@@ -1,0 +1,23 @@
+{
+  "oracle_cards": {
+    "updated_at": "2026-09-24T09:01:54.446+00:00",
+    "size": 24561172,
+    "sha256": "d023fcb33c71fa560223e16a720acb4d95c8e03623206cbc299de6cc89064973",
+    "file": "/Users/sms/Projects/mtg-deckbuilder/data/raw/oracle_cards.jsonl.gz",
+    "fetched_at": "2026-09-24T14:15:07.910Z"
+  },
+  "rulings": {
+    "updated_at": "2026-09-24T09:00:33.959+00:00",
+    "size": 5366187,
+    "sha256": "b75337e0198097593e15544149656e8c4bb9589d878229a7e9dd1f351b048fb5",
+    "file": "/Users/sms/Projects/mtg-deckbuilder/data/raw/rulings.jsonl.gz",
+    "fetched_at": "2026-09-24T14:15:08.549Z"
+  },
+  "oracle_tags": {
+    "updated_at": "2026-09-24T09:00:38.322+00:00",
+    "size": 6005507,
+    "sha256": "658932caeba9909bca59710a12e0cc05190d9b0dda237f6efc7ffd89412e1c36",
+    "file": "/Users/sms/Projects/mtg-deckbuilder/data/raw/oracle_tags.jsonl.gz",
+    "fetched_at": "2026-09-24T14:15:09.340Z"
+  }
+}
