@@ -470,6 +470,14 @@ fn control_condition(c: &str) -> Option<Condition> {
             ])));
         }
     }
+    // Lieutenant: "as long as you control your commander" (CR 903.3).
+    if c == "you control your commander" {
+        return Some(Condition::Exists(Filter::and(vec![
+            Filter::Commander,
+            Filter::OwnedBy(PlayerRel::You),
+            Filter::ControlledBy(PlayerRel::You),
+        ])));
+    }
     // "no opponent controls a white or blue creature"
     if let Some(r) = c.strip_prefix("no opponent controls ") {
         let f = phrase(&article(r)?)?;

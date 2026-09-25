@@ -272,6 +272,19 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
 
 /// [`parse_object_phrase`] plus [`extra_suffix`]es, in any order.
 pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
+    // "commander creatures you own", "commanders you control" (CR 903.3).
+    if let Some(r) = s.strip_prefix("commander ") {
+        let (f, plural, rest) = object_phrase(r)?;
+        return Some((Filter::and(vec![Filter::Commander, f]), plural, rest));
+    }
+    if let Some(r) = s.strip_prefix("commanders") {
+        if r.is_empty() || r.starts_with(' ') {
+            let probe = format!("permanents{r}");
+            let (f, _, rest) = object_phrase(&probe)?;
+            let rest = &r[r.len() - rest.len()..];
+            return Some((Filter::and(vec![Filter::Commander, f]), true, rest));
+        }
+    }
     let (f, plural, mut rest) = parse_object_phrase(s)?;
     let mut parts = match f {
         Filter::And(v) => v,
@@ -494,6 +507,17 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
                     creatures: g.creatures,
                 });
             }
+        }
+    }
+    // "~ and enchanted creature" (a bestowed Aura is not a creature, CR 702.103).
+    if let Some(r) = s.strip_prefix("~ and ") {
+        if matches!(r, "enchanted creature" | "equipped creature") {
+            let mut sub = group_subject(Filter::Or(vec![
+                Filter::Source,
+                Filter::AttachedToSource,
+            ]));
+            sub.creatures = true;
+            return Some(sub);
         }
     }
     // "~ and other Knights you control"
@@ -1581,6 +1605,9 @@ fn parse_predicate(
 struct Body {
     subject: Subject,
     outs: Vec<Out>,
+    /// Further bodies with their own subjects sharing the line's condition ("~ gets
+    /// +2/+2 and creatures you control have vigilance").
+    also: Vec<Body>,
 }
 
 /// "SUBJECT PREDICATES [, where X is VALUE]".
@@ -1613,7 +1640,11 @@ fn parse_body(
             .into_iter()
             .map(Out::Restr)
             .collect();
-        return Some(Body { subject, outs });
+        return Some(Body {
+            subject,
+            outs,
+            also: vec![],
+        });
     }
     // "You control enchanted creature" (layer 2, CR 613.1b).
     if let Some(r) = s.strip_prefix("you control ") {
@@ -1624,6 +1655,7 @@ fn parse_body(
         return Some(Body {
             subject,
             outs: vec![Out::Mod(Modification::SetController(PlayerRef::You))],
+            also: vec![],
         });
     }
     if let Some(body) = parse_player_body(s) {
@@ -1640,6 +1672,11 @@ fn parse_body(
         let i = idx + off;
         let (subject_text, rest) = (&s[..i], &s[i + 1..]);
         idx = i + 1;
+        // "~ and enchanted creature each get +1/+1"
+        let rest = match rest.strip_prefix("each ") {
+            Some(r) if starts_with_verb(r) && subject_text.contains(" and ") => r,
+            _ => rest,
+        };
         if !starts_with_verb(rest) {
             continue;
         }
@@ -1680,7 +1717,11 @@ fn parse_body(
             ok = false;
         }
         if ok && !outs.is_empty() {
-            return Some(Body { subject, outs });
+            return Some(Body {
+            subject,
+            outs,
+            also: vec![],
+        });
         }
     }
     None
@@ -1809,14 +1850,47 @@ fn parse_line(
             return Some((body, and_all(conds)));
         }
     }
-    let body = parse_body(s, referent.as_ref(), quotes, text, ctx)?;
+    let body = parse_body(s, referent.as_ref(), quotes, text, ctx)
+        .or_else(|| compound_body(s, referent.as_ref(), quotes, text, ctx))?;
     Some((body, and_all(conds)))
+}
+
+/// "~ gets +2/+2 and other creatures you control get +2/+2 and have trample": bodies
+/// with different subjects joined by "and".
+fn compound_body(
+    s: &str,
+    referent: Option<&Sel>,
+    quotes: &[String],
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Body> {
+    for sep in [", and ", " and "] {
+        for (i, _) in s.match_indices(sep) {
+            let (l, r) = (&s[..i], &s[i + sep.len()..]);
+            // The second part names its own subject.
+            if starts_with_verb(r) || r.starts_with("it ") || r.starts_with("they ") {
+                continue;
+            }
+            let Some(mut left) = parse_body(l, referent, quotes, text, ctx) else {
+                continue;
+            };
+            let Some(right) = parse_body(r, referent, quotes, text, ctx)
+                .or_else(|| compound_body(r, referent, quotes, text, ctx))
+            else {
+                continue;
+            };
+            left.also.push(right);
+            return Some(left);
+        }
+    }
+    None
 }
 
 /// Builds the abilities for a parsed line.
 fn build(body: Body, cond: Option<Condition>, zone: FunctionZone, text: &str) -> Vec<Ability> {
     let mut mods = Vec::new();
     let mut out = Vec::new();
+    let also = body.also;
     let mut restrictions = Vec::new();
     for o in body.outs {
         match o {
@@ -1842,6 +1916,9 @@ fn build(body: Body, cond: Option<Condition>, zone: FunctionZone, text: &str) ->
     }
     for e in restrictions {
         out.push(mk(e));
+    }
+    for b in also {
+        out.extend(build(b, cond.clone(), zone, text));
     }
     out
 }
@@ -2094,5 +2171,6 @@ fn parse_player_body(s: &str) -> Option<Body> {
             creatures: false,
         },
         outs,
+        also: vec![],
     })
 }
