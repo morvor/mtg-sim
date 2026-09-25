@@ -547,6 +547,33 @@ fn a_loop_of_mandatory_actions_is_a_draw() {
 }
 
 #[test]
+fn a_repetition_that_ends_on_its_own_is_not_a_draw() {
+    // Each time around, P0 loses 1 life: the game state never repeats, and the sequence
+    // ends when P0 loses.
+    cr!("104.4b");
+    let mut t = TestGame::new(2);
+    let e = card_from_text(
+        "Costly Return",
+        "",
+        "Enchantment",
+        None,
+        "Whenever a creature dies, you lose 1 life and return that card to the battlefield under its owner's control.",
+    );
+    t.custom(P0, e, Zone::Battlefield);
+    let z = card_from_text("Hollow Husk", "", "Creature — Construct", Some((0, 0)), "");
+    t.custom(P0, z, Zone::Graveyard(P0));
+    let husk = t.g.find_in_zone(Zone::Graveyard(P0), "Hollow Husk")[0];
+    t.g.move_object(
+        husk,
+        Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        Some(P0),
+    );
+    t.g.run_until(4000, |g| g.is_over());
+    assert_eq!(t.g.result, win(&[P1]));
+}
+
+#[test]
 fn a_loop_with_an_optional_action_is_not_a_draw() {
     cr!("104.4b");
     let mut t = TestGame::new(2);

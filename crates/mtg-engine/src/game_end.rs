@@ -415,11 +415,28 @@ impl Game {
     /// every zone change, CR 400.7), for recognizing repeated states.
     fn loop_fingerprint(&self) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
+        // Everything that could make a repetition end on its own must be part of the
+        // fingerprint (a creature shrinking each time around isn't a loop).
         let obj = |id: ObjectId| {
             let o = self.obj(id);
+            let pt = if o.is_creature() {
+                (o.power(), o.toughness())
+            } else {
+                (0, 0)
+            };
             format!(
-                "{}|{}|{}|{}|{:?}|{}",
-                o.chars.name, o.controller.0, o.tapped, o.damage, o.counters, o.face_down
+                "{}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
+                o.chars.name,
+                o.controller.0,
+                o.tapped,
+                o.damage,
+                o.counters,
+                o.face_down,
+                pt,
+                // Object ids change with every zone change (CR 400.7), so only whether
+                // it's attached.
+                o.attached_to.is_some(),
+                o.stack.as_ref().map(|s| s.x)
             )
         };
         let sorted = |ids: &[ObjectId]| {
@@ -430,10 +447,21 @@ impl Game {
         self.turn.number.hash(&mut h);
         format!("{:?}", self.turn.step).hash(&mut h);
         self.turn.priority.map(|p| p.0).hash(&mut h);
+        // Effects that pile up each time around.
+        (
+            self.effects.len(),
+            self.rule_effects.len(),
+            self.player_effects.len(),
+            self.replacements.len(),
+            self.delayed_triggers.len(),
+            self.history.spells_cast.len(),
+        )
+            .hash(&mut h);
         for p in &self.players {
             p.life.hash(&mut h);
             p.in_game().hash(&mut h);
             format!("{:?}", p.counters).hash(&mut h);
+            format!("{:?}", p.mana_pool).hash(&mut h);
             p.library.len().hash(&mut h);
             sorted(&p.hand).hash(&mut h);
             sorted(&p.graveyard).hash(&mut h);
