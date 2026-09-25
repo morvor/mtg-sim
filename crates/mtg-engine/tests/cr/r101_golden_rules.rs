@@ -199,9 +199,10 @@ fn simultaneous_choices_are_made_in_apnap_order_then_happen_at_once() {
     let mut t = TestGame::new(3);
     t.set_step(P1, Step::PrecombatMain);
     // "Whenever this creature or another creature dies, target player loses 1 life and
-    // you gain 1 life."
-    t.battlefield(P0, "Blood Artist");
-    let bears1 = t.battlefield(P1, "Grizzly Bears");
+    // you gain 1 life." — controlled by the active player, whose creature would go first
+    // if the sacrifices happened one at a time.
+    t.battlefield(P1, "Blood Artist");
+    let bears1 = t.battlefield(P0, "Grizzly Bears");
     let bears2 = t.battlefield(P2, "Grizzly Bears");
     let seen = observe(&mut t);
     t.lands(P1, "Swamp", 1);
