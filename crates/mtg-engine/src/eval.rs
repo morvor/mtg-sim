@@ -134,6 +134,10 @@ impl Game {
             PlayerFilter::HandSize(cmp, v) => {
                 cmp.eval(self.player(p).hand.len() as i64, self.eval_value(v, ctx))
             }
+            PlayerFilter::GraveyardSize(cmp, v) => cmp.eval(
+                self.player(p).graveyard.len() as i64,
+                self.eval_value(v, ctx),
+            ),
             PlayerFilter::Monarch => self.monarch == Some(p),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,

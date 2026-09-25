@@ -671,6 +671,8 @@ pub enum PlayerFilter {
     Life(Cmp, Box<Value>),
     /// Hand size comparisons.
     HandSize(Cmp, Box<Value>),
+    /// Graveyard size comparisons ("an opponent has eight or more cards in their graveyard").
+    GraveyardSize(Cmp, Box<Value>),
     /// The monarch.
     Monarch,
     /// The defending player.
@@ -1343,6 +1345,11 @@ pub enum Restriction {
         attacker: Filter,
         n: u32,
     },
+    /// "can't be blocked by more than one creature".
+    MaxBlockers {
+        attacker: Filter,
+        n: u32,
+    },
     /// "can block an additional creature each combat" / "any number".
     ExtraBlocks {
         blocker: Filter,
@@ -1353,6 +1360,8 @@ pub enum Restriction {
         blocker: Filter,
         attackers: Filter,
     },
+    /// "can attack as though it didn't have defender" (overrides CR 702.3b).
+    AttackDespiteDefender(Filter),
     CantBeTargeted {
         what: Filter,
         by: TargetRestriction,

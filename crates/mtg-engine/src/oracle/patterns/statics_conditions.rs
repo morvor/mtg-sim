@@ -95,6 +95,14 @@ fn state_filter(s: &str) -> Option<Filter> {
     if simple.is_some() {
         return simple;
     }
+    // "enchanted or equipped"
+    if let Some((a, b)) = s.split_once(" or ") {
+        if let (Some(fa), Some(fb)) = (state_filter(a), state_filter(b)) {
+            if !a.starts_with("a ") && !a.starts_with("an ") {
+                return Some(Filter::Or(vec![fa, fb]));
+            }
+        }
+    }
     // Color lists: "white", "red or green", "black or red".
     let colors: Option<Vec<Filter>> = s
         .split(" or ")
@@ -208,6 +216,25 @@ fn your_graveyard() -> Filter {
 /// in your graveyard" (descend 4).
 fn graveyard_condition(c: &str) -> Option<Condition> {
     let c = end(c);
+    // "an opponent has eight or more cards in their graveyard"
+    if let Some(r) = c.strip_prefix("an opponent has ") {
+        let (cmp, n, tail) = amount_cmp(r)?;
+        if end(tail) != "cards in their graveyard" {
+            return None;
+        }
+        return Some(Condition::PlayerMatches(
+            PlayerRef::EachOpponent,
+            PlayerFilter::GraveyardSize(cmp, Box::new(n)),
+        ));
+    }
+    // "there is a Lesson card in your graveyard"
+    if let Some(r) = c
+        .strip_prefix("there is a ")
+        .or_else(|| c.strip_prefix("there is an "))
+    {
+        let f = graveyard_cards(r)?;
+        return Some(Condition::Exists(f));
+    }
     // "there are N or more X in your graveyard" / "N or more X are in your graveyard"
     let (cmp, n, rest) = if let Some(r) = c.strip_prefix("there are ") {
         let (cmp, n, r) = amount_cmp(r)?;
@@ -236,11 +263,39 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
         ));
     }
     // "permanent cards in your graveyard", "creature cards in your graveyard"
-    let (f, _, tail) = parse_object_phrase(rest)?;
+    let f = graveyard_cards(rest)?;
+    Some(Condition::Compare(Value::Count(f), cmp, n))
+}
+
+/// "[kind] card(s) in your graveyard" → a filter over the cards in your graveyard.
+fn graveyard_cards(s: &str) -> Option<Filter> {
+    let s = end(s);
+    // "permanent card" is a card with a permanent type (CR 110.4a), not a permanent.
+    for p in ["permanent cards ", "permanent card "] {
+        if let Some(r) = s.strip_prefix(p) {
+            if r == "in your graveyard" {
+                return Some(Filter::and(vec![Filter::PermanentCard, your_graveyard()]));
+            }
+            return None;
+        }
+    }
+    let (f, _, tail) = parse_object_phrase(s)?;
     if !end(tail).is_empty() || f.zone() != Some(ZoneKind::Graveyard) {
         return None;
     }
-    Some(Condition::Compare(Value::Count(f), cmp, n))
+    // The zone must come from "in your graveyard", not from a "permanent" noun.
+    fn has_permanent(f: &Filter) -> bool {
+        match f {
+            Filter::Permanent => true,
+            Filter::And(v) | Filter::Or(v) => v.iter().any(has_permanent),
+            Filter::Not(x) => has_permanent(x),
+            _ => false,
+        }
+    }
+    if has_permanent(&f) {
+        return None;
+    }
+    Some(f)
 }
 
 /// Devotion (CR 700.5): "your devotion to black is less than five", "your devotion to

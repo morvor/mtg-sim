@@ -172,7 +172,13 @@ impl Game {
         if o.summoning_sick && !o.has_keyword(KeywordKind::Haste) {
             return false;
         }
-        if o.has_keyword(KeywordKind::Defender) {
+        // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
+        if o.has_keyword(KeywordKind::Defender)
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::AttackDespiteDefender(f) => Some(f),
+                _ => None,
+            })
+        {
             return false;
         }
         !self.restricted_obj(id, |r| match r {
@@ -329,6 +335,22 @@ impl Game {
             }
         }
         Some(n)
+    }
+
+    /// Maximum number of creatures that can block an attacker ("can't be blocked by more
+    /// than one creature"), if limited (CR 509.1b).
+    pub fn max_blockers(&self, attacker: ObjectId) -> Option<u32> {
+        let mut max: Option<u32> = None;
+        for (s, c, r, locked) in self.all_restrictions() {
+            if let Restriction::MaxBlockers { attacker: af, n } = &r {
+                if locked.as_ref().is_none_or(|v| v.contains(&attacker))
+                    && self.matches(attacker, af, &Ctx::new(s, c))
+                {
+                    max = Some(max.map_or(*n, |m| m.min(*n)));
+                }
+            }
+        }
+        max
     }
 
     /// Minimum number of blockers an attacker requires (menace etc.).
@@ -643,6 +665,9 @@ pub fn block_declaration_legal(
     }
     for (a, n) in &per_attacker {
         if *n < g.min_blockers(*a) {
+            return false;
+        }
+        if g.max_blockers(*a).is_some_and(|max| *n > max) {
             return false;
         }
     }

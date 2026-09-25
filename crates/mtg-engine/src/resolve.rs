@@ -1129,7 +1129,8 @@ impl Game {
             | Restriction::CantBeBlocked(f)
             | Restriction::DoesntUntap(f)
             | Restriction::CantBeCountered(f)
-            | Restriction::CantBeSacrificed(f) => f,
+            | Restriction::CantBeSacrificed(f)
+            | Restriction::AttackDespiteDefender(f) => f,
             Restriction::CantBeTargeted { what, .. } => what,
             _ => return None,
         };

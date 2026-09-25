@@ -499,23 +499,115 @@ fn mentions_x(v: &Value) -> bool {
     }
 }
 
-/// "for each [...]": the number of things counted. `it` is the single object the
-/// subject is, if any.
+/// Amounts: "the number of creatures you control", "2 plus the number of ...", "twice
+/// the number of ...", "half ..., rounded up", "your life total", "the greatest mana
+/// value among ...", "the number of +1/+1 counters on creatures you control".
+pub(crate) fn parse_amount(s: &str, it: Option<&Sel>) -> Option<Value> {
+    let s = end(s);
+    if let Some((a, b)) = s.split_once(" plus ") {
+        return Some(Value::Sum(vec![parse_amount(a, it)?, parse_amount(b, it)?]));
+    }
+    if let Some(r) = s.strip_prefix("twice ") {
+        return Some(Value::Mul(
+            Box::new(Value::c(2)),
+            Box::new(parse_amount(r, it)?),
+        ));
+    }
+    if let Some(r) = s.strip_prefix("half ") {
+        let (body, up) = if let Some(b) = r.strip_suffix(", rounded up") {
+            (b, true)
+        } else if let Some(b) = r.strip_suffix(", rounded down") {
+            (b, false)
+        } else {
+            return None;
+        };
+        return Some(Value::Div(Box::new(parse_amount(body, it)?), 2, up));
+    }
+    if let Some((n, rest)) = parse_number(s) {
+        if rest.trim().is_empty() && !matches!(n, Value::X) && !s.starts_with(['a', 'A']) {
+            return Some(n);
+        }
+    }
+    match s {
+        "your life total" => return Some(Value::LifeTotal(PlayerRef::You)),
+        "the number of creatures that died this turn" => return Some(Value::CreaturesDiedThisTurn),
+        _ => {}
+    }
+    if let Some(r) = s
+        .strip_prefix("the number of ")
+        .or_else(|| s.strip_prefix("the total number of "))
+    {
+        return parse_for_each(r, it);
+    }
+    for (p, power) in [
+        ("the greatest mana value among ", false),
+        ("the greatest power among ", true),
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let (f, plural) = whole_object_phrase(&union_nouns(r))?;
+            if !plural {
+                return None;
+            }
+            return Some(if power {
+                Value::GreatestPower(f)
+            } else {
+                Value::GreatestManaValue(f)
+            });
+        }
+    }
+    None
+}
+
+/// "a +1/+1 counter", "charge counters", "counter" → Some(kind or None for any kind).
+fn counter_words(body: &str) -> Option<Option<CounterKind>> {
+    let body = body.trim();
+    if body == "counter" || body == "counters" {
+        return Some(None);
+    }
+    let (kind, c) = body.split_once(' ')?;
+    if c != "counter" && c != "counters" {
+        return None;
+    }
+    if !(kind.starts_with('+') || kind.starts_with('-') || kind.chars().all(|c| c.is_alphabetic()))
+    {
+        return None;
+    }
+    Some(Some(kind.into()))
+}
+
+/// What's counted by "for each [...]" or "the number of [...]" (singular or plural
+/// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
+    let your_graveyard = || {
+        Filter::and(vec![
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ])
+    };
     match s {
-        "card in your hand" => return Some(Value::HandSize(PlayerRef::You)),
-        "card in your graveyard" => return Some(Value::GraveyardSize(PlayerRef::You)),
-        "basic land type among lands you control" => return Some(Value::Domain),
-        "card type among cards in your graveyard" => {
-            return Some(Value::CardTypesAmong(Filter::and(vec![
-                Filter::InZone(ZoneKind::Graveyard),
-                Filter::OwnedBy(PlayerRel::You),
-            ])))
+        "card in your hand" | "cards in your hand" => return Some(Value::HandSize(PlayerRef::You)),
+        "card in your graveyard" | "cards in your graveyard" => {
+            return Some(Value::GraveyardSize(PlayerRef::You))
+        }
+        "card in all players' hands" | "cards in all players' hands" => {
+            return Some(Value::Count(Filter::InZone(ZoneKind::Hand)))
+        }
+        "card in all graveyards" | "cards in all graveyards" => {
+            return Some(Value::Count(Filter::InZone(ZoneKind::Graveyard)))
+        }
+        "basic land type among lands you control" | "basic land types among lands you control" => {
+            return Some(Value::Domain)
+        }
+        "card type among cards in your graveyard" | "card types among cards in your graveyard" => {
+            return Some(Value::CardTypesAmong(your_graveyard()))
+        }
+        "card type among cards in all graveyards" | "card types among cards in all graveyards" => {
+            return Some(Value::CardTypesAmong(Filter::InZone(ZoneKind::Graveyard)))
         }
         _ => {}
     }
-    // "+1/+1 counter on it", "charge counter on ~", "counter on it".
+    // "+1/+1 counter on it", "charge counters on ~", "counter on it".
     for (tail, sel) in [
         (" on ~", Some(Sel::This)),
         (" on it", it.cloned()),
@@ -523,23 +615,28 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         (" on equipped creature", Some(Sel::AttachedTo)),
     ] {
         if let Some(body) = s.strip_suffix(tail) {
-            let Some(sel) = sel else { return None };
-            if body == "counter" {
-                return Some(Value::CountersOn(Box::new(sel), None));
-            }
-            let (kind, c) = body.split_once(' ')?;
-            if c != "counter" {
+            let sel = sel?;
+            return Some(Value::CountersOn(Box::new(sel), counter_words(body)?));
+        }
+    }
+    // "+1/+1 counters on creatures you control" (summed over the group).
+    if let Some((body, group)) = s.split_once(" on ") {
+        if let Some(kind) = counter_words(body) {
+            let (f, plural) = whole_object_phrase(&union_nouns(group))?;
+            if !plural || mentions_other_zones(&f) {
                 return None;
             }
-            return Some(Value::CountersOn(Box::new(sel), Some(kind.into())));
+            return Some(Value::CountersOn(Box::new(Sel::All(f)), kind));
         }
     }
     // "experience counter you have"
-    if let Some(body) = s.strip_suffix(" counter you have") {
-        if !body.contains(' ') {
-            return Some(Value::PlayerCounters(PlayerRef::You, body.into()));
+    for tail in [" counter you have", " counters you have"] {
+        if let Some(body) = s.strip_suffix(tail) {
+            if !body.contains(' ') && !body.is_empty() {
+                return Some(Value::PlayerCounters(PlayerRef::You, body.into()));
+            }
+            return None;
         }
-        return None;
     }
     // "Aura attached to it", "Aura and Equipment attached to ~".
     for (tail, sel) in [
@@ -577,16 +674,25 @@ fn starts_with_verb(s: &str) -> bool {
 }
 
 /// Splits "gets +1/+1, has flying, and is a Demon" into predicates at commas and "and"
-/// that are followed by a verb.
+/// that are followed by a verb (the subject may be repeated as "it": "... and it can't
+/// be blocked").
 fn split_predicates(s: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut start = 0;
     let mut i = 0;
     while i < s.len() {
         let rest = &s[i..];
-        let sep = [", and ", " and ", ", "]
-            .into_iter()
-            .find(|sep| rest.starts_with(sep) && starts_with_verb(&rest[sep.len()..]));
+        let sep = [
+            ", and it ",
+            " and it ",
+            ", and they ",
+            " and they ",
+            ", and ",
+            " and ",
+            ", ",
+        ]
+        .into_iter()
+        .find(|sep| rest.starts_with(sep) && starts_with_verb(&rest[sep.len()..]));
         if let Some(sep) = sep {
             out.push(s[start..i].trim());
             i += sep.len();
@@ -1062,6 +1168,12 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Restriction> {
             attackers: Filter::HasKeyword(KeywordKind::Flying),
         },
         "can't be sacrificed" => Restriction::CantBeSacrificed(f),
+        "can't be blocked by more than one creature" => {
+            Restriction::MaxBlockers { attacker: f, n: 1 }
+        }
+        // Overrides CR 702.3b.
+        "can attack as though it didn't have defender"
+        | "can attack as though they didn't have defender" => Restriction::AttackDespiteDefender(f),
         _ => {
             let r = p.strip_prefix("can't be blocked by ")?;
             let (b, _) = whole_object_phrase(r)?;
@@ -1170,6 +1282,15 @@ fn parse_body(
     ctx: &CompileContext,
 ) -> Option<Body> {
     let s = end(s);
+    // "it's a creature" is "it is a creature".
+    let owned;
+    let s = match s.strip_prefix("it's ") {
+        Some(r) => {
+            owned = format!("it is {r}");
+            owned.as_str()
+        }
+        None => s,
+    };
     // ", where X is [value]"
     let (s, x_text) = match s.find(", where x is ") {
         Some(i) => (&s[..i], Some(&s[i + ", where x is ".len()..])),
@@ -1188,6 +1309,9 @@ fn parse_body(
             continue;
         };
         let x = match x_text {
+            Some(xt) if parse_amount(xt, subject.it.as_ref()).is_some() => {
+                parse_amount(xt, subject.it.as_ref())
+            }
             Some(xt) => {
                 let mut b = crate::oracle::effects::Builder::new(ctx);
                 if let Some(it) = &subject.it {
@@ -1358,5 +1482,44 @@ inventory::submit! {
         name: "statics: subject and predicates",
         priority: 50,
         parse: parse_static_line,
+    }
+}
+
+/// "~ can attack this turn as though it didn't have defender" (and the same after "and"
+/// with the subject left out), "creatures you control with defender can attack this
+/// turn as though they didn't have defender": a rule-modifying effect until end of turn
+/// that overrides CR 702.3b.
+fn p_attack_despite_defender(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = end(l);
+    let subject = [
+        " can attack this turn as though it didn't have defender",
+        " can attack this turn as though they didn't have defender",
+    ]
+    .iter()
+    .find_map(|t| l.strip_suffix(t))
+    .or_else(|| (l == "can attack this turn as though it didn't have defender").then_some(""))?;
+    let filter = match subject {
+        // Only objects the rule effect can still find once the ability has resolved.
+        "~" => Filter::Source,
+        "" | "it" if matches!(b.it, Sel::This) => Filter::Source,
+        _ => {
+            let (f, plural) = whole_object_phrase(&union_nouns(subject))?;
+            if !plural || mentions_other_zones(&f) {
+                return None;
+            }
+            f
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::AttackDespiteDefender(filter),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! {
+    crate::oracle::patterns::EffectPattern {
+        name: "statics: can attack this turn as though it didn't have defender",
+        priority: 50,
+        parse: p_attack_despite_defender,
     }
 }
