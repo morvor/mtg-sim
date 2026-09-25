@@ -272,7 +272,21 @@ fn color_of_your_choice(l: &str, b: &mut Builder) -> Option<Effect> {
             break;
         }
     }
-    let (subj, kind, mods) = found?;
+    let (subj, kind, mods) = match found {
+        Some(f) => f,
+        None => {
+            // "~ becomes the chosen color" (a choice made earlier in the ability).
+            let x = l
+                .strip_suffix(" becomes the chosen color")
+                .or_else(|| l.strip_suffix(" become the chosen color"))?;
+            let what = subject(x, b)?;
+            return Some(Effect::Modify {
+                what,
+                mods: vec![Modification::SetChosenColor],
+                duration,
+            });
+        }
+    };
     let what = subject(subj, b)?;
     Some(Effect::seq(vec![
         Effect::Choose {

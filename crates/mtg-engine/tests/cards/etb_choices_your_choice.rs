@@ -155,3 +155,66 @@ fn becomes_the_color_of_your_choice() {
     t.advance_to(P1, turn::Step::Upkeep);
     assert_eq!(t.obj_now(crow).chars.colors, ColorSet::single(Color::Blue));
 }
+
+// ---------------------------------------------------------------------------
+// "choose a creature type. ... of that type" / "~ becomes the chosen color": a value
+// chosen earlier in the same ability (CR 607.2d, 608.2c).
+// ---------------------------------------------------------------------------
+
+fn choose_creature_type(t: &mut TestGame, p: PlayerId, ty: &str) {
+    let i = types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == ty)
+        .expect("creature type");
+    t.answer(p, DecisionKind::Option, Answer::Index(i));
+}
+
+#[test]
+fn permanents_of_that_type_gain_keywords() {
+    cr!("607.2d", "608.2c", "611.2c");
+    use mtg_engine::keywords::KeywordKind;
+    assert_supported("Selfless Safewright");
+    let mut t = TestGame::new(2);
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let enemy_elf = t.battlefield(P1, "Llanowar Elves");
+    choose_creature_type(&mut t, P0, "Elf");
+    let sw = t.enter(P0, "Selfless Safewright");
+    t.resolve_all();
+    assert!(t.obj_now(elf).has_keyword(KeywordKind::Hexproof));
+    assert!(t.obj_now(elf).has_keyword(KeywordKind::Indestructible));
+    assert!(!t.obj_now(bear).has_keyword(KeywordKind::Hexproof));
+    assert!(!t.obj_now(enemy_elf).has_keyword(KeywordKind::Hexproof));
+    assert!(
+        !t.obj_now(sw).has_keyword(KeywordKind::Hexproof),
+        "\"other permanents\" excludes the Safewright, an Elf itself"
+    );
+    // The affected set was locked in as the effect began (CR 611.2c).
+    let late = t.battlefield(P0, "Llanowar Elves");
+    assert!(!t.obj_now(late).has_keyword(KeywordKind::Hexproof));
+    t.advance_to(P1, turn::Step::Upkeep);
+    assert!(!t.obj_now(elf).has_keyword(KeywordKind::Hexproof));
+}
+
+#[test]
+fn artifact_becomes_the_chosen_color() {
+    cr!("105.3", "607.2d", "613.1e");
+    let c = card("Puca's Eye");
+    assert_eq!(
+        c.unsupported_text().len(),
+        1,
+        "only the five-colors activation restriction is unsupported: {:?}",
+        c.unsupported_text()
+    );
+    let mut t = TestGame::new(2);
+    let before = t.hand_size(P0);
+    choose_color(&mut t, P0, Color::Red);
+    let eye = t.enter(P0, "Puca's Eye");
+    assert!(t.obj_now(eye).chars.colors.is_colorless());
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+    assert_eq!(t.obj_now(eye).chars.colors, ColorSet::single(Color::Red));
+    t.advance_to(P1, turn::Step::Upkeep);
+    assert_eq!(t.obj_now(eye).chars.colors, ColorSet::single(Color::Red));
+}

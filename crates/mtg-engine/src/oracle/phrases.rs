@@ -374,6 +374,10 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that's the chosen color", Filter::ChosenColor),
         ("that are the chosen color", Filter::ChosenColor),
         ("with the chosen name", Filter::ChosenName),
+        // "Choose a creature type. ... creatures of that type": the choice just made.
+        ("of that type", Filter::ChosenType),
+        ("of that color", Filter::ChosenColor),
+        ("with that name", Filter::ChosenName),
         (
             "that aren't of the chosen type",
             Filter::not(Filter::ChosenType),
