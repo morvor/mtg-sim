@@ -259,3 +259,47 @@ fn a_planeswalker_equipped_by_ordinary_equipment_rules_becomes_unattached() {
     assert!(t.on_battlefield(luxior));
     assert!(t.obj_now(jace).is(CardType::Planeswalker));
 }
+
+#[test]
+fn equip_does_nothing_if_the_target_is_no_longer_controlled_by_you() {
+    cr!("702.6a", "301.5b", "608.2b");
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Short Sword");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 1);
+    t.activate(P0, sword, 0, &[Entity::Object(bears)]).unwrap();
+    // In response, the opponent gains control of the Bears.
+    apply(
+        &mut t,
+        P1,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: mtg_engine::ability::PlayerRef::You,
+            duration: Duration::EndOfTurn,
+        },
+        &[bears],
+    );
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), None);
+}
+
+#[test]
+fn equipping_the_creature_its_already_attached_to_does_nothing() {
+    cr!("702.6a", "701.3b");
+    ruling!(
+        "Killer Cosplay",
+        "An Equipment can't become attached to a creature if it's already attached to it. That is, you can activate the equip ability targeting the creature Killer Cosplay's already attached to, but that ability resolving won't do anything."
+    );
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Short Sword");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 2);
+    t.activate(P0, sword, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    let ts = t.obj_now(sword).timestamp;
+    t.activate(P0, sword, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), Some(Entity::Object(bears)));
+    assert_eq!(t.obj_now(sword).timestamp, ts, "it didn't become attached again");
+    assert_eq!(t.pt(bears), (3, 3));
+}

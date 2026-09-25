@@ -137,6 +137,30 @@ fn one_damage_from_deathtouch_counts_as_lethal_when_assigning_combat_damage() {
 }
 
 #[test]
+fn a_blocker_that_already_has_lethal_damage_needs_no_more_from_deathtouch() {
+    cr!("702.2c", "702.19b");
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Typhoid Rats");
+    let rancor = t.battlefield(P0, "Rancor");
+    assert!(t.g.attach(rancor, Entity::Object(rats)));
+    // Darksteel Myr: 0/1 indestructible, with 2 damage already marked.
+    let myr = t.battlefield(P1, "Darksteel Myr");
+    t.lands(P0, "Mountain", 1);
+    let shock = t.hand(P0, "Shock");
+    t.cast(P0, shock).target(myr).go();
+    t.resolve();
+    assert!(t.on_battlefield(myr));
+    assert_eq!(damage(&t, myr), 2);
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(rats, Entity::Player(P1))]);
+    block(&mut t, P1, &[(myr, rats)]);
+    // All 3 damage tramples over.
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![0, 3]));
+    go_to(&mut t, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
 fn deathtouch_attacker_divides_one_damage_to_each_of_several_blockers() {
     cr!("702.2c", "510.1c");
     let mut t = TestGame::new(2);
