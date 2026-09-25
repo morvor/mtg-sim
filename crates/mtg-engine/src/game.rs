@@ -63,6 +63,16 @@ pub struct GameConfig {
     /// Planechase: play with a single communal planar deck (CR 901.15).
     #[serde(default)]
     pub single_planar_deck: bool,
+    /// Commander: use the Brawl option (CR 903.12).
+    #[serde(default)]
+    pub brawl: bool,
+    /// Limited play (CR 100.2b) rather than constructed play.
+    #[serde(default)]
+    pub limited: bool,
+    /// The player who chooses who takes the first turn — in a match, the loser of the
+    /// previous game (CR 103.1). `None` = determined at random.
+    #[serde(default)]
+    pub first_turn_chooser: Option<PlayerId>,
 }
 
 impl Default for GameConfig {
@@ -82,6 +92,9 @@ impl Default for GameConfig {
             max_actions: 200_000,
             seed: 0,
             single_planar_deck: false,
+            brawl: false,
+            limited: false,
+            first_turn_chooser: None,
         }
     }
 }
@@ -464,6 +477,8 @@ pub struct Game {
     pub end: crate::game_end::EndState,
     /// Choices made so far by players choosing at the same time (CR 101.4).
     pub apnap_choices: Vec<crate::apnap::ApnapChoice>,
+    /// What happened while starting the game (CR 103).
+    pub start: crate::start::StartState,
 }
 
 impl Game {
@@ -548,6 +563,7 @@ impl Game {
             stickers: vec![],
             end: Default::default(),
             apnap_choices: vec![],
+            start: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -560,6 +576,12 @@ impl Game {
             let pid = PlayerId(i as u8);
             for card in deck {
                 // Nontraditional cards aren't part of the deck (CR 108.2a, 108.5).
+                // Conspiracies can't be included in a deck; they start in the sideboard
+                // (CR 315.3, 905.4).
+                if card.front().chars.card_types.contains(CardType::Conspiracy) {
+                    g.add_to_sideboard(pid, vec![card]);
+                    continue;
+                }
                 if crate::variants::is_nontraditional(&card) {
                     let (zone, face_down) = crate::variants::nontraditional_start(&card, pid);
                     let id = g.create_card_object(card, pid, zone);

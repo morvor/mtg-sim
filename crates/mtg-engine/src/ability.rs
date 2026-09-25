@@ -1852,6 +1852,12 @@ pub enum StaticEffect {
     BeforeShuffleExile {
         what: Filter,
     },
+    /// Companion (CR 702.139a): the condition the owner's starting deck must fulfill for
+    /// this card to be revealed as their companion before the game (CR 103.2b).
+    Companion(crate::start::DeckCondition),
+    /// "Any time you could mulligan and this card is in your hand, you may [effect]"
+    /// (CR 103.5b). Functions in the hand while mulligans are declared.
+    AnyTimeCouldMulligan(Box<Effect>),
     /// A static ability that functions on the stack and creates a delayed triggered ability
     /// as the permanent spell resolves and the permanent enters (CR 608.3g), e.g. dash's
     /// "return it to its owner's hand at the beginning of the next end step". The

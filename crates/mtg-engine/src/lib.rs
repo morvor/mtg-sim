@@ -66,6 +66,7 @@ pub mod sba;
 pub mod skip;
 pub mod splice;
 pub mod stack;
+pub mod start;
 pub mod stickers;
 pub mod testing;
 pub mod text_change;

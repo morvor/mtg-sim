@@ -63,7 +63,9 @@ impl Game {
             if !two_headed && pl.poison() >= 10 {
                 losers.insert(p); // 704.5c
             }
+            // Brawl games don't use this state-based action (CR 903.12h).
             if self.config.variant == Variant::Commander
+                && !self.config.brawl
                 && pl
                     .commander_damage
                     .values()

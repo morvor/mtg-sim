@@ -167,41 +167,42 @@ impl Game {
     /// Shuffles libraries, determines the starting player, draws opening hands, runs
     /// mulligans, and begins the first turn.
     pub fn start(&mut self) {
+        // CR 103.1: determine the starting player. While starting the game, the starting
+        // player is considered the active player (CR 101.4e).
+        let starting = crate::start::choose_starting_player(self);
+        self.turn.starting_player = starting;
+        self.turn.active = starting;
+        // CR 103.2: sideboards, companions, commanders, sticker sheets and conspiracies;
+        // then effects that make a player the starting player (CR 103.1c).
+        crate::start::additional_steps(self);
+        let starting = self.turn.starting_player;
         // CR 607.2n: actions taken before shuffling decks to start the game.
         crate::opening_hand::before_shuffle_actions(self);
-        // CR 103.3: each player shuffles their deck.
+        // CR 103.3: each player shuffles their deck, which becomes their library.
         for p in self.player_ids() {
             self.shuffle_library(p);
         }
         // CR 103.3a: supplementary planar decks are shuffled too.
         crate::planechase::shuffle_planar_decks(self);
-        // CR 103.1: randomly determine the starting player (the winner chooses; we let the
-        // random winner go first).
-        let starting = match self.config.starting_player {
-            Some(p) => p,
-            None => {
-                let n = self.players.len() as u32;
-                PlayerId(self.random_range(0, n - 1) as u8)
-            }
-        };
-        self.turn.starting_player = starting;
-        self.turn.active = starting;
         // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
         crate::variants::begin_game(self);
-        // CR 103.4–103.5: draw opening hands, then mulligans.
-        let hand_size = self.config.starting_hand_size;
+        // CR 103.4: starting life totals.
+        crate::start::set_starting_life(self);
+        // CR 103.5: draw opening hands, then mulligans.
         for p in self.apnap() {
-            for _ in 0..hand_size {
+            for _ in 0..self.starting_hand_size(p) {
                 self.draw_card_raw(p);
             }
         }
         if !self.config.skip_mulligans {
             crate::mulligan::run_mulligans(self);
         }
+        // CR 103.6: actions with cards from opening hands.
         crate::opening_hand::opening_hand_actions(self);
-        // CR 901.5: the starting plane.
+        // CR 103.7, 901.5: the starting plane.
         crate::planechase::set_starting_plane(self);
         self.events.clear();
+        // CR 103.8: the starting player takes their first turn.
         self.begin_turn(starting, false);
     }
 
@@ -320,16 +321,7 @@ impl Game {
                 self.turn.upkeeps += 1;
             }
             Step::Draw => {
-                // CR 103.8a: in a two-player game the starting player skips the draw of
-                // their first turn.
-                let skip_first = self
-                    .config
-                    .starting_player_skips_draw
-                    .unwrap_or(self.players.len() == 2);
-                let first_turn = self.turn.number == 1 && active == self.turn.starting_player;
-                if !(skip_first && first_turn) {
-                    self.draw_cards(active, 1);
-                }
+                self.draw_cards(active, 1);
             }
             Step::PrecombatMain | Step::PostcombatMain => {
                 self.turn.main_phases += 1;
@@ -559,6 +551,12 @@ impl Game {
 
     fn should_skip_step(&mut self, step: Step) -> bool {
         let active = self.turn.active;
+        // CR 103.8: in a two-player game the player who plays first skips the draw step of
+        // their first turn (CR 103.8a); in other multiplayer games no one does
+        // (CR 103.8c).
+        if step == Step::Draw && self.first_turn_draw_skipped(active) {
+            return true;
+        }
         let kind = match step {
             Step::Untap => StepKind::Untap,
             Step::Upkeep => StepKind::Upkeep,
@@ -593,6 +591,16 @@ impl Game {
             return true;
         }
         false
+    }
+
+    /// Whether `active` skips the draw step of this turn because it's the starting
+    /// player's first turn (CR 103.8a–c).
+    pub fn first_turn_draw_skipped(&self, active: PlayerId) -> bool {
+        let skips = self
+            .config
+            .starting_player_skips_draw
+            .unwrap_or(self.is_two_player());
+        skips && active == self.turn.starting_player && self.turn.number == 1 && !self.turn.extra
     }
 
     fn untap_step_actions(&mut self) {
