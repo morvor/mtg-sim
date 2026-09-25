@@ -52,10 +52,16 @@ impl Game {
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         for (i, m) in moves.iter().enumerate() {
-            if !self.is_live(m.obj) {
+            if !self.can_move(m.obj) {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
+                // An object that can't enter the battlefield stays where it is.
+                if let ReplEvent::Move(mv) = &e {
+                    if mv.to == Zone::Battlefield && self.cant_enter_battlefield(mv.obj) {
+                        continue;
+                    }
+                }
                 finals.push((i, e));
             }
         }
@@ -88,6 +94,25 @@ impl Game {
         out
     }
 
+    /// Whether a "can't enter the battlefield" effect applies to an object.
+    pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
+        self.statics.restrictions.iter().any(|(s, c, r)| match r {
+            Restriction::CantEnterBattlefield(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
+            _ => false,
+        })
+    }
+
+    /// Whether an object can be moved to a zone: it's a current object in some zone, or a
+    /// newly created object (a token or card) that hasn't been put anywhere yet.
+    pub fn can_move(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        self.is_live(id)
+            || (o.zone == Zone::Nowhere
+                && o.next.is_none()
+                && o.prev.is_none()
+                && o.kind != ObjKind::StackAbility)
+    }
+
     /// Snapshot of triggered abilities of permanents on the battlefield right now.
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         let mut snap = LookbackSnapshot::default();
@@ -110,7 +135,7 @@ impl Game {
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
         let old_id = m.obj;
-        if !self.is_live(old_id) {
+        if !self.can_move(old_id) {
             return None;
         }
         let from = self.obj(old_id).zone;
@@ -1173,9 +1198,20 @@ impl Game {
         mana: Vec<crate::mana::Mana>,
         source: Option<ObjectId>,
     ) {
+        let produced: Vec<crate::mana::ManaType> = mana.iter().map(|m| m.ty).collect();
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }
         self.emit(Event::ManaAdded { player: p, source });
+        // CR 106.12a: the permanent whose {T} mana ability is resolving was tapped for mana.
+        if let Some(obj) = source.filter(|s| self.mana_ability_resolving == Some(*s)) {
+            if !produced.is_empty() {
+                self.emit(Event::TappedForMana {
+                    obj,
+                    player: p,
+                    produced,
+                });
+            }
+        }
     }
 }

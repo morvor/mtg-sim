@@ -1209,8 +1209,8 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
-    /// One mana of any type the triggering permanent produced ("that player adds one mana
-    /// of any type that land produced"): read from the tapped-for-mana event.
+    /// One mana of any type the permanent tapped for mana produced (from the triggering
+    /// event, "one mana of any type that land produced").
     AnyTypeProduced,
     /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
     /// to enchanted permanent's mana cost", CR 106.8–106.11).
@@ -1390,6 +1390,8 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[objects] can't enter the battlefield" (CR 608.3e).
+    CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
     /// "can't gain life".
@@ -1624,6 +1626,12 @@ pub enum TriggerCond {
     },
     BecomesTapped(Filter),
     BecomesUntapped(Filter),
+    /// "Whenever [filter] is tapped for mana of a specified type" / "Whenever you tap a
+    /// permanent for {C}" (CR 106.12a): only if that type of mana was produced.
+    TappedForManaOfType {
+        filter: Filter,
+        mana: ManaType,
+    },
     /// "Whenever [filter] becomes the target of a spell or ability [opponent controls]".
     BecomesTarget {
         filter: Filter,
@@ -1669,14 +1677,9 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
-    /// "Whenever [player] taps [filter] for mana" / "Whenever [filter] is tapped for
-    /// mana" / "... for {C}" (CR 106.12a): a mana ability with {T} in its cost resolves
-    /// and produces mana (of the given type, if any).
-    TappedForMana {
-        filter: Filter,
-        who: PlayerRel,
-        mana: Option<ManaType>,
-    },
+    /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
+    /// (CR 106.12a). The event's amount is a bit mask of the types produced.
+    TappedForMana(Filter),
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
 }

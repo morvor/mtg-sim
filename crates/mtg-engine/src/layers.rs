@@ -46,6 +46,15 @@ impl Game {
         for p in &self.players {
             v.extend(p.hand.iter().copied());
             v.extend(p.graveyard.iter().copied());
+            // CR 604.3: characteristic-defining abilities function in all zones, so cards
+            // in libraries that have one are recomputed too.
+            v.extend(p.library.iter().copied().filter(|id| {
+                self.obj(*id)
+                    .base
+                    .abilities
+                    .iter()
+                    .any(|a| matches!(&a.kind, AbilityKind::Static(s) if s.is_cda))
+            }));
         }
         v
     }
@@ -506,20 +515,18 @@ impl Game {
         live: &[ObjectId],
         ctx: &Ctx,
     ) -> Vec<ObjectId> {
-        // An ability that affects only its own object (e.g. a characteristic-defining
-        // ability) affects it wherever the ability functions (CR 113.6a, 604.3).
-        if matches!(affected, Filter::Source) {
-            let ok = self.is_live(src) && !self.obj(src).phased_out && live.contains(&src);
-            return if ok { vec![src] } else { vec![] };
-        }
         let zone = affected.zone();
+        // A static ability that affects only its own object applies wherever that object
+        // is when the ability functions there (e.g. characteristic-defining abilities,
+        // CR 604.3; "this spell has flash as long as ...", CR 601.3d).
+        let self_only = filter_is_self(affected);
         live.iter()
             .copied()
             .filter(|o| {
                 let obj = self.obj(*o);
                 let in_zone = match zone {
                     Some(z) => obj.zone.kind() == Some(z),
-                    None => obj.zone == Zone::Battlefield,
+                    None => obj.zone == Zone::Battlefield || (self_only && *o == src),
                 };
                 in_zone && !obj.phased_out && self.matches(*o, affected, ctx)
             })
@@ -772,6 +779,15 @@ impl Game {
             p.land_plays = land_plays;
             p.mods = m;
         }
+    }
+}
+
+/// Whether a filter can only match the ability's own source object.
+fn filter_is_self(f: &Filter) -> bool {
+    match f {
+        Filter::Source => true,
+        Filter::And(v) => v.iter().any(filter_is_self),
+        _ => false,
     }
 }
 

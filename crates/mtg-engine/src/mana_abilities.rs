@@ -69,7 +69,7 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 }
             }
             ManaProduction::AnyTypeProduced => {
-                let t = mask_types(ctx.event.as_ref().map_or(0, |e| e.amount));
+                let t = types_from_mask(ctx.event.as_ref().map_or(0, |e| e.amount));
                 if t.is_empty() {
                     vec![]
                 } else {
@@ -260,27 +260,6 @@ fn collect_could_produce(
             }
         }
     }
-}
-
-/// Bitmask of mana types (bit i = `ManaType::ALL[i]`), used to carry the types a
-/// permanent produced in a tapped-for-mana trigger's event info.
-pub fn mana_type_mask(types: &[ManaType]) -> i32 {
-    let mut m = 0;
-    for t in types {
-        if let Some(i) = ManaType::ALL.iter().position(|x| x == t) {
-            m |= 1 << i;
-        }
-    }
-    m
-}
-
-pub fn mask_types(mask: i32) -> Vec<ManaType> {
-    ManaType::ALL
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, t)| *t)
-        .collect()
 }
 
 /// The ways one mana symbol could be added to a mana pool (CR 106.8–106.11): each inner
@@ -542,14 +521,8 @@ fn add_mana_with(
         // CR 106.5: mana of an undefined type isn't produced.
         return;
     }
+    // CR 106.12a: `add_mana` reports the permanent as tapped for mana.
     g.add_mana(p, units, ctx.source);
-    if let Some(perm) = tapped {
-        g.emit(crate::events::Event::TappedForMana {
-            obj: perm,
-            player: ctx.controller,
-            types: produced,
-        });
-    }
 }
 
 /// Mana abilities the player could activate right now to pay a cost.

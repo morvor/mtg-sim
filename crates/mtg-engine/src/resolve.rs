@@ -1299,21 +1299,21 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
-            ManaProduction::CouldProduceColor(f) => {
-                // CR 106.7: colorless isn't a color.
-                let types: Vec<ManaType> = crate::mana_abilities::types_could_produce(self, f, ctx)
-                    .into_iter()
-                    .filter(|t| *t != ManaType::C)
-                    .collect();
+            ManaProduction::AnyTypeProduced => {
+                let mask = ctx.event.as_ref().map_or(0, |e| e.amount);
+                let types = crate::mana::types_from_mask(mask);
                 if types.is_empty() {
                     vec![]
                 } else {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
-            ManaProduction::AnyTypeProduced => {
-                let types =
-                    crate::mana_abilities::mask_types(ctx.event.as_ref().map_or(0, |e| e.amount));
+            ManaProduction::CouldProduceColor(f) => {
+                // CR 106.7: colorless isn't a color.
+                let types: Vec<ManaType> = crate::mana_abilities::types_could_produce(self, f, ctx)
+                    .into_iter()
+                    .filter(|t| *t != ManaType::C)
+                    .collect();
                 if types.is_empty() {
                     vec![]
                 } else {

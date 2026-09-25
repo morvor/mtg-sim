@@ -350,9 +350,19 @@ fn for_mana(s: &str) -> Option<Option<ManaType>> {
     end(rest).is_empty().then_some(Some(t))
 }
 
+/// The trigger for "[filter] tapped for mana [of a type]".
+fn tapped_cond(filter: Filter, mana: Option<ManaType>) -> TriggerCond {
+    match mana {
+        None => TriggerCond::TappedForMana(filter),
+        Some(t) => TriggerCond::TappedForManaOfType { filter, mana: t },
+    }
+}
+
 /// Tapped-for-mana trigger conditions (CR 106.12a): "a player taps a land for mana",
 /// "you tap a creature for mana", "you tap a permanent for {c}", "enchanted land is
-/// tapped for mana", "a forest is tapped for mana", "you tap ~ for mana".
+/// tapped for mana", "a forest is tapped for mana", "you tap ~ for mana". The player
+/// who taps a permanent for mana is its controller, so "you tap" / "an opponent taps"
+/// restrict the permanent's controller.
 fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = end(l);
     // "[player] taps [object] for mana"
@@ -373,8 +383,12 @@ fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
                 (f, rest)
             };
             let mana = for_mana(rest)?;
+            let filter = match who {
+                PlayerRel::Any => filter,
+                rel => Filter::and(vec![filter, Filter::ControlledBy(rel)]),
+            };
             return Some((
-                TriggerCond::TappedForMana { filter, who, mana },
+                tapped_cond(filter, mana),
                 Sel::TriggerObject,
                 PlayerRef::TriggerPlayer,
             ));
@@ -403,11 +417,7 @@ fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         f
     };
     Some((
-        TriggerCond::TappedForMana {
-            filter,
-            who: PlayerRel::Any,
-            mana,
-        },
+        tapped_cond(filter, mana),
         Sel::TriggerObject,
         PlayerRef::TriggerPlayer,
     ))
@@ -428,7 +438,10 @@ fn tapped_for_mana_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     let AbilityKind::Triggered(t) = &a.kind else {
         return None;
     };
-    if !matches!(t.trigger, TriggerCond::TappedForMana { .. }) {
+    if !matches!(
+        t.trigger,
+        TriggerCond::TappedForMana(_) | TriggerCond::TappedForManaOfType { .. }
+    ) {
         return None;
     }
     let mut t = t.clone();

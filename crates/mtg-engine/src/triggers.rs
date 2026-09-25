@@ -833,23 +833,39 @@ impl Game {
                 one(EventInfo::default())
             }
             (
-                TriggerCond::TappedForMana { filter, who, mana },
-                Event::TappedForMana { obj, player, types },
+                TriggerCond::TappedForMana(f),
+                Event::TappedForMana {
+                    obj,
+                    player,
+                    produced,
+                },
             ) => {
-                // CR 106.12a: triggers when such a mana ability resolves and produces
-                // mana (of the specified type).
-                let type_ok = match mana {
-                    Some(t) => types.contains(t),
-                    None => !types.is_empty(),
-                };
-                if type_ok
-                    && self.player_rel_matches(*who, *player, &ctx)
-                    && self.matches(*obj, filter, &ctx)
-                {
+                if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
                         player: Some(*player),
-                        amount: crate::mana_abilities::mana_type_mask(types),
+                        amount: crate::mana::mask_of_types(produced),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
+                TriggerCond::TappedForManaOfType { filter, mana },
+                Event::TappedForMana {
+                    obj,
+                    player,
+                    produced,
+                },
+            ) => {
+                // CR 106.12a: "tapped for mana of a specified type" triggers only if that
+                // type of mana was produced.
+                if produced.contains(mana) && self.matches(*obj, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(*player),
+                        amount: crate::mana::mask_of_types(produced),
                         ..Default::default()
                     })
                 } else {
