@@ -300,3 +300,77 @@ fn irregular_plural_subtypes() {
     let horse = t.battlefield(P0, "Phyrexian Warhorse");
     assert!(has(&t, horse, KeywordKind::Indestructible));
 }
+
+// ---------------------------------------------------------------------------
+// "instead as long as", later sentences with their own condition, attachments
+// ---------------------------------------------------------------------------
+
+#[test]
+fn it_gets_more_instead_as_long_as() {
+    cr!("611.3a", "613.4c");
+    ruling!(
+        "Mind Carver",
+        "won't provide additional benefits if more than one opponent has eight or more cards in their graveyard"
+    );
+    compiles("Mind Carver");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let carver = t.battlefield(P0, "Mind Carver");
+    t.attach(carver, Entity::Object(bears));
+    t.settle();
+    assert_eq!(t.pt(bears), (3, 2));
+    for p in [P1, P2] {
+        for _ in 0..8 {
+            t.graveyard(p, "Island");
+        }
+    }
+    t.settle();
+    // +3/+1 instead of +1/+0, not in addition, and only once.
+    assert_eq!(t.pt(bears), (5, 3));
+}
+
+#[test]
+fn later_sentences_with_their_own_conditions() {
+    cr!("611.3a", "613.4c");
+    compiles("Tenza, Godo's Maul");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let tenza = t.battlefield(P0, "Tenza, Godo's Maul");
+    t.attach(tenza, Entity::Object(giant));
+    t.settle();
+    // Red but not legendary.
+    assert_eq!(t.pt(giant), (4, 4));
+    assert!(has(&t, giant, KeywordKind::Trample));
+    let legend = t.battlefield(P0, "Isamaru, Hound of Konda");
+    t.attach(tenza, Entity::Object(legend));
+    t.settle();
+    assert_eq!(t.pt(legend), (5, 5));
+    assert!(!has(&t, legend, KeywordKind::Trample));
+    assert_eq!(t.pt(giant), (3, 3));
+}
+
+#[test]
+fn for_each_aura_attached_to_the_enchanted_creature() {
+    cr!("613.4c", "303.4");
+    ruling!(
+        "Auramancer's Guise",
+        "counts itself when determining the power and toughness bonus"
+    );
+    compiles("Auramancer's Guise");
+    compiles("Golem-Skin Gauntlets");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    enchant(&mut t, P0, "Auramancer's Guise", bears);
+    assert_eq!(t.pt(bears), (4, 4));
+    assert!(has(&t, bears, KeywordKind::Vigilance));
+    enchant(&mut t, P0, "Rancor", bears);
+    // Rancor: +2/+0; the Guise now counts two Auras.
+    assert_eq!(t.pt(bears), (8, 6));
+    // Equipment on another creature doesn't count.
+    let giant = t.battlefield(P0, "Hill Giant");
+    let g = t.battlefield(P0, "Golem-Skin Gauntlets");
+    t.attach(g, Entity::Object(giant));
+    t.settle();
+    assert_eq!(t.pt(giant), (4, 3));
+    assert_eq!(t.pt(bears), (8, 6));
+}

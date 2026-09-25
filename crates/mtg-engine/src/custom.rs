@@ -13,6 +13,11 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     match name {
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
+        // "Aura attached to it" where "it" is the object the source is attached to.
+        "attached_to_host" => {
+            let host = ctx.source.and_then(|s| g.obj(s).attached_to);
+            host.is_some() && g.obj(id).attached_to == host
+        }
         // "with toughness greater than its power".
         "toughness_gt_power" => g.obj(id).toughness() > g.obj(id).power(),
         _ => false,

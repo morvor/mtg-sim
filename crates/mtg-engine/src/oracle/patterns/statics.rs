@@ -812,15 +812,14 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         (" attached to it", it.cloned()),
     ] {
         if let Some(body) = s.strip_suffix(tail) {
-            let sel = sel?;
-            if !matches!(sel, Sel::This) {
-                return None;
-            }
+            let attached = match sel? {
+                Sel::This => Filter::In(Box::new(Sel::AttachedToThis)),
+                // Attached to the object the source is attached to.
+                Sel::AttachedTo => Filter::Custom("attached_to_host".into()),
+                _ => return None,
+            };
             let (f, _) = whole_object_phrase(&union_nouns(body))?;
-            return Some(Value::Count(Filter::and(vec![
-                f,
-                Filter::In(Box::new(Sel::AttachedToThis)),
-            ])));
+            return Some(Value::Count(Filter::and(vec![f, attached])));
         }
     }
     let (f, _) = whole_object_phrase(&union_nouns(s))?;
@@ -1777,7 +1776,7 @@ fn parse_line(
             let i = from + off;
             from = i + 2;
             let (c, rest) = (&r[..i], &r[i + 2..]);
-            let Some((cond, it)) = parse_static_condition(c, None, ctx) else {
+            let Some((cond, it)) = parse_static_condition(c, referent.as_ref(), ctx) else {
                 continue;
             };
             let mut conds2 = conds.clone();
@@ -1954,6 +1953,7 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
     let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
     let same_subject = |a: &Body, b: &Body| format!("{:?}", a.subject.filter) == format!("{:?}", b.subject.filter);
     let mut otherwise = Vec::new();
+    let mut first_unless: Option<Condition> = None;
     for sentence in sentences {
         let it = body.subject.it.clone()?;
         // "... as long as it's a Human. Otherwise, it can't attack or block." (CR 611.3a)
@@ -1966,21 +1966,54 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
             otherwise.extend(build(b2, Some(Condition::Not(Box::new(c))), zone, text));
             continue;
         }
+        // "Enchanted creature gets -2/-2. It gets -5/-5 instead as long as you've
+        // completed a dungeon.": the first effect applies only while C is false.
+        if let Some(i) = sentence.find(" instead as long as ") {
+            if cond.is_some() || first_unless.is_some() {
+                return None;
+            }
+            let rewritten = format!("{}{}", &sentence[..i], &sentence[i + " instead".len()..]);
+            let (b2, c2) = parse_line(&rewritten, vec![], Some(it), &quotes, text, ctx)?;
+            let c2 = c2?;
+            if !same_subject(&body, &b2) {
+                return None;
+            }
+            first_unless = Some(c2.clone());
+            otherwise.extend(build(b2, Some(c2), zone, text));
+            continue;
+        }
         // More about the same object: "Enchanted creature is a Turtle with base power and
-        // toughness 0/1. It can't attack and loses all abilities." One effect.
-        if cond.is_some() || !otherwise.is_empty() {
-            return None;
-        }
+        // toughness 0/1. It can't attack and loses all abilities." One effect, or one
+        // with its own condition ("As long as it's legendary, it gets an additional
+        // +2/+2.").
         let (b2, c2) = parse_line(sentence, vec![], Some(it), &quotes, text, ctx)?;
-        if c2.is_some() || !same_subject(&body, &b2) {
+        if !same_subject(&body, &b2) {
             return None;
         }
-        body.outs.extend(b2.outs);
+        match c2 {
+            None => {
+                if cond.is_some() || !otherwise.is_empty() || first_unless.is_some() {
+                    return None;
+                }
+                body.outs.extend(b2.outs);
+            }
+            Some(c2) => {
+                let c = match &cond {
+                    Some(c) => Condition::And(vec![c.clone(), c2]),
+                    None => c2,
+                };
+                otherwise.extend(build(b2, Some(c), zone, text));
+            }
+        }
     }
     if zone != FunctionZone::Battlefield && body.subject.it.is_some() {
         // Only abilities about other objects work from the graveyard.
         return None;
     }
+    let cond = match first_unless {
+        Some(c) => Some(Condition::Not(Box::new(c))),
+        None => cond,
+    };
     let mut v = build(body, cond, zone, text);
     v.extend(otherwise);
     (!v.is_empty()).then_some(v)
