@@ -264,7 +264,7 @@ fn ward_x_paid_at_its_value_on_resolution() {
 
 #[test]
 fn ward_cost_based_on_power_uses_power_on_resolution() {
-    cr!("702.21a", "702.21b");
+    cr!("702.21a");
     ruling!(
         "Phyrexian Fleshgorger",
         "equal to Phyrexian Fleshgorger's power at the time the ward ability resolves"

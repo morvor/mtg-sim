@@ -158,10 +158,36 @@ fn bands_with_other_bands_with_creatures_of_its_quality() {
 #[test]
 fn losing_banding_removes_bands_with_other() {
     cr!("702.22b");
+    // An effect that removes only banding removes "bands with other" too.
+    let def = custom_card(
+        "Unband",
+        "Instant",
+        None,
+        "Target creature loses banding until end of turn.",
+    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Adventurers' Guildhouse");
     let ayula = t.battlefield(P0, "Ayula, Queen Among Bears");
+    let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
     assert_eq!(keyword_count(&t, ayula, KeywordKind::Banding), 1);
+    assert!(mtg_engine::kw::banding::legal_band(&t.g, &[ayula, isamaru]));
+    let spell = t.custom(P1, def, object::Zone::Hand(P1));
+    t.cast(P1, spell).target(ayula).go();
+    t.resolve_all();
+    assert_eq!(keyword_count(&t, ayula, KeywordKind::Banding), 0);
+    assert!(mtg_engine::kw::banding::bands_with_other(&t.g, ayula).is_empty());
+    // Without its "bands with other legendary creatures", Ayula can't band with the
+    // legendary Isamaru.
+    assert!(!mtg_engine::kw::banding::legal_band(&t.g, &[ayula, isamaru]));
+    attack_in_band(&mut t, ayula, &[isamaru], Entity::Player(P1), &[]);
+    assert!(t.g.is_attacking(ayula) && t.g.is_attacking(isamaru));
+    assert_eq!(band_of(&t, ayula), None);
+    assert_eq!(band_of(&t, isamaru), None);
+
+    // "Loses banding and all "bands with other" abilities" says the same.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Adventurers' Guildhouse");
+    let ayula = t.battlefield(P0, "Ayula, Queen Among Bears");
     let spell = lose_banding_spell(&mut t, P1);
     t.cast(P1, spell).target(ayula).go();
     t.resolve_all();
@@ -240,6 +266,31 @@ fn an_effect_blocking_one_member_blocks_the_band() {
     assert!(is_blocked(&t, hero));
     t.advance_to(P0, Step::EndOfCombat);
     // Blocked creatures with no blockers deal no combat damage.
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn an_effect_blocking_a_second_target_blocks_its_band() {
+    cr!("702.22i");
+    let def = custom_card(
+        "Ambush Order",
+        "Instant",
+        None,
+        "Target creature gets +1/+1 until end of turn. Target unblocked attacking creature becomes blocked.",
+    );
+    let mut t = TestGame::new(2);
+    let hero = t.battlefield(P0, "Benalish Hero");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Hill Giant");
+    attack_in_band(&mut t, hero, &[bears], Entity::Player(P1), &[]);
+    declare_blocks(&mut t, P1, &[]);
+    let spell = t.custom(P1, def, object::Zone::Hand(P1));
+    t.cast(P1, spell).target(wall).target(hero).go();
+    t.resolve_all();
+    assert_eq!(t.pt(wall), (4, 4));
+    assert!(is_blocked(&t, hero));
+    assert!(is_blocked(&t, bears));
+    t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20);
 }
 

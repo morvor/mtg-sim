@@ -11,7 +11,8 @@ use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::{end, parse_target};
 
-/// The custom effect making the creatures chosen for the first target become blocked.
+/// The custom effect making the attacking creature bound to [`vars::AFFECTED`] become
+/// blocked.
 pub const TARGET_BECOMES_BLOCKED: &str = "target becomes blocked";
 
 fn loses_banding_and_bands_with_other(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -32,8 +33,12 @@ fn becomes_blocked(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(tail).is_empty() {
         return None;
     }
-    b.add_target(spec, r);
-    Some(Effect::Custom(TARGET_BECOMES_BLOCKED.into()))
+    let slot = b.add_target(spec, r);
+    Some(Effect::ForEach {
+        sel: Sel::Target(slot),
+        var: vars::AFFECTED,
+        effect: Box::new(Effect::Custom(TARGET_BECOMES_BLOCKED.into())),
+    })
 }
 
 inventory::submit! { EffectPattern { name: "k702.22 target becomes blocked", priority: 60, parse: becomes_blocked } }

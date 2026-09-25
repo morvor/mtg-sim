@@ -284,12 +284,12 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "Target unblocked attacking creature becomes blocked" (CR 509.1h, 702.22i).
     if name == crate::oracle::patterns::k702_banding::TARGET_BECOMES_BLOCKED {
-        let targets: Vec<ObjectId> = ctx
-            .targets
-            .first()
+        let objs: Vec<ObjectId> = ctx
+            .vars
+            .get(&crate::ability::vars::AFFECTED)
             .map(|v| v.iter().filter_map(|e| e.object()).collect())
             .unwrap_or_default();
-        for t in targets {
+        for t in objs {
             crate::combat::become_blocked(g, t);
         }
         return;

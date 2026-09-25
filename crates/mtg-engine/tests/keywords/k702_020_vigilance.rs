@@ -28,7 +28,7 @@ fn attacking_doesnt_tap_a_creature_with_vigilance() {
 
 #[test]
 fn vigilance_doesnt_let_a_tapped_creature_attack() {
-    cr!("702.20b");
+    cr!("702.20b", "508.1a");
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Serra Angel");
     t.g.tap(angel);

@@ -106,7 +106,7 @@ fn lethal_damage_accounts_for_damage_already_marked() {
 
 #[test]
 fn deathtouch_makes_one_damage_lethal_for_trample() {
-    cr!("702.19b");
+    cr!("702.19b", "702.2c");
     let mut t = TestGame::new(2);
     let maw = t.battlefield(P0, "Colossal Dreadmaw");
     let collar = t.battlefield(P0, "Basilisk Collar");
@@ -135,6 +135,43 @@ fn lethal_damage_accounts_for_other_creatures_assigning_in_the_same_step() {
     let maw_decision = d.iter().find(|(_, c, _)| *c == maw).unwrap();
     assert_eq!(maw_decision.2.len(), 2);
     assert!(!t.on_battlefield(guard));
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn deathtouch_damage_assigned_by_another_attacker_counts_as_lethal() {
+    cr!("702.19b", "702.2c");
+    assert_supported("Typhoid Rats");
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Typhoid Rats");
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let guard = t.battlefield(P1, "Palace Guard");
+    attack_with(
+        &mut t,
+        &[(rats, Entity::Player(P1)), (maw, Entity::Player(P1))],
+    );
+    block_and_finish(&mut t, P1, &[(guard, rats), (guard, maw)]);
+    // The rats' 1 deathtouch damage is already lethal for the 1/4 guard, so all of the
+    // Dreadmaw's damage can go to the player.
+    assert!(!t.on_battlefield(guard));
+    assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn lethal_damage_ignores_effects_that_would_prevent_it() {
+    cr!("702.19b");
+    assert_supported("Vodalian Zombie");
+    let mut t = TestGame::new(2);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let zombie = t.battlefield(P1, "Vodalian Zombie");
+    // Protection from green will prevent the damage, but 2 must still be assigned to the
+    // 2/2 before any goes to the player: this all-to-the-player assignment is illegal
+    // and the default (2 to the blocker, 4 to the player) is used instead.
+    assign_damage(&mut t, P0, &[0, 6]);
+    attack_with(&mut t, &[(maw, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[(zombie, maw)]);
+    assert!(t.on_battlefield(zombie));
+    assert_eq!(t.obj_now(zombie).damage, 0);
     assert_eq!(t.life(P1), 16);
 }
 

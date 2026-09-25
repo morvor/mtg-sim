@@ -463,6 +463,10 @@ fn control_ending_while_phased_out_phases_in_at_that_players_untap_step() {
 #[test]
 fn phased_out_under_a_player_who_left_the_game() {
     cr!("702.26n");
+    ruling!(
+        "Spectral Adversary",
+        "If they leave the game before their next untap step, it phases in as the next untap step begins after their turn would have begun"
+    );
     let mut t = TestGame::new(3);
     let ogre = t.battlefield(P0, "Gray Ogre");
     steal(&mut t, P1, ogre);
