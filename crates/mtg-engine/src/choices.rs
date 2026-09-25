@@ -66,8 +66,18 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                     prompt: "Name a card".into(),
                 },
             ) {
-                Answer::Text(t) => t,
+                Answer::Text(t) => t.trim().to_string(),
                 _ => String::new(),
+            };
+            let filter = match kind {
+                ChoiceKind::CardNameFiltered(f) => Some(f.as_str()),
+                _ => None,
+            };
+            // An invalid answer names nothing (the choice stays undefined, CR 607.5a).
+            let name = if valid_card_name(&name, filter) {
+                name
+            } else {
+                String::new()
             };
             g.objects[src.0 as usize].choices.card_name = Some(SmolStr::new(name));
         }
@@ -159,4 +169,30 @@ pub const DOESNT_REMOVE_SOURCE: &str = "doesn't remove source";
 /// The bound form of [`DOESNT_REMOVE_SOURCE`] for a particular object.
 pub fn doesnt_remove_marker(src: crate::types::ObjectId) -> SmolStr {
     SmolStr::new(format!("doesn't remove #{}", src.0))
+}
+
+/// Whether `name` is the name of a real card (any face) satisfying the restriction of a
+/// "choose a [nonland/creature] card name" instruction (CR 201.3).
+pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let Some(c) = mtg_data::cards().by_name(name) else {
+        return false;
+    };
+    if !c.is_playable_card() {
+        return false;
+    }
+    let faces = c.faces();
+    let type_line = faces
+        .iter()
+        .find(|f| f.name.eq_ignore_ascii_case(name))
+        .and_then(|f| f.type_line.clone())
+        .or_else(|| c.type_line.clone())
+        .unwrap_or_default();
+    match filter {
+        Some("nonland") => !type_line.contains("Land"),
+        Some("creature") => type_line.contains("Creature"),
+        _ => true,
+    }
 }

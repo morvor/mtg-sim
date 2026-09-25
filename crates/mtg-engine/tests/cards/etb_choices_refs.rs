@@ -79,6 +79,28 @@ fn meddling_mage_stops_casting_the_named_spell() {
     assert!(t.cast(P0, bolt0).target(P1).try_go().is_err());
 }
 
+#[test]
+fn chosen_name_must_satisfy_the_restriction() {
+    cr!("201.3", "607.5a", "722.5");
+    let mut t = TestGame::new(2);
+    // "Choose a nonland card name": a land's name isn't a legal choice, so nothing is
+    // named.
+    name_card(&mut t, P0, "Forest");
+    let m = t.enter(P0, "Meddling Mage");
+    assert_eq!(t.obj_now(m).choices.card_name.as_deref(), Some(""));
+    // A prepare spell's name may be chosen (CR 722.5).
+    name_card(&mut t, P0, "Have a Bite");
+    let m2 = t.enter(P0, "Meddling Mage");
+    assert_eq!(
+        t.obj_now(m2).choices.card_name.as_deref(),
+        Some("Have a Bite")
+    );
+    // Not a real card.
+    name_card(&mut t, P0, "Not A Real Card Name");
+    let m3 = t.enter(P0, "Meddling Mage");
+    assert_eq!(t.obj_now(m3).choices.card_name.as_deref(), Some(""));
+}
+
 // ---------------------------------------------------------------------------
 // "the chosen color" in triggers, "the chosen player"
 // ---------------------------------------------------------------------------
