@@ -27,13 +27,6 @@ pub enum DeckCondition {
     Each { each: Filter, must: Filter },
 }
 
-/// A sticker sheet (CR 123.2): a predetermined combination of stickers.
-#[derive(Clone, Debug)]
-pub struct StickerSheet {
-    pub name: SmolStr,
-    pub stickers: Vec<crate::stickers::StickerKind>,
-}
-
 /// What happened while starting the game.
 #[derive(Clone, Debug, Default)]
 pub struct StartState {
@@ -43,35 +36,24 @@ pub struct StartState {
     pub starting_team: Option<u8>,
     /// Each player's starting deck (CR 103.2a): the cards in it when it was determined.
     pub starting_decks: BTreeMap<PlayerId, Vec<ObjectId>>,
-    /// The companion card each player revealed from outside the game (CR 103.2b).
-    pub companions: BTreeMap<PlayerId, ObjectId>,
-    /// The sticker sheets each player plays with (CR 123.2a, 123.2b).
-    pub sticker_sheets: BTreeMap<PlayerId, Vec<StickerSheet>>,
-    /// The sticker sheets each player chose (by index); they remain revealed and are the
-    /// only stickers that player has access to (CR 103.2d, 123.2c).
-    pub chosen_sticker_sheets: BTreeMap<PlayerId, Vec<usize>>,
-    /// Sticker sheets revealed to all players (CR 103.2d).
-    pub revealed_sticker_sheets: BTreeMap<PlayerId, Vec<usize>>,
+    /// The sticker sheets each player brings to the game (CR 123.2a, 123.2b); the ones
+    /// chosen at the start of the game are the ones they have access to
+    /// ([`crate::stickers::sheets_of`], CR 103.2d, 123.2c).
+    pub sticker_sheets: BTreeMap<PlayerId, Vec<crate::stickers::StickerSheet>>,
+    /// The names of the sticker sheets each player revealed (CR 103.2d).
+    pub revealed_sticker_sheets: BTreeMap<PlayerId, Vec<SmolStr>>,
 }
 
 impl Game {
-    /// The archenemy (CR 904.2a): the player who starts the game with scheme cards, or the
-    /// only player on a one-player team.
+    /// The archenemy (CR 904.2a): the only player on a one-player team. In a Supervillain
+    /// Rumble game every player is an archenemy (CR 904.12b), so there is no single one.
     pub fn archenemy(&self) -> Option<PlayerId> {
-        if self.config.variant != Variant::Archenemy {
-            return None;
-        }
-        let schemer = self
-            .command
-            .iter()
-            .map(|id| self.obj(*id))
-            .find(|o| o.base.is(CardType::Scheme))
-            .map(|o| o.owner);
-        schemer.or_else(|| {
-            self.player_ids()
-                .into_iter()
-                .find(|p| self.has_teams() && self.team_members(*p).len() == 1)
-        })
+        let all: Vec<PlayerId> = self
+            .player_ids()
+            .into_iter()
+            .filter(|p| crate::life_totals::is_archenemy(self, *p))
+            .collect();
+        (all.len() == 1).then(|| all[0])
     }
 
     /// Whether this is a Commander game using the Brawl option (CR 903.12).
@@ -87,29 +69,12 @@ impl Game {
         })
     }
 
-    /// A player's starting life total (CR 103.4): 20 (or the configured amount), 30 for
-    /// each Two-Headed Giant team (CR 103.4a), 40 in Commander (CR 103.4c), 25 or 30 in
+    /// A player's starting life total (CR 103.4, 119.1): 20 (or the configured amount), 30
+    /// for each Two-Headed Giant team (CR 103.4a), 40 in Commander (CR 103.4c), 25 or 30 in
     /// Brawl (CR 103.4d), 40 for the archenemy (CR 103.4e); a vanguard's life modifier
     /// applies (CR 103.4b).
     pub fn starting_life(&self, p: PlayerId) -> i32 {
-        let base = match self.config.variant {
-            Variant::TwoHeadedGiant => 30,
-            Variant::Commander if self.config.brawl => {
-                if self.is_two_player() {
-                    25
-                } else {
-                    30
-                }
-            }
-            Variant::Commander => 40,
-            Variant::Archenemy if self.archenemy() == Some(p) => 40,
-            _ => self.config.starting_life,
-        };
-        let modifier = self
-            .vanguard_of(p)
-            .and_then(|v| self.obj(v).base.life_modifier)
-            .unwrap_or(0);
-        base + modifier
+        crate::life_totals::starting_life(self, p)
     }
 
     /// A player's starting hand size (CR 103.5): normally seven, modified by their
@@ -153,17 +118,19 @@ impl Game {
             .collect()
     }
 
-    /// The stickers a player has access to (CR 123.2c): those on their chosen sticker
-    /// sheets, or none if they play without sticker sheets.
-    pub fn accessible_sticker_sheets(&self, p: PlayerId) -> Vec<&StickerSheet> {
-        let sheets = self.start.sticker_sheets.get(&p);
-        self.start
-            .chosen_sticker_sheets
-            .get(&p)
-            .into_iter()
-            .flatten()
-            .filter_map(|i| sheets.and_then(|s| s.get(*i)))
-            .collect()
+    /// The sticker sheets a player has access to (CR 123.2c): those chosen at the start of
+    /// the game, or none if they play without sticker sheets.
+    pub fn accessible_sticker_sheets(&self, p: PlayerId) -> &[crate::stickers::StickerSheet] {
+        crate::stickers::sheets_of(self, p)
+    }
+
+    /// The companion a player revealed (CR 103.2b), if any.
+    pub fn companion_of(&self, p: PlayerId) -> Option<ObjectId> {
+        self.special
+            .companions
+            .iter()
+            .find(|(q, _, _)| *q == p)
+            .map(|(_, c, _)| *c)
     }
 }
 
@@ -291,8 +258,8 @@ fn reveal_companions(g: &mut Game) {
         }
         let pick = g.ask_objects(p, None, "Reveal a companion?", cands, 0, 1);
         if let Some(c) = pick.first() {
-            g.start.companions.insert(p, *c);
-            g.log(|g| format!("{p} reveals {} as their companion", g.describe(*c)));
+            // Recorded for the companion's special action (CR 702.139a).
+            crate::kw::companion::choose_companion(g, p, *c);
         }
     }
 }
@@ -323,43 +290,42 @@ fn commanders_to_command_zone(g: &mut Game) {
 
 /// CR 103.2d: in a constructed game, each player playing with sticker sheets reveals all of
 /// them and chooses three at random; in a limited game, each such player chooses up to
-/// three and reveals them.
+/// three and reveals them. Those are the only stickers the player has access to
+/// (CR 123.2c).
 fn choose_sticker_sheets(g: &mut Game) {
-    use rand::seq::SliceRandom;
+    use crate::stickers::{choose_sheets, SheetFormat};
     for p in g.apnap() {
-        let n = g.start.sticker_sheets.get(&p).map_or(0, |s| s.len());
-        if n == 0 {
+        let Some(sheets) = g.start.sticker_sheets.get(&p).cloned() else {
+            continue;
+        };
+        if sheets.is_empty() {
             continue;
         }
-        let chosen: Vec<usize> = if g.config.limited {
+        if g.config.limited {
             let mut chosen: Vec<usize> = Vec::new();
             while chosen.len() < 3 {
-                let rest: Vec<usize> = (0..n).filter(|i| !chosen.contains(i)).collect();
+                let rest: Vec<usize> = (0..sheets.len()).filter(|i| !chosen.contains(i)).collect();
                 if rest.is_empty() {
                     break;
                 }
                 let mut options = vec!["Done".to_string()];
-                options.extend(
-                    rest.iter()
-                        .map(|i| g.start.sticker_sheets[&p][*i].name.to_string()),
-                );
+                options.extend(rest.iter().map(|i| sheets[*i].name.to_string()));
                 let k = g.ask_option(p, None, "Choose a sticker sheet", options);
                 if k == 0 {
                     break;
                 }
                 chosen.push(rest[k - 1]);
             }
-            g.start.revealed_sticker_sheets.insert(p, chosen.clone());
-            chosen
+            let picked: Vec<_> = chosen.iter().map(|i| sheets[*i].clone()).collect();
+            if let Ok(names) = choose_sheets(g, p, picked, SheetFormat::Limited) {
+                g.start.revealed_sticker_sheets.insert(p, names);
+            }
         } else {
-            g.start.revealed_sticker_sheets.insert(p, (0..n).collect());
-            let mut all: Vec<usize> = (0..n).collect();
-            all.shuffle(&mut g.rng);
-            all.truncate(3);
-            all.sort_unstable();
-            all
-        };
-        g.start.chosen_sticker_sheets.insert(p, chosen);
+            let all: Vec<SmolStr> = sheets.iter().map(|s| s.name.clone()).collect();
+            if choose_sheets(g, p, sheets, SheetFormat::Constructed).is_ok() {
+                g.start.revealed_sticker_sheets.insert(p, all);
+            }
+        }
     }
 }
 
@@ -434,13 +400,4 @@ fn apply_starting_player_effects(g: &mut Game) {
     g.log(|_| format!("{starting} is the starting player"));
     g.turn.starting_player = starting;
     g.turn.active = starting;
-}
-
-/// CR 103.4: each player's life total becomes their starting life total. In Two-Headed
-/// Giant, the team's shared life total is 30 (CR 103.4a, 810.4).
-pub fn set_starting_life(g: &mut Game) {
-    for p in g.player_ids() {
-        let life = g.starting_life(p);
-        g.players[p.idx()].life = life;
-    }
 }

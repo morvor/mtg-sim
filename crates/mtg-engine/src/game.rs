@@ -55,6 +55,8 @@ pub struct GameConfig {
     pub starting_player_skips_draw: Option<bool>,
     /// Commander: amount of combat damage from a single commander that loses the game.
     pub commander_damage_limit: u32,
+    /// Commander: the Brawl option (CR 903.12).
+    pub brawl: bool,
     /// Maximum number of turns before the game is declared a draw (simulation safety).
     pub max_turns: u32,
     /// Max decisions per game (safety valve for infinite loops).
@@ -63,9 +65,6 @@ pub struct GameConfig {
     /// Planechase: play with a single communal planar deck (CR 901.15).
     #[serde(default)]
     pub single_planar_deck: bool,
-    /// Commander: use the Brawl option (CR 903.12).
-    #[serde(default)]
-    pub brawl: bool,
     /// Limited play (CR 100.2b) rather than constructed play.
     #[serde(default)]
     pub limited: bool,
@@ -88,11 +87,11 @@ impl Default for GameConfig {
             skip_mulligans: false,
             starting_player_skips_draw: None,
             commander_damage_limit: 21,
+            brawl: false,
             max_turns: 200,
             max_actions: 200_000,
             seed: 0,
             single_planar_deck: false,
-            brawl: false,
             limited: false,
             first_turn_chooser: None,
         }
@@ -479,6 +478,8 @@ pub struct Game {
     pub apnap_choices: Vec<crate::apnap::ApnapChoice>,
     /// What happened while starting the game (CR 103).
     pub start: crate::start::StartState,
+    /// Special actions allowed by effects and effects being ignored (CR 116.2c, 116.2d).
+    pub special: crate::special_actions::SpecialState,
 }
 
 impl Game {
@@ -564,6 +565,7 @@ impl Game {
             end: Default::default(),
             apnap_choices: vec![],
             start: Default::default(),
+            special: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -572,6 +574,8 @@ impl Game {
                 }
             }
         }
+        // CR 119.1: starting life totals (which depend on the variant and teams).
+        crate::life_totals::set_starting_life_totals(&mut g);
         for (i, deck) in decks.into_iter().enumerate() {
             let pid = PlayerId(i as u8);
             for card in deck {
@@ -852,6 +856,8 @@ impl Game {
         let id = self.push_object(n);
         self.objects[old.0 as usize].next = Some(id);
         crate::stickers::follow(self, old, id, zone);
+        crate::rooms::entering(self, old, id, zone);
+        crate::merge::incarnation(self, old, id);
         id
     }
 

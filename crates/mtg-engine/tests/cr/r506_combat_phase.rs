@@ -192,7 +192,8 @@ fn shared_team_turns_active_team_attacks_nonactive_team_defends() {
     assert!(t.g.is_attacking(a0) && t.g.is_attacking(a1));
     assert!(t.g.is_blocking(b3));
     go_to(&mut t, Step::EndOfCombat);
-    assert_eq!(t.life(P2), 18);
+    // The defending team's shared life total started at 30 (CR 810.4).
+    assert_eq!(t.life(P2), 28);
     assert!(!t.on_battlefield(a1));
 }
 

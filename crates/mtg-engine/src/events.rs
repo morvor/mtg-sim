@@ -95,6 +95,12 @@ pub enum Event {
         amount: u32,
         combat: bool,
     },
+    /// A permanent was dealt excess damage (CR 120.10).
+    ExcessDamage {
+        obj: ObjectId,
+        amount: u32,
+        combat: bool,
+    },
     /// A prevention effect prevented some or all of the damage that would have been dealt
     /// (CR 615.13). `by` is the prevention effect's source; `key` identifies the effect.
     DamagePrevented {

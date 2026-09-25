@@ -80,6 +80,7 @@ fn the_kinds_of_objects() {
         vec![spell_ab(
             vec![],
             Effect::CreateEmblem {
+                who: PlayerRef::You,
                 abilities: vec![static_ab(StaticEffect::Continuous {
                     affected: Filter::creature().you_control(),
                     mods: vec![Modification::ModifyPT(Value::c(1), Value::c(1))],
@@ -335,6 +336,7 @@ fn an_emblem_is_controlled_by_the_player_who_puts_it_into_the_command_zone() {
         vec![spell_ab(
             vec![],
             Effect::CreateEmblem {
+                who: PlayerRef::You,
                 abilities: vec![static_ab(StaticEffect::Continuous {
                     affected: Filter::creature().you_control(),
                     mods: vec![Modification::ModifyPT(Value::c(1), Value::c(1))],

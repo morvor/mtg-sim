@@ -140,7 +140,7 @@ pub fn subtype_word(w: &str) -> Option<Subtype> {
 }
 
 /// A single "head" noun: card type, subtype, "permanent", "spell", "card".
-fn head_noun(w: &str) -> Option<Filter> {
+pub fn head_noun(w: &str) -> Option<Filter> {
     let sg = singular(w);
     match sg.as_str() {
         "permanent" => return Some(Filter::Permanent),
@@ -157,7 +157,7 @@ fn head_noun(w: &str) -> Option<Filter> {
 }
 
 /// Adjectives preceding the head noun.
-fn adjective(w: &str) -> Option<Filter> {
+pub fn adjective(w: &str) -> Option<Filter> {
     if let Some(c) = Color::from_word(w) {
         return Some(Filter::Color(c));
     }
@@ -211,7 +211,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         parts.push(Filter::Other);
         s = r;
     }
-    // Adjectives.
+    // Adjectives. Space- and comma-separated adjectives are conjunctive ("nonartifact,
+    // nonblack creature"); a list joined by "or" is disjunctive ("attacking or blocking
+    // creature", "red, white, or black creature").
+    let is_adj = |w: &str| {
+        let w2 = w.trim_end_matches(',');
+        !w2.is_empty()
+            && (head_noun(w2).is_none() || matches!(w2, "token" | "tokens"))
+            && adjective(w2).is_some()
+    };
+    let mut items: Vec<Vec<Filter>> = vec![vec![]];
+    let mut disjunctive = false;
     let mut last_adjective = "";
     loop {
         let (w, rest) = split_word(s);
@@ -219,23 +229,45 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         if w2.is_empty() {
             break;
         }
+        if matches!(w2, "or" | "and/or") && items.iter().any(|v| !v.is_empty()) {
+            // Only an adjective list continues after "or".
+            if !is_adj(split_word(rest).0) {
+                break;
+            }
+            disjunctive = true;
+            if !items.last().unwrap().is_empty() {
+                items.push(vec![]);
+            }
+            s = rest;
+            continue;
+        }
         // Stop if this word is a head noun (but "token" can be either).
-        if head_noun(w2).is_some() && !matches!(w2, "token" | "tokens") {
+        if !is_adj(w) {
             break;
         }
-        match adjective(w2) {
-            Some(f) => {
-                parts.push(f);
-                last_adjective = w2;
-                s = rest;
+        items.last_mut().unwrap().push(adjective(w2).unwrap());
+        last_adjective = w2;
+        s = rest;
+        if w.ends_with(',') {
+            let next = split_word(rest).0;
+            if is_adj(next) || matches!(next, "or" | "and/or") {
+                items.push(vec![]);
             }
-            None => break,
         }
+    }
+    items.retain(|v| !v.is_empty());
+    if disjunctive && items.len() > 1 {
+        parts.push(Filter::Or(
+            items.into_iter().map(Filter::and).collect::<Vec<_>>(),
+        ));
+    } else {
+        parts.extend(items.into_iter().flatten());
     }
     // Head nouns joined by "or", "and/or", commas.
     let mut heads: Vec<Filter> = Vec::new();
-    // Heads not yet narrowed by a following noun ("instant or sorcery | spell").
-    let mut unnarrowed = 0;
+    // Start of the heads joined since the last narrowing noun ("instant or sorcery"
+    // before "spell").
+    let mut group_start = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
     loop {
@@ -259,31 +291,66 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         if w.ends_with(',') {
             if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
                 s = r;
+            } else if let Some(r) = t.strip_prefix("and ") {
+                // "artifacts, creatures, and lands" (a plural list names a union), "each
+                // artifact, creature, and enchantment" (card types).
+                let next = head_noun(split_word(r).0.trim_end_matches(','));
+                let types = matches!(heads.last(), Some(Filter::Type(_)))
+                    && matches!(next, Some(Filter::Type(_)));
+                if (plural && next.is_some()) || types {
+                    s = r;
+                }
             }
             continue;
+        }
+        // "artifacts and enchantments": plural nouns joined by "and" name a union.
+        if plural {
+            if let Some(r) = t.strip_prefix("and ") {
+                let nw = split_word(r).0.trim_end_matches(',');
+                if nw.ends_with('s') && head_noun(nw).is_some() {
+                    s = r;
+                    continue;
+                }
+            }
+        }
+        // "each creature and planeswalker", "all artifact and creature cards": card types
+        // joined by "and" name objects with either type.
+        if let Some(r) = t.strip_prefix("and ") {
+            let nw = split_word(r).0.trim_end_matches(',');
+            if matches!(heads.last(), Some(Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Type(_)))
+            {
+                s = r;
+                continue;
+            }
         }
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
         let (nw, nrest) = split_word(s);
         let nw2 = nw.trim_end_matches(',');
         if let Some(nf) = head_noun(nw2) {
+            // The noun narrows every head joined since the last narrowing: "instant or
+            // sorcery spell", "artifact and enchantment cards".
+            let group: Vec<Filter> = heads
+                .drain(group_start..)
+                .map(|last| match (last, &nf) {
+                    // "permanent card" / "permanent spell" (CR 110.4a-b): not on the
+                    // battlefield, but with a permanent card type.
+                    (Filter::Permanent, Filter::Card | Filter::Spell | Filter::Any) => {
+                        Filter::PermanentCard
+                    }
+                    (last, _) => last,
+                })
+                .collect();
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
-            // The noun narrows every head of this "or" list: "instant or sorcery
-            // spells" are instant spells or sorcery spells.
-            for h in &mut heads[unnarrowed..] {
-                let last = std::mem::replace(h, Filter::Any);
-                // "permanent card" / "permanent spell" (CR 110.4a-b): not on the
-                // battlefield, but with a permanent card type.
-                let last = match (last, &nf) {
-                    (Filter::Permanent, Filter::Any | Filter::Card | Filter::Spell) => {
-                        Filter::PermanentCard
-                    }
-                    (l, _) => l,
-                };
-                *h = Filter::and(vec![last, nf.clone()]);
-            }
-            unnarrowed = heads.len();
+            let joined = if group.len() == 1 {
+                group.into_iter().next().unwrap()
+            } else {
+                Filter::Or(group)
+            };
+            heads.push(Filter::and(vec![joined, nf]));
+            group_start = heads.len();
             s = nrest;
             // allow "creature card or artifact card"
             let t = s.trim_start();
@@ -295,7 +362,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         break;
     }
     // "a token", "tokens you control": "token" was the head noun after all.
-    if heads.is_empty() && matches!(last_adjective, "token" | "tokens") {
+    if heads.is_empty() && !disjunctive && matches!(last_adjective, "token" | "tokens") {
         parts.pop();
         heads.push(Filter::Token);
         plural = last_adjective == "tokens";
@@ -331,14 +398,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("your opponents control"))
         {
             (Filter::ControlledBy(PlayerRel::Opponent), r)
-        } else if let Some(r) = t
-            .strip_prefix("target player controls")
-            .or_else(|| t.strip_prefix("target opponent controls"))
-        {
-            (Filter::ControlledBy(PlayerRel::Target(0)), r)
-        } else if let Some(r) = t.strip_prefix("defending player controls") {
-            // CR 508.5: the player the creature is attacking.
-            (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("the triggering player controls") {
+            // Internal form of "that player controls" inside a trigger whose player is
+            // the triggering player (see `triggers_effects::that_player_controls`).
+            (Filter::ControlledBy(PlayerRel::TriggerPlayer), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t
@@ -357,7 +420,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("from a graveyard"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
-        } else if let Some(r) = t.strip_prefix("in an opponent's graveyard") {
+        } else if let Some(r) = t
+            .strip_prefix("in an opponent's graveyard")
+            .or_else(|| t.strip_prefix("from an opponent's graveyard"))
+        {
             (
                 Filter::and(vec![
                     Filter::InZone(ZoneKind::Graveyard),
@@ -378,6 +444,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
+        } else if let Some(r) = t.strip_prefix("on the battlefield") {
+            (Filter::InZone(ZoneKind::Battlefield), r)
         } else if let Some(r) = t.strip_prefix("with flying") {
             (Filter::HasKeyword(KeywordKind::Flying), r)
         } else if let Some(r) = t.strip_prefix("without flying") {
@@ -402,6 +470,22 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {
             (Filter::Blocking, r)
+        } else if let Some(r) = t
+            .strip_prefix("that was dealt damage this turn")
+            .or_else(|| t.strip_prefix("that were dealt damage this turn"))
+        {
+            (Filter::DealtDamageThisTurn, r)
+        } else if let Some(r) = t.strip_prefix("defending player controls") {
+            (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {
+            (
+                Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("blocking ~") {
+            (Filter::BlockingSource, r)
+        } else if let Some(r) = t.strip_prefix("blocked by ~") {
+            (Filter::BlockedBySource, r)
         } else if let Some((f, r)) = parse_chosen_suffix(t) {
             (f, r)
         } else {
@@ -411,6 +495,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = rest;
     }
     Some((Filter::and(parts), plural, s))
+}
+
+/// "target player controls" / "target opponent controls" after an object phrase. The
+/// phrase parser leaves this suffix unparsed because it introduces a target of its own;
+/// callers that can add targets bind it (see `effects::bind_target_player`).
+pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &str)> {
+    let t = s.trim_start();
+    if let Some(r) = t.strip_prefix("target player controls") {
+        return Some((PlayerFilter::Any, "target player", r));
+    }
+    if let Some(r) = t.strip_prefix("target opponent controls") {
+        return Some((PlayerFilter::Opponent, "target opponent", r));
+    }
+    None
 }
 
 /// References to a choice made for the source (CR 607.2d): "of the chosen type",
@@ -532,6 +630,32 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((f, r));
         }
     }
+    // "with mana value equal to the number of charge counters on ~" (read as the effect
+    // checks each object; the source's last known information if it's gone).
+    for (p, cmp) in [
+        ("equal to the number of ", Cmp::Eq),
+        ("less than or equal to the number of ", Cmp::Le),
+    ] {
+        if let Some(r) = rest.strip_prefix(p) {
+            let (kind, r) = split_word(r);
+            let r = r
+                .strip_prefix("counters on ~")
+                .or_else(|| r.strip_prefix("counter on ~"))?;
+            if !kind
+                .chars()
+                .all(|c| c.is_alphabetic() || c == '+' || c == '-' || c == '/')
+            {
+                return None;
+            }
+            let v = Box::new(Value::CountersOn(Box::new(Sel::This), Some(kind.into())));
+            let f = match stat {
+                "power" => Filter::Power(cmp, v),
+                "toughness" => Filter::Toughness(cmp, v),
+                _ => Filter::ManaValue(cmp, v),
+            };
+            return Some((f, r));
+        }
+    }
     let (n, rest) = parse_number(rest)?;
     let rest = rest.trim_start();
     let (cmp, rest) = if let Some(r) = rest.strip_prefix("or less") {
@@ -564,6 +688,10 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         min = 0;
         max = n;
         s = r2;
+    } else if let Some(r) = strip(s, "one or two ") {
+        min = 1;
+        max = Value::Const(2);
+        s = r;
     } else if let Some((n, r)) = parse_number(s) {
         if strip(r, "target").is_some() || strip(r, "other target").is_some() {
             if let Value::Const(k) = n {

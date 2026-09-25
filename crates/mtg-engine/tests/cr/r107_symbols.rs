@@ -298,7 +298,18 @@ fn loyalty_symbols() {
     let chandra = t.battlefield(P0, "Chandra, Flamecaller");
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer(P0, DecisionKind::X, Answer::Number(2));
-    t.activate(P0, chandra, 0, &[]).unwrap();
+    // (Find the −X ability by its text: which of Chandra's other abilities the compiler
+    // supports doesn't matter here.)
+    let minus_x = t
+        .g
+        .obj(chandra)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.contains("damage to each creature"))
+        .expect("Chandra's −X ability");
+    t.activate(P0, chandra, minus_x, &[]).unwrap();
     assert_eq!(t.counters(chandra, "loyalty"), 2);
     t.resolve();
     assert!(!t.on_battlefield(bears));

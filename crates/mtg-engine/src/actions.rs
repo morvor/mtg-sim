@@ -514,6 +514,7 @@ impl Game {
                                 // Counters it's given as it enters are "put" on it (CR 122.6),
                                 // e.g. a Saga's first lore counter triggers chapter I (714.3a).
                                 if n > 0 {
+                                    self.history.counters_put += n;
                                     self.emit(Event::CountersAdded {
                                         target: Entity::Object(t),
                                         kind,
@@ -631,6 +632,10 @@ impl Game {
                 from: host,
             });
         }
+        if from == Zone::Battlefield {
+            // CR 730.3: the other components of a merged or melded permanent.
+            crate::merge::after_leaving(self, old_id, new_id, &m);
+        }
         Some(new_id)
     }
 
@@ -709,6 +714,11 @@ impl Game {
 
     /// Draws `n` cards one at a time (CR 121.2). Returns the cards drawn.
     pub fn draw_cards(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
+        // CR 121.2a: effects referring to the number of cards drawn apply first.
+        if let Some(out) = crate::draw_rules::replace_multiple_draws(self, p, n) {
+            self.run_post_replacement_effects();
+            return out;
+        }
         let mut out = Vec::new();
         for _ in 0..n {
             if !self.player(p).in_game() {
@@ -734,14 +744,9 @@ impl Game {
         out
     }
 
+    /// CR 121.2b: "can't draw more than N cards each turn" applies to individual draws.
     fn draw_restricted(&self, p: PlayerId) -> bool {
-        let drawn = self.history.cards_drawn.get(&p).copied().unwrap_or(0);
-        self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::MaxDrawsPerTurn(pf, n) => {
-                self.player_filter_matches(pf, p, &Ctx::new(Some(*s), *c)) && drawn >= *n
-            }
-            _ => false,
-        })
+        crate::draw_rules::draws_left(self, p) == Some(0)
     }
 
     fn perform_draw(&mut self, p: PlayerId) -> Option<ObjectId> {
@@ -772,6 +777,8 @@ impl Game {
             card: new,
             nth,
         });
+        // "As you draw it" abilities (CR 121.8, 121.9).
+        crate::draw_rules::card_drawn(self, p, new, nth);
         Some(new)
     }
 
@@ -869,6 +876,10 @@ impl Game {
         if o.zone != Zone::Battlefield || !o.tapped {
             return false;
         }
+        // CR 122.1d: a stun counter's replacement effect.
+        if crate::counter_rules::stun_instead_of_untap(self, obj) {
+            return false;
+        }
         self.objects[obj.0 as usize].tapped = false;
         self.dirty = true;
         self.emit(Event::Untapped { obj });
@@ -939,7 +950,14 @@ impl Game {
                 continue;
             }
             let evs = if no_regen {
-                vec![ReplEvent::Destroy { obj, source }]
+                // CR 701.19c: "can't be regenerated" makes regeneration shields not
+                // apply; other replacement effects still do.
+                let mut skip = self.repl_context.last().cloned().unwrap_or_default();
+                skip.extend(self.regeneration_keys());
+                self.repl_context.push(skip);
+                let r = self.replace(ReplEvent::Destroy { obj, source });
+                self.repl_context.pop();
+                r
             } else {
                 self.replace(ReplEvent::Destroy { obj, source })
             };
@@ -969,6 +987,25 @@ impl Game {
             }
         }
         res.into_iter().flatten().collect()
+    }
+
+    /// Keys of all regeneration replacement effects (shields and static regeneration).
+    fn regeneration_keys(&self) -> Vec<ReplKey> {
+        let regen = |d: &ReplacementDef| matches!(d.action, ReplacementAction::Regenerate);
+        let mut keys: Vec<ReplKey> = self
+            .replacements
+            .iter()
+            .filter(|r| regen(&r.def))
+            .map(|r| ReplKey::Instance(r.id))
+            .collect();
+        keys.extend(
+            self.statics
+                .replacements
+                .iter()
+                .filter(|(_, _, _, _, d)| regen(d))
+                .map(|(s, _, _, a, _)| ReplKey::Static(*s, a.uid)),
+        );
+        keys
     }
 
     /// Sacrifices a permanent (CR 701.21). Only the controller can sacrifice.
@@ -1152,6 +1189,7 @@ impl Game {
             return;
         }
         self.players[p.idx()].life += n as i32;
+        crate::life_totals::share_team_life(self, p);
         *self.history.life_gained.entry(p).or_insert(0) += n;
         // Life totals feed conditional statics and P/T-defining values (CR 611.3a).
         self.dirty = true;
@@ -1181,6 +1219,7 @@ impl Game {
             return;
         }
         self.players[p.idx()].life -= n as i32;
+        crate::life_totals::share_team_life(self, p);
         *self.history.life_lost.entry(p).or_insert(0) += n;
         self.dirty = true;
         self.emit(Event::LifeLost {
@@ -1284,6 +1323,12 @@ impl Game {
             }));
         }
         crate::prevention::merge_prevention_events(self, first_event);
+        // CR 120.10: what would be excess damage, as the damage is about to be dealt.
+        let excess_before = crate::excess_damage::thresholds_before(
+            self,
+            &crate::excess_damage::damage_events(&finals),
+        );
+        let mut dealt: Vec<(ObjectId, Entity, u32)> = Vec::new();
         // CR 702.15e: each source with lifelink causes one life gain event, even if it
         // dealt damage to several recipients at once.
         let mut lifelink_gains: Vec<(ObjectId, PlayerId, u32)> = Vec::new();
@@ -1297,6 +1342,7 @@ impl Game {
                 } => {
                     if self.valid_damage_recipient(target) && amount > 0 {
                         self.perform_damage(source, target, amount, combat);
+                        dealt.push((source, target, amount));
                         // CR 120.3f, 702.15b: lifelink — damage causes the source's
                         // controller (its owner if it has none) to gain that much life.
                         // The source's last known information is used if it has left its
@@ -1313,6 +1359,7 @@ impl Game {
                 other => self.execute_repl_event(other),
             }
         }
+        crate::excess_damage::record_excess(self, &excess_before, &dealt, combat);
         for (_, p, n) in lifelink_gains {
             self.gain_life(p, n);
         }
@@ -1335,8 +1382,9 @@ impl Game {
         match target {
             Entity::Player(p) => {
                 if infect {
-                    // CR 120.3b
-                    self.perform_add_counters(Entity::Player(p), counters::POISON.into(), amount);
+                    // CR 120.3b; the counters can be modified by replacement effects
+                    // (CR 120.4c).
+                    self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);
                 } else {
                     // CR 120.3a (life loss can be replaced as "lose life")
                     for e in self.replace(ReplEvent::LoseLife { player: p, amount }) {
@@ -1364,11 +1412,12 @@ impl Game {
                 }
                 if obj.is_creature() {
                     if wither || infect {
-                        // CR 120.3d
-                        self.perform_add_counters(
+                        // CR 120.3d, 120.4c
+                        self.put_damage_counters(
                             Entity::Object(o),
-                            counters::MINUS1.into(),
+                            counters::MINUS1,
                             amount,
+                            source,
                         );
                     } else {
                         // CR 120.3e
@@ -1398,6 +1447,19 @@ impl Game {
             combat,
         });
         crate::keyword_impls::after_damage(self, source, target, amount, combat);
+    }
+
+    /// Counters that are the result of damage (infect and wither, CR 120.3b, 120.3d),
+    /// as modified by replacement effects that interact with them (CR 120.4c).
+    fn put_damage_counters(&mut self, target: Entity, kind: &str, n: u32, source: ObjectId) {
+        for e in self.replace(ReplEvent::AddCounters {
+            target,
+            kind: kind.into(),
+            n,
+            source: Some(source),
+        }) {
+            self.execute_repl_event(e);
+        }
     }
 
     // ------------------------------------------------------------------

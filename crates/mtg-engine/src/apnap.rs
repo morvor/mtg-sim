@@ -96,8 +96,11 @@ impl Game {
 
     /// Sacrifices several permanents at the same time (CR 101.4, 701.21a): they leave the
     /// battlefield in one simultaneous event, so leaves-the-battlefield abilities of each
-    /// see the others (CR 603.10a). Returns the new objects.
-    pub fn sacrifice_simultaneously(&mut self, what: &[(ObjectId, PlayerId)]) -> Vec<ObjectId> {
+    /// see the others (CR 603.10a). Returns (sacrificed object, new object) pairs.
+    pub fn sacrifice_simultaneously(
+        &mut self,
+        what: &[(ObjectId, PlayerId)],
+    ) -> Vec<(ObjectId, ObjectId)> {
         if self.dirty {
             self.recompute();
         }
@@ -131,7 +134,10 @@ impl Game {
                 player: *by,
             });
         }
-        res.into_iter().flatten().collect()
+        ok.iter()
+            .zip(res)
+            .filter_map(|((o, _), new)| new.map(|n| (*o, n)))
+            .collect()
     }
 }
 

@@ -631,6 +631,7 @@ fn abilities_of_command_zone_objects_function_there() {
         vec![spell_ab(
             vec![],
             Effect::CreateEmblem {
+                who: PlayerRef::You,
                 abilities: vec![static_ab(StaticEffect::Continuous {
                     affected: Filter::creature().you_control(),
                     mods: vec![Modification::ModifyPT(Value::c(1), Value::c(1))],

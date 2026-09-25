@@ -685,10 +685,14 @@ fn triggered_mana_units(
                 continue;
             }
             // Only mana that goes to the paying player helps.
-            let who = match &t.body.effect {
-                Effect::AddMana { who, .. } => g.eval_player(who, &ctx),
-                _ => None,
-            };
+            fn recipient(e: &Effect) -> Option<&PlayerRef> {
+                match e {
+                    Effect::AddMana { who, .. } => Some(who),
+                    Effect::Seq(v) => v.iter().find_map(recipient),
+                    _ => None,
+                }
+            }
+            let who = recipient(&t.body.effect).and_then(|w| g.eval_player(w, &ctx));
             if who != Some(p) {
                 continue;
             }

@@ -6,7 +6,7 @@ use mtg_engine::card::{card, CardDef};
 use mtg_engine::decision::Decision;
 use mtg_engine::game::{GameConfig, Variant};
 use mtg_engine::object::{Characteristics, Zone};
-use mtg_engine::start::StickerSheet;
+use mtg_engine::stickers::StickerSheet;
 use mtg_engine::testing::*;
 use mtg_engine::turn::{Stage, Step};
 use mtg_engine::types::*;
@@ -96,6 +96,7 @@ fn the_archenemy_takes_the_first_turn() {
         let mut t = pregame(
             GameConfig {
                 variant: Variant::Archenemy,
+                teams: Some(vec![0, 0, 1]),
                 seed,
                 ..config()
             },
@@ -225,7 +226,7 @@ fn a_companion_can_be_revealed_only_if_the_starting_deck_fulfills_its_condition(
     let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den"), card("Hill Giant")]);
     t.answer_choose(P0, &[Entity::Object(side[0])]);
     t.g.start();
-    assert_eq!(t.g.start.companions.get(&P0), Some(&side[0]));
+    assert_eq!(t.g.companion_of(P0), Some(side[0]));
     // The revealed card remains outside the game.
     assert_eq!(t.g.obj(side[0]).zone, Zone::Outside(P0));
     // A deck with a three-mana permanent doesn't fulfill it: no reveal is offered.
@@ -235,16 +236,28 @@ fn a_companion_can_be_revealed_only_if_the_starting_deck_fulfills_its_condition(
     let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
     t.answer_choose(P0, &[Entity::Object(side[0])]);
     t.g.start();
-    assert!(t.g.start.companions.is_empty());
+    assert_eq!(t.g.companion_of(P0), None);
     // At most one companion.
     let mut t = pregame(config(), vec![cheap(), fillers(20)]);
     let side = t.g.add_to_sideboard(
         P0,
         vec![card("Lurrus of the Dream-Den"), card("Lurrus of the Dream-Den")],
     );
-    t.answer_choose(P0, &[Entity::Object(side[0]), Entity::Object(side[1])]);
+    t.answer_choose(P0, &[Entity::Object(side[1])]);
     t.g.start();
-    assert!(t.g.start.companions.len() <= 1);
+    assert_eq!(t.g.special.companions.len(), 1);
+    assert_eq!(t.g.companion_of(P0), Some(side[1]));
+    let max: Vec<u32> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { prompt, max, .. } if prompt.contains("companion") => {
+                Some(max)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(max, vec![1]);
 }
 
 #[test]
@@ -299,9 +312,13 @@ fn constructed_players_reveal_all_sticker_sheets_and_choose_three_at_random() {
         t.g.start.sticker_sheets.insert(P0, sheets(10));
         t.g.start();
         assert_eq!(t.g.start.revealed_sticker_sheets[&P0].len(), 10);
-        let chosen = t.g.start.chosen_sticker_sheets[&P0].clone();
+        let chosen: Vec<String> = t
+            .g
+            .accessible_sticker_sheets(P0)
+            .iter()
+            .map(|s| s.name.to_string())
+            .collect();
         assert_eq!(chosen.len(), 3);
-        assert_eq!(t.g.accessible_sticker_sheets(P0).len(), 3);
         picks.insert(chosen);
         // A player without sticker sheets has none.
         assert!(t.g.accessible_sticker_sheets(P1).is_empty());
@@ -325,8 +342,6 @@ fn limited_players_choose_up_to_three_sticker_sheets_and_reveal_them() {
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     t.g.start();
-    assert_eq!(t.g.start.chosen_sticker_sheets[&P0], vec![3, 0]);
-    assert_eq!(t.g.start.revealed_sticker_sheets[&P0], vec![3, 0]);
     let names: Vec<String> = t
         .g
         .accessible_sticker_sheets(P0)
@@ -334,6 +349,10 @@ fn limited_players_choose_up_to_three_sticker_sheets_and_reveal_them() {
         .map(|s| s.name.to_string())
         .collect();
     assert_eq!(names, vec!["Sheet 3", "Sheet 0"]);
+    assert_eq!(
+        t.g.start.revealed_sticker_sheets[&P0],
+        vec![SmolStr::new("Sheet 3"), SmolStr::new("Sheet 0")]
+    );
 }
 
 #[test]
@@ -556,6 +575,7 @@ fn commander_brawl_and_archenemy_starting_life() {
     let mut t = pregame(
         GameConfig {
             variant: Variant::Archenemy,
+            teams: Some(vec![0, 1, 0]),
             skip_mulligans: true,
             ..config()
         },

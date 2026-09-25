@@ -48,6 +48,17 @@ pub struct ConditionPattern {
 }
 inventory::collect!(ConditionPattern);
 
+/// A sentence that modifies the effect of the preceding sentence instead of adding an
+/// effect of its own ("Destroy target creature. It can't be regenerated."). Receives the
+/// lowercase sentence (no trailing period) and the effect parsed so far for the previous
+/// sentence; returns true if it understood the sentence and updated that effect.
+pub struct FollowupPattern {
+    pub name: &'static str,
+    pub priority: i32,
+    pub apply: fn(&str, &mut Effect, &mut Builder) -> bool,
+}
+inventory::collect!(FollowupPattern);
+
 /// Parses an entire ability block that the standard classifier can't handle (e.g. level
 /// up bars, class levels, saga chapters, "Choose a Background"). Tried before the standard
 /// classifier. Receives the original (normalized, not lowercased) block.
@@ -114,6 +125,14 @@ pub fn condition_patterns() -> &'static [&'static ConditionPattern] {
     static P: OnceLock<Vec<&'static ConditionPattern>> = OnceLock::new();
     P.get_or_init(|| {
         sorted(inventory::iter::<ConditionPattern>.into_iter(), |p| {
+            (p.priority, p.name)
+        })
+    })
+}
+pub fn followup_patterns() -> &'static [&'static FollowupPattern] {
+    static P: OnceLock<Vec<&'static FollowupPattern>> = OnceLock::new();
+    P.get_or_init(|| {
+        sorted(inventory::iter::<FollowupPattern>.into_iter(), |p| {
             (p.priority, p.name)
         })
     })

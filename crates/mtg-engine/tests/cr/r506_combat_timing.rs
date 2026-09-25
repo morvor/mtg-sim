@@ -11,12 +11,14 @@ use mtg_engine::types::*;
 use mtg_engine::*;
 
 fn instant(t: &mut TestGame, p: PlayerId, name: &str, restriction: &str) -> ObjectId {
-    let def = custom_card(
+    let mut def = custom_card(
         name,
         "Instant",
         None,
         &format!("{restriction}\nYou gain 1 life."),
     );
+    // A card with no mana cost couldn't be cast (CR 118.6): give it a {0} cost.
+    def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{0}");
     t.custom(p, def, Zone::Hand(p))
 }
 

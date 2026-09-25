@@ -36,6 +36,12 @@ pub trait KeywordRules: Sync + Send {
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
     }
+    /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
+    /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
+    /// Called for every registered implementation.
+    fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        vec![]
+    }
     /// Optional additional costs announced while casting (name, cost, repeatable).
     fn optional_costs(
         &self,
@@ -133,6 +139,9 @@ pub trait KeywordRules: Sync + Send {
         vec![]
     }
     fn day_night_changed(&self, g: &mut Game) {}
+    /// A player drew `card` (the `nth` card they drew this turn), as it's drawn: e.g.
+    /// "you may reveal this card as you draw it" (CR 121.9, 702.94a).
+    fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {}
     fn is_mutating(&self, g: &Game, spell: ObjectId) -> bool {
         false
     }
@@ -199,7 +208,10 @@ pub fn derived(kw: &Keyword) -> Vec<Ability> {
 }
 
 pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
-    let mut out = Vec::new();
+    let mut out: Vec<CastOption> = registry()
+        .iter()
+        .flat_map(|r| r.global_cast_options(g, p, card))
+        .collect();
     let kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
     for kw in &kws {
         for r in impls_for(kw.kind) {
@@ -361,6 +373,15 @@ pub fn damage_prevention(g: &Game, source: ObjectId, target: Entity) -> Vec<Keyw
 pub fn day_night_changed(g: &mut Game) {
     for r in registry() {
         r.day_night_changed(g);
+    }
+}
+
+pub fn after_draw(g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
+    for r in registry() {
+        if !g.is_live(card) {
+            return;
+        }
+        r.after_draw(g, p, card, nth);
     }
 }
 

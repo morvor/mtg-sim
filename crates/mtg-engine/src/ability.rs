@@ -270,10 +270,20 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             _ => false,
         }
     }
+    // CR 605.1b: unlike an activated mana ability (CR 605.1a), a triggered mana ability
+    // may also move cards to or from a library ("add {G} and draw a card").
+    fn could_add_mana(e: &Effect) -> bool {
+        match e {
+            Effect::AddMana { .. } => true,
+            Effect::Seq(v) => v.iter().any(could_add_mana),
+            Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
+            _ => false,
+        }
+    }
     from_mana_ability(trigger)
         && body.targets.is_empty()
         && body.modal.is_none()
-        && crate::oracle::effects::is_mana_effect(&body.effect)
+        && could_add_mana(&body.effect)
 }
 
 impl TriggeredAbility {
@@ -627,6 +637,12 @@ pub mod vars {
     pub const CREATED: Var = 1;
     /// Cards drawn/revealed/looked at.
     pub const REVEALED: Var = 2;
+    /// Objects dealt damage by the most recent damage effect ("a creature dealt damage
+    /// this way").
+    pub const DAMAGED: Var = 3;
+    /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
+    /// earlier instruction of it ("the sacrificed creature", last known information).
+    pub const SACRIFICED: Var = 9;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -762,6 +778,8 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player with one or more poison counters (CR 122.1f).
+    Poisoned,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
@@ -802,6 +820,9 @@ pub enum PlayerRel {
     NotYou,
     /// The player chosen as target in slot N (for "creature target player controls").
     Target(u8),
+    /// The player chosen as target in slot N, or the controller of the permanent chosen
+    /// there ("each creature that player or that planeswalker's controller controls").
+    TargetOrController(u8),
     /// The triggering player.
     TriggerPlayer,
     /// The defending player.
@@ -814,6 +835,69 @@ pub enum PlayerRel {
     Iterated,
     /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
     Chosen,
+}
+
+/// The four kinds of stickers (CR 123.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StickerType {
+    Name,
+    Ability,
+    PowerToughness,
+    Art,
+}
+
+/// What a spell or ability on the stack targets (CR 115.9).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetsFilter {
+    /// "with [N] target(s)": the number of times objects or players were chosen as its
+    /// targets, not how many are still legal (CR 115.9a).
+    Count(u32),
+    /// "that targets [object or player]": some current target matches (CR 115.9b).
+    Targets {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+    /// "that targets only [object or player]": exactly one different object or player was
+    /// chosen as its target(s), and it matches (CR 115.9c).
+    Only {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+}
+
+/// A special action granted by a static ability (CR 116.2d, 116.2e) or by an effect
+/// (CR 116.2c).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpecialActionDef {
+    /// Who may take it (relative to the source's controller).
+    pub who: PlayerFilter,
+    /// What taking it costs.
+    pub cost: Cost,
+    pub action: SpecialActionEffect,
+}
+
+/// What a special action does.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SpecialActionEffect {
+    /// An effect, carried out immediately without using the stack.
+    Effect(Effect),
+    /// "For that player to ignore this effect until end of turn" (CR 116.2d): the source's
+    /// other static abilities don't apply to that player (or to objects they control)
+    /// until end of turn.
+    IgnoreSourceEffects,
+}
+
+/// How an effect changes the targets of a spell or ability (CR 115.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetChange {
+    /// "Change the target(s)": each target to another legal target, or none (CR 115.7a).
+    All,
+    /// "Change a target": only one of them (CR 115.7b).
+    One,
+    /// "Change any targets": any number of them (CR 115.7c).
+    Any,
+    /// "Choose new targets": any number may be left unchanged (CR 115.7d).
+    ChooseNew,
 }
 
 /// Object predicates (CR 608.2j: filters check only the stated characteristics).
@@ -939,6 +1023,12 @@ pub enum Filter {
     /// A spell or ability on the stack with at least one target that is an object matching
     /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
     Targets(Box<Filter>),
+    /// Has a sticker on it ("stickered", CR 123.4), or a sticker of the given kind ("with a
+    /// name sticker on it").
+    HasSticker(Option<StickerType>),
+    /// A spell or ability on the stack described by its targets: "with a single target",
+    /// "that targets you", "that targets only [something]" (CR 115.9).
+    StackTargets(Box<TargetsFilter>),
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
@@ -1495,6 +1585,9 @@ pub enum ReplacementEvent {
     Dies(Filter),
     /// A player matching would draw a card.
     Draw(PlayerFilter),
+    /// A player matching would draw `min` or more cards (an effect that refers to the
+    /// number of cards drawn, CR 121.2a, 616.1g).
+    DrawCards { who: PlayerFilter, min: u32 },
     /// Damage would be dealt. `source`/`target` filter the damage event.
     Damage {
         source: Filter,
@@ -1510,6 +1603,12 @@ pub enum ReplacementEvent {
     PutCounters {
         on_objects: Option<Filter>,
         on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+    },
+    /// A player matching `by` would put counters (of `kind`) on a permanent ("If you would
+    /// put one or more counters on a permanent", CR 122.6a).
+    PutCountersBy {
+        by: PlayerRel,
         kind: Option<CounterKind>,
     },
     /// One or more tokens would be created under a player's control.
@@ -1719,12 +1818,17 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
+    /// don't apply when they're destroyed (CR 701.19c).
+    CantBeRegenerated(Filter),
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
+    /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
+    SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
     /// "can't search libraries".
@@ -1786,6 +1890,9 @@ pub enum CostChange {
     IncreaseMana(ManaCost),
     /// Costs specific colored mana less.
     ReduceColored(Color, Value),
+    /// Costs the given mana symbols less (CR 118.7a–g). `colored_only`: "This effect
+    /// reduces only the amount of colored mana you pay."
+    ReduceMana { mana: ManaCost, colored_only: bool },
     /// Additional non-mana cost ("As an additional cost to cast spells, pay 2 life").
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
@@ -1867,6 +1974,10 @@ pub enum StaticEffect {
         trigger: TriggerCond,
         body: Body,
     },
+    /// A special action players may take any time they have priority (CR 116.2d, 116.2e):
+    /// "You may discard this card any time you could cast an instant", "Any player may pay
+    /// {2} for that player to ignore this effect until end of turn".
+    SpecialAction(SpecialActionDef),
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."
@@ -2024,6 +2135,11 @@ pub enum TriggerCond {
         filter: Filter,
         combat_only: bool,
     },
+    /// "Whenever [filter] is dealt excess damage" (CR 120.10).
+    DealtExcessDamage {
+        filter: Filter,
+        noncombat_only: bool,
+    },
     /// "Whenever [player] is dealt damage".
     PlayerDealtDamage {
         who: PlayerRel,
@@ -2054,6 +2170,13 @@ pub enum TriggerCond {
     CountersRemoved {
         filter: Filter,
         kind: Option<CounterKind>,
+    },
+    /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
+    /// such that it had fewer than N before and N or more after (CR 122.7).
+    CounterThreshold {
+        filter: Filter,
+        kind: CounterKind,
+        n: u32,
     },
     BecomesTapped(Filter),
     BecomesUntapped(Filter),
@@ -2356,6 +2479,15 @@ pub enum Effect {
         amount: Value,
         to: Sel,
     },
+    /// Damage whose excess (beyond lethal damage, loyalty, or defense) is dealt to
+    /// another permanent or player instead (CR 120.4a): "Excess damage is dealt to that
+    /// creature's controller instead."
+    DealDamageExcess {
+        source: Sel,
+        amount: Value,
+        to: Sel,
+        excess_to: Sel,
+    },
     /// Divided damage using the division chosen on casting (CR 601.2d).
     DealDividedDamage {
         source: Sel,
@@ -2374,6 +2506,21 @@ pub enum Effect {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
+    /// counters of each kind; `n: None`: all of them.
+    MoveCounters {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
+        n: Option<Value>,
+    },
+    /// "Put [its] counters on [to]" for an object that has left the battlefield: the same
+    /// number of each kind of counter it had (or only of `kind`) (CR 122.8, 122.9).
+    PutCountersOf {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
     },
     /// Apply layer modifications to the selected objects for a duration (CR 611.2).
     Modify {
@@ -2432,6 +2579,40 @@ pub enum Effect {
         what: Sel,
         count: Value,
         new_targets: bool,
+    },
+    /// "Until end of turn, you may pay {1} any time you could cast an instant. If you do,
+    /// ..." (CR 116.2c): lets the players take a special action later, while `duration`
+    /// lasts. `repeatable`: whether it can be taken more than once.
+    OfferSpecialAction {
+        def: Box<SpecialActionDef>,
+        duration: Duration,
+        repeatable: bool,
+    },
+    /// "[Player] puts a [kind of] sticker on [objects]" (CR 123.3): they choose one of the
+    /// stickers they have access to that isn't on an object they own, and pay its ticket
+    /// cost unless `free` (CR 123.3c). `max_ticket`: "with ticket cost X or less".
+    PutSticker {
+        who: PlayerRef,
+        what: Sel,
+        kind: Option<StickerType>,
+        max_ticket: Option<Value>,
+        free: bool,
+    },
+    /// "Mana of any type can be spent to cast [that spell]" (CR 118.14): `who` may spend
+    /// mana as though it were colorless mana or mana of any color to cast the card.
+    SpendAnyTypeMana {
+        who: PlayerRef,
+        what: Sel,
+        duration: Duration,
+    },
+    /// "[Player] may change the target(s) of / choose new targets for [spell or ability]"
+    /// (CR 115.7). With `to`, the new target must be that object or player ("change the
+    /// target of target spell to this creature").
+    ChangeTargets {
+        what: Sel,
+        who: PlayerRef,
+        how: TargetChange,
+        to: Option<Sel>,
     },
     /// "[this] becomes a copy of [object]" (CR 707).
     BecomeCopy {
@@ -2543,6 +2724,11 @@ pub enum Effect {
     SetLife {
         who: PlayerRef,
         n: Value,
+    },
+    /// Two players exchange life totals (CR 119.7, 119.8).
+    ExchangeLifeTotals {
+        a: PlayerRef,
+        b: PlayerRef,
     },
     AddMana {
         who: PlayerRef,
@@ -2656,7 +2842,10 @@ pub enum Effect {
         step: TriggerStep,
         effect: Box<Effect>,
     },
+    /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an
+    /// emblem with the abilities into the command zone; they own and control it.
     CreateEmblem {
+        who: PlayerRef,
         abilities: Vec<Ability>,
     },
     /// "Each player chooses from among the permanents they control an artifact, a creature,

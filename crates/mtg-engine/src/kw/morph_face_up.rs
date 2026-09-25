@@ -51,8 +51,17 @@ impl KeywordRules for MorphFaceUp {
         if g.turn.priority != Some(p) {
             return vec![];
         }
+        // Only if its cost could be paid (with X = 0).
         g.permanents()
-            .filter(|o| o.controller == p && face_up_cost(g, o.id).is_some())
+            .filter(|o| o.controller == p)
+            .filter(|o| {
+                face_up_cost(g, o.id).is_some_and(|(_, mut cost)| {
+                    if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                        cost.mana = Some(m.with_x(0));
+                    }
+                    g.can_pay_cost(p, &cost, Some(o.id), &Ctx::new(Some(o.id), p))
+                })
+            })
             .map(|o| Action::Special(SpecialAction::TurnFaceUp { obj: o.id }))
             .collect()
     }

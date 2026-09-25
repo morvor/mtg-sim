@@ -173,6 +173,16 @@ pub fn damage_cant_be_prevented(g: &Game) -> bool {
             .any(|e| matches!(e.restriction, Restriction::DamageCantBePrevented))
 }
 
+/// Whether damage `source` would deal can't be prevented (CR 615.12): all damage, or
+/// damage from that source.
+pub fn damage_from_cant_be_prevented(g: &Game, source: ObjectId) -> bool {
+    damage_cant_be_prevented(g)
+        || g.restricted_obj(source, |r| match r {
+            Restriction::SourceDamageCantBePrevented(f) => Some(f),
+            _ => None,
+        })
+}
+
 /// Whether a replacement action is a prevention effect (CR 615.1a).
 pub fn is_prevention(a: &ReplacementAction) -> bool {
     matches!(

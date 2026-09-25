@@ -11,7 +11,8 @@ use crate::oracle::CompileContext;
 use crate::start::DeckCondition;
 
 inventory::submit! { AbilityPattern { name: "you are the starting player", priority: 0, parse: starting_player } }
-inventory::submit! { AbilityPattern { name: "companion condition", priority: 0, parse: companion } }
+// Tried before the plain keyword pattern, which keeps only the condition's text.
+inventory::submit! { AbilityPattern { name: "companion condition", priority: -1, parse: companion } }
 inventory::submit! { AbilityPattern { name: "any time you could mulligan", priority: 0, parse: could_mulligan } }
 inventory::submit! { EffectPattern { name: "exile your hand, then draw that many cards", priority: 100, parse: exile_hand_draw_that_many } }
 
@@ -70,19 +71,14 @@ fn starting_player(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 /// "Companion — Each [kind] card in your starting deck has [property]." / "... is a
 /// [kind] card." / "Your starting deck contains only cards with [property][ and land
-/// cards]." (CR 702.139a). The ability functions outside the game.
+/// cards]." (CR 702.139a): the companion keyword plus its condition on the starting deck,
+/// which functions outside the game (CR 103.2b).
 fn companion(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
     let l = t.to_lowercase();
-    // The keyword may already have been stripped like an ability word; only companion
-    // conditions talk about "your starting deck".
     let cond = l
         .strip_prefix("companion — ")
-        .or_else(|| l.strip_prefix("companion - "))
-        .unwrap_or(&l);
-    if !cond.contains("your starting deck") {
-        return None;
-    }
+        .or_else(|| l.strip_prefix("companion—"))?;
     // Drop the reminder text.
     let cond = match cond.split_once(" (") {
         Some((c, _)) => c,
@@ -129,11 +125,15 @@ fn companion(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     } else {
         return None;
     };
-    Some(static_in(
+    let mut kw = crate::keywords::Keyword::new(crate::keywords::KeywordKind::Companion);
+    kw.text = Some(t.into());
+    let mut out = vec![AbilityDef::new(AbilityKind::Keyword(kw), t)];
+    out.extend(static_in(
         StaticEffect::Companion(dc),
         FunctionZone::Anywhere,
         t,
-    ))
+    ));
+    Some(out)
 }
 
 /// "Any time you could mulligan and this card is in your hand, you may [effect]."

@@ -20,6 +20,27 @@ pub fn parse_effect_ext(l: &str, b: &mut Builder) -> Option<Effect> {
     None
 }
 
+/// Tries the registered [`FollowupPattern`]s on sentence `s` against the previous effect.
+pub fn apply_followup_ext(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = s.to_lowercase();
+    let l = crate::oracle::phrases::end(&lower);
+    followup_patterns().iter().any(|p| {
+        let saved = prev.clone();
+        let saved_targets = b.targets.len();
+        let saved_it = b.it.clone();
+        let saved_player = b.it_player.clone();
+        if (p.apply)(l, prev, b) {
+            true
+        } else {
+            *prev = saved;
+            b.targets.truncate(saved_targets);
+            b.it = saved_it;
+            b.it_player = saved_player;
+            false
+        }
+    })
+}
+
 pub fn parse_trigger_ext(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     trigger_patterns().iter().find_map(|p| (p.parse)(r))
 }
