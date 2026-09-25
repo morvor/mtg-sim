@@ -304,3 +304,62 @@ fn a_special_actions_hybrid_or_phyrexian_cost_is_chosen_before_paying() {
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.player(P1).mana_pool.total(), 1);
 }
+
+#[test]
+fn the_special_actions_are_offered_alongside_each_other_and_none_uses_the_stack() {
+    cr!("116.2");
+    // One main phase with many kinds of special actions available at once: playing a
+    // land (116.2a), turning a face-down creature face up (116.2b), ignoring a static
+    // ability's effect (116.2d), discarding Circling Vultures (116.2e), suspending
+    // (116.2f), foretelling (116.2h), plotting (116.2k), and unlocking a door (116.2m).
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let forest = t.hand(P0, "Forest");
+    let angel = face_down(&mut t, P0, "Exalted Angel");
+    let arbiter = t.battlefield(P1, "Leonin Arbiter");
+    let vultures = t.hand(P0, "Circling Vultures");
+    let vision = t.hand(P0, "Ancestral Vision");
+    let demon_bolt = t.hand(P0, "Demon Bolt");
+    let show_off = t.hand(P0, "Slickshot Show-Off");
+    let room = t.battlefield(P0, "Glassworks // Shattered Yard");
+    add_mana(&mut t, P0, ManaType::W, 2);
+    add_mana(&mut t, P0, ManaType::U, 1);
+    add_mana(&mut t, P0, ManaType::R, 1);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    let specials = specials(&mut t, P0);
+    let has = |s: &SpecialAction| specials.contains(s);
+    assert!(has(&SpecialAction::TurnFaceUp { obj: angel }));
+    assert!(specials
+        .iter()
+        .any(|s| matches!(s, SpecialAction::Static { source, .. } if *source == arbiter)));
+    assert!(specials
+        .iter()
+        .any(|s| matches!(s, SpecialAction::Static { source, .. } if *source == vultures)));
+    assert!(has(&SpecialAction::Suspend { card: vision }));
+    assert!(has(&SpecialAction::Foretell { card: demon_bolt }));
+    assert!(has(&SpecialAction::Plot { card: show_off }));
+    assert!(specials
+        .iter()
+        .any(|s| matches!(s, SpecialAction::Other { obj: Some(o), .. } if *o == room)));
+    assert!(t
+        .g
+        .legal_actions(P0)
+        .contains(&Action::PlayLand { card: forest }));
+    // Taking them one after another never puts anything on the stack.
+    t.play_land(P0, forest).unwrap();
+    for sa in [
+        SpecialAction::Suspend { card: vision },
+        SpecialAction::Plot { card: show_off },
+    ] {
+        take(&mut t, P0, sa);
+        assert_eq!(t.stack_len(), 0);
+        assert_eq!(t.g.turn.priority, Some(P0));
+    }
+    let vultures_action = self::specials(&mut t, P0)
+        .into_iter()
+        .find(|s| matches!(s, SpecialAction::Static { source, .. } if *source == vultures))
+        .unwrap();
+    take(&mut t, P0, vultures_action);
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.in_graveyard(P0, "Circling Vultures"));
+}

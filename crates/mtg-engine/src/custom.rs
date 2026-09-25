@@ -256,6 +256,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::planechase::planeswalk(g, ctx.controller);
         return;
     }
+    if name == crate::planechase::ROLL_PLANAR_DIE_EFFECT {
+        crate::planechase::roll_planar_die(g, ctx.controller);
+        return;
+    }
     match name {
         crate::kw::suspend::CAST_SUSPENDED => crate::kw::suspend::cast_suspended(g, ctx),
         crate::kw::miracle::CAST_MIRACLE => crate::kw::miracle::cast_miracle(g, ctx),

@@ -26,6 +26,9 @@ pub const PLANESWALKED: &str = "planeswalk";
 pub const PLANAR_DIE_ACTION: &str = "roll the planar die";
 /// `Effect::Custom` name: the planar controller planeswalks (CR 701.31).
 pub const PLANESWALK_EFFECT: &str = "planeswalk";
+/// `Effect::Custom` name: the controller rolls the planar die because of an effect (not
+/// the special action, CR 116.2i).
+pub const ROLL_PLANAR_DIE_EFFECT: &str = "roll the planar die (effect)";
 
 /// A face of the planar die (CR 901.3a): one Planeswalker symbol {PW} (CR 107.11), one
 /// chaos symbol {CHAOS} (CR 107.12), four blank faces.
@@ -241,6 +244,12 @@ fn may_roll(g: &Game, p: PlayerId) -> bool {
 /// The special action of rolling the planar die, when available (CR 901.9).
 pub fn special_actions(g: &Game, p: PlayerId) -> Vec<Action> {
     if !may_roll(g, p) {
+        return vec![];
+    }
+    // Only if its cost can be paid.
+    let n = rolls_this_turn(g, p) as u32;
+    let cost = Cost::mana(crate::mana::ManaCost::generic(n));
+    if n > 0 && !g.can_pay_cost(p, &cost, None, &crate::eval::Ctx::new(None, p)) {
         return vec![];
     }
     vec![Action::Special(SpecialAction::Other {
