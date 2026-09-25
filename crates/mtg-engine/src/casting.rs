@@ -212,6 +212,12 @@ impl Game {
                 out.push(gnt.object);
             }
         }
+        // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
+        for c in crate::designations::castable_prepared_copies(self, p) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
         out
     }
 
@@ -271,10 +277,13 @@ impl Game {
                         out.push(f);
                     }
                 }
-                Some(crate::card::Layout::Adventure) | Some(crate::card::Layout::Prepare) => {
+                Some(crate::card::Layout::Adventure) => {
                     push_face(FaceState::Front, &mut out);
                     push_face(FaceState::Half(1), &mut out);
                 }
+                // CR 722.3: a preparation card can't be cast as its prepare spell; only
+                // the copy created as it becomes prepared can.
+                Some(crate::card::Layout::Prepare) => push_face(FaceState::Front, &mut out),
                 Some(crate::card::Layout::ModalDfc) => {
                     push_face(FaceState::Front, &mut out);
                     push_face(FaceState::Back, &mut out);
@@ -705,7 +714,11 @@ impl Game {
                 .entry(chars.name.clone())
                 .or_insert(0) += 1;
         }
-        // 601.2i: the spell becomes cast.
+        // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
+        // this is loses the designation now (CR 722.3c).
+        if from == Zone::Exile && self.obj(card).kind == ObjKind::CardCopy {
+            crate::designations::prepared_copy_left_exile(self, card);
+        }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         self.emit(Event::SpellCast {
             spell: id,

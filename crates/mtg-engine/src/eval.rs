@@ -49,6 +49,8 @@ pub struct Ctx {
 pub struct EntryMods {
     pub tapped: bool,
     pub counters: Vec<(CounterKind, u32)>,
+    /// Enters prepared (CR 722.3a).
+    pub prepared: bool,
 }
 
 impl Ctx {
@@ -437,6 +439,7 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_name.as_ref())
                 .is_some_and(|n| !n.is_empty() && c.name.eq_ignore_ascii_case(n)),
+            Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
             Filter::ChosenCardType => self
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)

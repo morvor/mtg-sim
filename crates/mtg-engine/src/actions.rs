@@ -138,6 +138,9 @@ impl Game {
                 self.objects[p.0 as usize].paired_with = None;
             }
         }
+        if from == Zone::Exile && kind == ObjKind::CardCopy {
+            crate::designations::prepared_copy_left_exile(self, old_id);
+        }
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
         let new_id = self.create_incarnation(old_id, m.to);

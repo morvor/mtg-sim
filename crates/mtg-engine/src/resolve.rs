@@ -649,6 +649,20 @@ impl Game {
                     e.tapped = true;
                 }
             }
+            Effect::EnterPrepared => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.prepared = true;
+                }
+            }
+            Effect::SetPrepared { what, prepared } => {
+                for o in self.resolve_objects(what, ctx) {
+                    if *prepared {
+                        crate::designations::become_prepared(self, o);
+                    } else {
+                        crate::designations::become_unprepared(self, o);
+                    }
+                }
+            }
             Effect::EnterWithCounters { kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 if let Some(e) = ctx.entering.as_mut() {

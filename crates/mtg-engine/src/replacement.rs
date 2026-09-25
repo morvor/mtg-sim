@@ -474,6 +474,17 @@ impl Game {
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
+                    if em.prepared {
+                        // CR 722.3a/c: it gains the designation (and its prepare-spell
+                        // copy is created) as it's put onto the battlefield.
+                        m.etb.as_enters.push((
+                            c.clone(),
+                            Effect::SetPrepared {
+                                what: Sel::This,
+                                prepared: true,
+                            },
+                        ));
+                    }
                 }
                 vec![ReplEvent::Move(m)]
             }

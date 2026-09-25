@@ -343,6 +343,9 @@ pub struct GameObject {
     pub sector: Option<SmolStr>,
     /// Paired with (soulbond).
     pub paired_with: Option<ObjectId>,
+    /// The "prepared" designation (CR 722.3a): the copy of its prepare spell in exile
+    /// that its controller may cast (CR 722.3c).
+    pub prepared: Option<ObjectId>,
 }
 
 impl GameObject {
@@ -398,6 +401,7 @@ impl GameObject {
             is_commander: false,
             sector: None,
             paired_with: None,
+            prepared: None,
         }
     }
 

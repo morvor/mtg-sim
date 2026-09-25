@@ -164,6 +164,10 @@ fn entry(s: &str, ctx: &CompileContext) -> Option<Effect> {
     if s == "tapped" {
         return Some(Effect::EnterTapped);
     }
+    // CR 722.3a: "enters prepared".
+    if s == "prepared" {
+        return Some(Effect::EnterPrepared);
+    }
     if let Some(r) = s.strip_prefix("tapped with ") {
         let c = counters(r, ctx)?;
         return Some(Effect::seq(vec![Effect::EnterTapped, c]));
@@ -655,6 +659,65 @@ fn chosen_color_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
     None
 }
 
+/// "~ becomes prepared", "target creature becomes unprepared", "each creature you
+/// control becomes prepared" (CR 722.3a–b).
+fn prepared_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (subj, prepared) = if let Some(x) = l
+        .strip_suffix(" becomes prepared")
+        .or_else(|| l.strip_suffix(" become prepared"))
+    {
+        (x, true)
+    } else if let Some(x) = l
+        .strip_suffix(" becomes unprepared")
+        .or_else(|| l.strip_suffix(" become unprepared"))
+    {
+        (x, false)
+    } else {
+        return None;
+    };
+    let what = match subj {
+        "~" => Sel::This,
+        "it" | "that creature" | "that permanent" => b.it.clone(),
+        _ => {
+            if let Some(r) = subj.strip_prefix("each ") {
+                let (f, _, tail) = parse_object_phrase(r)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                Sel::All(f)
+            } else {
+                let (spec, tail) = parse_target(subj)?;
+                if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+                    return None;
+                }
+                Sel::Target(b.add_target(spec, subj))
+            }
+        }
+    };
+    Some(Effect::SetPrepared { what, prepared })
+}
+
+/// "~ is prepared", "~ isn't prepared".
+fn prepared_condition(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let (subj, yes) = if let Some(x) = c.strip_suffix(" isn't prepared") {
+        (x, false)
+    } else if let Some(x) = c.strip_suffix(" is prepared") {
+        (x, true)
+    } else {
+        return None;
+    };
+    if subj != "~" && subj != "it" {
+        return None;
+    }
+    let f = if yes {
+        Filter::Prepared
+    } else {
+        Filter::not(Filter::Prepared)
+    };
+    Some(Condition::SelMatches(Sel::This, f))
+}
+
 /// "~ is the chosen type in addition to its other types."
 fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() {
@@ -692,6 +755,12 @@ inventory::submit! {
 }
 inventory::submit! {
     ConditionPattern { name: "etb conditions", priority: 100, parse: more_conditions }
+}
+inventory::submit! {
+    EffectPattern { name: "become prepared", priority: 100, parse: prepared_effect }
+}
+inventory::submit! {
+    ConditionPattern { name: "is prepared", priority: 100, parse: prepared_condition }
 }
 inventory::submit! {
     ConditionPattern { name: "you control an X or a Y", priority: 100, parse: control_either }

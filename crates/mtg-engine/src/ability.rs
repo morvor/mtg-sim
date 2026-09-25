@@ -833,6 +833,8 @@ pub enum Filter {
     ChosenName,
     /// "of the chosen card type": has the card type chosen for the source.
     ChosenCardType,
+    /// Has the prepared designation (CR 722.3a).
+    Prepared,
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -1930,6 +1932,14 @@ pub enum Effect {
     EnterWithCounters {
         kind: CounterKind,
         n: Value,
+    },
+    /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
+    /// (CR 722.3a); elsewhere it does nothing.
+    EnterPrepared,
+    /// "[permanents] become prepared" / "become unprepared" (CR 722.3a–c).
+    SetPrepared {
+        what: Sel,
+        prepared: bool,
     },
 
     // --- Players ------------------------------------------------------------
