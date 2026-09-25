@@ -254,6 +254,16 @@ impl Game {
                         out.push(Entity::Object(o));
                     }
                 }
+                // "target spell or permanent" (e.g. Moonlace).
+                if let TargetKind::Spell(f) = &spec.what {
+                    if filter_allows_permanent(f) {
+                        for o in self.permanent_ids() {
+                            if self.is_legal_target(spec, Entity::Object(o), ctx, stack_obj) {
+                                out.push(Entity::Object(o));
+                            }
+                        }
+                    }
+                }
             }
             TargetKind::Player(_) => {
                 for p in self.players_in_game() {
@@ -327,7 +337,11 @@ impl Game {
                     TargetKind::ObjectOrPlayer(f, _) => {
                         ob.zone == Zone::Battlefield && self.matches(o, f, ctx)
                     }
-                    TargetKind::Spell(f) => ob.is_spell() && self.matches(o, f, ctx),
+                    TargetKind::Spell(f) => {
+                        (ob.is_spell()
+                            || (ob.zone == Zone::Battlefield && filter_allows_permanent(f)))
+                            && self.matches(o, f, ctx)
+                    }
                     TargetKind::Ability(f) => ob.is_stack_ability() && self.matches(o, f, ctx),
                     TargetKind::SpellOrAbility(f) => {
                         ob.zone == Zone::Stack && self.matches(o, f, ctx)
@@ -872,6 +886,16 @@ impl Game {
             }
             _ => false,
         })
+    }
+}
+
+/// Whether a spell-target filter explicitly allows permanents too ("target spell or
+/// permanent" compiles to `Or([Spell, Permanent])`).
+fn filter_allows_permanent(f: &Filter) -> bool {
+    match f {
+        Filter::Permanent => true,
+        Filter::Or(v) | Filter::And(v) => v.iter().any(filter_allows_permanent),
+        _ => false,
     }
 }
 

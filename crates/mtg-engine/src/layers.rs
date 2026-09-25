@@ -506,7 +506,12 @@ impl Game {
         live: &[ObjectId],
         ctx: &Ctx,
     ) -> Vec<ObjectId> {
-        let _ = src;
+        // An ability that affects only its own object (e.g. a characteristic-defining
+        // ability) affects it wherever the ability functions (CR 113.6a, 604.3).
+        if matches!(affected, Filter::Source) {
+            let ok = self.is_live(src) && !self.obj(src).phased_out && live.contains(&src);
+            return if ok { vec![src] } else { vec![] };
+        }
         let zone = affected.zone();
         live.iter()
             .copied()

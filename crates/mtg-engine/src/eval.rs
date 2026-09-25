@@ -698,6 +698,16 @@ impl Game {
                 }
                 set.count() as i64
             }
+            Value::ColorPairsAmong(f) => {
+                let mut pairs: Vec<ColorSet> = Vec::new();
+                for o in self.objects_matching(f, ctx) {
+                    let c = self.obj(o).chars.colors;
+                    if c.is_color_pair() && !pairs.contains(&c) {
+                        pairs.push(c);
+                    }
+                }
+                pairs.len() as i64
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()

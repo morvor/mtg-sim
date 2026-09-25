@@ -924,6 +924,9 @@ pub enum Value {
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
     CardTypesAmong(Filter),
+    /// Number of different color pairs (CR 105.5) among matching objects that are
+    /// exactly two colors.
+    ColorPairsAmong(Filter),
     /// Greatest power among objects matching.
     GreatestPower(Filter),
     GreatestManaValue(Filter),
