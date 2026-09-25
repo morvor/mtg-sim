@@ -220,6 +220,7 @@ impl Game {
                     .map(|a| copied_ability(a, eff.id))
                     .collect();
                 let ctx = Ctx::new(eff.source, eff.controller);
+                crate::copy::drop_overridden_cdas(&mut v, exceptions);
                 for m in exceptions {
                     apply_mod(&mut v, m, self, &ctx, *t);
                 }
