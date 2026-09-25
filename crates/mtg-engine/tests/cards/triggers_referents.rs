@@ -369,3 +369,58 @@ fn damage_to_that_lands_controller() {
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn that_creature_doesnt_untap_during_its_controllers_next_untap_step() {
+    cr!("502.3", "603.6a");
+    assert_supported(&["Frost Trickster"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    enter(&mut t, P0, "Frost Trickster");
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped);
+    // P1's next untap step: stays tapped.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(bears).tapped);
+    // The one after that: untaps.
+    t.advance_to(P1, Step::Draw);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.obj_now(bears).tapped);
+}
+
+#[test]
+fn it_doesnt_untap_your_own_attacker() {
+    cr!("502.3", "508.3a");
+    assert_supported(&["Lead Golem"]);
+    let mut t = TestGame::new(2);
+    let golem = t.battlefield(P0, "Lead Golem");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(golem, Entity::Player(P1))], &[]);
+    assert!(t.obj_now(golem).tapped);
+    // P1's untap step doesn't matter; P0's next one is skipped.
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Draw);
+    assert!(t.obj_now(golem).tapped);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Draw);
+    assert!(t.obj_now(golem).tapped);
+    t.set_step(P0, Step::End);
+    t.advance_to(P0, Step::Draw);
+    assert!(!t.obj_now(golem).tapped);
+}
+
+#[test]
+fn target_creature_cant_block_this_turn_applies_to_that_creature() {
+    cr!("115.1", "509.1a");
+    assert_supported(&["Goblin Shortcutter"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    enter(&mut t, P0, "Goblin Shortcutter");
+    t.resolve_all();
+    assert!(!t.g.can_block_at_all(bears));
+    assert!(t.g.can_block_at_all(other));
+}

@@ -26,6 +26,49 @@ inventory::submit! {
     EffectPattern { name: "[player] gets N poison/experience counters, you get {E}", priority: 100, parse: player_gets_counters }
 }
 
+inventory::submit! {
+    EffectPattern { name: "doesn't untap during its controller's next untap step", priority: 100, parse: doesnt_untap_next }
+}
+
+/// "it doesn't untap during its controller's next untap step", "target creature an
+/// opponent controls doesn't untap during its controller's next untap step", "those
+/// creatures don't untap during their controllers' next untap steps" (CR 502.3).
+fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let subject = [
+        " doesn't untap during its controller's next untap step",
+        " don't untap during their controllers' next untap steps",
+        " doesn't untap during your next untap step",
+        " don't untap during your next untap step",
+    ]
+    .iter()
+    .find_map(|s| l.strip_suffix(s))?;
+    let what = match subject {
+        "~" => Sel::This,
+        "enchanted creature" | "equipped creature" | "enchanted permanent" | "enchanted land" => {
+            Sel::AttachedTo
+        }
+        "it" | "that creature" | "that permanent" | "that land" | "they" | "those creatures"
+        | "those permanents" => {
+            if matches!(b.it, Sel::None) {
+                return None;
+            }
+            b.it.clone()
+        }
+        _ => {
+            let (spec, tail) = parse_any_target(subject)?;
+            if !end(tail).is_empty() || matches!(spec.what, TargetKind::Player(_)) {
+                return None;
+            }
+            Sel::Target(b.add_target(spec, subject))
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::DoesntUntap(Filter::In(Box::new(what))),
+        duration: Duration::ThroughNextUntapStep,
+    })
+}
+
 /// "that player gets two poison counters", "defending player gets a poison counter", "you
 /// get an experience counter", "you get {E}{E}" (energy counters, CR 107.14, 122.1).
 fn player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {

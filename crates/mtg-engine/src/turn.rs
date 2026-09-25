@@ -561,6 +561,28 @@ impl Game {
         for id in to_untap {
             self.untap(id);
         }
+        self.expire_through_next_untap_step(active);
+    }
+
+    /// "Doesn't untap during its controller's next untap step": that untap step has now
+    /// passed for the permanents the active player controls (and the effect no longer
+    /// applies to objects that left the battlefield, CR 400.7).
+    fn expire_through_next_untap_step(&mut self, active: PlayerId) {
+        let objects = &self.objects;
+        let battlefield = &self.battlefield;
+        for e in self.rule_effects.iter_mut() {
+            if !matches!(e.duration, Duration::ThroughNextUntapStep) {
+                continue;
+            }
+            if let Some(v) = e.objects.as_mut() {
+                v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
+            }
+        }
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughNextUntapStep)
+                || e.objects.as_ref().is_some_and(|v| !v.is_empty())
+        });
+        self.dirty = true;
     }
 
     pub fn set_day(&mut self, is_day: bool) {

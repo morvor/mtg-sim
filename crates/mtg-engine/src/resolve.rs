@@ -1151,34 +1151,34 @@ impl Game {
             .collect()
     }
 
+    /// A restriction locked onto specific objects (see [`Self::lock_restriction_objects`])
+    /// applies to exactly those objects: its filter named them through this resolution's
+    /// targets or event ("target creature", "that creature"), which aren't available when
+    /// the restriction is checked later, so it becomes "any object" (of the locked ones).
     fn fix_restriction(&self, r: &Restriction, _ctx: &Ctx) -> Restriction {
-        r.clone()
+        let mut r = r.clone();
+        if let Some(f) = restriction_object_filter(&mut r) {
+            if filter_references_specific(f) {
+                *f = Filter::Any;
+            }
+        }
+        r
     }
 
     /// Restrictions naming specific objects ("target creature can't block this turn")
     /// lock onto those objects.
     fn lock_restriction_objects(&self, r: &Restriction, ctx: &Ctx) -> Option<Vec<ObjectId>> {
-        let f = match r {
-            Restriction::CantAttack(f)
-            | Restriction::CantBlock(f)
-            | Restriction::CantAttackOrBlock(f)
-            | Restriction::MustAttack(f)
-            | Restriction::MustBlock(f)
-            | Restriction::MustBeBlocked(f)
-            | Restriction::CantBeBlocked(f)
-            | Restriction::DoesntUntap(f)
-            | Restriction::CantBeCountered(f)
-            | Restriction::CantBeSacrificed(f) => f,
-            Restriction::CantBeTargeted { what, .. } => what,
-            _ => return None,
-        };
+        let mut r = r.clone();
+        let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
-            Some(
-                self.objects_matching(f, ctx)
-                    .into_iter()
-                    .chain(ctx.targets.iter().flatten().filter_map(|e| e.object()))
-                    .collect(),
-            )
+            let mut v = self.objects_matching(f, ctx);
+            // Targets outside the battlefield ("target spell can't be countered").
+            for o in ctx.targets.iter().flatten().filter_map(|e| e.object()) {
+                if !v.contains(&o) && self.matches(o, f, ctx) {
+                    v.push(o);
+                }
+            }
+            Some(v)
         } else {
             None
         }
@@ -1404,6 +1404,24 @@ pub fn player_const(p: PlayerId) -> PlayerRef {
 /// A player filter matching exactly one player.
 pub fn player_filter_const(p: PlayerId) -> PlayerFilter {
     PlayerFilter::Is(p)
+}
+
+/// The filter selecting the objects a restriction applies to.
+fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
+    match r {
+        Restriction::CantAttack(f)
+        | Restriction::CantBlock(f)
+        | Restriction::CantAttackOrBlock(f)
+        | Restriction::MustAttack(f)
+        | Restriction::MustBlock(f)
+        | Restriction::MustBeBlocked(f)
+        | Restriction::CantBeBlocked(f)
+        | Restriction::DoesntUntap(f)
+        | Restriction::CantBeCountered(f)
+        | Restriction::CantBeSacrificed(f) => Some(f),
+        Restriction::CantBeTargeted { what, .. } => Some(what),
+        _ => None,
+    }
 }
 
 fn filter_references_specific(f: &Filter) -> bool {

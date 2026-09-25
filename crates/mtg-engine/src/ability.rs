@@ -1070,6 +1070,9 @@ pub enum Duration {
     UntilHostLeaves,
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
+    /// "[doesn't untap] during its controller's next untap step": for each affected
+    /// object, until its controller's next untap step has passed (CR 502.3).
+    ThroughNextUntapStep,
 }
 
 /// Layer-specific modifications of characteristics (CR 613).
