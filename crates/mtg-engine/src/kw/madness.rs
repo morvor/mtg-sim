@@ -125,9 +125,12 @@ pub fn found_after_madness(g: &Game, discarded: ObjectId) -> Option<ObjectId> {
     if o.zone != Zone::Exile || !o.chars.has_keyword(KeywordKind::Madness) {
         return None;
     }
-    // It was discarded into exile.
+    // It was discarded into exile (not exiled from a hand some other way).
     let prev = g.try_obj(o.prev?)?;
-    if !matches!(prev.zone, Zone::Hand(_)) {
+    let discarded_this_way = g.turn_events.iter().any(
+        |e| matches!(e, crate::events::Event::Discarded { card, .. } if *card == discarded),
+    );
+    if !matches!(prev.zone, Zone::Hand(_)) || !discarded_this_way {
         return None;
     }
     let next = o.next?;

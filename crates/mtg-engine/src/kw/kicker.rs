@@ -10,6 +10,9 @@
 //!   spell, if it's kicked, you get a ticket counter and you may put a sticker on this
 //!   spell" (CR 702.33h). It's recorded as "sticker kicker": abilities linked to a card's
 //!   own printed kicker don't see it (CR 702.33e).
+//! * Paying any of these kicks the spell (CR 702.33d): "kicked" is recorded too, which
+//!   is what other objects' abilities that care about kicked spells check ("Whenever you
+//!   cast a kicked spell" sees a sticker-kicked spell).
 //!
 //! Targets of a part of a spell that has its effect only if it was kicked are chosen only
 //! if it was (CR 702.33g; see `TargetSpec::condition`).
@@ -27,6 +30,20 @@ pub struct Kicker;
 pub const KICKER: &str = "kicker";
 pub const MULTIKICKER: &str = "multikicker";
 pub const STICKER_KICKER: &str = "sticker kicker";
+/// Recorded once when any kicker, multikicker, or sticker kicker cost was paid: the spell
+/// was kicked (CR 702.33d), as seen by other objects ("a kicked spell").
+pub const KICKED: &str = "kicked";
+
+/// Records in `paid` that the spell was kicked if any of its kicker costs was paid
+/// (CR 702.33d).
+pub fn record_kicked(paid: &mut Vec<SmolStr>) {
+    let kicked = paid
+        .iter()
+        .any(|n| matches!(n.as_str(), KICKER | MULTIKICKER | STICKER_KICKER));
+    if kicked && !paid.iter().any(|n| n == KICKED) {
+        paid.push(KICKED.into());
+    }
+}
 
 /// The additional part of a sticker kicker cost: "you get a ticket counter and you may put
 /// a sticker on this spell" (CR 702.33h, 123.3).

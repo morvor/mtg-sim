@@ -427,6 +427,44 @@ impl Game {
         out
     }
 
+    /// CR 400.7g: if an effect granted `card` the keyword ability it's being cast with
+    /// ("target card gains flashback", "each instant and sorcery card in your graveyard has
+    /// flashback"), that ability continues to apply to the spell `spell` it became, even
+    /// though the effect no longer applies to that new object.
+    fn keep_granted_casting_keyword(&mut self, card: ObjectId, spell: ObjectId, m: &CastMethod) {
+        let CastMethod::Keyword(k) = *m else {
+            return;
+        };
+        let o = self.obj(spell);
+        if o.chars.has_keyword(k) || o.base.keywords().any(|x| x.kind == k) {
+            return;
+        }
+        let controller = o.controller;
+        let Some(kw) = self
+            .obj(card)
+            .chars
+            .keywords()
+            .find(|x| x.kind == k)
+            .cloned()
+        else {
+            return;
+        };
+        let eid = self.new_effect_id();
+        let timestamp = self.new_timestamp();
+        self.effects.push(ContinuousEffect {
+            id: eid,
+            source: Some(spell),
+            controller,
+            timestamp,
+            duration: Duration::Permanent,
+            affected: Affected::Objects(vec![spell]),
+            mods: vec![Modification::AddKeyword(kw)],
+            layer1: None,
+            created_turn: self.turn.number,
+        });
+        self.recompute();
+    }
+
     /// Characteristics a card would have as a spell cast this way (CR 601.3e): those of
     /// the chosen face, or a face-down spell's (CR 702.37c, 708.2a).
     pub fn option_characteristics(&self, card: ObjectId, opt: &CastOption) -> Characteristics {
@@ -725,21 +763,6 @@ impl Game {
             }
         }
         self.stack.push(id);
-        // CR 400.7g: an effect that granted the card the ability it's being cast with
-        // (e.g. "gains flashback") continues to apply to the spell it becomes.
-        if let CastMethod::Keyword(k) = opt.method {
-            for e in self.effects.iter_mut() {
-                let grants = e
-                    .mods
-                    .iter()
-                    .any(|m| matches!(m, Modification::AddKeyword(kw) if kw.kind == k));
-                if let Affected::Objects(v) = &mut e.affected {
-                    if grants && v.contains(&card) {
-                        v.push(id);
-                    }
-                }
-            }
-        }
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -773,6 +796,7 @@ impl Game {
         // 611.2f).
         crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
+        self.keep_granted_casting_keyword(card, id, &opt.method);
         let chars = self.obj(id).chars.clone();
 
         // 601.2b: optional additional costs (kicker etc.) and X.
@@ -827,6 +851,9 @@ impl Game {
                 }
             }
         }
+        // CR 702.33d: a spell whose controller declared the intention to pay any of its
+        // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
+        crate::kw::kicker::record_kicked(&mut cast_info.paid);
         // (Additional costs required by the casting method itself are part of
         // `base_total_cost`.)
         // CR 702.47a: splice (the spell gains text, CR 612.10). Splice affordability

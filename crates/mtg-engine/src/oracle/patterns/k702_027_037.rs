@@ -282,7 +282,7 @@ fn cards_you_own_have_madness(
 ) -> Option<Vec<Ability>> {
     let r = end(l).strip_prefix("each ")?;
     let (quality, rest) = r.split_once(" card you own that isn't on the battlefield has madness")?;
-    if !matches!(end(rest), "" | ". the madness cost is equal to its mana cost") {
+    if end(rest) != ". the madness cost is equal to its mana cost" {
         return None;
     }
     let phrase = format!("{quality} card");
@@ -291,25 +291,33 @@ fn cards_you_own_have_madness(
     if !matches!(end(tail), "" | "card") {
         return None;
     }
-    // One effect per zone where the ability matters: the hand (where the discard
-    // replacement functions), exile (the trigger and casting), and the graveyard.
-    let out = [ZoneKind::Hand, ZoneKind::Exile, ZoneKind::Graveyard]
-        .into_iter()
-        .map(|z| {
-            let affected = Filter::and(vec![
-                f.clone(),
-                Filter::OwnedBy(PlayerRel::You),
-                Filter::InZone(z),
-            ]);
-            let s = StaticAbility::new(StaticEffect::Continuous {
-                affected,
-                mods: vec![Modification::AddKeyword(
-                    crate::keywords::Keyword::new(KeywordKind::Madness).text("Madness"),
-                )],
-            });
-            AbilityDef::new(AbilityKind::Static(s), text)
-        })
-        .collect();
+    // One effect per zone other than the battlefield (a static ability's affected set is
+    // in a single zone): the hand (where the discard replacement functions), exile (the
+    // trigger and casting), and the others where such cards can be.
+    let out = [
+        ZoneKind::Hand,
+        ZoneKind::Exile,
+        ZoneKind::Graveyard,
+        ZoneKind::Library,
+        ZoneKind::Stack,
+        ZoneKind::Command,
+    ]
+    .into_iter()
+    .map(|z| {
+        let affected = Filter::and(vec![
+            f.clone(),
+            Filter::OwnedBy(PlayerRel::You),
+            Filter::InZone(z),
+        ]);
+        let s = StaticAbility::new(StaticEffect::Continuous {
+            affected,
+            mods: vec![Modification::AddKeyword(
+                crate::keywords::Keyword::new(KeywordKind::Madness).text("Madness"),
+            )],
+        });
+        AbilityDef::new(AbilityKind::Static(s), text)
+    })
+    .collect();
     Some(out)
 }
 

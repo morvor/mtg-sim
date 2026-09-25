@@ -197,3 +197,43 @@ fn effects_can_modify_flashback_costs() {
     t.cast(P0, tt).method(FLASHBACK).go();
     assert_eq!(untapped_lands(&t, P0), 0);
 }
+
+#[test]
+fn flashback_granted_by_a_static_ability_still_exiles_the_spell() {
+    cr!("702.34a", "400.7g");
+    assert_supported("Unsubstantiate");
+    // The static ability grants flashback only to cards in the graveyard; the spell cast
+    // with it keeps the ability (CR 400.7g), so it's exiled however it leaves the stack.
+    let lens = || {
+        custom_card(
+            "Grave Lens",
+            "Enchantment",
+            None,
+            "Instant and sorcery cards in your graveyard have flashback {R}.",
+        )
+    };
+    // Resolves.
+    let mut t = TestGame::new(2);
+    t.custom(P0, lens(), Zone::Battlefield);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    assert!(can_cast(&mut t, P0, bolt, FLASHBACK));
+    let spell = t.cast(P0, bolt).method(FLASHBACK).target(P1).go();
+    assert!(t.obj_now(spell).has_keyword(KeywordKind::Flashback));
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lightning Bolt"));
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+    // Returned to its owner's hand instead: exiled.
+    let mut t = TestGame::new(2);
+    t.custom(P0, lens(), Zone::Battlefield);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P1, "Island", 2);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    let spell = t.cast(P0, bolt).method(FLASHBACK).target(P1).go();
+    let un = t.hand(P1, "Unsubstantiate");
+    t.cast(P1, un).target(spell).go();
+    t.resolve();
+    assert!(t.in_exile("Lightning Bolt"));
+    assert!(!t.in_hand(P0, "Lightning Bolt"));
+}

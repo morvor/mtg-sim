@@ -864,7 +864,8 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
     let mut parts = vec![];
     let x = match x.strip_prefix("kicked ") {
         Some(r) => {
-            parts.push(Filter::CastWithCost("kicker".into()));
+            // CR 702.33d: any kicker cost paid (sticker kicker too, CR 702.33h).
+            parts.push(Filter::CastWithCost(crate::kw::kicker::KICKED.into()));
             r
         }
         None => x,

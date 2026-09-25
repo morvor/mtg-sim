@@ -386,3 +386,64 @@ fn a_multikicker_ability_is_a_kicker_ability() {
     t.resolve();
     assert!(t.in_hand(P0, "Gnarlid Pack"));
 }
+
+#[test]
+fn a_sticker_kicked_spell_is_kicked_for_other_objects_abilities() {
+    cr!("702.33d", "702.33h");
+    ruling!(
+        "Wicker Picker",
+        "However, sticker kicker will work with cards that care about other spells being kicked"
+    );
+    assert_supported("Lullmage's Familiar");
+    // "Whenever you cast a kicked spell, you gain 2 life."
+    for pay in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Wicker Picker");
+        t.battlefield(P0, "Lullmage's Familiar");
+        t.lands(P0, "Forest", 3);
+        let bears = t.hand(P0, "Grizzly Bears");
+        kick(&mut t, P0, &[pay]);
+        t.cast(P0, bears).go();
+        assert_eq!(
+            optional_costs_offered(&t, P0),
+            vec!["sticker kicker".to_string()]
+        );
+        t.settle();
+        t.resolve_all();
+        assert!(t.on_battlefield(bears));
+        assert_eq!(t.life(P0), if pay { 22 } else { 20 }, "sticker kicked: {pay}");
+    }
+    // Bog Badger kicked only with sticker kicker: kicked for Lullmage's Familiar, though
+    // not for its own linked ability.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Wicker Picker");
+    t.battlefield(P0, "Lullmage's Familiar");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Swamp", 1);
+    let badger = t.hand(P0, "Bog Badger");
+    kick(&mut t, P0, &[false, true]);
+    t.cast(P0, badger).go();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert!(t.on_battlefield(badger));
+    assert!(!t.obj_now(badger).has_keyword(KeywordKind::Menace));
+}
+
+#[test]
+fn a_multikicked_spell_is_kicked() {
+    cr!("702.33c", "702.33d");
+    for times in [0i64, 1, 2] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Lullmage's Familiar");
+        t.lands(P0, "Forest", 6);
+        let pack = t.hand(P0, "Gnarlid Pack");
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Number(times));
+        t.cast(P0, pack).go();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(t.counters(pack, counters::PLUS1), times as u32);
+        // Kicked once however many times the multikicker cost was paid.
+        assert_eq!(t.life(P0), if times > 0 { 22 } else { 20 }, "{times}");
+    }
+}
