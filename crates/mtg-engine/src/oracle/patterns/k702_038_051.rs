@@ -5,7 +5,7 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::keywords::compile_keyword;
 use crate::oracle::effects::Builder;
-use crate::oracle::patterns::{AbilityPattern, EffectPattern};
+use crate::oracle::patterns::{AbilityPattern, EffectPattern, StaticPattern};
 use crate::types::CardType;
 use crate::oracle::CompileContext;
 use smol_str::SmolStr;
@@ -97,6 +97,83 @@ fn ninjutsu_cost_reduction(block: &str, _ctx: &CompileContext) -> Option<Vec<Abi
 }
 
 inventory::submit! { AbilityPattern { name: "ninjutsu abilities cost less", priority: 100, parse: ninjutsu_cost_reduction } }
+
+/// "[Quality] spells you cast have [keyword]" for keywords of spells in CR 702.38–51
+/// ("Artifact spells you cast have convoke", "Instant and sorcery spells you cast have
+/// storm", "Spells you cast have affinity for artifacts"): a static ability affecting
+/// spells on the stack, which have the keyword as they're cast.
+fn spells_you_cast_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (subject, kw_text) = if let Some(r) = l.strip_prefix("spells you cast have ") {
+        ("", r)
+    } else {
+        l.split_once(" spells you cast have ")?
+    };
+    let mut kws = Vec::new();
+    for a in crate::oracle::keywords::parse_keyword_line(kw_text, ctx)? {
+        match &a.kind {
+            AbilityKind::Keyword(k)
+                if matches!(
+                    k.kind,
+                    KeywordKind::Convoke | KeywordKind::Storm | KeywordKind::Affinity
+                ) =>
+            {
+                kws.push(k.clone())
+            }
+            _ => return None,
+        }
+    }
+    // "Instant and sorcery" is either type; "artifact creature" is both.
+    let words: Vec<&str> = subject.split_whitespace().collect();
+    let either = words.iter().any(|w| *w == "and" || *w == "or");
+    let mut types = Vec::new();
+    let mut adjectives = Vec::new();
+    for w in words {
+        if w == "and" || w == "or" {
+            continue;
+        }
+        if let Some(c) = crate::types::Color::from_word(w) {
+            adjectives.push(Filter::Color(c));
+            continue;
+        }
+        let adjective = match w {
+            "legendary" => Some(Filter::Supertype(crate::types::Supertype::Legendary)),
+            "multicolored" => Some(Filter::Multicolored),
+            "monocolored" => Some(Filter::Monocolored),
+            "colorless" => Some(Filter::Colorless),
+            _ => w
+                .strip_prefix("non")
+                .and_then(CardType::from_word)
+                .map(|t| Filter::not(Filter::Type(t))),
+        };
+        if let Some(f) = adjective {
+            adjectives.push(f);
+            continue;
+        }
+        let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(w)?;
+        if !crate::oracle::phrases::end(tail).is_empty() {
+            return None;
+        }
+        match f {
+            Filter::Type(_) => types.push(f),
+            other => adjectives.push(other),
+        }
+    }
+    let mut parts = adjectives;
+    if either && types.len() > 1 {
+        parts.push(Filter::Or(types));
+    } else {
+        parts.extend(types);
+    }
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(parts),
+        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spells you cast have [convoke/storm/affinity]", priority: 100, parse: spells_you_cast_have } }
 
 /// "each creature that convoked it" (CR 702.51c).
 fn convoked_it() -> Filter {

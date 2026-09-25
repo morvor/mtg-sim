@@ -177,6 +177,36 @@ fn countering_the_original_doesnt_affect_the_copies() {
 }
 
 #[test]
+fn spells_given_storm_have_it_as_they_are_cast() {
+    cr!("702.40a", "702.40b");
+    ruling!(
+        "Prismari, the Inspiration",
+        "If a spell has multiple instances of storm, each will trigger separately."
+    );
+    let mut t = TestGame::new(2);
+    // Prismari: "Instant and sorcery spells you cast have storm."
+    t.battlefield(P0, "Prismari, the Inspiration");
+    bolt(&mut t, P0, P1);
+    // Lightning Bolt now has storm: one copy.
+    t.lands(P0, "Mountain", 1);
+    let b = t.hand(P0, "Lightning Bolt");
+    cast_at(&mut t, P0, b, &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Storm").len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - 3 - 3 - 3);
+    // Grapeshot has storm twice: each instance triggers.
+    t.lands(P0, "Mountain", 2);
+    let shot = t.hand(P0, "Grapeshot");
+    cast_at(&mut t, P0, shot, &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Storm").len(), 2);
+    t.resolve_all();
+    // Two spells before it, twice: four copies plus the original.
+    assert_eq!(t.life(P1), 11 - 5);
+}
+
+#[test]
 fn each_instance_of_storm_triggers_separately() {
     cr!("702.40b");
     let def = with_cost(

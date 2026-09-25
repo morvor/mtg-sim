@@ -107,6 +107,59 @@ fn affinity_for_outlaws() {
 }
 
 #[test]
+fn spells_given_affinity_have_it_on_the_stack() {
+    cr!("702.41a", "702.41b");
+    ruling!(
+        "Sami, Wildcat Captain",
+        "if you somehow control two Sami, Wildcat Captains and you control two artifacts, each spell you cast will cost {4} less to cast."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sami, Wildcat Captain");
+    t.battlefield(P0, "Sami, Wildcat Captain");
+    t.battlefield(P0, "Memnite");
+    t.battlefield(P0, "Memnite");
+    // Craw Wurm {4}{G}{G} costs {G}{G}.
+    t.lands(P0, "Forest", 2);
+    let wurm = t.hand(P0, "Craw Wurm");
+    let actions = t.g.legal_actions(P0);
+    assert!(actions
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card, .. } if *card == wurm)));
+    t.cast(P0, wurm).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+}
+
+#[test]
+fn affinity_from_two_sources_is_cumulative() {
+    cr!("702.41b");
+    ruling!(
+        "Mycosynth Golem",
+        "Two or more instances of the affinity ability are cumulative, even if they’re both affinity for the same thing."
+    );
+    ruling!(
+        "Mycosynth Golem",
+        "The spells gain affinity for artifacts as they’re put onto the stack. They don’t have the ability while they’re cards in your hand."
+    );
+    let mut t = TestGame::new(2);
+    // Mycosynth Golem: "Artifact creature spells you cast have affinity for artifacts."
+    t.battlefield(P0, "Mycosynth Golem");
+    t.battlefield(P0, "Memnite");
+    let frog = t.hand(P0, "Frogmite");
+    assert_eq!(t.obj_now(frog).chars.keyword_count(keywords::KeywordKind::Affinity), 1);
+    // Frogmite {4}: its own affinity and the Golem's, two artifacts each: free.
+    let spell = t.cast(P0, frog).go();
+    assert_eq!(
+        t.obj_now(spell)
+            .chars
+            .keyword_count(keywords::KeywordKind::Affinity),
+        2
+    );
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Frogmite").len(), 1);
+}
+
+#[test]
 fn each_instance_of_affinity_applies() {
     cr!("702.41b");
     let def = with_cost(

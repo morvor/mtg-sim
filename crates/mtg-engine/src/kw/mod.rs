@@ -536,6 +536,100 @@ pub fn pay_mana_otherwise(
     Ok(())
 }
 
+/// A card seen as the spell its caster would put on the stack.
+struct AsSpell<'c> {
+    id: ObjectId,
+    chars: &'c Characteristics,
+    caster: PlayerId,
+}
+
+impl crate::eval::View for AsSpell<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.caster
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.id).then_some(self.caster)
+    }
+}
+
+/// The characteristics `card` would have as a spell `p` casts, including the keywords
+/// that static abilities give such spells ("Artifact spells you cast have convoke"), for
+/// checking whether it could be cast (CR 601.3e). As it's cast, the spell on the stack
+/// gets them from the layer system.
+pub fn with_granted_spell_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+) -> Characteristics {
+    let mut out = chars.clone();
+    let sources: Vec<ObjectId> = g
+        .permanents()
+        .map(|o| o.id)
+        .chain(g.command.iter().copied())
+        .collect();
+    for src in sources {
+        let o = g.obj(src);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            if !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let ctx = crate::eval::Ctx::new(Some(src), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            let granted: Vec<&Keyword> = mods
+                .iter()
+                .filter_map(|m| match m {
+                    Modification::AddKeyword(k) => Some(k),
+                    _ => None,
+                })
+                .collect();
+            // Judged as the spell it would be: with these characteristics, controlled by
+            // its caster.
+            let view = AsSpell {
+                id: card,
+                chars,
+                caster: p,
+            };
+            if granted.is_empty()
+                || !g.matches_view(
+                    &view,
+                    card,
+                    &crate::casting::as_spell_filter(affected),
+                    &ctx,
+                )
+            {
+                continue;
+            }
+            for k in granted {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// What of `cost` the keywords of `chars` could pay other than with mana.
 pub fn payable_otherwise(
     g: &Game,

@@ -475,7 +475,8 @@ impl Game {
                 }
             }
         }
-        // Optimistic cost check.
+        // Optimistic cost check, with the keywords the spell would be given as it's cast.
+        let chars = crate::kw::with_granted_spell_keywords(self, p, card, &chars);
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);

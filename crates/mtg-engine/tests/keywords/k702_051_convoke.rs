@@ -306,6 +306,32 @@ fn the_number_of_creatures_that_convoked_it() {
 }
 
 #[test]
+fn spells_can_be_given_convoke() {
+    cr!("702.51a");
+    assert_supported("Chief Engineer");
+    let mut t = TestGame::new(2);
+    // Chief Engineer: "Artifact spells you cast have convoke." Juggernaut {4} with four
+    // creatures and no lands.
+    let engineer = t.battlefield(P0, "Chief Engineer");
+    let others: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let jugg = t.hand(P0, "Juggernaut");
+    let bears = t.hand(P0, "Grizzly Bears");
+    let actions = t.g.legal_actions(P0);
+    let castable = |c: ObjectId| {
+        actions
+            .iter()
+            .any(|a| matches!(a, Action::Cast { card, .. } if *card == c))
+    };
+    assert!(castable(jugg));
+    // A nonartifact spell doesn't have convoke.
+    assert!(!castable(bears));
+    convoke_with(&mut t, P0, &[engineer, others[0], others[1], others[2]]);
+    t.cast(P0, jugg).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Juggernaut").len(), 1);
+}
+
+#[test]
 fn multiple_instances_of_convoke_are_redundant() {
     cr!("702.51d");
     let def = with_cost(
@@ -326,4 +352,24 @@ fn multiple_instances_of_convoke_are_redundant() {
     convoke_with(&mut t, P0, &[g1]);
     assert!(t.cast(P0, w).try_go().is_err());
     assert_eq!(convoke_asked(&t), 1);
+}
+
+#[test]
+fn convoke_from_two_sources_is_redundant() {
+    cr!("702.51d");
+    ruling!(
+        "Chief Engineer",
+        "Multiple instances of convoke on a single spell are redundant."
+    );
+    let mut t = TestGame::new(2);
+    let e1 = t.battlefield(P0, "Chief Engineer");
+    let e2 = t.battlefield(P0, "Chief Engineer");
+    t.lands(P0, "Wastes", 2);
+    let jugg = t.hand(P0, "Juggernaut");
+    convoke_with(&mut t, P0, &[e1, e2]);
+    t.cast(P0, jugg).go();
+    assert_eq!(convoke_asked(&t), 1);
+    assert!(tapped(&t, e1) && tapped(&t, e2));
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Juggernaut").len(), 1);
 }
