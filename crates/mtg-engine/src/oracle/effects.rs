@@ -901,7 +901,7 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
     let mut subtypes = Vec::new();
     let mut supertypes = Vec::new();
     let mut abilities: Vec<Ability> = Vec::new();
-    let mut name = SmolStr::default();
+    let name = SmolStr::default();
     loop {
         let (w, r) = split_word(rest);
         let w = w.trim_end_matches(',');
@@ -941,9 +941,10 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
                 ));
             }
         }
-    } else if let Some(r) = rest.strip_prefix("named ") {
-        name = SmolStr::new(end(r));
     } else if !end(rest).is_empty() {
+        // Named tokens ("named Wasp") are left to the `tokens_copies_create` pattern,
+        // which keeps the name's original case and stops at the clause after the name
+        // ("named Cadet, where X is ...", "named Blue Horror with "..."").
         return None;
     }
     if !types.contains(&CardType::Creature) {

@@ -75,3 +75,53 @@ pub fn copy_spell(
     }
     Some(id)
 }
+
+/// CR 707.9d: when a copy effect provides specific values for a characteristic (its
+/// exceptions set power and toughness, colors, or creature types), the copied object's
+/// characteristic-defining abilities that define that characteristic aren't copied, and
+/// for color neither is its color indicator. Exceptions that only add types ("in
+/// addition to its other types") don't count.
+pub fn drop_overridden_cdas(
+    v: &mut crate::object::Characteristics,
+    exceptions: &[crate::ability::Modification],
+) {
+    use crate::ability::{AbilityKind, Modification, StaticEffect};
+    use crate::keywords::KeywordKind;
+    let sets_pt = exceptions
+        .iter()
+        .any(|m| matches!(m, Modification::SetPT(Some(_), Some(_))));
+    let sets_color = exceptions
+        .iter()
+        .any(|m| matches!(m, Modification::SetColors(_)));
+    let sets_creature_types = exceptions.iter().any(|m| {
+        matches!(
+            m,
+            Modification::RemoveAllCreatureTypes | Modification::SetTypes { .. }
+        )
+    });
+    if !(sets_pt || sets_color || sets_creature_types) {
+        return;
+    }
+    if sets_color {
+        v.color_indicator = None;
+    }
+    v.abilities.retain(|a| match &a.kind {
+        AbilityKind::Static(s) if s.is_cda => match &s.effect {
+            StaticEffect::Continuous { mods, .. } => !mods.iter().any(|m| match m {
+                Modification::CdaPT(..) => sets_pt,
+                Modification::SetColors(_) => sets_color,
+                Modification::AllCreatureTypes => sets_creature_types,
+                _ => false,
+            }),
+            _ => true,
+        },
+        // Changeling and devoid are characteristic-defining abilities (CR 702.73a,
+        // 702.114a).
+        AbilityKind::Keyword(k) => match k.kind {
+            KeywordKind::Changeling => !sets_creature_types,
+            KeywordKind::Devoid => !sets_color,
+            _ => true,
+        },
+        _ => true,
+    });
+}
