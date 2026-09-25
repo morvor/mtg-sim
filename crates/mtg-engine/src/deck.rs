@@ -43,6 +43,20 @@ pub enum DeckProblem {
     /// Tournament rules bar the card from the format (CR 100.6): it's banned, or from a
     /// set the format doesn't use.
     NotLegalInFormat { name: String, format: String },
+    /// A conspiracy card where it can't be: in a constructed deck or sideboard (CR 315.1),
+    /// or in any deck (CR 315.3).
+    ConspiracyNotAllowed { name: String },
+}
+
+/// Conspiracy cards among `cards` (CR 315.1, 315.3).
+fn conspiracies(cards: &[Arc<CardDef>]) -> Vec<DeckProblem> {
+    cards
+        .iter()
+        .filter(|c| c.front().chars.card_types.contains(CardType::Conspiracy))
+        .map(|c| DeckProblem::ConspiracyNotAllowed {
+            name: c.name.to_string(),
+        })
+        .collect()
 }
 
 /// Pairs of card names treated as the same English name for deck construction
@@ -159,15 +173,19 @@ pub fn check_constructed_with(
             }
         }
     }
+    // CR 315.1: conspiracy cards aren't used in constructed play.
+    problems.extend(conspiracies(deck));
+    problems.extend(conspiracies(sideboard));
     problems
 }
 
 /// Checks a limited deck built from a card pool (CR 100.2b): at least 40 cards, made only
 /// of cards from the pool — as many duplicates as the pool has — plus any number of basic
-/// lands.
+/// lands. Conspiracy cards can't be included in the deck (CR 315.3); they're used from the
+/// sideboard.
 pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckProblem> {
     let cards = traditional(deck);
-    let mut problems = Vec::new();
+    let mut problems = conspiracies(deck);
     if cards.len() < 40 {
         problems.push(DeckProblem::TooFewCards {
             have: cards.len(),
