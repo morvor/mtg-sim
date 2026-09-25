@@ -15,12 +15,26 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
         .filter(|o| o.owner == p && o.next.is_none() && o.zone != Zone::Nowhere)
         .map(|o| o.id)
         .collect();
+    // CR 603.6c: a phased-in permanent leaving the game because its owner left triggers
+    // leaves-the-battlefield abilities (which look back in time, CR 603.10a).
+    let lookback = std::sync::Arc::new(g.lookback_snapshot());
     for id in owned {
         let zone = g.obj(id).zone;
         if let Some(list) = g.zone_list_mut(zone) {
             list.retain(|x| *x != id);
         }
         g.objects[id.0 as usize].zone = Zone::Nowhere;
+        if zone == Zone::Battlefield && !g.obj(id).phased_out {
+            g.emit(crate::events::Event::ZoneChange {
+                old: id,
+                new: id,
+                from: Zone::Battlefield,
+                to: Zone::Nowhere,
+                cause: crate::events::MoveCause::Other,
+                by: None,
+                lookback: Some(lookback.clone()),
+            });
+        }
     }
     // Spells and abilities controlled by the player on the stack cease to exist.
     let stack: Vec<ObjectId> = g

@@ -49,6 +49,7 @@ pub mod mana_abilities;
 pub mod mulligan;
 pub mod multiplayer;
 pub mod object;
+pub mod opening_hand;
 pub mod oracle;
 pub mod oracle_ext;
 pub mod replacement;

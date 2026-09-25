@@ -162,11 +162,91 @@ impl Game {
             .collect();
         // Play permissions from other zones ("play lands from the top of your library").
         for c in self.permitted_cards(p) {
-            if self.card_has_land_face(c) && !out.contains(&c) {
+            if self.card_has_land_face(c)
+                && !out.contains(&c)
+                && self.permission_allows(p, c, &self.land_face_characteristics(c), true)
+            {
                 out.push(c);
             }
         }
         out
+    }
+
+    /// Characteristics of the face a card would be played with as a land.
+    fn land_face_characteristics(&self, c: ObjectId) -> Characteristics {
+        let o = self.obj(c);
+        if o.chars.is_land() {
+            o.chars.clone()
+        } else {
+            self.face_characteristics(c, FaceState::Back)
+        }
+    }
+
+    /// Whether a rule or effect allows player `p` to play `card` from where it is, as a
+    /// land (`land`) or as a spell with the characteristics `chars` it would have
+    /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed.
+    pub fn permission_allows(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+    ) -> bool {
+        let o = self.obj(card);
+        if o.zone == Zone::Hand(p) {
+            return true;
+        }
+        // Grants from resolved effects name specific cards ("you may play that card").
+        if self
+            .play_grants
+            .iter()
+            .any(|g| g.player == p && g.object == card)
+        {
+            return true;
+        }
+        // CR 601.3f: a face-down card in exile can be cast only by a player who may look
+        // at it; permissions to cast spells "with certain qualities" don't reveal it.
+        if o.zone == Zone::Exile && o.face_down {
+            return false;
+        }
+        for (src, ctl, perm) in &self.statics.play_permissions {
+            if (land && !perm.lands) || (!land && !perm.spells) {
+                continue;
+            }
+            let ctx = Ctx::new(Some(*src), *ctl);
+            if !self.player_rel_matches(perm.who, p, &ctx) {
+                continue;
+            }
+            let in_zone = match perm.zone {
+                ZoneKind::Library => {
+                    if perm.top_only {
+                        self.library_top(p) == Some(card)
+                    } else {
+                        o.zone == Zone::Library(p)
+                    }
+                }
+                ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+                ZoneKind::Exile => o.zone == Zone::Exile,
+                ZoneKind::Hand => o.zone == Zone::Hand(p),
+                ZoneKind::Command => o.zone == Zone::Command,
+                _ => false,
+            };
+            if !in_zone {
+                continue;
+            }
+            // CR 601.3e: the alternative characteristics the card would have as it's
+            // played are what the permission checks.
+            let f = if land {
+                perm.what.clone()
+            } else {
+                as_spell_filter(&perm.what)
+            };
+            let view = WithChars { id: card, chars };
+            if self.matches_view(&view, card, &f, &ctx) {
+                return true;
+            }
+        }
+        false
     }
 
     fn card_has_land_face(&self, c: ObjectId) -> bool {
@@ -178,8 +258,10 @@ impl Game {
             })
     }
 
-    /// Cards in zones other than hand that the player may play because of static
-    /// permissions or grants.
+    /// Cards in zones other than hand that the player may be able to play because of
+    /// static permissions or grants. Whether a particular way of playing the card is
+    /// permitted is decided by [`Game::permission_allows`] (CR 601.3e: the permission
+    /// looks at the characteristics the card would have as it's played).
     pub fn permitted_cards(&self, p: PlayerId) -> Vec<ObjectId> {
         let mut out = Vec::new();
         for (src, ctl, perm) in &self.statics.play_permissions {
@@ -202,7 +284,7 @@ impl Game {
                 _ => vec![],
             };
             for c in cards {
-                if self.matches(c, &perm.what, &ctx) && !out.contains(&c) {
+                if !out.contains(&c) {
                     out.push(c);
                 }
             }
@@ -286,16 +368,34 @@ impl Game {
             for a in &o.chars.abilities {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
-                        if let (CostTarget::ThisSpell, CostChange::AlternativeCost(c)) =
-                            (&cm.applies_to, &cm.change)
-                        {
-                            let mut opt = CastOption::normal(FaceState::Front);
-                            opt.method = CastMethod::Alternative(a.uid);
-                            opt.alt_cost = Some(c.clone());
-                            out.push(opt);
+                        match (&cm.applies_to, &cm.change) {
+                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c)) => {
+                                let mut opt = CastOption::normal(FaceState::Front);
+                                opt.method = CastMethod::Alternative(a.uid);
+                                opt.alt_cost = Some(c.clone());
+                                out.push(opt);
+                            }
+                            // CR 601.3c: "You may cast this spell as though it had flash
+                            // if you pay [cost] more to cast it."
+                            (CostTarget::ThisSpell, CostChange::FlashForAdditionalCost(c)) => {
+                                let mut opt = CastOption::normal(FaceState::Front);
+                                opt.method = CastMethod::Alternative(a.uid);
+                                opt.extra_cost = Some(c.clone());
+                                opt.flash = true;
+                                out.push(opt);
+                            }
+                            _ => {}
                         }
                     }
                 }
+            }
+            // CR 601.3, 601.3e: outside the hand, each way of casting the card must be
+            // permitted by a rule or effect given the characteristics it would have.
+            if !in_hand {
+                out.retain(|opt| {
+                    let chars = self.face_characteristics(card, opt.face);
+                    self.permission_allows(p, card, &chars, false)
+                });
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
@@ -326,7 +426,7 @@ impl Game {
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
-        if self.cast_prohibited(p, card, &chars) {
+        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
             return false;
         }
         // Targets must be available.
@@ -371,10 +471,12 @@ impl Game {
         if self.turn.priority != Some(p) {
             return false;
         }
+        // CR 601.3d: a spell that has flash only while a condition is met can be cast as
+        // though it had flash while the condition is met (its characteristics include flash).
         let instant_speed = chars.is(CardType::Instant)
             || chars.has_keyword(KeywordKind::Flash)
             || opt.flash
-            || self.flash_permitted(p, card);
+            || self.flash_permitted(p, card, chars);
         if instant_speed {
             return !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
                 || self.is_sorcery_timing(p);
@@ -382,28 +484,48 @@ impl Game {
         self.is_sorcery_timing(p)
     }
 
-    fn flash_permitted(&self, p: PlayerId, card: ObjectId) -> bool {
+    /// Whether an effect lets `p` cast `card` as though it had flash, judged by the
+    /// characteristics the spell would have given the choices made in its proposal
+    /// (CR 601.3b, 601.3e).
+    fn flash_permitted(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+        let view = WithChars { id: card, chars };
         self.statics
             .flash_permissions
             .iter()
             .any(|(s, c, who, what)| {
                 let ctx = Ctx::new(Some(*s), *c);
-                self.player_rel_matches(*who, p, &ctx) && self.matches(card, what, &ctx)
+                self.player_rel_matches(*who, p, &ctx)
+                    && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
             })
     }
 
-    fn cast_prohibited(&self, p: PlayerId, card: ObjectId, _chars: &Characteristics) -> bool {
+    fn cast_prohibited(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+        self.cast_prohibited_by_effects(p, card, chars)
+            // CR 702.61a split second: no casting while a split-second spell is on the stack.
+            || self.split_second_on_stack()
+    }
+
+    /// Rules and effects that prohibit casting a spell with the given characteristics
+    /// ("can't cast", "can't cast more than one spell each turn"), CR 601.3.
+    fn cast_prohibited_by_effects(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
         let spells_cast = self
             .history
             .spells_cast
             .iter()
             .filter(|(q, _)| *q == p)
             .count() as u32;
+        let view = WithChars { id: card, chars };
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
             let ctx = Ctx::new(s, c);
             match r {
                 Restriction::CantCast { who, what } => {
-                    self.player_filter_matches(who, p, &ctx) && self.matches(card, what, &ctx)
+                    self.player_filter_matches(who, p, &ctx)
+                        && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
                 }
                 Restriction::MaxSpellsPerTurn(who, n) => {
                     self.player_filter_matches(who, p, &ctx) && spells_cast >= *n
@@ -411,10 +533,14 @@ impl Game {
                 _ => false,
             }
         };
-        self.statics.restrictions.iter().any(|(s, c, r)| check(r, Some(*s), *c))
-            || self.rule_effects.iter().any(|e| check(&e.restriction, e.source, e.controller))
-            // CR 702.61a split second: no casting while a split-second spell is on the stack.
-            || self.split_second_on_stack()
+        self.statics
+            .restrictions
+            .iter()
+            .any(|(s, c, r)| check(r, Some(*s), *c))
+            || self
+                .rule_effects
+                .iter()
+                .any(|e| check(&e.restriction, e.source, e.controller))
     }
 
     pub fn split_second_on_stack(&self) -> bool {
@@ -494,14 +620,15 @@ impl Game {
             .into_iter()
             .find(|o| o.method == method)
             .ok_or_else(|| Illegal(format!("no such casting method {method:?}")))?;
-        if !opt.any_time {
-            let chars = self.face_characteristics(card, opt.face);
-            if !self.timing_allows_cast(p, card, &chars, &opt) {
-                return Err(Illegal("timing".into()));
-            }
-            if self.cast_prohibited(p, card, &chars) {
-                return Err(Illegal("prohibited".into()));
-            }
+        let chars = self.face_characteristics(card, opt.face);
+        if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
+            return Err(Illegal("timing".into()));
+        }
+        // CR 601.3a: if choices made while proposing the spell (such as the value of X)
+        // could change the qualities a prohibition looks at, the player may begin to cast
+        // it; the prohibition is checked again once the proposal is complete (CR 601.2e).
+        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
+            return Err(Illegal("prohibited".into()));
         }
         self.cast_with_option(p, card, opt)
     }
@@ -533,6 +660,9 @@ impl Game {
     ) -> Result<ObjectId, Illegal> {
         let from = self.obj(card).zone;
         let from_kind = from.kind();
+        // Abilities that trigger when a card leaves a graveyard look back (CR 603.10a).
+        let lookback = matches!(from, Zone::Graveyard(_))
+            .then(|| std::sync::Arc::new(self.lookback_snapshot()));
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -579,7 +709,7 @@ impl Game {
             to: Zone::Stack,
             cause: MoveCause::Cast,
             by: Some(p),
-            lookback: None,
+            lookback,
         });
         self.recompute();
         let chars = self.obj(id).chars.clone();
@@ -624,16 +754,39 @@ impl Game {
                 cast_info.paid.push(name.clone());
                 if name.as_str() == "kicker" || name.as_str() == "multikicker" {
                     cast_info.times_kicked += 1;
+                    // CR 607.2i: abilities linked to a specific kicker cost refer to it.
+                    if let Some(m) = &cost.mana {
+                        cast_info.paid.push(format!("kicker {m}").into());
+                    }
                 }
             }
         }
-        if let Some(c) = &opt.extra_cost {
-            add_cost(&mut extra, c);
-        }
+        // (Additional costs required by the casting method itself are part of
+        // `base_total_cost`.)
         let base_cost_has_x = match &opt.alt_cost {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
-        } || extra.mana.as_ref().is_some_and(|m| m.has_x());
+        } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+            // A variable additional cost ("As an additional cost to cast this spell, pay X
+            // life", CR 601.2b, 607.2j).
+            || chars.abilities.iter().any(|a| match &a.kind {
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::CostModifier(CostModifier {
+                        applies_to: CostTarget::ThisSpell,
+                        change: CostChange::AdditionalCost(c),
+                        ..
+                    }) => {
+                        c.mana.as_ref().is_some_and(|m| m.has_x())
+                            || c.parts.iter().any(cost_part_has_x)
+                    }
+                    _ => false,
+                },
+                _ => false,
+            })
+            || opt
+                .extra_cost
+                .as_ref()
+                .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         let mut x: i64 = 0;
         if base_cost_has_x {
             let max = self.max_mana_available(p) as i64;
@@ -673,6 +826,14 @@ impl Game {
             return Err(Illegal("no legal targets / modes".into()));
         }
 
+        // 601.2e: the game checks whether the proposed spell can legally be cast. A
+        // prohibition that applies to the spell as proposed (e.g. to the mana value it has
+        // with the chosen X) makes the casting illegal (CR 601.3a, 601.6).
+        let proposed = self.obj(id).chars.clone();
+        if self.cast_prohibited_by_effects(p, id, &proposed) {
+            return Err(Illegal("the proposed spell can't be cast".into()));
+        }
+
         // 601.2f: total cost.
         let mut total = self.base_total_cost(p, id, &chars, opt, x as u32);
         add_cost(&mut total, &extra);
@@ -697,6 +858,7 @@ impl Game {
             subtypes: chars.subtypes.to_vec(),
             has_x: base_cost_has_x,
             source: Some(id),
+            any_color: self.any_color_mana(p, id, false),
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -737,10 +899,9 @@ impl Game {
                 parts: vec![],
             },
         };
+        // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
-            if opt.alt_cost.is_none() {
-                add_cost(&mut cost, e);
-            }
+            add_cost(&mut cost, e);
         }
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
@@ -771,7 +932,8 @@ impl Game {
                             CostChange::IncreaseMana(m) => {
                                 add_cost(&mut cost, &Cost::mana(m.clone()))
                             }
-                            CostChange::AlternativeCost(_) => {}
+                            CostChange::AlternativeCost(_)
+                            | CostChange::FlashForAdditionalCost(_) => {}
                         }
                     }
                 }
@@ -803,7 +965,7 @@ impl Game {
                     reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
                 }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::AlternativeCost(_) => {}
+                CostChange::AlternativeCost(_) | CostChange::FlashForAdditionalCost(_) => {}
             }
         }
         for (n, color) in reductions {
@@ -864,7 +1026,10 @@ impl Game {
         if who != p && !act.any_player {
             return false;
         }
-        if self.turn.priority != Some(p) && !act.is_mana_ability {
+        // CR 602.2, 605.3a: abilities are activated by a player with priority; mana
+        // abilities also while a mana payment is being made (casting, activating, or an
+        // effect asking for a payment).
+        if self.turn.priority != Some(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
         // Timing.
@@ -986,6 +1151,12 @@ impl Game {
                     self.player_rel_matches(cm.who, p, &ctx)
                         && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
                 }
+                // CR 606.4: the cost of a loyalty ability may be modified by other effects.
+                CostTarget::LoyaltyAbilities(f) => {
+                    act.is_loyalty
+                        && self.player_rel_matches(cm.who, p, &ctx)
+                        && self.matches(src, f, &ctx)
+                }
                 _ => false,
             };
             if !applies {
@@ -1006,6 +1177,20 @@ impl Game {
                 CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
                 _ => {}
             }
+        }
+        // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
+        let loyalty: Vec<i32> = cost
+            .parts
+            .iter()
+            .filter_map(|c| match c {
+                CostPart::Loyalty(n) => Some(*n),
+                _ => None,
+            })
+            .collect();
+        if loyalty.len() > 1 {
+            cost.parts.retain(|c| !matches!(c, CostPart::Loyalty(_)));
+            cost.parts
+                .insert(0, CostPart::Loyalty(loyalty.iter().sum()));
         }
         cost
     }
@@ -1055,6 +1240,15 @@ impl Game {
         act: &ActivatedAbility,
     ) -> Result<Option<ObjectId>, Illegal> {
         let src_chars = self.obj(src).chars.clone();
+        // CR 602.2a: an ability activated from a hidden zone reveals the card.
+        if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
+            self.emit(Event::Custom {
+                name: "revealed".into(),
+                player: Some(p),
+                obj: Some(src),
+                amount: 0,
+            });
+        }
         let mut ctx = Ctx::new(Some(src), p);
         ctx.ability_uid = a.uid;
         ctx.link = a.link;
@@ -1080,6 +1274,7 @@ impl Game {
                 is_ability: true,
                 card_types: src_chars.card_types,
                 source: Some(src),
+                any_color: self.any_color_mana(p, src, true),
                 ..Default::default()
             };
             self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
@@ -1126,10 +1321,13 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 602.1e: a modification of how the activation cost may be paid applies to the
+        // total cost.
         let spend = SpendContext {
             is_ability: true,
             card_types: src_chars.card_types,
             source: Some(src),
+            any_color: self.any_color_mana(p, src, true),
             ..Default::default()
         };
         let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
@@ -1155,6 +1353,35 @@ impl Game {
         });
         self.flush_events();
         Ok(Some(id))
+    }
+
+    /// Mana types `p` may spend as though they were mana of any color to pay for the
+    /// spell `src` (`ability == false`) or the activated abilities of `src` (CR 602.1e).
+    pub fn any_color_mana(&self, p: PlayerId, src: ObjectId, ability: bool) -> Vec<ManaType> {
+        let mut out = Vec::new();
+        for (s, c, e) in &self.statics.other {
+            let StaticEffect::SpendAsAnyColor { applies_to, types } = e else {
+                continue;
+            };
+            if *c != p {
+                continue;
+            }
+            let ctx = Ctx::new(Some(*s), *c);
+            let applies = match applies_to {
+                CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
+                CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
+                CostTarget::ThisSpell => !ability && src == *s,
+                CostTarget::Keyword(_) | CostTarget::LoyaltyAbilities(_) => false,
+            };
+            if applies {
+                if types.is_empty() {
+                    out.extend(ManaType::ALL);
+                } else {
+                    out.extend(types.iter().copied());
+                }
+            }
+        }
+        out
     }
 
     // ------------------------------------------------------------------
@@ -1186,8 +1413,17 @@ impl Game {
             {
                 return true;
             }
-            let plan =
-                crate::mana_abilities::plan_payment(self, p, &need, &SpendContext::default(), src);
+            let spend = SpendContext {
+                any_color: src
+                    .map(|s| {
+                        let mut v = self.any_color_mana(p, s, true);
+                        v.extend(self.any_color_mana(p, s, false));
+                        v
+                    })
+                    .unwrap_or_default(),
+                ..Default::default()
+            };
+            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
             return plan.is_some();
         }
         true
@@ -1420,7 +1656,11 @@ impl Game {
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;
             paid.mana_spent = spent;
         }
-        for part in &cost.parts {
+        // CR 601.2h: costs that involve random elements or moving objects from a library
+        // to a public zone are paid after all other costs.
+        let (late, early): (Vec<&CostPart>, Vec<&CostPart>) =
+            cost.parts.iter().partition(|c| cost_part_pays_last(c));
+        for part in early.into_iter().chain(late) {
             self.pay_cost_part(p, part, src, ctx, &mut paid)?;
         }
         Ok(paid)
@@ -1731,6 +1971,49 @@ impl Game {
     }
 }
 
+/// A view of the game in which one object has substitute characteristics — used to check
+/// rules and effects against the characteristics a card would have as the spell being
+/// proposed (CR 601.3a–e).
+struct WithChars<'c> {
+    id: ObjectId,
+    chars: &'c Characteristics,
+}
+
+impl crate::eval::View for WithChars<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        g.obj(id).controller
+    }
+}
+
+/// A filter describing spells ("creature spells", "spells with mana value 3") applied to
+/// a card that would become such a spell: the "is on the stack" parts are dropped.
+fn as_spell_filter(f: &Filter) -> Filter {
+    match f {
+        Filter::Spell | Filter::InZone(ZoneKind::Stack) => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(as_spell_filter).collect()),
+        Filter::Not(x) => match **x {
+            // "nonspell" stays as written.
+            Filter::Spell | Filter::InZone(ZoneKind::Stack) => f.clone(),
+            _ => Filter::Not(Box::new(as_spell_filter(x))),
+        },
+        other => other.clone(),
+    }
+}
+
+/// Whether choices made while proposing a spell can change the qualities that
+/// prohibitions look at (CR 601.3a): the value of X changes its mana value.
+fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
+    chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
+}
+
 /// What was paid for a cost.
 #[derive(Clone, Debug, Default)]
 pub struct PaidCost {
@@ -1747,6 +2030,20 @@ pub fn add_cost(total: &mut Cost, c: &Cost) {
         }
     }
     total.parts.extend(c.parts.iter().cloned());
+}
+
+/// Cost parts involving random elements or moving objects from a library to a public
+/// zone (CR 601.2h).
+fn cost_part_pays_last(c: &CostPart) -> bool {
+    matches!(
+        c,
+        CostPart::Discard { random: true, .. }
+            | CostPart::Mill(_)
+            | CostPart::Exile {
+                zone: ZoneKind::Library,
+                ..
+            }
+    )
 }
 
 fn cost_part_has_x(c: &CostPart) -> bool {

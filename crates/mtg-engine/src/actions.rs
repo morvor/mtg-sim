@@ -56,13 +56,26 @@ impl Game {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
+                // An object that can't enter the battlefield stays where it is.
+                if let ReplEvent::Move(mv) = &e {
+                    if mv.to == Zone::Battlefield && self.cant_enter_battlefield(mv.obj) {
+                        continue;
+                    }
+                }
                 finals.push((i, e));
             }
         }
-        // Look back in time for leaves-the-battlefield triggers (CR 603.10a).
+        // Look back in time for leaves-the-battlefield triggers and other zone-change
+        // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
+        // the stack, or a public object being put into a hand or library.
         let leaving = finals.iter().any(|(_, e)| match e {
             ReplEvent::Move(m) => {
-                self.obj(m.obj).zone == Zone::Battlefield && m.to != Zone::Battlefield
+                let from = self.obj(m.obj).zone;
+                from != m.to
+                    && (matches!(from, Zone::Battlefield | Zone::Graveyard(_) | Zone::Stack)
+                        || (from.is_public()
+                            && from != Zone::Nowhere
+                            && matches!(m.to, Zone::Hand(_) | Zone::Library(_))))
             }
             _ => false,
         });
@@ -88,6 +101,14 @@ impl Game {
         out
     }
 
+    /// Whether a "can't enter the battlefield" effect applies to an object.
+    pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
+        self.statics.restrictions.iter().any(|(s, c, r)| match r {
+            Restriction::CantEnterBattlefield(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
+            _ => false,
+        })
+    }
+
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
     /// newly created object (a token or card) that hasn't been put anywhere yet.
     pub fn can_move(&self, id: ObjectId) -> bool {
@@ -99,19 +120,12 @@ impl Game {
                 && o.kind != ObjKind::StackAbility)
     }
 
-    /// Snapshot of triggered abilities of permanents on the battlefield right now.
+    /// Snapshot of the triggered abilities that function right now, with their sources and
+    /// controllers, for abilities that look back in time (CR 603.10).
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
-        let mut snap = LookbackSnapshot::default();
-        for o in self.permanents() {
-            for a in &o.chars.abilities {
-                if matches!(a.kind, AbilityKind::Triggered(_))
-                    || crate::triggers::keyword_has_trigger(a)
-                {
-                    snap.sources.push((o.id, o.controller, a.clone()));
-                }
-            }
+        LookbackSnapshot {
+            sources: self.current_trigger_sources(),
         }
-        snap
     }
 
     /// Performs a (final, already-replaced) zone change.
@@ -143,6 +157,12 @@ impl Game {
         }
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
+        // An Aura, Equipment, or Fortification leaving the battlefield becomes unattached.
+        let was_attached_to = if from == Zone::Battlefield {
+            self.obj(old_id).attached_to
+        } else {
+            None
+        };
         let new_id = self.create_incarnation(old_id, m.to);
         {
             let face = m.etb.face;
@@ -293,7 +313,7 @@ impl Game {
         // Linked exile (CR 607): remember cards exiled by a source.
         if let (Some(src), Zone::Exile) = (m.source, m.to) {
             if self.is_live(src) {
-                let link = self.current_link;
+                let link = m.etb.link.unwrap_or(self.current_link);
                 self.objects[src.0 as usize]
                     .linked
                     .entry(link)
@@ -333,6 +353,13 @@ impl Game {
             by: m.by,
             lookback,
         });
+        if let Some(host) = was_attached_to {
+            // CR 603.10c: looks back in time (to the snapshot taken for this move).
+            self.emit(Event::Unattached {
+                obj: old_id,
+                from: host,
+            });
+        }
         Some(new_id)
     }
 
@@ -368,19 +395,18 @@ impl Game {
             }
             ReplEvent::Destroy { obj, .. } => {
                 let owner = self.obj(obj).owner;
+                // The move to the graveyard is itself subject to replacement effects
+                // ("if it would die, exile it instead"), as in `destroy_all`.
                 if self
-                    .perform_move(
-                        MoveEv {
-                            obj,
-                            to: Zone::Graveyard(owner),
-                            pos: LibraryPosition::Top,
-                            cause: MoveCause::Destroy,
-                            by: None,
-                            etb: EtbInfo::default(),
-                            source: None,
-                        },
-                        Some(Arc::new(self.lookback_snapshot())),
-                    )
+                    .move_object_ev(MoveEv {
+                        obj,
+                        to: Zone::Graveyard(owner),
+                        pos: LibraryPosition::Top,
+                        cause: MoveCause::Destroy,
+                        by: None,
+                        etb: EtbInfo::default(),
+                        source: None,
+                    })
                     .is_some()
                 {
                     self.emit(Event::Destroyed { obj });
@@ -572,8 +598,10 @@ impl Game {
     /// Whether a permanent doesn't untap during its controller's untap step (CR 502.3).
     pub fn doesnt_untap(&self, obj: ObjectId) -> bool {
         let o = self.obj(obj);
+        // CR 701.43a: an exerted permanent doesn't untap during its controller's next
+        // untap step.
         if o.exerted {
-            return false;
+            return true;
         }
         self.statics.restrictions.iter().any(|(s, c, r)| match r {
             Restriction::DoesntUntap(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
@@ -1187,9 +1215,20 @@ impl Game {
         mana: Vec<crate::mana::Mana>,
         source: Option<ObjectId>,
     ) {
+        let produced: Vec<crate::mana::ManaType> = mana.iter().map(|m| m.ty).collect();
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }
         self.emit(Event::ManaAdded { player: p, source });
+        // CR 106.12a: the permanent whose {T} mana ability is resolving was tapped for mana.
+        if let Some(obj) = source.filter(|s| self.mana_ability_resolving == Some(*s)) {
+            if !produced.is_empty() {
+                self.emit(Event::TappedForMana {
+                    obj,
+                    player: p,
+                    produced,
+                });
+            }
+        }
     }
 }

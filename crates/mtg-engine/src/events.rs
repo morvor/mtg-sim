@@ -73,6 +73,12 @@ pub enum Event {
         ability: ObjectId,
         source: ObjectId,
     },
+    /// An activated or triggered ability finished resolving (CR 608.2p).
+    AbilityResolved {
+        ability: ObjectId,
+        source: ObjectId,
+        controller: PlayerId,
+    },
     SpellResolved {
         spell: ObjectId,
     },
@@ -246,6 +252,13 @@ pub enum Event {
     ManaAdded {
         player: PlayerId,
         source: Option<ObjectId>,
+    },
+    /// A permanent was tapped for mana: a mana ability with {T} in its cost resolved and
+    /// produced mana (CR 106.12a).
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        produced: Vec<crate::mana::ManaType>,
     },
     Exploited {
         obj: ObjectId,

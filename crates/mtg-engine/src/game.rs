@@ -420,6 +420,12 @@ pub struct Game {
     pub play_grants: Vec<crate::casting::PlayGrant>,
     /// The permanent whose mana ability is resolving (for "tapped for mana" triggers).
     pub mana_ability_resolving: Option<ObjectId>,
+    /// Set while several players lose the game simultaneously, so the game's result is
+    /// determined only once all of them have lost (CR 104.4a).
+    pub losing_simultaneously: bool,
+    /// Cards exiled before the game began by an ability of a card with a given name:
+    /// (player who exiled it, that card's name, the exiled card) (CR 607.2n).
+    pub named_exiles: Vec<(PlayerId, SmolStr, ObjectId)>,
     /// Hint of which mana types an automatic payment needs (for "any color" choices).
     pub mana_hint: Option<Vec<crate::mana::ManaType>>,
     /// Commanders that moved to graveyard/exile since the last SBA check (CR 704.6d).
@@ -496,6 +502,8 @@ impl Game {
             saved_ctx: BTreeMap::new(),
             play_grants: vec![],
             mana_ability_resolving: None,
+            losing_simultaneously: false,
+            named_exiles: vec![],
             mana_hint: None,
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
@@ -762,6 +770,11 @@ impl Game {
             n.base = card.characteristics(n.face);
         }
         n.is_commander = o.is_commander;
+        // CR 607.2p: a choice made before the game began follows the card.
+        if let Some(c) = o.linked_choices.get(&crate::ability::PREGAME_LINK) {
+            n.linked_choices
+                .insert(crate::ability::PREGAME_LINK, c.clone());
+        }
         n.prev = Some(old);
         let id = self.push_object(n);
         self.objects[old.0 as usize].next = Some(id);
@@ -998,8 +1011,13 @@ impl Game {
         self.log(|_g| format!("{p} loses the game"));
         self.players[p.idx()].has_lost = true;
         self.emit(Event::PlayerLost { player: p });
+        // CR 603.10f: abilities that trigger when a player loses the game look back in
+        // time, before the player's objects leave the game (CR 800.4a).
+        self.flush_events();
         self.after_player_leaves(p);
-        self.check_game_over();
+        if !self.losing_simultaneously {
+            self.check_game_over();
+        }
     }
 
     pub fn player_wins(&mut self, p: PlayerId) {

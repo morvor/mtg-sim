@@ -167,6 +167,8 @@ impl Game {
     /// Shuffles libraries, determines the starting player, draws opening hands, runs
     /// mulligans, and begins the first turn.
     pub fn start(&mut self) {
+        // CR 607.2n: actions taken before shuffling decks to start the game.
+        crate::opening_hand::before_shuffle_actions(self);
         // CR 103.3: each player shuffles their deck.
         for p in self.player_ids() {
             self.shuffle_library(p);
@@ -192,6 +194,7 @@ impl Game {
         if !self.config.skip_mulligans {
             crate::mulligan::run_mulligans(self);
         }
+        crate::opening_hand::opening_hand_actions(self);
         self.events.clear();
         self.begin_turn(starting, false);
     }
@@ -498,6 +501,8 @@ impl Game {
         self.turn.stage = Stage::Begin;
         self.turn.priority = None;
         self.turn.passes = 0;
+        // Static abilities whose conditions depend on the step are re-evaluated.
+        self.dirty = true;
     }
 
     /// Adds an additional combat phase (and main phase) after the current phase (CR 500.8).
@@ -584,6 +589,12 @@ impl Game {
             .collect();
         for id in to_untap {
             self.untap(id);
+        }
+        // CR 701.43a: exertion lasts until its controller's next untap step.
+        for id in self.battlefield.clone() {
+            if self.obj(id).controller == active {
+                self.objects[id.0 as usize].exerted = false;
+            }
         }
     }
 

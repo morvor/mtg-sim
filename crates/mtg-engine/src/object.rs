@@ -310,8 +310,14 @@ pub struct GameObject {
     /// How this permanent was cast, if it was.
     pub cast: Option<Box<CastInfo>>,
     pub choices: Choices,
+    /// Choices made by this object's abilities, by link id (CR 607.2d, 607.5a): an ability
+    /// refers only to choices made by the abilities it's linked to.
+    pub linked_choices: BTreeMap<u16, Choices>,
     /// Objects linked to this one by CR 607 (e.g. cards exiled with it), by link id.
     pub linked: BTreeMap<u16, Vec<ObjectId>>,
+    /// The object (and link) whose ability created this token or put this permanent onto
+    /// the battlefield (CR 607.1d).
+    pub created_by: Option<(ObjectId, u16)>,
     /// Previous incarnation of this card (before its last zone change).
     pub prev: Option<ObjectId>,
     /// Next incarnation (after it changed zones).
@@ -379,7 +385,9 @@ impl GameObject {
             stack: None,
             cast: None,
             choices: Choices::default(),
+            linked_choices: BTreeMap::new(),
             linked: BTreeMap::new(),
+            created_by: None,
             prev: None,
             next: None,
             entered_turn: 0,

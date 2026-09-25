@@ -232,6 +232,14 @@ pub struct TriggeredAbility {
     /// Triggered mana abilities (CR 605.1b) resolve immediately.
     pub is_mana_ability: bool,
     pub zone: FunctionZone,
+    /// "This ability can't be countered." — an instruction that functions while the
+    /// ability is on the stack (CR 603.1a).
+    #[serde(default)]
+    pub cant_be_countered: bool,
+    /// "[...] Do this only once each turn.": the ability triggers only if its source's
+    /// controller hasn't taken the optional action this turn (CR 603.2h).
+    #[serde(default)]
+    pub do_once_per_turn: bool,
 }
 
 impl TriggeredAbility {
@@ -243,6 +251,8 @@ impl TriggeredAbility {
             once_per_turn: false,
             is_mana_ability: false,
             zone: FunctionZone::Battlefield,
+            cant_be_countered: false,
+            do_once_per_turn: false,
         }
     }
 }
@@ -498,6 +508,10 @@ pub struct TargetSpec {
     pub chosen_by_opponent: bool,
     /// Human-readable description ("target creature you control").
     pub text: String,
+    /// The target is required only if this condition holds as targets are chosen, e.g.
+    /// only if a kicker cost was paid (CR 601.2c).
+    #[serde(default)]
+    pub condition: Option<Condition>,
 }
 
 impl TargetSpec {
@@ -510,6 +524,7 @@ impl TargetSpec {
             divide: None,
             chosen_by_opponent: false,
             text: text.into(),
+            condition: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
@@ -558,6 +573,10 @@ pub enum TargetKind {
 pub type Var = u16;
 
 /// Well-known variables.
+/// The link shared by a pregame choice and the characteristic-defining ability that refers
+/// to it (CR 607.2p). Choices made for it are kept as the card changes zones.
+pub const PREGAME_LINK: u16 = 0x7fff;
+
 pub mod vars {
     use super::Var;
     /// Objects affected by the most recent effect ("it", "those cards", "the exiled card").
@@ -610,6 +629,12 @@ pub enum Sel {
     },
     /// Cards linked to this object by CR 607 ("the exiled cards", "cards exiled with this").
     Linked,
+    /// Objects linked to the ability of the object that created this token or put this
+    /// permanent onto the battlefield (CR 607.1d): "the card exiled with [that object]".
+    CreatorLinked,
+    /// Cards the controller exiled before the game began with abilities of cards with this
+    /// name ("a card you exiled with cards named [name]", CR 607.2n).
+    ExiledWithCardsNamed(SmolStr),
     /// The spell this ability resolves for (for "copy that spell").
     TriggerSpell,
     /// Union of selections.
@@ -832,6 +857,14 @@ pub enum Filter {
     /// Attacked this turn.
     AttackedThisTurn,
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
+    /// Of the color chosen by the source's linked ability ("the chosen color",
+    /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
+    LinkedChosenColor,
+    /// Of the creature type chosen by the source's linked ability.
+    LinkedChosenCreatureType,
+    /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
+    /// ability (CR 607.2f).
+    ManaValueOfChosenQuality,
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1014,6 +1047,11 @@ pub enum Condition {
     PrevAffectedAny,
     /// The spell/ability was cast from the given zone.
     CastFrom(ZoneKind),
+    /// Whether all of these trigger conditions have occurred this turn, regardless of
+    /// whether any ability triggered on them (CR 603.1b).
+    AllTriggerConditionsThisTurn(Vec<TriggerCond>),
+    /// The word chosen by the linked ability is this one (anchor words, CR 607.2m).
+    ChosenWord(String),
     /// Game-state predicates about the current turn.
     Phase(PhaseCond),
     /// You have the city's blessing (CR 702.131).
@@ -1127,6 +1165,9 @@ pub enum Modification {
     SetBasicLandType(Vec<Subtype>),
     // Layer 5
     SetColors(ColorSet),
+    /// "[This] is the chosen color": the color chosen by the linked ability (CR 607.2p).
+    /// Does nothing while no color is chosen (CR 607.5a).
+    SetLinkedChosenColor,
     AddColors(ColorSet),
     // Layer 6
     AddAbility(Ability),
@@ -1163,7 +1204,7 @@ impl Modification {
             | AllCreatureTypes
             | RemoveAllCreatureTypes
             | SetBasicLandType(_) => Layer::L4Type,
-            SetColors(_) | AddColors(_) => Layer::L5Color,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -1240,6 +1281,9 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of any type the permanent tapped for mana produced (from the triggering
+    /// event, "one mana of any type that land produced").
+    AnyTypeProduced,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1435,6 +1479,8 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[objects] can't enter the battlefield" (CR 608.3e).
+    CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
     /// "can't gain life".
@@ -1461,6 +1507,12 @@ pub enum Restriction {
     SorcerySpeedOnly(PlayerFilter),
     /// "can't play lands".
     CantPlayLands(PlayerFilter),
+    /// "While [a player] is choosing targets as part of casting a spell or activating an
+    /// ability, that player must choose at least one [object] if able" (CR 601.2c).
+    MustTarget {
+        chooser: PlayerFilter,
+        what: Filter,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
 }
@@ -1494,6 +1546,8 @@ pub enum CostTarget {
     ThisSpell,
     /// Specific: "Equip abilities", "ninjutsu abilities".
     Keyword(KeywordKind),
+    /// Loyalty abilities of sources matching (CR 606.4).
+    LoyaltyAbilities(Filter),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1510,6 +1564,9 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
+    /// (CR 601.3c).
+    FlashForAdditionalCost(Cost),
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -1536,6 +1593,47 @@ pub enum StaticEffect {
     FlashPermission {
         who: PlayerRel,
         what: Filter,
+    },
+    /// "If [cause] causes a triggered ability of [sources] to trigger, that ability triggers
+    /// an additional time" (CR 603.2d). `cause: None` means any trigger event.
+    AdditionalTrigger {
+        sources: Filter,
+        cause: Option<Box<TriggerCond>>,
+    },
+    /// "You may spend [types] mana as though it were mana of any color to pay [costs]"
+    /// (CR 602.1e). An empty list means mana of any type.
+    SpendAsAnyColor {
+        applies_to: CostTarget,
+        types: Vec<ManaType>,
+    },
+    /// An action a player may take with this card from their opening hand (CR 103.6):
+    /// with no delayed ability, "you may begin the game with it on the battlefield";
+    /// otherwise "you may reveal this card from your opening hand. If you do, [delayed
+    /// triggered ability]", whose source is this card (CR 603.7g).
+    OpeningHand {
+        delayed: Option<Box<(TriggerCond, Body)>>,
+    },
+    /// "If this card is your commander, choose a color before the game begins" (CR 607.2p):
+    /// the choice is linked to the characteristic-defining ability in the same paragraph
+    /// and persists as the card changes zones.
+    PregameChoice {
+        kind: ChoiceKind,
+        only_if_commander: bool,
+    },
+    /// "Before you shuffle your deck to start the game, you may reveal this card from your
+    /// deck and exile [a card matching `what`] you drafted that isn't in your deck"
+    /// (CR 607.2n). Functions in the library before the game begins.
+    BeforeShuffleExile {
+        what: Filter,
+    },
+    /// A static ability that functions on the stack and creates a delayed triggered ability
+    /// as the permanent spell resolves and the permanent enters (CR 608.3g), e.g. dash's
+    /// "return it to its owner's hand at the beginning of the next end step". The
+    /// condition is checked against the spell ("if it was cast for its dash cost").
+    DelayedTriggerAsEnters {
+        condition: Option<Condition>,
+        trigger: TriggerCond,
+        body: Body,
     },
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
@@ -1761,6 +1859,36 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
+    /// A triggered ability with several trigger conditions ("Whenever A or B, ...");
+    /// it triggers when any of them occurs (CR 603.1b).
+    AnyOf(Vec<TriggerCond>),
+    /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
+    PhasesOut(Filter),
+    /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).
+    /// "That permanent" is the trigger object.
+    BecomesUnattached(Filter),
+    /// "When you lose control of [filter]" (looks back in time, CR 603.10d).
+    LoseControl(Filter),
+    /// "When/Whenever [filter spell] is countered" (looks back in time, CR 603.10e).
+    SpellCountered(Filter),
+    /// "Whenever an ability of [source] resolves" / "Whenever the final chapter ability of
+    /// a Saga you control resolves" (CR 608.2p): triggers once the ability has finished
+    /// resolving. "That Saga" is the trigger object.
+    AbilityResolved {
+        source: Filter,
+        final_chapter: bool,
+    },
+    /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
+    /// (CR 106.12a). The event's amount is a bit mask of the types produced.
+    TappedForMana(Filter),
+    /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
+    /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
+    /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is
+    /// the trigger spell.
+    AbilityTriggered {
+        cause: Box<TriggerCond>,
+        source: Filter,
+    },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1845,6 +1973,16 @@ pub enum Effect {
     /// Store a number into a variable.
     StoreValue {
         var: Var,
+        value: Value,
+    },
+    /// "Note [a number]": records information for the abilities linked to this one to refer
+    /// to ("the noted number", CR 607.2e). Read with `Value::Chosen`.
+    Note {
+        value: Value,
+    },
+    /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
+    /// creates ("that many" after paying a cost any number of times, CR 603.12a).
+    SetX {
         value: Value,
     },
 
@@ -2107,6 +2245,13 @@ pub enum Effect {
         /// Fires once and is then removed.
         once: bool,
     },
+    /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
+    /// triggers immediately and is put on the stack the next time a player would receive
+    /// priority, with its own targets (CR 603.12). Wrap it in a condition to make it
+    /// trigger only if the action was taken.
+    Reflexive {
+        body: Box<Body>,
+    },
     /// "At the beginning of the next end step" / "at end of combat" (common delayed triggers).
     AtNext {
         step: TriggerStep,
@@ -2197,6 +2342,9 @@ pub enum ChoiceKind {
     BasicLandType,
     CardType,
     OddOrEven,
+    /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
+    /// Dragons", CR 607.2f, 607.2m, 614.12b).
+    Word(Vec<String>),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

@@ -474,6 +474,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         divide: None,
         chosen_by_opponent: false,
         text: String::new(),
+        condition: None,
     };
     Some((spec, rest))
 }

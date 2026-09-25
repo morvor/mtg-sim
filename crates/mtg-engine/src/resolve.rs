@@ -29,6 +29,9 @@ impl Game {
             Effect::Seq(v) => {
                 for x in v {
                     self.exec(x, ctx);
+                    // CR 603.8: state triggers trigger as soon as the game state matches,
+                    // even momentarily during a resolution.
+                    self.check_state_triggers();
                 }
             }
             Effect::If {
@@ -53,8 +56,9 @@ impl Game {
                 );
                 ctx.prev_happened = yes;
                 if yes {
+                    // Effects that can fail to do what they say (sacrificing, paying,
+                    // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
-                    ctx.prev_happened = true;
                 }
             }
             Effect::PayOptional {
@@ -133,6 +137,19 @@ impl Game {
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
+            Effect::Note { value } => {
+                let n = self.eval_value(value, ctx) as i32;
+                if let Some(src) = ctx.source {
+                    self.objects[src.0 as usize]
+                        .linked_choices
+                        .entry(ctx.link)
+                        .or_default()
+                        .number = Some(n);
+                }
+            }
+            Effect::SetX { value } => {
+                ctx.x = self.eval_value(value, ctx) as i32;
+            }
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
@@ -166,9 +183,12 @@ impl Game {
                             },
                             ..Default::default()
                         },
-                        source: if *link { ctx.source } else { None },
+                        // CR 607.2a: cards an ability exiles are exiled with its source,
+                        // for the abilities linked to it.
+                        source: ctx.source,
                     })
                     .collect();
+                let _ = link;
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
@@ -208,6 +228,7 @@ impl Game {
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
+                ctx.prev_happened = !all.is_empty();
                 ctx.set_var(vars::IT, all);
             }
             Effect::SacrificeObjects { what } => {
@@ -228,6 +249,9 @@ impl Game {
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 let res = self.move_to_destination(objs, to, ctx);
+                if to.zone == ZoneKind::Battlefield {
+                    self.link_to_creator(ctx, &res);
+                }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -498,6 +522,7 @@ impl Game {
                     };
                     created.extend(self.create_tokens(p, tc, n, ctx.source));
                 }
+                self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
                 ctx.set_var(
                     vars::CREATED,
@@ -688,6 +713,7 @@ impl Game {
                     }
                 }
                 ctx.prev_value = discarded.len() as i64;
+                ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
                 ctx.set_var(vars::IT, discarded);
             }
@@ -881,6 +907,8 @@ impl Game {
                 body,
                 once,
             } => {
+                // CR 603.7a: it won't trigger on events that happened before it was created.
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
@@ -894,7 +922,36 @@ impl Game {
                     created_step: Some(self.turn.step),
                 });
             }
+            Effect::Reflexive { body } => {
+                // CR 603.12: a reflexive triggered ability is checked immediately after it's
+                // created; it triggers now and waits to be put on the stack (with its own
+                // targets) until a player would receive priority. It's controlled by the
+                // controller of the resolving spell or ability (CR 603.7d–e).
+                self.trigger_order += 1;
+                let ability = AbilityDef::new(
+                    AbilityKind::Triggered(TriggeredAbility::new(
+                        TriggerCond::Custom("reflexive".into()),
+                        (**body).clone(),
+                    )),
+                    "reflexive trigger",
+                );
+                let src = ctx
+                    .stack_obj
+                    .filter(|s| self.obj(*s).is_spell())
+                    .or(ctx.source);
+                self.pending_triggers.push(PendingTrigger {
+                    source: src.unwrap_or(ObjectId(0)),
+                    controller: ctx.controller,
+                    ability,
+                    event: ctx.event.clone().unwrap_or_default(),
+                    source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
+                    saved: Some(ctx.clone()),
+                    body: Some((**body).clone()),
+                    order: self.trigger_order,
+                });
+            }
             Effect::AtNext { step, effect } => {
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
@@ -1280,16 +1337,24 @@ impl Game {
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
             ManaProduction::ChosenColor(n) => {
+                // CR 607.5a: an undefined choice produces nothing.
                 let k = self.eval_value(n, ctx).max(0) as usize;
-                let c = ctx
-                    .source
-                    .and_then(|s| self.obj(s).choices.color)
-                    .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![c; k]
+                match self.linked_choice(ctx).and_then(|c| c.color) {
+                    Some(c) => vec![ManaType::from_color(c); k],
+                    None => vec![],
+                }
             }
             ManaProduction::CouldProduce(f) => {
                 let types = crate::mana_abilities::types_could_produce(self, f, ctx);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
+            ManaProduction::AnyTypeProduced => {
+                let mask = ctx.event.as_ref().map_or(0, |e| e.amount);
+                let types = crate::mana::types_from_mask(mask);
                 if types.is_empty() {
                     vec![]
                 } else {
@@ -1308,6 +1373,27 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+        }
+    }
+
+    /// CR 607.2c, 607.1d: objects an ability created or put onto the battlefield are
+    /// linked to that ability of its source ("created with ~", "put onto the battlefield
+    /// with ~").
+    pub(crate) fn link_to_creator(&mut self, ctx: &Ctx, objs: &[ObjectId]) {
+        let Some(src) = ctx.source else { return };
+        if !self.is_live(src) {
+            return;
+        }
+        for o in objs {
+            if *o == src || !self.is_live(*o) {
+                continue;
+            }
+            self.objects[src.0 as usize]
+                .linked
+                .entry(ctx.link)
+                .or_default()
+                .push(*o);
+            self.objects[o.0 as usize].created_by = Some((src, ctx.link));
         }
     }
 
