@@ -122,7 +122,7 @@ pub fn subtype_word(w: &str) -> Option<Subtype> {
 }
 
 /// A single "head" noun: card type, subtype, "permanent", "spell", "card".
-fn head_noun(w: &str) -> Option<Filter> {
+pub fn head_noun(w: &str) -> Option<Filter> {
     let sg = singular(w);
     match sg.as_str() {
         "permanent" => return Some(Filter::Permanent),
@@ -138,7 +138,7 @@ fn head_noun(w: &str) -> Option<Filter> {
 }
 
 /// Adjectives preceding the head noun.
-fn adjective(w: &str) -> Option<Filter> {
+pub fn adjective(w: &str) -> Option<Filter> {
     if let Some(c) = Color::from_word(w) {
         return Some(Filter::Color(c));
     }
