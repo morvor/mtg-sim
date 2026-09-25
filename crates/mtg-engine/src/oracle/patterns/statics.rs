@@ -70,7 +70,7 @@ fn quoted_segments(text: &str) -> Vec<&str> {
 /// object only "this creature" means that object; the card's name still means the card
 /// (CR 201.5a: "Equipped creature has '{T}, Sacrifice Blazing Torch: ...'"). Such
 /// abilities are left unsupported. Unknown provenance counts as naming the card.
-fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
+pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
     if !normalized.contains('~') {
         return false;
     }
