@@ -97,6 +97,21 @@ fn spell_quality(subject: &str) -> Option<Filter> {
 
 inventory::submit! { StaticPattern { name: "each [quality] spell you cast has replicate", priority: 100, parse: spells_have_replicate } }
 
+/// "Spells you cast have ripple N." (Thrumming Stone): the spells have ripple as they're
+/// cast, so it triggers when they're cast (CR 702.60a).
+fn spells_have_ripple(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let n: i32 = l.strip_prefix("spells you cast have ripple ")?.parse().ok()?;
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(vec![Filter::Spell, Filter::ControlledBy(PlayerRel::You)]),
+        mods: vec![Modification::AddKeyword(
+            Keyword::with_n(KeywordKind::Ripple, n).text(format!("ripple {n}")),
+        )],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spells you cast have ripple N", priority: 100, parse: spells_have_ripple } }
+
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
 /// looks back in time (CR 603.10a). It triggers however the card gets there.

@@ -88,6 +88,11 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    // CR 702.61a: while a spell with split second is on the stack, no other spell can be
+    // cast, even as part of a resolving ability's effect.
+    if g.split_second_on_stack() {
+        return Err(Illegal("a spell with split second is on the stack".into()));
+    }
     let face = FaceState::Front;
     let mut opt = CastOption::normal(face);
     opt.any_time = true;
