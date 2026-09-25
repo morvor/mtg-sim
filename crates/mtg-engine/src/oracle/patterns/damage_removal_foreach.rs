@@ -31,6 +31,26 @@ fn multiply(e: Effect, count: Value) -> Option<Effect> {
         Effect::LoseLife { who, n } => Effect::LoseLife { who, n: times(&n)? },
         Effect::Draw { who, n } => Effect::Draw { who, n: times(&n)? },
         Effect::Mill { who, n } => Effect::Mill { who, n: times(&n)? },
+        Effect::AddCounters { what, kind, n } => Effect::AddCounters {
+            what,
+            kind,
+            n: times(&n)?,
+        },
+        Effect::AddPlayerCounters { who, kind, n } => Effect::AddPlayerCounters {
+            who,
+            kind,
+            n: times(&n)?,
+        },
+        // "Add {C} for each charge counter on ~": that much mana of one type.
+        Effect::AddMana {
+            who,
+            mana: ManaProduction::Fixed(syms),
+            restriction,
+        } if syms.len() == 1 => Effect::AddMana {
+            who,
+            mana: ManaProduction::Amount(syms[0], count),
+            restriction,
+        },
         Effect::DealDamage { source, amount, to } => Effect::DealDamage {
             source,
             amount: times(&amount)?,
