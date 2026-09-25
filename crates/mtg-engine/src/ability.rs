@@ -1765,6 +1765,12 @@ pub enum Restriction {
     /// "All creatures able to block [filter] do so" (a blocking requirement for each
     /// creature able to block it, CR 509.1c).
     MustBeBlockedByAll(Filter),
+    /// "[blocker] blocks [attacker] this combat if able" (provoke, CR 702.39a): a
+    /// requirement that each such creature blocks each such attacker (CR 509.1c).
+    MustBlockAttacker {
+        blocker: Filter,
+        attacker: Filter,
+    },
     /// "[attackers] can't attack [defender] (or planeswalkers they control) unless their
     /// controller pays [cost] for each ..." (CR 508.1d, 508.1h).
     AttackCost {

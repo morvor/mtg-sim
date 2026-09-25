@@ -1262,6 +1262,22 @@ pub fn block_requirements(
             }
         }
     }
+    // "[blocker] blocks [attacker] this combat if able" (CR 702.39a).
+    for (s, c, r, locked) in g.all_restrictions() {
+        if let Restriction::MustBlockAttacker { blocker, attacker } = &r {
+            let ctx = Ctx::new(s, c);
+            for (b, atts) in options {
+                if !g.restriction_applies(*b, blocker, &ctx, &locked) {
+                    continue;
+                }
+                for a in atts {
+                    if g.matches(*a, attacker, &ctx) {
+                        out.push(BlockRequirement::BlocksAttacker(*b, *a));
+                    }
+                }
+            }
+        }
+    }
     out
 }
 

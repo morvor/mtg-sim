@@ -1688,6 +1688,15 @@ impl Game {
                 *f = Filter::Any;
             }
         }
+        // "Target creature blocks this creature this combat if able": both creatures are
+        // the objects named as the effect began.
+        if let Restriction::MustBlockAttacker { blocker, attacker } = &mut r {
+            for f in [blocker, attacker] {
+                if filter_references_specific(f) {
+                    *f = Filter::Objects(self.named_objects(f, ctx));
+                }
+            }
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
@@ -1705,24 +1714,29 @@ impl Game {
         let mut r = r.clone();
         let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
-            let mut v = self.objects_matching(f, ctx);
-            // Targets outside the battlefield ("target spell can't be countered"), and the
-            // resolving spell itself ("the damage [this spell deals] can't be prevented").
-            let extra = ctx
-                .targets
-                .iter()
-                .flatten()
-                .filter_map(|e| e.object())
-                .chain(ctx.source);
-            for o in extra {
-                if !v.contains(&o) && self.matches(o, f, ctx) {
-                    v.push(o);
-                }
-            }
-            Some(v)
+            Some(self.named_objects(f, ctx))
         } else {
             None
         }
+    }
+
+    /// The objects a filter naming specific objects matches as an effect begins.
+    fn named_objects(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
+        let mut v = self.objects_matching(f, ctx);
+        // Targets outside the battlefield ("target spell can't be countered"), and the
+        // resolving spell itself ("the damage [this spell deals] can't be prevented").
+        let extra = ctx
+            .targets
+            .iter()
+            .flatten()
+            .filter_map(|e| e.object())
+            .chain(ctx.source);
+        for o in extra {
+            if !v.contains(&o) && self.matches(o, f, ctx) {
+                v.push(o);
+            }
+        }
+        v
     }
 
     fn lock_replacement_objects(&self, d: &ReplacementDef, ctx: &Ctx) -> Option<Vec<ObjectId>> {

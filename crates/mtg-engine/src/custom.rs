@@ -39,6 +39,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::stickers::sticker_value(g, name, ctx) {
         return v;
     }
+    // Values computed by keyword implementations (e.g. storm, CR 702.40a).
+    if let Some(v) = crate::kw::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.
@@ -353,6 +357,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "exile them, then meld them into [result]" (CR 701.42a).
     if crate::merge::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Effects performed by keyword implementations (e.g. ninjutsu, CR 702.49a).
+    if crate::kw::custom_effect(g, name, ctx) {
         return;
     }
     match name {
