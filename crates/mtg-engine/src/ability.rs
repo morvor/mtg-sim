@@ -1638,6 +1638,13 @@ pub enum Restriction {
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
+    /// "[Players] can't untap more than [n] [objects] during their untap steps"
+    /// (modifies CR 502.3).
+    MaxUntaps {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
     /// "can't gain life".
     CantGainLife(PlayerFilter),
     /// "can't lose life".

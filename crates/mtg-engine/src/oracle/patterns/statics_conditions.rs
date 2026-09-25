@@ -933,8 +933,29 @@ pub(crate) fn parse_static_condition(
         return Some((cond, None));
     }
     // Built-in forms ("you control an artifact", "it's your turn") and other patterns.
-    let cond = crate::oracle::statics::parse_condition(c, ctx)?;
-    Some((cond, None))
+    if let Some(cond) = crate::oracle::statics::parse_condition(c, ctx) {
+        return Some((cond, None));
+    }
+    // "it's your turn and you control an Army", "you control a Desert or there is a
+    // Desert card in your graveyard".
+    for (sep, all) in [(" and ", true), (" or ", false)] {
+        for (i, _) in c.match_indices(sep) {
+            let (a, b) = (&c[..i], &c[i + sep.len()..]);
+            let (Some((ca, ita)), Some((cb, _))) = (
+                parse_static_condition(a, it, ctx),
+                parse_static_condition(b, it, ctx),
+            ) else {
+                continue;
+            };
+            let cond = if all {
+                Condition::And(vec![ca, cb])
+            } else {
+                Condition::Or(vec![ca, cb])
+            };
+            return Some((cond, ita));
+        }
+    }
+    None
 }
 
 /// The forms offered to other abilities (intervening "if" clauses). Conditions about the

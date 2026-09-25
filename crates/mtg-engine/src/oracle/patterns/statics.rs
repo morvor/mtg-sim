@@ -214,6 +214,35 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
     }
+    // "with power greater than the number of cards in your hand", "with power less than
+    // the number of Islands you control"
+    for (p, cmp) in [
+        ("with power greater than ", Cmp::Gt),
+        ("with power less than ", Cmp::Lt),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.starts_with("the number of ") {
+                // The amount runs to the end of the phrase.
+                let v = parse_amount(r, None)?;
+                return Some((Filter::Power(cmp, Box::new(v)), ""));
+            }
+        }
+    }
+    // "creatures blocking or blocked by ~"
+    for (p, f) in [
+        (
+            "blocking or blocked by ~",
+            Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
+        ),
+        ("blocking ~", Filter::BlockingSource),
+        ("blocked by ~", Filter::BlockedBySource),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',']) {
+                return Some((f, r));
+            }
+        }
+    }
     // "with power or toughness 1 or less"
     if let Some(r) = t.strip_prefix("with power or toughness ") {
         let (n, r2) = parse_number(r)?;
@@ -339,6 +368,24 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             parts.push(g);
             rest = r;
             continue;
+        }
+        // "without flying or reach": neither keyword.
+        if let (Some(r), Some(Filter::Not(inner))) = (t.strip_prefix("or "), parts.last()) {
+            if let Filter::HasKeyword(k1) = **inner {
+                let probe = format!("with {r}");
+                let parsed = extra_suffix(&probe).map(|(f, r2)| (f, r.len() - r2.len()));
+                if let Some((Filter::HasKeyword(k2), used)) = parsed {
+                    if k1 != KeywordKind::Landwalk && k2 != KeywordKind::Landwalk {
+                        parts.pop();
+                        parts.push(Filter::not(Filter::Or(vec![
+                            Filter::HasKeyword(k1),
+                            Filter::HasKeyword(k2),
+                        ])));
+                        rest = &r[used..];
+                        continue;
+                    }
+                }
+            }
         }
         // "with flying or reach": another keyword joins the last "with" keyword.
         if let (Some(r), Some(Filter::HasKeyword(_))) = (t.strip_prefix("or "), parts.last()) {
@@ -1072,7 +1119,18 @@ fn grant_list(
         return Some(keyword_mods(r)?.into_iter().map(Out::Mod).collect());
     }
     let mut out = Vec::new();
+    // "..., and protection from black and from red": one keyword.
+    let mut items: Vec<String> = Vec::new();
     for item in split_list(r) {
+        match items.last_mut() {
+            Some(last) if item.starts_with("from ") && last.starts_with("protection from ") => {
+                last.push_str(" and ");
+                last.push_str(item);
+            }
+            _ => items.push(item.to_string()),
+        }
+    }
+    for item in items.iter().map(String::as_str) {
         if let Some(k) = item
             .strip_prefix("\"#")
             .and_then(|x| x.strip_suffix('"'))
@@ -1508,7 +1566,27 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
             blocker: Filter::not(b),
         }]);
     }
-    single_restriction(p, f).map(|r| vec![r])
+    if let Some(r) = single_restriction(p, f) {
+        return Some(vec![r]);
+    }
+    // "can't attack you or block creatures you control": two restrictions.
+    let x = p.strip_prefix("can't ")?;
+    for (i, _) in x.match_indices(" or ") {
+        let (a, b) = (&x[..i], &x[i + " or ".len()..]);
+        // A bare verb shares the second part's object ("can't block or be blocked by
+        // creatures with power 2 or greater").
+        if !a.contains(' ') {
+            continue;
+        }
+        if let (Some(mut ra), Some(rb)) = (
+            restriction_predicate(&format!("can't {a}"), f),
+            restriction_predicate(&format!("can't {b}"), f),
+        ) {
+            ra.extend(rb);
+            return Some(ra);
+        }
+    }
+    None
 }
 
 /// Which spells and abilities can't target: "spells", "Aura spells", "white spells or
@@ -1691,8 +1769,23 @@ fn parse_predicate(
     if let Some(r) = p.strip_prefix("has ").or_else(|| p.strip_prefix("have ")) {
         // Base P/T (layer 7b).
         if let Some(pt) = r.strip_prefix("base power and toughness ") {
+            if let Some(a) = pt.strip_prefix("each equal to ") {
+                let v = parse_amount(a, subj.it.as_ref())?;
+                return Some(vec![Out::Mod(Modification::SetPT(Some(v.clone()), Some(v)))]);
+            }
             let (bp, bt) = base_pt(pt)?;
             return Some(vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))]);
+        }
+        for (p, power) in [("base power ", true), ("base toughness ", false)] {
+            if let Some(n) = r.strip_prefix(p) {
+                let n: i32 = n.parse().ok()?;
+                let v = Some(Value::c(n));
+                return Some(vec![Out::Mod(if power {
+                    Modification::SetPT(v, None)
+                } else {
+                    Modification::SetPT(None, v)
+                })]);
+            }
         }
         return grant_list(r, subj, quotes, text, ctx);
     }
@@ -2409,6 +2502,25 @@ fn parse_player_body(s: &str) -> Option<Body> {
         }
         "can't draw more than one card each turn" => {
             outs.push(Out::Restr(Restriction::MaxDrawsPerTurn(who.clone(), 1)))
+        }
+        // "can't untap more than one land during their untap steps" (CR 502.3)
+        _ if rest.starts_with("can't untap more than ") => {
+            let r = rest.strip_prefix("can't untap more than ")?;
+            let (n, r) = parse_number(r)?;
+            let Value::Const(n) = n else { return None };
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !matches!(
+                tail.trim(),
+                "during their untap steps" | "during their untap step" | "during your untap step"
+            ) || mentions_other_zones(&f)
+            {
+                return None;
+            }
+            outs.push(Out::Restr(Restriction::MaxUntaps {
+                who: who.clone(),
+                what: Filter::and(vec![f, Filter::Permanent]),
+                n: n as u32,
+            }));
         }
         _ => {
             // "can't cast [X] spells[ or activate abilities of Y]"
