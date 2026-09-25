@@ -259,7 +259,13 @@ impl Game {
         if o.summoning_sick && !o.has_keyword(KeywordKind::Haste) {
             return false;
         }
-        if o.has_keyword(KeywordKind::Defender) {
+        // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
+        if o.has_keyword(KeywordKind::Defender)
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::AttackDespiteDefender(f) => Some(f),
+                _ => None,
+            })
+        {
             return false;
         }
         !self.restricted_obj(id, |r| match r {

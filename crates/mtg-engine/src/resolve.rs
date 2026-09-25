@@ -1726,6 +1726,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::CantAttack(f)
         | Restriction::CantBlock(f)
         | Restriction::CantAttackOrBlock(f)
+        | Restriction::AttackDespiteDefender(f)
         | Restriction::MustAttack(f)
         | Restriction::MustBlock(f)
         | Restriction::MustBeBlocked(f)

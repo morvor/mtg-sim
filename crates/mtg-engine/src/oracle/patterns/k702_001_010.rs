@@ -8,8 +8,11 @@
 //! * "Equip costs you pay cost {1} less" / "Equip abilities you activate cost {1} less to
 //!   activate" (CR 702.1a: a "[keyword] cost" is the keyword's own cost).
 //! * Self-state conditions: "it's attacking", "~ is equipped", ...
+//! * "[Creatures] can attack as though they didn't have defender" (CR 702.3b), as a static
+//!   ability or for a turn.
 
-use super::{AbilityPattern, ConditionPattern, StaticPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern};
+use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
 use crate::oracle::phrases::*;
@@ -193,4 +196,156 @@ fn self_state_condition(c: &str) -> Option<Condition> {
 
 inventory::submit! {
     ConditionPattern { name: "k702: self state", priority: 150, parse: self_state_condition }
+}
+
+const DESPITE_DEFENDER: [&str; 2] = [
+    " as though it didn't have defender",
+    " as though they didn't have defender",
+];
+
+/// Strips "as though it/they didn't have defender" from the end of a clause.
+fn strip_despite_defender(l: &str) -> Option<&str> {
+    DESPITE_DEFENDER.iter().find_map(|s| l.strip_suffix(s))
+}
+
+/// The objects a static ability's subject refers to: "~", "it", "enchanted Wall",
+/// "creatures you control", "Wall creatures".
+fn static_subject(s: &str) -> Option<Filter> {
+    let s = s.trim();
+    match s {
+        "~" | "it" => return Some(Filter::Source),
+        "enchanted creature" | "equipped creature" | "enchanted wall" => {
+            return Some(Filter::AttachedToSource)
+        }
+        _ => {}
+    }
+    let s = s.strip_prefix("each ").unwrap_or(s);
+    let (f, _, tail) = parse_object_phrase(s)?;
+    end(tail).is_empty().then_some(f)
+}
+
+/// "~ can attack as though it didn't have defender", "Creatures you control can attack
+/// as though they didn't have defender", "~ gets +2/+2 and can attack as though it didn't
+/// have defender".
+fn attack_despite_defender_static(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let head = strip_despite_defender(l)?;
+    let restriction = |f: Filter| {
+        AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
+                Restriction::AttackDespiteDefender(f),
+            ))),
+            text,
+        )
+    };
+    if let Some(subject) = head.strip_suffix(" can attack") {
+        return Some(vec![restriction(static_subject(subject)?)]);
+    }
+    // "[subject] gets +2/+2 and can attack ...": the rest of the ability, then this.
+    let rest = head.strip_suffix(" and can attack")?;
+    let subject = [" gets ", " has ", " get ", " have "]
+        .iter()
+        .find_map(|v| rest.split_once(v).map(|(s, _)| s))?;
+    let f = static_subject(subject)?;
+    let mut v = crate::oracle::statics::parse_static(rest, ctx)?;
+    if v.is_empty() || !v.iter().all(|a| matches!(a.kind, AbilityKind::Static(_))) {
+        return None;
+    }
+    v = with_text(v, text);
+    v.push(restriction(f));
+    Some(v)
+}
+
+inventory::submit! {
+    StaticPattern { name: "k702: attack despite defender", priority: 50, parse: attack_despite_defender_static }
+}
+
+/// "~ can attack this turn as though it didn't have defender", "target creature with
+/// defender can attack this turn as though it didn't have defender", "creatures you
+/// control with defender can attack this turn as though they didn't have defender".
+fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (l, until_eot) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => (r, true),
+        None => (l, false),
+    };
+    let head = strip_despite_defender(l)?;
+    let subject = head
+        .strip_suffix(" can attack this turn")
+        .or_else(|| head.strip_suffix(" can attack").filter(|_| until_eot))
+        .or_else(|| {
+            // Subjectless second half: "~ gets +3/-1 until end of turn and can attack
+            // this turn as though it didn't have defender".
+            (head == "can attack this turn").then_some("")
+        })?
+        .trim();
+    let sel = match subject {
+        "" | "it" | "that creature" => b.it.clone(),
+        "~" => Sel::This,
+        s if s.contains("target ") => {
+            let (spec, tail) = parse_target(s)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            let slot = b.add_target(spec, s);
+            Sel::Target(slot)
+        }
+        s => {
+            let s = s.strip_prefix("each ").unwrap_or(s);
+            let (f, _, tail) = parse_object_phrase(s)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            Sel::All(f)
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::AttackDespiteDefender(Filter::In(Box::new(sel))),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! {
+    EffectPattern { name: "k702: attack despite defender this turn", priority: 50, parse: attack_despite_defender_effect }
+}
+
+/// "As long as [condition], ~ gets +2/+2 and can attack as though it didn't have
+/// defender": the two halves as separate conditional statics.
+fn conditional_and_attack_despite_defender(
+    block: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || block.contains('\n') || block.contains(':') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("as long as ")?;
+    let (cond, rest) = r.split_once(", ")?;
+    let head = strip_despite_defender(rest)?;
+    let first = head.strip_suffix(" and can attack")?;
+    let subject = [" gets ", " has ", " get ", " have "]
+        .iter()
+        .find_map(|v| first.split_once(v).map(|(s, _)| s))?;
+    let mut v =
+        crate::oracle::statics::parse_static(&format!("as long as {cond}, {first}"), ctx)?;
+    v.extend(crate::oracle::statics::parse_static(
+        &format!("as long as {cond}, {subject} can attack as though it didn't have defender"),
+        ctx,
+    )?);
+    if !v
+        .iter()
+        .all(|a| matches!(&a.kind, AbilityKind::Static(s) if s.condition.is_some()))
+    {
+        return None;
+    }
+    Some(with_text(v, block))
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: conditional and attack despite defender", priority: 50, parse: conditional_and_attack_despite_defender }
 }
