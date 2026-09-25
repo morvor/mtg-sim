@@ -326,6 +326,18 @@ impl Game {
                 }
             }
         }
+        // CR 400.6: the moving object's own abilities that would affect the move apply,
+        // even from a hidden zone.
+        if let ReplEvent::Move(m) = ev {
+            for own in crate::zones::own_move_replacements(self, m) {
+                if !sources
+                    .iter()
+                    .any(|(src, _, ab, _)| *src == own.0 && ab.uid == own.2.uid)
+                {
+                    sources.push(own);
+                }
+            }
+        }
         for (src, ctl, a, d) in sources {
             let key = ReplKey::Static(src, a.uid);
             if applied.contains(&key) || !in_scope(&d) {

@@ -63,6 +63,53 @@ pub fn owners_zone(g: &Game, obj: ObjectId, to: Zone) -> Zone {
     }
 }
 
+/// CR 400.6: an object moving to a public zone where its owner will be able to look at it
+/// is looked at for abilities that would affect the move: its own replacement abilities
+/// for zone changes apply wherever they function, even in a hidden zone (e.g. "If ~ would
+/// be put into a graveyard from anywhere, ..."). Returns (source, controller, ability,
+/// replacement) entries like the collected static replacement effects.
+pub fn own_move_replacements(
+    g: &Game,
+    m: &MoveEv,
+) -> Vec<(ObjectId, PlayerId, Ability, ReplacementDef)> {
+    let o = g.obj(m.obj);
+    if !m.to.is_public() || m.etb.face_down.is_some() || o.face_down {
+        return vec![];
+    }
+    // Objects without a controller are affected on behalf of their owner.
+    let controller = match o.zone {
+        Zone::Battlefield | Zone::Stack => o.controller,
+        _ => o.owner,
+    };
+    let ctx = Ctx::new(Some(m.obj), controller);
+    o.chars
+        .abilities
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AbilityKind::Static(s)
+                if g.ability_functions(o, s.zone, s.is_cda)
+                    && s.condition.as_ref().is_none_or(|c| g.eval_cond(c, &ctx)) =>
+            {
+                match &s.effect {
+                    StaticEffect::Replacement(d)
+                        if matches!(
+                            &d.event,
+                            ReplacementEvent::ZoneChange {
+                                filter: Filter::Source,
+                                ..
+                            }
+                        ) =>
+                    {
+                        Some((m.obj, controller, a.clone(), d.clone()))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The card types of cards that can't leave the command zone (CR 400.4b).
 const COMMAND_ONLY: [CardType; 5] = [
     CardType::Conspiracy,

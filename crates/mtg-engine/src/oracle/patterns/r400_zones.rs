@@ -160,3 +160,68 @@ fn shuffle_zones_into_library(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r400 shuffle hand and graveyard into library", priority: 100, parse: shuffle_zones_into_library } }
+
+/// "If a card or token would be put into a graveyard from anywhere, exile it instead."
+/// (Rest in Peace), "If a card would be put into an opponent's graveyard from anywhere,
+/// exile it instead." (Leyline of the Void), "If ~ would be put into a graveyard from
+/// anywhere, reveal ~ and shuffle it into its owner's library instead." (Blightsteel
+/// Colossus): replacement effects that apply to an object moving from any zone
+/// (CR 400.6; objects go to their owner's graveyard, CR 400.3).
+fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("if ")?;
+    let (what, r) = r.split_once(" would be put into ")?;
+    let (whose, instead) = r.split_once(" graveyard from anywhere, ")?;
+    let (filter, self_replacement) = match what {
+        "~" => (Filter::Source, true),
+        "a card" => (Filter::Card, false),
+        "a card or token" => (Filter::Any, false),
+        "an instant or sorcery card" => (
+            Filter::and(vec![
+                Filter::Card,
+                Filter::Or(vec![
+                    Filter::Type(crate::types::CardType::Instant),
+                    Filter::Type(crate::types::CardType::Sorcery),
+                ]),
+            ]),
+            false,
+        ),
+        _ => return None,
+    };
+    let owner = match whose {
+        "a" => None,
+        "your" => Some(PlayerRel::You),
+        "an opponent's" => Some(PlayerRel::Opponent),
+        _ => return None,
+    };
+    let dest = match instead {
+        "exile it instead" | "exile that card instead" => Destination::zone(ZoneKind::Exile),
+        "reveal ~ and shuffle it into its owner's library instead"
+        | "shuffle it into its owner's library instead" => {
+            let mut d = Destination::zone(ZoneKind::Library);
+            d.position = LibraryPosition::Shuffled;
+            d
+        }
+        _ => return None,
+    };
+    let filter = match owner {
+        Some(o) => Filter::and(vec![filter, Filter::OwnedBy(o)]),
+        None => filter,
+    };
+    let mut s = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
+        event: ReplacementEvent::ZoneChange {
+            filter,
+            from: None,
+            to: Some(ZoneKind::Graveyard),
+        },
+        action: ReplacementAction::MoveInstead(dest),
+        self_replacement,
+        optional: false,
+    }));
+    if self_replacement {
+        // "From anywhere": the object's own ability applies wherever it is.
+        s.zone = FunctionZone::Anywhere;
+    }
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "r400 put into a graveyard from anywhere instead", priority: 100, parse: graveyard_from_anywhere } }
