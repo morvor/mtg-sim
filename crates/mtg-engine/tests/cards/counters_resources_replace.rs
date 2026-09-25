@@ -109,7 +109,7 @@ fn two_corpsejack_menaces_quadruple_counters() {
 
 #[test]
 fn winding_constrictor_adds_to_each_kind_and_to_player_counters() {
-    cr!("614.16", "107.14");
+    cr!("614.16", "107.14", "701.34a");
     ruling!(
         "Winding Constrictor",
         "If you would get counters of multiple kinds at the same time, Winding Constrictor increases the number of each of those kinds of counters by one."
@@ -132,6 +132,19 @@ fn winding_constrictor_adds_to_each_kind_and_to_player_counters() {
     assert_eq!(t.counters(theirs, "+1/+1"), 1);
     t.g.add_counters(Entity::Player(P1), "poison", 1, None);
     assert_eq!(t.g.player(P1).counter("poison"), 1);
+    // Several kinds at the same time (proliferate): one more of each kind, on the
+    // creature and on the player.
+    t.g.add_counters(Entity::Player(P0), "experience", 1, None);
+    assert_eq!(t.g.player(P0).counter("experience"), 2);
+    t.lands(P0, "Island", 3);
+    let sp = t.hand(P0, "Steady Progress");
+    t.answer_choose(P0, &[Entity::Object(bear), Entity::Player(P0)]);
+    t.cast(P0, sp).go();
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 4);
+    assert_eq!(t.counters(bear, "flying"), 4);
+    assert_eq!(t.g.player(P0).counter("energy"), 5);
+    assert_eq!(t.g.player(P0).counter("experience"), 4);
 }
 
 #[test]

@@ -108,19 +108,29 @@ fn may_pay_mana_after_an_intervening_if() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Markov Purifier");
     t.lands(P0, "Plains", 2);
+    let tapped_plains = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|&&l| t.g.obj(l).name() == "Plains" && t.g.obj(l).tapped)
+            .count()
+    };
+    // No life gained this turn: the ability doesn't trigger, so nothing is paid or drawn.
+    t.answer_yes(P0, true);
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(tapped_plains(&t), 0);
+    t.clear_answers();
+    // A later turn in which P0 gained life: pay {2} and draw.
+    t.advance_to(P0, Step::PrecombatMain);
     t.g.gain_life(P0, 1);
     let hand = t.hand_size(P0);
     t.answer_yes(P0, true);
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
-    assert_eq!(
-        t.g.battlefield
-            .iter()
-            .filter(|&&l| t.g.obj(l).name() == "Plains" && t.g.obj(l).tapped)
-            .count(),
-        2
-    );
+    assert_eq!(tapped_plains(&t), 2);
 }
 
 #[test]
@@ -159,7 +169,7 @@ fn lathnu_hellion_is_sacrificed_unless_energy_is_paid() {
 
 #[test]
 fn pay_six_energy_cost() {
-    cr!("107.14", "602.2b");
+    cr!("107.14", "118.3");
     assert_supported(&["Roil Cartographer"]);
     let mut t = TestGame::new(2);
     let r = t.battlefield(P0, "Roil Cartographer");
@@ -171,4 +181,21 @@ fn pay_six_energy_cost() {
     t.resolve_all();
     assert_eq!(energy(&t, P0), 0);
     assert_eq!(t.hand_size(P0), hand + 3);
+}
+
+#[test]
+fn an_alternative_cost_isnt_paid_as_the_spell_resolves() {
+    cr!("118.9");
+    // "If you control a Swamp, you may pay 4 life rather than pay this spell's mana
+    // cost" is an alternative cost chosen as the spell is cast, not a payment offered
+    // while it resolves.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let s = t.hand(P0, "Snuff Out");
+    t.answer_yes(P0, true);
+    t.cast(P0, s).target(bear).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bear));
+    assert_eq!(t.life(P0), 20);
 }

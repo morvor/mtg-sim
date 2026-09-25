@@ -46,7 +46,7 @@ fn library_of_alexandria_checks_hand_size_only_on_activation() {
 
 #[test]
 fn glistening_sphere_corrupted_mana_ability() {
-    cr!("602.5", "122.1f");
+    cr!("602.5", "122.1");
     assert_supported(&["Glistening Sphere"]);
     let mut t = TestGame::new(2);
     let s = t.battlefield(P0, "Glistening Sphere");
@@ -62,7 +62,7 @@ fn glistening_sphere_corrupted_mana_ability() {
 
 #[test]
 fn vivisection_evangelist_corrupted_trigger() {
-    cr!("603.4", "122.1f");
+    cr!("603.4", "122.1");
     assert_supported(&["Vivisection Evangelist"]);
     let mut t = TestGame::new(2);
     let bear = t.battlefield(P1, "Grizzly Bears");

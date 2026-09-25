@@ -61,16 +61,18 @@ fn distribute_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     let (n, kind, r) = count_and_kind(r)?;
     let r = strip(r, "among ")?;
     let total = n.as_const();
+    // "any number of" and "up to N" allow zero targets (CR 115.6; "You can cast Stolen
+    // Goodies with no targets"); then nothing is distributed.
     let (min, max, r): (u32, Value, &str) = if let Some(r) = strip(r, "one or two ") {
         (1, Value::c(2), r)
     } else if let Some(r) = strip(r, "one, two, or three ") {
         (1, Value::c(3), r)
     } else if let Some(r) = strip(r, "any number of ") {
         // Each target gets at least one, so there are at most that many targets.
-        (1, n.clone(), r)
+        (0, n.clone(), r)
     } else if let Some(r) = strip(r, "up to ") {
         let (m, r2) = parse_number(r)?;
-        (1, m, r2)
+        (0, m, r2)
     } else {
         return None;
     };
@@ -217,6 +219,11 @@ fn source_counter_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Abili
     }
     let (clause, _) = rest.split_once(", ")?;
     if !(clause.starts_with("had ") || clause.starts_with("has ")) || !clause.contains("counter") {
+        return None;
+    }
+    // Text the standard compiler already understands ("if it had counters on it", read
+    // from the object as it last existed) is left to it.
+    if crate::oracle::triggers::parse_triggered(text, ctx).is_some() {
         return None;
     }
     // Rewrite the pronoun (at the same position in the original-case text).

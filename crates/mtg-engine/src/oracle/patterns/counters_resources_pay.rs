@@ -17,6 +17,16 @@ pub fn resolution_cost(s: &str) -> Option<Cost> {
     if s.is_empty() || has_x || s.contains(" and ") || s.contains(" or ") {
         return None;
     }
+    // Only the cost itself: a run of symbols ("{2}{B}", "{E}{E}") or "N life". The cost
+    // parser tolerates trailing words ("4 life rather than pay ~'s mana cost" is an
+    // alternative cost, CR 118.9, not a payment during resolution).
+    let only_symbols = s.starts_with('{')
+        && s.ends_with('}')
+        && s.split('}').all(|p| p.is_empty() || (p.starts_with('{') && !p[1..].contains('{')));
+    let only_life = parse_number(s).is_some_and(|(_, r)| end(r) == "life");
+    if !only_symbols && !only_life {
+        return None;
+    }
     let (cost, loyalty) = crate::oracle::costs::parse_cost(s)
         .or_else(|| crate::oracle::costs::parse_cost(&format!("pay {s}")))?;
     if loyalty || (cost.mana.is_none() && cost.parts.is_empty()) {
