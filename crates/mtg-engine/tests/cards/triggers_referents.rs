@@ -309,6 +309,56 @@ fn you_may_have_it_deal_damage() {
 }
 
 #[test]
+fn target_artifact_that_player_controls() {
+    cr!("510.2", "115.1");
+    assert_supported(&["Trygon Predator"]);
+    let mut t = TestGame::new(2);
+    let trygon = t.battlefield(P0, "Trygon Predator");
+    let mine = t.battlefield(P0, "Ornithopter");
+    let theirs = t.battlefield(P1, "Ornithopter");
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    // Only the damaged player's artifacts can be targeted.
+    t.attack(&[(trygon, Entity::Player(P1))], &[]);
+    assert!(!t.on_battlefield(theirs));
+    assert!(t.on_battlefield(mine));
+    // Choosing your own artifact isn't allowed.
+    let mut t = TestGame::new(2);
+    let trygon = t.battlefield(P0, "Trygon Predator");
+    let mine = t.battlefield(P0, "Ornithopter");
+    t.battlefield(P1, "Ornithopter");
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(trygon, Entity::Player(P1))], &[]);
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn that_player_gets_a_poison_counter() {
+    cr!("122.1", "510.2");
+    assert_supported(&["Pit Scorpion"]);
+    let mut t = TestGame::new(2);
+    let scorpion = t.battlefield(P0, "Pit Scorpion");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(scorpion, Entity::Player(P1))], &[]);
+    assert_eq!(t.g.player(P1).counter("poison"), 1);
+    assert_eq!(t.g.player(P0).counter("poison"), 0);
+}
+
+#[test]
+fn you_get_energy() {
+    cr!("107.14", "603.6a");
+    // "When this land enters, you get {E} (an energy counter)."
+    let c = card("Aether Hub");
+    assert!(!c.unsupported_text().iter().any(|u| u.contains("you get")));
+    let mut t = TestGame::new(2);
+    enter(&mut t, P0, "Aether Hub");
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).counter("energy"), 1);
+}
+
+#[test]
 fn damage_to_that_lands_controller() {
     cr!("603.6a", "201.5c");
     assert_supported(&["Zo-Zu the Punisher"]);

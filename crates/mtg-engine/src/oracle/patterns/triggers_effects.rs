@@ -18,6 +18,95 @@ inventory::submit! {
     EffectPattern { name: "deals that much damage", priority: 100, parse: that_much_damage }
 }
 
+inventory::submit! {
+    EffectPattern { name: "[object] that player controls (trigger player)", priority: 150, parse: that_player_controls }
+}
+
+inventory::submit! {
+    EffectPattern { name: "[player] gets N poison/experience counters, you get {E}", priority: 100, parse: player_gets_counters }
+}
+
+/// "that player gets two poison counters", "defending player gets a poison counter", "you
+/// get an experience counter", "you get {E}{E}" (energy counters, CR 107.14, 122.1).
+fn player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, rest) = if let Some(r) = l.strip_prefix("you get ") {
+        (PlayerRef::You, r)
+    } else if let Some(r) = l.strip_prefix("that player gets ") {
+        if !b.in_trigger || matches!(b.it_player, PlayerRef::Iterated) {
+            return None;
+        }
+        (b.it_player.clone(), r)
+    } else if let Some(r) = l.strip_prefix("defending player gets ") {
+        (PlayerRef::DefendingPlayer, r)
+    } else if let Some(r) = l.strip_prefix("each opponent gets ") {
+        (PlayerRef::EachOpponent, r)
+    } else if let Some(r) = l.strip_prefix("each player gets ") {
+        (PlayerRef::EachPlayer, r)
+    } else {
+        return None;
+    };
+    // "{e}{e}{e}"
+    let rest = rest.trim();
+    if rest.starts_with("{e}") {
+        let n = rest.matches("{e}").count();
+        if rest.replace("{e}", "").trim().is_empty() {
+            return Some(Effect::AddPlayerCounters {
+                who,
+                kind: crate::types::counters::ENERGY.into(),
+                n: Value::c(n as i32),
+            });
+        }
+        return None;
+    }
+    let (n, r) = parse_number(rest)?;
+    let (kind, r) = r.trim_start().split_once(' ')?;
+    if !matches!(kind, "poison" | "experience" | "rad" | "ticket") {
+        return None;
+    }
+    if !matches!(end(r), "counter" | "counters") {
+        return None;
+    }
+    Some(Effect::AddPlayerCounters {
+        who,
+        kind: kind.into(),
+        n,
+    })
+}
+
+/// "destroy target artifact that player controls", "goad target creature that player
+/// controls": objects controlled by the trigger's player ("whenever a player casts …",
+/// "whenever ~ deals combat damage to a player"). Parsed as "target player controls" (which
+/// the phrase parser reads as the player chosen in target slot 0) and then pointed at the
+/// trigger's player. Only when the clause has no player target of its own and "that
+/// player" is still the trigger's player.
+fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !b.in_trigger
+        || !matches!(b.it_player, PlayerRef::TriggerPlayer)
+        || !l.contains("that player controls")
+        || l.contains("target player")
+        || l.contains("target opponent")
+    {
+        return None;
+    }
+    let s = l.replace("that player controls", "target player controls");
+    let first_new = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(&s, b)?;
+    b.it_player = PlayerRef::TriggerPlayer;
+    fn fix<T: serde::Serialize + serde::de::DeserializeOwned>(v: &T) -> Option<T> {
+        let text = serde_json::to_string(v).ok()?.replace(
+            r#"{"ControlledBy":{"Target":0}}"#,
+            r#"{"ControlledBy":"TriggerPlayer"}"#,
+        );
+        serde_json::from_str(&text).ok()
+    }
+    for i in first_new..b.targets.len() {
+        b.targets[i] = fix(&b.targets[i])?;
+    }
+    fix(&e)
+}
+
 /// "it deals that much damage to any target", "~ deals that much damage to each
 /// opponent", "~ deals that much damage to that player".
 fn that_much_damage(l: &str, b: &mut Builder) -> Option<Effect> {
