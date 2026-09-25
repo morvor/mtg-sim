@@ -414,7 +414,12 @@ pub fn parse_spell_static(text: &str, _ctx: &CompileContext) -> Option<Ability> 
 }
 
 /// Conditions: "you control an artifact", "you have 10 or less life", "it's your turn".
-pub fn parse_condition(c: &str, _ctx: &CompileContext) -> Option<Condition> {
+/// The built-in forms are tried first, then the `ConditionPattern`s in `oracle/patterns/`.
+pub fn parse_condition(c: &str, ctx: &CompileContext) -> Option<Condition> {
+    parse_condition_core(c, ctx).or_else(|| crate::oracle_ext::parse_condition_ext(end(c)))
+}
+
+fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
     let c = end(c);
     match c {
         "it's your turn" => return Some(Condition::YourTurn),
@@ -452,7 +457,10 @@ pub fn parse_condition(c: &str, _ctx: &CompileContext) -> Option<Condition> {
         }
         return Some(Condition::Exists(f.you_control()));
     }
-    if let Some(r) = c.strip_prefix("you have ") {
+    if let Some(r) = c
+        .strip_prefix("you have ")
+        .filter(|r| parse_number(r).is_some())
+    {
         let (n, rest) = parse_number(r)?;
         let rest = end(rest);
         let cmp = if let Some(x) = rest
@@ -493,7 +501,7 @@ pub fn parse_condition(c: &str, _ctx: &CompileContext) -> Option<Condition> {
             Value::c(0),
         ));
     }
-    crate::oracle_ext::parse_condition_ext(c)
+    None
 }
 
 /// Value phrases: "the number of creatures you control", "its power", "X", "twice X".

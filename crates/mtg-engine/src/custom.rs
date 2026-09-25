@@ -24,7 +24,41 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     let _ = (g, ctx);
+    let you = ctx.controller;
+    let h = &g.history;
     match name {
+        // "if you attacked this turn": only the active player declares attackers (CR 508.1).
+        "you_attacked_this_turn" => g.turn.active == you && !h.attackers.is_empty(),
+        // "if a permanent you controlled left the battlefield this turn" (last known
+        // information of the permanents that left).
+        "permanent_you_controlled_left_this_turn" => h
+            .permanents_left
+            .iter()
+            .any(|o| g.obj(*o).controller == you),
+        "creature_died_under_your_control_this_turn" => {
+            h.creatures_died.iter().any(|o| g.obj(*o).controller == you)
+        }
+        "you_descended_this_turn" => h.descended.get(&you).is_some_and(|n| *n > 0),
+        "card_left_your_graveyard_this_turn" => {
+            h.cards_left_graveyard.get(&you).is_some_and(|n| *n > 0)
+        }
+        "you_cast_noncreature_spell_this_turn" => h
+            .spells_cast
+            .iter()
+            .any(|(p, s)| *p == you && !g.obj(*s).chars.card_types.contains(CardType::Creature)),
+        // Werewolves (the previous turn's history).
+        "no_spells_cast_last_turn" => g.last_turn_history.spells_cast.is_empty(),
+        "a_player_cast_two_spells_last_turn" => {
+            let spells = &g.last_turn_history.spells_cast;
+            spells
+                .iter()
+                .any(|(p, _)| spells.iter().filter(|(q, _)| q == p).count() >= 2)
+        }
+        "you_lost_life_last_turn" => g
+            .last_turn_history
+            .life_lost
+            .get(&you)
+            .is_some_and(|n| *n > 0),
         _ => false,
     }
 }

@@ -229,7 +229,7 @@ impl Game {
         self.turn.combat_phases = 0;
         self.turn.upkeeps = 0;
         self.turn.cleanup_priority = false;
-        self.history = TurnHistory::default();
+        self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
         for p in self.players.iter_mut() {
             p.lands_played_this_turn = 0;

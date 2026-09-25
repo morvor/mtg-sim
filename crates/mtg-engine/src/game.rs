@@ -375,6 +375,8 @@ pub struct Game {
     pub pending_triggers: Vec<PendingTrigger>,
     pub statics: ActiveStatics,
     pub history: TurnHistory,
+    /// The previous turn's history ("if no spells were cast last turn").
+    pub last_turn_history: TurnHistory,
     pub result: Option<GameResult>,
     pub rng: ChaCha8Rng,
     pub agents: Agents,
@@ -470,6 +472,7 @@ impl Game {
             pending_triggers: vec![],
             statics: ActiveStatics::default(),
             history: TurnHistory::default(),
+            last_turn_history: TurnHistory::default(),
             result: None,
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
