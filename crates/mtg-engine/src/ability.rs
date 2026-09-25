@@ -637,6 +637,12 @@ pub mod vars {
     pub const CREATED: Var = 1;
     /// Cards drawn/revealed/looked at.
     pub const REVEALED: Var = 2;
+    /// Objects dealt damage by the most recent damage effect ("a creature dealt damage
+    /// this way").
+    pub const DAMAGED: Var = 3;
+    /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
+    /// earlier instruction of it ("the sacrificed creature", last known information).
+    pub const SACRIFICED: Var = 9;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -814,6 +820,9 @@ pub enum PlayerRel {
     NotYou,
     /// The player chosen as target in slot N (for "creature target player controls").
     Target(u8),
+    /// The player chosen as target in slot N, or the controller of the permanent chosen
+    /// there ("each creature that player or that planeswalker's controller controls").
+    TargetOrController(u8),
     /// The triggering player.
     TriggerPlayer,
     /// The defending player.
@@ -1809,12 +1818,17 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
+    /// don't apply when they're destroyed (CR 701.19c).
+    CantBeRegenerated(Filter),
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
+    /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
+    SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
     /// "can't search libraries".

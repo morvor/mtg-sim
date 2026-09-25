@@ -241,7 +241,11 @@ impl Game {
             .count() as u32
     }
 
-    fn restricted_obj(&self, id: ObjectId, pick: impl Fn(&Restriction) -> Option<&Filter>) -> bool {
+    pub(crate) fn restricted_obj(
+        &self,
+        id: ObjectId,
+        pick: impl Fn(&Restriction) -> Option<&Filter>,
+    ) -> bool {
         self.count_restrictions(id, pick) > 0
     }
 

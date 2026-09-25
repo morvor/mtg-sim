@@ -920,6 +920,13 @@ impl Game {
             si.cast.mana_spent = paid.mana_spent.clone();
             si.cast.cost_objects = paid.objects.clone();
         }
+        // "The sacrificed creature" (resolution reads the spell's saved context).
+        if !paid.sacrificed.is_empty() {
+            self.saved_ctx.entry(id).or_default().vars.insert(
+                vars::SACRIFICED,
+                paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
+            );
+        }
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
         if spent > 0 {
@@ -1478,6 +1485,12 @@ impl Game {
                 paid.objects.iter().map(|o| Entity::Object(*o)).collect(),
             );
         }
+        if !paid.sacrificed.is_empty() {
+            ctx.vars.insert(
+                vars::SACRIFICED,
+                paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
+            );
+        }
         self.saved_ctx.insert(id, ctx.clone());
         *self.objects[src.0 as usize]
             .activations_this_turn
@@ -1890,6 +1903,7 @@ impl Game {
             CostPart::SacrificeSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
+                paid.sacrificed.push(s);
                 if self.sacrifice(s, p).is_none() && self.is_live(s) {
                     return bad("can't sacrifice");
                 }
@@ -1908,6 +1922,7 @@ impl Game {
                     self.ask_objects(p, src, "Choose permanents to sacrifice (cost)", cands, n, n);
                 for o in pick {
                     paid.objects.push(o);
+                    paid.sacrificed.push(o);
                     self.sacrifice(o, p);
                 }
             }
@@ -2214,6 +2229,8 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
 pub struct PaidCost {
     pub mana_spent: Vec<ManaType>,
     pub objects: Vec<ObjectId>,
+    /// The permanents among `objects` that were sacrificed.
+    pub sacrificed: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

@@ -22,6 +22,9 @@ pub struct Builder<'c> {
     pub it_player: PlayerRef,
     /// Whether we're inside a triggered ability (pronouns default to the trigger object).
     pub in_trigger: bool,
+    /// Number of sentences of the current effect text parsed so far (a pronoun in the
+    /// first sentence can only refer to the source, trigger object, or a target).
+    pub sentences: usize,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -32,6 +35,7 @@ impl<'c> Builder<'c> {
             it: Sel::This,
             it_player: PlayerRef::You,
             in_trigger: false,
+            sentences: 0,
             ctx,
         }
     }
@@ -169,7 +173,15 @@ pub fn split_sentences(t: &str) -> Vec<String> {
 pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
     let mut effects = Vec::new();
     for s in split_sentences(t) {
+        // Sentences that modify the previous one ("It can't be regenerated.").
+        if let Some(prev) = effects.last_mut() {
+            if crate::oracle_ext::apply_followup_ext(&s, prev, b) {
+                b.sentences += 1;
+                continue;
+            }
+        }
         effects.push(parse_sentence(&s, b)?);
+        b.sentences += 1;
     }
     Some(Effect::seq(effects))
 }
@@ -232,7 +244,13 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
         if let Some((a, c)) = l.split_once(sep) {
             let saved_targets = b.targets.len();
             let saved_it = b.it.clone();
-            if let Some(ea) = parse_simple(a, b) {
+            if let Some(mut ea) = parse_simple(a, b) {
+                // The second half may modify the first ("exile it, then return it").
+                if matches!(sep, ", then " | " and then ")
+                    && crate::oracle_ext::apply_followup_ext(c, &mut ea, b)
+                {
+                    return Some(ea);
+                }
                 // Second half may omit the subject: "draw a card and lose 1 life".
                 if let Some(ec) = parse_simple(c, b).or_else(|| parse_clause(c, b)) {
                     return Some(Effect::seq(vec![ea, ec]));
@@ -246,7 +264,7 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 /// Resolves pronoun/self references to a selection.
-fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
     let pairs: [(&str, Sel); 3] = [
         ("~", Sel::This),
@@ -284,18 +302,38 @@ fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     }
     if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
         let (f, _, rest) = parse_object_phrase(r)?;
-        return Some((Sel::All(f), rest.to_string()));
+        let (f, rest) = bind_target_player(f, rest, b);
+        return Some((Sel::All(f), rest));
     }
     // Bare plural noun phrases ("creatures you control") mean all such objects.
     if let Some((f, plural, rest)) = parse_object_phrase(s) {
         if plural {
-            return Some((Sel::All(f), rest.to_string()));
+            let (f, rest) = bind_target_player(f, rest, b);
+            return Some((Sel::All(f), rest));
         }
     }
     None
 }
 
-fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
+/// "[objects] target player controls": adds the player target and restricts the filter
+/// to objects that player controls. Returns the filter and the rest of the text.
+pub fn bind_target_player(f: Filter, rest: &str, b: &mut Builder) -> (Filter, String) {
+    match target_player_controls(rest) {
+        Some((pf, text, r)) => {
+            let it = b.it.clone();
+            let slot = b.add_target(TargetSpec::player(pf, text), text);
+            b.it = it;
+            b.it_player = PlayerRef::Target(slot);
+            (
+                Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Target(slot))]),
+                r.to_string(),
+            )
+        }
+        None => (f, rest.to_string()),
+    }
+}
+
+pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     let s = s.trim();
     if let Some(r) = s.strip_prefix("that player") {
         return Some((b.it_player.clone(), r.to_string()));
@@ -329,7 +367,7 @@ fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
 }
 
 /// Duration suffix: "until end of turn", "this turn", "until your next turn".
-fn duration_suffix(s: &str) -> (Duration, &str) {
+pub fn duration_suffix(s: &str) -> (Duration, &str) {
     let t = s.trim();
     for (p, d) in [
         (" until end of turn", Duration::EndOfTurn),
@@ -352,7 +390,7 @@ fn duration_suffix(s: &str) -> (Duration, &str) {
     (Duration::Permanent, t)
 }
 
-fn keyword_mods(s: &str) -> Option<Vec<Modification>> {
+pub fn keyword_mods(s: &str) -> Option<Vec<Modification>> {
     // "flying", "flying and trample", "first strike, vigilance, and lifelink",
     // "hexproof and indestructible", "protection from red"
     let parts = super::keywords::split_keyword_phrases(s);
@@ -1217,6 +1255,10 @@ pub fn is_mana_effect(e: &Effect) -> bool {
             v.iter().any(is_mana_effect) && v.iter().all(|x| !matches!(x, Effect::Draw { .. }))
         }
         Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| is_mana_effect(e)),
+        // "Add {G}. If you control four or more creatures, add {G}{G} instead."
+        Effect::If {
+            then, otherwise, ..
+        } => is_mana_effect(then) && is_mana_effect(otherwise),
         _ => false,
     }
 }

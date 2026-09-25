@@ -382,6 +382,16 @@ impl Game {
                 });
             }
         }
+        // CR 701.19c: a permanent that "can't be regenerated" isn't affected by
+        // regeneration shields or effects; other replacement effects still apply.
+        if let ReplEvent::Destroy { obj, .. } = ev {
+            if self.restricted_obj(*obj, |r| match r {
+                Restriction::CantBeRegenerated(f) => Some(f),
+                _ => None,
+            }) {
+                out.retain(|c| !matches!(c.def.action, ReplacementAction::Regenerate));
+            }
+        }
         // Built-in rules replacement: commander to hand/library (CR 903.9b).
         if let ReplEvent::Move(m) = ev {
             let o = self.obj(m.obj);
@@ -757,9 +767,13 @@ impl Game {
         // CR 615.12: prevention effects applied to damage that can't be prevented prevent
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
-        let unpreventable = matches!(ev, ReplEvent::Damage { .. })
-            && crate::prevention::is_prevention(&cand.def.action)
-            && crate::prevention::damage_cant_be_prevented(self);
+        let unpreventable = match &ev {
+            ReplEvent::Damage { source, .. } => {
+                crate::prevention::is_prevention(&cand.def.action)
+                    && crate::prevention::damage_from_cant_be_prevented(self, *source)
+            }
+            _ => false,
+        };
         // Use up one application of limited-use effects.
         if let Some(id) = cand.instance {
             if !unpreventable {

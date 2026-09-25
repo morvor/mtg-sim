@@ -950,7 +950,14 @@ impl Game {
                 continue;
             }
             let evs = if no_regen {
-                vec![ReplEvent::Destroy { obj, source }]
+                // CR 701.19c: "can't be regenerated" makes regeneration shields not
+                // apply; other replacement effects still do.
+                let mut skip = self.repl_context.last().cloned().unwrap_or_default();
+                skip.extend(self.regeneration_keys());
+                self.repl_context.push(skip);
+                let r = self.replace(ReplEvent::Destroy { obj, source });
+                self.repl_context.pop();
+                r
             } else {
                 self.replace(ReplEvent::Destroy { obj, source })
             };
@@ -980,6 +987,25 @@ impl Game {
             }
         }
         res.into_iter().flatten().collect()
+    }
+
+    /// Keys of all regeneration replacement effects (shields and static regeneration).
+    fn regeneration_keys(&self) -> Vec<ReplKey> {
+        let regen = |d: &ReplacementDef| matches!(d.action, ReplacementAction::Regenerate);
+        let mut keys: Vec<ReplKey> = self
+            .replacements
+            .iter()
+            .filter(|r| regen(&r.def))
+            .map(|r| ReplKey::Instance(r.id))
+            .collect();
+        keys.extend(
+            self.statics
+                .replacements
+                .iter()
+                .filter(|(_, _, _, _, d)| regen(d))
+                .map(|(s, _, _, a, _)| ReplKey::Static(*s, a.uid)),
+        );
+        keys
     }
 
     /// Sacrifices a permanent (CR 701.21). Only the controller can sacrifice.
