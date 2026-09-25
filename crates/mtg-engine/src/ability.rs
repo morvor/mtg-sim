@@ -1730,6 +1730,18 @@ pub enum TriggerCond {
         with: Filter,
         min: u32,
     },
+    /// "Whenever [obj] becomes attached to [other]" (`attached`) / "becomes unattached from
+    /// [other]" (CR 701.3). Event object = the Aura/Equipment, other = the permanent.
+    AttachChanged {
+        attached: bool,
+        obj: Filter,
+        other: Filter,
+    },
+    /// "Whenever [filter] phases in" (`phased_in`) / "phases out" (CR 702.26).
+    Phases {
+        phased_in: bool,
+        filter: Filter,
+    },
     /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
     /// only: "whenever a source you control deals noncombat damage to an opponent".
     Noncombat(Box<TriggerCond>),

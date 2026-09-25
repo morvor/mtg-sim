@@ -406,8 +406,12 @@ impl Game {
                 let fm = from.is_none_or(|z| zf.kind() == Some(z));
                 let tm = to.is_none_or(|z| zt.kind() == Some(z));
                 // CR 603.10a: leaves-the-battlefield and leaves-a-graveyard triggers look
-                // back in time at the object as it was before the event.
-                let check = if matches!(zf, Zone::Battlefield | Zone::Graveyard(_)) {
+                // back in time at the object as it was before the event; enters-the-
+                // battlefield triggers ("enters from a graveyard") look at the permanent
+                // (CR 603.6a).
+                let check = if !matches!(zt, Zone::Battlefield)
+                    && matches!(zf, Zone::Battlefield | Zone::Graveyard(_))
+                {
                     *old
                 } else {
                     *new
@@ -1162,6 +1166,63 @@ impl Game {
             }
             // Detected per batch of simultaneous events (see `check_batch_triggers`).
             (TriggerCond::Batched { .. }, _) => none(),
+            (
+                TriggerCond::AttachChanged {
+                    attached: true,
+                    obj,
+                    other,
+                },
+                Event::Attached {
+                    obj: o,
+                    to: Entity::Object(t),
+                },
+            )
+            | (
+                TriggerCond::AttachChanged {
+                    attached: false,
+                    obj,
+                    other,
+                },
+                Event::Unattached {
+                    obj: o,
+                    from: Entity::Object(t),
+                },
+            ) => {
+                if self.matches(*o, obj, &ctx) && self.matches(*t, other, &ctx) {
+                    one(EventInfo {
+                        object: Some(*o),
+                        other: Some(*t),
+                        player: Some(self.obj(*t).controller),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
+                TriggerCond::Phases {
+                    phased_in: true,
+                    filter,
+                },
+                Event::PhasedIn { obj },
+            )
+            | (
+                TriggerCond::Phases {
+                    phased_in: false,
+                    filter,
+                },
+                Event::PhasedOut { obj },
+            ) => {
+                if self.matches(*obj, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(self.obj(*obj).controller),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches(inner, src, ctl, ev)
             }

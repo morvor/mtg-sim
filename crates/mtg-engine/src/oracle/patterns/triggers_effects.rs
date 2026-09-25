@@ -130,12 +130,32 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-/// "sacrifice it" where "it" is the ability's source.
+/// "sacrifice it" where "it" is the ability's source; "sacrifice that permanent" /
+/// "sacrifice that creature" / "sacrifice it" for the trigger's object (only if you control
+/// it: CR 701.21a, a player can sacrifice only permanents they control).
 fn sacrifice_it(l: &str, b: &mut Builder) -> Option<Effect> {
-    if end(l) != "sacrifice it" || !b.in_trigger || !matches!(b.it, Sel::This) {
+    if !b.in_trigger {
         return None;
     }
-    Some(Effect::SacrificeObjects { what: Sel::This })
+    let what = end(l).strip_prefix("sacrifice ")?;
+    if what == "it" && matches!(b.it, Sel::This) {
+        return Some(Effect::SacrificeObjects { what: Sel::This });
+    }
+    if !matches!(
+        what,
+        "it" | "that permanent" | "that creature" | "that land"
+    ) {
+        return None;
+    }
+    let it = b.it.clone();
+    if !matches!(it, Sel::TriggerObject | Sel::TriggerOtherObject) {
+        return None;
+    }
+    Some(Effect::If {
+        cond: Condition::SelMatches(it.clone(), Filter::ControlledBy(PlayerRel::You)),
+        then: Box::new(Effect::SacrificeObjects { what: it }),
+        otherwise: Box::new(Effect::Noop),
+    })
 }
 
 /// "you gain that much life", "that player loses that much life", "each opponent loses

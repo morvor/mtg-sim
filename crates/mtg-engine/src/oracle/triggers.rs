@@ -94,8 +94,13 @@ fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         } if mentions_source(filter) && *from != Some(ZoneKind::Battlefield) => {
             return FunctionZone::Graveyard
         }
-        // CR 702.29c: "when you cycle ~" triggers from whatever zone the card winds up in.
+        // CR 702.29c: "when you cycle ~" triggers from whatever zone the card winds up in;
+        // so does "when you discard ~" (the graveyard, or exile with madness).
         TriggerCond::Cycled {
+            filter: Filter::Source,
+            ..
+        }
+        | TriggerCond::Discards {
             filter: Filter::Source,
             ..
         } => return FunctionZone::Anywhere,

@@ -567,6 +567,18 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
     // Discarding.
     if let Some(t) = verb(rest, "discard") {
         let t = end(t);
+        // "when you discard ~": the card as it is in the graveyard (it triggers from
+        // wherever the card went, see `oracle::triggers::trigger_zone`).
+        if t == "~" && who == PlayerRel::You {
+            return Some((
+                TriggerCond::Discards {
+                    who,
+                    filter: Filter::Source,
+                },
+                Sel::This,
+                tp(),
+            ));
+        }
         if let Some(x) = t.strip_prefix("one or more ") {
             let (f, plural, tail) = parse_object_phrase(x)?;
             if !plural || !end(tail).is_empty() {
@@ -1087,12 +1099,35 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         "enter",
     ] {
         if let Some(r) = starts(p) {
-            let f = if p.contains("under your control") {
+            let mut f = if p.contains("under your control") {
                 f.clone().you_control()
             } else {
                 f.clone()
             };
-            let cond = TriggerCond::EntersBattlefield(f);
+            let mut r = r;
+            let mut from = None;
+            // "enters untapped" (its status as it enters), "enters from a graveyard".
+            if let Some(x) = r.strip_prefix(" untapped") {
+                f = Filter::and(vec![f, Filter::Untapped]);
+                r = x;
+            } else if let Some(x) = r
+                .strip_prefix(" from a graveyard")
+                .or_else(|| r.strip_prefix(" from your graveyard"))
+            {
+                from = Some(ZoneKind::Graveyard);
+                r = x;
+            } else if let Some(x) = r.strip_prefix(" from exile") {
+                from = Some(ZoneKind::Exile);
+                r = x;
+            }
+            let cond = match from {
+                None => TriggerCond::EntersBattlefield(f),
+                Some(z) => TriggerCond::ZoneChange {
+                    filter: f,
+                    from: Some(z),
+                    to: Some(ZoneKind::Battlefield),
+                },
+            };
             if subj.one_or_more {
                 return Some((batch(cond, false, ctl_of(Sel::TriggerObject)), r));
             }
@@ -1339,6 +1374,13 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             } else if let Some(x) = t.strip_prefix("for the first time each turn") {
                 cond = TriggerCond::FirstTimeEachTurn(Box::new(cond));
                 r = x;
+            } else if let Some(x) = t.strip_prefix("while saddled").filter(|_| so) {
+                // CR 702.171b: saddled is a designation of the permanent.
+                cond = TriggerCond::Where {
+                    trigger: Box::new(cond),
+                    cond: Condition::SelMatches(Sel::This, Filter::Custom("saddled".into())),
+                };
+                r = x;
             } else if let Some(x) = t.strip_prefix("while you control ") {
                 let x2 = x
                     .strip_prefix("a ")
@@ -1517,6 +1559,63 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 ),
                 r,
             ));
+        }
+    }
+    // "phases in" (CR 702.26c).
+    for p in ["phases in", "phase in"] {
+        if let Some(r) = starts(p) {
+            if subj.one_or_more {
+                return None;
+            }
+            let cond = TriggerCond::Phases {
+                phased_in: true,
+                filter: f.clone(),
+            };
+            return Some((
+                (
+                    cond,
+                    this_or(Sel::TriggerObject),
+                    ctl_of(Sel::TriggerObject),
+                ),
+                r,
+            ));
+        }
+    }
+    // "becomes attached to a creature", "becomes unattached from a permanent": "that
+    // creature"/"that permanent" is the other object; for "an Aura becomes attached to ~"
+    // "it" is the Aura.
+    for (p, attached) in [
+        ("becomes attached to ", true),
+        ("becomes unattached from ", false),
+    ] {
+        if let Some(r) = starts(p) {
+            if subj.one_or_more {
+                return None;
+            }
+            let (other, r) = if let Some(x) = r.strip_prefix('~') {
+                (Filter::Source, x)
+            } else {
+                let x = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+                let (g, plural, tail) = parse_object_phrase(x)?;
+                if plural {
+                    return None;
+                }
+                (g, tail)
+            };
+            let other_self = matches!(other, Filter::Source);
+            let cond = TriggerCond::AttachChanged {
+                attached,
+                obj: f.clone(),
+                other,
+            };
+            let it = if so {
+                Sel::TriggerOtherObject
+            } else if other_self {
+                Sel::TriggerObject
+            } else {
+                Sel::None
+            };
+            return Some(((cond, it, PlayerRef::TriggerPlayer), r));
         }
     }
     // --- targeting ------------------------------------------------------------------

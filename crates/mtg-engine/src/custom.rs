@@ -11,6 +11,8 @@ use crate::types::*;
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     match name {
+        // CR 702.171b: the saddled designation.
+        "saddled" => g.obj(id).saddled,
         _ => false,
     }
 }
