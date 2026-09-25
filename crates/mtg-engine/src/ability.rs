@@ -611,6 +611,10 @@ pub mod vars {
     pub const REVEALED: Var = 2;
     /// First user-defined variable.
     pub const USER: Var = 10;
+    /// The object a static ability's continuous effect is being applied to, while its
+    /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
+    /// on it").
+    pub const AFFECTED: Var = 9;
 }
 
 /// Selects players and/or objects.

@@ -803,8 +803,21 @@ impl Game {
             return;
         }
         // Values are evaluated against the current interim characteristics, including the
-        // object's own (e.g. a CDA counting the creatures its controller controls).
+        // object's own (e.g. a CDA counting the creatures its controller controls). P/T
+        // values may refer to the affected object itself.
         let mut chars = self.objects[target.0 as usize].chars.clone();
+        let with_target;
+        let ctx = if matches!(
+            m,
+            Modification::ModifyPT(..) | Modification::SetPT(..) | Modification::CdaPT(..)
+        ) {
+            let mut c = ctx.clone();
+            c.set_var(vars::AFFECTED, vec![Entity::Object(target)]);
+            with_target = c;
+            &with_target
+        } else {
+            ctx
+        };
         apply_mod(&mut chars, m, self, ctx, target);
         self.objects[target.0 as usize].chars = chars;
     }

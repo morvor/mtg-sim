@@ -13,6 +13,12 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     match name {
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
+        // "Equipment attached to it" where "it" is each object an effect applies to.
+        "attached_to_affected" => ctx
+            .vars
+            .get(&crate::ability::vars::AFFECTED)
+            .and_then(|v| v.first().copied())
+            .is_some_and(|e| g.obj(id).attached_to == Some(e)),
         // "Aura attached to it" where "it" is the object the source is attached to.
         "attached_to_host" => {
             let host = ctx.source.and_then(|s| g.obj(s).attached_to);
@@ -30,6 +36,24 @@ fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
 
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     let _ = (g, ctx);
+    // "for each of its colors": the source, the object it's attached to, or the object
+    // an effect is being applied to.
+    if let Some(which) = name.strip_prefix("colors_of:") {
+        let obj = match which {
+            "source" => ctx.source,
+            "host" => ctx
+                .source
+                .and_then(|s| g.obj(s).attached_to)
+                .and_then(|e| e.object()),
+            "affected" => ctx
+                .vars
+                .get(&crate::ability::vars::AFFECTED)
+                .and_then(|v| v.first().copied())
+                .and_then(|e| e.object()),
+            _ => None,
+        };
+        return obj.map_or(0, |o| g.obj(o).chars.colors.count() as i64);
+    }
     // The most counters of a kind any opponent has ("an opponent is poisoned").
     if let Some(k) = name.strip_prefix("max_opponent_counters:") {
         return g

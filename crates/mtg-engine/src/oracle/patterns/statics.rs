@@ -824,10 +824,36 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             return Some(Value::Sum(vec![va, vb]));
         }
     }
+    // "of its colors": how many colors it has.
+    if s == "of its colors" {
+        let which = match it? {
+            Sel::This => "source",
+            Sel::AttachedTo => "host",
+            Sel::Var(v) if *v == vars::AFFECTED => "affected",
+            _ => return None,
+        };
+        return Some(Value::Custom(format!("colors_of:{which}").into()));
+    }
+    // "other creature on the battlefield that shares a creature type with it": other
+    // than it (not other than the source).
+    if let (Some(sel), Some(r)) = (it, s.strip_prefix("other ")) {
+        let body = r
+            .strip_suffix(" that shares a creature type with it")
+            .or_else(|| r.strip_suffix(" that shares at least one creature type with it"));
+        if let Some(body) = body {
+            let (f, _) = whole_object_phrase(body)?;
+            return Some(Value::Count(Filter::and(vec![
+                f,
+                Filter::SharesCreatureType(Box::new(sel.clone())),
+                Filter::not(Filter::In(Box::new(sel.clone()))),
+            ])));
+        }
+    }
     // "+1/+1 counter on it", "charge counters on ~", "counter on it".
     for (tail, sel) in [
         (" on ~", Some(Sel::This)),
         (" on it", it.cloned()),
+        (" on them", it.cloned()),
         (" on enchanted creature", Some(Sel::AttachedTo)),
         (" on equipped creature", Some(Sel::AttachedTo)),
     ] {
@@ -927,6 +953,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
                 Sel::This => Filter::In(Box::new(Sel::AttachedToThis)),
                 // Attached to the object the source is attached to.
                 Sel::AttachedTo => Filter::Custom("attached_to_host".into()),
+                // Attached to each affected object.
+                Sel::Var(v) if v == vars::AFFECTED => {
+                    Filter::Custom("attached_to_affected".into())
+                }
                 _ => return None,
             };
             let (f, _) = whole_object_phrase(&union_nouns(body))?;
@@ -1772,7 +1802,9 @@ fn parse_predicate(
         let (mut pv, mut tv) = (pv, tv);
         let tail = tail.trim();
         if let Some(fe) = tail.strip_prefix("for each ") {
-            let n = parse_for_each(fe, subj.it.as_ref())?;
+            // In a group, "it" is each affected object.
+            let each = Sel::Var(vars::AFFECTED);
+            let n = parse_for_each(fe, Some(subj.it.as_ref().unwrap_or(&each)))?;
             let mul = |v: Value| match v {
                 Value::Const(0) => Value::Const(0),
                 Value::Const(1) => n.clone(),
