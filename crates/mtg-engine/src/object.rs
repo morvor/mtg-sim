@@ -220,6 +220,11 @@ pub struct CastInfo {
     /// Creatures tapped to pay for it with convoke: they "convoked" it (CR 702.51c).
     #[serde(default)]
     pub convoked: Vec<ObjectId>,
+    /// It was cast "any time a sorcery couldn't have been cast": without its controller
+    /// having priority, outside their main phase, or while another object was on the stack
+    /// (CR 307.5a).
+    #[serde(default)]
+    pub instant_timing: bool,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that

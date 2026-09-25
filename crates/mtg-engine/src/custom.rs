@@ -179,6 +179,22 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
         return b;
     }
+    // CR 307.5a: cast as though it had flash with its own ability, any time a sorcery
+    // couldn't have been cast.
+    if name == crate::oracle::patterns::r307_sorcery_timing::CAST_BY_OWN_FLASH_AT_INSTANT_TIMING {
+        return ctx.source.is_some_and(|s| {
+            let o = g.obj(s);
+            ctx.cast.as_ref().or(o.cast.as_deref()).is_some_and(|c| {
+                c.instant_timing
+                    && matches!(c.method, CastMethod::Alternative(uid) if o.chars.abilities.iter().any(|a| {
+                        a.uid == uid
+                            && matches!(&a.kind, crate::ability::AbilityKind::Static(st)
+                                if matches!(&st.effect, crate::ability::StaticEffect::CostModifier(cm)
+                                    if matches!(cm.change, crate::ability::CostChange::FlashForAdditionalCost(_))))
+                    }))
+            })
+        });
+    }
     let you = ctx.controller;
     let h = &g.history;
     // "you've cast another red spell this turn": a spell of that color (as it was on the

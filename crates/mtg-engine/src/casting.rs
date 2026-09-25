@@ -781,6 +781,9 @@ impl Game {
         // Abilities that trigger when a card leaves a graveyard look back (CR 603.10a).
         let lookback = matches!(from, Zone::Graveyard(_))
             .then(|| std::sync::Arc::new(self.lookback_snapshot()));
+        // CR 307.5a: whether a sorcery could have been cast now (checked before the spell
+        // is on the stack).
+        let sorcery_time = !opt.any_time && self.has_priority(p) && self.is_sorcery_timing(p);
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -806,6 +809,7 @@ impl Game {
             from: from_kind,
             was_cast: true,
             turn: self.turn.number,
+            instant_timing: !sorcery_time,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
