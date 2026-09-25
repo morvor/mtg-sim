@@ -265,7 +265,21 @@ fn on_self(s: &str) -> Option<&str> {
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
+    // "loyalty counter on planeswalkers you control"
+    if let Some((k, r)) = s.split_once(" counter on ") {
+        if !k.contains(' ') {
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            return Some(Value::CountersOn(Box::new(Sel::All(f)), Some(k.into())));
+        }
+    }
     let fixed = [
+        (
+            "creature that died under your control this turn",
+            Value::Custom("creatures_you_controlled_died_this_turn".into()),
+        ),
         ("color of mana spent to cast it", Value::ColorsSpent),
         ("color of mana spent to cast ~", Value::ColorsSpent),
         ("time it was kicked", Value::TimesKicked),
@@ -312,6 +326,14 @@ fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
         if s == p {
             return Some(v);
         }
+    }
+    // "the greatest power among other creatures you control"
+    if let Some(r) = s.strip_prefix("the greatest power among ") {
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Value::GreatestPower(f));
     }
     // "the number of other creatures on the battlefield"
     let s2 = s
@@ -397,6 +419,25 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
         let e = self_entry(r, ctx)?;
         return Some(Effect::If {
             cond: Condition::Not(Box::new(Condition::PrevHappened)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
+    if let Some(r) = l.strip_prefix("if you do, ") {
+        let e = self_entry(r, ctx)?;
+        return Some(Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
+    // "if you do or if you control a Dragon, ~ enters with a +1/+1 counter on it"
+    if let Some(r) = l.strip_prefix("if you do or if ") {
+        let (c, rest) = r.split_once(", ")?;
+        let cond = etb_condition(c, ctx)?;
+        let e = self_entry(rest, ctx)?;
+        return Some(Effect::If {
+            cond: Condition::Or(vec![Condition::PrevHappened, cond]),
             then: Box::new(e),
             otherwise: Box::new(Effect::Noop),
         });
@@ -596,6 +637,30 @@ fn more_conditions(c: &str) -> Option<Condition> {
             who,
             PlayerFilter::Life(cmp, Box::new(n)),
         ));
+    }
+    // Adamant: "at least three blue mana was spent to cast ~", "at least three mana of
+    // the same color was spent to cast it".
+    if let Some(r) = c.strip_prefix("at least ") {
+        let (n, rest) = parse_number(r)?;
+        let rest = rest.trim();
+        let body = rest
+            .strip_suffix(" was spent to cast ~")
+            .or_else(|| rest.strip_suffix(" was spent to cast it"))?;
+        let v = if body == "mana of the same color" {
+            Value::Custom("max_mana_spent_of_one_color".into())
+        } else {
+            let letter = match body.strip_suffix(" mana")? {
+                "white" => 'W',
+                "blue" => 'U',
+                "black" => 'B',
+                "red" => 'R',
+                "green" => 'G',
+                "colorless" => 'C',
+                _ => return None,
+            };
+            Value::Custom(format!("mana_spent_of:{letter}").into())
+        };
+        return Some(Condition::Compare(v, Cmp::Ge, n));
     }
     // "you've cast two or more spells this turn"
     if let Some(r) = c.strip_prefix("you've cast ") {

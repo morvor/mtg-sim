@@ -216,7 +216,13 @@ impl Game {
         if let ReplEvent::Move(m) = ev {
             if m.to == Zone::Battlefield {
                 let o = self.obj(m.obj);
-                for a in &o.chars.abilities {
+                // CR 614.12, 707.9: once it's entering as a copy, the copied object's
+                // "as this enters" / "enters with" abilities apply instead of its own.
+                let abilities = match m.etb.copy_of {
+                    Some(c) => &self.obj(c).copiable.abilities,
+                    None => &o.chars.abilities,
+                };
+                for a in abilities {
                     if let AbilityKind::Static(s) = &a.kind {
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't

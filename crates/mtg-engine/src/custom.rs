@@ -15,9 +15,55 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     }
 }
 
+/// How the spell (or, for its abilities, the permanent) was cast: the resolving spell's
+/// cast info, or the source permanent's.
+fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+    match ctx.cast.as_ref() {
+        Some(c) if c.was_cast => Some(c),
+        _ => ctx
+            .source
+            .and_then(|s| g.obj(s).cast.as_deref())
+            .or(ctx.cast.as_ref()),
+    }
+}
+
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     let _ = (g, ctx);
+    // "mana_spent_of:U": amount of mana of one type spent to cast it (adamant).
+    if let Some(t) = name.strip_prefix("mana_spent_of:") {
+        let Some(t) = t
+            .chars()
+            .next()
+            .and_then(crate::mana::ManaType::from_letter)
+        else {
+            return 0;
+        };
+        return cast_info(g, ctx).map_or(0, |c| {
+            c.mana_spent.iter().filter(|m| **m == t).count() as i64
+        });
+    }
     match name {
+        // "at least three mana of the same color was spent to cast it" (adamant).
+        "max_mana_spent_of_one_color" => cast_info(g, ctx).map_or(0, |c| {
+            [
+                crate::mana::ManaType::W,
+                crate::mana::ManaType::U,
+                crate::mana::ManaType::B,
+                crate::mana::ManaType::R,
+                crate::mana::ManaType::G,
+            ]
+            .iter()
+            .map(|t| c.mana_spent.iter().filter(|m| *m == t).count() as i64)
+            .max()
+            .unwrap_or(0)
+        }),
+        // Creatures that died under the controller's control this turn.
+        "creatures_you_controlled_died_this_turn" => g
+            .history
+            .creatures_died
+            .iter()
+            .filter(|o| g.obj(**o).controller == ctx.controller)
+            .count() as i64,
         // Number of spells the controller has cast this turn.
         "spells_you_cast_this_turn" => g
             .history

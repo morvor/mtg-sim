@@ -86,6 +86,58 @@ fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     )])
 }
 
+/// "You may have ~ enter as a copy of any creature on the battlefield." (CR 707.9,
+/// 614.1c); "You may have ~ enter tapped as a copy of any land on the battlefield."
+fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("you may have ~ enter ")?;
+    let (tapped, r) = match r.strip_prefix("tapped ") {
+        Some(x) => (true, x),
+        None => (false, r),
+    };
+    let r = r.strip_prefix("as a copy of ")?;
+    let r = r
+        .strip_prefix("any ")
+        .or_else(|| r.strip_prefix("a "))
+        .or_else(|| r.strip_prefix("an "))?;
+    let r = r.strip_suffix(" on the battlefield").unwrap_or(r);
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    // "Enter tapped as a copy" is one effect; its "tapped" part is applied first (as a
+    // self-replacement, CR 616.1a) so it isn't lost when the permanent becomes a copy
+    // and loses this ability.
+    let rep = |action, self_replacement| {
+        AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+                ReplacementDef {
+                    event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                    action,
+                    self_replacement,
+                    optional: false,
+                },
+            ))),
+            block,
+        )
+    };
+    let mut out = vec![rep(
+        ReplacementAction::EnterAsCopy {
+            filter: f,
+            optional: true,
+        },
+        false,
+    )];
+    if tapped {
+        out.push(rep(ReplacementAction::EnterTapped, true));
+    }
+    Some(out)
+}
+
 // ---------------------------------------------------------------------------
 // Day and night (CR 731)
 // ---------------------------------------------------------------------------
@@ -152,6 +204,9 @@ fn day_night_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! {
     AbilityPattern { name: "others enter tapped", priority: 50, parse: others_enter_tapped }
+}
+inventory::submit! {
+    AbilityPattern { name: "enter as a copy", priority: 50, parse: enter_as_copy }
 }
 inventory::submit! {
     AbilityPattern { name: "it becomes day as ~ enters", priority: 50, parse: day_as_enters }

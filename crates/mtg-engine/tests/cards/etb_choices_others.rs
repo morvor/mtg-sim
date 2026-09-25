@@ -111,3 +111,135 @@ fn it_doesnt_become_day_if_it_is_night() {
     t.enter(P0, "Firmament Sage");
     assert_eq!(t.g.day, Some(false));
 }
+
+// ---------------------------------------------------------------------------
+// "You may have ~ enter as a copy of ..." (CR 707.9)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn clone_enters_as_a_copy() {
+    cr!("707.9", "614.1c", "706.2");
+    assert_supported("Clone");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let c = t.enter(P0, "Clone");
+    let now = t.g.current(c);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Grizzly Bears");
+    assert_eq!(t.pt(c), (2, 2));
+    assert_eq!(t.g.obj(now).controller, P0);
+}
+
+#[test]
+fn clone_may_copy_nothing() {
+    cr!("707.9", "704.5f");
+    ruling!("Clone", "You can choose not to copy anything");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[]);
+    let c = t.enter(P0, "Clone");
+    t.settle();
+    assert!(!t.on_battlefield(c));
+    assert!(t.in_graveyard(P0, "Clone"));
+}
+
+#[test]
+fn clone_uses_the_copied_creatures_as_enters_abilities() {
+    cr!("707.9", "614.12", "607.2d");
+    ruling!(
+        "Clone",
+        "Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the chosen creature will also work"
+    );
+    let mut t = TestGame::new(2);
+    let voice = t.battlefield(P1, "Voice of All");
+    t.answer_choose(P0, &[Entity::Object(voice)]);
+    // Blue is index 1.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let c = t.enter(P0, "Clone");
+    let now = t.g.current(c);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Voice of All");
+    assert_eq!(t.g.obj(now).choices.color, Some(types::Color::Blue));
+    let blue = t.battlefield(P1, "Coral Merfolk");
+    assert!(t.g.protected_from(now, blue));
+}
+
+#[test]
+fn vesuva_enters_tapped_as_a_copy_of_a_land() {
+    cr!("707.9", "614.1c");
+    assert_supported("Vesuva");
+    let mut t = TestGame::new(2);
+    let ground = t.battlefield(P1, "Stomping Ground");
+    t.answer_choose(P0, &[Entity::Object(ground)]);
+    // Stomping Ground's "you may pay 2 life" applies too; it enters tapped either way.
+    t.answer_yes(P0, true);
+    let v = t.hand(P0, "Vesuva");
+    t.play_land(P0, v).unwrap();
+    let now = t.g.current(v);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Stomping Ground");
+    assert!(t.obj_now(v).tapped);
+    assert_eq!(t.life(P0), 18);
+}
+
+// ---------------------------------------------------------------------------
+// Adamant; "if you do or if ..."
+// ---------------------------------------------------------------------------
+
+#[test]
+fn adamant_counter_needs_three_mana_of_the_color() {
+    cr!("614.1c", "207.2c", "601.2h");
+    assert_supported("Ardenvale Paladin");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    let p = t.hand(P0, "Ardenvale Paladin");
+    t.cast(P0, p).go();
+    t.resolve();
+    assert_eq!(t.counters(p, "+1/+1"), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Island", 2);
+    let p = t.hand(P0, "Ardenvale Paladin");
+    t.cast(P0, p).go();
+    t.resolve();
+    assert_eq!(t.counters(p, "+1/+1"), 0);
+}
+
+#[test]
+fn adamant_same_color() {
+    cr!("614.1c", "207.2c");
+    assert_supported("Henge Walker");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let h = t.hand(P0, "Henge Walker");
+    t.cast(P0, h).go();
+    t.resolve();
+    assert_eq!(t.counters(h, "+1/+1"), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Forest", 1);
+    let h = t.hand(P0, "Henge Walker");
+    t.cast(P0, h).go();
+    t.resolve();
+    assert_eq!(t.counters(h, "+1/+1"), 0);
+}
+
+#[test]
+fn reveal_or_control_a_dragon_for_a_counter() {
+    cr!("614.1c", "614.12a");
+    assert_supported("Dragon's Disciple");
+    // Reveal a Dragon card from hand.
+    let mut t = TestGame::new(2);
+    let dragon = t.hand(P0, "Shivan Dragon");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(dragon)]);
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 1);
+    // Control a Dragon (and don't reveal).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shivan Dragon");
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 1);
+    // Neither.
+    let mut t = TestGame::new(2);
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 0);
+}
