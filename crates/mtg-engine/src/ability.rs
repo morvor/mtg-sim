@@ -442,6 +442,13 @@ pub enum CostPart {
     /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
     /// object is a spell on the stack (CR 107.3h).
     PayManaCostOf(Box<Sel>),
+    /// "[cost] for each [thing]": the cost repeated a number of times determined as it's
+    /// paid, with any choices made separately for each repetition, paid all at once or not
+    /// at all (cumulative upkeep, CR 702.24a).
+    Repeated {
+        cost: Box<Cost>,
+        times: Value,
+    },
 }
 
 // ---------------------------------------------------------------------------
