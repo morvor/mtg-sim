@@ -29,6 +29,27 @@ fn face_up_keyword(abilities: &[Ability]) -> Option<(KeywordKind, bool, Cost)> {
     })
 }
 
+/// Whether any continuous effect or static ability in the game could change an object's
+/// abilities (copy, text-, type-, or ability-changing effects, CR 613.1). Without one, a
+/// face-down permanent would have its printed abilities face up.
+fn effects_could_change_abilities(g: &Game) -> bool {
+    let risky = |m: &Modification| {
+        matches!(
+            m.layer(),
+            Layer::L1aCopy | Layer::L3Text | Layer::L4Type | Layer::L6Ability
+        )
+    };
+    g.effects
+        .iter()
+        .any(|e| e.layer1.is_some() || e.mods.iter().any(risky))
+        || g.live_objects().into_iter().any(|id| {
+            g.obj(id).chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Static(s)
+                    if matches!(&s.effect, StaticEffect::Continuous { mods, .. } if mods.iter().any(risky)))
+            })
+        })
+}
+
 /// Whether it has megamorph, and the cost to turn `id` face up, if it's a face-down
 /// permanent that would have morph, megamorph, or disguise if it were face up (CR 702.37e:
 /// if it wouldn't have a morph cost face up, e.g. because of an effect that would apply to
@@ -40,12 +61,16 @@ fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     }
     let card = o.card.as_ref()?;
     // Printed without such an ability: nothing to look at.
-    face_up_keyword(&card.front().chars.abilities)?;
-    // The characteristics it would have face up, with the effects that would apply.
-    let mut h = g.clone();
-    h.objects[id.0 as usize].face_down = false;
-    h.recompute();
-    let (kind, megamorph, cost) = face_up_keyword(&h.obj(id).chars.abilities)?;
+    let printed = face_up_keyword(&card.front().chars.abilities)?;
+    let (kind, megamorph, cost) = if effects_could_change_abilities(g) {
+        // The characteristics it would have face up, with the effects that would apply.
+        let mut h = g.clone();
+        h.objects[id.0 as usize].face_down = false;
+        h.recompute();
+        face_up_keyword(&h.obj(id).chars.abilities)?
+    } else {
+        printed
+    };
     // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
     let cost = if kind == KeywordKind::Morph {
         super::modified_keyword_cost(g, o.controller, KeywordKind::Morph, &cost)
