@@ -122,7 +122,8 @@ fn a_face_up_schemes_abilities_function_from_the_command_zone() {
     t.g.destroy(bears, None);
     t.settle();
     t.resolve_all();
-    assert!(t.obj(deck[0]).face_down);
+    // Abandoned: turned face down, as a new object (CR 400.9).
+    assert!(t.obj(t.g.current(deck[0])).face_down);
 }
 
 #[test]
@@ -177,9 +178,11 @@ fn a_non_ongoing_scheme_returns_to_the_bottom_of_the_scheme_deck() {
     t.settle();
     assert!(!t.obj(deck[0]).face_down);
     t.resolve();
-    // Then it's turned face down and put on the bottom of its owner's scheme deck.
-    assert!(t.obj(deck[0]).face_down);
-    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], deck[0]]);
+    // Then it's turned face down (becoming a new object, CR 400.9) and put on the bottom
+    // of its owner's scheme deck.
+    let now = t.g.current(deck[0]);
+    assert!(t.obj(now).face_down);
+    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], now]);
     assert_eq!(t.named_on_battlefield("Dragon Token").len(), 1);
 }
 
@@ -207,7 +210,11 @@ fn this_scheme_means_the_scheme_card_that_is_the_abilitys_source() {
     t.g.destroy(bears, None);
     t.settle();
     t.resolve_all();
-    assert!(t.obj(deck[0]).face_down, "this scheme was abandoned");
+    assert!(
+        t.obj(t.g.current(deck[0])).face_down,
+        "this scheme was abandoned"
+    );
+    assert_eq!(t.g.current(deck[1]), deck[1]);
     assert!(!t.obj(deck[1]).face_down, "the other scheme stays");
     let _ = CardType::Scheme;
 }

@@ -144,9 +144,13 @@ fn a_non_ongoing_scheme_returns_to_the_bottom_once_its_ability_has_left_the_stac
     assert_eq!(variants::face_up_schemes(&t.g), vec![deck[0]]);
     // Once it has resolved, the scheme is turned face down and put on the bottom of its
     // owner's scheme deck.
+    // (Turned face down, it's a new object, CR 400.9.)
     t.resolve();
-    assert!(t.obj(deck[0]).face_down);
-    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], deck[0]]);
+    assert!(t.obj_now(deck[0]).face_down);
+    assert_eq!(
+        variants::scheme_deck(&t.g, P0),
+        vec![deck[1], t.g.current(deck[0])]
+    );
     assert!(variants::face_up_schemes(&t.g).is_empty());
 }
 
@@ -171,7 +175,7 @@ fn a_scheme_waits_for_the_triggered_abilities_of_any_scheme() {
     assert!(!t.obj(deck[1]).face_down, "idle scheme waits");
     t.resolve();
     assert_eq!(t.life(P0), 42);
-    assert!(t.obj(deck[1]).face_down);
+    assert!(t.obj_now(deck[1]).face_down);
     // An ongoing scheme stays face up...
     assert_eq!(variants::face_up_schemes(&t.g), vec![deck[0]]);
     t.settle();
@@ -180,8 +184,11 @@ fn a_scheme_waits_for_the_triggered_abilities_of_any_scheme() {
     to_step_start(&mut t, P0, Step::End);
     t.settle();
     t.resolve_all();
-    assert!(t.obj(deck[0]).face_down);
-    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], deck[0]]);
+    assert!(t.obj_now(deck[0]).face_down);
+    assert_eq!(
+        variants::scheme_deck(&t.g, P0),
+        vec![t.g.current(deck[1]), t.g.current(deck[0])]
+    );
 }
 
 // --- 704.6f: phenomena ----------------------------------------------------------------

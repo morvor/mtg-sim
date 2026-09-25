@@ -1279,6 +1279,21 @@ impl Game {
                 let _ = after_this;
                 self.add_extra_combat(true);
             }
+            Effect::AddTurnParts {
+                parts,
+                after_phase,
+                n,
+                who,
+            } => {
+                // CR 500.10a: "you get" adds nothing to another player's turn.
+                let gets = who.as_ref().map(|w| self.eval_players(w, ctx));
+                if gets.is_none_or(|ps| ps.iter().any(|p| self.is_active_player(*p))) {
+                    let n = self.eval_value(n, ctx).max(0) as usize;
+                    for _ in 0..n {
+                        self.add_turn_parts(parts, *after_phase);
+                    }
+                }
+            }
             Effect::Skip { who, step } => {
                 for p in self.eval_players(who, ctx) {
                     self.players[p.idx()].skips.push(*step);
@@ -1380,6 +1395,7 @@ impl Game {
                 optional,
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let mut cast: Vec<Entity> = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
@@ -1394,8 +1410,12 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    let _ = crate::casting::cast_during_resolution(self, p, o, method);
+                    if let Ok(spell) = crate::casting::cast_during_resolution(self, p, o, method) {
+                        cast.push(Entity::Object(spell));
+                    }
                 }
+                // CR 400.7h: other parts of the effect can find the spells cast this way.
+                ctx.set_var(vars::IT, cast);
             }
             Effect::PlayCard {
                 who,
@@ -1579,11 +1599,13 @@ impl Game {
                     .filter(|o| !self.entering.contains(o))
                     .collect();
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
-                let picked: Vec<Entity> = self
-                    .ask_objects(p, ctx.source, "Choose", cands, min, n)
-                    .into_iter()
-                    .map(Entity::Object)
-                    .collect();
+                // CR 406.4: face-down exiled cards the player can't look at are chosen by
+                // pile.
+                let picked: Vec<Entity> =
+                    crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect();
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }

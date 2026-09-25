@@ -49,6 +49,14 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // CR 400.3: objects go to their owner's library, hand, or graveyard.
+        let moves: Vec<MoveEv> = moves
+            .into_iter()
+            .map(|mut m| {
+                m.to = crate::zones::owners_zone(self, m.obj, m.to);
+                m
+            })
+            .collect();
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are
@@ -89,6 +97,7 @@ impl Game {
                 // would exist, taking those replacements into account).
                 let e = match e {
                     ReplEvent::Move(mut mv) => {
+                        mv.to = crate::zones::owners_zone(self, mv.obj, mv.to);
                         if mv.to == Zone::Battlefield && self.cant_enter(&mv)
                             || self.move_forbidden(&mv)
                         {
@@ -114,6 +123,9 @@ impl Game {
         // CR 613.7m: objects entering the battlefield simultaneously get timestamps in
         // APNAP order.
         self.order_simultaneous_entries(&mut finals);
+        // CR 401.4, 404.3: the owner arranges cards put into a library position or a
+        // graveyard at the same time.
+        crate::zones::order_simultaneous(self, &mut finals);
         // Look back in time for leaves-the-battlefield triggers and other zone-change
         // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
         // the stack, or a public object being put into a hand or library.
@@ -142,6 +154,16 @@ impl Game {
             })
             .collect();
         self.entering = entering;
+        // CR 406.4: cards exiled face down together form a pile.
+        let face_down_exiles: Vec<(usize, Option<ObjectId>)> = finals
+            .iter()
+            .filter_map(|(i, e)| match e {
+                ReplEvent::Move(m) if m.to == Zone::Exile && m.etb.face_down.is_some() => {
+                    Some((*i, m.source))
+                }
+                _ => None,
+            })
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -154,6 +176,13 @@ impl Game {
             }
         }
         self.entering = prev_entering;
+        crate::zones::face_down_exiled(
+            self,
+            face_down_exiles
+                .into_iter()
+                .filter_map(|(i, src)| out[i].map(|o| (o, src)))
+                .collect(),
+        );
         self.run_post_replacement_effects();
         self.recompute();
         let entered: Vec<ObjectId> = out.iter().flatten().copied().collect();
@@ -206,7 +235,9 @@ impl Game {
                 }
             }
         }
-        crate::variants::stays_in_command_zone(self, mv)
+        // CR 400.4b, 407.3, 407.4: the command zone and the ante zone; CR 309.2c, 315.3:
+        // dungeon and conspiracy cards.
+        crate::zones::move_forbidden(self, mv) || crate::variants::stays_in_command_zone(self, mv)
     }
 
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
@@ -351,7 +382,9 @@ impl Game {
         }
         if from == Zone::Stack && m.to == Zone::Battlefield {
             // Effects of resolved spells and abilities that changed a permanent spell
-            // continue to apply to the permanent it becomes (CR 112.4, 110.2b).
+            // continue to apply to the permanent it becomes (CR 112.4, 110.2b, 400.7a).
+            // (Prevention effects for damage from it follow it through `Filter::Objects`,
+            // CR 400.7c.)
             for e in self.effects.iter_mut() {
                 if let Affected::Objects(v) = &mut e.affected {
                     for x in v.iter_mut().filter(|x| **x == old_id) {

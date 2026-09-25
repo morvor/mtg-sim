@@ -214,9 +214,10 @@ impl Game {
         if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
             return true;
         }
-        // CR 601.3f: a face-down card in exile can be cast only by a player who may look
-        // at it; permissions to cast spells "with certain qualities" don't reveal it.
-        if o.zone == Zone::Exile && o.face_down {
+        // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
+        // to cast spells "with certain qualities" only by a player who may look at it
+        // (and then only if the resulting spell has those qualities).
+        if o.zone == Zone::Exile && o.face_down && !crate::zones::may_look(self, p, card) {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
@@ -646,12 +647,18 @@ impl Game {
                 self.player_loses(p);
                 Ok(())
             }
-            Action::PlayLand { card } => self.play_land(p, card),
+            // CR 401.5: special actions (CR 116.2a) finish before a new top card of a
+            // library is revealed.
+            Action::PlayLand { card } => {
+                crate::zones::during_special_action(self, |g| g.play_land(p, card))
+            }
             Action::Cast { card, method } => self.cast_spell(p, card, method).map(|_| ()),
             Action::Activate { source, ability } => {
                 self.activate_ability(p, source, ability).map(|_| ())
             }
-            Action::Special(sa) => crate::keyword_impls::perform_special_action(self, p, sa),
+            Action::Special(sa) => crate::zones::during_special_action(self, |g| {
+                crate::keyword_impls::perform_special_action(g, p, sa)
+            }),
         };
         self.flush_events();
         r
@@ -721,6 +728,8 @@ impl Game {
             source: None,
         });
         if let Some(n) = new {
+            // CR 400.7i: grants to lands played this way apply to the new permanent.
+            crate::zones::land_played(self, p, card, n);
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
@@ -1030,6 +1039,12 @@ impl Game {
                 vars::SACRIFICED,
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
+        }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        let mut moved = std::collections::BTreeMap::new();
+        crate::zones::record_cost_moved(self, &paid, &mut moved);
+        if !moved.is_empty() {
+            self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
@@ -1597,6 +1612,8 @@ impl Game {
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
         }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
         *self.objects[src.0 as usize]
             .activations_this_turn
@@ -2121,6 +2138,7 @@ impl Game {
                 let pick = self.ask_objects(p, src, "Choose cards to exile (cost)", cands, n, n);
                 for c in pick {
                     paid.objects.push(c);
+                    paid.exiled.push(c);
                     self.exile_object(c, src);
                 }
             }
@@ -2374,6 +2392,9 @@ pub struct PaidCost {
     pub objects: Vec<ObjectId>,
     /// The permanents among `objects` that were sacrificed.
     pub sacrificed: Vec<ObjectId>,
+    /// The cards among `objects` that an exile cost exiled ("the exiled card",
+    /// CR 400.7j).
+    pub exiled: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

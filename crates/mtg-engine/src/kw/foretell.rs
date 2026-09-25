@@ -92,6 +92,8 @@ impl KeywordRules for Foretell {
         });
         if let Some(new) = new {
             crate::special_actions::mark(g, new, KeywordKind::Foretell);
+            // CR 702.143a, 406.3: the player may look at it as long as it remains exiled.
+            crate::zones::allow_look(g, p, new);
         }
         Some(Ok(()))
     }

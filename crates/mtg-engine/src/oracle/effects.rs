@@ -86,6 +86,19 @@ pub fn parse_body(text: &str, ctx: &CompileContext) -> Option<Body> {
     })
 }
 
+/// Parses a body in which "it"/"that card" initially refers to `it` (e.g. the card an
+/// activated ability's cost exiled, CR 400.7j).
+pub fn parse_body_with_it(text: &str, ctx: &CompileContext, it: Sel) -> Option<Body> {
+    let mut b = Builder::new(ctx);
+    b.it = it;
+    let effect = parse_effect_text(text.trim(), &mut b)?;
+    Some(Body {
+        targets: b.targets,
+        effect,
+        modal: None,
+    })
+}
+
 /// Parses a body inside a triggered ability (pronouns refer to the trigger object).
 pub fn parse_trigger_body(
     text: &str,
@@ -410,6 +423,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         (" until end of turn", Duration::EndOfTurn),
         (" this turn", Duration::EndOfTurn),
         (" until your next turn", Duration::UntilYourNextTurn),
+        // CR 500.4: until that step next begins.
+        (
+            " until your next upkeep",
+            Duration::UntilYourNextStep(TriggerStep::Upkeep),
+        ),
+        (
+            " until your next end step",
+            Duration::UntilYourNextStep(TriggerStep::End),
+        ),
         (" until end of combat", Duration::EndOfCombat),
         (
             " for as long as ~ remains on the battlefield",

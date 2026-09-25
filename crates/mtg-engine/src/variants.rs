@@ -118,12 +118,9 @@ pub fn set_in_motion(g: &mut Game, p: PlayerId) -> Option<ObjectId> {
 }
 
 /// Turns a face-up scheme face down and puts it on the bottom of its owner's scheme deck
-/// (CR 701.33b, 704.6e).
+/// (CR 701.33b, 704.6e). It becomes a new object (CR 400.9).
 fn scheme_to_bottom(g: &mut Game, id: ObjectId) {
-    g.command.retain(|x| *x != id);
-    g.command.push(id);
-    g.objects[id.0 as usize].face_down = true;
-    g.dirty = true;
+    crate::zones::turn_face_down_in_command(g, id);
 }
 
 /// Abandons a scheme (CR 701.33): only a face-up ongoing scheme may be abandoned, and only
@@ -342,10 +339,11 @@ pub fn command_cards_controlled_by_owners(g: &mut Game, live: &[ObjectId]) {
     }
 }
 
-/// Moves of cards that stay where they are: plane, phenomenon, vanguard, scheme, and
-/// conspiracy cards remain in the command zone if they would leave it (CR 311.2, 312.2,
-/// 313.2, 314.2, 315.3); a dungeon card leaves it only as it leaves the game (CR 309.2c);
-/// and a conspiracy card that isn't in the game can't be brought into it (CR 315.3).
+/// Moves of dungeon and conspiracy cards that the card-type rules forbid: a dungeon card
+/// leaves the command zone only as it leaves the game (CR 309.2c), and a conspiracy card
+/// that isn't in the game can't be brought into it (CR 315.3). (Plane, phenomenon,
+/// vanguard, scheme, and conspiracy cards staying in the command zone, CR 311.2, 312.2,
+/// 313.2, 314.2, 315.3, is CR 400.4b: see `zones::move_forbidden`.)
 pub fn stays_in_command_zone(g: &Game, mv: &crate::replacement::MoveEv) -> bool {
     let o = g.obj(mv.obj);
     let Some(card) = o
@@ -357,17 +355,10 @@ pub fn stays_in_command_zone(g: &Game, mv: &crate::replacement::MoveEv) -> bool 
     };
     let types = card.front().chars.card_types;
     match o.zone {
-        Zone::Command if mv.to != Zone::Command => {
-            [
-                CardType::Plane,
-                CardType::Phenomenon,
-                CardType::Vanguard,
-                CardType::Scheme,
-                CardType::Conspiracy,
-            ]
-            .iter()
-            .any(|t| types.contains(*t))
-                || (types.contains(CardType::Dungeon) && !matches!(mv.to, Zone::Outside(_)))
+        // Leaving the game along with its owner (CR 800.4a) isn't a zone change.
+        Zone::Command => {
+            types.contains(CardType::Dungeon)
+                && !matches!(mv.to, Zone::Command | Zone::Outside(_) | Zone::Nowhere)
         }
         Zone::Outside(_) => {
             types.contains(CardType::Conspiracy) && !matches!(mv.to, Zone::Outside(_))

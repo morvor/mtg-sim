@@ -199,6 +199,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
             })
         });
     }
+    // Main phase counting and "after upkeep" timing (CR 505.1b, 503.2).
+    if let Some(b) = crate::turn_structure::custom_condition(g, name, ctx) {
+        return b;
+    }
     let you = ctx.controller;
     let h = &g.history;
     // "you've cast another red spell this turn": a spell of that color (as it was on the
@@ -391,6 +395,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     // "named-token:N:Name": create N tokens by name (CR 111.11).
     if let Some(spec) = name.strip_prefix("named-token:") {
         crate::tokens::create_named_tokens(g, spec, ctx);
+        return;
+    }
+    // Zone rules and ante (CR 400-407).
+    if crate::zones::custom_effect(g, name, ctx) {
         return;
     }
     // "The game is a draw" (CR 104.4c, 104.4e).

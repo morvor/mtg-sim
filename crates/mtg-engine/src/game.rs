@@ -72,6 +72,9 @@ pub struct GameConfig {
     /// previous game (CR 103.1). `None` = determined at random.
     #[serde(default)]
     pub first_turn_chooser: Option<PlayerId>,
+    /// Playing for ante, an optional variation (CR 407).
+    #[serde(default)]
+    pub ante: bool,
 }
 
 impl Default for GameConfig {
@@ -94,6 +97,7 @@ impl Default for GameConfig {
             single_planar_deck: false,
             limited: false,
             first_turn_chooser: None,
+            ante: false,
         }
     }
 }
@@ -429,7 +433,8 @@ pub struct Game {
     pub initiative: Option<PlayerId>,
     /// Day/night (CR 731): None = neither.
     pub day: Option<bool>,
-    /// Number of spells the active player cast last turn, for day/night.
+    /// Number of spells the active player cast last turn, for day/night (with shared
+    /// team turns, the most any player of the active team cast, CR 502.2a).
     pub spells_cast_last_turn_by_active: u32,
     /// Extra turns queued (CR 500.7): taken after the current turn, most recent first.
     pub extra_turns: Vec<PlayerId>,
@@ -494,6 +499,9 @@ pub struct Game {
     pub special: crate::special_actions::SpecialState,
     /// Coins and dice (CR 705, 706).
     pub dice: crate::dice::DiceState,
+    /// Zone bookkeeping: face-down exiled cards players may look at, revealed top cards
+    /// of libraries (CR 401.5, 401.6, 406.3).
+    pub zones: crate::zones::ZoneState,
 }
 
 impl Game {
@@ -582,6 +590,7 @@ impl Game {
             start: Default::default(),
             special: Default::default(),
             dice: Default::default(),
+            zones: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -1060,6 +1069,8 @@ impl Game {
         let mut lib = std::mem::take(&mut self.players[p.idx()].library);
         lib.shuffle(&mut self.rng);
         self.players[p.idx()].library = lib;
+        // CR 401.6: a revealed top card stops being revealed.
+        crate::zones::library_shuffled(self, p);
         self.emit(Event::Shuffled { player: p });
     }
 
@@ -1141,6 +1152,8 @@ impl Game {
         if !over && self.result.is_some() {
             // CR 708.9: at the end of the game, face-down objects are revealed.
             crate::facedown::reveal_all(self, None);
+            // CR 407.2: the winner becomes the owner of the cards in the ante.
+            crate::ante::game_ended(self);
         }
     }
 

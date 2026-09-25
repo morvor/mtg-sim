@@ -228,10 +228,18 @@ impl Game {
             }
         }
 
-        // Layer 1b: face-down (CR 708.2).
+        // Layer 1b: face-down (CR 708.2). A card exiled face down has no characteristics
+        // (CR 406.3a).
         for id in &live {
             if self.obj(*id).face_down {
-                let fd = crate::facedown::face_down_characteristics(self, *id);
+                let fd = if self.obj(*id).zone == Zone::Exile {
+                    Characteristics {
+                        rules_text: std::sync::Arc::from(""),
+                        ..Default::default()
+                    }
+                } else {
+                    crate::facedown::face_down_characteristics(self, *id)
+                };
                 self.objects[id.0 as usize].chars = fd;
             }
         }
@@ -366,8 +374,14 @@ impl Game {
                 o.world_since = None;
             }
         }
+        // CR 400.11c: cards outside the game have only their own CDAs applied.
+        crate::zones::outside_game_characteristics(self);
         self.collect_statics();
         self.compute_player_effects();
+        if side_effects {
+            // CR 401.5: the revealed top cards of libraries.
+            crate::zones::update_revealed_tops(self);
+        }
     }
 
     pub fn is_live(&self, id: ObjectId) -> bool {

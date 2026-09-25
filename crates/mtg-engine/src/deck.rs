@@ -46,6 +46,9 @@ pub enum DeckProblem {
     /// A conspiracy card where it can't be: in a constructed deck or sideboard (CR 315.1),
     /// or in any deck (CR 315.3).
     ConspiracyNotAllowed { name: String },
+    /// A card that must be removed from decks and sideboards when not playing for ante
+    /// (CR 407.3).
+    AnteCard { name: String },
 }
 
 /// Conspiracy cards among `cards` (CR 315.1, 315.3).

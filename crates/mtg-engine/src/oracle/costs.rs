@@ -181,12 +181,14 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     if let Some(r) = strip(p, "exile") {
         let (n, r2) = parse_number(r)?;
         let (f, _, tail) = parse_object_phrase(r2)?;
-        let zone = if tail.contains("graveyard") || f.zone() == Some(ZoneKind::Graveyard) {
-            ZoneKind::Graveyard
-        } else if tail.contains("hand") || f.zone() == Some(ZoneKind::Hand) {
-            ZoneKind::Hand
-        } else {
-            return None;
+        // Nothing may follow the zone ("... from your graveyard and pay its mana cost" is
+        // a different cost).
+        let zone = match end(tail) {
+            "from your graveyard" | "from a graveyard" => ZoneKind::Graveyard,
+            "from your hand" => ZoneKind::Hand,
+            "" if f.zone() == Some(ZoneKind::Graveyard) => ZoneKind::Graveyard,
+            "" if f.zone() == Some(ZoneKind::Hand) => ZoneKind::Hand,
+            _ => return None,
         };
         return Some(CostPart::Exile {
             filter: f,

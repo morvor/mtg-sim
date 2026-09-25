@@ -238,8 +238,6 @@ fn step_word(s: &str) -> Option<(TriggerStep, &str)> {
         ("first main phase", TriggerStep::PrecombatMain),
         ("postcombat main phases", TriggerStep::PostcombatMain),
         ("postcombat main phase", TriggerStep::PostcombatMain),
-        ("second main phases", TriggerStep::PostcombatMain),
-        ("second main phase", TriggerStep::PostcombatMain),
         ("combat", TriggerStep::BeginningOfCombat),
     ] {
         if let Some(r) = s.strip_prefix(p) {
