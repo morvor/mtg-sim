@@ -2829,6 +2829,15 @@ pub enum Effect {
     ShuffleInto {
         what: Sel,
     },
+    /// "[Player] shuffles [objects] into their library" (CR 701.24): the objects are put
+    /// into their owners' libraries at the same time, then each of those libraries and
+    /// `library`'s is shuffled once, even if some or none of the objects could be put
+    /// there (CR 701.24c, 701.24d). The number of objects moved is the result
+    /// (`Value::Prev`, "then draw that many cards").
+    ShuffleIntoLibrary {
+        what: Sel,
+        library: PlayerRef,
+    },
     /// Reveal/look at the top N cards and choose some to put somewhere
     /// ("Look at the top N cards, put M of them into your hand and the rest on the bottom").
     Dig {

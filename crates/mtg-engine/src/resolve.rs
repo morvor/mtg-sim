@@ -1204,6 +1204,44 @@ impl Game {
                     self.shuffle_library(o);
                 }
             }
+            Effect::ShuffleIntoLibrary { what, library } => {
+                let objs = self.resolve_objects(what, ctx);
+                // CR 701.24c, 701.24d: the libraries are shuffled even if the objects
+                // aren't where they're expected to be, or there are none.
+                let mut libraries = self.eval_players(library, ctx);
+                for o in &objs {
+                    let owner = self.obj(*o).owner;
+                    if !libraries.contains(&owner) {
+                        libraries.push(owner);
+                    }
+                }
+                let moves: Vec<MoveEv> = objs
+                    .iter()
+                    .filter(|o| self.is_live(**o))
+                    .map(|o| MoveEv {
+                        obj: *o,
+                        to: Zone::Library(self.obj(*o).owner),
+                        pos: LibraryPosition::Top,
+                        cause: MoveCause::Effect,
+                        by: Some(ctx.controller),
+                        etb: EtbInfo::default(),
+                        source: ctx.source,
+                    })
+                    .collect();
+                let moved: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+                for p in libraries {
+                    self.shuffle_library(p);
+                }
+                let moved: Vec<Entity> = moved
+                    .into_iter()
+                    .filter(|o| matches!(self.obj(*o).zone, Zone::Library(_)))
+                    .map(Entity::Object)
+                    .collect();
+                ctx.prev_value = moved.len() as i64;
+                ctx.prev_happened = !moved.is_empty();
+                ctx.prev_affected = moved.clone();
+                ctx.set_var(vars::IT, moved);
+            }
             Effect::Dig {
                 who,
                 n,
