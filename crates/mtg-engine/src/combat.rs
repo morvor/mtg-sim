@@ -485,6 +485,11 @@ pub fn attacking_players(g: &Game) -> Vec<PlayerId> {
             return c.attacking_players.clone();
         }
     }
+    active_team(g)
+}
+
+/// The active player, plus teammates with shared team turns (CR 805.4a).
+fn active_team(g: &Game) -> Vec<PlayerId> {
     let ap = g.turn.active;
     let mut v = vec![ap];
     if shared_team_turns(g) {
@@ -517,7 +522,7 @@ pub fn within_range(g: &Game, a: PlayerId, b: PlayerId) -> bool {
 /// Beginning of combat (CR 507): set up combat and choose the defending player.
 pub fn begin_combat(g: &mut Game) {
     let ap = g.turn.active;
-    let attacking = attacking_players(g);
+    let attacking = active_team(g);
     // CR 801.3: only opponents within range of influence can be attacked.
     let opponents: Vec<PlayerId> = g
         .opponents(ap)

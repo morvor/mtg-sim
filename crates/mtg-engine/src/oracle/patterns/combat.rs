@@ -41,15 +41,6 @@ fn attack_recipient(s: &str) -> Option<DamageRecipient> {
     })
 }
 
-fn player_rel(s: &str) -> Option<PlayerRel> {
-    Some(match s {
-        "you" => PlayerRel::You,
-        "an opponent" => PlayerRel::Opponent,
-        "a player" => PlayerRel::Any,
-        _ => return None,
-    })
-}
-
 fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let obj = Sel::TriggerObject;
     // CR 506.6: "[filter] attacks a player alone".
@@ -195,7 +186,6 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             ));
         }
     }
-    let _ = player_rel;
     None
 }
 

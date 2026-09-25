@@ -483,6 +483,9 @@ impl Game {
             return;
         }
         let mut next = self.turn.schedule.remove(0);
+        if next == Step::CombatDamage && self.dirty {
+            self.recompute();
+        }
         if next == Step::CombatDamage
             && self.combat.as_ref().is_some_and(|c| !c.first_strike_step)
             && crate::combat::any_first_strike(self)
