@@ -151,3 +151,57 @@ fn shortened_name_refers_to_the_card() {
     t.attack(&[(edgar, Entity::Player(P1))], &[]);
     assert_eq!(t.counters(edgar, "+1/+1"), 1);
 }
+
+#[test]
+fn attacks_while_you_dont_control_another_dinosaur() {
+    cr!("508.3a", "603.2");
+    assert_supported(&["Pugnacious Hammerskull"]);
+    for other_dino in [false, true] {
+        let mut t = TestGame::new(2);
+        let skull = t.battlefield(P0, "Pugnacious Hammerskull");
+        if other_dino {
+            t.battlefield(P0, "Pugnacious Hammerskull");
+        }
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.attack(&[(skull, Entity::Player(P1))], &[]);
+        let stun = if other_dino { 0 } else { 1 };
+        assert_eq!(
+            t.counters(skull, "stun"),
+            stun,
+            "other dinosaur: {other_dino}"
+        );
+    }
+}
+
+#[test]
+fn attacks_while_you_control_two_or_more_artifacts() {
+    cr!("508.3a", "603.2");
+    assert_supported(&["Brazen Blademaster"]);
+    for artifacts in [1usize, 2] {
+        let mut t = TestGame::new(2);
+        let bm = t.battlefield(P0, "Brazen Blademaster");
+        t.lands(P0, "Ornithopter", artifacts);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(bm, Entity::Player(P1))]),
+        );
+        t.advance_to(P0, Step::DeclareBlockers);
+        let expected = if artifacts >= 2 { (4, 4) } else { (2, 3) };
+        assert_eq!(t.pt(bm), expected, "{artifacts} artifacts");
+    }
+}
+
+#[test]
+fn deals_damage_to_a_creature_of_a_type() {
+    cr!("510.2", "120.3");
+    assert_supported(&["Vampire Slayer"]);
+    let mut t = TestGame::new(2);
+    let slayer = t.battlefield(P0, "Vampire Slayer");
+    let vampire = t.battlefield(P1, "Sengir Vampire");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(slayer, Entity::Player(P1))], &[(vampire, slayer)]);
+    // 2 damage doesn't kill the 4/4; the trigger destroys it.
+    assert!(!t.on_battlefield(vampire));
+}

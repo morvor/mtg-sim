@@ -453,6 +453,35 @@ fn qualify(cond: TriggerCond, tail: &str) -> Option<TriggerCond> {
     })
 }
 
+/// A condition qualifying a trigger event ("while you control two or more artifacts").
+/// Conditions don't depend on the card being compiled except through `~`.
+pub(crate) fn event_condition(c: &str) -> Option<Condition> {
+    // "you don't control another Dinosaur", "you don't control a legendary Monkey"
+    if let Some(x) = c.strip_prefix("you don't control ") {
+        let x = x
+            .strip_prefix("a ")
+            .or_else(|| x.strip_prefix("an "))
+            .unwrap_or(x);
+        let (g, plural, tail) = parse_object_phrase(x)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Condition::Not(Box::new(Condition::Exists(g.you_control()))));
+    }
+    let tl = TypeLine::default();
+    let ctx = crate::oracle::CompileContext {
+        card_name: "",
+        full_name: "",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    crate::oracle::statics::parse_condition(c, &ctx)
+}
+
 fn ordinal(w: &str) -> Option<u32> {
     Some(match w {
         "first" => 1,
@@ -1381,20 +1410,31 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                     cond: Condition::SelMatches(Sel::This, Filter::Custom("saddled".into())),
                 };
                 r = x;
-            } else if let Some(x) = t.strip_prefix("while you control ") {
-                let x2 = x
-                    .strip_prefix("a ")
-                    .or_else(|| x.strip_prefix("an "))
-                    .unwrap_or(x);
-                let (g, plural, tail) = parse_object_phrase(x2)?;
-                if plural {
-                    return None;
-                }
+            } else if let Some((g, tail)) = t
+                .strip_prefix("while you control ")
+                .and_then(|x| {
+                    let x2 = x
+                        .strip_prefix("a ")
+                        .or_else(|| x.strip_prefix("an "))
+                        .unwrap_or(x);
+                    parse_object_phrase(x2)
+                })
+                .filter(|(_, plural, _)| !plural)
+                .map(|(g, _, tail)| (g, tail))
+            {
                 cond = TriggerCond::Where {
                     trigger: Box::new(cond),
                     cond: Condition::Exists(g.you_control()),
                 };
                 r = tail;
+            } else if let Some(c) = t.strip_prefix("while ").and_then(event_condition) {
+                // "while you control two or more artifacts", "while you don't control
+                // another Dinosaur": part of the trigger event (not an intervening "if").
+                cond = TriggerCond::Where {
+                    trigger: Box::new(cond),
+                    cond: c,
+                };
+                r = "";
             }
             if subj.one_or_more {
                 return Some((batch(cond, false, PlayerRef::TriggerPlayer), r));
@@ -1749,15 +1789,28 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
     }
     let (to, to_player, rest) = if t.is_empty() || !t.starts_with("to ") {
         (DamageRecipient::Any, false, r)
-    } else {
-        let (p, to, pl) = recipients
-            .iter()
-            .find(|(p, _, _)| {
-                t.strip_prefix(p)
-                    .is_some_and(|x| x.is_empty() || x.starts_with(' '))
-            })?
-            .clone();
+    } else if let Some((p, to, pl)) = recipients
+        .iter()
+        .find(|(p, _, _)| {
+            t.strip_prefix(p)
+                .is_some_and(|x| x.is_empty() || x.starts_with(' '))
+        })
+        .cloned()
+    {
         (to, pl, &t[p.len()..])
+    } else if let Some(x) = t.strip_prefix("to defending player") {
+        (DamageRecipient::Player(PlayerRel::Defending), true, x)
+    } else {
+        // "to a Vampire", "to a Goblin or Orc": a permanent (CR 120.1: only creatures,
+        // planeswalkers, battles and players are dealt damage).
+        let x = t
+            .strip_prefix("to a ")
+            .or_else(|| t.strip_prefix("to an "))?;
+        let (g, plural, tail) = parse_object_phrase(x)?;
+        if plural || matches!(g, Filter::Any) {
+            return None;
+        }
+        (DamageRecipient::Object(g), false, tail)
     };
     let cond = TriggerCond::DealsDamage {
         source: subj.filter.clone(),

@@ -107,9 +107,21 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
             s = s.replace(n.as_str(), "~");
         }
     }
-    // Legendary cards are also called by the first word of their name ("Whenever Edgar
-    // attacks" on Edgar Markov, "Zur" for Zur the Enchanter).
+    // Legendary cards are also called by the first word(s) of their name ("Whenever Edgar
+    // attacks" on Edgar Markov, "Zur" for Zur the Enchanter, "Jedit Ojanen" for Jedit
+    // Ojanen of Efrava): the longest such prefix first.
     if let Some(first) = short_first_name(ctx) {
+        let words: Vec<&str> = ctx.card_name.split(' ').collect();
+        for k in (2..words.len()).rev() {
+            let prefix = words[..k].join(" ");
+            if words[k - 1]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase())
+            {
+                s = replace_word(&s, &prefix, "~");
+            }
+        }
         s = replace_word(&s, first, "~");
     }
     const SELF_REFS: [&str; 22] = [
