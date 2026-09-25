@@ -1255,6 +1255,43 @@ pub fn apply_mod(
             c.abilities
                 .push(AbilityDef::new(AbilityKind::Keyword(k), name))
         }
+        Modification::AddKeywordX(k, x) => {
+            // CR 702.1b: the variable is reevaluated whenever this is applied.
+            let n = g.eval_value(x, ctx).max(0);
+            let mut k = k.clone();
+            k.n = Some(n as i32);
+            if let Some(m) = k.cost.as_mut().and_then(|c| c.mana.as_mut()) {
+                for s in m.symbols.iter_mut() {
+                    if *s == crate::mana::ManaSymbol::X {
+                        *s = crate::mana::ManaSymbol::Generic(n as u32);
+                    }
+                }
+            }
+            apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
+        }
+        Modification::AddKeywordsOf { kinds, from } => {
+            // CR 702.1c: each variant and variable of each listed keyword that such an
+            // object has; identical instances are granted once.
+            let mut seen: Vec<String> = Vec::new();
+            for o in g.objects_matching(from, ctx) {
+                for k in g
+                    .obj(o)
+                    .chars
+                    .keywords()
+                    .filter(|k| kinds.contains(&k.kind))
+                {
+                    let key = format!(
+                        "{:?}{:?}{:?}{:?}{:?}",
+                        k.kind, k.n, k.cost, k.costs, k.filter
+                    );
+                    if seen.contains(&key) {
+                        continue;
+                    }
+                    seen.push(key);
+                    apply_mod(c, &Modification::AddKeyword(k.clone()), g, ctx, _target);
+                }
+            }
+        }
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),

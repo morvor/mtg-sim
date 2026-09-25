@@ -413,6 +413,142 @@ inventory::submit! {
     StaticPattern { name: "k702: attached type swap", priority: 50, parse: attached_type_swap }
 }
 
+/// "Enchant artifact, creature, or planeswalker", "Equip Shaman, Warlock, or Wizard {1}":
+/// an enchant/equip quality is an object phrase that may contain commas, so the line is
+/// one keyword rather than a comma-separated keyword list (CR 702.5a, 702.6c).
+fn enchant_or_equip_with_commas(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::keywords::Keyword;
+    use crate::oracle::keywords::{compile_keyword, parse_keyword_cost, quality_phrase};
+    let t = block.trim().trim_end_matches('.');
+    if !t.contains(',') || t.contains('—') || t.contains('\n') || t.contains(':') {
+        return None;
+    }
+    let lower = t.to_lowercase();
+    let kw = if let Some(q) = lower.strip_prefix("enchant ") {
+        Keyword::with_filter(KeywordKind::Enchant, quality_phrase(q)?)
+    } else if let Some(r) = lower.strip_prefix("equip ") {
+        let i = r.find('{')?;
+        let cost = parse_keyword_cost(&t[t.len() - (r.len() - i)..])?;
+        Keyword {
+            cost: Some(cost),
+            ..Keyword::with_filter(KeywordKind::Equip, quality_phrase(r[..i].trim())?)
+        }
+    } else {
+        return None;
+    };
+    Some(compile_keyword(kw.text(t), t))
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: enchant/equip quality with commas", priority: 50, parse: enchant_or_equip_with_commas }
+}
+
+/// Parses a single keyword ("bushido x", "ward {x}", "flying").
+fn one_keyword(s: &str) -> Option<crate::keywords::Keyword> {
+    match keyword_mods(s)?.as_slice() {
+        [Modification::AddKeyword(k)] => Some(k.clone()),
+        _ => None,
+    }
+}
+
+/// "the number of +1/+1 counters on it", "the number of experience counters you have".
+fn counter_count(s: &str) -> Option<Value> {
+    let r = end(s).strip_prefix("the number of ")?;
+    if let Some(k) = r
+        .strip_suffix(" counters on it")
+        .or_else(|| r.strip_suffix(" counters on ~"))
+    {
+        return Some(Value::CountersOn(Box::new(Sel::This), Some(k.into())));
+    }
+    let k = r.strip_suffix(" counters you have")?;
+    Some(Value::PlayerCounters(PlayerRef::You, k.into()))
+}
+
+/// "~ has bushido X, where X is the number of attacking creatures." — a keyword whose
+/// variable the effect defines, reevaluated constantly (CR 702.1b).
+fn keyword_with_variable(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') || block.contains(':') || block.contains('"') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let (head, value) = l.split_once(", where x is ")?;
+    let (subject, kw) = head
+        .split_once(" has ")
+        .or_else(|| head.split_once(" have "))?;
+    if !(kw.ends_with(" x") || kw.ends_with(" {x}")) {
+        return None;
+    }
+    let affected = static_subject(subject)?;
+    let kw = one_keyword(kw)?;
+    let x = counter_count(value).or_else(|| {
+        let mut b = Builder::new(ctx);
+        let (x, tail) = crate::oracle::statics::parse_value_phrase(value, &mut b)?;
+        end(&tail).is_empty().then_some(x)
+    })?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected,
+            mods: vec![Modification::AddKeywordX(kw, x)],
+        })),
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: keyword with variable x", priority: 50, parse: keyword_with_variable }
+}
+
+/// "As long as a creature card with flying is in a graveyard, ~ has flying. The same is
+/// true for fear, first strike, ..., landwalk, ..., protection, ..." (Cairn Wanderer):
+/// the object has each listed keyword, in all its variants, that such a card has
+/// (CR 702.1c).
+fn same_is_true_for(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || block.contains('\n') || block.contains(':') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let (first, list) = l.split_once(". the same is true for ")?;
+    let (cond, main) = first.strip_prefix("as long as ")?.split_once(", ")?;
+    let (subject, kw0) = main.split_once(" has ")?;
+    let affected = static_subject(subject)?;
+    let mut kinds = vec![KeywordKind::from_name(kw0)?];
+    for item in list
+        .split(", and ")
+        .flat_map(|p| p.split(", "))
+        .flat_map(|p| p.split(" and "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
+        kinds.push(KeywordKind::from_name(item)?);
+    }
+    // "a creature card with flying is in a graveyard"
+    let phrase = cond.strip_suffix(" is in a graveyard")?;
+    let phrase = phrase
+        .strip_prefix("a ")
+        .or_else(|| phrase.strip_prefix("an "))?;
+    let phrase = phrase.replace(&format!(" with {kw0}"), "");
+    let (f, _, tail) = parse_object_phrase(&phrase)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected,
+            mods: vec![Modification::AddKeywordsOf {
+                kinds,
+                from: Filter::and(vec![f, Filter::InZone(ZoneKind::Graveyard)]),
+            }],
+        })),
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: the same is true for", priority: 50, parse: same_is_true_for }
+}
+
 /// "You may cast creature spells from the top of your library." / "You may play lands and
 /// cast spells from the top of your library." — permissions to play cards from another
 /// zone; the cards' own timing rules (including flash, CR 702.8a) still apply.

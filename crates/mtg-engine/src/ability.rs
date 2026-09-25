@@ -1271,6 +1271,17 @@ pub enum Modification {
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
+    /// Adds a keyword whose variable is defined by the effect ("~ has bushido X, where X
+    /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
+    /// becomes the keyword's N, and the value of {X} in its cost.
+    AddKeywordX(Keyword, Value),
+    /// Adds each keyword of these kinds, with all its variants and variables, that an
+    /// object matching the filter has ("... has flying. The same is true for first strike,
+    /// landwalk, protection, ...", CR 702.1c).
+    AddKeywordsOf {
+        kinds: Vec<KeywordKind>,
+        from: Filter,
+    },
     RemoveKeyword(KeywordKind),
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
@@ -1313,7 +1324,12 @@ impl Modification {
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor => Layer::L5Color,
-            AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
+            AddAbility(_)
+            | AddKeyword(_)
+            | AddKeywordX(..)
+            | AddKeywordsOf { .. }
+            | RemoveKeyword(_)
+            | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
             SetPT(..) => Layer::L7bSet,

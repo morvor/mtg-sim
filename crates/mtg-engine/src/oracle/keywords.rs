@@ -35,14 +35,6 @@ pub fn parse_keyword_line(text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     if t.is_empty() {
         return None;
     }
-    // "Enchant creature, planeswalker, or Clue", "Equip Shaman, Warlock, or Wizard {1}":
-    // the parameter is an object phrase that may contain commas.
-    let lower = t.to_lowercase();
-    if lower.starts_with("enchant ") || lower.starts_with("equip ") {
-        if let Some(kw) = parse_one_keyword(t, ctx) {
-            return Some(compile_keyword(kw, t));
-        }
-    }
     let parts = split_keyword_list(t);
     let mut out = Vec::new();
     for part in parts {
@@ -197,7 +189,7 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
 /// The object phrase of "Enchant [quality]" / "Equip [quality]": "creature you control",
 /// "artifact, creature, or planeswalker", "red or green creature" (adjectives joined by
 /// "or" before a shared noun).
-fn quality_phrase(s: &str) -> Option<Filter> {
+pub fn quality_phrase(s: &str) -> Option<Filter> {
     if let Some((f, _, tail)) = parse_object_phrase(s) {
         if end(tail).is_empty() {
             return Some(f);
