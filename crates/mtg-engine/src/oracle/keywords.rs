@@ -23,6 +23,11 @@ fn names() -> &'static [(String, KeywordKind)] {
         v.push(("landcycling".into(), KeywordKind::Cycling));
         v.push(("partner with".into(), KeywordKind::Partner));
         v.push(("bands with other".into(), KeywordKind::Banding));
+        // CR 702.19c: a variant of trample, marked by its text.
+        v.push((
+            crate::kw::trample::OVER_PLANESWALKERS.into(),
+            KeywordKind::Trample,
+        ));
         v.push(("hexproof from".into(), KeywordKind::Hexproof));
         v.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
         v
@@ -244,8 +249,9 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         KeywordKind::Partner if name.as_str() == "partner with" => {
             kw.text = Some(SmolStr::new(rest_raw));
         }
+        // CR 702.22b: "bands with other [quality]" is banding with a quality.
         KeywordKind::Banding if name.as_str() == "bands with other" => {
-            kw.text = Some(SmolStr::new(rest_raw));
+            kw.filter = Some(crate::kw::banding::quality_filter(rest, rest_raw)?);
         }
         _ => {
             if rest.is_empty() {

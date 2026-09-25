@@ -32,6 +32,12 @@ pub trait KeywordRules: Sync + Send {
     fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
         None
     }
+    /// Whether a variable X the granting effect defines ("has ward {X}, where X is ...")
+    /// is determined as the keyword's ability resolves (kept in [`Keyword::x`]) rather than
+    /// whenever characteristics are computed (CR 702.21b).
+    fn x_determined_on_resolution(&self) -> bool {
+        false
+    }
     /// Additional ways to cast `card` because it has `kw`.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
@@ -124,6 +130,18 @@ pub trait KeywordRules: Sync + Send {
     fn assigns_as_though_unblocked(&self, g: &mut Game, creature: ObjectId) -> bool {
         false
     }
+    /// The player who assigns this attacking or blocking creature's combat damage instead
+    /// of its controller, dividing it freely among the creatures it's blocked by or
+    /// blocking (banding, CR 702.22j–k).
+    fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
+        None
+    }
+    /// Other attacking creatures that become blocked by the same blocking creature when
+    /// `attacker` becomes blocked by it (or become blocked when an effect blocks it), e.g.
+    /// the rest of its band (CR 702.22h–i).
+    fn also_blocked(&self, g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+        vec![]
+    }
     fn after_damage(
         &self,
         g: &mut Game,
@@ -197,6 +215,10 @@ fn impls_for(kind: KeywordKind) -> impl Iterator<Item = &'static &'static dyn Ke
 // ---------------------------------------------------------------------------
 // Dispatchers used by keyword_impls.rs
 // ---------------------------------------------------------------------------
+
+pub fn x_determined_on_resolution(kind: KeywordKind) -> bool {
+    impls_for(kind).any(|r| r.x_determined_on_resolution())
+}
 
 pub fn derived(kw: &Keyword) -> Vec<Ability> {
     for r in impls_for(kw.kind) {
@@ -349,6 +371,24 @@ pub fn combat_damage_amount(g: &Game, id: ObjectId) -> Option<u32> {
     registry()
         .iter()
         .find_map(|r| r.combat_damage_amount(g, id))
+}
+
+pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+    let mut out: Vec<ObjectId> = Vec::new();
+    for r in registry() {
+        for x in r.also_blocked(g, attacker) {
+            if x != attacker && !out.contains(&x) {
+                out.push(x);
+            }
+        }
+    }
+    out
+}
+
+pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {
+    registry()
+        .iter()
+        .find_map(|r| r.combat_damage_assigner(g, id))
 }
 
 pub fn assigns_as_though_unblocked(g: &mut Game, id: ObjectId) -> bool {

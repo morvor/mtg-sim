@@ -4,7 +4,7 @@
 //! the rules text). A [`Keyword`] is an instance on an object, carrying its parameters
 //! (e.g. the cost of Equip, the N of Bushido N, what Protection is from).
 
-use crate::ability::{Cost, Filter};
+use crate::ability::{Cost, Filter, Value};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
@@ -23,6 +23,11 @@ pub struct Keyword {
     pub filter: Option<Filter>,
     /// Raw parameter text (e.g. "Islandwalk", "Partner with Brallin", "Swampcycling").
     pub text: Option<SmolStr>,
+    /// What X in the cost is equal to ("ward {X}, where X is ...", CR 702.21b), for a
+    /// keyword whose ability determines X as it resolves; `costs` then holds the cost
+    /// with X, while `cost` shows its current value (CR 702.1b).
+    #[serde(default)]
+    pub x: Option<Value>,
 }
 
 impl Keyword {
@@ -34,6 +39,7 @@ impl Keyword {
             costs: vec![],
             filter: None,
             text: None,
+            x: None,
         }
     }
     pub fn with_n(kind: KeywordKind, n: i32) -> Keyword {

@@ -46,10 +46,6 @@ pub fn derived_abilities(kw: &Keyword) -> Vec<Ability> {
     v
 }
 
-fn this_creature() -> Filter {
-    Filter::Source
-}
-
 fn build_derived(kw: &Keyword) -> Vec<Ability> {
     use KeywordKind as K;
     let text = kw.kind.name();
@@ -69,29 +65,7 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
             )),
             text,
         )],
-        // CR 702.21a: "Whenever this permanent becomes the target of a spell or ability an
-        // opponent controls, counter it unless that player pays [cost]."
-        K::Ward => {
-            let cost = kw.cost.clone().unwrap_or_default();
-            vec![AbilityDef::new(
-                AbilityKind::Triggered(TriggeredAbility::new(
-                    TriggerCond::BecomesTarget {
-                        filter: this_creature(),
-                        by: PlayerRel::Opponent,
-                    },
-                    Body::effect(Effect::PayOptional {
-                        who: PlayerRef::TriggerPlayer,
-                        cost,
-                        then: Box::new(Effect::Noop),
-                        otherwise: Box::new(Effect::CounterSpell {
-                            what: Sel::TriggerSpell,
-                        }),
-                    }),
-                )),
-                format!("Ward"),
-            )]
-        }
-        // CR 702.6 equip: see `kw/equip.rs`.
+        // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
         // CR 702.29a: "[Cost], Discard this card: Draw a card."
         K::Cycling => {
             let mut cost = kw.cost.clone().unwrap_or_default();
@@ -371,66 +345,16 @@ pub fn after_damage(g: &mut Game, source: ObjectId, target: Entity, amount: u32,
 
 /// CR 502.1 / 702.26: phasing during the untap step.
 pub fn phasing_untap_step(g: &mut Game, active: PlayerId) {
-    let out: Vec<ObjectId> = g
-        .battlefield
-        .iter()
-        .copied()
-        .filter(|id| {
-            let o = g.obj(*id);
-            !o.phased_out && o.controller == active && o.has_keyword(KeywordKind::Phasing)
-        })
-        .collect();
-    let back: Vec<ObjectId> = g
-        .battlefield
-        .iter()
-        .copied()
-        .filter(|id| {
-            let o = g.obj(*id);
-            o.phased_out
-                && o.controller == active
-                && !o.phased_out_indirectly
-                && !crate::until::held_phased_out(g, *id)
-        })
-        .collect();
-    phase_out(g, out);
-    for id in back {
-        phase_in(g, id);
-    }
+    crate::kw::phasing::untap_step(g, active);
 }
 
 /// Phases permanents out, along with everything attached to them (CR 702.26g).
 pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
-    for id in objs {
-        if g.obj(id).phased_out {
-            continue;
-        }
-        g.objects[id.0 as usize].phased_out = true;
-        crate::combat::remove_from_combat(g, id);
-        g.emit(crate::events::Event::PhasedOut { obj: id });
-        for a in g.attachments_of(Entity::Object(id)) {
-            if !g.obj(a).phased_out {
-                g.objects[a.0 as usize].phased_out = true;
-                g.objects[a.0 as usize].phased_out_indirectly = true;
-                // They phase out too, so "phases out" abilities see them (CR 603.10b).
-                g.emit(crate::events::Event::PhasedOut { obj: a });
-            }
-        }
-    }
-    g.dirty = true;
+    crate::kw::phasing::phase_out(g, objs);
 }
 
 pub fn phase_in(g: &mut Game, id: ObjectId) {
-    crate::until::phased_in_otherwise(g, id);
-    g.objects[id.0 as usize].phased_out = false;
-    for a in g.battlefield.clone() {
-        if g.obj(a).phased_out_indirectly && g.obj(a).attached_to == Some(Entity::Object(id)) {
-            let o = &mut g.objects[a.0 as usize];
-            o.phased_out = false;
-            o.phased_out_indirectly = false;
-        }
-    }
-    g.emit(crate::events::Event::PhasedIn { obj: id });
-    g.dirty = true;
+    crate::kw::phasing::phase_in(g, id);
 }
 
 /// CR 702.145 daybound/nightbound transform when day/night changes.

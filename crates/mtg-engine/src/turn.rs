@@ -231,6 +231,11 @@ impl Game {
 
     /// Begins a new turn for `active`.
     pub fn begin_turn(&mut self, active: PlayerId, extra: bool) {
+        // CR 702.26n: the turns of players who left the game seated before this one would
+        // have begun.
+        if self.turn.number > 0 && !extra {
+            crate::kw::phasing::turns_would_have_begun(self, self.turn.active, active);
+        }
         self.turn.previous_active = if self.turn.number > 0 {
             Some(self.turn.active)
         } else {

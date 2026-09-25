@@ -155,6 +155,17 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
         });
     }
     if let Some(r) = strip(p, "pay") {
+        // "Pay life equal to ~'s power" (e.g. a ward cost): the amount is determined as
+        // the cost is paid (CR 702.21b rulings).
+        match r.trim() {
+            "life equal to ~'s power" => {
+                return Some(CostPart::PayLife(Value::PowerOf(Box::new(Sel::This))))
+            }
+            "life equal to ~'s toughness" => {
+                return Some(CostPart::PayLife(Value::ToughnessOf(Box::new(Sel::This))))
+            }
+            _ => {}
+        }
         if let Some((n, r2)) = parse_number(r) {
             if strip(r2, "life").is_some() {
                 return Some(CostPart::PayLife(n));

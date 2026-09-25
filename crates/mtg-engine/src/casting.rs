@@ -1563,6 +1563,7 @@ impl Game {
         _chars: &Characteristics,
     ) -> bool {
         let ctx = Ctx::new(src, p);
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
         for part in &cost.parts {
             if !self.cost_part_payable(p, part, src, &ctx) {
                 return false;
@@ -1596,7 +1597,7 @@ impl Game {
 
     pub fn can_pay_cost(&self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
-        let _ = ctx;
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         self.can_pay_cost_optimistic(p, cost, src, &chars)
     }
 
@@ -1794,9 +1795,23 @@ impl Game {
             }
             // CR 121.2b: a cost that includes drawing more cards than the player may draw
             // can't be paid.
-            CostPart::Effect(e) => crate::draw_rules::can_choose(self, e, ctx),
+            CostPart::Effect(e) => {
+                // The player paying the cost performs the action ("you" is that player).
+                let mut c = ctx.clone();
+                c.controller = p;
+                crate::draw_rules::can_choose(self, e, &c)
+            }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
+            }
+            CostPart::Repeated { .. } => {
+                let one = Cost {
+                    mana: None,
+                    parts: vec![part.clone()],
+                };
+                let flat = crate::kw::cumulative_upkeep::expand_repeated(self, &one, ctx);
+                let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
+                self.can_pay_cost_optimistic(p, &flat, src, &chars)
             }
         }
     }
@@ -1828,6 +1843,8 @@ impl Game {
         ctx: &Ctx,
     ) -> Result<PaidCost, Illegal> {
         let mut paid = PaidCost::default();
+        // CR 702.24a: a repeated cost's total is determined as it's paid.
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
@@ -2163,13 +2180,29 @@ impl Game {
                 }
             }
             CostPart::Effect(e) => {
+                // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
+                c.controller = p;
                 self.exec(e, &mut c);
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
                     return bad("can't pay mana cost");
                 }
+            }
+            CostPart::Repeated { .. } => {
+                let one = Cost {
+                    mana: None,
+                    parts: vec![part.clone()],
+                };
+                let flat = crate::kw::cumulative_upkeep::expand_repeated(self, &one, ctx);
+                let spend = SpendContext {
+                    is_ability: true,
+                    source: src,
+                    ..Default::default()
+                };
+                let sub = self.pay_total_cost(p, &flat, src, &spend, ctx)?;
+                paid.mana_spent.extend(sub.mana_spent);
             }
         }
         Ok(())

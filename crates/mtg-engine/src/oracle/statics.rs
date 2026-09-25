@@ -12,7 +12,15 @@ fn static_ability(effect: StaticEffect, text: &str) -> Ability {
 }
 
 fn keyword_list_mods(s: &str) -> Option<Vec<Modification>> {
-    let parts = super::keywords::split_keyword_phrases(end(s));
+    // A quoted keyword ability (`has "cumulative upkeep {1}."`) grants that keyword.
+    let parts = match end(s)
+        .strip_prefix('"')
+        .and_then(|r| r.strip_suffix('"'))
+        .filter(|r| !r.contains('"'))
+    {
+        Some(inner) => vec![inner.trim_end_matches('.').to_string()],
+        None => super::keywords::split_keyword_phrases(end(s)),
+    };
     let mut out = Vec::new();
     for p in &parts {
         let tl = TypeLine::default();

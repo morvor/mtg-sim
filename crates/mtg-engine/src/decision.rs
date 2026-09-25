@@ -143,8 +143,11 @@ pub enum Decision {
         options: Vec<(ObjectId, Vec<ObjectId>)>,
     },
     /// Assign combat damage for one creature (CR 510.1). `recipients` are the creatures it
-    /// can assign to plus (for trample) the player/permanent it's attacking. `lethal` gives
-    /// the lethal damage for each creature recipient. Answer `Numbers`.
+    /// can assign to plus (for trample) the player/permanent it's attacking, plus (for
+    /// trample over planeswalkers attacking a planeswalker, CR 702.19c) that
+    /// planeswalker's controller. `lethal` gives the lethal damage for each creature
+    /// recipient, followed in that last case by the damage the planeswalker must be
+    /// assigned before its controller can be. Answer `Numbers`.
     AssignCombatDamage {
         creature: ObjectId,
         amount: u32,
