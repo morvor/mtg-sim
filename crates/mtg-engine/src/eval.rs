@@ -577,6 +577,14 @@ impl Game {
             Sel::Choose { store, .. } => store
                 .and_then(|v| ctx.vars.get(&v).cloned())
                 .unwrap_or_default(),
+            Sel::ExiledWithCardsNamed(name) => self
+                .named_exiles
+                .iter()
+                .filter(|(p, n, _)| *p == ctx.controller && n == name)
+                .map(|(_, _, o)| self.current(*o))
+                .filter(|o| self.is_live(*o) && self.obj(*o).zone == Zone::Exile)
+                .map(Entity::Object)
+                .collect(),
             Sel::CreatorLinked => ctx
                 .source
                 .and_then(|s| self.obj(s).created_by)

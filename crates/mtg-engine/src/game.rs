@@ -423,6 +423,9 @@ pub struct Game {
     /// Set while several players lose the game simultaneously, so the game's result is
     /// determined only once all of them have lost (CR 104.4a).
     pub losing_simultaneously: bool,
+    /// Cards exiled before the game began by an ability of a card with a given name:
+    /// (player who exiled it, that card's name, the exiled card) (CR 607.2n).
+    pub named_exiles: Vec<(PlayerId, SmolStr, ObjectId)>,
     /// Hint of which mana types an automatic payment needs (for "any color" choices).
     pub mana_hint: Option<Vec<crate::mana::ManaType>>,
     /// Commanders that moved to graveyard/exile since the last SBA check (CR 704.6d).
@@ -500,6 +503,7 @@ impl Game {
             play_grants: vec![],
             mana_ability_resolving: None,
             losing_simultaneously: false,
+            named_exiles: vec![],
             mana_hint: None,
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,

@@ -7,7 +7,58 @@ use crate::eval::Ctx;
 use crate::events::{Event, MoveCause};
 use crate::game::{DelayedTrigger, Game};
 use crate::object::Zone;
-use crate::types::PlayerId;
+use crate::types::{ObjectId, PlayerId};
+
+/// "Before you shuffle your deck to start the game, you may reveal this card from your
+/// deck and exile [a card] you drafted that isn't in your deck" (CR 607.2n): the exiled
+/// card is linked to the abilities of cards with that card's name.
+pub fn before_shuffle_actions(g: &mut Game) {
+    for p in g.player_ids() {
+        for card in g.player(p).library.clone() {
+            let filters: Vec<Filter> = g
+                .obj(card)
+                .base
+                .abilities
+                .iter()
+                .filter_map(|a| match &a.kind {
+                    AbilityKind::Static(s) => match &s.effect {
+                        StaticEffect::BeforeShuffleExile { what } => Some(what.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
+            for f in filters {
+                let name = g.obj(card).base.name.clone();
+                let ctx = Ctx::new(Some(card), p);
+                let cands: Vec<ObjectId> = g
+                    .player(p)
+                    .sideboard
+                    .clone()
+                    .into_iter()
+                    .filter(|c| g.matches(*c, &f, &ctx))
+                    .collect();
+                if cands.is_empty()
+                    || !g.ask_yes_no(
+                        p,
+                        Some(card),
+                        &format!("Reveal {name} from your deck?"),
+                        true,
+                    )
+                {
+                    continue;
+                }
+                let pick = g.ask_objects(p, Some(card), "Choose a card to exile", cands, 1, 1);
+                for c in pick {
+                    if let Some(e) = g.move_object(c, Zone::Exile, MoveCause::Effect, Some(p)) {
+                        g.named_exiles.push((p, name.clone(), e));
+                    }
+                }
+            }
+        }
+    }
+    g.events.clear();
+}
 
 /// Once mulligans are complete, the starting player may take any such actions, then each
 /// other player in turn order (CR 103.6).

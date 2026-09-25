@@ -89,3 +89,33 @@ fn opening_hand(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "opening hand actions", priority: 0, parse: opening_hand } }
+
+/// "Before you shuffle your deck to start the game, you may reveal this card from your deck
+/// and exile [a card] you drafted that isn't in your deck." (CR 607.2n)
+fn before_shuffle(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let mut r = None;
+    for this in ["this card", "~"] {
+        let prefix = format!(
+            "before you shuffle your deck to start the game, you may reveal {this} from your deck and exile "
+        );
+        if let Some(x) = lower.strip_prefix(&prefix) {
+            r = Some(x);
+        }
+    }
+    let r = r?.strip_suffix(" you drafted that isn't in your deck.")?;
+    let r = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .unwrap_or(r);
+    let (what, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if !crate::oracle::phrases::end(tail).is_empty() {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::BeforeShuffleExile { what });
+    s.zone = FunctionZone::Library;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "before you shuffle your deck", priority: 0, parse: before_shuffle } }

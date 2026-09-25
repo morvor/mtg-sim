@@ -625,6 +625,9 @@ pub enum Sel {
     /// Objects linked to the ability of the object that created this token or put this
     /// permanent onto the battlefield (CR 607.1d): "the card exiled with [that object]".
     CreatorLinked,
+    /// Cards the controller exiled before the game began with abilities of cards with this
+    /// name ("a card you exiled with cards named [name]", CR 607.2n).
+    ExiledWithCardsNamed(SmolStr),
     /// The spell this ability resolves for (for "copy that spell").
     TriggerSpell,
     /// Union of selections.
@@ -1541,6 +1544,12 @@ pub enum StaticEffect {
     /// triggered ability]", whose source is this card (CR 603.7g).
     OpeningHand {
         delayed: Option<Box<(TriggerCond, Body)>>,
+    },
+    /// "Before you shuffle your deck to start the game, you may reveal this card from your
+    /// deck and exile [a card matching `what`] you drafted that isn't in your deck"
+    /// (CR 607.2n). Functions in the library before the game begins.
+    BeforeShuffleExile {
+        what: Filter,
     },
     /// A static ability that functions on the stack and creates a delayed triggered ability
     /// as the permanent spell resolves and the permanent enters (CR 608.3g), e.g. dash's

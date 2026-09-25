@@ -158,6 +158,8 @@ impl Game {
     /// Shuffles libraries, determines the starting player, draws opening hands, runs
     /// mulligans, and begins the first turn.
     pub fn start(&mut self) {
+        // CR 607.2n: actions taken before shuffling decks to start the game.
+        crate::opening_hand::before_shuffle_actions(self);
         // CR 103.3: each player shuffles their deck.
         for p in self.player_ids() {
             self.shuffle_library(p);

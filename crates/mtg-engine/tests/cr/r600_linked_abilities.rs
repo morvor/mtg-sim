@@ -778,3 +778,56 @@ fn the_two_champion_abilities_are_linked() {
     assert!(!t.on_battlefield(hero));
     assert!(t.in_graveyard(P0, "Changeling Hero"));
 }
+
+#[test]
+fn cards_exiled_before_the_game_are_linked_to_cards_with_that_name() {
+    cr!("607.2n");
+    // Arcane Savant: "Before you shuffle your deck to start the game, you may reveal this
+    // card from your deck and exile an instant or sorcery card you drafted that isn't in
+    // your deck." A card named Arcane Savant refers to "a card you exiled with cards named
+    // Arcane Savant" — including cards exiled by another Arcane Savant.
+    let fetcher = |name: &str| {
+        CB::new(name)
+            .creature(3, 3)
+            .ability(trig(
+                TriggerCond::EntersBattlefield(Filter::Source),
+                Body::effect(Effect::Move {
+                    what: Sel::ExiledWithCardsNamed("Arcane Savant".into()),
+                    to: Destination::zone(ZoneKind::Hand),
+                }),
+            ))
+            .build()
+    };
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Arcane Savant");
+    // The sideboard (cards drafted that aren't in the deck).
+    let bolt = t.custom(P0, (*card("Lightning Bolt")).clone(), Zone::Outside(P0));
+    let bears = t.custom(P0, (*card("Grizzly Bears")).clone(), Zone::Outside(P0));
+    t.g.players[P0.idx()].sideboard.extend([bolt, bears]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    mtg_engine::opening_hand::before_shuffle_actions(&mut t.g);
+    assert!(t.in_exile("Lightning Bolt"));
+    // A card with another name doesn't refer to it.
+    let mut def = fetcher("Other Savant");
+    if let Some(a) = def.faces[0].chars.abilities.first().cloned() {
+        let mut k = a.kind.clone();
+        if let AbilityKind::Triggered(tr) = &mut k {
+            tr.body = Body::effect(Effect::Move {
+                what: Sel::ExiledWithCardsNamed("Other Savant".into()),
+                to: Destination::zone(ZoneKind::Hand),
+            });
+        }
+        def.faces[0].chars.abilities = vec![AbilityDef::new(k, "t")];
+    }
+    let o = t.custom(P0, def, Zone::Nowhere);
+    t.g.move_object(o, Zone::Battlefield, MoveCause::Effect, Some(P0));
+    t.resolve_all();
+    assert!(t.in_exile("Lightning Bolt"));
+    // Another object named Arcane Savant does.
+    let s2 = t.custom(P0, fetcher("Arcane Savant"), Zone::Nowhere);
+    t.g.move_object(s2, Zone::Battlefield, MoveCause::Effect, Some(P0));
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+    assert!(!t.in_exile("Grizzly Bears"));
+}
