@@ -14,6 +14,8 @@
 use crate::ability::*;
 use crate::casting::{CastOption, Illegal};
 use crate::decision::{Action, SpecialAction};
+use crate::eval::Ctx;
+use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
@@ -110,6 +112,11 @@ pub trait KeywordRules: Sync + Send {
     fn block_allowed(&self, g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
         true
     }
+    /// Whether `p` may activate the activated ability `a` of `src` as far as this
+    /// implementation is concerned (e.g. "Players can't cycle cards", CR 702.29f).
+    fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+        true
+    }
     fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
         true
     }
@@ -169,6 +176,27 @@ pub trait KeywordRules: Sync + Send {
     fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
         false
     }
+    /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        None
+    }
+    /// Performs a named [`Effect::Custom`] this implementation defines; returns true if it
+    /// was one.
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        false
+    }
+    /// Matches a named [`TriggerCond::Custom`] this implementation defines against an
+    /// event, for the triggered ability of `src` controlled by `ctl`.
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        src: ObjectId,
+        ctl: PlayerId,
+        ev: &Event,
+    ) -> Option<Vec<EventInfo>> {
+        None
+    }
     /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
     /// number of spells cast before a storm spell (CR 702.40a).
     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
@@ -184,11 +212,6 @@ pub trait KeywordRules: Sync + Send {
         ctx: &crate::eval::Ctx,
     ) -> Option<bool> {
         None
-    }
-    /// A named effect (`Effect::Custom(name)`) performed by this implementation. Returns
-    /// true if it handled `name`.
-    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {
-        false
     }
     /// Once the total cost of `spell` is locked in (CR 601.2f), ways this keyword lets its
     /// controller pay part of it other than with mana, performed as the total cost is paid
@@ -384,6 +407,12 @@ pub fn block_allowed(g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
         .all(|r| r.block_allowed(g, blocker, attacker))
 }
 
+pub fn activation_allowed(g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.activation_allowed(g, p, src, a))
+}
+
 pub fn attack_declaration_ok(g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
     registry().iter().all(|r| r.attack_declaration_ok(g, decl))
 }
@@ -494,6 +523,60 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
     }
 }
 
+pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_condition(g, name, ctx))
+}
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    registry().iter().any(|r| r.custom_effect(g, name, ctx))
+}
+
+pub fn custom_trigger(
+    g: &Game,
+    name: &str,
+    src: ObjectId,
+    ctl: PlayerId,
+    ev: &Event,
+) -> Option<Vec<EventInfo>> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
+}
+
+/// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
+/// costs ("Buyback costs cost {2} less", "All morph costs cost {2} more", CR 601.2f):
+/// generic mana only, never below zero.
+pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
+    let mut cost = cost.clone();
+    for (s, ctl, cm) in &g.statics.cost_modifiers {
+        if !matches!(cm.applies_to, CostTarget::Keyword(k) if k == kind) {
+            continue;
+        }
+        let ctx = Ctx::new(Some(*s), *ctl);
+        if !g.player_rel_matches(cm.who, p, &ctx) {
+            continue;
+        }
+        match &cm.change {
+            CostChange::ReduceGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                if let Some(m) = cost.mana.as_mut() {
+                    m.reduce_generic(n);
+                }
+            }
+            CostChange::IncreaseGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                cost.mana
+                    .get_or_insert_with(crate::mana::ManaCost::default)
+                    .add(&crate::mana::ManaCost::generic(n));
+            }
+            _ => {}
+        }
+    }
+    cost
+}
+
 pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
     registry().iter().find_map(|r| r.custom_value(g, name, ctx))
 }
@@ -502,10 +585,6 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &crate::eval::Ctx)
     registry()
         .iter()
         .find_map(|r| r.custom_filter(g, name, id, ctx))
-}
-
-pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {
-    registry().iter().any(|r| r.custom_effect(g, name, ctx))
 }
 
 /// Keyword instances of `chars` with distinct kinds: several instances of a payment

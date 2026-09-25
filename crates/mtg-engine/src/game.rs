@@ -147,6 +147,10 @@ pub struct Player {
     pub mods: Vec<PlayerModification>,
     /// Number of times this player has "expended" (mana spent this turn) etc.
     pub mana_spent_this_turn: u32,
+    /// Timestamps of the beginnings of this player's two most recent upkeep steps, oldest
+    /// first ("since the beginning of your last upkeep", CR 702.30a).
+    #[serde(default)]
+    pub upkeeps_begun: Vec<Timestamp>,
 }
 
 impl Player {
@@ -184,6 +188,7 @@ impl Player {
             land_plays: 1,
             mods: vec![],
             mana_spent_this_turn: 0,
+            upkeeps_begun: vec![],
         }
     }
     pub fn counter(&self, k: &str) -> u32 {
@@ -813,6 +818,7 @@ impl Game {
         let id = ObjectId(self.objects.len() as u32);
         obj.id = id;
         obj.timestamp = self.new_timestamp();
+        obj.control_since = obj.timestamp;
         obj.entered_turn = self.turn.number;
         self.objects.push(obj);
         self.dirty = true;

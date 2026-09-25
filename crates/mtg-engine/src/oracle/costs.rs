@@ -239,6 +239,18 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     if p == "exert ~" {
         return Some(CostPart::ExertSelf);
     }
+    // "Reveal a black card in your hand" (e.g. a morph cost, CR 702.37a).
+    if let Some(r) = strip(p, "reveal") {
+        let (n, r2) = parse_number(r)?;
+        let (f, _, tail) = parse_object_phrase(r2)?;
+        if !matches!(end(tail), "" | "in your hand" | "from your hand") {
+            return None;
+        }
+        return Some(CostPart::RevealFromHand {
+            filter: f,
+            count: n,
+        });
+    }
     if let Some(r) = strip(p, "mill") {
         let (n, _) = parse_card_count(r)?;
         return Some(CostPart::Mill(n));

@@ -311,6 +311,8 @@ impl Game {
             if now != prev {
                 // CR 302.6: a control change resets summoning sickness; CR 506.4: removed from combat.
                 self.objects[id.0 as usize].summoning_sick = true;
+                let ts = self.new_timestamp();
+                self.objects[id.0 as usize].control_since = ts;
                 crate::combat::remove_from_combat(self, id);
                 self.events.push(crate::events::Event::ControlChanged {
                     obj: id,

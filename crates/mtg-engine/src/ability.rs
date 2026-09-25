@@ -1039,7 +1039,7 @@ pub enum Filter {
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
-    /// `"kicker"`).
+    /// `"kicked"`, see `kw/kicker.rs`).
     CastWithCost(SmolStr),
     /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
     /// by ~ this turn").

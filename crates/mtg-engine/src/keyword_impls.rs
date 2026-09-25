@@ -77,20 +77,7 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
             text,
         )],
         // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
-        // CR 702.29a: "[Cost], Discard this card: Draw a card."
-        K::Cycling => {
-            let mut cost = kw.cost.clone().unwrap_or_default();
-            cost.parts.push(CostPart::DiscardSelf);
-            let mut act = ActivatedAbility::new(
-                cost,
-                Body::effect(Effect::Draw {
-                    who: PlayerRef::You,
-                    n: Value::c(1),
-                }),
-            );
-            act.zone = FunctionZone::Hand;
-            vec![AbilityDef::new(AbilityKind::Activated(act), "Cycling")]
-        }
+        // CR 702.29 cycling and typecycling: see `kw/cycling.rs`.
         _ => crate::kw::derived(kw),
     }
 }
@@ -124,63 +111,14 @@ pub fn ability_from_keyword(a: &AbilityDef) -> Option<KeywordKind> {
 
 /// Keyword-granted ways to cast a card (flashback, escape, foretell, dash, evoke, ...).
 pub fn keyword_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
-    let o = g.obj(card);
-    let mut out = Vec::new();
-    for kw in o.chars.keywords() {
-        match kw.kind {
-            // CR 702.34a: cast from graveyard by paying the flashback cost; exiled after.
-            KeywordKind::Flashback if crate::as_though::in_graveyard_for(g, p, card) => {
-                let mut opt = CastOption::normal(FaceState::Front);
-                opt.method = CastMethod::Keyword(KeywordKind::Flashback);
-                opt.alt_cost = kw.cost.clone();
-                opt.tag = Some("flashback");
-                out.push(opt);
-            }
-            _ => {}
-        }
-    }
-    out.extend(crate::kw::cast_options(g, p, card));
-    out
+    // Flashback (CR 702.34): see `kw/flashback.rs`.
+    crate::kw::cast_options(g, p, card)
 }
 
 /// Optional additional costs announced while casting (CR 601.2b): (name, cost, repeatable).
 pub fn optional_additional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
-    let o = g.obj(spell);
-    let mut out = Vec::new();
-    for kw in o.chars.keywords() {
-        match kw.kind {
-            // CR 702.33a kicker; multikicker is the same keyword with "multikicker" text.
-            KeywordKind::Kicker => {
-                let repeatable = kw
-                    .text
-                    .as_deref()
-                    .is_some_and(|t| t.to_lowercase().starts_with("multikicker"));
-                if let Some(c) = &kw.cost {
-                    out.push((
-                        if repeatable {
-                            "multikicker".into()
-                        } else {
-                            "kicker".into()
-                        },
-                        c.clone(),
-                        repeatable,
-                    ));
-                }
-                for c in &kw.costs {
-                    out.push(("kicker".into(), c.clone(), false));
-                }
-            }
-            // CR 702.27a buyback
-            KeywordKind::Buyback => {
-                if let Some(c) = &kw.cost {
-                    out.push(("buyback".into(), c.clone(), false));
-                }
-            }
-            _ => {}
-        }
-    }
-    out.extend(crate::kw::optional_costs(g, spell));
-    out
+    // Kicker (CR 702.33): see `kw/kicker.rs`; buyback (CR 702.27): `kw/buyback.rs`.
+    crate::kw::optional_costs(g, spell)
 }
 
 /// Lets keywords adjust the spell's targets/effect as cast (overload, bestow, ...).
@@ -219,17 +157,7 @@ pub fn cost_reductions_from_keywords(
 /// effects tied to how it was cast.
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
-    let si = o.stack.as_deref();
-    let paid = |name: &str| si.is_some_and(|s| s.cast.paid.iter().any(|p| p == name));
-    if matches!(
-        si.map(|s| &s.cast.method),
-        Some(CastMethod::Keyword(KeywordKind::Flashback))
-    ) {
-        return (Zone::Exile, LibraryPosition::Top); // CR 702.34a
-    }
-    if paid("buyback") {
-        return (Zone::Hand(o.owner), LibraryPosition::Top); // CR 702.27a
-    }
+    // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }
@@ -237,13 +165,7 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
 /// Where a countered spell (or one that fails to resolve) goes.
 pub fn countered_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
-    let si = o.stack.as_deref();
-    if matches!(
-        si.map(|s| &s.cast.method),
-        Some(CastMethod::Keyword(KeywordKind::Flashback))
-    ) {
-        return (Zone::Exile, LibraryPosition::Top); // CR 702.34a: exiled instead of anywhere else
-    }
+    // Flashback (CR 702.34a: exiled instead of anywhere else): see `kw/flashback.rs`.
     crate::kw::countered_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }

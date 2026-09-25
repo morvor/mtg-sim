@@ -565,6 +565,33 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
     if let Some(tail) = rest.strip_prefix("no abilities") {
         return Some((Filter::not(Filter::HasAbilities), tail));
     }
+    // "with a cycling ability" (typecycling abilities are cycling abilities, CR 702.29f),
+    // "with a morph ability" (megamorph is morph, CR 702.37b), "with a kicker ability"
+    // (multikicker is kicker, CR 702.33c).
+    for (word, kind) in [
+        ("cycling", KeywordKind::Cycling),
+        ("morph", KeywordKind::Morph),
+        ("kicker", KeywordKind::Kicker),
+    ] {
+        let one = format!("a {word} ability");
+        let many = format!("{word} abilities");
+        if let Some(tail) = rest
+            .strip_prefix(one.as_str())
+            .or_else(|| rest.strip_prefix(many.as_str()))
+        {
+            let f = Filter::HasKeyword(kind);
+            return Some((if negate { Filter::not(f) } else { f }, tail));
+        }
+    }
+    // "with an activated ability that isn't a mana ability" (an ability such as cycling
+    // exists in every zone, CR 702.29b).
+    if let Some(tail) = rest
+        .strip_prefix("an activated ability that isn't a mana ability")
+        .or_else(|| rest.strip_prefix("activated abilities that aren't mana abilities"))
+    {
+        let f = Filter::Custom(crate::custom::HAS_NONMANA_ACTIVATED_ABILITY.into());
+        return Some((if negate { Filter::not(f) } else { f }, tail));
+    }
     if !negate {
         if let Some(r) = rest
             .strip_prefix("a ")

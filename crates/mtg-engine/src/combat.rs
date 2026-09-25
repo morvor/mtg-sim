@@ -371,10 +371,7 @@ impl Game {
         {
             return false;
         }
-        // Shadow (702.28b)
-        if ak.has_keyword(KeywordKind::Shadow) != bk.has_keyword(KeywordKind::Shadow) {
-            return false;
-        }
+        // Shadow (702.28b): see `kw/shadow.rs`.
         // Horsemanship (702.31b)
         if ak.has_keyword(KeywordKind::Horsemanship) && !bk.has_keyword(KeywordKind::Horsemanship) {
             return false;

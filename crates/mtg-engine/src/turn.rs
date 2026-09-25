@@ -335,6 +335,15 @@ impl Game {
             Step::Untap => self.untap_step_actions(),
             Step::Upkeep => {
                 self.turn.upkeeps += 1;
+                // "Since the beginning of your last upkeep" (CR 702.30a).
+                for p in self.active_players() {
+                    let ts = self.new_timestamp();
+                    let ups = &mut self.players[p.idx()].upkeeps_begun;
+                    ups.push(ts);
+                    if ups.len() > 2 {
+                        ups.remove(0);
+                    }
+                }
             }
             Step::Draw => {
                 // With shared team turns, each player on the active team draws
