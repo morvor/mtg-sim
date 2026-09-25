@@ -193,7 +193,7 @@ fn a_card_brought_in_from_the_sideboard_is_owned_by_the_player_who_started_with_
 
 #[test]
 fn a_card_that_isnt_a_permanent_or_spell_is_controlled_by_its_owner() {
-    cr!("108.4", "108.4a");
+    cr!("108.4", "108.4a", "109.4");
     let mut t = TestGame::new(2);
     // P0 steals P1's Grizzly Bears, then it dies.
     let bears = t.battlefield(P1, "Grizzly Bears");
