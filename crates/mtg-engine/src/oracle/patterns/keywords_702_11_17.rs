@@ -15,6 +15,7 @@ use crate::ability::*;
 use crate::oracle::effects::{parse_simple, Builder};
 use crate::oracle::keywords::{parse_keyword_line, protection_qualities, split_keyword_phrases};
 use crate::oracle::phrases::{end, parse_object_phrase};
+use crate::keywords::KeywordKind;
 use crate::oracle::CompileContext;
 
 fn static_ability(effect: StaticEffect, text: &str) -> Ability {
@@ -116,6 +117,28 @@ fn you_gain_protection(l: &str, _b: &mut Builder) -> Option<Effect> {
     ))
 }
 
+/// The keywords an object loses: whole keywords only ("hexproof", "indestructible",
+/// "protection" — all protection abilities, "all landwalk abilities"). Losing one
+/// particular protection or landwalk ability isn't supported.
+fn lost_keywords(s: &str) -> Option<Vec<KeywordKind>> {
+    let mut out = Vec::new();
+    for p in split_keyword_phrases(s) {
+        match p.as_str() {
+            "protection" => out.push(KeywordKind::Protection),
+            "all landwalk abilities" | "landwalk" => out.push(KeywordKind::Landwalk),
+            _ => {
+                for k in keyword_list(&p)? {
+                    if k.filter.is_some() || k.cost.is_some() || k.n.is_some() {
+                        return None;
+                    }
+                    out.push(k.kind);
+                }
+            }
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 /// "[objects] lose [keywords] until end of turn", "that permanent loses indestructible
 /// until end of turn", "until end of turn, ~ loses hexproof and gains first strike and
 /// deathtouch". Losing hexproof also loses every "hexproof from" ability (CR 702.11e).
@@ -136,22 +159,10 @@ fn loses_keywords(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((a, g)) => (a.to_string(), Some(g.to_string())),
         None => (rest.to_string(), None),
     };
-    let lost = keyword_list(&lost)?;
-    // Only whole keywords can be lost this way ("loses protection from red" would need
-    // to single out one protection ability).
-    if lost.iter().any(|k| k.filter.is_some() || k.cost.is_some() || k.n.is_some()) {
-        return None;
-    }
+    let lost = lost_keywords(&lost)?;
     // Parse "[subject] gains [something] [duration]" to resolve the subject (targets,
     // "creatures your opponents control", pronouns) the way granting effects do.
-    let probe_keywords = match &gained {
-        Some(g) => g.clone(),
-        None => lost
-            .iter()
-            .map(|k| k.kind.name().to_lowercase())
-            .collect::<Vec<_>>()
-            .join(" and "),
-    };
+    let probe_keywords = gained.clone().unwrap_or_else(|| "flying".to_string());
     let dur = match duration {
         Duration::EndOfTurn => " until end of turn",
         Duration::UntilYourNextTurn => " until your next turn",
@@ -167,10 +178,7 @@ fn loses_keywords(l: &str, b: &mut Builder) -> Option<Effect> {
     else {
         return None;
     };
-    let mut out: Vec<Modification> = lost
-        .iter()
-        .map(|k| Modification::RemoveKeyword(k.kind))
-        .collect();
+    let mut out: Vec<Modification> = lost.into_iter().map(Modification::RemoveKeyword).collect();
     if gained.is_some() {
         out.extend(mods);
     }

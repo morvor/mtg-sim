@@ -571,3 +571,25 @@ fn protection_that_doesnt_remove_what_is_already_attached() {
     assert!(t.in_graveyard(P0, "Holy Strength"));
     assert!(t.in_graveyard(P0, "Benevolent Blessing"));
 }
+
+#[test]
+fn losing_protection_removes_every_protection_ability() {
+    cr!("702.16b", "702.16h");
+    assert_supported("Shay Cormac");
+    let mut t = TestGame::new(2);
+    let knight = t.battlefield(P0, "White Knight");
+    let angel = t.battlefield(P0, "Iridescent Angel");
+    // "{1}: Permanents your opponents control lose hexproof, indestructible, protection,
+    // shroud, and ward until end of turn."
+    let shay = t.battlefield(P1, "Shay Cormac");
+    t.lands(P1, "Wastes", 1);
+    t.activate(P1, shay, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(keyword_count(&t, knight, KeywordKind::Protection), 0);
+    assert_eq!(keyword_count(&t, angel, KeywordKind::Protection), 0);
+    assert!(spell_can_target(&mut t, P1, "Disfigure", knight));
+    assert!(spell_can_target(&mut t, P1, "Lightning Bolt", angel));
+    // Until end of turn.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!spell_can_target(&mut t, P1, "Disfigure", knight));
+}

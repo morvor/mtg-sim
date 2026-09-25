@@ -177,3 +177,21 @@ fn creatures_with_landwalk_can_be_blocked_as_though_they_didnt_have_it() {
     t.g.recompute();
     assert!(t.g.can_block(giant, wraith));
 }
+
+#[test]
+fn a_creature_that_loses_its_landwalk_abilities_can_be_blocked() {
+    cr!("702.14c");
+    assert_supported("Hammerheim");
+    let mut t = TestGame::new(2);
+    let wraith = t.battlefield(P0, "Bog Wraith");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P1, "Swamp", 1);
+    // "{T}: Target creature loses all landwalk abilities until end of turn."
+    let hammerheim = t.battlefield(P1, "Hammerheim");
+    t.activate(P1, hammerheim, 1, &[Entity::Object(wraith)])
+        .unwrap();
+    t.resolve_all();
+    assert_eq!(keyword_count(&t, wraith, KeywordKind::Landwalk), 0);
+    attack_with(&mut t, &[(wraith, Entity::Player(P1))]);
+    assert!(t.g.can_block(bears, wraith));
+}

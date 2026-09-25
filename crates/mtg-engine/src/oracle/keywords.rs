@@ -205,6 +205,10 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
                     .collect(),
             );
         }
+        // "landwalk of the chosen type" (a land type chosen as the source entered).
+        KeywordKind::Landwalk if rest == "of the chosen type" => {
+            kw.filter = Some(Filter::ChosenType);
+        }
         KeywordKind::Enchant => {
             let r = rest;
             if r == "player" || r == "opponent" || r == "player or planeswalker" {
