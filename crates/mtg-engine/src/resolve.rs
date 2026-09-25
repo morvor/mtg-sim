@@ -1237,6 +1237,21 @@ impl Game {
                 let _ = after_this;
                 self.add_extra_combat(true);
             }
+            Effect::AddTurnParts {
+                parts,
+                after_phase,
+                n,
+                who,
+            } => {
+                // CR 500.10a: "you get" adds nothing to another player's turn.
+                let gets = who.as_ref().map(|w| self.eval_players(w, ctx));
+                if gets.is_none_or(|ps| ps.iter().any(|p| self.is_active_player(*p))) {
+                    let n = self.eval_value(n, ctx).max(0) as usize;
+                    for _ in 0..n {
+                        self.add_turn_parts(parts, *after_phase);
+                    }
+                }
+            }
             Effect::Skip { who, step } => {
                 for p in self.eval_players(who, ctx) {
                     self.players[p.idx()].skips.push(*step);

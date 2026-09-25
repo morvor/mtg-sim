@@ -167,6 +167,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
         return b;
     }
+    // Main phase counting and "after upkeep" timing (CR 505.1b, 503.2).
+    if let Some(b) = crate::turn_structure::custom_condition(g, name, ctx) {
+        return b;
+    }
     let you = ctx.controller;
     let h = &g.history;
     // "you've cast another red spell this turn": a spell of that color (as it was on the

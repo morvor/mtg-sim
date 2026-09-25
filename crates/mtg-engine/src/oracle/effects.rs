@@ -390,6 +390,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         (" until end of turn", Duration::EndOfTurn),
         (" this turn", Duration::EndOfTurn),
         (" until your next turn", Duration::UntilYourNextTurn),
+        // CR 500.4: until that step next begins.
+        (
+            " until your next upkeep",
+            Duration::UntilYourNextStep(TriggerStep::Upkeep),
+        ),
+        (
+            " until your next end step",
+            Duration::UntilYourNextStep(TriggerStep::End),
+        ),
         (" until end of combat", Duration::EndOfCombat),
         (
             " for as long as ~ remains on the battlefield",
