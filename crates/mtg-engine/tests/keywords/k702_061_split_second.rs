@@ -16,6 +16,14 @@ fn no_other_spells_or_nonmana_abilities_while_a_split_second_spell_is_on_the_sta
         "Krosan Grip",
         "Casting a spell with split second won't affect spells and abilities that are already on the stack."
     );
+    ruling!(
+        "Trickbind",
+        "Casting a spell with split second won’t affect spells and abilities that are already on the stack."
+    );
+    ruling!(
+        "Trickbind",
+        "After a spell with split second resolves (or otherwise leaves the stack), players may again cast spells and activate abilities before the next object on the stack resolves."
+    );
     assert_supported("Krosan Grip");
     let mut t = TestGame::new(2);
     let anthem = t.battlefield(P1, "Glorious Anthem");
@@ -56,6 +64,10 @@ fn mana_abilities_and_special_actions_are_allowed() {
         "Trickbind",
         "Players may turn face-down creatures face up while a spell with split second is on the stack."
     );
+    ruling!(
+        "Trickbind",
+        "Players still get priority while a card with split second is on the stack; their options are just limited to mana abilities and certain special actions."
+    );
     assert_supported("Scornful Egotist");
     let mut t = TestGame::new(2);
     // A face-down Scornful Egotist (morph {U}).
@@ -74,6 +86,22 @@ fn mana_abilities_and_special_actions_are_allowed() {
     // P0 activates mana abilities (a creature's and a land's), then turns Scornful
     // Egotist face up, paying {U} from the mana pool.
     let elves = t.battlefield(P0, "Llanowar Elves");
+    // P0 gets priority; the only actions offered are passing, mana abilities, and
+    // special actions.
+    t.g.turn.priority = Some(P0);
+    let actions = t.g.legal_actions(P0);
+    assert!(actions.contains(&Action::Pass));
+    assert!(actions.iter().all(|a| match a {
+        Action::Pass | Action::Special(_) => true,
+        Action::Activate { source, ability } => t
+            .g
+            .obj(*source)
+            .chars
+            .abilities
+            .iter()
+            .any(|x| x.uid == *ability && x.is_mana_ability()),
+        _ => false,
+    }));
     assert!(t.activate(P0, elves, 0, &[]).is_ok());
     let island = t.battlefield(P0, "Island");
     assert!(t.activate(P0, island, 0, &[]).is_ok());
@@ -95,6 +123,10 @@ fn triggered_abilities_trigger_as_normal() {
     ruling!(
         "Krosan Grip",
         "Split second doesn't stop triggered abilities from triggering, such as that of Chalice of the Void."
+    );
+    ruling!(
+        "Trickbind",
+        "Split second doesn’t stop triggered abilities from triggering, such as that of Chalice of the Void."
     );
     assert_supported("Chalice of the Void");
     assert_supported("Kiln Fiend");
@@ -133,6 +165,10 @@ fn a_spell_cast_by_a_resolving_triggered_ability_is_prohibited_too() {
     ruling!(
         "Krosan Grip",
         "If the resolution of a triggered ability involves casting a spell, that spell can't be cast if a spell with split second is on the stack."
+    );
+    ruling!(
+        "Trickbind",
+        "If the resolution of a triggered ability involves casting a spell, that spell can’t be cast if a spell with split second is on the stack."
     );
     let mut t = TestGame::new(2);
     // Thrumming Stone gives Krosan Grip ripple 4: the ripple ability triggers and
