@@ -48,6 +48,9 @@ pub struct SpecialState {
     /// Each player's chosen companion (CR 103.2b), and whether they've put it into their
     /// hand (CR 702.139a).
     pub companions: Vec<(PlayerId, ObjectId, bool)>,
+    /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
+    /// duration, source, turn created).
+    pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
     /// (source, player, turn): the player ignores the source's static effects until end
     /// of that turn (CR 116.2d).
     pub ignoring: Vec<(ObjectId, PlayerId, u32)>,
@@ -155,7 +158,7 @@ pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
 /// The special actions (other than keyword ones and playing lands) `p` could take now.
 pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
     let mut out = Vec::new();
-    if g.turn.priority != Some(p) {
+    if !g.has_priority(p) {
         return out;
     }
     // CR 116.2b: face-down permanents the player controls that can be turned face up.

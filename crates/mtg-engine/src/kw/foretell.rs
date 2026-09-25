@@ -27,7 +27,7 @@ fn can_foretell(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     o.zone == Zone::Hand(p)
         && o.chars.has_keyword(KeywordKind::Foretell)
         && g.turn.active == p
-        && g.turn.priority == Some(p)
+        && g.has_priority(p)
 }
 
 /// The foretell cost printed on a card (CR 702.143a).

@@ -61,7 +61,7 @@ impl KeywordRules for Companion {
         let Some(card) = unused_companion(g, p) else {
             return vec![];
         };
-        if g.turn.priority != Some(p)
+        if !g.has_priority(p)
             || !g.is_sorcery_timing(p)
             || !g.can_pay_cost(p, &companion_cost(), Some(card), &Ctx::new(Some(card), p))
         {
@@ -79,10 +79,7 @@ impl KeywordRules for Companion {
         let SpecialAction::CompanionToHand { card } = sa else {
             return None;
         };
-        if unused_companion(g, p) != Some(*card)
-            || g.turn.priority != Some(p)
-            || !g.is_sorcery_timing(p)
-        {
+        if unused_companion(g, p) != Some(*card) || !g.has_priority(p) || !g.is_sorcery_timing(p) {
             return Some(Err(Illegal(
                 "can't put that companion into hand now".into(),
             )));

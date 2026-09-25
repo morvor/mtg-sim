@@ -782,6 +782,16 @@ impl Game {
         pred(self)
     }
 
+    /// Whether `p` may act as a player with priority: they hold priority, or, with the
+    /// shared team turns option, their team does (CR 117.6, 805.5a).
+    pub fn has_priority(&self, p: PlayerId) -> bool {
+        match self.turn.priority {
+            Some(q) if q == p => true,
+            Some(q) => crate::combat::shared_team_turns(self) && self.teammates(q).contains(&p),
+            None => false,
+        }
+    }
+
     /// Whether the current step is a main phase of the active player with an empty stack
     /// (sorcery timing, CR 307.1).
     pub fn is_sorcery_timing(&self, p: PlayerId) -> bool {

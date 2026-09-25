@@ -147,7 +147,7 @@ impl Game {
         self.turn.active == p
             && self.turn.step.is_main()
             && self.stack.is_empty()
-            && self.turn.priority == Some(p)
+            && self.has_priority(p)
             && self.player(p).lands_played_this_turn < self.player(p).land_plays
             && !self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_)))
     }
@@ -475,7 +475,8 @@ impl Game {
             }
         }
         // Optimistic cost check.
-        let cost = self.base_total_cost(p, card, &chars, opt, 0);
+        let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
+        crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
 
@@ -490,7 +491,7 @@ impl Game {
         if !crate::combat::spell_cast_restrictions_ok(self, p, card, chars) {
             return false;
         }
-        if self.turn.priority != Some(p) {
+        if !self.has_priority(p) {
             return false;
         }
         // CR 601.3d: a spell that has flash only while a condition is met can be cast as
@@ -892,6 +893,8 @@ impl Game {
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 118.14: mana of any type may be spent to cast it.
+        crate::cost_rules::spend_any_type(self, p, id, &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
         // 601.2g–h: activate mana abilities and pay.
@@ -1118,7 +1121,7 @@ impl Game {
         // CR 602.2, 605.3a: abilities are activated by a player with priority; mana
         // abilities also while a mana payment is being made (casting, activating, or an
         // effect asking for a payment).
-        if self.turn.priority != Some(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
+        if !self.has_priority(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
         // Timing.

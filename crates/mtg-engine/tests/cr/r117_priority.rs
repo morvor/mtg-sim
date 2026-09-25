@@ -390,3 +390,35 @@ fn a_spell_cast_in_response_resolves_first() {
     t.resolve();
     assert!(t.in_graveyard(P0, "Giant Growth"));
 }
+
+#[test]
+fn with_shared_team_turns_teams_have_priority() {
+    cr!("117.6");
+    let config = mtg_engine::game::GameConfig {
+        variant: mtg_engine::game::Variant::TwoHeadedGiant,
+        teams: Some(vec![0, 0, 1, 1]),
+        ..Default::default()
+    };
+    let mut t = TestGame::with_config(4, config);
+    t.set_step(P0, Step::PrecombatMain);
+    let a = t.custom(P1, free_instant("Team Gift"), Zone::Hand(P1));
+    let b = t.custom(P2, free_instant("Other Gift"), Zone::Hand(P2));
+    // P0 holds priority for team P0/P1: P1 may cast a spell as their team has priority,
+    // and then receives priority; the other team may not.
+    assert_eq!(t.turn.priority, Some(P0));
+    assert!(t.g.perform_action(P2, cast_action(b)).is_err());
+    t.g.take_action(P1, cast_action(a));
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.turn.priority, Some(P1));
+    // Passing moves priority to the other team.
+    t.g.take_action(P1, Action::Pass);
+    assert!(t.g.has_priority(P2) && t.g.has_priority(P3));
+    assert!(!t.g.has_priority(P0) && !t.g.has_priority(P1));
+    t.g.take_action(P2, Action::Pass);
+    t.g.take_action(P3, Action::Pass);
+    assert_eq!(t.stack_len(), 1);
+    // Once every player of every team has passed in succession, the spell resolves.
+    t.g.take_action(P0, Action::Pass);
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.life(P1), 31);
+}

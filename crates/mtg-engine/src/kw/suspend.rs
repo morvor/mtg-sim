@@ -96,7 +96,7 @@ impl KeywordRules for Suspend {
             .hand
             .iter()
             .copied()
-            .filter(|c| g.turn.priority == Some(p) && could_begin_to_cast(g, p, *c))
+            .filter(|c| g.has_priority(p) && could_begin_to_cast(g, p, *c))
             .filter(|c| {
                 suspend_keyword(g, *c).is_some_and(|k| {
                     let cost = k.cost.unwrap_or_default();
@@ -118,7 +118,7 @@ impl KeywordRules for Suspend {
         };
         let card = *card;
         let bad = |s: &str| Some(Err(Illegal(s.into())));
-        if !g.is_live(card) || g.turn.priority != Some(p) || !could_begin_to_cast(g, p, card) {
+        if !g.is_live(card) || !g.has_priority(p) || !could_begin_to_cast(g, p, card) {
             return bad("can't suspend that card now");
         }
         let Some(kw) = suspend_keyword(g, card) else {

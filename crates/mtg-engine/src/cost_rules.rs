@@ -320,3 +320,46 @@ pub fn may_decline_cast_if_able(g: &mut Game, p: PlayerId, card: ObjectId) -> bo
             Answer::Bool(true) | Answer::Default
         )
 }
+
+/// Whether `p` may spend mana of any type to cast `spell` (CR 118.14): an effect allowed
+/// it for the card the spell was cast from.
+pub fn may_spend_any_type(g: &Game, p: PlayerId, spell: ObjectId) -> bool {
+    let card = g.obj(spell).prev;
+    g.special.any_type_mana.iter().any(|(q, o, d, src, turn)| {
+        *q == p
+            && (*o == spell || Some(*o) == card)
+            && match d {
+                Duration::EndOfTurn | Duration::ThisTurn => *turn == g.turn.number,
+                other => !g.effect_expired(other, *src, p),
+            }
+    })
+}
+
+/// CR 118.14: when mana of any type can be spent to cast a spell, mana may be spent as
+/// though it were colorless mana or mana of any color: each colored, colorless or hybrid
+/// symbol of its cost can be paid with one mana of any type.
+pub fn spend_any_type(g: &Game, p: PlayerId, spell: ObjectId, cost: &mut Cost) {
+    if !may_spend_any_type(g, p, spell) {
+        return;
+    }
+    let Some(m) = cost.mana.as_mut() else {
+        return;
+    };
+    for s in m.symbols.iter_mut() {
+        if matches!(
+            s,
+            ManaSymbol::Colored(_)
+                | ManaSymbol::Colorless
+                | ManaSymbol::Hybrid(..)
+                | ManaSymbol::TwoHybrid(_)
+                | ManaSymbol::ColorlessHybrid(_)
+        ) {
+            *s = ManaSymbol::Generic(1);
+        }
+    }
+    let generic = m.generic_amount();
+    m.symbols.retain(|s| !matches!(s, ManaSymbol::Generic(_)));
+    if generic > 0 {
+        m.symbols.insert(0, ManaSymbol::Generic(generic));
+    }
+}

@@ -2,9 +2,10 @@
 //! cast", including "instant and sorcery spells" and "This effect reduces only the amount
 //! of colored mana you pay".
 
-use super::StaticPattern;
+use super::{EffectPattern, StaticPattern};
 use crate::ability::*;
 use crate::mana::{ManaCost, ManaSymbol};
+use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
 use crate::types::CardType;
@@ -27,12 +28,11 @@ fn spells_filter(s: &str) -> Option<Filter> {
 /// "[Spells] you cast cost [mana] less/more to cast[. This effect reduces only the amount
 /// of colored mana you pay]".
 fn mana_cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let (l, colored_only) = match l
-        .strip_suffix(". this effect reduces only the amount of colored mana you pay")
-    {
-        Some(r) => (r, true),
-        None => (l, false),
-    };
+    let (l, colored_only) =
+        match l.strip_suffix(". this effect reduces only the amount of colored mana you pay") {
+            Some(r) => (r, true),
+            None => (l, false),
+        };
     let (spells, rest) = l.split_once(" cost {")?;
     let (who, spells) = if let Some(s) = spells.strip_suffix(" you cast") {
         (PlayerRel::You, s)
@@ -72,3 +72,19 @@ fn mana_cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<
 }
 
 inventory::submit! { StaticPattern { name: "spells cost mana less", priority: 0, parse: mana_cost_modifier } }
+
+/// "mana of any type can be spent to cast that spell" / "... to cast it" / "... to cast
+/// them" (CR 118.14): applies to the cards the preceding permission refers to.
+fn any_type_mana(l: &str, b: &mut Builder) -> Option<Effect> {
+    let rest = end(l).strip_prefix("mana of any type can be spent to cast ")?;
+    if !matches!(rest, "that spell" | "it" | "them" | "those spells") {
+        return None;
+    }
+    Some(Effect::SpendAnyTypeMana {
+        who: PlayerRef::You,
+        what: b.it.clone(),
+        duration: Duration::Permanent,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "mana of any type can be spent", priority: 0, parse: any_type_mana } }

@@ -28,7 +28,7 @@ fn plot_cost(g: &Game, card: ObjectId) -> Option<Cost> {
 
 fn can_plot(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     g.obj(card).zone == Zone::Hand(p)
-        && g.turn.priority == Some(p)
+        && g.has_priority(p)
         && g.is_sorcery_timing(p)
         && plot_cost(g, card).is_some()
 }

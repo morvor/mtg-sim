@@ -2447,6 +2447,13 @@ pub enum Effect {
         duration: Duration,
         repeatable: bool,
     },
+    /// "Mana of any type can be spent to cast [that spell]" (CR 118.14): `who` may spend
+    /// mana as though it were colorless mana or mana of any color to cast the card.
+    SpendAnyTypeMana {
+        who: PlayerRef,
+        what: Sel,
+        duration: Duration,
+    },
     /// "[Player] may change the target(s) of / choose new targets for [spell or ability]"
     /// (CR 115.7). With `to`, the new target must be that object or player ("change the
     /// target of target spell to this creature").

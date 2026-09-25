@@ -224,8 +224,11 @@ fn zero_costs_must_still_be_acknowledged() {
     t.set_step(P0, Step::PrecombatMain);
     let s = t.cast(P0, thopter).go();
     assert_eq!(t.obj(s).zone, Zone::Stack);
-    assert!(!events_matching(&t, |e| matches!(e, mtg_engine::events::Event::SpellCast { .. }))
-        .is_empty());
+    assert!(!events_matching(&t, |e| matches!(
+        e,
+        mtg_engine::events::Event::SpellCast { .. }
+    ))
+    .is_empty());
     t.resolve();
     t.activate(P0, engine, 0, &[]).unwrap();
     t.resolve();
@@ -541,9 +544,7 @@ fn two_alternatives() -> CardDef {
     CB::new("Twin Path")
         .sorcery()
         .cost("{4}{U}{U}")
-        .ability(alt_cost(
-            Cost::free().with(CostPart::PayLife(Value::c(3))),
-        ))
+        .ability(alt_cost(Cost::free().with(CostPart::PayLife(Value::c(3)))))
         .ability(alt_cost(Cost::free().with(sac_creature())))
         .spell(Body::effect(draw(1)))
         .build()
@@ -643,7 +644,10 @@ fn each_payment_applies_to_only_one_cost() {
     let altar = || {
         CB::new("Altar")
             .artifact()
-            .ability(act(Cost::free().with(sac_creature()), Body::effect(gain(1))))
+            .ability(act(
+                Cost::free().with(sac_creature()),
+                Body::effect(gain(1)),
+            ))
             .build()
     };
     let a = t.custom(P0, altar(), Zone::Battlefield);
@@ -750,7 +754,10 @@ fn if_you_do_checks_whether_the_cost_was_paid_not_what_happened() {
                 effect: Box::new(Effect::Move {
                     what: Sel::Choose {
                         chooser: PlayerRef::You,
-                        filter: Filter::and(vec![Filter::creature(), Filter::InZone(ZoneKind::Hand)]),
+                        filter: Filter::and(vec![
+                            Filter::creature(),
+                            Filter::InZone(ZoneKind::Hand),
+                        ]),
                         count: Value::c(1),
                         up_to: false,
                         store: None,
@@ -891,4 +898,77 @@ fn the_choice_for_a_cost_paid_during_resolution_is_made_before_paying() {
     t.resolve();
     assert_eq!(t.life(P0), 23);
     assert!(!t.obj(forest).tapped);
+}
+
+/// "You may cast [cards matching `name` in exile], and mana of any type can be spent to
+/// cast them" (`any_type`), or just the permission.
+fn exile_permission(name: &str, any_type: bool) -> CardDef {
+    let what = Sel::All(Filter::and(vec![
+        Filter::Named(name.into()),
+        Filter::InZone(ZoneKind::Exile),
+    ]));
+    let mut effects = vec![Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: what.clone(),
+        duration: Duration::Permanent,
+        free: false,
+    }];
+    if any_type {
+        effects.push(Effect::SpendAnyTypeMana {
+            who: PlayerRef::You,
+            what,
+            duration: Duration::Permanent,
+        });
+    }
+    CB::new("Borrowed Power")
+        .sorcery()
+        .cost("{0}")
+        .spell(Body::effect(Effect::seq(effects)))
+        .build()
+}
+
+#[test]
+fn mana_of_any_type_can_be_spent_to_cast_the_permitted_spell() {
+    cr!("118.14");
+    for any_type in [true, false] {
+        let mut t = TestGame::new(2);
+        let angel = t.exile(P1, "Serra Angel");
+        let seer = t.exile(P1, "Thought-Knot Seer");
+        let grant = t.custom(
+            P0,
+            exile_permission("Serra Angel", any_type),
+            Zone::Hand(P0),
+        );
+        t.cast(P0, grant).go();
+        t.resolve();
+        let grant = t.custom(
+            P0,
+            exile_permission("Thought-Knot Seer", any_type),
+            Zone::Hand(P0),
+        );
+        t.cast(P0, grant).go();
+        t.resolve();
+        // {3}{W}{W} paid with blue mana: as though it were mana of any color.
+        pool(&mut t, P0, &[ManaType::U; 5]);
+        assert_eq!(t.cast(P0, angel).try_go().is_ok(), any_type);
+        t.resolve_all();
+        // {3}{C} paid with blue mana: as though it were colorless mana.
+        t.g.players[0].mana_pool.empty();
+        pool(&mut t, P0, &[ManaType::U; 4]);
+        assert_eq!(t.cast(P0, seer).try_go().is_ok(), any_type);
+        t.resolve_all();
+        if any_type {
+            assert_eq!(t.named_on_battlefield("Serra Angel").len(), 1);
+            assert_eq!(t.named_on_battlefield("Thought-Knot Seer").len(), 1);
+        }
+    }
+    // It applies only to casting that spell: another Serra Angel needs white mana.
+    let mut t = TestGame::new(2);
+    t.exile(P1, "Serra Angel");
+    let grant = t.custom(P0, exile_permission("Serra Angel", true), Zone::Hand(P0));
+    t.cast(P0, grant).go();
+    t.resolve();
+    let own = t.hand(P0, "Serra Angel");
+    pool(&mut t, P0, &[ManaType::U; 5]);
+    assert!(t.cast(P0, own).try_go().is_err());
 }

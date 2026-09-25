@@ -704,6 +704,19 @@ impl Game {
                     *repeatable,
                 );
             }
+            Effect::SpendAnyTypeMana {
+                who,
+                what,
+                duration,
+            } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let turn = self.turn.number;
+                for o in self.resolve_objects(what, ctx) {
+                    self.special
+                        .any_type_mana
+                        .push((p, o, duration.clone(), ctx.source, turn));
+                }
+            }
             Effect::ChangeTargets { what, who, how, to } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let forced = match to {
