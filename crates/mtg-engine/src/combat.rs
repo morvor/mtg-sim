@@ -71,6 +71,10 @@ pub struct CombatState {
     pub declared_blockers: Vec<ObjectId>,
     /// Attackers removed from combat, with the defending player they had (CR 508.5).
     pub removed_attackers: Vec<(ObjectId, PlayerId)>,
+    /// Attackers removed from combat, with the player, planeswalker, or battle they were
+    /// attacking (e.g. for ninjutsu, CR 702.49c).
+    #[serde(default)]
+    pub removed_attack_targets: Vec<(ObjectId, Entity)>,
 }
 
 impl CombatState {
@@ -2102,6 +2106,9 @@ pub fn remove_from_combat(g: &mut Game, id: ObjectId) {
     let Some(c) = g.combat.as_mut() else { return };
     if let Some(p) = dp {
         c.removed_attackers.push((id, p));
+    }
+    if let Some(t) = c.attack_target(id) {
+        c.removed_attack_targets.push((id, t));
     }
     c.attackers.retain(|a| a.id != id);
     for a in c.attackers.iter_mut() {

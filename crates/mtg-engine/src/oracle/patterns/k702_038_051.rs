@@ -20,6 +20,12 @@ fn keyword_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
         ));
         return Some(compile_keyword(kw, t));
     }
+    // CR 702.49d: "Commander ninjutsu [cost]".
+    if let Some(r) = lower.strip_prefix("commander ninjutsu") {
+        let cost = crate::oracle::keywords::parse_keyword_cost(&t[t.len() - r.len()..])?;
+        let kw = Keyword::with_cost(KeywordKind::Ninjutsu, cost).text(t);
+        return Some(compile_keyword(kw, t));
+    }
     // CR 702.48a: "[Quality] offering" ("Fox offering", "Artifact offering").
     if let Some(q) = lower.strip_suffix(" offering") {
         if !q.contains(' ') {
@@ -72,6 +78,25 @@ fn an_opponent_gains_life(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "an opponent gains N life", priority: 100, parse: an_opponent_gains_life } }
+
+/// "Ninjutsu abilities you activate cost {1} less to activate." (CR 702.49a: the
+/// abilities ninjutsu stands for are ninjutsu abilities.)
+fn ninjutsu_cost_reduction(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.trim_end_matches('.').to_lowercase();
+    let r = lower
+        .strip_prefix("ninjutsu abilities you activate cost {")?
+        .strip_suffix("} less to activate")?;
+    let n: i32 = r.parse().ok()?;
+    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::Keyword(KeywordKind::Ninjutsu),
+        who: PlayerRel::You,
+        change: CostChange::ReduceGeneric(Value::c(n)),
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "ninjutsu abilities cost less", priority: 100, parse: ninjutsu_cost_reduction } }
 
 /// "each creature that convoked it" (CR 702.51c).
 fn convoked_it() -> Filter {
