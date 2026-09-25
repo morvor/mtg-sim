@@ -163,7 +163,7 @@ impl Game {
             .effects
             .iter()
             .enumerate()
-            .filter(|(_, e)| matches!(e.layer1, Some(Layer1::Copy { .. })))
+            .filter(|(_, e)| e.layer1.is_some())
             .map(|(i, e)| (e.timestamp, i))
             .collect();
         copy_effects.sort();
@@ -172,6 +172,19 @@ impl Game {
             let Affected::Objects(targets) = &eff.affected else {
                 continue;
             };
+            if let Some(Layer1::Copiable(mods)) = &eff.layer1 {
+                let ctx = Ctx::new(eff.source, eff.controller);
+                for t in targets {
+                    if self.is_live(*t) {
+                        let mut c = self.objects[t.0 as usize].chars.clone();
+                        for m in mods {
+                            apply_mod(&mut c, m, self, &ctx, *t);
+                        }
+                        self.objects[t.0 as usize].chars = c;
+                    }
+                }
+                continue;
+            }
             let Some(Layer1::Copy { values, exceptions }) = &eff.layer1 else {
                 continue;
             };
@@ -1222,4 +1235,23 @@ pub fn intrinsic_mana_ability(land_type: &str) -> Option<Ability> {
         _ => return None,
     };
     Some(abilities[i].clone())
+}
+
+/// CR 613.2a: an "as [this] enters" or "as [this] is turned face up" ability that sets
+/// power and toughness generates a copiable effect: continuous effects it created (those
+/// after index `from` in `Game::effects`) that apply only to the permanent and set its
+/// power and toughness become part of its copiable values.
+pub fn as_enters_copiable(g: &mut Game, obj: ObjectId, from: usize) {
+    for e in g.effects.iter_mut().skip(from) {
+        let only_it = matches!(&e.affected, Affected::Objects(v) if v.as_slice() == [obj]);
+        if only_it
+            && e.layer1.is_none()
+            && e.mods.iter().any(|m| matches!(m, Modification::SetPT(..)))
+        {
+            let mods = std::mem::take(&mut e.mods);
+            e.layer1 = Some(Layer1::Copiable(mods));
+            e.duration = Duration::Permanent;
+        }
+    }
+    g.dirty = true;
 }

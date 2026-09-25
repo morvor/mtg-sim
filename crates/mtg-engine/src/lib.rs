@@ -22,6 +22,7 @@
 pub mod ability;
 pub mod actions;
 pub mod agents;
+pub mod as_though;
 pub mod attach;
 pub mod battle;
 pub mod card;

@@ -387,7 +387,9 @@ impl Game {
                 for (mut c, e) in m.etb.as_enters.clone() {
                     c.source = Some(new_id);
                     c.controller = controller;
+                    let before = self.effects.len();
                     self.exec(&e, &mut c);
+                    crate::layers::as_enters_copiable(self, new_id, before);
                 }
                 if let Some(target) = m.etb.attacking {
                     crate::combat::put_onto_battlefield_attacking(self, new_id, target);

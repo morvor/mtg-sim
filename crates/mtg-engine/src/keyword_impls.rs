@@ -163,7 +163,7 @@ pub fn keyword_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOp
     for kw in o.chars.keywords() {
         match kw.kind {
             // CR 702.34a: cast from graveyard by paying the flashback cost; exiled after.
-            KeywordKind::Flashback if o.zone == crate::object::Zone::Graveyard(p) => {
+            KeywordKind::Flashback if crate::as_though::in_graveyard_for(g, p, card) => {
                 let mut opt = CastOption::normal(FaceState::Front);
                 opt.method = CastMethod::Keyword(KeywordKind::Flashback);
                 opt.alt_cost = kw.cost.clone();

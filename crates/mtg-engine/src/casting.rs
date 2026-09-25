@@ -229,6 +229,12 @@ impl Game {
                 out.push(*c);
             }
         }
+        // CR 609.4: "as though those cards were in your graveyard".
+        for c in crate::as_though::other_graveyard_cards(self, p) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
         for c in self.permitted_cards(p) {
             if !out.contains(&c) {
                 out.push(c);
@@ -1168,7 +1174,7 @@ impl Game {
             }
         }
         if let Some(m) = &cost.mana {
-            let need = m.with_x(0);
+            let need = crate::as_though::payment_cost(self, p, &m.with_x(0));
             if need.mana_value() == 0
                 && !need
                     .symbols
@@ -1407,6 +1413,8 @@ impl Game {
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
             let reserve = if cost.has_tap() { src } else { None };
+            // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
+            let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;

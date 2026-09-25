@@ -91,7 +91,9 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
         })
         .collect();
     for (mut ctx, e) in effects {
+        let before = g.effects.len();
         g.exec(&e, &mut ctx);
+        crate::layers::as_enters_copiable(g, id, before);
     }
     g.emit(Event::TurnedFaceUp { obj: id });
     true
