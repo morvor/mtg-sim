@@ -2017,11 +2017,7 @@ impl Game {
                 }
             })
             .collect();
-        let moved: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
-        if to.zone == ZoneKind::Library {
-            crate::library::arrange_placed(self, &moved, to.position);
-        }
-        moved
+        self.move_objects(moves).into_iter().flatten().collect()
     }
 
     /// Default attack target for "put onto the battlefield attacking": the defending

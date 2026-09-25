@@ -7,7 +7,7 @@
 //!   from the top, or the bottom of a library with fewer cards (CR 401.7).
 //! - "Put any number of target creature cards from your graveyard on top of your library":
 //!   the owner arranges cards put into the same position at the same time (CR 401.4; see
-//!   `library::arrange_placed`).
+//!   `zones::order_simultaneous`).
 //! - A choice of positions: "target creature's owner puts it on their choice of the top or
 //!   bottom of their library", "the owner of target nonland permanent puts it into their
 //!   library second from the top or on the bottom", "put target card from a graveyard on

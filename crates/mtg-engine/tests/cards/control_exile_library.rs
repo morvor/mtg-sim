@@ -144,11 +144,12 @@ fn several_cards_on_top_are_arranged_by_their_owner() {
     t.cast(P0, feast)
         .targets(&[Entity::Object(bear), Entity::Object(wall)])
         .go();
-    // Top first: the Wall, then the Bears. "Draw a card" then draws the Wall.
+    // In the order they're put there: the Wall, then the Bears on top of it. "Draw a
+    // card" then draws the Bears.
     t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
     t.resolve_all();
-    assert!(t.in_hand(P0, "Wall of Wood"));
-    assert_eq!(from_top(&t, P0, bear), Some(0));
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(from_top(&t, P0, wall), Some(0));
 }
 
 #[test]

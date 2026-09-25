@@ -49,48 +49,6 @@ fn to_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
     }
 }
 
-/// CR 401.4: cards an effect put on top or on the bottom of a library at the same time
-/// are arranged by their owner in any order (a random order for `BottomRandom`). `placed`
-/// are the objects the effect moved; those not in a library are ignored.
-pub fn arrange_placed(g: &mut Game, placed: &[ObjectId], pos: LibraryPosition) {
-    if placed.len() < 2 {
-        return;
-    }
-    for p in g.player_ids() {
-        let cards: Vec<ObjectId> = placed
-            .iter()
-            .copied()
-            .filter(|c| g.obj(*c).zone == Zone::Library(p))
-            .collect();
-        if cards.len() < 2 {
-            continue;
-        }
-        match pos {
-            LibraryPosition::Top => {
-                let order = choose_order(g, p, &cards, "Order the cards to put on top (top first)");
-                set_top(g, p, &order);
-            }
-            LibraryPosition::Bottom => {
-                let mut order = choose_order(
-                    g,
-                    p,
-                    &cards,
-                    "Order the cards to put on the bottom (top first)",
-                );
-                order.reverse();
-                to_bottom(g, p, &order);
-            }
-            LibraryPosition::BottomRandom => {
-                use rand::seq::SliceRandom;
-                let mut order = cards;
-                order.shuffle(&mut g.rng);
-                to_bottom(g, p, &order);
-            }
-            LibraryPosition::FromTop(_) | LibraryPosition::Shuffled => {}
-        }
-    }
-}
-
 /// CR 701.22a: look at the top N cards, put any number on the bottom in any order and
 /// the rest on top in any order.
 pub fn scry(g: &mut Game, p: PlayerId, n: u32) {
