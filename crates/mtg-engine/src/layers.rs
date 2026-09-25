@@ -299,6 +299,16 @@ impl Game {
                 }
             }
         }
+        // CR 208.3, 302.4, 301.7a: power and toughness are characteristics only creatures
+        // have; a noncreature permanent has none, even with a printed power and toughness
+        // (such as a Vehicle).
+        for id in &live {
+            let o = &mut self.objects[id.0 as usize];
+            if o.zone == Zone::Battlefield && !o.chars.is(CardType::Creature) {
+                o.chars.power = None;
+                o.chars.toughness = None;
+            }
+        }
 
         // Post-processing.
         let turn = self.turn.number;
