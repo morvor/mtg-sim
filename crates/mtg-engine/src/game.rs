@@ -311,6 +311,8 @@ pub struct TurnHistory {
     pub players_attacked: BTreeSet<PlayerId>,
     pub attackers: Vec<ObjectId>,
     pub objects_dealt_damage: BTreeSet<ObjectId>,
+    /// (source, object) pairs: objects dealt damage this turn and by what.
+    pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
     pub lands_played: BTreeMap<PlayerId, u32>,
     pub tokens_created: BTreeMap<PlayerId, u32>,
     pub cards_left_graveyard: BTreeMap<PlayerId, u32>,
@@ -318,6 +320,8 @@ pub struct TurnHistory {
     pub crimes: BTreeMap<PlayerId, u32>,
     pub counters_put: u32,
     pub descended: BTreeMap<PlayerId, u32>,
+    /// Mana each player spent this turn to cast spells (CR 700.14, "expend").
+    pub spell_mana_spent: BTreeMap<PlayerId, u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -378,6 +382,8 @@ pub struct Game {
     pub pending_triggers: Vec<PendingTrigger>,
     pub statics: ActiveStatics,
     pub history: TurnHistory,
+    /// The previous turn's history ("if no spells were cast last turn").
+    pub last_turn_history: TurnHistory,
     pub result: Option<GameResult>,
     pub rng: ChaCha8Rng,
     pub agents: Agents,
@@ -494,6 +500,7 @@ impl Game {
             pending_triggers: vec![],
             statics: ActiveStatics::default(),
             history: TurnHistory::default(),
+            last_turn_history: TurnHistory::default(),
             result: None,
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],

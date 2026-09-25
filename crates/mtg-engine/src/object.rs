@@ -234,6 +234,9 @@ pub struct EventInfo {
     pub spell: Option<ObjectId>,
     /// Objects involved (e.g. all attackers).
     pub objects: Vec<ObjectId>,
+    /// The mana produced, for "whenever [a permanent] is tapped for mana" ("add one mana of
+    /// any type that land produced").
+    pub mana: Vec<ManaType>,
 }
 
 /// The kind of object on the stack.

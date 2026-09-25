@@ -24,6 +24,9 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c).
+        self.end_event_batch();
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
@@ -1260,6 +1263,12 @@ impl Game {
                 }
                 out
             }
+            Sel::This | Sel::TriggerLki => {
+                let v = self.eval_sel(sel, ctx);
+                v.into_iter()
+                    .map(|e| self.follow_zone_change_trigger_object(e, ctx))
+                    .collect()
+            }
             other => self.eval_sel(other, ctx),
         }
     }
@@ -1299,6 +1308,36 @@ impl Game {
                 true
             }
             _ => false,
+        }
+    }
+
+    /// CR 400.7e: an ability that triggers when an object moves from one zone to another
+    /// can find the new object it became in the zone it moved to, if that zone is public
+    /// ("When ~ dies, return it to its owner's hand"). Information about the object (its
+    /// power, etc.) still uses last known information, via `eval_sel`.
+    fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
+        let Entity::Object(id) = e else {
+            return e;
+        };
+        if self.is_live(id) {
+            return e;
+        }
+        let Some(ev) = ctx.event.as_ref() else {
+            return e;
+        };
+        match (ev.lki, ev.object) {
+            (Some(old), Some(new)) if old == id && new != id => {
+                let public = !matches!(
+                    self.obj(new).zone,
+                    Zone::Hand(_) | Zone::Library(_) | Zone::Outside(_) | Zone::Nowhere
+                );
+                if public {
+                    Entity::Object(new)
+                } else {
+                    e
+                }
+            }
+            _ => e,
         }
     }
 
@@ -1381,34 +1420,34 @@ impl Game {
             .collect()
     }
 
+    /// A restriction locked onto specific objects (see [`Self::lock_restriction_objects`])
+    /// applies to exactly those objects: its filter named them through this resolution's
+    /// targets or event ("target creature", "that creature"), which aren't available when
+    /// the restriction is checked later, so it becomes "any object" (of the locked ones).
     fn fix_restriction(&self, r: &Restriction, _ctx: &Ctx) -> Restriction {
-        r.clone()
+        let mut r = r.clone();
+        if let Some(f) = restriction_object_filter(&mut r) {
+            if filter_references_specific(f) {
+                *f = Filter::Any;
+            }
+        }
+        r
     }
 
     /// Restrictions naming specific objects ("target creature can't block this turn")
     /// lock onto those objects.
     fn lock_restriction_objects(&self, r: &Restriction, ctx: &Ctx) -> Option<Vec<ObjectId>> {
-        let f = match r {
-            Restriction::CantAttack(f)
-            | Restriction::CantBlock(f)
-            | Restriction::CantAttackOrBlock(f)
-            | Restriction::MustAttack(f)
-            | Restriction::MustBlock(f)
-            | Restriction::MustBeBlocked(f)
-            | Restriction::CantBeBlocked(f)
-            | Restriction::DoesntUntap(f)
-            | Restriction::CantBeCountered(f)
-            | Restriction::CantBeSacrificed(f) => f,
-            Restriction::CantBeTargeted { what, .. } => what,
-            _ => return None,
-        };
+        let mut r = r.clone();
+        let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
-            Some(
-                self.objects_matching(f, ctx)
-                    .into_iter()
-                    .chain(ctx.targets.iter().flatten().filter_map(|e| e.object()))
-                    .collect(),
-            )
+            let mut v = self.objects_matching(f, ctx);
+            // Targets outside the battlefield ("target spell can't be countered").
+            for o in ctx.targets.iter().flatten().filter_map(|e| e.object()) {
+                if !v.contains(&o) && self.matches(o, f, ctx) {
+                    v.push(o);
+                }
+            }
+            Some(v)
         } else {
             None
         }
@@ -1587,21 +1626,21 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
-            ManaProduction::AnyTypeProduced => {
-                let mask = ctx.event.as_ref().map_or(0, |e| e.amount);
-                let types = crate::mana::types_from_mask(mask);
-                if types.is_empty() {
-                    vec![]
-                } else {
-                    vec![self.choose_mana_color(p, ctx, &types)]
-                }
-            }
             ManaProduction::AnyColorAmong(f) => {
                 let mut cs = ColorSet::NONE;
                 for o in self.objects_matching(f, ctx) {
                     cs = cs.union(self.obj(o).chars.colors);
                 }
                 let types: Vec<ManaType> = cs.iter().map(ManaType::from_color).collect();
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
+            // CR 106.12a: one mana of any type the triggering mana ability produced.
+            ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                let types = produced_types(ctx);
                 if types.is_empty() {
                     vec![]
                 } else {
@@ -1660,6 +1699,17 @@ impl Game {
     }
 }
 
+/// The distinct types of mana the triggering mana ability produced (CR 106.12a).
+pub fn produced_types(ctx: &Ctx) -> Vec<ManaType> {
+    let mut types: Vec<ManaType> = Vec::new();
+    for t in ctx.event.iter().flat_map(|e| e.mana.iter()) {
+        if !types.contains(t) {
+            types.push(*t);
+        }
+    }
+    types
+}
+
 /// A [`PlayerRef`] that always refers to a specific player (locked in at resolution).
 pub fn player_const(p: PlayerId) -> PlayerRef {
     PlayerRef::Player(p)
@@ -1668,6 +1718,24 @@ pub fn player_const(p: PlayerId) -> PlayerRef {
 /// A player filter matching exactly one player.
 pub fn player_filter_const(p: PlayerId) -> PlayerFilter {
     PlayerFilter::Is(p)
+}
+
+/// The filter selecting the objects a restriction applies to.
+fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
+    match r {
+        Restriction::CantAttack(f)
+        | Restriction::CantBlock(f)
+        | Restriction::CantAttackOrBlock(f)
+        | Restriction::MustAttack(f)
+        | Restriction::MustBlock(f)
+        | Restriction::MustBeBlocked(f)
+        | Restriction::CantBeBlocked(f)
+        | Restriction::DoesntUntap(f)
+        | Restriction::CantBeCountered(f)
+        | Restriction::CantBeSacrificed(f) => Some(f),
+        Restriction::CantBeTargeted { what, .. } => Some(what),
+        _ => None,
+    }
 }
 
 fn filter_references_specific(f: &Filter) -> bool {

@@ -86,8 +86,9 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
-            ManaProduction::AnyTypeProduced => {
-                let t = types_from_mask(ctx.event.as_ref().map_or(0, |e| e.amount));
+            // CR 106.12a: the types of mana the triggering mana ability produced.
+            ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                let t = crate::resolve::produced_types(ctx);
                 if t.is_empty() {
                     vec![]
                 } else {
@@ -192,17 +193,23 @@ fn triggered_mana_units(
             if !t.is_mana_ability {
                 continue;
             }
-            let TriggerCond::TappedForMana(f) = &t.trigger else {
+            let TriggerCond::TappedForMana {
+                who: tapper,
+                filter: f,
+            } = &t.trigger
+            else {
                 continue;
             };
             let mut ctx = Ctx::new(Some(s.id), s.controller);
+            ctx.link = a.link;
             ctx.event = Some(crate::object::EventInfo {
                 object: Some(obj),
                 player: Some(p),
-                amount: mask_of_types(&produced),
+                amount: produced.len() as i32,
+                mana: produced.clone(),
                 ..Default::default()
             });
-            if !g.matches(obj, f, &ctx) {
+            if !g.player_rel_matches(*tapper, p, &ctx) || !g.matches(obj, f, &ctx) {
                 continue;
             }
             // Only mana that goes to the paying player helps.
@@ -728,6 +735,11 @@ pub fn pay_mana(
     if plan_now.is_none() {
         let plan = plan_payment(g, p, cost, spend, reserve)?;
         for (src, types) in plan {
+            // Triggered mana abilities (CR 605.4a, "whenever enchanted land is tapped for
+            // mana, ... adds an additional {G}") may already have added enough.
+            if try_pool(g, 0).is_some() {
+                break;
+            }
             if !g.is_live(src.obj) || g.obj(src.obj).zone != Zone::Battlefield {
                 continue;
             }

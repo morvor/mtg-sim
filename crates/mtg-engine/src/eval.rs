@@ -132,19 +132,6 @@ impl Game {
         }
     }
 
-    /// How "it" was cast, for abilities that refer to it ("if it was kicked", "if you cast
-    /// it from your hand", "the mana spent to cast it", CR 607.2i): the resolving spell's
-    /// own cast info, or — for abilities of a permanent — how that permanent was cast.
-    pub fn cast_info<'a>(&'a self, ctx: &'a Ctx) -> Option<&'a CastInfo> {
-        match ctx.cast.as_ref() {
-            Some(c) if c.was_cast => Some(c),
-            _ => ctx
-                .source
-                .and_then(|s| self.obj(s).cast.as_deref())
-                .or(ctx.cast.as_ref()),
-        }
-    }
-
     /// Choices made for the ability's source ("the chosen color", CR 607.2d): those made
     /// by the abilities linked to the one being evaluated. An ability with an explicit
     /// link (including abilities acquired from another object or through a copy effect)
@@ -198,6 +185,7 @@ impl Game {
             PlayerFilter::Monarch => self.monarch == Some(p),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Not(x) => !self.player_filter_matches(x, p, ctx),
@@ -518,6 +506,33 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)
                 .is_some_and(|t| c.card_types.contains(t)),
+            Filter::Targets(inner) => {
+                o.zone == Zone::Stack
+                    && o.stack.as_ref().is_some_and(|si| {
+                        si.chosen.iter().any(|cm| {
+                            cm.targets.iter().flatten().any(|t| match t {
+                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                Entity::Player(_) => false,
+                            })
+                        })
+                    })
+            }
+            Filter::CastFrom(z) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
+            }
+            Filter::DealtDamageThisTurnBy(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|s| self.history.damage_by_source.contains(&(s, id))),
+            Filter::CastWithCost(name) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.paid.iter().any(|p| p == name))
+            }
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }
@@ -919,6 +934,34 @@ impl Game {
             Value::Max(a, b) => self.eval_value(a, ctx).max(self.eval_value(b, ctx)),
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
         }
+    }
+
+    /// How the spell was cast, for "if it was kicked", "if you cast it", "mana spent to
+    /// cast it" (CR 607.2i): the resolving spell's own information, or, for an ability of
+    /// a permanent (including a triggered ability checking its intervening "if", CR 603.4),
+    /// the spell that became that permanent (CR 400.7d).
+    pub fn cast_info<'a>(&'a self, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+        let resolving_ability = ctx
+            .stack_obj
+            .is_some_and(|s| self.obj(s).kind == ObjKind::StackAbility);
+        let own = if resolving_ability {
+            None
+        } else {
+            ctx.cast.as_ref()
+        };
+        if let Some(c) = own.filter(|c| c.was_cast) {
+            return Some(c);
+        }
+        ctx.source
+            .and_then(|s| {
+                let o = self.obj(s);
+                // A spell on the stack ("when you cast ~, if it was kicked") keeps its
+                // cast information in its stack info.
+                o.cast
+                    .as_deref()
+                    .or_else(|| o.stack.as_ref().map(|si| &si.cast))
+            })
+            .or(own)
     }
 
     // ------------------------------------------------------------------

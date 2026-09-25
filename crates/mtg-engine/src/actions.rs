@@ -1303,6 +1303,7 @@ impl Game {
                     }
                 }
                 self.history.objects_dealt_damage.insert(o);
+                self.history.damage_by_source.insert((source, o));
             }
         }
         self.dirty = true;
@@ -1447,20 +1448,11 @@ impl Game {
         mana: Vec<crate::mana::Mana>,
         source: Option<ObjectId>,
     ) {
-        let produced: Vec<crate::mana::ManaType> = mana.iter().map(|m| m.ty).collect();
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }
         self.emit(Event::ManaAdded { player: p, source });
-        // CR 106.12a: the permanent whose {T} mana ability is resolving was tapped for mana.
-        if let Some(obj) = source.filter(|s| self.mana_ability_resolving == Some(*s)) {
-            if !produced.is_empty() {
-                self.emit(Event::TappedForMana {
-                    obj,
-                    player: p,
-                    produced,
-                });
-            }
-        }
+        // CR 106.12a: "tapped for mana" is reported once the whole mana ability has
+        // resolved, with all the mana it produced (see `Game::activate_ability`).
     }
 }

@@ -242,6 +242,25 @@ pub struct TriggeredAbility {
     pub do_once_per_turn: bool,
 }
 
+/// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
+/// it triggers from resolving a mana ability ("is tapped for mana"), has no targets, and
+/// could add mana.
+pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
+    fn from_mana_ability(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::TappedForMana { .. } => true,
+            TriggerCond::ThisTurn(t) | TriggerCond::Where { trigger: t, .. } => {
+                from_mana_ability(t)
+            }
+            _ => false,
+        }
+    }
+    from_mana_ability(trigger)
+        && body.targets.is_empty()
+        && body.modal.is_none()
+        && crate::oracle::effects::is_mana_effect(&body.effect)
+}
+
 impl TriggeredAbility {
     pub fn new(trigger: TriggerCond, body: Body) -> Self {
         TriggeredAbility {
@@ -712,6 +731,8 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// One of the players a reference resolves to ("enchanted player").
+    Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),
@@ -881,6 +902,17 @@ pub enum Filter {
     ChosenCardType,
     /// Has the prepared designation (CR 722.3a).
     Prepared,
+    /// A spell or ability on the stack with at least one target that is an object matching
+    /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
+    Targets(Box<Filter>),
+    /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
+    CastFrom(ZoneKind),
+    /// A spell for which the named optional additional cost was paid ("a kicked spell":
+    /// `"kicker"`).
+    CastWithCost(SmolStr),
+    /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
+    /// by ~ this turn").
+    DealtDamageThisTurnBy(Box<Sel>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
@@ -1160,6 +1192,9 @@ pub enum Duration {
     UntilHostLeaves,
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
+    /// "[doesn't untap] during its controller's next untap step": for each affected
+    /// object, until its controller's next untap step has passed (CR 502.3).
+    ThroughNextUntapStep,
 }
 
 /// Layer-specific modifications of characteristics (CR 613).
@@ -1360,6 +1395,9 @@ pub enum ManaProduction {
     /// One mana of any type the permanent tapped for mana produced (from the triggering
     /// event, "one mana of any type that land produced").
     AnyTypeProduced,
+    /// One mana of any type the triggering mana ability produced ("add one mana of any
+    /// type that land produced", CR 106.12a).
+    TypeProduced,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1860,11 +1898,13 @@ pub enum TriggerCond {
         defender: PlayerRel,
     },
     /// "Whenever [blocker] blocks a creature" (CR 509.3b): once per attacker blocked.
+    /// Event object = the blocked attacker ("that creature"), other = the blocker.
     BlocksCreature {
         blocker: Filter,
         attacker: Filter,
     },
     /// "Whenever [attacker] becomes blocked by a creature" (CR 509.3d): once per blocker.
+    /// Event object = the blocker ("that creature"), other = the attacker.
     BlockedByCreature {
         attacker: Filter,
         blocker: Filter,
@@ -1963,9 +2003,6 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
-    /// A triggered ability with several trigger conditions ("Whenever A or B, ...");
-    /// it triggers when any of them occurs (CR 603.1b).
-    AnyOf(Vec<TriggerCond>),
     /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
     PhasesOut(Filter),
     /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).
@@ -1982,9 +2019,6 @@ pub enum TriggerCond {
         source: Filter,
         final_chapter: bool,
     },
-    /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
-    /// (CR 106.12a). The event's amount is a bit mask of the types produced.
-    TappedForMana(Filter),
     /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
     /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
     /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is
@@ -1993,8 +2027,97 @@ pub enum TriggerCond {
         cause: Box<TriggerCond>,
         source: Filter,
     },
+    /// An ability with several trigger conditions ("When ~ enters or dies", "At the
+    /// beginning of your upkeep and whenever you cast a green spell"). It triggers once for
+    /// each event that matches any of them (CR 603.2c): for a single event, the first
+    /// matching condition is used.
+    AnyOf(Vec<TriggerCond>),
+    /// A trigger event qualified by a condition that is part of the trigger event itself
+    /// ("attacks alone", "while you control …", "your second card each turn"). The
+    /// condition is evaluated with the event information when the event occurs; unlike an
+    /// intervening "if" clause (CR 603.4) it isn't checked again on resolution.
+    Where {
+        trigger: Box<TriggerCond>,
+        cond: Condition,
+    },
+    /// "… for the first time each turn": triggers only if no earlier event this turn
+    /// matched the inner trigger condition.
+    FirstTimeEachTurn(Box<TriggerCond>),
+    /// Triggers once for each batch of simultaneous events matching the inner condition
+    /// (CR 603.2c), grouped by `per`: "whenever one or more creatures die" (once per
+    /// batch), "one or more creatures you control deal combat damage to a player" (once
+    /// per damaged player), "whenever ~ is dealt damage" (once however many sources dealt
+    /// damage at the same time). The event info carries all matching objects (`objects`)
+    /// and the total amount; other fields come from the first matching event.
+    Batched {
+        trigger: Box<TriggerCond>,
+        per: BatchPer,
+    },
+    /// "Whenever [player] copies a [filter] spell" ("whenever you cast or copy an instant or
+    /// sorcery spell"): a copy of a spell was put onto the stack (CR 707.10).
+    SpellCopied {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// A player performed a named keyword action reported as [`crate::events::Event::Custom`]
+    /// ("scry", "surveil", "proliferate"): "whenever you scry".
+    PlayerAction {
+        name: SmolStr,
+        who: PlayerRel,
+    },
+    /// "Whenever [attacker] attacks [defender] [with N or more [filter]]", "whenever
+    /// [defender] is attacked" (CR 508.3b, 508.3e): once for each player attacked by
+    /// creatures the attacking player controls, when attackers are declared. Needs at least
+    /// `min` attackers matching `with` attacking that player. Event player = the attacked
+    /// player, objects = the creatures attacking them, amount = their number.
+    PlayerAttacked {
+        attacker: PlayerRel,
+        defender: PlayerFilter,
+        with: Filter,
+        min: u32,
+    },
+    /// "Whenever [obj] becomes attached to [other]" (`attached`) / "becomes unattached from
+    /// [other]" (CR 701.3). Event object = the Aura/Equipment, other = the permanent.
+    AttachChanged {
+        attached: bool,
+        obj: Filter,
+        other: Filter,
+    },
+    /// "Whenever [filter] phases in" (`phased_in`) / "phases out" (CR 702.26).
+    Phases {
+        phased_in: bool,
+        filter: Filter,
+    },
+    /// A delayed triggered ability that lasts for the rest of the turn ("until end of
+    /// turn, whenever …", "whenever … this turn", CR 603.7b); removed in the cleanup step
+    /// (CR 514.2).
+    ThisTurn(Box<TriggerCond>),
+    /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
+    /// only: "whenever a source you control deals noncombat damage to an opponent".
+    Noncombat(Box<TriggerCond>),
+    /// "Whenever [filter] is tapped for mana", "whenever [player] taps [filter] for mana"
+    /// (CR 106.12a): a mana ability with {T} in its cost resolved and produced mana. `who`
+    /// is the player who activated it. Event object = the permanent, player = `who`.
+    TappedForMana {
+        who: PlayerRel,
+        filter: Filter,
+    },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
+}
+
+/// How a [`TriggerCond::Batched`] trigger groups the events of one batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BatchPer {
+    /// Once per batch.
+    Batch,
+    /// Once per player in the events (`EventInfo::player`).
+    Player,
+    /// Once per object the events are about (`EventInfo::object`), e.g. the creature dealt
+    /// damage.
+    Object,
+    /// Once per other object (`EventInfo::other`), e.g. the source dealing damage.
+    Other,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

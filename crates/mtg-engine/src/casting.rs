@@ -897,6 +897,21 @@ impl Game {
             si.cast.mana_spent = paid.mana_spent.clone();
             si.cast.cost_objects = paid.objects.clone();
         }
+        // CR 700.14: the player expends N for each N reached by this payment.
+        let spent = paid.mana_spent.len() as u32;
+        if spent > 0 {
+            let total = self.history.spell_mana_spent.entry(p).or_insert(0);
+            let before = *total;
+            *total += spent;
+            for n in before + 1..=before + spent {
+                self.emit(Event::Custom {
+                    name: "expend".into(),
+                    player: Some(p),
+                    obj: None,
+                    amount: n as i32,
+                });
+            }
+        }
         if matches!(from, Zone::Command) && self.obj(id).is_commander {
             *self.players[p.idx()]
                 .commander_casts
@@ -1326,9 +1341,31 @@ impl Game {
             });
             let tapped_for_mana = act.cost.has_tap();
             self.mana_ability_resolving = tapped_for_mana.then_some(src);
+            let pools_before: Vec<usize> = self
+                .players
+                .iter()
+                .map(|pl| pl.mana_pool.mana.len())
+                .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
             self.mana_ability_resolving = None;
+            // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
+            // produces mana.
+            if tapped_for_mana {
+                let mana: Vec<crate::mana::ManaType> = self
+                    .players
+                    .iter()
+                    .zip(pools_before)
+                    .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                    .collect();
+                if !mana.is_empty() {
+                    self.emit(Event::TappedForMana {
+                        obj: src,
+                        player: p,
+                        mana,
+                    });
+                }
+            }
             self.flush_events();
             return Ok(None);
         }
@@ -1379,6 +1416,17 @@ impl Game {
             .activations_this_turn
             .entry(a.uid)
             .or_insert(0) += 1;
+        // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
+        if a.text == "Cycling"
+            && act
+                .cost
+                .parts
+                .iter()
+                .any(|c| matches!(c, CostPart::DiscardSelf))
+        {
+            let card = self.current(src);
+            self.emit(Event::Cycled { player: p, card });
+        }
         // 602.2i: becomes activated.
         self.log(|g| format!("{p} activates {}", g.describe(src)));
         self.emit(Event::AbilityActivated {

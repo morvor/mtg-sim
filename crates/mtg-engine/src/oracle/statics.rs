@@ -458,7 +458,10 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
         }
         return Some(Condition::Exists(f.you_control()));
     }
-    if let Some(r) = c.strip_prefix("you have ") {
+    if let Some(r) = c
+        .strip_prefix("you have ")
+        .filter(|r| parse_number(r).is_some())
+    {
         let (n, rest) = parse_number(r)?;
         let rest = end(rest);
         let cmp = if let Some(x) = rest
@@ -499,7 +502,7 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
             Value::c(0),
         ));
     }
-    crate::oracle_ext::parse_condition_ext(c)
+    None
 }
 
 /// Value phrases: "the number of creatures you control", "its power", "X", "twice X".

@@ -276,10 +276,16 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
             // Combat timing windows (CR 506.8g).
             ("activate only before attackers are declared.", 10),
             ("activate only after attackers are declared.", 11),
-            ("activate only during combat after blockers are declared.", 12),
+            (
+                "activate only during combat after blockers are declared.",
+                12,
+            ),
             ("activate only before the combat damage step.", 13),
             ("activate only before the end of combat step.", 14),
-            ("activate only during combat before blockers are declared.", 15),
+            (
+                "activate only during combat before blockers are declared.",
+                15,
+            ),
         ];
         let mut matched = false;
         for (p, k) in pats {

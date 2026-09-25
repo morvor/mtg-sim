@@ -245,7 +245,7 @@ impl Game {
         self.turn.cleanup_priority = false;
         self.turn.step_log.clear();
         self.turn.attacked_players.clear();
-        self.history = TurnHistory::default();
+        self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
         for p in self.players.iter_mut() {
             p.lands_played_this_turn = 0;
@@ -616,6 +616,28 @@ impl Game {
                 self.objects[id.0 as usize].exerted = false;
             }
         }
+        self.expire_through_next_untap_step(active);
+    }
+
+    /// "Doesn't untap during its controller's next untap step": that untap step has now
+    /// passed for the permanents the active player controls (and the effect no longer
+    /// applies to objects that left the battlefield, CR 400.7).
+    fn expire_through_next_untap_step(&mut self, active: PlayerId) {
+        let objects = &self.objects;
+        let battlefield = &self.battlefield;
+        for e in self.rule_effects.iter_mut() {
+            if !matches!(e.duration, Duration::ThroughNextUntapStep) {
+                continue;
+            }
+            if let Some(v) = e.objects.as_mut() {
+                v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
+            }
+        }
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughNextUntapStep)
+                || e.objects.as_ref().is_some_and(|v| !v.is_empty())
+        });
+        self.dirty = true;
     }
 
     pub fn set_day(&mut self, is_day: bool) {
@@ -684,6 +706,9 @@ impl Game {
             o.deathtouch_damage = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
+        self.delayed_triggers
+            .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
         self.dirty = true;
     }
 
