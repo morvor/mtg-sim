@@ -127,6 +127,51 @@ fn spells_have_ripple(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<
 
 inventory::submit! { StaticPattern { name: "spells you cast have ripple N", priority: 100, parse: spells_have_ripple } }
 
+/// "~ enters with a +1/+1 counter on it for each [quality] card exiled with it" (Murktide
+/// Regent): the cards exiled to pay for its spell with delve (CR 702.66a).
+fn enters_with_counter_per_delved_card(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let quality = lower
+        .trim_end_matches('.')
+        .strip_prefix("~ enters with a +1/+1 counter on it for each ")?
+        .strip_suffix(" card exiled with it")?;
+    let filter = Filter::And(vec![
+        Filter::InZone(ZoneKind::Exile),
+        spell_quality(quality)?,
+        Filter::Custom(crate::kw::delve::EXILED_WITH_IT.into()),
+    ]);
+    let s = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+        action: ReplacementAction::EnterWithCounters(
+            counters::PLUS1.into(),
+            Value::Count(filter),
+        ),
+        self_replacement: false,
+        optional: false,
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "enters with a counter for each card exiled with it", priority: 100, parse: enters_with_counter_per_delved_card } }
+
+/// "Spells you cast have delve." (Teval, Arbiter of Virtue): the spells have delve as
+/// they're cast, so it applies to their total cost (CR 702.66a).
+fn spells_have_delve(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if l != "spells you cast have delve" {
+        return None;
+    }
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(vec![Filter::Spell, Filter::ControlledBy(PlayerRel::You)]),
+        mods: vec![Modification::AddKeyword(
+            Keyword::new(KeywordKind::Delve).text("delve"),
+        )],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spells you cast have delve", priority: 100, parse: spells_have_delve } }
+
 /// "Whenever a time counter is removed from ~ while it's exiled, [effect]" (suspend X
 /// cards such as Roiling Horror): a triggered ability that functions in exile and
 /// triggers once for each time counter removed.
