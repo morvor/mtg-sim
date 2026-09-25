@@ -287,8 +287,41 @@ fn color_of_your_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
+/// "All Slivers have protection from the chosen color", "All creatures of the chosen type
+/// get -1/-1": "all [objects] ..." in a static ability means the same as "[objects] ...".
+fn all_objects_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() || block.contains('\n') {
+        return None;
+    }
+    let rest = block
+        .strip_prefix("All ")
+        .or_else(|| block.strip_prefix("all "))?;
+    // Only statics about objects ("All creatures get ...", "All Slivers have ...").
+    let lower = rest.to_lowercase();
+    let (_, plural, tail) = parse_object_phrase(&lower)?;
+    let tail = tail.trim_start();
+    if !plural
+        || !(tail.starts_with("get ")
+            || tail.starts_with("have ")
+            || tail.starts_with("gain ")
+            || tail.starts_with("are "))
+    {
+        return None;
+    }
+    let abilities = crate::oracle::statics::parse_static(rest, ctx)?;
+    Some(
+        abilities
+            .into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), block))
+            .collect(),
+    )
+}
+
 inventory::submit! {
     AbilityPattern { name: "chosen name restrictions", priority: 50, parse: chosen_restrictions }
+}
+inventory::submit! {
+    AbilityPattern { name: "all [objects] statics", priority: 60, parse: all_objects_static }
 }
 inventory::submit! {
     EffectPattern { name: "color of your choice", priority: 100, parse: color_of_your_choice }

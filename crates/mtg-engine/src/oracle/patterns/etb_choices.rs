@@ -662,6 +662,68 @@ fn more_conditions(c: &str) -> Option<Condition> {
         };
         return Some(Condition::Compare(v, Cmp::Ge, n));
     }
+    // "you gained life this turn", "you gained 2 or more life this turn"
+    if c == "you gained life this turn" {
+        return Some(Condition::Compare(
+            Value::LifeGainedThisTurn(PlayerRef::You),
+            Cmp::Ge,
+            Value::c(1),
+        ));
+    }
+    if let Some(r) = c.strip_prefix("you gained ") {
+        let (n, rest) = parse_number(r)?;
+        if end(rest) == "or more life this turn" {
+            return Some(Condition::Compare(
+                Value::LifeGainedThisTurn(PlayerRef::You),
+                Cmp::Ge,
+                n,
+            ));
+        }
+        return None;
+    }
+    // "two or more creatures died this turn"
+    if let Some(rest) = c.strip_suffix(" or more creatures died this turn") {
+        let (n, tail) = parse_number(rest)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some(Condition::Compare(Value::CreaturesDiedThisTurn, Cmp::Ge, n));
+    }
+    // "there are three or more creature cards in your graveyard"
+    if let Some(r) = c.strip_prefix("there are ") {
+        let (n, rest) = parse_number(r)?;
+        let rest = strip(rest, "or more")?;
+        let what = rest.strip_suffix(" in your graveyard")?;
+        let (f, _, tail) = parse_object_phrase(what)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Condition::Compare(
+            Value::CardsInGraveyard(PlayerRef::You, f),
+            Cmp::Ge,
+            n,
+        ));
+    }
+    // "an opponent has more cards in hand than you"
+    if c == "an opponent has more cards in hand than you" {
+        return Some(Condition::PlayerMatches(
+            PlayerRef::EachOpponent,
+            PlayerFilter::HandSize(Cmp::Gt, Box::new(Value::HandSize(PlayerRef::You))),
+        ));
+    }
+    // "a player has one or fewer cards in hand"
+    if let Some(r) = c.strip_prefix("a player has ") {
+        let (n, rest) = parse_number(r)?;
+        let cmp = match end(rest) {
+            "or fewer cards in hand" => Cmp::Le,
+            "or more cards in hand" => Cmp::Ge,
+            _ => return None,
+        };
+        return Some(Condition::PlayerMatches(
+            PlayerRef::EachPlayer,
+            PlayerFilter::HandSize(cmp, Box::new(n)),
+        ));
+    }
     // "you've cast two or more spells this turn"
     if let Some(r) = c.strip_prefix("you've cast ") {
         let (n, rest) = parse_number(r)?;

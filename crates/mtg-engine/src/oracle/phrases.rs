@@ -247,6 +247,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
+            // "permanent card": a card with a permanent type (CR 110.4a), not an
+            // object on the battlefield.
+            let last = match (last, &nf) {
+                (Filter::Permanent, Filter::Any) => Filter::PermanentCard,
+                (l, _) => l,
+            };
             heads.push(Filter::and(vec![last, nf]));
             s = nrest;
             // allow "creature card or artifact card"
@@ -368,6 +374,22 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that's the chosen color", Filter::ChosenColor),
         ("that are the chosen color", Filter::ChosenColor),
         ("with the chosen name", Filter::ChosenName),
+        (
+            "that aren't of the chosen type",
+            Filter::not(Filter::ChosenType),
+        ),
+        (
+            "that isn't of the chosen type",
+            Filter::not(Filter::ChosenType),
+        ),
+        (
+            "that aren't the chosen color",
+            Filter::not(Filter::ChosenColor),
+        ),
+        (
+            "that isn't the chosen color",
+            Filter::not(Filter::ChosenColor),
+        ),
     ] {
         if let Some(r) = t.strip_prefix(p) {
             if r.is_empty() || r.starts_with([' ', ',', '.']) {
