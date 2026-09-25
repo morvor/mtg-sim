@@ -1656,6 +1656,27 @@ impl Game {
                 }
             }
             (
+                TriggerCond::CounterThreshold { filter, kind, n },
+                Event::CountersAdded {
+                    target: Entity::Object(o),
+                    kind: k,
+                    n: added,
+                },
+            ) => {
+                // CR 122.7: fewer than N before the counters were put on it, N or more after.
+                let after = self.obj(*o).counter(k);
+                let before = after.saturating_sub(*added);
+                if k == kind && before < *n && after >= *n && self.matches(*o, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*o),
+                        amount: *n as i32,
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
                 TriggerCond::Phases {
                     phased_in: true,
                     filter,
@@ -1673,6 +1694,28 @@ impl Game {
                     one(EventInfo {
                         object: Some(*obj),
                         player: Some(self.obj(*obj).controller),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
+                TriggerCond::DealtExcessDamage {
+                    filter,
+                    noncombat_only,
+                },
+                Event::ExcessDamage {
+                    obj,
+                    amount,
+                    combat,
+                },
+            ) => {
+                if !(*noncombat_only && *combat) && self.matches(*obj, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(self.obj(*obj).controller),
+                        amount: *amount as i32,
                         ..Default::default()
                     })
                 } else {

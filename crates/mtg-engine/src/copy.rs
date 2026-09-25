@@ -1,7 +1,6 @@
 //! Copying spells (CR 707.10).
 
 use crate::decision::{Answer, Decision};
-use crate::eval::Ctx;
 use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
@@ -54,9 +53,6 @@ pub fn copy_spell(
         });
     }
     if new_targets {
-        let body = g.stack_body(id);
-        let mut ctx = Ctx::new(Some(id), controller);
-        ctx.x = g.obj(id).stack.as_ref().and_then(|s| s.x).unwrap_or(0);
         let keep = g.ask(
             controller,
             Decision::YesNo {
@@ -65,12 +61,14 @@ pub fn copy_spell(
             },
         );
         if matches!(keep, Answer::Bool(true)) {
-            let saved = g.obj(id).stack.as_ref().map(|s| s.chosen.clone());
-            if !g.choose_modes_and_targets(id, &body, &mut ctx) {
-                if let (Some(s), Some(si)) = (saved, g.objects[id.0 as usize].stack.as_mut()) {
-                    si.chosen = s;
-                }
-            }
+            // CR 707.10c, 115.7d: the copy's modes stay; any of its targets may be changed.
+            crate::target_rules::change_targets(
+                g,
+                controller,
+                id,
+                crate::ability::TargetChange::ChooseNew,
+                None,
+            );
         }
     }
     Some(id)

@@ -147,7 +147,7 @@ impl Game {
         self.turn.active == p
             && self.turn.step.is_main()
             && self.stack.is_empty()
-            && self.turn.priority == Some(p)
+            && self.has_priority(p)
             && self.player(p).lands_played_this_turn < self.player(p).land_plays
             && !self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_)))
     }
@@ -434,6 +434,9 @@ impl Game {
                 d.characteristics(FaceState::Front)
             }
             (Some(d), f) if f != FaceState::Front => d.characteristics(f),
+            // A face-down card outside the battlefield (e.g. foretold) is cast face up
+            // (CR 702.143a).
+            (Some(d), f) if o.face_down && o.zone != Zone::Battlefield => d.characteristics(f),
             _ => o.chars.clone(),
         }
     }
@@ -472,11 +475,12 @@ impl Game {
             }
         }
         // Optimistic cost check.
-        let cost = self.base_total_cost(p, card, &chars, opt, 0);
+        let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
+        crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
 
-    fn timing_allows_cast(
+    pub(crate) fn timing_allows_cast(
         &self,
         p: PlayerId,
         card: ObjectId,
@@ -487,7 +491,7 @@ impl Game {
         if !crate::combat::spell_cast_restrictions_ok(self, p, card, chars) {
             return false;
         }
-        if self.turn.priority != Some(p) {
+        if !self.has_priority(p) {
             return false;
         }
         // CR 601.3d: a spell that has flash only while a condition is met can be cast as
@@ -518,7 +522,12 @@ impl Game {
             })
     }
 
-    fn cast_prohibited(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+    pub(crate) fn cast_prohibited(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
         self.cast_prohibited_by_effects(p, card, chars)
             // CR 702.61a split second: no casting while a split-second spell is on the stack.
             || self.split_second_on_stack()
@@ -659,8 +668,13 @@ impl Game {
         opt: CastOption,
     ) -> Result<ObjectId, Illegal> {
         let snapshot = self.clone();
+        self.special.casting += 1;
         match self.cast_inner(p, card, &opt) {
-            Ok(id) => Ok(id),
+            Ok(id) => {
+                // CR 601.2i: the spell became cast.
+                crate::draw_rules::finish_casting(self);
+                Ok(id)
+            }
             Err(e) => {
                 // CR 733: return to the moment before casting was proposed.
                 let agents = self.agents.clone();
@@ -869,7 +883,9 @@ impl Game {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
 
-        // 601.2f: total cost.
+        // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
+        // cost is reduced (CR 118.7e).
+        crate::cost_rules::choose_reduction_halves(self, p, id);
         let mut total = self.base_total_cost(p, id, &chars, opt, x as u32);
         add_cost(&mut total, &extra);
         // Mode costs (spree, etc.).
@@ -885,6 +901,10 @@ impl Game {
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 118.14: mana of any type may be spent to cast it.
+        crate::cost_rules::spend_any_type(self, p, id, &mut total);
+        // CR 118.13a: how symbols that can be paid in more than one way will be paid.
+        crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
             is_spell: true,
@@ -899,6 +919,13 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.cast.mana_spent = paid.mana_spent.clone();
             si.cast.cost_objects = paid.objects.clone();
+        }
+        // "The sacrificed creature" (resolution reads the spell's saved context).
+        if !paid.sacrificed.is_empty() {
+            self.saved_ctx.entry(id).or_default().vars.insert(
+                vars::SACRIFICED,
+                paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
+            );
         }
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
@@ -949,10 +976,18 @@ impl Game {
         let mut cost = match &opt.alt_cost {
             Some(c) => c.clone(),
             None => Cost {
-                mana: Some(chars.mana_cost.clone().unwrap_or_default()),
+                // CR 118.6: an object with no mana cost has an unpayable cost.
+                mana: Some(
+                    chars
+                        .mana_cost
+                        .clone()
+                        .unwrap_or_else(crate::cost_rules::unpayable),
+                ),
                 parts: vec![],
             },
         };
+        // Reductions by mana symbols (CR 118.7a–g), applied after the other changes.
+        let mut mana_reductions: Vec<(ManaCost, bool)> = Vec::new();
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
@@ -990,6 +1025,9 @@ impl Game {
                             CostChange::IncreaseMana(m) => {
                                 add_cost(&mut cost, &Cost::mana(m.clone()))
                             }
+                            CostChange::ReduceMana { mana, colored_only } => {
+                                mana_reductions.push((mana.clone(), *colored_only))
+                            }
                             CostChange::AlternativeCost(_)
                             | CostChange::FlashForAdditionalCost(_) => {}
                         }
@@ -1001,9 +1039,11 @@ impl Game {
         let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
         for (src, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*src), *ctl);
+            // (A card being considered for casting is judged as the spell it would be.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
-                    self.player_rel_matches(cm.who, p, &ctx) && self.matches(card, f, &ctx)
+                    self.player_rel_matches(cm.who, p, &ctx)
+                        && self.matches(card, &as_spell_filter(f), &ctx)
                 }
                 _ => false,
             };
@@ -1022,6 +1062,9 @@ impl Game {
                 CostChange::ReduceColored(c, v) => {
                     reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
                 }
+                CostChange::ReduceMana { mana, colored_only } => {
+                    mana_reductions.push((mana.clone(), *colored_only))
+                }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
                 CostChange::AlternativeCost(_) | CostChange::FlashForAdditionalCost(_) => {}
             }
@@ -1038,6 +1081,16 @@ impl Game {
                         }
                     }
                 }
+            }
+        }
+        let mut hybrid = 0;
+        for (by, colored_only) in mana_reductions {
+            if let Some(m) = cost.mana.as_mut() {
+                crate::cost_rules::reduce_by(m, &by, colored_only, |_, cur, s| {
+                    let h = crate::cost_rules::chosen_half(self, card, hybrid, cur, s);
+                    hybrid += 1;
+                    h
+                });
             }
         }
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
@@ -1087,7 +1140,7 @@ impl Game {
         // CR 602.2, 605.3a: abilities are activated by a player with priority; mana
         // abilities also while a mana payment is being made (casting, activating, or an
         // effect asking for a payment).
-        if self.turn.priority != Some(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
+        if !self.has_priority(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
         // Timing.
@@ -1233,6 +1286,13 @@ impl Game {
                 }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
                 CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
+                CostChange::ReduceMana { mana, colored_only } => {
+                    if let Some(m) = cost.mana.as_mut() {
+                        crate::cost_rules::reduce_by(m, mana, *colored_only, |_, cur, s| {
+                            crate::cost_rules::default_half(cur, s)
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -1279,8 +1339,13 @@ impl Game {
             return Err(Illegal("can't activate".into()));
         }
         let snapshot = self.clone();
+        self.special.casting += 1;
         match self.activate_inner(p, src, &a, &act) {
-            Ok(r) => Ok(r),
+            Ok(r) => {
+                // CR 602.2e: the ability became activated.
+                crate::draw_rules::finish_casting(self);
+                Ok(r)
+            }
             Err(e) => {
                 let agents = self.agents.clone();
                 *self = snapshot;
@@ -1401,6 +1466,8 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 118.13a: how symbols that can be paid in more than one way will be paid.
+        crate::cost_rules::choose_payment_ways(self, p, Some(src), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
@@ -1416,6 +1483,12 @@ impl Game {
             ctx.vars.insert(
                 vars::USER + 91,
                 paid.objects.iter().map(|o| Entity::Object(*o)).collect(),
+            );
+        }
+        if !paid.sacrificed.is_empty() {
+            ctx.vars.insert(
+                vars::SACRIFICED,
+                paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
         }
         self.saved_ctx.insert(id, ctx.clone());
@@ -1530,6 +1603,11 @@ impl Game {
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
     pub fn pay_cost(&mut self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let snapshot = self.clone();
+        // CR 118.13b: the choice of how to pay hybrid and Phyrexian symbols is made
+        // immediately before paying.
+        let mut cost = cost.clone();
+        crate::cost_rules::choose_payment_ways(self, p, src, &mut cost);
+        let cost = &cost;
         let spend = SpendContext {
             is_ability: true,
             source: src,
@@ -1590,7 +1668,10 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1604,7 +1685,9 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.cost_zone_cards(p, *zone)
                     .into_iter()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1674,7 +1757,10 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1699,11 +1785,21 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
-            CostPart::Effect(_) => true,
+            // CR 121.2b: a cost that includes drawing more cards than the player may draw
+            // can't be paid.
+            CostPart::Effect(e) => {
+                // The player paying the cost performs the action ("you" is that player).
+                let mut c = ctx.clone();
+                c.controller = p;
+                crate::draw_rules::can_choose(self, e, &c)
+            }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
             }
@@ -1748,15 +1844,14 @@ impl Game {
         let mut paid = PaidCost::default();
         // CR 702.24a: a repeated cost's total is determined as it's paid.
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
-        // Check all parts are payable before paying anything.
-        for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, ctx) {
-                return Err(Illegal(format!("can't pay {part:?}")));
-            }
-        }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
+            if m.symbols.contains(&crate::mana::ManaSymbol::Infinity) {
+                return Err(Illegal(
+                    "unpayable cost: an object with no mana cost (CR 118.6)".into(),
+                ));
+            }
             let reserve = if cost.has_tap() { src } else { None };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
             let m = &crate::as_though::payment_cost(self, p, m);
@@ -1764,6 +1859,14 @@ impl Game {
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;
             paid.mana_spent = spent;
+        }
+        // Check all other parts are payable before paying any of them. (Mana abilities
+        // activated above may have changed what's available, CR 121.8; callers roll back
+        // a failed payment.)
+        for part in &cost.parts {
+            if !self.cost_part_payable(p, part, src, ctx) {
+                return Err(Illegal(format!("can't pay {part:?}")));
+            }
         }
         // CR 601.2h: costs that involve random elements or moving objects from a library
         // to a public zone are paid after all other costs.
@@ -1817,6 +1920,7 @@ impl Game {
             CostPart::SacrificeSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
+                paid.sacrificed.push(s);
                 if self.sacrifice(s, p).is_none() && self.is_live(s) {
                     return bad("can't sacrifice");
                 }
@@ -1835,6 +1939,7 @@ impl Game {
                     self.ask_objects(p, src, "Choose permanents to sacrifice (cost)", cands, n, n);
                 for o in pick {
                     paid.objects.push(o);
+                    paid.sacrificed.push(o);
                     self.sacrifice(o, p);
                 }
             }
@@ -1856,7 +1961,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough cards");
@@ -1894,7 +2001,9 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .cost_zone_cards(p, *zone)
                     .into_iter()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough cards to exile");
@@ -2012,7 +2121,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 let pick = self.ask_objects(p, src, "Choose cards to reveal (cost)", cands, n, n);
                 paid.objects.extend(pick);
@@ -2039,7 +2150,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 let pick = self.ask_objects(
                     p,
@@ -2124,7 +2237,7 @@ impl crate::eval::View for WithChars<'_> {
 
 /// A filter describing spells ("creature spells", "spells with mana value 3") applied to
 /// a card that would become such a spell: the "is on the stack" parts are dropped.
-fn as_spell_filter(f: &Filter) -> Filter {
+pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     match f {
         Filter::Spell | Filter::InZone(ZoneKind::Stack) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
@@ -2149,6 +2262,8 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
 pub struct PaidCost {
     pub mana_spent: Vec<ManaType>,
     pub objects: Vec<ObjectId>,
+    /// The permanents among `objects` that were sacrificed.
+    pub sacrificed: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

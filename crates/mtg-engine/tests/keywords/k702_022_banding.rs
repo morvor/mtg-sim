@@ -43,15 +43,23 @@ fn attack_in_band(
     attack_with(t, &decl);
 }
 
-/// "Target creature loses banding until end of turn."
-fn lose_banding_spell(t: &mut TestGame, p: PlayerId) -> ObjectId {
-    let def = custom_card(
-        "Disband",
-        "Instant",
-        None,
-        "Target creature loses banding and all \"bands with other\" abilities until end of turn.",
-    );
+/// A custom instant with mana cost {0} (an object with no mana cost can't be cast, CR
+/// 118.6) in `p`'s hand.
+fn free_instant(t: &mut TestGame, p: PlayerId, name: &str, text: &str) -> ObjectId {
+    let mut def = custom_card(name, "Instant", None, text);
+    def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{0}");
     t.custom(p, def, object::Zone::Hand(p))
+}
+
+/// "Target creature loses banding and all "bands with other" abilities until end of
+/// turn."
+fn lose_banding_spell(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    free_instant(
+        t,
+        p,
+        "Disband",
+        "Target creature loses banding and all \"bands with other\" abilities until end of turn.",
+    )
 }
 
 #[test]
@@ -159,19 +167,18 @@ fn bands_with_other_bands_with_creatures_of_its_quality() {
 fn losing_banding_removes_bands_with_other() {
     cr!("702.22b");
     // An effect that removes only banding removes "bands with other" too.
-    let def = custom_card(
-        "Unband",
-        "Instant",
-        None,
-        "Target creature loses banding until end of turn.",
-    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Adventurers' Guildhouse");
     let ayula = t.battlefield(P0, "Ayula, Queen Among Bears");
     let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
     assert_eq!(keyword_count(&t, ayula, KeywordKind::Banding), 1);
     assert!(mtg_engine::kw::banding::legal_band(&t.g, &[ayula, isamaru]));
-    let spell = t.custom(P1, def, object::Zone::Hand(P1));
+    let spell = free_instant(
+        &mut t,
+        P1,
+        "Unband",
+        "Target creature loses banding until end of turn.",
+    );
     t.cast(P1, spell).target(ayula).go();
     t.resolve_all();
     assert_eq!(keyword_count(&t, ayula, KeywordKind::Banding), 0);
@@ -272,19 +279,18 @@ fn an_effect_blocking_one_member_blocks_the_band() {
 #[test]
 fn an_effect_blocking_a_second_target_blocks_its_band() {
     cr!("702.22i");
-    let def = custom_card(
-        "Ambush Order",
-        "Instant",
-        None,
-        "Target creature gets +1/+1 until end of turn. Target unblocked attacking creature becomes blocked.",
-    );
     let mut t = TestGame::new(2);
     let hero = t.battlefield(P0, "Benalish Hero");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let wall = t.battlefield(P1, "Hill Giant");
     attack_in_band(&mut t, hero, &[bears], Entity::Player(P1), &[]);
     declare_blocks(&mut t, P1, &[]);
-    let spell = t.custom(P1, def, object::Zone::Hand(P1));
+    let spell = free_instant(
+        &mut t,
+        P1,
+        "Ambush Order",
+        "Target creature gets +1/+1 until end of turn. Target unblocked attacking creature becomes blocked.",
+    );
     t.cast(P1, spell).target(wall).target(hero).go();
     t.resolve_all();
     assert_eq!(t.pt(wall), (4, 4));

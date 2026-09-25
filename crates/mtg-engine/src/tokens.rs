@@ -49,18 +49,20 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
     }
 }
 
-/// Creates an emblem in the command zone (CR 114.1).
+/// Creates an emblem in the command zone, owned and controlled by `owner` (CR 114.1,
+/// 114.2). It has no characteristics other than its abilities: no name, types, mana cost
+/// or color (CR 114.3).
 pub fn create_emblem(
     g: &mut Game,
     owner: PlayerId,
     abilities: Vec<Ability>,
     source: Option<ObjectId>,
 ) -> ObjectId {
-    let name = source
-        .map(|s| format!("Emblem ({})", g.obj(s).chars.name))
-        .unwrap_or_else(|| "Emblem".into());
+    if let Some(s) = source {
+        g.log(|g| format!("{} gets an emblem from {}", owner, g.obj(s).chars.name));
+    }
     let chars = Characteristics {
-        name: SmolStr::new(name),
+        name: SmolStr::default(),
         abilities,
         rules_text: std::sync::Arc::from(""),
         ..Default::default()

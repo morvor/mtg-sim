@@ -125,6 +125,14 @@ impl Game {
                 .targets
                 .get(slot as usize)
                 .is_some_and(|v| v.contains(&Entity::Player(p))),
+            PlayerRel::TargetOrController(slot) => {
+                ctx.targets.get(slot as usize).is_some_and(|v| {
+                    v.iter().any(|e| match e {
+                        Entity::Player(q) => *q == p,
+                        Entity::Object(o) => self.obj(*o).controller == p,
+                    })
+                })
+            }
             PlayerRel::TriggerPlayer => ctx.event.as_ref().and_then(|e| e.player) == Some(p),
             PlayerRel::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerRel::Active => self.turn.active == p,
@@ -208,6 +216,7 @@ impl Game {
             }
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::Poisoned => self.player(p).poison() > 0,
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -535,12 +544,17 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)
                 .is_some_and(|t| c.card_types.contains(t)),
+            Filter::StackTargets(tf) => crate::target_rules::stack_targets_match(self, id, tf, ctx),
+            Filter::HasSticker(kind) => crate::stickers::has_sticker(self, id, *kind),
             Filter::Targets(inner) => {
                 o.zone == Zone::Stack
                     && o.stack.as_ref().is_some_and(|si| {
                         si.chosen.iter().any(|cm| {
                             cm.targets.iter().flatten().any(|t| match t {
-                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                // CR 115.9b: a target that left its zone is ignored.
+                                Entity::Object(x) => {
+                                    self.is_live(*x) && self.matches(*x, inner, ctx)
+                                }
                                 Entity::Player(_) => false,
                             })
                         })

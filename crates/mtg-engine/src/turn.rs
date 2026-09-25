@@ -186,6 +186,9 @@ impl Game {
         };
         self.turn.starting_player = starting;
         self.turn.active = starting;
+        // CR 103.4, 119.1: each player's life total becomes their starting life total
+        // (vanguard life modifiers are known now, CR 902.4).
+        crate::life_totals::set_starting_life_totals(self);
         // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
         crate::variants::begin_game(self);
         // CR 103.4–103.5: draw opening hands, then mulligans.
@@ -686,6 +689,8 @@ impl Game {
         }
         // CR 505.5: attractions.
         crate::variants::roll_to_visit_attractions(self, active);
+        // CR 122.1i, 728.1: the rad counter triggered ability.
+        crate::counter_rules::rad_trigger(self);
     }
 
     fn cleanup_actions(&mut self) {
@@ -710,6 +715,7 @@ impl Game {
             }
         }
         // CR 514.2: remove damage; end "until end of turn" effects.
+        crate::special_actions::end_of_turn(self);
         for id in self.battlefield.clone() {
             let o = &mut self.objects[id.0 as usize];
             o.damage = 0;
@@ -784,6 +790,16 @@ impl Game {
             self.advance();
         }
         pred(self)
+    }
+
+    /// Whether `p` may act as a player with priority: they hold priority, or, with the
+    /// shared team turns option, their team does (CR 117.6, 805.5a).
+    pub fn has_priority(&self, p: PlayerId) -> bool {
+        match self.turn.priority {
+            Some(q) if q == p => true,
+            Some(q) => crate::combat::shared_team_turns(self) && self.teammates(q).contains(&p),
+            None => false,
+        }
     }
 
     /// Whether the current step is a main phase of the active player with an empty stack

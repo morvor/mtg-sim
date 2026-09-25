@@ -365,6 +365,33 @@ impl Game {
                 });
             }
         }
+        // Effects that shield and finality counters create (CR 122.1c, 122.1h).
+        for (key, obj, controller, def, text) in
+            crate::counter_rules::counter_replacements(self, ev)
+        {
+            if !applied.contains(&key) {
+                out.push(Candidate {
+                    key,
+                    source: Some(obj),
+                    link: 0,
+                    controller,
+                    class: 4,
+                    text,
+                    def,
+                    instance: None,
+                });
+            }
+        }
+        // CR 701.19c: a permanent that "can't be regenerated" isn't affected by
+        // regeneration shields or effects; other replacement effects still apply.
+        if let ReplEvent::Destroy { obj, .. } = ev {
+            if self.restricted_obj(*obj, |r| match r {
+                Restriction::CantBeRegenerated(f) => Some(f),
+                _ => None,
+            }) {
+                out.retain(|c| !matches!(c.def.action, ReplacementAction::Regenerate));
+            }
+        }
         // Built-in rules replacement: commander to hand/library (CR 903.9b).
         if let ReplEvent::Move(m) = ev {
             let o = self.obj(m.obj);
@@ -674,6 +701,20 @@ impl Game {
                 }
             }
             (
+                ReplacementEvent::PutCountersBy { by, kind },
+                ReplEvent::AddCounters {
+                    target: Entity::Object(o),
+                    kind: k,
+                    n,
+                    source,
+                },
+            ) => {
+                *n > 0
+                    && kind.as_ref().is_none_or(|x| x == k)
+                    && crate::counter_rules::who_puts_counters(self, *o, *source)
+                        .is_some_and(|p| self.player_rel_matches(*by, p, ctx))
+            }
+            (
                 ReplacementEvent::CreateTokens(pf),
                 ReplEvent::CreateTokens {
                     controller, count, ..
@@ -726,9 +767,13 @@ impl Game {
         // CR 615.12: prevention effects applied to damage that can't be prevented prevent
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
-        let unpreventable = matches!(ev, ReplEvent::Damage { .. })
-            && crate::prevention::is_prevention(&cand.def.action)
-            && crate::prevention::damage_cant_be_prevented(self);
+        let unpreventable = match &ev {
+            ReplEvent::Damage { source, .. } => {
+                crate::prevention::is_prevention(&cand.def.action)
+                    && crate::prevention::damage_from_cant_be_prevented(self, *source)
+            }
+            _ => false,
+        };
         // Use up one application of limited-use effects.
         if let Some(id) = cand.instance {
             if !unpreventable {
@@ -993,6 +1038,13 @@ impl Game {
             (ReplacementAction::Instead(effect), ev) => {
                 let mut c = ctx.clone();
                 c.event = Some(event_info_of(&ev));
+                // CR 121.7: card draws resulting from a replacement or prevention effect
+                // happen after the parts of the original event that weren't replaced.
+                if !matches!(ev, ReplEvent::Draw { .. }) && crate::draw_rules::draws_cards(&effect)
+                {
+                    self.post_replacement_effects.push((c, *effect));
+                    return vec![];
+                }
                 self.repl_context.push(applied.to_vec());
                 self.exec(&effect, &mut c);
                 self.repl_context.pop();

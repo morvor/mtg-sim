@@ -119,10 +119,10 @@ fn player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "destroy target artifact that player controls", "goad target creature that player
 /// controls": objects controlled by the trigger's player ("whenever a player casts …",
-/// "whenever ~ deals combat damage to a player"). Parsed as "target player controls" (which
-/// the phrase parser reads as the player chosen in target slot 0) and then pointed at the
-/// trigger's player. Only when the clause has no player target of its own and "that
-/// player" is still the trigger's player.
+/// "whenever ~ deals combat damage to a player"). The phrase is rewritten to "the
+/// triggering player controls", which the phrase parser reads as the trigger's player.
+/// Only when the clause has no player target of its own and "that player" is still the
+/// trigger's player.
 fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if !b.in_trigger
@@ -133,21 +133,10 @@ fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     {
         return None;
     }
-    let s = l.replace("that player controls", "target player controls");
-    let first_new = b.targets.len();
+    let s = l.replace("that player controls", "the triggering player controls");
     let e = crate::oracle::effects::parse_clause(&s, b)?;
     b.it_player = PlayerRef::TriggerPlayer;
-    fn fix<T: serde::Serialize + serde::de::DeserializeOwned>(v: &T) -> Option<T> {
-        let text = serde_json::to_string(v).ok()?.replace(
-            r#"{"ControlledBy":{"Target":0}}"#,
-            r#"{"ControlledBy":"TriggerPlayer"}"#,
-        );
-        serde_json::from_str(&text).ok()
-    }
-    for i in first_new..b.targets.len() {
-        b.targets[i] = fix(&b.targets[i])?;
-    }
-    fix(&e)
+    Some(e)
 }
 
 /// "it deals that much damage to any target", "~ deals that much damage to each

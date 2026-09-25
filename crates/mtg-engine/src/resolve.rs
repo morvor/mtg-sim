@@ -54,12 +54,14 @@ impl Game {
             Effect::May { who, effect } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let text = format!("{effect:?}");
-                let yes = self.ask_yes_no(
-                    p,
-                    ctx.source,
-                    &format!("You may: {}", truncate(&text, 120)),
-                    true,
-                );
+                // CR 121.2b, 121.3: a player can't choose to draw more cards than they may.
+                let yes = crate::draw_rules::can_choose(self, effect, ctx)
+                    && self.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("You may: {}", truncate(&text, 120)),
+                        true,
+                    );
                 ctx.prev_happened = yes;
                 if yes {
                     // Effects that can fail to do what they say (sacrificing, paying,
@@ -231,19 +233,26 @@ impl Game {
                         chosen.push((p, o));
                     }
                 }
+                let mut sacrificed = Vec::new();
                 for (p, o) in chosen {
                     if let Some(new) = self.sacrifice(o, p) {
                         all.push(Entity::Object(new));
+                        sacrificed.push(Entity::Object(o));
                     }
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
                 ctx.prev_happened = !all.is_empty();
                 ctx.set_var(vars::IT, all);
+                // "The sacrificed creature" (its last known information).
+                if !sacrificed.is_empty() {
+                    ctx.set_var(vars::SACRIFICED, sacrificed);
+                }
             }
             Effect::SacrificeObjects { what } => {
                 let objs = self.resolve_objects(what, ctx);
                 let mut res = Vec::new();
+                let mut sacrificed = Vec::new();
                 for o in objs {
                     if !self.is_live(o) {
                         continue;
@@ -251,10 +260,14 @@ impl Game {
                     let p = self.obj(o).controller;
                     if let Some(n) = self.sacrifice(o, p) {
                         res.push(Entity::Object(n));
+                        sacrificed.push(Entity::Object(o));
                     }
                 }
                 ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res);
+                if !sacrificed.is_empty() {
+                    ctx.set_var(vars::SACRIFICED, sacrificed);
+                }
             }
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
@@ -281,22 +294,53 @@ impl Game {
                 let recipients = self.resolve_sel(to, ctx);
                 if let Some(src) = src {
                     let evs = recipients.into_iter().map(|r| (src, r, n)).collect();
+                    let before = self.events.len();
                     self.deal_damage_batch(evs, false);
+                    self.record_damaged(src, before, ctx);
                     ctx.prev_value = n as i64;
+                }
+            }
+            Effect::DealDamageExcess {
+                source,
+                amount,
+                to,
+                excess_to,
+            } => {
+                // CR 120.4a: the excess is split off before replacement and prevention
+                // effects apply to the damage.
+                let src = self.damage_source(source, ctx);
+                let n = self.eval_value(amount, ctx).max(0) as u32;
+                let recipients = self.resolve_sel(to, ctx);
+                let other = self.resolve_sel(excess_to, ctx).into_iter().next();
+                if let Some(src) = src {
+                    let mut evs = Vec::new();
+                    let mut excess_total = 0;
+                    for r in recipients {
+                        let (main, excess) = crate::excess_damage::split_excess(self, src, r, n);
+                        evs.push((src, r, main));
+                        if let (Some(o), true) = (other, excess > 0) {
+                            evs.push((src, o, excess));
+                        }
+                        excess_total += excess;
+                    }
+                    self.deal_damage_batch(evs, false);
+                    ctx.prev_value = excess_total as i64;
                 }
             }
             Effect::DealDividedDamage { source, slot } => {
                 if let Some(src) = self.damage_source(source, ctx) {
                     let targets = ctx.targets.get(*slot as usize).cloned().unwrap_or_default();
                     let div = ctx.divided.get(*slot as usize).cloned().unwrap_or_default();
-                    // Divided among original targets; illegal targets were filtered, so
-                    // match by position in the original choice where possible.
+                    // Divisions are kept aligned with the targets that are still legal
+                    // (CR 608.2b; see `recheck_targets`).
                     let evs: Vec<(ObjectId, Entity, u32)> = targets
                         .iter()
                         .enumerate()
                         .map(|(i, t)| (src, *t, div.get(i).copied().unwrap_or(0)))
                         .collect();
+                    let before = self.events.len();
                     self.deal_damage_batch(evs, false);
+                    self.record_damaged(src, before, ctx);
                 }
             }
             Effect::Fight { a, b } => {
@@ -345,6 +389,55 @@ impl Game {
                                 total += self.remove_counters(t, &kk, k);
                             }
                         }
+                    }
+                }
+                ctx.prev_value = total as i64;
+            }
+            Effect::MoveCounters { from, to, kind, n } => {
+                let from = self.resolve_objects(from, ctx).into_iter().next();
+                let to = self.resolve_sel(to, ctx).into_iter().next();
+                let mut total = 0;
+                if let (Some(from), Some(to)) = (from, to) {
+                    let present: Vec<CounterKind> =
+                        self.obj(from).counters.keys().cloned().collect();
+                    let kinds: Vec<CounterKind> = match (kind, n) {
+                        (Some(k), _) => vec![k.clone()],
+                        // "Move all counters": each kind.
+                        (None, None) => present,
+                        // "Move a counter": of a kind the player chooses.
+                        (None, Some(_)) => {
+                            let labels = present.iter().map(|k| k.to_string()).collect();
+                            let i = self.ask_option(
+                                ctx.controller,
+                                ctx.source,
+                                "Choose a kind of counter",
+                                labels,
+                            );
+                            present.get(i).cloned().into_iter().collect()
+                        }
+                    };
+                    for k in kinds {
+                        let count = match n {
+                            Some(v) => self.eval_value(v, ctx).max(0) as u32,
+                            None => self.obj(from).counter(&k),
+                        };
+                        total += crate::counter_rules::move_counters(self, from, to, &k, count);
+                    }
+                }
+                ctx.prev_value = total as i64;
+            }
+            Effect::PutCountersOf { from, to, kind } => {
+                // "Its counters": the counters the object had as it last existed (CR 122.8),
+                // not the new object it became.
+                let from = self
+                    .eval_sel(from, ctx)
+                    .into_iter()
+                    .find_map(|e| e.object());
+                let mut total = 0;
+                if let Some(from) = from {
+                    for t in self.resolve_sel(to, ctx) {
+                        total +=
+                            crate::counter_rules::put_counters_of(self, from, t, kind.as_deref());
                     }
                 }
                 ctx.prev_value = total as i64;
@@ -439,6 +532,13 @@ impl Game {
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let objects = self.lock_replacement_objects(def, ctx);
+                // Once locked onto specific objects, references to the resolving
+                // ability's targets/variables can't be evaluated later (the instance is
+                // matched without them), so they're dropped from the stored filter.
+                let def = &match objects {
+                    Some(_) => unlock_replacement_def(def),
+                    None => def.clone(),
+                };
                 let remaining = match &def.action {
                     ReplacementAction::PreventAmount(v)
                     | ReplacementAction::PreventAndThen(Some(v), _) => {
@@ -617,6 +717,64 @@ impl Game {
                     }
                 }
             }
+            Effect::OfferSpecialAction {
+                def,
+                duration,
+                repeatable,
+            } => {
+                crate::special_actions::offer(
+                    self,
+                    (**def).clone(),
+                    ctx,
+                    duration.clone(),
+                    *repeatable,
+                );
+            }
+            Effect::PutSticker {
+                who,
+                what,
+                kind,
+                max_ticket,
+                free,
+            } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let max = max_ticket
+                    .as_ref()
+                    .map(|v| self.eval_value(v, ctx).max(0) as u32);
+                let mut placed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    placed |= crate::stickers::put_from_sheets(self, p, o, *kind, max, *free);
+                }
+                ctx.prev_happened = placed;
+            }
+            Effect::SpendAnyTypeMana {
+                who,
+                what,
+                duration,
+            } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let turn = self.turn.number;
+                for o in self.resolve_objects(what, ctx) {
+                    self.special
+                        .any_type_mana
+                        .push((p, o, duration.clone(), ctx.source, turn));
+                }
+            }
+            Effect::ChangeTargets { what, who, how, to } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let forced = match to {
+                    Some(sel) => match self.resolve_sel(sel, ctx).into_iter().next() {
+                        Some(e) => Some(e),
+                        None => return,
+                    },
+                    None => None,
+                };
+                let mut changed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    changed |= crate::target_rules::change_targets(self, p, o, *how, forced);
+                }
+                ctx.prev_happened = changed;
+            }
             Effect::BecomeCopy { what, of, duration } => {
                 let targets = self.resolve_objects(what, ctx);
                 let Some(src) = self.resolve_objects(of, ctx).into_iter().next() else {
@@ -758,7 +916,9 @@ impl Game {
             Effect::Draw { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut drawn = Vec::new();
-                for p in self.eval_players(who, ctx) {
+                // CR 121.2c: the active player draws first, then the others in turn order.
+                let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
+                for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
                 ctx.prev_value = drawn.len() as i64;
@@ -848,6 +1008,14 @@ impl Game {
                         self.lose_life(p, (cur - k) as u32);
                     }
                 }
+            }
+            Effect::ExchangeLifeTotals { a, b } => {
+                let a = self.eval_player(a, ctx);
+                let b = self.eval_player(b, ctx);
+                ctx.prev_happened = match (a, b) {
+                    (Some(a), Some(b)) => crate::life_totals::exchange_life_totals(self, a, b),
+                    _ => false,
+                };
             }
             Effect::AddMana {
                 who,
@@ -1063,8 +1231,10 @@ impl Game {
                     created_step: Some(self.turn.step),
                 });
             }
-            Effect::CreateEmblem { abilities } => {
-                crate::tokens::create_emblem(self, ctx.controller, abilities.clone(), ctx.source);
+            Effect::CreateEmblem { who, abilities } => {
+                for p in self.eval_players(who, ctx) {
+                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                }
             }
             Effect::WinGame { who } => {
                 for p in self.eval_players(who, ctx) {
@@ -1087,6 +1257,11 @@ impl Game {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 for o in self.resolve_objects(what, ctx) {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
+                        continue;
+                    }
+                    // CR 118.8c: casting "if able" isn't required when the spell has a
+                    // mandatory additional cost involving hidden cards with a quality.
+                    if !*optional && crate::cost_rules::may_decline_cast_if_able(self, p, o) {
                         continue;
                     }
                     let method = if *free {
@@ -1359,6 +1534,28 @@ impl Game {
             .collect()
     }
 
+    /// Records the objects that were actually dealt damage by `src` since event index
+    /// `before` (after replacement and prevention) as "dealt damage this way"
+    /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
+    fn record_damaged(&mut self, src: ObjectId, before: usize, ctx: &mut Ctx) {
+        let mut damaged: Vec<Entity> = Vec::new();
+        for ev in &self.events[before.min(self.events.len())..] {
+            if let Event::Damage {
+                source,
+                target: Entity::Object(o),
+                amount,
+                ..
+            } = ev
+            {
+                if *source == src && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
+                    damaged.push(Entity::Object(*o));
+                }
+            }
+        }
+        ctx.prev_affected = damaged.clone();
+        ctx.set_var(vars::DAMAGED, damaged);
+    }
+
     /// The source of damage for an effect: the named object, or the resolving object's
     /// source (CR 120.2, 609.7). Uses last known information if it has left.
     fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
@@ -1466,8 +1663,15 @@ impl Game {
         let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
             let mut v = self.objects_matching(f, ctx);
-            // Targets outside the battlefield ("target spell can't be countered").
-            for o in ctx.targets.iter().flatten().filter_map(|e| e.object()) {
+            // Targets outside the battlefield ("target spell can't be countered"), and the
+            // resolving spell itself ("the damage [this spell deals] can't be prevented").
+            let extra = ctx
+                .targets
+                .iter()
+                .flatten()
+                .filter_map(|e| e.object())
+                .chain(ctx.source);
+            for o in extra {
                 if !v.contains(&o) && self.matches(o, f, ctx) {
                     v.push(o);
                 }
@@ -1516,6 +1720,9 @@ impl Game {
             .controller
             .as_ref()
             .and_then(|r| self.eval_player(r, ctx));
+        // "under its owner's control" / "under their owners' control": each object
+        // enters under its own owner's control.
+        let owners_control = matches!(to.controller, Some(PlayerRef::OwnerOf(_)));
         let mut counters: Vec<(CounterKind, u32)> = Vec::new();
         for (k, v) in &to.with_counters {
             counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
@@ -1548,7 +1755,9 @@ impl Game {
                     etb: EtbInfo {
                         tapped: to.tapped,
                         counters: counters.clone(),
-                        controller: if to.zone == ZoneKind::Battlefield {
+                        controller: if to.zone == ZoneKind::Battlefield && owners_control {
+                            Some(owner)
+                        } else if to.zone == ZoneKind::Battlefield {
                             Some(controller.unwrap_or(ctx.controller))
                         } else {
                             None
@@ -1797,6 +2006,27 @@ pub fn player_filter_const(p: PlayerId) -> PlayerFilter {
     PlayerFilter::Is(p)
 }
 
+/// Replaces `Filter::In(..)` parts of a locked replacement's event filter with `Any`
+/// (the lock already restricts the effect to those objects).
+fn unlock_replacement_def(d: &ReplacementDef) -> ReplacementDef {
+    fn unlock(f: &Filter) -> Filter {
+        match f {
+            Filter::In(_) => Filter::Any,
+            Filter::And(v) => Filter::and(v.iter().map(unlock).collect()),
+            other => other.clone(),
+        }
+    }
+    let mut d = d.clone();
+    match &mut d.event {
+        ReplacementEvent::Destroy(f)
+        | ReplacementEvent::Dies(f)
+        | ReplacementEvent::EntersBattlefield(f) => *f = unlock(f),
+        ReplacementEvent::ZoneChange { filter, .. } => *filter = unlock(filter),
+        _ => {}
+    }
+    d
+}
+
 /// The filter selecting the objects a restriction applies to.
 fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
     match r {
@@ -1810,6 +2040,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::DoesntUntap(f)
         | Restriction::CantBeCountered(f)
         | Restriction::CantBeSacrificed(f)
+        | Restriction::CantBeRegenerated(f)
+        | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f) => Some(f),

@@ -254,13 +254,17 @@ pub fn resolve_mutate(g: &mut Game, id: ObjectId) {
 // ---------------------------------------------------------------------------
 
 pub fn special_actions(g: &Game, p: PlayerId) -> Vec<Action> {
-    let mut v = crate::kw::special_actions(g, p);
+    let mut v = crate::special_actions::available(g, p);
+    v.extend(crate::kw::special_actions(g, p));
     // Rolling the planar die (CR 901.9).
     v.extend(crate::planechase::special_actions(g, p));
     v
 }
 
 pub fn perform_special_action(g: &mut Game, p: PlayerId, sa: SpecialAction) -> Result<(), Illegal> {
+    if let Some(r) = crate::special_actions::perform(g, p, &sa) {
+        return r;
+    }
     if let Some(r) = crate::planechase::perform_special_action(g, p, &sa) {
         return r;
     }

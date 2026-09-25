@@ -13,10 +13,13 @@ use mtg_engine::*;
 use smol_str::SmolStr;
 use std::sync::Arc;
 
+/// Characteristics of a custom card with a mana cost of {0} (an object with no mana
+/// cost couldn't be cast, CR 118.6).
 pub fn chars(name: &str) -> Characteristics {
     Characteristics {
         name: SmolStr::new(name),
         rules_text: Arc::from(""),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{0}"),
         ..Default::default()
     }
 }
@@ -60,7 +63,7 @@ pub fn permanent(name: &str, ts: &[CardType], abilities: Vec<Ability>) -> CardDe
     CardDef::custom(c)
 }
 
-/// An instant with the given body (no mana cost).
+/// An instant with the given body (mana cost {0}).
 pub fn instant(name: &str, body: Body) -> CardDef {
     let mut c = chars(name);
     c.card_types = CardTypeSet::single(CardType::Instant);

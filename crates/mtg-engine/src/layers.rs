@@ -176,6 +176,8 @@ impl Game {
         }
         // Face-up planes and phenomena are controlled by the planar controller (CR 901.6).
         crate::planechase::apply_planar_control(self);
+        // Locked halves of Rooms (CR 709.5).
+        crate::rooms::apply_locks(self, &live);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self
@@ -485,11 +487,10 @@ impl Game {
             }
         }
         if layer == Layer::L6Ability {
+            // CR 122.1b: keyword counters on a permanent, or on a card in a zone other
+            // than the battlefield.
             for id in live {
                 let o = self.obj(*id);
-                if o.zone != Zone::Battlefield {
-                    continue;
-                }
                 for (k, n) in &o.counters {
                     if *n == 0 {
                         continue;
@@ -853,10 +854,16 @@ impl Game {
     fn apply_pt_counters(&mut self, live: &[ObjectId]) {
         for id in live {
             let o = &self.objects[id.0 as usize];
-            if o.zone != Zone::Battlefield || o.counters.is_empty() {
+            // CR 122.1a: counters on a creature, or on a creature card in a zone other than
+            // the battlefield. CR 122.1j: hone counters on Equipment attached to it.
+            if !o.is_creature() {
                 continue;
             }
-            let mut dp = 0i32;
+            let mut dp = if o.zone == Zone::Battlefield {
+                crate::counter_rules::hone_bonus(self, *id)
+            } else {
+                0
+            };
             let mut dt = 0i32;
             for (k, n) in &o.counters {
                 if let Some((p, t)) = parse_pt_counter(k) {
@@ -975,6 +982,7 @@ impl Game {
                 }
             }
         }
+        crate::special_actions::apply_ignoring(self, &mut st.restrictions);
         self.statics = st;
     }
 

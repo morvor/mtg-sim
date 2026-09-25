@@ -42,6 +42,12 @@ pub enum SpecialAction {
     Plot { card: ObjectId },
     /// Put companion into hand (CR 702.139c).
     CompanionToHand { card: ObjectId },
+    /// A special action granted by a static ability of `source` (CR 116.2d, 116.2e).
+    Static { source: ObjectId, ability: u64 },
+    /// A special action an effect allows (CR 116.2c), by offer id.
+    Offer { id: u32 },
+    /// Roll the planar die (CR 116.2i, 901.9).
+    RollPlanarDie,
     /// End the turn with a split second / etc. Other special actions by name.
     Other { name: String, obj: Option<ObjectId> },
 }
