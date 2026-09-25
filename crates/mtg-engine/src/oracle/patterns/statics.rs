@@ -142,6 +142,27 @@ fn granted_abilities(
 /// Suffixes the shared object-phrase parser doesn't know.
 fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
     for (p, f) in [
+        ("with no abilities", Filter::not(Filter::HasAbilities)),
+        (
+            "that are enchanted or equipped",
+            Filter::Or(vec![Filter::Enchanted, Filter::Equipped]),
+        ),
+        (
+            "that share a color with equipped creature",
+            Filter::SharesColor(Box::new(Sel::AttachedTo)),
+        ),
+        (
+            "that share a color with enchanted creature",
+            Filter::SharesColor(Box::new(Sel::AttachedTo)),
+        ),
+        (
+            "that share a creature type with equipped creature",
+            Filter::SharesCreatureType(Box::new(Sel::AttachedTo)),
+        ),
+        (
+            "that share a creature type with enchanted creature",
+            Filter::SharesCreatureType(Box::new(Sel::AttachedTo)),
+        ),
         ("on the battlefield", Filter::Any),
         ("in all graveyards", Filter::InZone(ZoneKind::Graveyard)),
         ("in graveyards", Filter::InZone(ZoneKind::Graveyard)),
@@ -1638,6 +1659,9 @@ fn parse_predicate(
     ctx: &CompileContext,
 ) -> Option<Vec<Out>> {
     let p = end(p);
+    // "Creatures you control also get +1/+0 and have trample as long as ...": "also"
+    // only says it's in addition to other effects.
+    let p = p.strip_prefix("also ").unwrap_or(p);
     // P/T changes (layer 7c).
     if let Some(r) = p.strip_prefix("gets ").or_else(|| p.strip_prefix("get ")) {
         let r = r.strip_prefix("an additional ").unwrap_or(r);
@@ -1806,6 +1830,11 @@ fn parse_body(
             Some(r) if starts_with_verb(r) && subject_text.contains(" and ") => r,
             _ => rest,
         };
+        // "Creatures you control also get +1/+0 ..."
+        let rest = match rest.strip_prefix("also ") {
+            Some(r) if starts_with_verb(r) => r,
+            _ => rest,
+        };
         if !starts_with_verb(rest) {
             continue;
         }
@@ -1935,9 +1964,17 @@ fn parse_line(
     // Trailing "... as long as C" / "... during your turn".
     for (i, _) in s.match_indices(" as long as ") {
         let (b, c) = (&s[..i], &s[i + " as long as ".len()..]);
-        let Some(body) = parse_body(b, referent.as_ref(), quotes, text, ctx) else {
+        let Some(mut body) = parse_body(b, referent.as_ref(), quotes, text, ctx) else {
             continue;
         };
+        // "Each land gets +2/+2 as long as it's a creature": "it" is each affected
+        // object, so the state narrows the group.
+        if body.subject.it.is_none() && body.also.is_empty() {
+            if let Some(f) = super::statics_conditions::pronoun_state(c) {
+                body.subject.filter = Filter::and(vec![body.subject.filter.clone(), f]);
+                return Some((body, and_all(conds)));
+            }
+        }
         let Some((cond, _)) = parse_static_condition(c, body.subject.it.as_ref(), ctx) else {
             continue;
         };

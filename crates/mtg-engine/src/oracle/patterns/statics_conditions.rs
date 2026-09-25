@@ -72,6 +72,26 @@ fn object_state(r: &str, sel: &Sel, contracted: bool) -> Option<Condition> {
     Some(if neg { Condition::Not(Box::new(c)) } else { c })
 }
 
+/// "it's a creature", "it's not attacking", "it isn't tapped": a state of the object
+/// "it" refers to, as a filter.
+pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
+    let c = end(c);
+    let (neg, state) = if let Some(r) = c
+        .strip_prefix("it's not ")
+        .or_else(|| c.strip_prefix("it isn't "))
+        .or_else(|| c.strip_prefix("it is not "))
+    {
+        (true, r)
+    } else {
+        (
+            false,
+            c.strip_prefix("it's ").or_else(|| c.strip_prefix("it is "))?,
+        )
+    };
+    let f = state_filter(state)?;
+    Some(if neg { Filter::not(f) } else { f })
+}
+
 /// "attacking", "tapped", "equipped", "a creature", "white", "red or green",
 /// "legendary", "a basic Mountain", "face down".
 fn state_filter(s: &str) -> Option<Filter> {
