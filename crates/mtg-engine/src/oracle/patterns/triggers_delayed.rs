@@ -10,11 +10,88 @@
 
 use crate::ability::*;
 use crate::oracle::effects::{parse_sentence, Builder};
-use crate::oracle::patterns::EffectPattern;
+use crate::oracle::patterns::{AbilityPattern, EffectPattern};
 use crate::oracle::phrases::end;
+use crate::oracle::CompileContext;
 
 inventory::submit! {
     EffectPattern { name: "delayed trigger (next upkeep / end step / end of combat)", priority: 100, parse: delayed_trigger }
+}
+
+inventory::submit! {
+    AbilityPattern { name: "delayed trigger line of an instant or sorcery", priority: 100, parse: spell_delayed_line }
+}
+
+inventory::submit! {
+    EffectPattern { name: "you lose/win the game", priority: 100, parse: lose_or_win_game }
+}
+
+/// "you lose the game", "you win the game" (CR 104.3, 104.2).
+fn lose_or_win_game(l: &str, _b: &mut Builder) -> Option<Effect> {
+    match end(l) {
+        "you lose the game" => Some(Effect::LoseGame {
+            who: PlayerRef::You,
+        }),
+        "you win the game" => Some(Effect::WinGame {
+            who: PlayerRef::You,
+        }),
+        _ => None,
+    }
+}
+
+/// A line of an instant or sorcery that creates a delayed triggered ability when the spell
+/// resolves: "At the beginning of your next upkeep, pay {2}{U}{U}. If you don't, you lose
+/// the game." (the Pacts). The delayed ability chooses its own targets when it triggers
+/// (CR 603.7, 603.3d).
+fn spell_delayed_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() || block.contains('\n') {
+        return None;
+    }
+    let lower = block.trim().to_lowercase();
+    let (trigger, inner) = split_delay(end(&lower))?;
+    if !lower.starts_with("at ") || has_object_pronoun(inner) {
+        return None;
+    }
+    // "pay {cost}. if you don't, [effect]": an "unless"-style payment (CR 118.12).
+    let body = if let Some(r) = inner.strip_prefix("pay ") {
+        let (cost_s, rest) = r.split_once(". if you don't, ")?;
+        let cost = crate::oracle::keywords::parse_keyword_cost(cost_s)?;
+        let otherwise = crate::oracle::effects::parse_body(rest, ctx)?;
+        if otherwise.modal.is_some() {
+            return None;
+        }
+        Body {
+            targets: otherwise.targets,
+            effect: Effect::PayOptional {
+                who: PlayerRef::You,
+                cost,
+                then: Box::new(Effect::Noop),
+                otherwise: Box::new(otherwise.effect),
+            },
+            modal: None,
+        }
+    } else {
+        crate::oracle::effects::parse_body(inner, ctx)?
+    };
+    // Nothing in the delayed ability may depend on the spell's own targets or objects.
+    let json = serde_json::to_string(&body.effect).ok()?;
+    if ["\"This\"", "Trigger", "EventAmount"]
+        .iter()
+        .any(|p| json.contains(p))
+    {
+        return None;
+    }
+    let effect = Effect::DelayedTrigger {
+        trigger,
+        body: Box::new(body),
+        once: true,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Spell(SpellAbility {
+            body: Body::effect(effect),
+        }),
+        block,
+    )])
 }
 
 /// First variable used to capture values for a delayed trigger.

@@ -774,6 +774,41 @@ fn draw_at_the_beginning_of_the_next_turns_upkeep() {
 }
 
 #[test]
+fn pact_delayed_upkeep_payment() {
+    cr!("603.7a", "603.7b", "118.12");
+    assert_supported(&["Slaughter Pact"]);
+    for pay in [true, false] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        if pay {
+            t.lands(P0, "Swamp", 3);
+        }
+        let pact = t.hand(P0, "Slaughter Pact");
+        t.cast(P0, pact).target(bears).go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(bears));
+        // Nothing happens at the opponent's upkeep; at ours we pay or lose.
+        t.advance_to(P1, Step::Draw);
+        assert!(!t.has_lost(P0));
+        t.answer_yes(P0, true);
+        if pay {
+            t.advance_to(P0, Step::Draw);
+        } else {
+            let _ = t.g.run_until(10_000, |g| {
+                g.result.is_some() || (g.turn.active == P0 && g.turn.step == Step::Draw)
+            });
+        }
+        assert_eq!(t.has_lost(P0), !pay, "paid: {pay}");
+        if pay {
+            assert!(t.g.battlefield.iter().all(|id| {
+                let o = t.g.obj(*id);
+                o.controller != P0 || o.tapped
+            }));
+        }
+    }
+}
+
+#[test]
 fn enters_then_draw_at_next_upkeep() {
     cr!("603.7a", "603.7e");
     assert_supported(&["Ritual of Steel"]);
