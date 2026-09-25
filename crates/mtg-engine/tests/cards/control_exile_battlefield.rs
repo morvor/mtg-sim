@@ -111,3 +111,47 @@ fn enduring_returns_as_a_noncreature_enchantment_once() {
     t.resolve_all();
     assert_eq!(t.zone(vitality), Zone::Graveyard(P1));
 }
+
+#[test]
+fn then_that_player_mills_is_the_graveyards_owner() {
+    cr!("107.3", "110.2");
+    ruling!(
+        "Geth, Lord of the Vault",
+        "The target card must have mana value exactly X"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let geth = t.battlefield(P0, "Geth, Lord of the Vault");
+    let bear = t.graveyard(P1, "Grizzly Bears");
+    let lib0 = t.library_size(P0);
+    let lib1 = t.library_size(P1);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.activate(P0, geth, 0, &[Entity::Object(bear)]).unwrap();
+    t.resolve_all();
+    let o = t.obj_now(bear);
+    assert_eq!(o.zone, Zone::Battlefield);
+    assert_eq!(o.controller, P0);
+    assert!(o.tapped);
+    // "Then that player mills X cards": the opponent, not you.
+    assert_eq!(t.library_size(P1), lib1 - 2);
+    assert_eq!(t.library_size(P0), lib0);
+}
+
+#[test]
+fn that_creature_deals_damage_to_each_other_creature() {
+    cr!("110.2", "120.3");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    t.lands(P0, "Mountain", 1);
+    let giant = t.graveyard(P1, "Hill Giant");
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let ogre = t.battlefield(P0, "Gray Ogre");
+    let spell = t.hand(P0, "Too Greedily, Too Deep");
+    t.cast(P0, spell).target(giant).go();
+    t.resolve_all();
+    // The 3/3 deals 3 damage to each other creature, but not to itself.
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj_now(giant).damage, 0);
+    assert!(!t.on_battlefield(bear));
+    assert!(!t.on_battlefield(ogre));
+}

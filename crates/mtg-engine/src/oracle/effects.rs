@@ -562,11 +562,44 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
+    let to = other_than_subject(to, &src);
     Some(Effect::DealDamage {
         source: src,
         amount,
         to,
     })
+}
+
+/// "That creature deals damage ... to each other creature": "other" means other than the
+/// subject of the sentence, which isn't necessarily the ability's source.
+fn other_than_subject(to: Sel, subject: &Sel) -> Sel {
+    if matches!(subject, Sel::This) {
+        return to;
+    }
+    let fix = |f: Filter| match f {
+        Filter::Other => Filter::not(Filter::In(Box::new(subject.clone()))),
+        Filter::And(v) => Filter::And(
+            v.into_iter()
+                .map(|x| match x {
+                    Filter::Other => Filter::not(Filter::In(Box::new(subject.clone()))),
+                    x => x,
+                })
+                .collect(),
+        ),
+        f => f,
+    };
+    match to {
+        Sel::All(f) => Sel::All(fix(f)),
+        Sel::Union(v) => Sel::Union(
+            v.into_iter()
+                .map(|s| match s {
+                    Sel::All(f) => Sel::All(fix(f)),
+                    s => s,
+                })
+                .collect(),
+        ),
+        to => to,
+    }
 }
 
 fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {

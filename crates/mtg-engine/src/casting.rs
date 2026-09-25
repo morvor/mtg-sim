@@ -1269,7 +1269,22 @@ impl Game {
         }
         let ctx = Ctx::new(Some(src), p);
         if act.body.modal.is_none() && !self.targets_possible(&act.body.targets, &ctx, src) {
-            return false;
+            // CR 602.2b, 601.2b: the value of X is announced before targets are chosen,
+            // so targets that depend on X ("target creature card with mana value X") are
+            // possible if they are for some value the player could choose.
+            let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                || act.cost.parts.iter().any(cost_part_has_x);
+            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let for_some_x = has_x
+                && (1..=max_x as i32).any(|x| {
+                    let mut c = ctx.clone();
+                    c.x = x;
+                    c.x_defined = true;
+                    self.targets_possible(&act.body.targets, &c, src)
+                });
+            if !for_some_x {
+                return false;
+            }
         }
         let cost = self.ability_total_cost(p, src, a, act);
         self.can_pay_cost_optimistic(p, &cost, Some(src), &o.chars.clone())

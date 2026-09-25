@@ -184,3 +184,58 @@ fn put_target_creature_you_control_on_top() {
     assert_eq!(from_top(&t, P0, bear), Some(0));
     assert!(t.on_battlefield(other));
 }
+
+#[test]
+fn bottom_of_library_then_life_from_last_known_toughness() {
+    cr!("608.2h");
+    ruling!(
+        "Condemn",
+        "Use the creature's toughness as it last existed on the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 1);
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Its toughness on the battlefield is higher than printed.
+    t.g.objects[giant.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 2);
+    t.g.recompute();
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(giant, Entity::Player(P0))]),
+    );
+    t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    t.advance_to(P1, mtg_engine::turn::Step::DeclareAttackers);
+    let condemn = t.hand(P0, "Condemn");
+    t.cast(P0, condemn).target(giant).go();
+    t.resolve();
+    assert_eq!(t.g.player(P1).library.first(), Some(&t.g.current(giant)));
+    assert_eq!(t.life(P1), 25);
+}
+
+#[test]
+fn may_put_it_into_its_owners_library_third_from_the_top() {
+    cr!("401.7", "603.6c");
+    ruling!(
+        "God-Eternal Oketra",
+        "two or fewer cards in their library, the God is put on the bottom"
+    );
+    for library in [30, 2] {
+        let mut t = TestGame::new(2);
+        t.g.players[0].library.truncate(library);
+        t.lands(P1, "Mountain", 1);
+        let god = t.battlefield(P0, "God-Eternal Oketra");
+        // A 3/6 with 3 damage marked.
+        t.g.objects[god.0 as usize].damage = 3;
+        let bolt = t.hand(P1, "Lightning Bolt");
+        t.cast(P1, bolt).target(god).go();
+        t.answer_yes(P0, true);
+        t.resolve_all();
+        if library == 30 {
+            assert_eq!(from_top(&t, P0, god), Some(2));
+        } else {
+            assert_eq!(t.g.player(P0).library.first(), Some(&t.g.current(god)));
+        }
+    }
+}

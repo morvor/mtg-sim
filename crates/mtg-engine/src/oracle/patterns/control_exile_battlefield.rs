@@ -71,6 +71,16 @@ fn p_put_onto_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let to = onto_battlefield(&tail, &what)?;
+    // "Then that player mills X cards" after taking a card from a graveyard: the owner
+    // of that graveyard.
+    if let Sel::Target(slot) = what {
+        let from_graveyard = b.targets.get(slot as usize).is_some_and(
+            |t| matches!(&t.what, TargetKind::Object(f) if f.zone() == Some(ZoneKind::Graveyard)),
+        );
+        if from_graveyard {
+            b.it_player = PlayerRef::OwnerOf(Box::new(what.clone()));
+        }
+    }
     // "That creature ..." afterwards: the permanent it became (CR 400.7).
     b.it = Sel::Var(vars::IT);
     Some(Effect::Move { what, to })
