@@ -63,6 +63,39 @@ inventory::submit! {
     EffectPattern { name: "remove N counters from ~/it", priority: 100, parse: remove_counters }
 }
 
+inventory::submit! {
+    EffectPattern { name: "of their choice / they (that player)", priority: 150, parse: their_choice_and_they }
+}
+
+/// "that player sacrifices a creature of their choice" (the sacrificing player always
+/// chooses, CR 701.21a) and "they lose 1 life" (they = that player).
+fn their_choice_and_they(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if l.contains(" of their choice") {
+        let s = l.replace(" of their choice", "");
+        if s.contains("sacrifice") {
+            return crate::oracle::effects::parse_clause(&s, b);
+        }
+        return None;
+    }
+    // "they [verb]": the trigger's player.
+    let r = l.strip_prefix("they ")?;
+    if !b.in_trigger || matches!(b.it_player, PlayerRef::Iterated) {
+        return None;
+    }
+    let (verb, rest) = split_word(r);
+    let third = match verb {
+        "lose" => "loses",
+        "gain" => "gains",
+        "draw" => "draws",
+        "discard" => "discards",
+        "sacrifice" => "sacrifices",
+        "mill" => "mills",
+        _ => return None,
+    };
+    crate::oracle::effects::parse_clause(&format!("that player {third} {rest}"), b)
+}
+
 /// "you draw a card" (with an explicit subject, as in "you draw a card and you lose 1
 /// life").
 fn you_draw(l: &str, _b: &mut Builder) -> Option<Effect> {

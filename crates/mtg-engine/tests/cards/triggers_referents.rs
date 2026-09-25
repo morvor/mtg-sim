@@ -196,6 +196,35 @@ fn put_into_your_graveyard_from_your_library() {
 }
 
 #[test]
+fn sheoldred_they_lose_life() {
+    cr!("603.2", "121.1");
+    assert_supported(&["Sheoldred, the Apocalypse"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sheoldred, the Apocalypse");
+    // "Whenever you draw a card, you gain 2 life. Whenever an opponent draws a card, they
+    // lose 2 life."
+    t.g.draw_cards(P0, 1);
+    t.resolve_all();
+    t.g.draw_cards(P1, 2);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn that_player_sacrifices_a_creature_of_their_choice() {
+    cr!("701.21a", "510.2");
+    assert_supported(&["Demon of Loathing"]);
+    let mut t = TestGame::new(2);
+    let demon = t.battlefield(P0, "Demon of Loathing");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(demon, Entity::Player(P1))], &[]);
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(demon));
+}
+
+#[test]
 fn that_player_mills_that_many_cards() {
     cr!("510.2", "701.17a");
     assert_supported(&["Crosstown Courier"]);
