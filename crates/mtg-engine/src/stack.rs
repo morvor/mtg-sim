@@ -389,7 +389,9 @@ impl Game {
     /// Hexproof, shroud, protection and "can't be the target" restrictions on objects.
     pub fn object_untargetable(&self, o: ObjectId, by: PlayerId, source: Option<ObjectId>) -> bool {
         let ob = self.obj(o);
-        if ob.zone == Zone::Battlefield || ob.zone == Zone::Stack {
+        // Hexproof, shroud and protection are abilities of permanents: a spell with them
+        // on the stack can still be targeted (CR 113.6, 702.11b, 702.16b, 702.18a).
+        if ob.zone == Zone::Battlefield {
             let c = &ob.chars;
             // CR 702.18a shroud
             if c.has_keyword(KeywordKind::Shroud) {

@@ -46,6 +46,13 @@ impl Game {
         for p in &self.players {
             v.extend(p.hand.iter().copied());
             v.extend(p.graveyard.iter().copied());
+            // CR 604.3: characteristic-defining abilities function in all zones, so cards
+            // in libraries that have one are recomputed too.
+            v.extend(p.library.iter().copied().filter(|id| {
+                self.obj(*id).base.abilities.iter().any(
+                    |a| matches!(&a.kind, AbilityKind::Static(s) if s.is_cda),
+                )
+            }));
         }
         v
     }
