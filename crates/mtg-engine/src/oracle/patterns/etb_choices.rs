@@ -563,6 +563,18 @@ fn more_conditions(c: &str) -> Option<Condition> {
             PlayerFilter::Life(cmp, Box::new(n)),
         ));
     }
+    // "you've cast two or more spells this turn"
+    if let Some(r) = c.strip_prefix("you've cast ") {
+        let (n, rest) = parse_number(r)?;
+        if end(rest) == "or more spells this turn" {
+            return Some(Condition::Compare(
+                Value::Custom("spells_you_cast_this_turn".into()),
+                Cmp::Ge,
+                n,
+            ));
+        }
+        return None;
+    }
     // "you have two or more opponents"
     if let Some(r) = c.strip_prefix("you have ") {
         let (n, rest) = parse_number(r)?;
@@ -576,6 +588,23 @@ fn more_conditions(c: &str) -> Option<Condition> {
         return None;
     }
     match c {
+        "you attacked this turn" | "you attacked with a creature this turn" => {
+            return Some(Condition::Custom("you_attacked_this_turn".into()))
+        }
+        "a permanent left the battlefield under your control this turn" => {
+            return Some(Condition::Custom(
+                "permanent_left_under_your_control_this_turn".into(),
+            ))
+        }
+        "an opponent lost life this turn" => {
+            return Some(Condition::Custom("opponent_lost_life_this_turn".into()))
+        }
+        "it wasn't cast or no mana was spent to cast it" => {
+            return Some(Condition::Or(vec![
+                Condition::Not(Box::new(Condition::WasCast)),
+                Condition::Compare(Value::ManaSpent, Cmp::Eq, Value::c(0)),
+            ]))
+        }
         "a creature died this turn" => {
             return Some(Condition::Compare(
                 Value::CreaturesDiedThisTurn,

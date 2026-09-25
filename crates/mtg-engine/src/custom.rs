@@ -18,6 +18,13 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     let _ = (g, ctx);
     match name {
+        // Number of spells the controller has cast this turn.
+        "spells_you_cast_this_turn" => g
+            .history
+            .spells_cast
+            .iter()
+            .filter(|(p, _)| *p == ctx.controller)
+            .count() as i64,
         _ => 0,
     }
 }
@@ -25,6 +32,25 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     let _ = (g, ctx);
     match name {
+        // "you attacked this turn" (raid): you declared one or more attackers this turn
+        // (CR 508.1).
+        "you_attacked_this_turn" => g
+            .history
+            .attackers
+            .iter()
+            .any(|a| g.obj(*a).controller == ctx.controller),
+        // "a permanent left the battlefield under your control this turn" (revolt).
+        "permanent_left_under_your_control_this_turn" => g
+            .history
+            .permanents_left
+            .iter()
+            .any(|o| g.obj(*o).controller == ctx.controller),
+        // "an opponent lost life this turn".
+        "opponent_lost_life_this_turn" => g
+            .history
+            .life_lost
+            .iter()
+            .any(|(p, n)| *n > 0 && g.are_opponents(ctx.controller, *p)),
         _ => false,
     }
 }
