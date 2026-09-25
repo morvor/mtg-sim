@@ -274,7 +274,7 @@ fn stickers_stay_on_objects_moving_to_public_zones_only() {
 
 #[test]
 fn name_stickers_add_a_word_where_the_controller_chooses() {
-    cr!("123.6", "123.6a", "123.6b", "123.6c");
+    cr!("123.6", "123.6a", "123.6b");
     // "Wolf in _____ Clothing" has three words: the blank isn't one.
     assert_eq!(stickers::word_count("Wolf in _____ Clothing"), 3);
     assert_eq!(stickers::word_count("Grizzly Bears-Cubs"), 2);
@@ -313,8 +313,7 @@ fn name_stickers_add_a_word_where_the_controller_chooses() {
         ]
         .join(" | ")]
     );
-    // It's a text-changing effect: with a later effect that sets the name, the sticker
-    // still applies in timestamp order... and a nameless object's name becomes the word.
+    // A nameless object's name becomes the word.
     let fd = t.battlefield(P0, "Grizzly Bears");
     assert!(mtg_engine::facedown::turn_face_down(&mut t.g, fd));
     t.g.recompute();
@@ -593,4 +592,85 @@ fn a_melded_permanents_stickers_stay_with_the_card_its_owner_chooses() {
     let hand = t.g.players[P0.idx()].hand.clone();
     assert_eq!(hand.len(), 2);
     assert!(hand.iter().all(|o| !stickers::is_stickered(&t.g, *o)));
+}
+
+#[test]
+fn a_name_stickers_position_is_kept_as_the_name_it_modifies_changes() {
+    cr!("123.6c");
+    let mut t = TestGame::new(2);
+    limited(&mut t, P0, vec![sheet("Words", vec![name_st("Big", 0)])]);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // After one word: "Grizzly Big Bears".
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    assert!(stickers::put_from_sheets(
+        &mut t.g, P0, bears, None, None, false
+    ));
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Grizzly Big Bears");
+    // Face down it has no name: the word is added at the end of the (empty) name. Face up
+    // again, it's after the first word again.
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, bears));
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Big");
+    assert!(mtg_engine::facedown::turn_face_up(&mut t.g, bears, false));
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Grizzly Big Bears");
+    // Its copiable values change (it becomes a copy of Llanowar Elves): the sticker's word
+    // is still after the first word of the new name.
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let values = Box::new(t.obj(elves).copiable.clone());
+    t.g.effects.push(ContinuousEffect {
+        id: 998,
+        source: None,
+        controller: P0,
+        timestamp: 20_000,
+        duration: Duration::Permanent,
+        affected: Affected::Objects(vec![bears]),
+        mods: vec![],
+        layer1: Some(mtg_engine::game::Layer1::Copy {
+            values,
+            exceptions: vec![],
+        }),
+        created_turn: 1,
+    });
+    t.g.dirty = true;
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Llanowar Big Elves");
+    t.g.effects.retain(|e| e.id != 998);
+    t.g.dirty = true;
+    t.g.recompute();
+    // With a one-word name, it's added at the end.
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let values = Box::new(t.obj(thopter).copiable.clone());
+    t.g.effects.push(ContinuousEffect {
+        id: 997,
+        source: None,
+        controller: P0,
+        timestamp: 20_001,
+        duration: Duration::Permanent,
+        affected: Affected::Objects(vec![bears]),
+        mods: vec![],
+        layer1: Some(mtg_engine::game::Layer1::Copy {
+            values,
+            exceptions: vec![],
+        }),
+        created_turn: 1,
+    });
+    t.g.dirty = true;
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Ornithopter Big");
+    t.g.effects.retain(|e| e.id != 997);
+    t.g.dirty = true;
+    t.g.recompute();
+    // The position is remembered as it moves between public zones.
+    let dead =
+        t.g.move_object(bears, Zone::Graveyard(P0), MoveCause::Effect, Some(P0))
+            .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj(dead).chars.name, "Grizzly Big Bears");
+    let exiled =
+        t.g.move_object(dead, Zone::Exile, MoveCause::Effect, Some(P0))
+            .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj(exiled).chars.name, "Grizzly Big Bears");
 }
