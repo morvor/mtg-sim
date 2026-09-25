@@ -348,6 +348,89 @@ fn suspend_x_needs_x_of_at_least_one() {
 }
 
 #[test]
+fn abilities_that_work_only_while_the_card_is_suspended() {
+    cr!("702.62b");
+    assert_supported("Greater Gargadon");
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P0, "Mountain", 3);
+    let gargadon = t.hand(P0, "Greater Gargadon");
+    // "Sacrifice an artifact, creature, or land: Remove a time counter from this card.
+    // Activate only if this card is suspended." Not from the hand.
+    let sac = |t: &mut TestGame| {
+        let src = t.g.current(gargadon);
+        crate::common_k702_027_037::activate_named(
+            t,
+            P0,
+            src,
+            "Sacrifice an artifact, creature, or land: Remove a time counter from ~. Activate only if ~ is suspended.",
+            0,
+        )
+    };
+    assert!(sac(&mut t).is_err());
+    let exiled = suspend(&mut t, P0, gargadon);
+    assert_eq!(t.counters(exiled, TIME), 10);
+    t.answer_choose(P0, &[Entity::Object(lands[1])]);
+    sac(&mut t).unwrap();
+    t.resolve();
+    assert_eq!(t.counters(exiled, TIME), 9);
+    assert!(!t.on_battlefield(lands[1]));
+    // Once it has no time counter, it isn't suspended: the ability can't be activated.
+    remove_counters(&mut t, exiled, TIME, 9);
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert!(sac(&mut t).is_err());
+}
+
+#[test]
+fn a_spell_that_exiles_itself_with_time_counters_is_suspended() {
+    cr!("702.62b");
+    assert_supported("Suspended Sentence");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    let sentence = t.hand(P0, "Suspended Sentence");
+    t.cast(P0, sentence).target(bears).go();
+    t.resolve();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.life(P1), 17);
+    // "Exile Suspended Sentence with three time counters on it": suspended.
+    assert_eq!(t.zone(sentence), Zone::Exile);
+    assert_eq!(t.counters(sentence, TIME), 3);
+    assert!(!t.in_graveyard(P0, "Suspended Sentence"));
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(stack_triggers(&t, SUSPEND).len(), 1);
+    t.resolve();
+    assert_eq!(t.counters(sentence, TIME), 2);
+}
+
+#[test]
+fn an_ability_can_trigger_when_the_last_time_counter_is_removed_in_exile() {
+    cr!("702.62a");
+    assert_supported("Riftmarked Knight");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let knight = t.hand(P0, "Riftmarked Knight");
+    let exiled = suspend(&mut t, P0, knight);
+    remove_counters(&mut t, exiled, TIME, 3);
+    t.settle();
+    // Suspend's cast trigger and the Knight's own trigger.
+    assert_eq!(t.stack_len(), 2);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(knight));
+    let tokens: Vec<_> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token() && o.chars.has_subtype("Knight"))
+        .map(|o| o.chars.has_keyword(KeywordKind::Haste))
+        .collect();
+    assert_eq!(tokens, vec![true]);
+}
+
+#[test]
 fn countering_the_cast_trigger_leaves_the_card_exiled() {
     cr!("702.62a", "702.62b");
     ruling!(

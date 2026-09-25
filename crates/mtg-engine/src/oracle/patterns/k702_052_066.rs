@@ -5,7 +5,10 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::parse_trigger_body;
 use crate::oracle::keywords::compile_keyword;
-use crate::oracle::patterns::{AbilityPattern, ConditionPattern, StaticPattern};
+use crate::oracle::effects::Builder;
+use crate::oracle::patterns::{
+    AbilityPattern, ConditionPattern, EffectPattern, StaticPattern,
+};
 use crate::oracle::CompileContext;
 use crate::types::counters;
 
@@ -245,6 +248,147 @@ fn forecast(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "forecast", priority: 100, parse: forecast } }
+
+/// "~ is suspended" (CR 702.62b): it's in exile, has suspend, and has a time counter on it.
+fn is_suspended(l: &str) -> Option<Condition> {
+    matches!(l, "~ is suspended" | "it's suspended").then(|| {
+        Condition::And(vec![
+            Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile)),
+            Condition::SelMatches(Sel::This, Filter::HasKeyword(KeywordKind::Suspend)),
+            Condition::Compare(
+                Value::CountersOn(Box::new(Sel::This), Some(counters::TIME.into())),
+                Cmp::Gt,
+                Value::c(0),
+            ),
+        ])
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "~ is suspended", priority: 100, parse: is_suspended } }
+
+/// A triggered ability "…, if ~ is suspended, …" (Deep-Sea Kraken, Nihilith): it can
+/// trigger only while the card is suspended, so it functions in exile.
+fn trigger_while_suspended(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    if !(lower.starts_with("when") || lower.starts_with("at "))
+        || !lower.contains(", if ~ is suspended, ")
+    {
+        return None;
+    }
+    let a = crate::oracle::triggers::parse_triggered(t, ctx)?;
+    let AbilityKind::Triggered(mut tr) = a.kind.clone() else {
+        return None;
+    };
+    tr.zone = FunctionZone::Exile;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "triggered ability while ~ is suspended", priority: 100, parse: trigger_while_suspended } }
+
+/// "[Cost]: [effect]. Activate only if ~ is suspended." (Greater Gargadon): an activated
+/// ability of the card in exile.
+fn activate_while_suspended(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let suffix = " activate only if ~ is suspended.";
+    if !lower.ends_with(suffix) {
+        return None;
+    }
+    let rest = &t[..t.len() - suffix.len()];
+    let (cost_s, eff_s) = crate::oracle::split_cost(rest)?;
+    let cost = crate::oracle::costs::parse_cost(cost_s)
+        .map(|(c, _)| c)
+        .or_else(|| sacrifice_one_of(cost_s))?;
+    let body = crate::oracle::effects::parse_body(eff_s, ctx)?;
+    let mut act = ActivatedAbility::new(cost, body);
+    act.zone = FunctionZone::Exile;
+    act.condition = is_suspended("~ is suspended");
+    Some(vec![AbilityDef::new(AbilityKind::Activated(act), t)])
+}
+
+/// "Sacrifice an artifact, creature, or land": a permanent with any of the types.
+fn sacrifice_one_of(s: &str) -> Option<Cost> {
+    let l = s.trim().to_lowercase();
+    let r = l
+        .strip_prefix("sacrifice an ")
+        .or_else(|| l.strip_prefix("sacrifice a "))?;
+    let mut fs = Vec::new();
+    for w in r.split(", ").flat_map(|p| p.split("or ")) {
+        let w = w.trim().trim_end_matches(',');
+        if w.is_empty() {
+            continue;
+        }
+        fs.push(Filter::Type(crate::types::CardType::from_word(w)?));
+    }
+    (fs.len() > 1).then(|| {
+        Cost::free().with(CostPart::Sacrifice {
+            filter: Filter::Or(fs),
+            count: Value::c(1),
+        })
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "activate only if ~ is suspended", priority: 100, parse: activate_while_suspended } }
+
+/// "Exile ~ with N time counters on it." as a spell's last instruction (Suspended
+/// Sentence, Reality Strobe): the resolving spell is exiled with time counters instead of
+/// going to the graveyard, so it's suspended if it has suspend (CR 702.62b).
+fn exile_self_with_time_counters(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = l
+        .strip_prefix("exile ~ with ")?
+        .strip_suffix(" time counters on it")?;
+    let (n, tail) = crate::oracle::phrases::parse_number(r)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::Seq(vec![
+        Effect::Exile {
+            what: Sel::This,
+            face_down: false,
+            link: false,
+        },
+        Effect::AddCounters {
+            what: Sel::Var(vars::IT),
+            kind: counters::TIME.into(),
+            n,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "exile ~ with N time counters on it", priority: 100, parse: exile_self_with_time_counters } }
+
+/// "When the last time counter is removed from ~ while it's exiled, [effect]" (Riftmarked
+/// Knight): a triggered ability that functions in exile.
+fn last_time_counter_removed_while_exiled(
+    block: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let rest = lower
+        .strip_prefix("when the last time counter is removed from ~ while it's exiled, ")?;
+    let eff = &t[t.len() - rest.len()..];
+    let body = parse_trigger_body(eff, ctx, Sel::This, PlayerRef::You)?;
+    let mut tr = TriggeredAbility::new(
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::CountersRemoved {
+                filter: Filter::Source,
+                kind: Some(counters::TIME.into()),
+            }),
+            cond: Condition::Compare(
+                Value::CountersOn(Box::new(Sel::This), Some(counters::TIME.into())),
+                Cmp::Eq,
+                Value::c(0),
+            ),
+        },
+        body,
+    );
+    tr.zone = FunctionZone::Exile;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "when the last time counter is removed from ~ while it's exiled", priority: 100, parse: last_time_counter_removed_while_exiled } }
 
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and

@@ -44,12 +44,26 @@ impl<'c> Builder<'c> {
         // A target player doesn't become "it" ("target opponent loses life equal to its
         // power" — "its" is still the object from before).
         let is_player = matches!(spec.what, TargetKind::Player(_));
+        // "Destroy target creature an opponent controls. That player loses 3 life.": the
+        // opponent mentioned is that object's controller.
+        let opponents = matches!(&spec.what, TargetKind::Object(f) if controlled_by_opponent(f));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
             self.it = Sel::Target(slot);
         }
+        if opponents {
+            self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        }
         slot
+    }
+}
+
+fn controlled_by_opponent(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(PlayerRel::Opponent) => true,
+        Filter::And(v) => v.iter().any(controlled_by_opponent),
+        _ => false,
     }
 }
 
