@@ -99,6 +99,33 @@ fn an_instant_or_sorcery_with_haunt_haunts_after_resolving() {
 }
 
 #[test]
+fn a_spell_that_doesnt_resolve_doesnt_haunt() {
+    cr!("702.55a");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 4);
+    let seize = t.hand(P0, "Seize the Soul");
+    t.cast(P0, seize).target(bears).go();
+    // Its only target leaves the battlefield: it doesn't resolve (CR 608.2b).
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Move {
+            what: Sel::Target(0),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+        &[Entity::Object(bears)],
+    );
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Seize the Soul"));
+    t.settle();
+    assert!(stack_triggers(&t, HAUNT).is_empty());
+    assert!(t.in_graveyard(P0, "Seize the Soul"));
+}
+
+#[test]
 fn haunt_needs_a_target_and_the_card_still_in_the_graveyard() {
     cr!("702.55a");
     let mut t = TestGame::new(2);

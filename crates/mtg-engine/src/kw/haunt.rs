@@ -76,20 +76,21 @@ impl KeywordRules for Haunt {
         if name != SPELL_RESOLVED {
             return None;
         }
+        // The spell resolved (a spell whose targets are all illegal doesn't, CR 608.2b)
+        // and the card it was is now this card in a graveyard.
         Some(match ev {
-            Event::ZoneChange {
-                old,
-                new,
-                from: Zone::Stack,
-                to: Zone::Graveyard(_),
-                cause: MoveCause::Resolve,
-                ..
-            } if *new == src && g.obj(*old).kind == ObjKind::Card => vec![EventInfo {
-                object: Some(*new),
-                lki: Some(*old),
-                player: Some(g.obj(*new).owner),
-                ..Default::default()
-            }],
+            Event::SpellResolved { spell }
+                if g.obj(*spell).next == Some(src)
+                    && g.obj(*spell).kind == ObjKind::Card
+                    && matches!(g.obj(src).zone, Zone::Graveyard(_)) =>
+            {
+                vec![EventInfo {
+                    object: Some(src),
+                    lki: Some(*spell),
+                    player: Some(g.obj(src).owner),
+                    ..Default::default()
+                }]
+            }
             _ => vec![],
         })
     }
