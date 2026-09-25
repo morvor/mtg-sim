@@ -207,6 +207,7 @@ impl Game {
                 let mut all = Vec::new();
                 // CR 101.4 / 608.2e: choices in APNAP order, then performed simultaneously.
                 let mut chosen: Vec<(PlayerId, ObjectId)> = Vec::new();
+                let round = self.apnap_choices.len();
                 for p in players {
                     let mut pctx = ctx.clone();
                     pctx.iter_player = Some(p);
@@ -224,14 +225,17 @@ impl Game {
                         k,
                         k,
                     );
+                    self.record_apnap_choice(p, pick.clone());
                     for o in pick {
                         chosen.push((p, o));
                     }
                 }
-                for (p, o) in chosen {
-                    if let Some(new) = self.sacrifice(o, p) {
-                        all.push(Entity::Object(new));
-                    }
+                let sac: Vec<(ObjectId, PlayerId)> = chosen.iter().map(|(p, o)| (*o, *p)).collect();
+                for new in self.sacrifice_simultaneously(&sac) {
+                    all.push(Entity::Object(new));
+                }
+                self.end_apnap_choices(round);
+                for (_, o) in chosen {
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
@@ -240,16 +244,17 @@ impl Game {
             }
             Effect::SacrificeObjects { what } => {
                 let objs = self.resolve_objects(what, ctx);
-                let mut res = Vec::new();
-                for o in objs {
-                    if !self.is_live(o) {
-                        continue;
-                    }
-                    let p = self.obj(o).controller;
-                    if let Some(n) = self.sacrifice(o, p) {
-                        res.push(Entity::Object(n));
-                    }
-                }
+                // Sacrificed at the same time (CR 101.4).
+                let what: Vec<(ObjectId, PlayerId)> = objs
+                    .into_iter()
+                    .filter(|o| self.is_live(*o))
+                    .map(|o| (o, self.obj(o).controller))
+                    .collect();
+                let res: Vec<Entity> = self
+                    .sacrifice_simultaneously(&what)
+                    .into_iter()
+                    .map(Entity::Object)
+                    .collect();
                 ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res);
             }
@@ -764,6 +769,10 @@ impl Game {
             } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut discarded = Vec::new();
+                // CR 101.4: each player chooses in APNAP order — cards chosen in a hand stay
+                // face down (CR 101.4a) — then the cards are discarded.
+                let round = self.apnap_choices.len();
+                let mut picks: Vec<(PlayerId, Vec<ObjectId>)> = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     let hand: Vec<ObjectId> = self
                         .player(p)
@@ -781,12 +790,17 @@ impl Game {
                     } else {
                         self.ask_objects(p, ctx.source, "Choose cards to discard", hand, k, k)
                     };
+                    self.record_apnap_choice(p, pick.clone());
+                    picks.push((p, pick));
+                }
+                for (p, pick) in picks {
                     for c in pick {
                         if let Some(n) = self.discard(p, c, ctx.source) {
                             discarded.push(Entity::Object(n));
                         }
                     }
                 }
+                self.end_apnap_choices(round);
                 ctx.prev_value = discarded.len() as i64;
                 ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
@@ -1054,6 +1068,9 @@ impl Game {
             }
             Effect::CreateEmblem { abilities } => {
                 crate::tokens::create_emblem(self, ctx.controller, abilities.clone(), ctx.source);
+            }
+            Effect::KeepAndSacrificeRest { who, among, keep } => {
+                crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, ctx);
             }
             Effect::WinGame { who } => {
                 // CR 104.2b, 104.3f: players named together win simultaneously.
@@ -1422,11 +1439,19 @@ impl Game {
     /// applies to exactly those objects: its filter named them through this resolution's
     /// targets or event ("target creature", "that creature"), which aren't available when
     /// the restriction is checked later, so it becomes "any object" (of the locked ones).
-    fn fix_restriction(&self, r: &Restriction, _ctx: &Ctx) -> Restriction {
+    fn fix_restriction(&self, r: &Restriction, ctx: &Ctx) -> Restriction {
         let mut r = r.clone();
         if let Some(f) = restriction_object_filter(&mut r) {
             if filter_references_specific(f) {
                 *f = Filter::Any;
+            }
+        }
+        // A restriction on a referenced player ("target player can't play lands this
+        // turn") locks onto that player.
+        if let Some(pf) = restriction_player_filter(&mut r) {
+            if let PlayerFilter::Ref(who) = pf {
+                let ps = self.eval_players(who, ctx);
+                *pf = PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect());
             }
         }
         r
@@ -1784,6 +1809,22 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeCountered(f)
         | Restriction::CantBeSacrificed(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
+        _ => None,
+    }
+}
+
+/// The player filter of a restriction on players.
+fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
+    match r {
+        Restriction::CantGainLife(f)
+        | Restriction::CantLoseLife(f)
+        | Restriction::CantLoseGame(f)
+        | Restriction::CantWinGame(f)
+        | Restriction::CantSearch(f)
+        | Restriction::SorcerySpeedOnly(f)
+        | Restriction::CantPlayLands(f)
+        | Restriction::MaxDrawsPerTurn(f, _)
+        | Restriction::MaxSpellsPerTurn(f, _) => Some(f),
         _ => None,
     }
 }

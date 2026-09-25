@@ -293,6 +293,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         let t = s.trim_start();
         let (f, rest) = if let Some(r) = t.strip_prefix("you control") {
             (Filter::ControlledBy(PlayerRel::You), r)
+        } else if let Some(r) = t.strip_prefix("your team controls") {
+            // CR 102.4: "your team" means "you and/or your teammates".
+            (
+                Filter::Or(vec![
+                    Filter::ControlledBy(PlayerRel::You),
+                    Filter::ControlledBy(PlayerRel::Teammate),
+                ]),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("you don't control") {
             (Filter::ControlledBy(PlayerRel::NotYou), r)
         } else if let Some(r) = t

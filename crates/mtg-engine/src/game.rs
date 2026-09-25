@@ -462,6 +462,8 @@ pub struct Game {
     pub stickers: Vec<u32>,
     /// Game-ending bookkeeping: draws for individual players, mandatory loops (CR 104).
     pub end: crate::game_end::EndState,
+    /// Choices made so far by players choosing at the same time (CR 101.4).
+    pub apnap_choices: Vec<crate::apnap::ApnapChoice>,
 }
 
 impl Game {
@@ -545,6 +547,7 @@ impl Game {
             carried_effects: vec![],
             stickers: vec![],
             end: Default::default(),
+            apnap_choices: vec![],
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
