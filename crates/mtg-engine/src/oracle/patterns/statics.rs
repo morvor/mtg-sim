@@ -161,6 +161,21 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // Comparisons with this object's power: "with power less than ~'s power", "with
+    // greater power" (than ~).
+    let this_power = || Box::new(Value::PowerOf(Box::new(Sel::This)));
+    for (p, cmp) in [
+        ("with power less than ~'s power", Cmp::Lt),
+        ("with power greater than ~'s power", Cmp::Gt),
+        ("with greater power", Cmp::Gt),
+        ("with lesser power", Cmp::Lt),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',']) {
+                return Some((Filter::Power(cmp, this_power()), r));
+            }
+        }
+    }
     // "with +1/+1 counters on them", "with one or more +1/+1 counters on it",
     // "with counters on them", "with a +1/+1 counter on it".
     if let Some(r) = t.strip_prefix("with ") {
@@ -220,7 +235,10 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
 /// [`parse_object_phrase`] plus [`extra_suffix`]es, in any order.
 pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let (f, plural, mut rest) = parse_object_phrase(s)?;
-    let mut parts = vec![f];
+    let mut parts = match f {
+        Filter::And(v) => v,
+        other => vec![other],
+    };
     loop {
         let t = rest.trim_start();
         if t.is_empty() {
@@ -231,6 +249,17 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             parts.push(g);
             rest = r;
             continue;
+        }
+        // "with flying or reach": another keyword joins the last "with" keyword.
+        if let (Some(r), Some(Filter::HasKeyword(_))) = (t.strip_prefix("or "), parts.last()) {
+            let probe = format!("with {r}");
+            let parsed = extra_suffix(&probe).map(|(f, r2)| (f, r.len() - r2.len()));
+            if let Some((Filter::HasKeyword(k2), used)) = parsed {
+                let k1 = parts.pop()?;
+                parts.push(Filter::Or(vec![k1, Filter::HasKeyword(k2)]));
+                rest = &r[used..];
+                continue;
+            }
         }
         // The shared parser's suffixes, after one of ours ("with flying you control").
         const SUFFIX_STARTS: &[&str] = &[
@@ -692,7 +721,12 @@ fn split_predicates(s: &str) -> Vec<&str> {
             ", ",
         ]
         .into_iter()
-        .find(|sep| rest.starts_with(sep) && starts_with_verb(&rest[sep.len()..]));
+        .find(|sep| {
+            rest.starts_with(sep)
+                && (starts_with_verb(&rest[sep.len()..])
+                    || rest[sep.len()..].starts_with("its activated abilities ")
+                    || rest[sep.len()..].starts_with("their activated abilities "))
+        });
         if let Some(sep) = sep {
             out.push(s[start..i].trim());
             i += sep.len();
@@ -712,6 +746,8 @@ fn split_predicates(s: &str) -> Vec<&str> {
 enum Out {
     Mod(Modification),
     Restr(Restriction),
+    /// A static effect that isn't about the subject objects (players' abilities).
+    Other(StaticEffect),
 }
 
 /// Keyword list items: "flying", "first strike", "protection from red", "ward {2}".
@@ -980,7 +1016,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
         }
         return m(vec![Modification::AddSubtypes(tw.subtypes)]);
     }
-    if r == "every creature type" {
+    if r == "every creature type" || r == "all creature types" {
         // CR 205.3m / 702.73a: all creature types.
         if !subj.creatures {
             return None;
@@ -1137,7 +1173,77 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 }
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
-fn restriction_predicate(p: &str, f: &Filter) -> Option<Restriction> {
+fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
+    let fc = f.clone();
+    match p {
+        "attack or block each combat if able" | "attacks or blocks each combat if able" => {
+            return Some(vec![
+                Restriction::MustAttack(fc.clone()),
+                Restriction::MustBlock(fc),
+            ])
+        }
+        // CR 602.5a: activated abilities (mana abilities included) can't be activated.
+        "its activated abilities can't be activated"
+        | "their activated abilities can't be activated" => {
+            return Some(vec![Restriction::CantActivate {
+                who: PlayerFilter::Any,
+                sources: fc,
+                include_mana: true,
+            }])
+        }
+        "its activated abilities can't be activated unless they're mana abilities"
+        | "their activated abilities can't be activated unless they're mana abilities" => {
+            return Some(vec![Restriction::CantActivate {
+                who: PlayerFilter::Any,
+                sources: fc,
+                include_mana: false,
+            }])
+        }
+        _ => {}
+    }
+    // "can't block it", "can't block creatures with power 2 or greater", "Cowards can't
+    // block Warriors": the subject can't block the named attackers.
+    if let Some(x) = p.strip_prefix("can't block ") {
+        let attacker = match x {
+            "it" | "~" => Filter::Source,
+            _ => {
+                let (a, plural) = whole_object_phrase(&union_nouns(x))?;
+                if !plural {
+                    return None;
+                }
+                a
+            }
+        };
+        return Some(vec![Restriction::CantBeBlockedBy {
+            attacker,
+            blocker: fc,
+        }]);
+    }
+    // "can't be blocked except by creatures with flying"
+    if let Some(x) = p.strip_prefix("can't be blocked except by ") {
+        if x.contains(" or more ") {
+            return single_restriction(p, f).map(|r| vec![r]);
+        }
+        // "Walls and/or creatures with flying": the suffix belongs to the last noun only,
+        // unlike "Walls and creatures you control"; leave such lists alone.
+        if let Some((nouns, _)) = x.split_once(" with ") {
+            if nouns.contains(" or ") || nouns.contains(" and") || nouns.contains(',') {
+                return None;
+            }
+        }
+        let (b, plural) = whole_object_phrase(&union_nouns(x))?;
+        if !plural {
+            return None;
+        }
+        return Some(vec![Restriction::CantBeBlockedBy {
+            attacker: fc,
+            blocker: Filter::not(b),
+        }]);
+    }
+    single_restriction(p, f).map(|r| vec![r])
+}
+
+fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
     let f = f.clone();
     Some(match p {
         "can't block" => Restriction::CantBlock(f),
@@ -1147,6 +1253,7 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Restriction> {
         "attack each combat if able" | "attacks each combat if able" => Restriction::MustAttack(f),
         "block each combat if able" | "blocks each combat if able" => Restriction::MustBlock(f),
         "doesn't untap during its controller's untap step"
+        | "doesn't untap during your untap step"
         | "don't untap during their controllers' untap steps"
         | "don't untap during their controller's untap step" => Restriction::DoesntUntap(f),
         "can't be blocked except by two or more creatures" => {
@@ -1176,6 +1283,13 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Restriction> {
         | "can attack as though they didn't have defender" => Restriction::AttackDespiteDefender(f),
         _ => {
             let r = p.strip_prefix("can't be blocked by ")?;
+            // "with greater power" compares with ~ itself; other subjects would need a
+            // comparison with each attacker.
+            if (r.contains("with greater power") || r.contains("with lesser power"))
+                && !matches!(f, Filter::Source)
+            {
+                return None;
+            }
             let (b, _) = whole_object_phrase(r)?;
             Restriction::CantBeBlockedBy {
                 attacker: f,
@@ -1260,7 +1374,12 @@ fn parse_predicate(
         };
         return type_predicate(&r, subj);
     }
-    Some(vec![Out::Restr(restriction_predicate(p, &subj.filter)?)])
+    Some(
+        restriction_predicate(p, &subj.filter)?
+            .into_iter()
+            .map(Out::Restr)
+            .collect(),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1291,6 +1410,9 @@ fn parse_body(
         }
         None => s,
     };
+    if let Some(body) = parse_player_body(s) {
+        return Some(body);
+    }
     // ", where X is [value]"
     let (s, x_text) = match s.find(", where x is ") {
         Some(i) => (&s[..i], Some(&s[i + ", where x is ".len()..])),
@@ -1403,6 +1525,19 @@ fn parse_line(
             };
             let mut conds2 = conds.clone();
             conds2.push(cond);
+            // "As long as you control exactly one creature, that creature gets +2/+2":
+            // while the condition holds, that's every creature you control.
+            let owned;
+            let rest = match (
+                c.strip_prefix("you control exactly one "),
+                rest.strip_prefix("that creature "),
+            ) {
+                (Some(noun), Some(tail)) if !noun.contains(' ') => {
+                    owned = format!("each {noun} you control {tail}");
+                    owned.as_str()
+                }
+                _ => rest,
+            };
             if let Some(res) = parse_line(rest, conds2, it.or(referent.clone()), quotes, text, ctx)
             {
                 return Some(res);
@@ -1422,6 +1557,30 @@ fn parse_line(
         let mut conds2 = conds.clone();
         conds2.push(cond);
         return Some((body, and_all(conds2)));
+    }
+    // Restrictions with a condition: "~ can't attack unless defending player controls an
+    // Island", "~ doesn't untap during your untap step if it has a depletion counter on
+    // it". The restriction applies while the condition holds (CR 508.1c).
+    for (sep, negate) in [(" unless ", true), (" if ", false)] {
+        for (i, _) in s.match_indices(sep) {
+            let (b, c) = (&s[..i], &s[i + sep.len()..]);
+            let Some(body) = parse_body(b, referent.as_ref(), quotes, text, ctx) else {
+                continue;
+            };
+            if !body.outs.iter().all(|o| matches!(o, Out::Restr(_))) {
+                continue;
+            }
+            let Some((cond, _)) = parse_static_condition(c, body.subject.it.as_ref(), ctx) else {
+                continue;
+            };
+            let mut conds2 = conds.clone();
+            conds2.push(if negate {
+                Condition::Not(Box::new(cond))
+            } else {
+                cond
+            });
+            return Some((body, and_all(conds2)));
+        }
     }
     for tail in [
         " during your turn",
@@ -1446,7 +1605,8 @@ fn build(body: Body, cond: Option<Condition>, text: &str) -> Vec<Ability> {
     for o in body.outs {
         match o {
             Out::Mod(m) => mods.push(m),
-            Out::Restr(r) => restrictions.push(r),
+            Out::Restr(r) => restrictions.push(StaticEffect::Restriction(r)),
+            Out::Other(e) => restrictions.push(e),
         }
     }
     let mk = |effect: StaticEffect| {
@@ -1460,8 +1620,8 @@ fn build(body: Body, cond: Option<Condition>, text: &str) -> Vec<Ability> {
             mods,
         }));
     }
-    for r in restrictions {
-        out.push(mk(StaticEffect::Restriction(r)));
+    for e in restrictions {
+        out.push(mk(e));
     }
     out
 }
@@ -1522,4 +1682,114 @@ inventory::submit! {
         priority: 50,
         parse: p_attack_despite_defender,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Players as subjects
+// ---------------------------------------------------------------------------
+
+/// Removes "spell" from a filter: "can't cast creature spells" checks the card being
+/// cast, which isn't on the stack yet.
+fn without_spell(f: Filter) -> Option<Filter> {
+    match f {
+        Filter::Spell => Some(Filter::Any),
+        Filter::And(v) => Some(Filter::and(
+            v.into_iter().map(without_spell).collect::<Option<Vec<_>>>()?,
+        )),
+        Filter::Or(v) => Some(Filter::Or(
+            v.into_iter().map(without_spell).collect::<Option<Vec<_>>>()?,
+        )),
+        Filter::InZone(_) | Filter::Permanent => None,
+        other => Some(other),
+    }
+}
+
+/// "your opponents can't cast spells", "players have no maximum hand size", "you have
+/// hexproof", "each opponent can't gain life", "your opponents can't cast spells or
+/// activate abilities of artifacts, creatures, or enchantments" (CR 613.10, 613.11).
+fn parse_player_body(s: &str) -> Option<Body> {
+    let (who, rest) = [
+        ("you ", PlayerFilter::You),
+        ("your opponents ", PlayerFilter::Opponent),
+        ("each opponent ", PlayerFilter::Opponent),
+        ("players ", PlayerFilter::Any),
+        ("each player ", PlayerFilter::Any),
+        ("all players ", PlayerFilter::Any),
+    ]
+    .into_iter()
+    .find_map(|(p, f)| s.strip_prefix(p).map(|r| (f, r)))?;
+    let player_effect = |e: PlayerModification| {
+        Out::Other(StaticEffect::PlayerEffect {
+            affected: who.clone(),
+            effect: e,
+        })
+    };
+    let mut outs = Vec::new();
+    match rest {
+        "have no maximum hand size" | "has no maximum hand size" => {
+            outs.push(player_effect(PlayerModification::MaxHandSize(None)))
+        }
+        "have hexproof" | "has hexproof" => outs.push(player_effect(PlayerModification::Hexproof)),
+        "have shroud" | "has shroud" => outs.push(player_effect(PlayerModification::Shroud)),
+        "can't gain life" => outs.push(Out::Restr(Restriction::CantGainLife(who.clone()))),
+        "can't lose life" => outs.push(Out::Restr(Restriction::CantLoseLife(who.clone()))),
+        "can't search libraries" => outs.push(Out::Restr(Restriction::CantSearch(who.clone()))),
+        "can't play lands" => outs.push(Out::Restr(Restriction::CantPlayLands(who.clone()))),
+        "can't cast more than one spell each turn" => {
+            outs.push(Out::Restr(Restriction::MaxSpellsPerTurn(who.clone(), 1)))
+        }
+        "can't draw more than one card each turn" => {
+            outs.push(Out::Restr(Restriction::MaxDrawsPerTurn(who.clone(), 1)))
+        }
+        _ => {
+            // "can't cast [X] spells[ or activate abilities of Y]"
+            let r = rest.strip_prefix("can't ")?;
+            let (cast, activate) = match r.split_once(" or activate abilities of ") {
+                Some((c, a)) => (Some(c), Some(a)),
+                None => match r.strip_prefix("activate abilities of ") {
+                    Some(a) => (None, Some(a)),
+                    None => (Some(r), None),
+                },
+            };
+            if let Some(c) = cast {
+                let what = c.strip_prefix("cast ")?;
+                let what = if what == "spells" {
+                    Filter::Any
+                } else {
+                    let (f, plural) = whole_object_phrase(&union_nouns(what))?;
+                    if !plural || !filter_mentions(&f, &|x| matches!(x, Filter::Spell)) {
+                        return None;
+                    }
+                    without_spell(f)?
+                };
+                outs.push(Out::Restr(Restriction::CantCast {
+                    who: who.clone(),
+                    what,
+                }));
+            }
+            if let Some(a) = activate {
+                // Mana abilities are activated abilities too (CR 605.1a).
+                let (sources, plural) = whole_object_phrase(&union_nouns(a))?;
+                if !plural || mentions_other_zones(&sources) {
+                    return None;
+                }
+                outs.push(Out::Restr(Restriction::CantActivate {
+                    who: who.clone(),
+                    // Only abilities of permanents, not of cards in other zones.
+                    sources: Filter::and(vec![sources, Filter::Permanent]),
+                    include_mana: true,
+                }));
+            }
+        }
+    }
+    Some(Body {
+        subject: Subject {
+            filter: Filter::Any,
+            it: None,
+            hint: CardType::Creature,
+            lands: false,
+            creatures: false,
+        },
+        outs,
+    })
 }

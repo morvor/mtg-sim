@@ -159,6 +159,9 @@ pub(crate) fn counters_on_it(h: &str) -> Option<(Cmp, Value, Option<CounterKind>
         (Cmp::Eq, Value::c(0), r)
     } else if let Some(r) = body.strip_prefix("one or more ") {
         (Cmp::Ge, Value::c(1), r)
+    } else if let Some(r) = body.strip_prefix("exactly ") {
+        let (n, r) = parse_number(r)?;
+        (Cmp::Eq, n, r)
     } else {
         let (n, r) = parse_number(body)?;
         if let Some(r2) = strip(r, "or more") {
@@ -192,6 +195,18 @@ fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
     }
     if let Some(r) = s.strip_prefix("no ") {
         return Some((Cmp::Eq, Value::c(0), r));
+    }
+    for (p, cmp) in [
+        ("exactly ", Cmp::Eq),
+        ("fewer than ", Cmp::Lt),
+        ("less than ", Cmp::Lt),
+        ("more than ", Cmp::Gt),
+        ("greater than ", Cmp::Gt),
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let (n, r) = parse_number(r)?;
+            return Some((cmp, n, r));
+        }
     }
     let (n, r) = parse_number(s)?;
     if let Some(r2) = strip(r, "or more").or_else(|| strip(r, "or greater")) {
@@ -391,10 +406,7 @@ fn life_condition(c: &str) -> Option<Condition> {
 /// "defending player controls a X", "you control N or fewer X".
 fn control_condition(c: &str) -> Option<Condition> {
     let c = end(c);
-    let phrase = |r: &str| -> Option<Filter> {
-        let (f, _, tail) = parse_object_phrase(r)?;
-        end(tail).is_empty().then_some(f)
-    };
+    let phrase = |r: &str| -> Option<Filter> { color_or_phrase(r) };
     let article = |r: &'_ str| -> Option<String> {
         r.strip_prefix("a ")
             .or_else(|| r.strip_prefix("an "))
@@ -433,15 +445,72 @@ fn control_condition(c: &str) -> Option<Condition> {
             ])));
         }
     }
+    if let Some(r) = c.strip_prefix("your opponents control no ") {
+        let f = phrase(r)?;
+        return Some(Condition::Not(Box::new(Condition::Exists(f.opp_controls()))));
+    }
     if let Some(r) = c.strip_prefix("you control ") {
-        let (cmp, n, rest) = amount_cmp(r)?;
-        if cmp != Cmp::Le {
-            return None;
+        if let Some((cmp, n, rest)) = amount_cmp(r) {
+            let f = phrase(rest)?;
+            return Some(Condition::Compare(Value::Count(f.you_control()), cmp, n));
         }
-        let f = phrase(rest)?;
-        return Some(Condition::Compare(Value::Count(f.you_control()), cmp, n));
+        // "you control a red or white permanent"
+        let f = phrase(&article(r)?)?;
+        return Some(Condition::Exists(f.you_control()));
     }
     None
+}
+
+/// An object phrase, also allowing a leading color choice: "red or white permanent".
+fn color_or_phrase(r: &str) -> Option<Filter> {
+    let words: Vec<&str> = r.splitn(4, ' ').collect();
+    if words.len() == 4 && words[1] == "or" {
+        if let (Some(a), Some(b)) = (Color::from_word(words[0]), Color::from_word(words[2])) {
+            let (f, _, tail) = parse_object_phrase(words[3])?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            return Some(Filter::and(vec![
+                Filter::Or(vec![Filter::Color(a), Filter::Color(b)]),
+                f,
+            ]));
+        }
+    }
+    let (f, _, tail) = parse_object_phrase(r)?;
+    end(tail).is_empty().then_some(f)
+}
+
+/// "your life total is greater than or equal to your starting life total", "an
+/// opponent's life total is less than half their starting life total", "you have more
+/// cards in hand than each opponent".
+fn comparison_condition(c: &str) -> Option<Condition> {
+    let life = || Value::LifeTotal(PlayerRef::You);
+    Some(match end(c) {
+        "your life total is greater than or equal to your starting life total"
+        | "your life total is at least your starting life total" => {
+            Condition::Compare(life(), Cmp::Ge, Value::StartingLife)
+        }
+        "your life total is less than your starting life total" => {
+            Condition::Compare(life(), Cmp::Lt, Value::StartingLife)
+        }
+        // Less than half: below half, rounding the half up for odd totals.
+        "an opponent's life total is less than half their starting life total" => {
+            Condition::PlayerMatches(
+                PlayerRef::EachOpponent,
+                PlayerFilter::Life(
+                    Cmp::Lt,
+                    Box::new(Value::Div(Box::new(Value::StartingLife), 2, true)),
+                ),
+            )
+        }
+        "you have more cards in hand than each opponent" => Condition::Not(Box::new(
+            Condition::PlayerMatches(
+                PlayerRef::EachOpponent,
+                PlayerFilter::HandSize(Cmp::Ge, Box::new(Value::HandSize(PlayerRef::You))),
+            ),
+        )),
+        _ => return None,
+    })
 }
 
 /// Turn history: "you gained life this turn", "you've drawn two or more cards this
@@ -551,6 +620,7 @@ fn referent_free_condition(c: &str) -> Option<Condition> {
         .or_else(|| life_condition(c))
         .or_else(|| hand_condition(c))
         .or_else(|| control_condition(c))
+        .or_else(|| comparison_condition(c))
         .or_else(|| history_condition(c))
         .or_else(|| stat_condition(c, None))
         .or_else(|| {
