@@ -4,8 +4,9 @@
 //!   (via `cr!(...)`) or exempted (`docs/cr-exemptions.tsv`).
 //! * `card-coverage [--write PATH]` — how many cards the oracle compiler fully supports,
 //!   and the most common unsupported ability texts.
-//! * `rulings-coverage [--write PATH]` — which Scryfall rulings are cited by tests (via
-//!   `ruling!(...)`).
+//! * `rulings-coverage [--write PATH] [--check] [--card NAME] [--text SUBSTR]` — which
+//!   Scryfall rulings are cited by tests (via `ruling!(...)`) or exempted
+//!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status.
 //! * `unsupported [--limit N] [--filter TEXT]` — dump unsupported ability texts with counts.
 
 use mtg_data::rules::RuleKind;
@@ -406,7 +407,8 @@ fn unsupported(args: &[String]) {
 /// All `ruling!("Card", "text")` citations.
 pub fn ruling_citations() -> Vec<(String, String, String)> {
     let mut files = Vec::new();
-    rust_files(&repo_root().join("crates"), &mut files);
+    // Only the engine: mtg-data and mtg-tools mention the macro in docs and help text.
+    rust_files(&repo_root().join("crates/mtg-engine"), &mut files);
     let re =
         Regex::new(r#"(?s)ruling!\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)"#)
             .unwrap();
@@ -431,57 +433,229 @@ pub fn ruling_citations() -> Vec<(String, String, String)> {
     out
 }
 
-fn rulings_coverage(args: &[String]) {
-    let cites = ruling_citations();
+/// Rulings exempted from test coverage, from every `docs/rulings-exemptions/*.tsv`:
+/// `Card Name<TAB>distinctive substring<TAB>reason` → (card, substring, reason, file).
+pub fn rulings_exemptions() -> Vec<(String, String, String, String)> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(repo_root().join("docs/rulings-exemptions")) else {
+        return out;
+    };
+    let mut paths: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "tsv"))
+        .collect();
+    paths.sort();
+    for path in paths {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let file = path
+            .strip_prefix(repo_root())
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        for line in text.lines() {
+            if line.trim().is_empty() || line.trim_start().starts_with('#') {
+                continue;
+            }
+            let mut parts = line.splitn(3, '\t');
+            let card = parts.next().unwrap_or("").trim().to_string();
+            let needle = parts.next().unwrap_or("").trim().to_string();
+            let reason = parts.next().unwrap_or("").trim().to_string();
+            out.push((card, needle, reason, file.clone()));
+        }
+    }
+    out
+}
+
+/// Resolves `(card, needle)` references against the rulings: every matching
+/// (oracle_id, comment) goes into `hit`; references matching nothing are returned.
+fn match_ruling_refs<'a>(
+    refs: impl Iterator<Item = (&'a str, &'a str, &'a str)>,
+    hit: &mut BTreeSet<(String, String)>,
+) -> Vec<String> {
     let rulings = mtg_data::rulings();
     let cards = mtg_data::cards();
-    let mut matched: BTreeSet<(String, String)> = BTreeSet::new(); // (oracle_id, comment)
     let mut unmatched = Vec::new();
-    for (card, needle, file) in &cites {
+    for (card, needle, file) in refs {
         let Some(c) = cards.by_name(card) else {
             unmatched.push(format!("{card}: unknown card ({file})"));
             continue;
         };
         let n = mtg_data::normalize_text(needle);
         let mut found = false;
-        for r in rulings.for_oracle_id(&c.oracle_id) {
-            if mtg_data::normalize_text(&r.comment).contains(&n) {
-                matched.insert((c.oracle_id.clone(), r.comment.clone()));
-                found = true;
+        if !n.is_empty() {
+            for r in rulings.for_oracle_id(&c.oracle_id) {
+                if mtg_data::normalize_text(&r.comment).contains(&n) {
+                    hit.insert((c.oracle_id.clone(), r.comment.clone()));
+                    found = true;
+                }
             }
         }
         if !found {
             unmatched.push(format!("{card}: {needle} ({file})"));
         }
     }
+    unmatched
+}
+
+fn rulings_coverage(args: &[String]) {
+    let cites = ruling_citations();
+    let exempts = rulings_exemptions();
+    let rulings = mtg_data::rulings();
+    let cards = mtg_data::cards();
+    let mut matched: BTreeSet<(String, String)> = BTreeSet::new(); // (oracle_id, comment)
+    let unmatched = match_ruling_refs(
+        cites
+            .iter()
+            .map(|(c, n, f)| (c.as_str(), n.as_str(), f.as_str())),
+        &mut matched,
+    );
+    let mut exempted: BTreeSet<(String, String)> = BTreeSet::new();
+    let unmatched_ex = match_ruling_refs(
+        exempts
+            .iter()
+            .map(|(c, n, _, f)| (c.as_str(), n.as_str(), f.as_str())),
+        &mut exempted,
+    );
+    let missing_reason: Vec<String> = exempts
+        .iter()
+        .filter(|(_, _, r, _)| r.is_empty())
+        .map(|(c, n, _, f)| format!("{c}: {n} ({f})"))
+        .collect();
     let unique_comments: BTreeSet<&str> = rulings.iter().map(|r| r.comment.as_str()).collect();
     let cited_comments: BTreeSet<&str> = matched.iter().map(|(_, c)| c.as_str()).collect();
+    let exempt_comments: BTreeSet<&str> = exempted
+        .iter()
+        .map(|(_, c)| c.as_str())
+        .filter(|c| !cited_comments.contains(c))
+        .collect();
     // A ruling text shared by many cards counts as covered once for "unique" coverage.
     let covered_unique = unique_comments
         .iter()
         .filter(|c| cited_comments.contains(*c))
         .count();
+    let exempt_unique = unique_comments
+        .iter()
+        .filter(|c| exempt_comments.contains(*c))
+        .count();
+    let pct = |n: usize| 100.0 * n as f64 / unique_comments.len() as f64;
     println!(
-        "Rulings cited: {} (card, ruling) pairs; {} of {} unique ruling texts ({:.2}%); {} citations unmatched",
+        "Rulings cited: {} (card, ruling) pairs; {} of {} unique ruling texts cited ({:.2}%), {} exempt ({:.2}%); {} citations and {} exemptions unmatched",
         matched.len(),
         covered_unique,
         unique_comments.len(),
-        100.0 * covered_unique as f64 / unique_comments.len() as f64,
-        unmatched.len()
+        pct(covered_unique),
+        exempt_unique,
+        pct(exempt_unique),
+        unmatched.len(),
+        unmatched_ex.len()
     );
     for u in &unmatched {
-        println!("  UNMATCHED {u}");
+        println!("  UNMATCHED citation {u}");
+    }
+    for u in &unmatched_ex {
+        println!("  UNMATCHED exemption {u}");
+    }
+    for u in &missing_reason {
+        println!("  EXEMPTION WITHOUT REASON {u}");
+    }
+    let status = |comment: &str, oracle_id: &str| -> &'static str {
+        let key = (oracle_id.to_string(), comment.to_string());
+        if matched.contains(&key) {
+            "CITED    "
+        } else if cited_comments.contains(comment) {
+            "CITED*   "
+        } else if exempted.contains(&key) || exempt_comments.contains(comment) {
+            "EXEMPT   "
+        } else {
+            "UNCOVERED"
+        }
+    };
+    let mut write = None;
+    let mut check = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--write" => {
+                write = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--check" => check = true,
+            // Status of every ruling of one card.
+            "--card" => {
+                let name = args.get(i + 1).cloned().unwrap_or_default();
+                i += 1;
+                match cards.by_name(&name) {
+                    None => println!("unknown card: {name}"),
+                    Some(c) => {
+                        println!(
+                            "{} ({} rulings):",
+                            c.name,
+                            rulings.for_oracle_id(&c.oracle_id).len()
+                        );
+                        for r in rulings.for_oracle_id(&c.oracle_id) {
+                            println!("  {} {}", status(&r.comment, &c.oracle_id), r.comment);
+                        }
+                    }
+                }
+            }
+            // Status of every unique ruling text containing a substring.
+            "--text" => {
+                let needle = mtg_data::normalize_text(args.get(i + 1).map_or("", |s| s.as_str()));
+                i += 1;
+                let mut by_text: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+                for r in rulings.iter() {
+                    if mtg_data::normalize_text(&r.comment).contains(&needle) {
+                        by_text
+                            .entry(r.comment.as_str())
+                            .or_default()
+                            .push(r.oracle_id.as_str());
+                    }
+                }
+                for (text, ids) in &by_text {
+                    let st = ids
+                        .iter()
+                        .map(|id| status(text, id))
+                        .min_by_key(|s| {
+                            if s.starts_with("CITED") {
+                                0
+                            } else if s.starts_with("EXEMPT") {
+                                1
+                            } else {
+                                2
+                            }
+                        })
+                        .unwrap_or("UNCOVERED");
+                    let names: Vec<String> = ids
+                        .iter()
+                        .take(3)
+                        .filter_map(|id| cards.by_oracle_id(id).map(|c| c.name.clone()))
+                        .collect();
+                    println!(
+                        "  {st} [{} cards, e.g. {}] {text}",
+                        ids.len(),
+                        names.join("; ")
+                    );
+                }
+            }
+            _ => {}
+        }
+        i += 1;
     }
     let mut md = String::new();
-    md.push_str("# Scryfall rulings coverage\n\nGenerated by `cargo run -p mtg-tools -- rulings-coverage --write docs/RULINGS_COVERAGE.md`. Tests cite rulings with `ruling!(\"Card Name\", \"distinctive text\")`, which fails if no such ruling exists.\n\n");
+    md.push_str("# Scryfall rulings coverage\n\nGenerated by `cargo run -p mtg-tools -- rulings-coverage --write docs/RULINGS_COVERAGE.md`. Tests cite rulings with `ruling!(\"Card Name\", \"distinctive text\")`, which fails if no such ruling exists. Rulings with no engine-testable content are listed with a reason in `docs/rulings-exemptions/*.tsv`.\n\n");
     md.push_str(&format!(
-        "- Total rulings: {} ({} unique texts across {} cards)\n- (card, ruling) pairs cited by tests: **{}**\n- Unique ruling texts covered: **{}** ({:.2}%)\n\n",
+        "- Total rulings: {} ({} unique texts across {} cards)\n- (card, ruling) pairs cited by tests: **{}**\n- Unique ruling texts covered by tests: **{}** ({:.2}%)\n- Unique ruling texts exempt: **{}** ({:.2}%)\n\n",
         rulings.len(),
         unique_comments.len(),
         rulings.iter().map(|r| r.oracle_id.as_str()).collect::<BTreeSet<_>>().len(),
         matched.len(),
         covered_unique,
-        100.0 * covered_unique as f64 / unique_comments.len() as f64
+        pct(covered_unique),
+        exempt_unique,
+        pct(exempt_unique),
     ));
     let mut by_card: BTreeMap<String, usize> = BTreeMap::new();
     for (card, _, _) in &cites {
@@ -494,14 +668,12 @@ fn rulings_coverage(args: &[String]) {
     for (c, n) in &by_card {
         md.push_str(&format!("- {c} ({n})\n"));
     }
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == "--write" {
-            std::fs::write(repo_root().join(&args[i + 1]), &md).expect("write report");
-            println!("wrote {}", args[i + 1]);
-            i += 1;
-        }
-        i += 1;
+    if let Some(path) = write {
+        std::fs::write(repo_root().join(&path), &md).expect("write report");
+        println!("wrote {path}");
+    }
+    if check && !(unmatched.is_empty() && unmatched_ex.is_empty() && missing_reason.is_empty()) {
+        std::process::exit(1);
     }
 }
 
