@@ -566,6 +566,11 @@ fn p_prevent(l: &str, b: &mut Builder) -> Option<Effect> {
     if amount.is_some() && combat_only {
         return None;
     }
+    // "All damage that would be dealt to creatures this turn" applies to whatever is a
+    // creature when the damage would be dealt (damage_removal_prevention.rs).
+    if amount.is_none() && matches!(to, Sel::All(_)) {
+        return None;
+    }
     Some(Effect::PreventDamage {
         to,
         amount,

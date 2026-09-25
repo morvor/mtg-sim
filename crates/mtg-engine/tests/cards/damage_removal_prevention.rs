@@ -1,0 +1,204 @@
+//! Prevention "to"/"by" objects and groups, static prevention, and "would die, exile it
+//! instead" statics (patterns in `src/oracle/patterns/damage_removal_prevention.rs`).
+
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+fn assert_compiles(names: &[&str]) {
+    for n in names {
+        let u = card(n).unsupported_text().join(" | ");
+        assert!(u.is_empty(), "{n} has unsupported text: {u}");
+    }
+}
+
+#[test]
+fn prevention_cards_compile() {
+    assert_compiles(&[
+        "Dawn Elemental",
+        "Fog Bank",
+        "Sandskin",
+        "Inviolability",
+        "Demonic Torment",
+        "Maze of Ith",
+        "Ethereal Haze",
+        "Defend the Hearth",
+        "Hunter's Ambush",
+        "Blinding Fog",
+        "Incendiary Oracle",
+        "Bubble Matrix",
+        "Champion Lancer",
+        "Uncle Istvan",
+        "Kor Haven",
+        "Moonlight Geist",
+        "Emmara Tandris",
+        "Possessed Skaab",
+        "Ebony Horse",
+    ]);
+}
+
+fn bolt(t: &mut TestGame, target: impl Into<Entity>) {
+    t.lands(P1, "Mountain", 1);
+    let b = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, b).target(target).go();
+    t.resolve();
+}
+
+#[test]
+fn dawn_elemental_prevents_all_damage_to_itself() {
+    cr!("615.1a", "615.3");
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Dawn Elemental");
+    bolt(&mut t, e);
+    assert!(t.on_battlefield(e));
+    assert_eq!(t.obj_now(e).damage, 0);
+}
+
+#[test]
+fn fog_bank_prevents_combat_damage_to_and_by_it_but_not_other_damage() {
+    cr!("615.1a", "510.2");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let fog = t.battlefield(P1, "Fog Bank");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[(fog, bears)]);
+    assert!(t.on_battlefield(fog));
+    assert_eq!(t.obj_now(fog).damage, 0);
+    // Fog Bank deals no damage either (it has 0 power anyway, so check the Bears).
+    assert_eq!(t.obj_now(bears).damage, 0);
+    // Noncombat damage isn't prevented.
+    bolt(&mut t, fog);
+    assert!(!t.on_battlefield(fog));
+}
+
+#[test]
+fn sandskin_prevents_combat_damage_to_and_by_the_enchanted_creature() {
+    cr!("615.1a", "303.4");
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    let skin = t.battlefield(P0, "Sandskin");
+    assert!(t.g.attach(skin, Entity::Object(attacker)));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(attacker, Entity::Player(P1))], &[(blocker, attacker)]);
+    assert!(t.on_battlefield(attacker));
+    assert!(t.on_battlefield(blocker));
+    assert_eq!(t.obj_now(attacker).damage, 0);
+    assert_eq!(t.obj_now(blocker).damage, 0);
+}
+
+#[test]
+fn maze_of_ith_untaps_and_neutralizes_an_attacker() {
+    cr!("615.1a", "506.4");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let maze = t.battlefield(P1, "Maze of Ith");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    assert!(t.obj_now(bears).tapped);
+    t.activate(P1, maze, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    assert!(!t.obj_now(bears).tapped);
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn ethereal_haze_prevents_damage_dealt_by_creatures_only() {
+    cr!("615.1a");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Plains", 1);
+    let haze = t.hand(P1, "Ethereal Haze");
+    t.cast(P1, haze).go();
+    t.resolve();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 20);
+    // A spell isn't a creature.
+    t.lands(P0, "Mountain", 1);
+    let b = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn defend_the_hearth_prevents_combat_damage_to_players() {
+    cr!("615.1a", "510.2");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Llanowar Elves");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Forest", 2);
+    let d = t.hand(P1, "Defend the Hearth");
+    t.cast(P1, d).go();
+    t.resolve();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[(bears, Entity::Player(P1)), (other, Entity::Player(P1))],
+        &[(blocker, other)],
+    );
+    assert_eq!(t.life(P1), 20);
+    // Combat damage to creatures still happens.
+    assert!(!t.on_battlefield(blocker));
+}
+
+#[test]
+fn bubble_matrix_prevents_damage_to_creatures_but_not_players() {
+    cr!("615.1a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bubble Matrix");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    bolt(&mut t, bears);
+    assert!(t.on_battlefield(bears));
+    bolt(&mut t, P0);
+    assert_eq!(t.life(P0), 17, "players aren't protected");
+}
+
+#[test]
+fn champion_lancer_prevents_damage_from_creatures_only() {
+    cr!("615.1a");
+    let mut t = TestGame::new(2);
+    let lancer = t.battlefield(P0, "Champion Lancer");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P0))], &[(lancer, bears)]);
+    assert_eq!(t.obj_now(lancer).damage, 0);
+    assert!(!t.on_battlefield(bears));
+    bolt(&mut t, lancer);
+    assert!(!t.on_battlefield(lancer), "3 damage from a spell to a 3/3");
+}
+
+#[test]
+fn possessed_skaab_is_exiled_instead_of_dying() {
+    cr!("614.1a", "700.4");
+    let mut t = TestGame::new(2);
+    let skaab = t.battlefield(P0, "Possessed Skaab");
+    bolt(&mut t, skaab);
+    assert!(!t.on_battlefield(skaab));
+    assert!(t.in_exile("Possessed Skaab"));
+    assert!(!t.in_graveyard(P0, "Possessed Skaab"));
+}
+
+#[test]
+fn incendiary_oracle_exiles_creatures_it_dealt_damage_this_turn() {
+    cr!("614.1a", "700.4");
+    let mut t = TestGame::new(2);
+    let oracle = t.battlefield(P0, "Incendiary Oracle");
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(oracle, Entity::Player(P1))], &[(blocker, oracle)]);
+    // The blocker was dealt damage by the Oracle and died: exiled.
+    assert!(!t.on_battlefield(blocker));
+    assert!(t.in_exile("Grizzly Bears"));
+    // Another creature that dies normally goes to the graveyard.
+    bolt(&mut t, other);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
