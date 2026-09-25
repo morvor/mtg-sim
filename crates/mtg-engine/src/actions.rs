@@ -247,6 +247,7 @@ impl Game {
                 if o.chars.has_subtype("Saga") && crate::saga::has_chapters(o) {
                     counters_to_add.push((counters::LORE.into(), 1));
                 }
+                let counters_before = self.obj(new_id).counters.clone();
                 for (k, n) in counters_to_add {
                     // Counters placed as it enters are part of the ETB event; replacement
                     // effects on counters still apply (CR 614.16).
@@ -269,6 +270,8 @@ impl Game {
                         }
                     }
                 }
+                // CR 122.6: counters it's given as it enters are counters put on it.
+                crate::counter_rules::entered_with_counters(self, new_id, &counters_before);
                 // "As this enters" effects (CR 614.1c).
                 for (mut c, e) in m.etb.as_enters.clone() {
                     c.source = Some(new_id);
@@ -590,6 +593,10 @@ impl Game {
     pub fn untap(&mut self, obj: ObjectId) -> bool {
         let o = self.obj(obj);
         if o.zone != Zone::Battlefield || !o.tapped {
+            return false;
+        }
+        // CR 122.1d: a stun counter's replacement effect.
+        if crate::counter_rules::stun_instead_of_untap(self, obj) {
             return false;
         }
         self.objects[obj.0 as usize].tapped = false;

@@ -280,6 +280,23 @@ impl Game {
                 });
             }
         }
+        // Effects that shield and finality counters create (CR 122.1c, 122.1h).
+        for (key, obj, controller, def, text) in
+            crate::counter_rules::counter_replacements(self, ev)
+        {
+            if !applied.contains(&key) {
+                out.push(Candidate {
+                    key,
+                    source: Some(obj),
+                    link: 0,
+                    controller,
+                    class: 4,
+                    text,
+                    def,
+                    instance: None,
+                });
+            }
+        }
         // Built-in rules replacement: commander to hand/library (CR 903.9b).
         if let ReplEvent::Move(m) = ev {
             let o = self.obj(m.obj);
@@ -408,6 +425,20 @@ impl Game {
                         .as_ref()
                         .is_some_and(|f| self.player_filter_matches(f, *p, ctx)),
                 }
+            }
+            (
+                ReplacementEvent::PutCountersBy { by, kind },
+                ReplEvent::AddCounters {
+                    target: Entity::Object(o),
+                    kind: k,
+                    n,
+                    source,
+                },
+            ) => {
+                *n > 0
+                    && kind.as_ref().is_none_or(|x| x == k)
+                    && crate::counter_rules::who_puts_counters(self, *o, *source)
+                        .is_some_and(|p| self.player_rel_matches(*by, p, ctx))
             }
             (
                 ReplacementEvent::CreateTokens(pf),

@@ -631,6 +631,8 @@ impl Game {
         }
         // CR 505.5: attractions.
         crate::variants::roll_to_visit_attractions(self, active);
+        // CR 122.1i, 728.1: the rad counter triggered ability.
+        crate::counter_rules::rad_trigger(self);
     }
 
     fn cleanup_actions(&mut self) {

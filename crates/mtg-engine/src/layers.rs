@@ -643,10 +643,16 @@ impl Game {
     fn apply_pt_counters(&mut self, live: &[ObjectId]) {
         for id in live {
             let o = &self.objects[id.0 as usize];
-            if o.zone != Zone::Battlefield || o.counters.is_empty() {
+            // CR 122.1a: counters on a creature, or on a creature card in a zone other than
+            // the battlefield. CR 122.1j: hone counters on Equipment attached to it.
+            if !o.is_creature() {
                 continue;
             }
-            let mut dp = 0i32;
+            let mut dp = if o.zone == Zone::Battlefield {
+                crate::counter_rules::hone_bonus(self, *id)
+            } else {
+                0
+            };
             let mut dt = 0i32;
             for (k, n) in &o.counters {
                 if let Some((p, t)) = parse_pt_counter(k) {
@@ -670,7 +676,8 @@ impl Game {
     fn apply_keyword_counters(&mut self, live: &[ObjectId]) {
         for id in live {
             let o = &self.objects[id.0 as usize];
-            if o.zone != Zone::Battlefield || o.counters.is_empty() {
+            // CR 122.1b: on a permanent, or on a card in a zone other than the battlefield.
+            if o.counters.is_empty() {
                 continue;
             }
             let mut add: Vec<Keyword> = Vec::new();

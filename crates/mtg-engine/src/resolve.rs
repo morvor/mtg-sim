@@ -368,6 +368,50 @@ impl Game {
                 }
                 ctx.prev_value = total as i64;
             }
+            Effect::MoveCounters { from, to, kind, n } => {
+                let from = self.resolve_objects(from, ctx).into_iter().next();
+                let to = self.resolve_sel(to, ctx).into_iter().next();
+                let mut total = 0;
+                if let (Some(from), Some(to)) = (from, to) {
+                    let present: Vec<CounterKind> =
+                        self.obj(from).counters.keys().cloned().collect();
+                    let kinds: Vec<CounterKind> = match (kind, n) {
+                        (Some(k), _) => vec![k.clone()],
+                        // "Move all counters": each kind.
+                        (None, None) => present,
+                        // "Move a counter": of a kind the player chooses.
+                        (None, Some(_)) => {
+                            let labels = present.iter().map(|k| k.to_string()).collect();
+                            let i = self.ask_option(
+                                ctx.controller,
+                                ctx.source,
+                                "Choose a kind of counter",
+                                labels,
+                            );
+                            present.get(i).cloned().into_iter().collect()
+                        }
+                    };
+                    for k in kinds {
+                        let count = match n {
+                            Some(v) => self.eval_value(v, ctx).max(0) as u32,
+                            None => self.obj(from).counter(&k),
+                        };
+                        total += crate::counter_rules::move_counters(self, from, to, &k, count);
+                    }
+                }
+                ctx.prev_value = total as i64;
+            }
+            Effect::PutCountersOf { from, to, kind } => {
+                let from = self.resolve_objects(from, ctx).into_iter().next();
+                let mut total = 0;
+                if let Some(from) = from {
+                    for t in self.resolve_sel(to, ctx) {
+                        total +=
+                            crate::counter_rules::put_counters_of(self, from, t, kind.as_deref());
+                    }
+                }
+                ctx.prev_value = total as i64;
+            }
             Effect::Modify {
                 what,
                 mods,

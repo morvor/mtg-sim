@@ -705,6 +705,8 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player with one or more poison counters (CR 122.1f).
+    Poisoned,
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),
@@ -1332,6 +1334,12 @@ pub enum ReplacementEvent {
         on_players: Option<PlayerFilter>,
         kind: Option<CounterKind>,
     },
+    /// A player matching `by` would put counters (of `kind`) on a permanent ("If you would
+    /// put one or more counters on a permanent", CR 122.6a).
+    PutCountersBy {
+        by: PlayerRel,
+        kind: Option<CounterKind>,
+    },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
     /// A permanent would be destroyed.
@@ -1820,6 +1828,13 @@ pub enum TriggerCond {
         filter: Filter,
         kind: Option<CounterKind>,
     },
+    /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
+    /// such that it had fewer than N before and N or more after (CR 122.7).
+    CounterThreshold {
+        filter: Filter,
+        kind: CounterKind,
+        n: u32,
+    },
     BecomesTapped(Filter),
     BecomesUntapped(Filter),
     /// "Whenever [filter] becomes the target of a spell or ability [opponent controls]".
@@ -2059,6 +2074,21 @@ pub enum Effect {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
+    /// counters of each kind; `n: None`: all of them.
+    MoveCounters {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
+        n: Option<Value>,
+    },
+    /// "Put [its] counters on [to]" for an object that has left the battlefield: the same
+    /// number of each kind of counter it had (or only of `kind`) (CR 122.8, 122.9).
+    PutCountersOf {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
     },
     /// Apply layer modifications to the selected objects for a duration (CR 611.2).
     Modify {

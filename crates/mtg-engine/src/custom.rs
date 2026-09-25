@@ -79,6 +79,5 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
 
 /// "can't have more than N [kind] counters on it" (CR 704.5r).
 pub fn counter_limits(g: &Game, id: ObjectId) -> Vec<(CounterKind, u32)> {
-    let _ = (g, id);
-    vec![]
+    crate::counter_rules::counter_limits(g, id)
 }
