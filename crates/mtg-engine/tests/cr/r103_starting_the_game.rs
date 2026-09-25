@@ -173,6 +173,44 @@ fn sideboards_are_set_aside_and_the_deck_is_the_starting_deck() {
 }
 
 #[test]
+fn the_additional_steps_happen_in_order_after_the_starting_player_is_determined() {
+    cr!("103.2");
+    let mut deck = copies("Grizzly Bears", 20);
+    deck.extend(copies("Forest", 20));
+    let mut t = pregame(
+        GameConfig {
+            limited: true,
+            first_turn_chooser: Some(P0),
+            skip_mulligans: true,
+            ..config()
+        },
+        vec![deck, fillers(40)],
+    );
+    t.g.add_to_sideboard(
+        P0,
+        vec![card("Lurrus of the Dream-Den"), card("Brago's Favor")],
+    );
+    t.g.start.sticker_sheets.insert(P0, sheets(2));
+    t.g.start();
+    let prompts: Vec<String> = t
+        .asked()
+        .into_iter()
+        .filter(|(p, _)| *p == P0)
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { prompt, .. } | Decision::ChooseOption { prompt, .. } => {
+                Some(prompt)
+            }
+            _ => None,
+        })
+        .collect();
+    let first = |s: &str| prompts.iter().position(|p| p.contains(s)).unwrap();
+    // 103.1, then 103.2b (companion), 103.2d (sticker sheets), 103.2e (conspiracies).
+    assert!(first("first turn") < first("companion"));
+    assert!(first("companion") < first("sticker sheet"));
+    assert!(first("sticker sheet") < first("conspiracies"));
+}
+
+#[test]
 fn a_companion_can_be_revealed_only_if_the_starting_deck_fulfills_its_condition() {
     cr!("103.2b");
     // Lurrus: "Companion — Each permanent card in your starting deck has mana value 2 or
@@ -759,7 +797,7 @@ fn the_starting_player_takes_the_first_turn() {
 
 #[test]
 fn in_a_two_player_game_the_starting_player_skips_their_first_draw_step() {
-    cr!("103.8a", "100.1a");
+    cr!("103.8a", "100.1", "100.1a");
     let mut deck = fillers(40);
     deck.push(card("Howling Mine"));
     let mut t = pregame(
@@ -785,7 +823,7 @@ fn in_a_two_player_game_the_starting_player_skips_their_first_draw_step() {
 
 #[test]
 fn in_other_multiplayer_games_no_one_skips_their_first_draw() {
-    cr!("103.8c", "100.1b");
+    cr!("103.8c", "100.1", "100.1b");
     let mut t = started(
         GameConfig {
             starting_player: Some(P0),

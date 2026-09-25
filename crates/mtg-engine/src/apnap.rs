@@ -24,6 +24,44 @@ pub struct ApnapChoice {
 }
 
 impl Game {
+    /// Makes simultaneous choices in APNAP order (CR 101.4): each request is one player's
+    /// choice; `choose` makes it and returns any further choices it causes. The next
+    /// choice is always the outstanding one of the player earliest in APNAP order, so if a
+    /// nonactive player's choice makes the active player (or a nonactive player earlier in
+    /// turn order) have to choose, APNAP order restarts for all outstanding choices
+    /// (CR 101.4d). Requests of the same player keep their order.
+    pub fn apnap_round<T>(
+        &mut self,
+        requests: Vec<(PlayerId, T)>,
+        mut choose: impl FnMut(&mut Game, PlayerId, T) -> Vec<(PlayerId, T)>,
+    ) {
+        let order = self.pregame_order_or_apnap();
+        let pos = |p: PlayerId| order.iter().position(|x| *x == p).unwrap_or(usize::MAX);
+        let mut outstanding: Vec<(PlayerId, T)> = requests;
+        while !outstanding.is_empty() {
+            let i = (0..outstanding.len())
+                .min_by_key(|i| (pos(outstanding[*i].0), *i))
+                .unwrap_or(0);
+            let (p, data) = outstanding.remove(i);
+            let more = choose(self, p, data);
+            outstanding.extend(more);
+        }
+    }
+
+    /// APNAP order for simultaneous choices: with shared team turns the active team's
+    /// players first, then each other team in turn order (CR 805.6).
+    fn pregame_order_or_apnap(&self) -> Vec<PlayerId> {
+        let mut order = self.pregame_order();
+        // Players who have left the game make no choices, but keep them last so a request
+        // for them is still handled.
+        for p in self.player_ids() {
+            if !order.contains(&p) {
+                order.push(p);
+            }
+        }
+        order
+    }
+
     /// Records a player's choice among simultaneous choices, for players choosing later
     /// (CR 101.4b). A round of choices starts at `apnap_choices.len()`.
     pub fn record_apnap_choice(&mut self, player: PlayerId, chosen: Vec<ObjectId>) {
@@ -108,7 +146,10 @@ pub fn keep_and_sacrifice_rest(
     let players = g.eval_players(who, ctx);
     let round = g.apnap_choices.len();
     let mut sacrifice: Vec<(ObjectId, PlayerId)> = Vec::new();
-    for p in players {
+    let requests = players.into_iter().map(|p| (p, ())).collect();
+    let rctx: &crate::eval::Ctx = ctx;
+    g.apnap_round(requests, |g, p, ()| {
+        let ctx = rctx;
         let mut pctx = ctx.clone();
         pctx.iter_player = Some(p);
         let mine: Vec<ObjectId> = g
@@ -134,7 +175,8 @@ pub fn keep_and_sacrifice_rest(
                 .filter(|o| !kept.contains(o))
                 .map(|o| (o, p)),
         );
-    }
+        vec![]
+    });
     let res = g.sacrifice_simultaneously(&sacrifice);
     g.end_apnap_choices(round);
     ctx.prev_value = res.len() as i64;

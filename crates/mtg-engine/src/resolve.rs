@@ -214,28 +214,31 @@ impl Game {
                 // CR 101.4 / 608.2e: choices in APNAP order, then performed simultaneously.
                 let mut chosen: Vec<(PlayerId, ObjectId)> = Vec::new();
                 let round = self.apnap_choices.len();
-                for p in players {
-                    let mut pctx = ctx.clone();
+                let requests = players.into_iter().map(|p| (p, ())).collect();
+                let rctx: &Ctx = ctx;
+                self.apnap_round(requests, |g, p, ()| {
+                    let mut pctx = rctx.clone();
                     pctx.iter_player = Some(p);
-                    let cands: Vec<ObjectId> = self
+                    let cands: Vec<ObjectId> = g
                         .objects_matching(filter, &pctx)
                         .into_iter()
-                        .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
+                        .filter(|o| g.obj(*o).controller == p && !g.cant_be_sacrificed(*o))
                         .collect();
                     let k = n.min(cands.len() as u32);
-                    let pick = self.ask_objects(
+                    let pick = g.ask_objects(
                         p,
-                        ctx.source,
+                        rctx.source,
                         "Choose permanents to sacrifice",
                         cands,
                         k,
                         k,
                     );
-                    self.record_apnap_choice(p, pick.clone());
+                    g.record_apnap_choice(p, pick.clone());
                     for o in pick {
                         chosen.push((p, o));
                     }
-                }
+                    vec![]
+                });
                 let sac: Vec<(ObjectId, PlayerId)> = chosen.iter().map(|(p, o)| (*o, *p)).collect();
                 for new in self.sacrifice_simultaneously(&sac) {
                     all.push(Entity::Object(new));
@@ -787,26 +790,33 @@ impl Game {
                 // face down (CR 101.4a) — then the cards are discarded.
                 let round = self.apnap_choices.len();
                 let mut picks: Vec<(PlayerId, Vec<ObjectId>)> = Vec::new();
-                for p in self.eval_players(who, ctx) {
-                    let hand: Vec<ObjectId> = self
+                let requests = self
+                    .eval_players(who, ctx)
+                    .into_iter()
+                    .map(|p| (p, ()))
+                    .collect();
+                let rctx: &Ctx = ctx;
+                self.apnap_round(requests, |g, p, ()| {
+                    let hand: Vec<ObjectId> = g
                         .player(p)
                         .hand
                         .clone()
                         .into_iter()
-                        .filter(|c| self.matches(*c, filter, ctx))
+                        .filter(|c| g.matches(*c, filter, rctx))
                         .collect();
                     let k = k.min(hand.len() as u32);
                     let pick = if *random {
                         use rand::seq::SliceRandom;
                         let mut h = hand.clone();
-                        h.shuffle(&mut self.rng);
+                        h.shuffle(&mut g.rng);
                         h.into_iter().take(k as usize).collect()
                     } else {
-                        self.ask_objects(p, ctx.source, "Choose cards to discard", hand, k, k)
+                        g.ask_objects(p, rctx.source, "Choose cards to discard", hand, k, k)
                     };
-                    self.record_apnap_choice(p, pick.clone());
+                    g.record_apnap_choice(p, pick.clone());
                     picks.push((p, pick));
-                }
+                    vec![]
+                });
                 for (p, pick) in picks {
                     for c in pick {
                         if let Some(n) = self.discard(p, c, ctx.source) {

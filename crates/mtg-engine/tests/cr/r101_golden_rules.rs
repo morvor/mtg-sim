@@ -340,3 +340,42 @@ fn while_starting_the_game_the_starting_player_is_the_active_player() {
     assert_eq!(order, vec![P2, P0, P1]);
 }
 
+
+#[test]
+fn a_nonactive_players_choice_that_makes_an_earlier_player_choose_restarts_apnap_order() {
+    cr!("101.4d");
+    // Three players choose at once (P1 is active). P2's choice makes the active player P1
+    // and the later player P0 choose again: P1 chooses next (APNAP order restarts for all
+    // outstanding choices), then P0's two choices.
+    let mut t = TestGame::new(3);
+    t.set_step(P1, Step::PrecombatMain);
+    let requests = vec![(P0, "first"), (P1, "first"), (P2, "first")];
+    let mut made: Vec<(PlayerId, &'static str)> = Vec::new();
+    t.g.apnap_round(requests, |g, p, what| {
+        // Each choice is a real decision the player makes.
+        g.ask_yes_no(p, None, what, true);
+        made.push((p, what));
+        if p == P2 && what == "first" {
+            vec![(P0, "caused"), (P1, "caused")]
+        } else {
+            vec![]
+        }
+    });
+    assert_eq!(
+        made,
+        vec![
+            (P1, "first"),
+            (P2, "first"),
+            (P1, "caused"),
+            (P0, "first"),
+            (P0, "caused"),
+        ]
+    );
+    let asked: Vec<PlayerId> = t
+        .asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+        .map(|(p, _)| p)
+        .collect();
+    assert_eq!(asked, vec![P1, P2, P1, P0, P0]);
+}
