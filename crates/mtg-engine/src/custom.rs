@@ -13,6 +13,19 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     match name {
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
+        // "Equipment attached to it" where "it" is each object an effect applies to.
+        "attached_to_affected" => ctx
+            .vars
+            .get(&crate::ability::vars::AFFECTED)
+            .and_then(|v| v.first().copied())
+            .is_some_and(|e| g.obj(id).attached_to == Some(e)),
+        // "Aura attached to it" where "it" is the object the source is attached to.
+        "attached_to_host" => {
+            let host = ctx.source.and_then(|s| g.obj(s).attached_to);
+            host.is_some() && g.obj(id).attached_to == host
+        }
+        // "with toughness greater than its power".
+        "toughness_gt_power" => g.obj(id).toughness() > g.obj(id).power(),
         _ => false,
     }
 }
@@ -23,6 +36,44 @@ fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
 
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     let _ = (g, ctx);
+    // "for each of its colors": the source, the object it's attached to, or the object
+    // an effect is being applied to.
+    if let Some(which) = name.strip_prefix("colors_of:") {
+        let obj = match which {
+            "source" => ctx.source,
+            "host" => ctx
+                .source
+                .and_then(|s| g.obj(s).attached_to)
+                .and_then(|e| e.object()),
+            "affected" => ctx
+                .vars
+                .get(&crate::ability::vars::AFFECTED)
+                .and_then(|v| v.first().copied())
+                .and_then(|e| e.object()),
+            _ => None,
+        };
+        return obj.map_or(0, |o| g.obj(o).chars.colors.count() as i64);
+    }
+    // The most counters of a kind any opponent has ("an opponent is poisoned").
+    if let Some(k) = name.strip_prefix("max_opponent_counters:") {
+        return g
+            .players
+            .iter()
+            .filter(|p| !p.has_lost && g.are_opponents(ctx.controller, p.id))
+            .map(|p| p.counter(k) as i64)
+            .max()
+            .unwrap_or(0);
+    }
+    // The total counters of a kind your opponents have ("for each poison counter your
+    // opponents have").
+    if let Some(k) = name.strip_prefix("opponents_counters:") {
+        return g
+            .players
+            .iter()
+            .filter(|p| !p.has_lost && g.are_opponents(ctx.controller, p.id))
+            .map(|p| p.counter(k) as i64)
+            .sum();
+    }
     // "mana_spent_of:U": amount of mana of one type spent to cast it (adamant).
     if let Some(t) = name.strip_prefix("mana_spent_of:") {
         let Some(t) = t
@@ -96,6 +147,20 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
         return g.history.spells_cast.iter().any(|(p, o)| {
             *p == ctx.controller && Some(*o) != ctx.source && g.obj(*o).chars.colors.contains(color)
         });
+    }
+    // "[color] is the most common color among all permanents or is tied for most
+    // common".
+    if let Some(c) = name.strip_prefix("most_common_color:") {
+        let Some(color) = c.chars().next().and_then(Color::from_letter) else {
+            return false;
+        };
+        let count = |c: Color| {
+            g.permanents()
+                .filter(|o| o.chars.colors.contains(c))
+                .count()
+        };
+        let n = count(color);
+        return Color::ALL.iter().all(|c| count(*c) <= n);
     }
     match name {
         // "if you attacked this turn" (raid): you declared one or more attackers this turn;
