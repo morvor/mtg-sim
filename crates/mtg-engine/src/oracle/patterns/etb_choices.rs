@@ -1471,7 +1471,9 @@ fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
                 "type in addition to its other types"
                 | "type in addition to their other types"
                 | "creature type in addition to its other creature types"
-                | "creature type in addition to their other creature types" => {
+                | "creature type in addition to their other creature types"
+                | "creature type in addition to its other types"
+                | "creature type in addition to their other types" => {
                     vec![Modification::AddChosenType]
                 }
                 _ => return None,

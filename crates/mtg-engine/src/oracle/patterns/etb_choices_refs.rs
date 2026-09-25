@@ -355,6 +355,91 @@ inventory::submit! {
     TriggerPattern { name: "cast a spell of the chosen ...", priority: 100, parse: cast_spell_suffix_trigger }
 }
 
+/// "{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the
+/// chosen type." (CR 106.6, 607.2d)
+fn chosen_type_mana(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const SUFFIX: &str = " spend this mana only to cast a creature spell of the chosen type.";
+    if !block.is_ascii() || !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    if !lower.ends_with(SUFFIX) {
+        return None;
+    }
+    let head = &block[..block.len() - SUFFIX.len()];
+    let abilities = crate::oracle::parse_ability(head, ctx)?;
+    let [a] = abilities.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Activated(act) = &a.kind else {
+        return None;
+    };
+    if !act.is_mana_ability {
+        return None;
+    }
+    let mut act = act.clone();
+    match &mut act.body.effect {
+        Effect::AddMana { restriction, .. } if restriction.is_none() => {
+            *restriction = Some(crate::mana::ManaRestriction::SpellOfChosenType);
+        }
+        _ => return None,
+    }
+    Some(vec![AbilityDef::new(AbilityKind::Activated(act), block)])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "mana spendable only on the chosen type", priority: 50, parse: chosen_type_mana }
+}
+
+/// "Creatures you control of the chosen type get +1/+1 for each charge counter on ~.",
+/// "~ gets -1/-1 for each card in the chosen player's hand." (CR 607.2d, 613.4c)
+fn chosen_anthem_for_each(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let (subj, rest) = l.split_once(" gets ").or_else(|| l.split_once(" get "))?;
+    let (pt, each) = rest.split_once(" for each ")?;
+    let (p, t) = pt.split_once('/')?;
+    let p: i32 = p.trim_start_matches('+').parse().ok()?;
+    let t: i32 = t.trim_start_matches('+').parse().ok()?;
+    let per = if each == "card in the chosen player's hand" {
+        Value::HandSize(PlayerRef::ChosenOpponent)
+    } else {
+        let (k, on) = each.split_once(" counter on ")?;
+        if on != "~" || k.contains(' ') {
+            return None;
+        }
+        Value::CountersOn(Box::new(Sel::This), Some(k.into()))
+    };
+    let affected = if subj == "~" {
+        // Only with a value referring to the chosen player.
+        if !matches!(per, Value::HandSize(_)) {
+            return None;
+        }
+        Filter::Source
+    } else {
+        let (f, plural, tail) = parse_object_phrase(subj)?;
+        if !plural || !end(tail).is_empty() || !crate::choices::filter_mentions_choice(&f) {
+            return None;
+        }
+        f
+    };
+    let mul = |n: i32| Value::Mul(Box::new(Value::c(n)), Box::new(per.clone()));
+    Some(vec![static_ability(
+        StaticEffect::Continuous {
+            affected,
+            mods: vec![Modification::ModifyPT(mul(p), mul(t))],
+        },
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "chosen-type anthems for each ...", priority: 50, parse: chosen_anthem_for_each }
+}
+
 /// Values measured for the chosen player (CR 607.2d): "the number of cards in the chosen
 /// player's hand", "the number of nonbasic lands the chosen player controls", "1 plus the
 /// number of green creature cards in the chosen player's graveyard".

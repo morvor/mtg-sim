@@ -7,7 +7,7 @@ use crate::eval::Ctx;
 use crate::events::{Event, MoveCause};
 use crate::game::*;
 use crate::keywords::KeywordKind;
-use crate::mana::{Mana, ManaType};
+use crate::mana::{Mana, ManaRestriction, ManaType};
 use crate::object::*;
 use crate::replacement::*;
 use crate::types::*;
@@ -789,6 +789,16 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let produced = self.produce_mana(p, mana, ctx);
+                // "of the chosen type": the type chosen for the source (CR 607.2d).
+                let restriction = match restriction {
+                    Some(ManaRestriction::SpellOfChosenType) => Some(
+                        ctx.source
+                            .and_then(|s| self.obj(s).choices.creature_type.clone())
+                            .map(ManaRestriction::SpellWithSubtype)
+                            .unwrap_or(ManaRestriction::SpellOfChosenType),
+                    ),
+                    other => other.clone(),
+                };
                 let snow = ctx
                     .source
                     .is_some_and(|s| self.obj(s).chars.has_supertype(Supertype::Snow));

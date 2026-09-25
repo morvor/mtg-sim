@@ -166,3 +166,102 @@ fn power_and_toughness_from_nonbasic_lands_the_chosen_player_controls() {
     let b = t.enter(P0, "Skyshroud War Beast");
     assert_eq!(t.pt(b), (2, 2));
 }
+
+// ---------------------------------------------------------------------------
+// "Spend this mana only to cast a creature spell of the chosen type."
+// ---------------------------------------------------------------------------
+
+fn choose_creature_type(t: &mut TestGame, p: PlayerId, ty: &str) {
+    let i = types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == ty)
+        .expect("creature type");
+    t.answer(p, DecisionKind::Option, Answer::Index(i));
+}
+
+#[test]
+fn mana_spendable_only_on_creature_spells_of_the_chosen_type() {
+    cr!("106.6", "607.2d");
+    assert_supported("Unclaimed Territory");
+    assert_supported("Pillar of Origins");
+    // Colors: W, U, B, R, G.
+    let with_mana = |color: usize| {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        choose_creature_type(&mut t, P0, "Elf");
+        let land = t.enter(P0, "Unclaimed Territory");
+        let now = t.g.current(land);
+        t.answer(P0, DecisionKind::Any, Answer::Index(color));
+        t.activate(P0, now, 1, &[]).unwrap();
+        t
+    };
+    let mut t = with_mana(4);
+    let elves = t.hand(P0, "Llanowar Elves");
+    assert!(t.cast(P0, elves).try_go().is_ok());
+    // Mana of the right color, but not for a creature spell of the chosen type.
+    let mut t = with_mana(4);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 1);
+    assert!(t.cast(P0, bears).try_go().is_err());
+    let mut t = with_mana(3);
+    let goblin = t.hand(P0, "Raging Goblin");
+    assert!(t.cast(P0, goblin).try_go().is_err());
+}
+
+#[test]
+fn chosen_type_anthem_for_each_charge_counter() {
+    cr!("607.2d", "613.4c");
+    assert_supported("Door of Destinies");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    choose_creature_type(&mut t, P0, "Elf");
+    let door = t.enter(P0, "Door of Destinies");
+    assert_eq!(t.pt(elf), (1, 1));
+    // Casting an Elf spell puts a charge counter on it.
+    t.lands(P0, "Forest", 1);
+    let e2 = t.hand(P0, "Llanowar Elves");
+    t.cast(P0, e2).go();
+    t.resolve_all();
+    assert_eq!(t.counters(door, "charge"), 1);
+    assert_eq!(t.pt(elf), (2, 2));
+    assert_eq!(t.pt(e2), (2, 2));
+    let now = t.g.current(door);
+    t.g.add_counters(Entity::Object(now), "charge", 2, None);
+    t.settle();
+    assert_eq!(t.pt(elf), (4, 4));
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn gets_smaller_for_each_card_in_the_chosen_players_hand() {
+    cr!("607.2d", "613.4c");
+    assert_supported("Nyxathid");
+    let mut t = TestGame::new(2);
+    let n = t.hand_size(P1) as i32;
+    t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Grizzly Bears");
+    let x = t.enter(P0, "Nyxathid");
+    assert_eq!(t.pt(x), (7 - n - 2, 7 - n - 2));
+}
+
+#[test]
+fn restricted_mana_from_the_chosen_type_ability() {
+    cr!("106.6", "607.2d", "607.5a");
+    let mut t = TestGame::new(2);
+    choose_creature_type(&mut t, P0, "Goblin");
+    let pillar = t.enter(P0, "Pillar of Origins");
+    let now = t.g.current(pillar);
+    // Choose red for "any color".
+    t.answer(P0, DecisionKind::Any, Answer::Index(3));
+    t.activate(P0, now, 0, &[]).unwrap();
+    let pool = &t.g.players[0].mana_pool;
+    assert_eq!(pool.total(), 1);
+    let m = &pool.mana[0];
+    assert_eq!(
+        m.restriction,
+        Some(mana::ManaRestriction::SpellWithSubtype("Goblin".into()))
+    );
+}
