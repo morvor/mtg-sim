@@ -1388,6 +1388,22 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
                 battles: false,
             }])
         }
+        // CR 115.4 ("can't be the target of"): hexproof-like, shroud-like, or by the
+        // qualities of the spell or the ability's source.
+        "can't be the target of spells or abilities your opponents control"
+        | "can't be the targets of spells or abilities your opponents control" => {
+            return Some(vec![Restriction::CantBeTargeted {
+                what: fc,
+                by: TargetRestriction::Opponents,
+            }])
+        }
+        "can't be the target of spells or abilities"
+        | "can't be the targets of spells or abilities" => {
+            return Some(vec![Restriction::CantBeTargeted {
+                what: fc,
+                by: TargetRestriction::Any,
+            }])
+        }
         "assigns combat damage equal to its toughness rather than its power"
         | "assign combat damage equal to their toughness rather than their power" => {
             return Some(vec![Restriction::DamageByToughness(fc)])
@@ -1416,6 +1432,15 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
             }])
         }
         _ => {}
+    }
+    if let Some(x) = p
+        .strip_prefix("can't be the target of ")
+        .or_else(|| p.strip_prefix("can't be the targets of "))
+    {
+        return Some(vec![Restriction::CantBeTargeted {
+            what: fc,
+            by: TargetRestriction::Sources(targeting_sources(x)?),
+        }]);
     }
     // "can't block it", "can't block creatures with power 2 or greater", "Cowards can't
     // block Warriors": the subject can't block the named attackers.
@@ -1463,6 +1488,50 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         }]);
     }
     single_restriction(p, f).map(|r| vec![r])
+}
+
+/// Which spells and abilities can't target: "spells", "Aura spells", "white spells or
+/// abilities from white sources", "blue or black spells", "abilities from artifact
+/// sources". An ability's qualities are those of its source (CR 113.7).
+fn targeting_sources(x: &str) -> Option<Filter> {
+    let quality = |w: &str| -> Option<Filter> {
+        if let Some(c) = w.strip_prefix("non").and_then(Color::from_word) {
+            return Some(Filter::not(Filter::Color(c)));
+        }
+        if let Some((a, b)) = w.split_once(" or ") {
+            return Some(Filter::Or(vec![
+                Filter::Color(Color::from_word(a)?),
+                Filter::Color(Color::from_word(b)?),
+            ]));
+        }
+        if let Some(c) = Color::from_word(w) {
+            return Some(Filter::Color(c));
+        }
+        let (f, _) = whole_object_phrase(w)?;
+        if mentions_other_zones(&f) || filter_mentions(&f, &|x| matches!(x, Filter::ControlledBy(_))) {
+            return None;
+        }
+        Some(f)
+    };
+    if x == "spells" {
+        return Some(Filter::Spell);
+    }
+    // "white spells or abilities from white sources"
+    if let Some((a, b)) = x.split_once(" spells or abilities from ") {
+        let src = b.strip_suffix(" sources")?;
+        if a != src {
+            return None;
+        }
+        return quality(a);
+    }
+    if let Some(src) = x
+        .strip_prefix("abilities from ")
+        .and_then(|r| r.strip_suffix(" sources"))
+    {
+        return Some(Filter::and(vec![quality(src)?, Filter::not(Filter::Spell)]));
+    }
+    let q = x.strip_suffix(" spells")?;
+    Some(Filter::and(vec![quality(q)?, Filter::Spell]))
 }
 
 /// Plural object phrases joined by "and/or": "artifact creatures and/or white
@@ -1790,6 +1859,7 @@ fn parse_body(
 /// "during your turn" / "during turns other than yours".
 fn turn_condition(s: &str) -> Option<Condition> {
     match s {
+        "during combat" => Some(Condition::Phase(PhaseCond::Combat)),
         "during your turn" | "during each of your turns" => Some(Condition::YourTurn),
         // An opponent is the active player (not a teammate, in team games).
         "during turns other than yours"
@@ -1923,6 +1993,7 @@ fn parse_line(
         " during your turn",
         " during turns other than yours",
         " during each opponent's turn",
+        " during combat",
     ] {
         if let Some(b) = s.strip_suffix(tail) {
             let body = parse_body(b, referent.as_ref(), quotes, text, ctx)?;
@@ -2198,10 +2269,77 @@ fn without_spell(f: Filter) -> Option<Filter> {
     }
 }
 
+/// Zones a spell is cast from: "graveyards or libraries", "graveyards", "exile",
+/// "anywhere other than their hands". A card being cast is still in that zone while
+/// prohibitions are first checked, and on the stack remembers it (CR 601.3).
+fn cast_from_zones(z: &str) -> Option<Filter> {
+    let zone = |k: ZoneKind| Filter::Or(vec![Filter::InZone(k), Filter::CastFrom(k)]);
+    if matches!(
+        z,
+        "anywhere other than their hands" | "anywhere other than their hand"
+    ) {
+        return Some(Filter::not(zone(ZoneKind::Hand)));
+    }
+    let mut v = Vec::new();
+    for w in z.split(" or ") {
+        v.push(zone(match w {
+            "graveyards" | "a graveyard" | "their graveyards" => ZoneKind::Graveyard,
+            "libraries" | "their libraries" => ZoneKind::Library,
+            "exile" => ZoneKind::Exile,
+            _ => return None,
+        }));
+    }
+    Some(if v.len() == 1 { v.pop()? } else { Filter::Or(v) })
+}
+
 /// "your opponents can't cast spells", "players have no maximum hand size", "you have
 /// hexproof", "each opponent can't gain life", "your opponents can't cast spells or
 /// activate abilities of artifacts, creatures, or enchantments" (CR 613.10, 613.11).
 fn parse_player_body(s: &str) -> Option<Body> {
+    // Maximum hand size (CR 402.2): "your maximum hand size is increased by one", "each
+    // opponent's maximum hand size is reduced by two", "your maximum hand size is five".
+    for (p, who) in [
+        ("your maximum hand size is ", PlayerFilter::You),
+        ("each opponent's maximum hand size is ", PlayerFilter::Opponent),
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let m = if let Some(x) = r.strip_prefix("increased by ") {
+                let (n, t) = parse_number(x)?;
+                let Value::Const(n) = n else { return None };
+                if !t.trim().is_empty() {
+                    return None;
+                }
+                PlayerModification::HandSizeDelta(n)
+            } else if let Some(x) = r.strip_prefix("reduced by ") {
+                let (n, t) = parse_number(x)?;
+                let Value::Const(n) = n else { return None };
+                if !t.trim().is_empty() {
+                    return None;
+                }
+                PlayerModification::HandSizeDelta(-n)
+            } else {
+                let (n, t) = parse_number(r)?;
+                if !t.trim().is_empty() || matches!(n, Value::X) || r.starts_with('a') {
+                    return None;
+                }
+                PlayerModification::MaxHandSize(Some(n))
+            };
+            return Some(Body {
+                subject: Subject {
+                    filter: Filter::Any,
+                    it: None,
+                    hint: CardType::Creature,
+                    lands: false,
+                    creatures: false,
+                },
+                outs: vec![Out::Other(StaticEffect::PlayerEffect {
+                    affected: who,
+                    effect: m,
+                })],
+                also: vec![],
+            });
+        }
+    }
     let (who, rest) = [
         ("you ", PlayerFilter::You),
         ("your opponents ", PlayerFilter::Opponent),
@@ -2238,6 +2376,13 @@ fn parse_player_body(s: &str) -> Option<Body> {
         _ => {
             // "can't cast [X] spells[ or activate abilities of Y]"
             let r = rest.strip_prefix("can't ")?;
+            // "can't cast spells or activate abilities that aren't mana abilities"
+            let (r, non_mana) = match r
+                .strip_suffix(" or activate abilities that aren't mana abilities")
+            {
+                Some(c) => (c, true),
+                None => (r, false),
+            };
             let (cast, activate) = match r.split_once(" or activate abilities of ") {
                 Some((c, a)) => (Some(c), Some(a)),
                 None => match r.strip_prefix("activate abilities of ") {
@@ -2245,8 +2390,24 @@ fn parse_player_body(s: &str) -> Option<Body> {
                     None => (Some(r), None),
                 },
             };
+            if non_mana {
+                if activate.is_some() {
+                    return None;
+                }
+                outs.push(Out::Restr(Restriction::CantActivate {
+                    who: who.clone(),
+                    sources: Filter::Any,
+                    include_mana: false,
+                }));
+            }
             if let Some(c) = cast {
                 let what = c.strip_prefix("cast ")?;
+                // "... from graveyards or libraries", "... from anywhere other than
+                // their hands": the zone the card is cast from.
+                let (what, zone) = match what.split_once(" from ") {
+                    Some((w, z)) => (w, Some(cast_from_zones(z)?)),
+                    None => (what, None),
+                };
                 let what = if what == "spells" {
                     Filter::Any
                 } else {
@@ -2255,6 +2416,10 @@ fn parse_player_body(s: &str) -> Option<Body> {
                         return None;
                     }
                     without_spell(f)?
+                };
+                let what = match zone {
+                    Some(z) => Filter::and(vec![what, z]),
+                    None => what,
                 };
                 outs.push(Out::Restr(Restriction::CantCast {
                     who: who.clone(),

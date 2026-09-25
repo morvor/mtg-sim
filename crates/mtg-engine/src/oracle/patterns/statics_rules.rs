@@ -63,6 +63,37 @@ fn abilities_cant_be_activated(
     ))
 }
 
+/// "Cards in graveyards can't be the targets of spells or abilities" (CR 115.4).
+fn graveyard_cards_untargetable(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let subject = end(l).strip_suffix(" can't be the targets of spells or abilities")?;
+    let (f, plural) = whole_object_phrase(&union_nouns(subject))?;
+    if !plural || f.zone() != Some(ZoneKind::Graveyard) {
+        return None;
+    }
+    Some(restriction(
+        Restriction::CantBeTargeted {
+            what: f,
+            by: TargetRestriction::Any,
+        },
+        text,
+    ))
+}
+
+inventory::submit! {
+    StaticPattern {
+        name: "statics: cards in graveyards can't be targeted",
+        priority: 50,
+        parse: graveyard_cards_untargetable,
+    }
+}
+
 inventory::submit! {
     StaticPattern {
         name: "statics: spells can't be countered",
