@@ -845,7 +845,7 @@ inventory::submit! { EffectPattern { name: "damage_removal: edict", priority: 50
 /// Parses "destroy/exile/sacrifice/return X [to its owner's hand] at end of combat|at
 /// the beginning of the next end step" (or with the time first: "at the beginning of the
 /// next end step, sacrifice it"). Returns (verb, object text, tail, step).
-fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)> {
+pub(crate) fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)> {
     let (body, step) = if let Some(x) = l.strip_suffix(" at end of combat") {
         (x, TriggerStep::EndOfCombat)
     } else if let Some(x) = l.strip_suffix(" at the beginning of the next end step") {
@@ -873,7 +873,7 @@ fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)> {
 
 /// Builds "store the object now; at the step, destroy/exile/bounce it" (CR 603.7).
 /// Delayed triggers keep the creating ability's variables, not its targets or event.
-fn delayed_removal(verb: &str, what: Sel, tail: &str, step: TriggerStep) -> Option<Effect> {
+pub(crate) fn delayed_removal(verb: &str, what: Sel, tail: &str, step: TriggerStep) -> Option<Effect> {
     let delayed = Sel::Var(DELAYED);
     let effect = match (verb, tail) {
         ("destroy", "") => Effect::Destroy {
