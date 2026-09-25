@@ -161,6 +161,32 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // Relative clauses naming kinds: "that's a Fungus or Saproling", "that's a
+    // Barbarian, a Warrior, or a Berserker", "that are Zombies and/or tokens".
+    for p in ["that's a ", "that's an ", "that are "] {
+        if let Some(r) = t.strip_prefix(p) {
+            let list = r
+                .replace(", a ", ", ")
+                .replace(", an ", ", ")
+                .replace(" or a ", " or ")
+                .replace(" or an ", " or ");
+            // The clause ends the phrase.
+            let (f, _, rest) = parse_object_phrase(&list)?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            // Only kinds of objects, not a controller or zone.
+            if filter_mentions(&f, &|x| {
+                matches!(
+                    x,
+                    Filter::ControlledBy(_) | Filter::OwnedBy(_) | Filter::InZone(_)
+                )
+            }) {
+                return None;
+            }
+            return Some((f, ""));
+        }
+    }
     // "with toughness greater than its power" (each object compared with itself).
     if let Some(r) = t.strip_prefix("with toughness greater than its power") {
         if r.is_empty() || r.starts_with([' ', ',']) {
@@ -441,6 +467,27 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
                 lands,
                 creatures,
             });
+        }
+    }
+    // "enchanted Mountain", "enchanted Equipment": the object the source is attached
+    // to, of a kind the enchant ability already restricts it to.
+    if let Some(r) = s.strip_prefix("enchanted ") {
+        if let Some((f, false)) = whole_object_phrase(r) {
+            if !filter_mentions(&f, &|x| {
+                matches!(
+                    x,
+                    Filter::ControlledBy(_) | Filter::OwnedBy(_) | Filter::InZone(_)
+                )
+            }) {
+                let g = group_subject(f);
+                return Some(Subject {
+                    filter: Filter::AttachedToSource,
+                    it: Some(Sel::AttachedTo),
+                    hint: g.hint,
+                    lands: g.lands,
+                    creatures: g.creatures,
+                });
+            }
         }
     }
     // "~ and other Knights you control"
@@ -932,6 +979,8 @@ fn base_pt(s: &str) -> Option<(Value, Value)> {
 /// creature", "Zombies", "an artifact creature", "Clues", "every basic land type").
 struct TypeWords {
     colors: Option<ColorSet>,
+    /// Supertypes are added (CR 205.4; setting card types keeps them, CR 205.1a).
+    supertypes: Vec<Supertype>,
     card_types: Vec<CardType>,
     subtypes: Vec<Subtype>,
     pt: Option<(Value, Value)>,
@@ -943,6 +992,7 @@ fn type_words(s: &str) -> Option<TypeWords> {
     let mut s = s.trim();
     let mut tw = TypeWords {
         colors: None,
+        supertypes: vec![],
         card_types: vec![],
         subtypes: vec![],
         pt: None,
@@ -960,7 +1010,9 @@ fn type_words(s: &str) -> Option<TypeWords> {
         tw.pt = Some(base_pt(&s[i + " with base power and toughness ".len()..])?);
         s = &s[..i];
     } else if let Some(i) = s.find(" with ") {
-        tw.keywords = keyword_mods(&s[i + " with ".len()..])?;
+        for item in split_list(&s[i + " with ".len()..]) {
+            tw.keywords.extend(keyword_mods(item)?);
+        }
         s = &s[..i];
     }
     let s = s
@@ -1000,6 +1052,8 @@ fn type_words(s: &str) -> Option<TypeWords> {
             tw.colors = Some(ColorSet::NONE);
         } else if let Some(t) = CardType::from_word(w) {
             tw.card_types.push(t);
+        } else if let Some(st) = Supertype::from_word(w) {
+            tw.supertypes.push(st);
         } else if let Some(st) = subtype_word(w) {
             tw.subtypes.push(st);
         } else {
@@ -1035,6 +1089,26 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
         return m(vec![Modification::RemoveTypes(vec![CardType::Creature])]);
     }
     // "in addition to its other types" (CR 205.1b): types are added.
+    // "is a black Zombie in addition to its other colors and types": colors are added
+    // too (CR 105.3, 205.1b).
+    for tail in [
+        " in addition to its other colors and types",
+        " in addition to their other colors and types",
+    ] {
+        if let Some(x) = r.strip_suffix(tail) {
+            let tw = type_words(x)?;
+            let cs = tw.colors?;
+            let mut out = type_predicate(&format!("{x} in addition to its other types"), subj)?;
+            for o in &mut out {
+                if let Out::Mod(Modification::SetColors(c)) = o {
+                    if *c == cs {
+                        *o = Out::Mod(Modification::AddColors(cs));
+                    }
+                }
+            }
+            return Some(out);
+        }
+    }
     for tail in [
         " in addition to its other types",
         " in addition to their other types",
@@ -1071,6 +1145,9 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
                     return None;
                 }
             }
+            if !tw.supertypes.is_empty() {
+                mods.push(Modification::AddSupertypes(tw.supertypes.clone()));
+            }
             if !tw.subtypes.is_empty() {
                 mods.push(Modification::AddSubtypes(tw.subtypes.clone()));
             }
@@ -1089,13 +1166,25 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     }
     let tw = type_words(r)?;
     let mut mods = Vec::new();
+    if !tw.supertypes.is_empty() {
+        // "is legendary", "is snow" (layer 4).
+        if tw.supertypes.contains(&Supertype::Basic) {
+            return None;
+        }
+        mods.push(Modification::AddSupertypes(tw.supertypes.clone()));
+    }
     // Colors alone: "All creatures are black" (layer 5).
     if tw.card_types.is_empty() && tw.subtypes.is_empty() && tw.pt.is_none() {
-        let cs = tw.colors?;
         if !tw.keywords.is_empty() {
             return None;
         }
-        return m(vec![Modification::SetColors(cs)]);
+        if let Some(cs) = tw.colors {
+            mods.push(Modification::SetColors(cs));
+        }
+        if mods.is_empty() {
+            return None;
+        }
+        return m(mods);
     }
     if tw.card_types.is_empty() {
         if tw.subtypes.is_empty() {
@@ -1123,10 +1212,14 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
             creature && tw.card_types.contains(&CardType::Artifact) && tw.card_types.len() == 2;
         if tw.still_lands || (artifact_creature && tw.subtypes.is_empty()) {
             // "1/1 creatures that are still lands", "an artifact creature": the object
-            // keeps its types (CR 205.1b).
+            // keeps its types and subtypes (CR 205.1b).
             mods.push(Modification::AddTypes(tw.card_types.clone()));
             if !tw.subtypes.is_empty() {
-                return None;
+                // "a 2/2 blue Elemental creature that's still a land"
+                if !creature || !tw.subtypes.iter().all(|s| is_creature_type(s)) {
+                    return None;
+                }
+                mods.push(Modification::AddSubtypes(tw.subtypes.clone()));
             }
         } else if artifact_creature {
             // "[creature types] artifact creature": keeps other types, replaces creature
@@ -1366,9 +1459,17 @@ fn parse_predicate(
         }
         return grant_list(r, subj, quotes, text, ctx);
     }
+    // "can't have or gain flying": applied after other layer-6 effects.
+    if let Some(r) = p.strip_prefix("can't have or gain ") {
+        return Some(vec![Out::Mod(Modification::CantHaveKeyword(
+            KeywordKind::from_name(r)?,
+        ))]);
+    }
     // Losing abilities (layer 6).
     if let Some(r) = p.strip_prefix("loses ").or_else(|| p.strip_prefix("lose ")) {
-        if r == "all abilities" {
+        // "loses all other abilities": all but the ones this effect grants (the removal
+        // is ordered first in the effect, see [`build`]).
+        if r == "all abilities" || r == "all other abilities" {
             return Some(vec![Out::Mod(Modification::RemoveAllAbilities)]);
         }
         let mut out = Vec::new();
@@ -1664,6 +1765,9 @@ fn build(body: Body, cond: Option<Condition>, text: &str) -> Vec<Ability> {
             Out::Other(e) => restrictions.push(e),
         }
     }
+    // Abilities an effect grants survive its own "loses all (other) abilities": the
+    // removal applies first within the effect.
+    mods.sort_by_key(|m| !matches!(m, Modification::RemoveAllAbilities));
     let mk = |effect: StaticEffect| {
         let mut s = StaticAbility::new(effect);
         s.condition = cond.clone();
@@ -1686,9 +1790,45 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
     if ctx.is_spell() {
         return None;
     }
-    let (masked, quotes) = mask_quotes(end(l))?;
-    let (body, cond) = parse_line(&masked, vec![], None, &quotes, text, ctx)?;
-    let v = build(body, cond, text);
+    let (mut masked, quotes) = mask_quotes(end(l))?;
+    // "... creature. It's still a land." (CR 205.1b)
+    for (tail, repl) in [
+        (". it's still a land", " that's still a land"),
+        (". they're still lands", " that are still lands"),
+    ] {
+        if let Some(b) = masked.strip_suffix(tail) {
+            masked = format!("{b}{repl}");
+        }
+    }
+    let mut sentences = masked.split(". ");
+    let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
+    let same_subject = |a: &Body, b: &Body| format!("{:?}", a.subject.filter) == format!("{:?}", b.subject.filter);
+    let mut otherwise = Vec::new();
+    for sentence in sentences {
+        let it = body.subject.it.clone()?;
+        // "... as long as it's a Human. Otherwise, it can't attack or block." (CR 611.3a)
+        if let Some(r) = sentence.strip_prefix("otherwise, ") {
+            let c = cond.clone()?;
+            let (b2, c2) = parse_line(r, vec![], Some(it), &quotes, text, ctx)?;
+            if c2.is_some() || !same_subject(&body, &b2) {
+                return None;
+            }
+            otherwise.extend(build(b2, Some(Condition::Not(Box::new(c))), text));
+            continue;
+        }
+        // More about the same object: "Enchanted creature is a Turtle with base power and
+        // toughness 0/1. It can't attack and loses all abilities." One effect.
+        if cond.is_some() || !otherwise.is_empty() {
+            return None;
+        }
+        let (b2, c2) = parse_line(sentence, vec![], Some(it), &quotes, text, ctx)?;
+        if c2.is_some() || !same_subject(&body, &b2) {
+            return None;
+        }
+        body.outs.extend(b2.outs);
+    }
+    let mut v = build(body, cond, text);
+    v.extend(otherwise);
     (!v.is_empty()).then_some(v)
 }
 

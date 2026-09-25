@@ -108,10 +108,27 @@ fn capitalize(w: &str) -> String {
 
 /// Recognizes a subtype word (any case/plural) and returns its canonical form.
 pub fn subtype_word(w: &str) -> Option<Subtype> {
-    let sg = singular(&w.to_lowercase());
+    let lower = w.to_lowercase();
+    let sg = singular(&lower);
     let cap = capitalize(&sg);
     if subtype_kind(&cap).is_some() {
         return Some(SmolStr::new(cap));
+    }
+    // Plurals the general rule gets wrong: "Horses", "Heroes", "Mice", "Pegasi".
+    let irregular = match lower.as_str() {
+        "mice" => Some("mouse"),
+        "pegasi" => Some("pegasus"),
+        "cyclopes" => Some("cyclops"),
+        _ => None,
+    };
+    for cand in [lower.strip_suffix('s'), lower.strip_suffix("es"), irregular]
+        .into_iter()
+        .flatten()
+    {
+        let cap = capitalize(cand);
+        if subtype_kind(&cap).is_some() {
+            return Some(SmolStr::new(cap));
+        }
     }
     // Possessive land types like "Urza's"
     let cap_raw = capitalize(w);
@@ -226,7 +243,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         if !matches!(f, Filter::Subtype(_)) {
             head_subtypes_only = false;
         }
-        if w2.ends_with('s') && singular(w2) != w2 {
+        if (w2.ends_with('s') && singular(w2) != w2) || matches!(w2, "mice" | "pegasi") {
             plural = true;
         }
         heads.push(f);

@@ -658,6 +658,19 @@ pub(crate) fn parse_static_condition(
     ctx: &CompileContext,
 ) -> Option<(Condition, Option<Sel>)> {
     let c = end(c);
+    // "as long as you control enchanted creature"
+    for (p, rel) in [
+        ("you control ", PlayerRel::You),
+        ("another player controls ", PlayerRel::NotYou),
+    ] {
+        if let Some(r) = c.strip_prefix(p) {
+            if matches!(r, "enchanted creature" | "equipped creature" | "enchanted permanent") {
+                let sel = Sel::AttachedTo;
+                let cond = Condition::SelMatches(sel.clone(), Filter::ControlledBy(rel));
+                return Some((cond, Some(sel)));
+            }
+        }
+    }
     // Pronouns first, so they're never read as some other ability's "it".
     if let Some((sel, r, contracted)) = condition_subject(c, it) {
         if let Some(cond) = object_state(r, &sel, contracted) {
