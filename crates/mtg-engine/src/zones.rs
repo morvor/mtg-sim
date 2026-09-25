@@ -118,7 +118,7 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
             None => groups.push((key, vec![i])),
         }
     }
-    for ((zone, _), slots) in groups {
+    for ((zone, pos), slots) in groups {
         if slots.len() < 2 {
             continue;
         }
@@ -126,6 +126,17 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
             Zone::Library(p) | Zone::Graveyard(p) => p,
             _ => continue,
         };
+        let events: Vec<(usize, ReplEvent)> = slots.iter().map(|i| finals[*i].clone()).collect();
+        if pos == Some(LibraryPosition::BottomRandom) {
+            // "In a random order": nobody chooses.
+            use rand::seq::SliceRandom;
+            let mut order: Vec<usize> = (0..slots.len()).collect();
+            order.shuffle(&mut g.rng);
+            for (k, i) in slots.iter().enumerate() {
+                finals[*i] = events[order[k]].clone();
+            }
+            continue;
+        }
         let names: Vec<String> = slots
             .iter()
             .map(|i| match &finals[*i].1 {
@@ -142,7 +153,6 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
             &format!("Order the cards being put into {what} (in the order they're put there)"),
             names,
         );
-        let events: Vec<(usize, ReplEvent)> = slots.iter().map(|i| finals[*i].clone()).collect();
         for (k, i) in slots.iter().enumerate() {
             finals[*i] = events[order[k]].clone();
         }
