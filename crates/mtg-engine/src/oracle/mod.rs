@@ -199,8 +199,19 @@ fn replace_word(s: &str, word: &str, rep: &str) -> String {
         let end = start + word.len();
         let before = s[..start].chars().next_back();
         let after = s[end..].chars().next();
+        // Part of a longer proper name ("a token named Tuktuk the Returned").
+        let rest = &s[end..];
+        let rest = rest
+            .strip_prefix(" the ")
+            .or_else(|| rest.strip_prefix(" of "))
+            .or_else(|| rest.strip_prefix(' '))
+            .unwrap_or("");
+        let longer_name = rest.chars().next().is_some_and(|c| c.is_uppercase());
         out.push_str(&s[i..start]);
-        if before.is_some_and(|c| is_word(c) || c == '\'') || after.is_some_and(is_word) {
+        if before.is_some_and(|c| is_word(c) || c == '\'')
+            || after.is_some_and(is_word)
+            || longer_name
+        {
             out.push_str(word);
         } else {
             out.push_str(rep);
