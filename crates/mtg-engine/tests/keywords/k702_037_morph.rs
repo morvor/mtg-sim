@@ -269,3 +269,23 @@ fn x_in_a_morph_cost_is_the_x_of_its_other_abilities() {
     t.resolve();
     assert_eq!(tokens(&t, P0), 2);
 }
+
+#[test]
+fn effects_can_modify_morph_costs_but_not_the_face_down_casting_cost() {
+    cr!("702.37a", "702.37e");
+    assert_supported("Exiled Doomsayer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Exiled Doomsayer");
+    t.lands(P0, "Island", 5);
+    let egotist = t.hand(P0, "Scornful Egotist");
+    // Still {3} to cast face down.
+    let egotist = cast_face_down(&mut t, P0, egotist);
+    assert_eq!(untapped_lands(&t, P0), 2);
+    // Morph {U} costs {2}{U}.
+    assert!(!can_turn_up(&mut t, P0, egotist));
+    t.lands(P0, "Island", 1);
+    assert!(can_turn_up(&mut t, P0, egotist));
+    t.g.perform_action(P0, turn_up(egotist)).unwrap();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert!(!t.obj_now(egotist).face_down);
+}

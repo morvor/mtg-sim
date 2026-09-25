@@ -174,3 +174,26 @@ fn a_granted_flashback_ability_can_cost_the_cards_mana_cost() {
     assert_eq!(t.life(P1), 17);
     assert!(t.in_exile("Lightning Bolt"));
 }
+
+#[test]
+fn effects_can_modify_flashback_costs() {
+    cr!("702.34a");
+    assert_supported("Catalyst Stone");
+    // "Flashback costs you pay cost {2} less": Think Twice's {2}{U} costs {U}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.lands(P0, "Island", 1);
+    let tt = t.graveyard(P0, "Think Twice");
+    assert!(can_cast(&mut t, P0, tt, FLASHBACK));
+    t.cast(P0, tt).method(FLASHBACK).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    // "Flashback costs your opponents pay cost {2} more": {4}{U}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Catalyst Stone");
+    t.lands(P0, "Island", 4);
+    let tt = t.graveyard(P0, "Think Twice");
+    assert!(!can_cast(&mut t, P0, tt, FLASHBACK));
+    t.lands(P0, "Island", 1);
+    t.cast(P0, tt).method(FLASHBACK).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+}

@@ -6,10 +6,8 @@
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
-use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
-use crate::mana::ManaCost;
 use crate::object::*;
 use crate::types::*;
 use smol_str::SmolStr;
@@ -18,41 +16,6 @@ use smol_str::SmolStr;
 pub const BUYBACK: &str = "buyback";
 
 pub struct Buyback;
-
-/// A cost of a keyword ability of a spell `p` is casting, after the effects that modify
-/// that keyword's costs ("Buyback costs cost {2} less", CR 601.2f): generic mana only,
-/// never below zero.
-pub fn modified_keyword_cost(
-    g: &Game,
-    p: PlayerId,
-    kind: KeywordKind,
-    cost: &Cost,
-) -> Cost {
-    let mut cost = cost.clone();
-    for (s, ctl, cm) in &g.statics.cost_modifiers {
-        if !matches!(cm.applies_to, CostTarget::Keyword(k) if k == kind) {
-            continue;
-        }
-        let ctx = Ctx::new(Some(*s), *ctl);
-        if !g.player_rel_matches(cm.who, p, &ctx) {
-            continue;
-        }
-        match &cm.change {
-            CostChange::ReduceGeneric(v) => {
-                let n = g.eval_value(v, &ctx).max(0) as u32;
-                if let Some(m) = cost.mana.as_mut() {
-                    m.reduce_generic(n);
-                }
-            }
-            CostChange::IncreaseGeneric(v) => {
-                let n = g.eval_value(v, &ctx).max(0) as u32;
-                cost.mana.get_or_insert_with(ManaCost::default).add(&ManaCost::generic(n));
-            }
-            _ => {}
-        }
-    }
-    cost
-}
 
 impl KeywordRules for Buyback {
     fn kinds(&self) -> &'static [KeywordKind] {
@@ -71,7 +34,7 @@ impl KeywordRules for Buyback {
         let p = g.obj(spell).controller;
         vec![(
             BUYBACK.into(),
-            modified_keyword_cost(g, p, KeywordKind::Buyback, c),
+            super::modified_keyword_cost(g, p, KeywordKind::Buyback, c),
             false,
         )]
     }

@@ -20,14 +20,20 @@ fn generic_amount(s: &str) -> Option<i32> {
     s.trim().strip_prefix('{')?.strip_suffix('}')?.parse().ok()
 }
 
-/// "[Keyword] costs cost {N} less/more" and "[Keyword] abilities you activate cost {N}
-/// less/more to activate".
+/// "[Keyword] costs cost {N} less/more", "[Keyword] costs you pay cost {N} less", and
+/// "[Keyword] abilities you activate cost {N} less/more to activate".
 fn keyword_cost_change(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let (kind, who, rest) = if let Some(r) = l.strip_prefix("buyback costs cost ") {
         (KeywordKind::Buyback, PlayerRel::Any, r)
     } else if let Some(r) = l.strip_prefix("cycling abilities you activate cost ") {
         let r = r.strip_suffix(" to activate").unwrap_or(r);
         (KeywordKind::Cycling, PlayerRel::You, r)
+    } else if let Some(r) = l.strip_prefix("all morph costs cost ") {
+        (KeywordKind::Morph, PlayerRel::Any, r)
+    } else if let Some(r) = l.strip_prefix("flashback costs you pay cost ") {
+        (KeywordKind::Flashback, PlayerRel::You, r)
+    } else if let Some(r) = l.strip_prefix("flashback costs your opponents pay cost ") {
+        (KeywordKind::Flashback, PlayerRel::Opponent, r)
     } else {
         return None;
     };
@@ -203,8 +209,55 @@ inventory::submit! {
 inventory::submit! {
     EffectPattern { name: "k702.35c: the discarded card from your graveyard", priority: 50, parse: discarded_card_from_graveyard }
 }
+/// "Each land card in your hand has cycling {R}.", "Each Sliver card in each player's hand
+/// has slivercycling {3}.": cycling granted to cards in hands, where it functions
+/// (CR 702.29a).
+fn cards_in_hand_have_cycling(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("each ")?;
+    let (quality, rest) = r.split_once(" card in ")?;
+    let (owner, granted) = if let Some(g) = rest.strip_prefix("your hand has ") {
+        (Some(Filter::OwnedBy(PlayerRel::You)), g)
+    } else if let Some(g) = rest.strip_prefix("each player's hand has ") {
+        (None, g)
+    } else {
+        return None;
+    };
+    let kws: Vec<crate::keywords::Keyword> =
+        crate::oracle::keywords::parse_keyword_line(granted, ctx)?
+            .into_iter()
+            .filter_map(|a| match &a.kind {
+                AbilityKind::Keyword(k) => Some(k.clone()),
+                _ => None,
+            })
+            .collect();
+    if kws.len() != 1 || kws[0].kind != KeywordKind::Cycling {
+        return None;
+    }
+    let phrase = format!("{quality} card");
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(&phrase)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let mut parts = vec![f, Filter::InZone(ZoneKind::Hand)];
+    parts.extend(owner);
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::and(parts),
+            mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+        })),
+        text,
+    )])
+}
+
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
+}
+inventory::submit! {
+    StaticPattern { name: "k702.29: cards in hand have cycling", priority: 50, parse: cards_in_hand_have_cycling }
 }
 inventory::submit! {
     StaticPattern { name: "k702.33h: spells you cast have sticker kicker", priority: 50, parse: spells_you_cast_have_sticker_kicker }

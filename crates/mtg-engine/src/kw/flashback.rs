@@ -66,10 +66,17 @@ impl KeywordRules for Flashback {
         if !chars.is(CardType::Instant) && !chars.is(CardType::Sorcery) {
             return vec![];
         }
-        opt.alt_cost = match &kw.cost {
-            Some(c) => Some(c.clone()),
-            None => Some(Cost::mana(chars.mana_cost.clone().unwrap_or_default())),
+        let cost = match &kw.cost {
+            Some(c) => c.clone(),
+            None => Cost::mana(chars.mana_cost.clone().unwrap_or_default()),
         };
+        // "Flashback costs you pay cost {2} less."
+        opt.alt_cost = Some(super::modified_keyword_cost(
+            g,
+            p,
+            KeywordKind::Flashback,
+            &cost,
+        ));
         opt.tag = Some(FLASHBACK);
         vec![opt]
     }

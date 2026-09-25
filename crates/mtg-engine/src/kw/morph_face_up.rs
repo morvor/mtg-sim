@@ -14,15 +14,16 @@ use crate::types::*;
 
 pub struct MorphFaceUp;
 
-/// The morph, megamorph, or disguise ability among `abilities`: (is megamorph, cost).
-fn face_up_keyword(abilities: &[Ability]) -> Option<(bool, Cost)> {
+/// The morph, megamorph, or disguise ability among `abilities`: (kind, is megamorph,
+/// cost).
+fn face_up_keyword(abilities: &[Ability]) -> Option<(KeywordKind, bool, Cost)> {
     abilities.iter().find_map(|a| match &a.kind {
         AbilityKind::Keyword(k) if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) => {
             let megamorph = k
                 .text
                 .as_deref()
                 .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
-            k.cost.clone().map(|c| (megamorph, c))
+            k.cost.clone().map(|c| (k.kind, megamorph, c))
         }
         _ => None,
     })
@@ -44,7 +45,14 @@ fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     let mut h = g.clone();
     h.objects[id.0 as usize].face_down = false;
     h.recompute();
-    face_up_keyword(&h.obj(id).chars.abilities)
+    let (kind, megamorph, cost) = face_up_keyword(&h.obj(id).chars.abilities)?;
+    // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
+    let cost = if kind == KeywordKind::Morph {
+        super::modified_keyword_cost(g, o.controller, KeywordKind::Morph, &cost)
+    } else {
+        cost
+    };
+    Some((megamorph, cost))
 }
 
 impl KeywordRules for MorphFaceUp {

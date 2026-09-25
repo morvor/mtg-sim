@@ -315,3 +315,46 @@ fn effects_looking_for_cards_with_cycling_find_typecycling_cards() {
     t.g.recompute();
     assert_eq!(t.pt(vile).0, base + 3);
 }
+
+#[test]
+fn cycling_granted_to_cards_in_a_hand_functions_there() {
+    cr!("702.29a", "702.29e");
+    ruling!(
+        "Homing Sliver",
+        "Unlike a normal cycling ability, Slivercycling doesn't have you draw a card. Instead, it lets you search your library for a Sliver card."
+    );
+    assert_supported("Tectonic Reformation");
+    assert_supported("Homing Sliver");
+    // "Each land card in your hand has cycling {R}."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tectonic Reformation");
+    t.lands(P0, "Mountain", 1);
+    let forest = t.hand(P0, "Forest");
+    let yard_forest = t.graveyard(P0, "Forest");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    assert!(can_cycle(&mut t, P0, forest));
+    assert!(!can_cycle(&mut t, P0, yard_forest));
+    assert!(!can_cycle(&mut t, P0, bears));
+    // The opponent's land cards don't have it.
+    let theirs = t.hand(P1, "Forest");
+    assert!(!t.obj_now(theirs).has_keyword(KeywordKind::Cycling));
+    cycle(&mut t, P0, forest, 0).unwrap();
+    t.resolve();
+    assert!(t.in_hand(P0, "Island"));
+    assert!(t.in_graveyard(P0, "Forest"));
+    // "Each Sliver card in each player's hand has slivercycling {3}": typecycling, for
+    // every player.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Homing Sliver");
+    t.lands(P1, "Plains", 3);
+    let sliver = t.hand(P1, "Muscle Sliver");
+    let found = t.library_top(P1, "Metallic Sliver");
+    t.library_top(P1, "Grizzly Bears");
+    assert!(can_cycle(&mut t, P1, sliver));
+    cycle(&mut t, P1, sliver, 0).unwrap();
+    t.answer_choose(P1, &[Entity::Object(found)]);
+    t.resolve();
+    assert_eq!(search_candidates(&t), vec![Entity::Object(found)]);
+    assert!(t.in_hand(P1, "Metallic Sliver"));
+}

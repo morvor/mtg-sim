@@ -500,3 +500,35 @@ pub fn custom_trigger(
         .iter()
         .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
 }
+
+/// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
+/// costs ("Buyback costs cost {2} less", "All morph costs cost {2} more", CR 601.2f):
+/// generic mana only, never below zero.
+pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
+    let mut cost = cost.clone();
+    for (s, ctl, cm) in &g.statics.cost_modifiers {
+        if !matches!(cm.applies_to, CostTarget::Keyword(k) if k == kind) {
+            continue;
+        }
+        let ctx = Ctx::new(Some(*s), *ctl);
+        if !g.player_rel_matches(cm.who, p, &ctx) {
+            continue;
+        }
+        match &cm.change {
+            CostChange::ReduceGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                if let Some(m) = cost.mana.as_mut() {
+                    m.reduce_generic(n);
+                }
+            }
+            CostChange::IncreaseGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                cost.mana
+                    .get_or_insert_with(crate::mana::ManaCost::default)
+                    .add(&crate::mana::ManaCost::generic(n));
+            }
+            _ => {}
+        }
+    }
+    cost
+}
