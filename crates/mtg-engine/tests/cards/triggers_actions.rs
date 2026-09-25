@@ -1,7 +1,7 @@
 //! Trigger conditions on player actions and spell properties: cycling (CR 702.29),
 //! magecraft "cast or copy" (CR 707.10), keyword-action events, kicked spells, "your first
-//! [kind of] spell each turn", battalion, counters being put on permanents, and tokens
-//! leaving the battlefield.
+//! [kind of] spell each turn", battalion, counters being put on permanents, tokens leaving
+//! the battlefield, shuffling, and becoming the monarch.
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -297,4 +297,49 @@ fn token_you_control_leaves_the_battlefield() {
     t.g.destroy(bears, None);
     t.resolve_all();
     assert_eq!(t.counters(scrapper, "+1/+1"), 1);
+}
+
+#[test]
+fn whenever_an_opponent_shuffles_their_library() {
+    cr!("701.24a", "603.2");
+    assert_supported(&["Cosi's Trickster"]);
+    let mut t = TestGame::new(2);
+    let trickster = t.battlefield(P0, "Cosi's Trickster");
+    t.answer_yes(P0, true);
+    t.g.shuffle_library(P1);
+    t.resolve_all();
+    assert_eq!(t.counters(trickster, "+1/+1"), 1);
+    // Its controller shuffling doesn't count.
+    t.g.shuffle_library(P0);
+    t.resolve_all();
+    assert_eq!(t.counters(trickster, "+1/+1"), 1);
+}
+
+#[test]
+fn whenever_you_become_the_monarch() {
+    cr!("725.1", "603.2");
+    assert_supported(&["Custodi Lich"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // "When this creature enters, you become the monarch." then the second ability
+    // triggers: target player sacrifices a creature.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    enter_from_hand(&mut t, P0, "Custodi Lich");
+    t.resolve_all();
+    assert_eq!(t.g.monarch, Some(P0));
+    assert!(!t.on_battlefield(bears));
+}
+
+#[test]
+fn whenever_you_surveil_for_the_first_time_each_turn() {
+    cr!("701.25d", "603.2");
+    assert_supported(&["Whispering Snitch"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Whispering Snitch");
+    mtg_engine::library::surveil(&mut t.g, P0, 1);
+    t.resolve_all();
+    mtg_engine::library::surveil(&mut t.g, P0, 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P0), 21);
 }

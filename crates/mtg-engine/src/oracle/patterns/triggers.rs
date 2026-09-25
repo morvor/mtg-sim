@@ -699,11 +699,24 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
     }
     // Misc player events.
     let t = end(rest);
+    // "[event] for the first time each turn"
+    if let Some(x) = t.strip_suffix(" for the first time each turn") {
+        let (c, it, p) = parse_player_trigger(&format!("{} {x}", player_word(who)?))?;
+        if matches!(c, TriggerCond::PlayerAction { .. }) {
+            return Some((TriggerCond::FirstTimeEachTurn(Box::new(c)), it, p));
+        }
+        return None;
+    }
     let action = |name: &str| TriggerCond::PlayerAction {
         name: name.into(),
         who,
     };
     let simple = match t {
+        "become the monarch" | "becomes the monarch" => action("monarch"),
+        "take the initiative" | "takes the initiative" => action("initiative"),
+        "shuffle your library" | "shuffles their library" | "shuffles a library" => {
+            action("shuffle")
+        }
         "commit a crime" | "commits a crime" => TriggerCond::CommitCrime(who),
         "search your library" | "searches their library" => TriggerCond::Searched(who),
         "roll a die" | "rolls a die" => TriggerCond::RollDie(who),
@@ -728,18 +741,35 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             per: BatchPer::Batch,
         },
         _ => {
-            // "roll a 1": the result of a die roll.
+            // "roll a 1", "roll a 15 or higher": the result of a die roll.
             let x = t
                 .strip_prefix("roll a ")
-                .or_else(|| t.strip_prefix("rolls a "))?;
+                .or_else(|| t.strip_prefix("rolls a "))
+                .or_else(|| t.strip_prefix("roll an "))
+                .or_else(|| t.strip_prefix("rolls an "))?;
+            let (x, cmp) = match x.strip_suffix(" or higher") {
+                Some(x) => (x, Cmp::Ge),
+                None => (x, Cmp::Eq),
+            };
             let n: i32 = x.parse().ok()?;
             TriggerCond::Where {
                 trigger: Box::new(TriggerCond::RollDie(who)),
-                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::c(n)),
+                cond: Condition::Compare(Value::EventAmount, cmp, Value::c(n)),
             }
         }
     };
     Some((simple, Sel::None, tp()))
+}
+
+/// The subject phrase for a player relation (the inverse of [`player_subject`]).
+fn player_word(rel: PlayerRel) -> Option<&'static str> {
+    Some(match rel {
+        PlayerRel::You => "you",
+        PlayerRel::Opponent => "an opponent",
+        PlayerRel::Any => "a player",
+        PlayerRel::NotYou => "another player",
+        _ => return None,
+    })
 }
 
 fn rel_filter(rel: PlayerRel) -> Option<PlayerFilter> {

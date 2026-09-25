@@ -942,6 +942,28 @@ impl Game {
                     none()
                 }
             }
+            // Player actions reported by their own events: "whenever you become the
+            // monarch" (CR 725.1), "take the initiative" (CR 726.1), "shuffle".
+            (
+                TriggerCond::PlayerAction { name, who },
+                Event::BecameMonarch { player }
+                | Event::TookInitiative { player }
+                | Event::Shuffled { player },
+            ) => {
+                let n = match ev {
+                    Event::BecameMonarch { .. } => "monarch",
+                    Event::TookInitiative { .. } => "initiative",
+                    _ => "shuffle",
+                };
+                if n == name && self.player_rel_matches(*who, *player, &ctx) {
+                    one(EventInfo {
+                        player: Some(*player),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             // CR 700.14: one "expend" event per total reached by a spell's mana payment.
             (
                 TriggerCond::Expend { who, n },
