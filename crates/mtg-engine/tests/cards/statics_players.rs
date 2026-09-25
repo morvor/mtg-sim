@@ -21,7 +21,7 @@ fn compiles(name: &str) {
 
 #[test]
 fn cant_be_the_target_of_spells_or_abilities_your_opponents_control() {
-    cr!("115.4", "613.11");
+    cr!("601.2c", "613.11");
     ruling!(
         "Canopy Cover",
         "your opponents won’t be able to target their own creature"
@@ -51,7 +51,7 @@ fn cant_be_the_target_of_spells_or_abilities_your_opponents_control() {
 
 #[test]
 fn cant_be_the_target_of_spells_only() {
-    cr!("115.4");
+    cr!("601.2c", "602.2b");
     ruling!(
         "Spectral Shield",
         "The enchanted creature can still be the target of abilities."
@@ -78,7 +78,7 @@ fn cant_be_the_target_of_spells_only() {
 
 #[test]
 fn cant_be_the_targets_of_blue_spells_or_abilities_from_blue_sources() {
-    cr!("115.4", "113.7");
+    cr!("601.2c", "602.2b", "113.7");
     compiles("Spellbane Centaur");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Spellbane Centaur");
@@ -88,26 +88,52 @@ fn cant_be_the_targets_of_blue_spells_or_abilities_from_blue_sources() {
     let unsummon = t.hand(P1, "Unsummon");
     let bolt = t.hand(P1, "Lightning Bolt");
     t.set_step(P1, Step::PrecombatMain);
+    // The only creatures are ones it protects: Unsummon has no legal target.
     assert!(t.cast(P1, unsummon).target(bears).try_go().is_err());
     t.clear_answers();
+    // An ability's color is its source's (CR 113.7): the blue Sorcerer's ability can't
+    // target the Bears (another target is chosen instead), the red Pyromancer's can.
+    let blue = t.battlefield(P1, "Prodigal Sorcerer");
+    let red = t.battlefield(P1, "Prodigal Pyromancer");
+    let _ = t.activate(P1, blue, 0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).damage, 0);
+    t.clear_answers();
+    t.activate(P1, red, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).damage, 1);
+    t.clear_answers();
+    t.g.turn.priority = Some(P1);
     assert!(t.cast(P1, bolt).target(bears).try_go().is_ok());
 }
 
 #[test]
 fn cards_in_graveyards_cant_be_the_targets_of_spells_or_abilities() {
-    cr!("115.4");
+    cr!("601.2c");
     ruling!(
         "Ground Seal",
         "Only spells and abilities that target cards in graveyards will be affected."
     );
     compiles("Ground Seal");
-    let mut t = TestGame::new(2);
-    t.battlefield(P1, "Ground Seal");
-    t.graveyard(P0, "Grizzly Bears");
-    t.lands(P0, "Swamp", 2);
-    let raise = t.hand(P0, "Raise Dead");
-    t.set_step(P0, Step::PrecombatMain);
-    assert!(t.cast(P0, raise).try_go().is_err());
+    for seal in [false, true] {
+        let mut t = TestGame::new(2);
+        if seal {
+            t.battlefield(P1, "Ground Seal");
+        }
+        t.graveyard(P0, "Grizzly Bears");
+        t.lands(P0, "Swamp", 2);
+        let raise = t.hand(P0, "Raise Dead");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Mountain", 1);
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.set_step(P0, Step::PrecombatMain);
+        // Raise Dead's only possible target is a card in a graveyard.
+        assert_eq!(t.cast(P0, raise).try_go().is_err(), seal);
+        t.clear_answers();
+        // Permanents can still be targeted.
+        t.g.turn.priority = Some(P0);
+        assert!(t.cast(P0, bolt).target(bears).try_go().is_ok());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,11 +158,22 @@ fn opponents_cant_cast_spells_from_anywhere_other_than_their_hands() {
     assert!(t
         .cast(P1, firebolt)
         .target(P0)
-        .method(flashback)
+        .method(flashback.clone())
         .try_go()
         .is_err());
     t.clear_answers();
     assert!(t.cast(P1, bolt).target(P0).try_go().is_ok());
+    // Without the Magistrate, flashback works.
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 5);
+    let firebolt = t.graveyard(P1, "Firebolt");
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(t
+        .cast(P1, firebolt)
+        .target(P0)
+        .method(flashback)
+        .try_go()
+        .is_ok());
 }
 
 #[test]
@@ -187,6 +224,16 @@ fn maximum_hand_size_changes_apply_in_timestamp_order() {
     t.battlefield(P0, "Thought Devourer");
     t.settle();
     assert_eq!(t.g.player(P0).max_hand_size, Some(4));
+    // A later "your maximum hand size is two" overrides the earlier changes; an earlier
+    // one is modified by the later changes.
+    t.battlefield(P0, "Null Profusion");
+    t.settle();
+    assert_eq!(t.g.player(P0).max_hand_size, Some(2));
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Null Profusion");
+    t.battlefield(P0, "Minamo Scrollkeeper");
+    t.settle();
+    assert_eq!(t.g.player(P0).max_hand_size, Some(3));
 }
 
 // ---------------------------------------------------------------------------

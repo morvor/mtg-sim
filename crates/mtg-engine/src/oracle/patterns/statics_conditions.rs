@@ -311,8 +311,9 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
     };
     let rest = rest.as_str();
     if rest == "cards in your graveyard" || rest == "card in your graveyard" {
+        // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
         return Some(Condition::Compare(
-            Value::GraveyardSize(PlayerRef::You),
+            Value::CardsInGraveyard(PlayerRef::You, Filter::Card),
             cmp,
             n,
         ));

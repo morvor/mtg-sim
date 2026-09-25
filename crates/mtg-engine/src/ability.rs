@@ -747,7 +747,8 @@ pub enum PlayerFilter {
     Life(Cmp, Box<Value>),
     /// Hand size comparisons.
     HandSize(Cmp, Box<Value>),
-    /// Graveyard size comparisons ("an opponent has eight or more cards in their graveyard").
+    /// Graveyard size comparisons ("an opponent has eight or more cards in their
+    /// graveyard"), counting cards only (CR 108.2b).
     GraveyardSize(Cmp, Box<Value>),
     /// The monarch.
     Monarch,

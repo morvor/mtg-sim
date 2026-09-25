@@ -39,6 +39,18 @@ fn during_your_turn_opponents_cant_cast_or_activate() {
     t.clear_answers();
     // Lands aren't artifacts, creatures, or enchantments.
     assert!(t.activate(P1, land, 0, &[]).is_ok());
+    // Triggered abilities of P1's creatures still trigger and resolve.
+    t.battlefield(P1, "Soul Warden");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.g.move_object(
+        bears,
+        mtg_engine::object::Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        Some(P0),
+    );
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 21);
     // On P1's own turn, no restriction.
     t.set_step(P1, Step::PrecombatMain);
     assert!(t.cast(P1, bolt).target(P0).try_go().is_ok());
@@ -74,7 +86,7 @@ fn your_opponents_cant_gain_life() {
 
 #[test]
 fn you_have_no_maximum_hand_size() {
-    cr!("402.2");
+    cr!("402.2", "613.10");
     ruling!(
         "Spellbook",
         "If multiple effects modify your hand size, apply them in timestamp order."
@@ -85,6 +97,18 @@ fn you_have_no_maximum_hand_size() {
     t.settle();
     assert_eq!(t.g.player(P0).max_hand_size, None);
     assert_eq!(t.g.player(P1).max_hand_size, Some(7));
+    // Null Profusion ("your maximum hand size is two") first, then Spellbook: no
+    // maximum; the other way around: two.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Null Profusion");
+    t.battlefield(P0, "Spellbook");
+    t.settle();
+    assert_eq!(t.g.player(P0).max_hand_size, None);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Spellbook");
+    t.battlefield(P0, "Null Profusion");
+    t.settle();
+    assert_eq!(t.g.player(P0).max_hand_size, Some(2));
 }
 
 #[test]
@@ -98,17 +122,30 @@ fn each_player_cant_cast_more_than_one_spell_each_turn() {
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Rule of Law");
     t.lands(P0, "Mountain", 2);
+    t.lands(P1, "Island", 2);
     let a = t.hand(P0, "Lightning Bolt");
     let b = t.hand(P0, "Shock");
+    let counter = t.hand(P1, "Counterspell");
     t.set_step(P0, Step::PrecombatMain);
-    t.cast(P0, a).target(P1).go();
+    let spell = t.cast(P0, a).target(P1).go();
+    // P1's first spell this turn: allowed.
+    t.cast(P1, counter).target(spell).go();
     t.resolve_all();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert_eq!(t.life(P1), 20);
+    // The countered Bolt was still cast this turn.
+    t.g.turn.priority = Some(P0);
     assert!(t.cast(P0, b).target(P1).try_go().is_err());
+    // Next turn, P0 can cast a spell again.
+    t.clear_answers();
+    t.advance_to(P1, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    assert!(t.cast(P0, b).target(P1).try_go().is_ok());
 }
 
 #[test]
 fn arrested_creature_cant_attack_block_or_activate() {
-    cr!("508.1c", "509.1a", "602.5");
+    cr!("508.1c", "509.1b", "602.5");
     compiles("Arrest");
     let mut t = TestGame::new(2);
     let elves = t.battlefield(P1, "Llanowar Elves");

@@ -78,9 +78,12 @@ fn aura_on_an_opponents_creature_gives_them_the_ability() {
     t.attach(aura, Entity::Object(theirs));
     t.settle();
     // Only the enchanted creature's controller can activate the granted ability.
+    assert!(t.activate(P0, theirs, 0, &[Entity::Player(P1)]).is_err());
+    t.clear_answers();
     t.activate(P1, theirs, 0, &[Entity::Player(P0)]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]
@@ -109,14 +112,20 @@ fn equipment_grant_where_this_creature_is_the_equipped_creature() {
     // damage to any target."
     compiles("Mortarpod");
     let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    // The Equipment's controller isn't the creature's: the creature's controller
+    // activates the granted ability.
+    let bears = t.battlefield(P1, "Grizzly Bears");
     let pod = t.battlefield(P0, "Mortarpod");
     t.attach(pod, Entity::Object(bears));
     t.settle();
     assert_eq!(t.pt(bears), (2, 3));
-    t.activate(P0, bears, 0, &[Entity::Player(P1)]).unwrap();
+    assert!(t.activate(P0, bears, 0, &[Entity::Player(P1)]).is_err());
+    t.clear_answers();
+    assert!(t.on_battlefield(bears));
+    t.activate(P1, bears, 0, &[Entity::Player(P0)]).unwrap();
     t.resolve_all();
-    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 20);
     // The creature was sacrificed, not the Equipment.
     assert!(!t.on_battlefield(bears));
     assert!(t.on_battlefield(pod));

@@ -881,7 +881,7 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
                 return Some(Value::HandSize(who()))
             }
             "card in its controller's graveyard" | "cards in its controller's graveyard" => {
-                return Some(Value::GraveyardSize(who()))
+                return Some(Value::CardsInGraveyard(who(), Filter::Card))
             }
             _ => {}
         }

@@ -108,7 +108,7 @@ fn activated_can_attack_this_turn_as_though_it_didnt_have_defender() {
 
 #[test]
 fn as_long_as_an_opponent_has_many_cards_in_their_graveyard() {
-    cr!("611.3a");
+    cr!("611.3a", "108.2b");
     compiles("Jace's Phantasm");
     let mut t = TestGame::new(2);
     let phantasm = t.battlefield(P0, "Jace's Phantasm");
@@ -119,8 +119,13 @@ fn as_long_as_an_opponent_has_many_cards_in_their_graveyard() {
     t.graveyard(P0, "Grizzly Bears");
     t.settle();
     assert_eq!(t.pt(phantasm), (1, 1));
+    // Neither does a token in theirs: it isn't a card (CR 108.2b).
+    super::statics::token_in_graveyard(&mut t, P1);
+    t.g.recompute();
+    assert_eq!(t.g.player(P1).graveyard.len(), 10);
+    assert_eq!(t.pt(phantasm), (1, 1));
     t.graveyard(P1, "Grizzly Bears");
-    t.settle();
+    t.g.recompute();
     assert_eq!(t.pt(phantasm), (5, 5));
 }
 

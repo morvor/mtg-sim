@@ -114,14 +114,20 @@ fn enchanted_creature_must_be_blocked_if_able() {
     let aura = t.battlefield(P0, "Predatory Impetus");
     t.attach(aura, Entity::Object(bears));
     let wall = t.battlefield(P1, "Wall of Stone");
+    let wall2 = t.battlefield(P1, "Wall of Stone");
     t.settle();
     assert_eq!(t.pt(bears), (5, 5));
     t.set_step(P0, Step::BeginningOfCombat);
-    // The defending player declares no blocks; the Wall must block anyway.
+    // The defending player declares no blocks; a Wall must block anyway, but only one.
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.attack(&[(bears, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 20);
-    assert!(t.on_battlefield(wall));
+    assert!(t.on_battlefield(wall) && t.on_battlefield(wall2));
+    let damaged = [wall, wall2]
+        .iter()
+        .filter(|w| t.obj_now(**w).damage > 0)
+        .count();
+    assert_eq!(damaged, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,12 +197,12 @@ fn each_creature_assigns_combat_damage_equal_to_its_toughness() {
     compiles("Doran, the Siege Tower");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Doran, the Siege Tower");
-    let giant = t.battlefield(P0, "Hill Giant");
+    let ox = t.battlefield(P0, "Pillarfield Ox");
     t.set_step(P0, Step::BeginningOfCombat);
-    t.attack(&[(giant, Entity::Player(P1))], &[]);
-    // Hill Giant is 3/3; the power itself doesn't change.
-    assert_eq!(t.life(P1), 17);
-    assert_eq!(t.pt(giant), (3, 3));
+    t.attack(&[(ox, Entity::Player(P1))], &[]);
+    // The 2/4 Ox assigns 4; its power itself doesn't change.
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.pt(ox), (2, 4));
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Doran, the Siege Tower");
     let elves = t.battlefield(P0, "Llanowar Elves");

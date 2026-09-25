@@ -124,7 +124,7 @@ fn otherwise_restriction_after_a_bonus() {
 
 #[test]
 fn as_long_as_you_control_enchanted_creature_otherwise() {
-    cr!("611.3a", "509.1a");
+    cr!("611.3a", "509.1b");
     compiles("Mishra's Domination");
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Grizzly Bears");
@@ -273,9 +273,18 @@ fn each_other_creature_thats_a_fungus_or_saproling() {
     let thallid = t.battlefield(P0, "Sporecrown Thallid");
     let fungus = t.battlefield(P0, "Thallid");
     let bears = t.battlefield(P0, "Grizzly Bears");
+    let both = t.battlefield(P0, "Grizzly Bears");
+    t.g.objects[both.0 as usize]
+        .base
+        .subtypes
+        .extend(["Fungus".into(), "Saproling".into()]);
+    t.g.dirty = true;
+    t.settle();
     assert_eq!(t.pt(thallid), (2, 2));
     assert_eq!(t.pt(fungus), (2, 2));
     assert_eq!(t.pt(bears), (2, 2));
+    // A Fungus Saproling gets +1/+1 once.
+    assert_eq!(t.pt(both), (3, 3));
 }
 
 #[test]

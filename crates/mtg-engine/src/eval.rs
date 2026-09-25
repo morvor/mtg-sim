@@ -182,8 +182,13 @@ impl Game {
             PlayerFilter::HandSize(cmp, v) => {
                 cmp.eval(self.player(p).hand.len() as i64, self.eval_value(v, ctx))
             }
+            // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
             PlayerFilter::GraveyardSize(cmp, v) => cmp.eval(
-                self.player(p).graveyard.len() as i64,
+                self.player(p)
+                    .graveyard
+                    .iter()
+                    .filter(|o| self.obj(**o).is_card())
+                    .count() as i64,
                 self.eval_value(v, ctx),
             ),
             PlayerFilter::Monarch => self.monarch == Some(p),

@@ -83,7 +83,7 @@ fn has_infect_while_an_opponent_is_poisoned() {
 
 #[test]
 fn djinn_shrinks_while_its_color_is_most_common_or_tied() {
-    cr!("611.3a", "105.1");
+    cr!("611.3a");
     compiles("Zanam Djinn");
     let mut t = TestGame::new(2);
     let djinn = t.battlefield(P0, "Zanam Djinn");
@@ -118,7 +118,7 @@ fn a_kind_of_card_in_your_graveyard() {
 
 #[test]
 fn for_each_other_creature_named_this() {
-    cr!("613.4c", "201.2");
+    cr!("613.4c", "201.2a");
     compiles("Timberpack Wolf");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Timberpack Wolf");
@@ -208,7 +208,7 @@ fn power_equal_to_devotion() {
 
 #[test]
 fn plague_rats_count_each_other() {
-    cr!("604.3", "201.2");
+    cr!("604.3", "201.2a");
     compiles("Plague Rats");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Plague Rats");

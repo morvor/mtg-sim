@@ -136,6 +136,49 @@ fn threshold_counts_cards_in_your_graveyard() {
     assert_eq!(t.pt(beast), (8, 8));
 }
 
+/// A token put into `p`'s graveyard (it stays there until state-based actions run).
+pub(crate) fn token_in_graveyard(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    let model = t.exile(p, "Grizzly Bears");
+    let spec = mtg_engine::replacement::TokenCreate {
+        chars: t.g.obj(model).copiable.clone(),
+        card: t.g.obj(model).card.clone(),
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let token = t.g.create_tokens(p, spec, 1, None)[0];
+    let gone = t
+        .g
+        .move_object(
+            token,
+            mtg_engine::object::Zone::Graveyard(p),
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        )
+        .unwrap();
+    assert!(t.g.obj(gone).is_token());
+    gone
+}
+
+#[test]
+fn threshold_counts_cards_not_tokens() {
+    cr!("611.3a", "108.2b");
+    let mut t = TestGame::new(2);
+    let beast = t.battlefield(P0, "Krosan Beast");
+    for _ in 0..6 {
+        t.graveyard(P0, "Grizzly Bears");
+    }
+    // A token in your graveyard (before it ceases to exist) isn't a card.
+    token_in_graveyard(&mut t, P0);
+    t.g.recompute();
+    assert_eq!(t.g.player(P0).graveyard.len(), 7);
+    assert_eq!(t.pt(beast), (1, 1));
+    t.graveyard(P0, "Grizzly Bears");
+    t.g.recompute();
+    assert_eq!(t.pt(beast), (8, 8));
+}
+
 #[test]
 fn as_long_as_it_is_attacking() {
     cr!("611.3a", "702.7b", "511.3");

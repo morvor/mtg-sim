@@ -91,8 +91,18 @@ fn commander_creatures_you_own_have_a_triggered_ability() {
     // "When this creature enters ..., draw a card."
     assert_eq!(t.hand_size(P0), before);
     assert!(t.obj_now(on_bf).is_commander);
+    // A second commander you own has it too.
+    t.library_top(P0, "Island");
+    let giant = t.hand(P0, "Hill Giant");
+    t.g.objects[giant.0 as usize].is_commander = true;
+    let size = t.hand_size(P0);
+    t.g.move_object(giant, Zone::Battlefield, MoveCause::Effect, Some(P0))
+        .unwrap();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), size);
     // A non-commander creature doesn't have it.
-    let other = t.hand(P0, "Hill Giant");
+    let other = t.hand(P0, "Grizzly Bears");
     let size = t.hand_size(P0);
     t.g.move_object(other, Zone::Battlefield, MoveCause::Effect, Some(P0));
     t.settle();
@@ -138,7 +148,7 @@ fn lieutenant_with_two_subjects() {
 
 #[test]
 fn this_and_enchanted_creature_each_get() {
-    cr!("613.4c", "702.103a");
+    cr!("613.4c", "113.6");
     ruling!(
         "Nighthowler",
         "Nighthowler's last ability functions only from the battlefield."
@@ -151,4 +161,9 @@ fn this_and_enchanted_creature_each_get() {
     t.graveyard(P1, "Island");
     t.settle();
     assert_eq!(t.pt(n), (2, 2));
+    // A Nighthowler card in a graveyard counts, but its own ability doesn't work there.
+    let dead = t.graveyard(P1, "Nighthowler");
+    t.settle();
+    assert_eq!(t.pt(n), (3, 3));
+    assert_eq!(t.pt(dead), (0, 0));
 }

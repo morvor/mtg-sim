@@ -31,8 +31,25 @@ fn defending_player_is_the_player_it_would_attack() {
 }
 
 #[test]
+fn cant_attack_unless_defending_player_is_poisoned() {
+    cr!("508.1c", "508.5", "122.1f");
+    compiles("Chained Throatseeker");
+    let mut t = TestGame::new(3);
+    let seeker = t.battlefield(P0, "Chained Throatseeker");
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!t.can_attack_target(seeker, Entity::Player(P1)));
+    assert!(!t.can_attack_target(seeker, Entity::Player(P2)));
+    // Your own poison counters don't matter; the player it would attack's do.
+    t.g.add_counters(Entity::Player(P0), "poison", 1, None);
+    t.g.add_counters(Entity::Player(P1), "poison", 1, None);
+    t.g.recompute();
+    assert!(t.can_attack_target(seeker, Entity::Player(P1)));
+    assert!(!t.can_attack_target(seeker, Entity::Player(P2)));
+}
+
+#[test]
 fn can_attack_only_the_monarch_or_their_planeswalkers() {
-    cr!("508.1c", "724.1");
+    cr!("508.1c", "725.1");
     ruling!(
         "Crown-Hunter Hireling",
         "can attack only the monarch or a planeswalker controlled by the monarch"

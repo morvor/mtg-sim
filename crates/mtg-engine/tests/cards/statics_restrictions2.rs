@@ -79,6 +79,43 @@ fn untap_limits_dont_add_together() {
 }
 
 #[test]
+fn untap_limits_apply_together() {
+    cr!("502.3");
+    let setup = || {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Static Orb");
+        t.battlefield(P1, "Smoke");
+        // Creatures first: the player picks among all limited permanents at once.
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Grizzly Bears");
+        let lands = t.lands(P0, "Forest", 2);
+        let all = [a, b, lands[0], lands[1]];
+        for id in &all {
+            t.g.tap(*id);
+        }
+        t.set_step(P1, Step::End);
+        (t, all)
+    };
+    // By default, as many as both limits allow: two permanents, one creature at most.
+    let (mut t, all) = setup();
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(untapped(&t, &all), 2);
+    assert_eq!(untapped(&t, &all[..2]), 1);
+    // The player's choice of two lands obeys both limits.
+    let (mut t, all) = setup();
+    t.answer_choose(P0, &[Entity::Object(all[2]), Entity::Object(all[3])]);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(untapped(&t, &all[2..]), 2);
+    assert_eq!(untapped(&t, &all[..2]), 0);
+    // Two creatures break Smoke's limit: that choice isn't allowed.
+    let (mut t, all) = setup();
+    t.answer_choose(P0, &[Entity::Object(all[0]), Entity::Object(all[1])]);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(untapped(&t, &all), 2);
+    assert_eq!(untapped(&t, &all[..2]), 1);
+}
+
+#[test]
 fn keyword_list_with_protection_from_two_colors() {
     cr!("613.1f", "702.16a");
     compiles("Akroma's Memorial");
@@ -219,6 +256,11 @@ fn conditions_joined_by_and_or_or() {
     t.settle();
     assert_eq!(t.pt(naga), (4, 2));
     assert!(has(&t, naga, KeywordKind::Trample));
+    // Controlling Deserts as well doesn't add to it.
+    t.battlefield(P0, "Desert");
+    t.battlefield(P0, "Desert");
+    t.settle();
+    assert_eq!(t.pt(naga), (4, 2));
     // "As long as it's your turn and you control an Army"
     let grond = t.battlefield(P0, "Grond, the Gatebreaker");
     t.set_step(P0, Step::PrecombatMain);
