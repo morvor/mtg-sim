@@ -1215,11 +1215,10 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         }
     }
     // "blocks or becomes blocked by a creature", "blocks or becomes blocked"
-    if let Some(r) = starts("blocks or becomes blocked by a creature") {
+    if let Some((g, r)) = starts("blocks or becomes blocked by ").and_then(article_phrase) {
         if !so {
             return None;
         }
-        let (g, r) = optional_creature_qualifier(r)?;
         return Some((
             (
                 TriggerCond::AnyOf(vec![
@@ -1251,12 +1250,11 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             r,
         ));
     }
-    if let Some(r) = starts("blocks a creature") {
+    if let Some((g, r)) = starts("blocks ").and_then(article_phrase) {
         // "~ blocks a creature [with flying]": once per blocked attacker (CR 509.3b).
         if !so {
             return None;
         }
-        let (g, r) = optional_creature_qualifier(r)?;
         return Some((
             (
                 TriggerCond::BlocksCreature {
@@ -1285,12 +1283,11 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             ));
         }
     }
-    if let Some(r) = starts("becomes blocked by a creature") {
+    if let Some((g, r)) = starts("becomes blocked by ").and_then(article_phrase) {
         // CR 509.3d: once for each creature blocking it.
         if !so {
             return None;
         }
-        let (g, r) = optional_creature_qualifier(r)?;
         return Some((
             (
                 TriggerCond::BlockedByCreature {
@@ -1418,19 +1415,16 @@ fn controller_suffix(s: &str) -> (PlayerRel, &str) {
     (PlayerRel::Any, s)
 }
 
-/// After "blocks a creature"/"becomes blocked by a creature": an optional qualifier such
-/// as "with flying" or "with power 3 or greater".
-fn optional_creature_qualifier(r: &str) -> Option<(Filter, &str)> {
+/// "a creature [with flying]", "a non-Wall creature", "an artifact creature" after
+/// "blocks"/"becomes blocked by": the filter and the remaining text.
+fn article_phrase(r: &str) -> Option<(Filter, &str)> {
     let t = r.trim_start();
-    if t.is_empty() || t.starts_with("or ") {
-        return Some((Filter::creature(), r));
+    let t = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+    let (g, plural, tail) = parse_object_phrase(t)?;
+    if plural {
+        return None;
     }
-    // "with flying", "with power 3 or greater": reuse the object phrase suffix grammar.
-    let phrase = format!("creature {t}");
-    let (g, _, tail) = parse_object_phrase(&phrase)?;
-    let consumed = phrase.len() - tail.len();
-    let used = consumed.saturating_sub("creature ".len());
-    Some((g, &t[used.min(t.len())..]))
+    Some((g, tail))
 }
 
 /// "deals [combat] damage [to a player | to an opponent | to you | to a creature | to a

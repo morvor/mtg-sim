@@ -108,7 +108,12 @@ impl Game {
             }
             for g in groups {
                 let mut info = g[0].clone();
+                // "That much"/"that many": the total amount (damage, life, ...), or the
+                // number of events for events without an amount (objects entering, ...).
                 info.amount = g.iter().map(|i| i.amount).sum();
+                if g.iter().all(|i| i.amount == 0) {
+                    info.amount = g.len() as i32;
+                }
                 info.objects = Vec::new();
                 for i in &g {
                     if let Some(o) = i.object.or(i.other) {

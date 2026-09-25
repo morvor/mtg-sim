@@ -183,6 +183,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let r = l
         .strip_prefix("whenever ")
         .or_else(|| l.strip_prefix("when "))?;
+    // "enchanted creature"/"equipped creature" without an article is the object this
+    // permanent is attached to, not any enchanted/equipped creature: see
+    // patterns/triggers.rs.
+    for p in ["enchanted ", "equipped ", "fortified "] {
+        if r.starts_with(p) {
+            return None;
+        }
+    }
     // Self triggers.
     let self_pairs: [(&str, TriggerCond); 12] = [
         ("~ enters", TriggerCond::EntersBattlefield(Filter::Source)),

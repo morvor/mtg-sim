@@ -56,7 +56,7 @@ fn delays() -> Vec<(&'static str, TriggerCond)> {
 }
 
 /// Splits "[effect] [delay]" or "[delay], [effect]".
-fn split_delay(l: &str) -> Option<(TriggerCond, &str)> {
+pub(crate) fn split_delay(l: &str) -> Option<(TriggerCond, &str)> {
     for (p, t) in delays() {
         if let Some(inner) = l.strip_prefix(p).and_then(|r| r.strip_prefix(", ")) {
             return Some((t, inner));
