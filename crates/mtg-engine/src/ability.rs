@@ -1571,6 +1571,9 @@ pub enum CostChange {
     IncreaseMana(ManaCost),
     /// Costs specific colored mana less.
     ReduceColored(Color, Value),
+    /// Costs the given mana symbols less (CR 118.7a–g). `colored_only`: "This effect
+    /// reduces only the amount of colored mana you pay."
+    ReduceMana { mana: ManaCost, colored_only: bool },
     /// Additional non-mana cost ("As an additional cost to cast spells, pay 2 life").
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."

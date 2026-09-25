@@ -834,7 +834,9 @@ impl Game {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
 
-        // 601.2f: total cost.
+        // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
+        // cost is reduced (CR 118.7e).
+        crate::cost_rules::choose_reduction_halves(self, p, id);
         let mut total = self.base_total_cost(p, id, &chars, opt, x as u32);
         add_cost(&mut total, &extra);
         // Mode costs (spree, etc.).
@@ -850,6 +852,8 @@ impl Game {
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 118.13a: how symbols that can be paid in more than one way will be paid.
+        crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
             is_spell: true,
@@ -895,10 +899,18 @@ impl Game {
         let mut cost = match &opt.alt_cost {
             Some(c) => c.clone(),
             None => Cost {
-                mana: Some(chars.mana_cost.clone().unwrap_or_default()),
+                // CR 118.6: an object with no mana cost has an unpayable cost.
+                mana: Some(
+                    chars
+                        .mana_cost
+                        .clone()
+                        .unwrap_or_else(crate::cost_rules::unpayable),
+                ),
                 parts: vec![],
             },
         };
+        // Reductions by mana symbols (CR 118.7a–g), applied after the other changes.
+        let mut mana_reductions: Vec<(ManaCost, bool)> = Vec::new();
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
@@ -932,6 +944,9 @@ impl Game {
                             CostChange::IncreaseMana(m) => {
                                 add_cost(&mut cost, &Cost::mana(m.clone()))
                             }
+                            CostChange::ReduceMana { mana, colored_only } => {
+                                mana_reductions.push((mana.clone(), *colored_only))
+                            }
                             CostChange::AlternativeCost(_)
                             | CostChange::FlashForAdditionalCost(_) => {}
                         }
@@ -943,9 +958,11 @@ impl Game {
         let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
         for (src, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*src), *ctl);
+            // (A card being considered for casting is judged as the spell it would be.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
-                    self.player_rel_matches(cm.who, p, &ctx) && self.matches(card, f, &ctx)
+                    self.player_rel_matches(cm.who, p, &ctx)
+                        && self.matches(card, &as_spell_filter(f), &ctx)
                 }
                 _ => false,
             };
@@ -964,6 +981,9 @@ impl Game {
                 CostChange::ReduceColored(c, v) => {
                     reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
                 }
+                CostChange::ReduceMana { mana, colored_only } => {
+                    mana_reductions.push((mana.clone(), *colored_only))
+                }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
                 CostChange::AlternativeCost(_) | CostChange::FlashForAdditionalCost(_) => {}
             }
@@ -980,6 +1000,16 @@ impl Game {
                         }
                     }
                 }
+            }
+        }
+        let mut hybrid = 0;
+        for (by, colored_only) in mana_reductions {
+            if let Some(m) = cost.mana.as_mut() {
+                crate::cost_rules::reduce_by(m, &by, colored_only, |_, cur, s| {
+                    let h = crate::cost_rules::chosen_half(self, card, hybrid, cur, s);
+                    hybrid += 1;
+                    h
+                });
             }
         }
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
@@ -1175,6 +1205,13 @@ impl Game {
                 }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
                 CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
+                CostChange::ReduceMana { mana, colored_only } => {
+                    if let Some(m) = cost.mana.as_mut() {
+                        crate::cost_rules::reduce_by(m, mana, *colored_only, |_, cur, s| {
+                            crate::cost_rules::default_half(cur, s)
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -1321,6 +1358,8 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 118.13a: how symbols that can be paid in more than one way will be paid.
+        crate::cost_rules::choose_payment_ways(self, p, Some(src), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
@@ -1438,6 +1477,11 @@ impl Game {
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
     pub fn pay_cost(&mut self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let snapshot = self.clone();
+        // CR 118.13b: the choice of how to pay hybrid and Phyrexian symbols is made
+        // immediately before paying.
+        let mut cost = cost.clone();
+        crate::cost_rules::choose_payment_ways(self, p, src, &mut cost);
+        let cost = &cost;
         let spend = SpendContext {
             is_ability: true,
             source: src,
@@ -1996,7 +2040,7 @@ impl crate::eval::View for WithChars<'_> {
 
 /// A filter describing spells ("creature spells", "spells with mana value 3") applied to
 /// a card that would become such a spell: the "is on the stack" parts are dropped.
-fn as_spell_filter(f: &Filter) -> Filter {
+pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     match f {
         Filter::Spell | Filter::InZone(ZoneKind::Stack) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),

@@ -1077,6 +1077,11 @@ impl Game {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
                     }
+                    // CR 118.8c: casting "if able" isn't required when the spell has a
+                    // mandatory additional cost involving hidden cards with a quality.
+                    if !*optional && crate::cost_rules::may_decline_cast_if_able(self, p, o) {
+                        continue;
+                    }
                     let method = if *free {
                         CastMethod::Free
                     } else {

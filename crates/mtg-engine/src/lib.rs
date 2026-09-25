@@ -29,6 +29,7 @@ pub mod casting;
 pub mod choices;
 pub mod combat;
 pub mod copy;
+pub mod cost_rules;
 pub mod counter_rules;
 pub mod custom;
 pub mod decision;
