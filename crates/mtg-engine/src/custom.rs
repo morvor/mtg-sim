@@ -22,7 +22,10 @@ fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
 }
 
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
-    let _ = (g, ctx);
+    // Values referring to stickers (CR 123.6d, 123.6e, 123.8a).
+    if let Some(v) = crate::stickers::sticker_value(g, name, ctx) {
+        return v;
+    }
     // "mana_spent_of:U": amount of mana of one type spent to cast it (adamant).
     if let Some(t) = name.strip_prefix("mana_spent_of:") {
         let Some(t) = t
@@ -183,6 +186,33 @@ pub fn custom_trigger(
                     }
                 }
                 return out;
+            }
+        }
+        return vec![];
+    }
+    // "sticker placed:you" / "sticker placed:self": "Whenever you place a sticker",
+    // "Whenever you put a sticker on ~".
+    if let Some(which) = name.strip_prefix("sticker placed:") {
+        if let Event::Custom {
+            name: n,
+            player: Some(p),
+            obj: Some(o),
+            amount,
+        } = ev
+        {
+            let ok = n == crate::stickers::PLACED_EVENT
+                && match which {
+                    "you" => *p == ctl,
+                    "self" => *o == src,
+                    _ => false,
+                };
+            if ok {
+                return vec![EventInfo {
+                    object: Some(*o),
+                    player: Some(*p),
+                    amount: *amount,
+                    ..Default::default()
+                }];
             }
         }
         return vec![];

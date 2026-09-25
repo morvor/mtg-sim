@@ -508,6 +508,7 @@ impl Game {
                 .and_then(|ch| ch.card_type)
                 .is_some_and(|t| c.card_types.contains(t)),
             Filter::StackTargets(tf) => crate::target_rules::stack_targets_match(self, id, tf, ctx),
+            Filter::HasSticker(kind) => crate::stickers::has_sticker(self, id, *kind),
             Filter::Targets(inner) => {
                 o.zone == Zone::Stack
                     && o.stack.as_ref().is_some_and(|si| {

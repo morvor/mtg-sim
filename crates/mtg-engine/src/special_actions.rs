@@ -54,6 +54,8 @@ pub struct SpecialState {
     pub casting: u32,
     pub drawn_while_casting: Vec<ObjectId>,
     pub deferred_draws: Vec<(PlayerId, ObjectId, u32)>,
+    /// Sticker sheets and the stickers on objects (CR 123).
+    pub stickers: crate::stickers::StickerState,
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,

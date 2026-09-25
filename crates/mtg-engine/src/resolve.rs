@@ -704,6 +704,23 @@ impl Game {
                     *repeatable,
                 );
             }
+            Effect::PutSticker {
+                who,
+                what,
+                kind,
+                max_ticket,
+                free,
+            } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let max = max_ticket
+                    .as_ref()
+                    .map(|v| self.eval_value(v, ctx).max(0) as u32);
+                let mut placed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    placed |= crate::stickers::put_from_sheets(self, p, o, *kind, max, *free);
+                }
+                ctx.prev_happened = placed;
+            }
             Effect::SpendAnyTypeMana {
                 who,
                 what,

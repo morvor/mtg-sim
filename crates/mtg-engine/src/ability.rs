@@ -797,6 +797,15 @@ pub enum PlayerRel {
     Chosen,
 }
 
+/// The four kinds of stickers (CR 123.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StickerType {
+    Name,
+    Ability,
+    PowerToughness,
+    Art,
+}
+
 /// What a spell or ability on the stack targets (CR 115.9).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TargetsFilter {
@@ -971,6 +980,9 @@ pub enum Filter {
     /// A spell or ability on the stack with at least one target that is an object matching
     /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
     Targets(Box<Filter>),
+    /// Has a sticker on it ("stickered", CR 123.4), or a sticker of the given kind ("with a
+    /// name sticker on it").
+    HasSticker(Option<StickerType>),
     /// A spell or ability on the stack described by its targets: "with a single target",
     /// "that targets you", "that targets only [something]" (CR 115.9).
     StackTargets(Box<TargetsFilter>),
@@ -2456,6 +2468,16 @@ pub enum Effect {
         def: Box<SpecialActionDef>,
         duration: Duration,
         repeatable: bool,
+    },
+    /// "[Player] puts a [kind of] sticker on [objects]" (CR 123.3): they choose one of the
+    /// stickers they have access to that isn't on an object they own, and pay its ticket
+    /// cost unless `free` (CR 123.3c). `max_ticket`: "with ticket cost X or less".
+    PutSticker {
+        who: PlayerRef,
+        what: Sel,
+        kind: Option<StickerType>,
+        max_ticket: Option<Value>,
+        free: bool,
     },
     /// "Mana of any type can be spent to cast [that spell]" (CR 118.14): `who` may spend
     /// mana as though it were colorless mana or mana of any color to cast the card.
