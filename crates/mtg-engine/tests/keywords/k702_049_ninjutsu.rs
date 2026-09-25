@@ -198,6 +198,32 @@ fn ninjutsu_during_the_first_strike_damage_step() {
 }
 
 #[test]
+fn ninjutsu_after_combat_damage_deals_no_damage() {
+    cr!("702.49a");
+    ruling!(
+        "Ninja of the Deep Hours",
+        "The ninjutsu ability can be activated during the declare blockers step, combat damage step, or end of combat step. If you wait until after the declare blockers step, because all combat damage is dealt at once, the Ninja won't normally deal combat damage."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    let ninja = t.hand(P0, "Ninja of the Deep Hours");
+    unblocked_attack(&mut t, bears, Entity::Player(P1));
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 18);
+    // The Bears are still an unblocked attacking creature in the end of combat step.
+    let hand = t.hand_size(P0);
+    t.activate(P0, ninja, 0, &[]).unwrap();
+    t.resolve_all();
+    let n = t.named_on_battlefield("Ninja of the Deep Hours")[0];
+    assert!(t.g.is_attacking(n));
+    t.advance_to(P0, Step::PostcombatMain);
+    assert_eq!(t.life(P1), 18);
+    // The Bears went back to hand; no card was drawn.
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
 fn commander_ninjutsu_works_from_the_command_zone() {
     cr!("702.49d");
     ruling!(
