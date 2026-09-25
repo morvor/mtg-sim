@@ -378,19 +378,18 @@ impl Game {
             }
             ReplEvent::Destroy { obj, .. } => {
                 let owner = self.obj(obj).owner;
+                // The move to the graveyard is itself subject to replacement effects
+                // ("if it would die, exile it instead"), as in `destroy_all`.
                 if self
-                    .perform_move(
-                        MoveEv {
-                            obj,
-                            to: Zone::Graveyard(owner),
-                            pos: LibraryPosition::Top,
-                            cause: MoveCause::Destroy,
-                            by: None,
-                            etb: EtbInfo::default(),
-                            source: None,
-                        },
-                        Some(Arc::new(self.lookback_snapshot())),
-                    )
+                    .move_object_ev(MoveEv {
+                        obj,
+                        to: Zone::Graveyard(owner),
+                        pos: LibraryPosition::Top,
+                        cause: MoveCause::Destroy,
+                        by: None,
+                        etb: EtbInfo::default(),
+                        source: None,
+                    })
                     .is_some()
                 {
                     self.emit(Event::Destroyed { obj });

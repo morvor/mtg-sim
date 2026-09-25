@@ -887,6 +887,8 @@ impl Game {
                 body,
                 once,
             } => {
+                // CR 603.7a: it won't trigger on events that happened before it was created.
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
@@ -929,6 +931,7 @@ impl Game {
                 });
             }
             Effect::AtNext { step, effect } => {
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
