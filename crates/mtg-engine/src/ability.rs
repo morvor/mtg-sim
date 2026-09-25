@@ -2575,7 +2575,10 @@ pub enum Effect {
         step: TriggerStep,
         effect: Box<Effect>,
     },
+    /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an
+    /// emblem with the abilities into the command zone; they own and control it.
     CreateEmblem {
+        who: PlayerRef,
         abilities: Vec<Ability>,
     },
     /// Win or lose the game.

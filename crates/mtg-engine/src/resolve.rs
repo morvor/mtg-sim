@@ -1140,8 +1140,10 @@ impl Game {
                     created_step: Some(self.turn.step),
                 });
             }
-            Effect::CreateEmblem { abilities } => {
-                crate::tokens::create_emblem(self, ctx.controller, abilities.clone(), ctx.source);
+            Effect::CreateEmblem { who, abilities } => {
+                for p in self.eval_players(who, ctx) {
+                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                }
             }
             Effect::WinGame { who } => {
                 for p in self.eval_players(who, ctx) {
