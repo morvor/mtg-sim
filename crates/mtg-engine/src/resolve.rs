@@ -1896,7 +1896,11 @@ impl Game {
                 }
             })
             .collect();
-        self.move_objects(moves).into_iter().flatten().collect()
+        let moved: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+        if to.zone == ZoneKind::Library {
+            crate::library::arrange_placed(self, &moved, to.position);
+        }
+        moved
     }
 
     /// Default attack target for "put onto the battlefield attacking": the defending
