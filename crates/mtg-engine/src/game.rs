@@ -55,6 +55,8 @@ pub struct GameConfig {
     pub starting_player_skips_draw: Option<bool>,
     /// Commander: amount of combat damage from a single commander that loses the game.
     pub commander_damage_limit: u32,
+    /// Commander: the Brawl option (CR 903.12).
+    pub brawl: bool,
     /// Maximum number of turns before the game is declared a draw (simulation safety).
     pub max_turns: u32,
     /// Max decisions per game (safety valve for infinite loops).
@@ -75,6 +77,7 @@ impl Default for GameConfig {
             skip_mulligans: false,
             starting_player_skips_draw: None,
             commander_damage_limit: 21,
+            brawl: false,
             max_turns: 200,
             max_actions: 200_000,
             seed: 0,
@@ -515,6 +518,8 @@ impl Game {
                 }
             }
         }
+        // CR 119.1: starting life totals (which depend on the variant and teams).
+        crate::life_totals::set_starting_life_totals(&mut g);
         for (i, deck) in decks.into_iter().enumerate() {
             let pid = PlayerId(i as u8);
             for card in deck {

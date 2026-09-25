@@ -184,6 +184,9 @@ impl Game {
         };
         self.turn.starting_player = starting;
         self.turn.active = starting;
+        // CR 103.4, 119.1: each player's life total becomes their starting life total
+        // (vanguard life modifiers are known now, CR 902.4).
+        crate::life_totals::set_starting_life_totals(self);
         // CR 103.4–103.5: draw opening hands, then mulligans.
         let hand_size = self.config.starting_hand_size;
         for p in self.apnap() {

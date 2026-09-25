@@ -44,6 +44,7 @@ pub mod keywords;
 pub mod kw;
 pub mod layers;
 pub mod library;
+pub mod life_totals;
 pub mod mana;
 pub mod mana_abilities;
 pub mod mulligan;

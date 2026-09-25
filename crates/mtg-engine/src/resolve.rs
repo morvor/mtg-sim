@@ -763,6 +763,14 @@ impl Game {
                     }
                 }
             }
+            Effect::ExchangeLifeTotals { a, b } => {
+                let a = self.eval_player(a, ctx);
+                let b = self.eval_player(b, ctx);
+                ctx.prev_happened = match (a, b) {
+                    (Some(a), Some(b)) => crate::life_totals::exchange_life_totals(self, a, b),
+                    _ => false,
+                };
+            }
             Effect::AddMana {
                 who,
                 mana,

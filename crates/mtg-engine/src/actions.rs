@@ -857,6 +857,7 @@ impl Game {
             return;
         }
         self.players[p.idx()].life += n as i32;
+        crate::life_totals::share_team_life(self, p);
         *self.history.life_gained.entry(p).or_insert(0) += n;
         self.emit(Event::LifeGained {
             player: p,
@@ -884,6 +885,7 @@ impl Game {
             return;
         }
         self.players[p.idx()].life -= n as i32;
+        crate::life_totals::share_team_life(self, p);
         *self.history.life_lost.entry(p).or_insert(0) += n;
         self.emit(Event::LifeLost {
             player: p,

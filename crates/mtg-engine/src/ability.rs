@@ -2170,6 +2170,11 @@ pub enum Effect {
         who: PlayerRef,
         n: Value,
     },
+    /// Two players exchange life totals (CR 119.7, 119.8).
+    ExchangeLifeTotals {
+        a: PlayerRef,
+        b: PlayerRef,
+    },
     AddMana {
         who: PlayerRef,
         mana: ManaProduction,
