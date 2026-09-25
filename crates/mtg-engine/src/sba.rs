@@ -381,13 +381,6 @@ impl Game {
             self.objects[id.0 as usize].zone = Zone::Nowhere;
             self.dirty = true;
         }
-        for id in unattach {
-            self.unattach(id);
-        }
-        for (id, k, n) in counter_removals {
-            self.remove_counters(Entity::Object(id), &k, n);
-        }
-
         let mut moves: Vec<MoveEv> = Vec::new();
         for id in &to_graveyard {
             let owner = self.obj(*id).owner;
@@ -473,6 +466,20 @@ impl Game {
                 }
             }
         }
+        // Unattaching and removing counters happen at the same time as the zone changes
+        // above. They're done afterward so that the last known information of a
+        // permanent that left is from before any of these actions (CR 704.8); a
+        // permanent that left the battlefield needs neither.
+        for id in unattach {
+            if self.is_live(id) {
+                self.unattach(id);
+            }
+        }
+        for (id, k, n) in counter_removals {
+            if self.is_live(id) && self.obj(id).zone == Zone::Battlefield {
+                self.remove_counters(Entity::Object(id), &k, n);
+            }
+        }
 
         // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3); "can't
         // lose" effects apply (CR 101.2).
@@ -480,6 +487,26 @@ impl Game {
         self.lose_game_simultaneously(&losers);
         self.recompute();
         true
+    }
+
+    /// Permanents that entered the battlefield in one simultaneous event have had the
+    /// world supertype for the same amount of time (CR 704.5k's tie).
+    pub(crate) fn entered_simultaneously(&mut self, ids: &[ObjectId]) {
+        let worlds: Vec<ObjectId> = ids
+            .iter()
+            .copied()
+            .filter(|id| self.obj(*id).zone == Zone::Battlefield)
+            .filter(|id| self.obj(*id).world_since.is_some())
+            .collect();
+        if let Some(first) = worlds
+            .iter()
+            .filter_map(|id| self.obj(*id).world_since)
+            .min()
+        {
+            for id in worlds {
+                self.objects[id.0 as usize].world_since = Some(first);
+            }
+        }
     }
 
     /// Whether the object is the source of a triggered ability that has triggered but not

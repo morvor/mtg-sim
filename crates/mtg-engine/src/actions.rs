@@ -141,6 +141,8 @@ impl Game {
         self.entering = prev_entering;
         self.run_post_replacement_effects();
         self.recompute();
+        let entered: Vec<ObjectId> = out.iter().flatten().copied().collect();
+        self.entered_simultaneously(&entered);
         out
     }
 
@@ -692,7 +694,7 @@ impl Game {
         }
     }
 
-    fn run_post_replacement_effects(&mut self) {
+    pub(crate) fn run_post_replacement_effects(&mut self) {
         while let Some((mut c, e)) = self.post_replacement_effects.pop() {
             self.exec(&e, &mut c);
         }
