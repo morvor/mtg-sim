@@ -118,7 +118,7 @@ fn it_doesnt_become_day_if_it_is_night() {
 
 #[test]
 fn clone_enters_as_a_copy() {
-    cr!("707.9", "614.1c", "706.2");
+    cr!("707.2", "614.1c");
     assert_supported("Clone");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -132,7 +132,7 @@ fn clone_enters_as_a_copy() {
 
 #[test]
 fn clone_may_copy_nothing() {
-    cr!("707.9", "704.5f");
+    cr!("707.2", "704.5f");
     ruling!("Clone", "You can choose not to copy anything");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
@@ -145,7 +145,7 @@ fn clone_may_copy_nothing() {
 
 #[test]
 fn clone_uses_the_copied_creatures_as_enters_abilities() {
-    cr!("707.9", "614.12", "607.2d");
+    cr!("707.2", "614.12", "607.2d");
     ruling!(
         "Clone",
         "Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the chosen creature will also work"
@@ -165,7 +165,7 @@ fn clone_uses_the_copied_creatures_as_enters_abilities() {
 
 #[test]
 fn vesuva_enters_tapped_as_a_copy_of_a_land() {
-    cr!("707.9", "614.1c");
+    cr!("707.2", "614.1c");
     assert_supported("Vesuva");
     let mut t = TestGame::new(2);
     let ground = t.battlefield(P1, "Stomping Ground");

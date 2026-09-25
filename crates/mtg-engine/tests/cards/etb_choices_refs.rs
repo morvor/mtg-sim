@@ -268,7 +268,7 @@ fn protection_aura_doesnt_remove_itself() {
 
 #[test]
 fn chosen_color_protection_aura_and_sacrifice_ability() {
-    cr!("702.16n", "607.2d", "611.2c");
+    cr!("702.16n", "607.2d", "113.7a");
     assert_supported("Floating Shield");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
