@@ -173,6 +173,8 @@ impl Game {
         };
         self.turn.starting_player = starting;
         self.turn.active = starting;
+        // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
+        crate::variants::begin_game(self);
         // CR 103.4–103.5: draw opening hands, then mulligans.
         let hand_size = self.config.starting_hand_size;
         for p in self.apnap() {

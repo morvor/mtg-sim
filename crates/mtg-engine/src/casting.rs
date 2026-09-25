@@ -635,6 +635,10 @@ impl Game {
         if let Some(c) = &opt.extra_cost {
             add_cost(&mut extra, c);
         }
+        // CR 702.47a: splice (the spell gains text, CR 612.10).
+        for c in crate::splice::offer_splices(self, p, id, &extra) {
+            add_cost(&mut extra, &c);
+        }
         let base_cost_has_x = match &opt.alt_cost {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),

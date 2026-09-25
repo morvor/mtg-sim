@@ -442,6 +442,8 @@ pub struct Game {
     /// Continuous effects on permanent spells that keep applying to the permanents they
     /// become (CR 611.3d).
     pub carried_effects: Vec<u32>,
+    /// The continuous effects that are stickers on objects (CR 123).
+    pub stickers: Vec<u32>,
 }
 
 impl Game {
@@ -520,6 +522,7 @@ impl Game {
             step_start_actions: vec![],
             entering: vec![],
             carried_effects: vec![],
+            stickers: vec![],
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -786,6 +789,7 @@ impl Game {
         n.prev = Some(old);
         let id = self.push_object(n);
         self.objects[old.0 as usize].next = Some(id);
+        crate::stickers::follow(self, old, id, zone);
         id
     }
 

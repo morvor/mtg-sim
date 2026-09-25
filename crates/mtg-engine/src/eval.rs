@@ -311,15 +311,12 @@ impl Game {
                 cmp.eval(self.mana_value_of(id) as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.name.eq_ignore_ascii_case(n),
-            Filter::SameNameAs(sel) => {
-                !c.name.is_empty()
-                    && self
-                        .eval_sel(sel, ctx)
-                        .iter()
-                        .filter_map(|e| e.object())
-                        .any(|x| self.obj(x).chars.name == c.name)
-            }
+            Filter::Named(n) => c.has_name(n),
+            Filter::SameNameAs(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .any(|x| c.shares_name_with(&self.obj(x).chars)),
             Filter::SharesCreatureType(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()

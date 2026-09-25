@@ -304,11 +304,28 @@ pub fn replace_words(text: &str, from: &str, to: &str) -> String {
     out
 }
 
+/// True if `n` is the name of a nonlegendary creature card in the Oracle card reference,
+/// including faces of multi-faced cards but not tokens (CR 612.7).
+pub fn is_nonlegendary_creature_name(n: &str) -> bool {
+    let Some(c) = mtg_data::cards().by_name(n) else {
+        return false;
+    };
+    c.is_playable_card()
+        && c.faces().iter().any(|f| {
+            let ty = f.type_line.as_deref().unwrap_or("");
+            let ty = ty.split('\u{2014}').next().unwrap_or("");
+            f.name.eq_ignore_ascii_case(n)
+                && ty.split_whitespace().any(|w| w == "Creature")
+                && !ty.split_whitespace().any(|w| w == "Legendary")
+        })
+}
+
 /// Gives an object the full text of a card (CR 612.6): the text representing its name,
 /// mana cost, color indicator, type line, rules text, power, and toughness. Its color
 /// follows its new mana cost and color indicator (CR 202.2).
 pub fn take_full_text(c: &mut Characteristics, of: &Characteristics) {
     c.name = of.name.clone();
+    c.all_creature_names = of.all_creature_names;
     c.mana_cost = of.mana_cost.clone();
     c.color_indicator = of.color_indicator;
     c.colors = of.colors;

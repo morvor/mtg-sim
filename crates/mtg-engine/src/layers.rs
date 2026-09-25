@@ -387,7 +387,7 @@ impl Game {
             if e.layer1.is_none() && has_layer_mod(&e.mods, layer) && !done.contains(&key) {
                 effs.push(LayerEff {
                     key,
-                    ts: (e.timestamp, 0),
+                    ts: crate::stickers::effect_timestamp(self, e),
                     cda: false,
                 });
             }
@@ -1064,7 +1064,14 @@ pub fn apply_mod(
     match m {
         Modification::SetController(_) => {}
         Modification::ChangeText { from, to } => crate::text_change::change_text(c, from, to),
-        Modification::SetName(n) => c.name = n.clone(),
+        Modification::SetName(n) => {
+            c.name = n.clone();
+            c.all_creature_names = false;
+        }
+        Modification::AllCreatureNames => c.all_creature_names = true,
+        Modification::NameSticker { word, position } => {
+            c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
+        }
         // Becomes `SetText` for each object as the effect is created.
         Modification::ExchangeText => {}
         Modification::SetText { abilities, text } => {
@@ -1075,6 +1082,16 @@ pub fn apply_mod(
             if let Some(t) = g.eval_sel_objects(sel, ctx).first() {
                 crate::text_change::take_full_text(c, &g.obj(*t).base);
             }
+        }
+        Modification::AddText { abilities, text } => {
+            c.abilities.extend(abilities.iter().cloned());
+            let own = c.rules_text.trim_end();
+            let joined = if own.is_empty() {
+                text.to_string()
+            } else {
+                format!("{own}\n{text}")
+            };
+            c.rules_text = std::sync::Arc::from(joined.as_str());
         }
         Modification::AddTypes(ts) => {
             for t in ts {

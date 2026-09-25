@@ -1094,6 +1094,20 @@ pub enum Modification {
     /// Has the full text of the selected card (CR 612.6): its name, mana cost, color
     /// indicator, type line, rules text, and power and toughness.
     FullTextOf(Box<Sel>),
+    /// Adds rules text following the object's own, without changing its own text (a
+    /// splice ability, CR 612.10, 702.47c).
+    AddText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// "Has all names of nonlegendary creature cards in addition to its name" (CR 612.7).
+    AllCreatureNames,
+    /// A name sticker: adds `word` to the object's name after `position` words (CR 123.6,
+    /// 612.9).
+    NameSticker {
+        word: SmolStr,
+        position: u32,
+    },
     // Layer 4
     AddTypes(Vec<CardType>),
     RemoveTypes(Vec<CardType>),
@@ -1138,9 +1152,14 @@ impl Modification {
         use Modification::*;
         match self {
             SetController(_) => Layer::L2Control,
-            ChangeText { .. } | SetName(_) | ExchangeText | SetText { .. } | FullTextOf(_) => {
-                Layer::L3Text
-            }
+            ChangeText { .. }
+            | SetName(_)
+            | ExchangeText
+            | SetText { .. }
+            | FullTextOf(_)
+            | AddText { .. }
+            | AllCreatureNames
+            | NameSticker { .. } => Layer::L3Text,
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)

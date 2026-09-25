@@ -32,6 +32,9 @@ pub struct Characteristics {
     pub life_modifier: Option<i32>,
     /// Oracle text, for display and text-changing effects.
     pub rules_text: Arc<str>,
+    /// Also has the name of each nonlegendary creature card (Spy Kit, CR 612.7).
+    #[serde(default)]
+    pub all_creature_names: bool,
 }
 
 impl Characteristics {
@@ -70,6 +73,21 @@ impl Characteristics {
     }
     pub fn keyword_count(&self, k: KeywordKind) -> usize {
         self.keywords().filter(|kw| kw.kind == k).count()
+    }
+    /// True if the object has the name `n` (CR 201.2): its own name, or, with "all names
+    /// of nonlegendary creature cards" (CR 612.7), any such card's name.
+    pub fn has_name(&self, n: &str) -> bool {
+        (!self.name.is_empty() && self.name.eq_ignore_ascii_case(n))
+            || (self.all_creature_names && crate::text_change::is_nonlegendary_creature_name(n))
+    }
+    /// True if the two objects have at least one name in common.
+    pub fn shares_name_with(&self, other: &Characteristics) -> bool {
+        if self.name.is_empty() && !self.all_creature_names {
+            return false;
+        }
+        (self.all_creature_names && other.all_creature_names)
+            || other.has_name(&self.name)
+            || self.has_name(&other.name)
     }
     /// True if the object has no abilities other than those the compiler couldn't parse.
     pub fn has_no_abilities(&self) -> bool {
