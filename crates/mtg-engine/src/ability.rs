@@ -570,6 +570,10 @@ pub enum TargetKind {
 pub type Var = u16;
 
 /// Well-known variables.
+/// The link shared by a pregame choice and the characteristic-defining ability that refers
+/// to it (CR 607.2p). Choices made for it are kept as the card changes zones.
+pub const PREGAME_LINK: u16 = 0x7fff;
+
 pub mod vars {
     use super::Var;
     /// Objects affected by the most recent effect ("it", "those cards", "the exiled card").
@@ -1123,6 +1127,9 @@ pub enum Modification {
     SetBasicLandType(Vec<Subtype>),
     // Layer 5
     SetColors(ColorSet),
+    /// "[This] is the chosen color": the color chosen by the linked ability (CR 607.2p).
+    /// Does nothing while no color is chosen (CR 607.5a).
+    SetLinkedChosenColor,
     AddColors(ColorSet),
     // Layer 6
     AddAbility(Ability),
@@ -1159,7 +1166,7 @@ impl Modification {
             | AllCreatureTypes
             | RemoveAllCreatureTypes
             | SetBasicLandType(_) => Layer::L4Type,
-            SetColors(_) | AddColors(_) => Layer::L5Color,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -1544,6 +1551,13 @@ pub enum StaticEffect {
     /// triggered ability]", whose source is this card (CR 603.7g).
     OpeningHand {
         delayed: Option<Box<(TriggerCond, Body)>>,
+    },
+    /// "If this card is your commander, choose a color before the game begins" (CR 607.2p):
+    /// the choice is linked to the characteristic-defining ability in the same paragraph
+    /// and persists as the card changes zones.
+    PregameChoice {
+        kind: ChoiceKind,
+        only_if_commander: bool,
     },
     /// "Before you shuffle your deck to start the game, you may reveal this card from your
     /// deck and exile [a card matching `what`] you drafted that isn't in your deck"

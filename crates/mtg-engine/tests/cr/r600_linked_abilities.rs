@@ -831,3 +831,36 @@ fn cards_exiled_before_the_game_are_linked_to_cards_with_that_name() {
     assert!(t.in_hand(P0, "Lightning Bolt"));
     assert!(!t.in_exile("Grizzly Bears"));
 }
+
+#[test]
+fn a_pregame_choice_for_a_cda_is_linked_and_follows_the_card() {
+    cr!("607.2p");
+    // The Prismatic Piper: "If The Prismatic Piper is your commander, choose a color before
+    // the game begins. The Prismatic Piper is the chosen color."
+    let mut t = TestGame::new(2);
+    let piper = t.command(P0, "The Prismatic Piper");
+    t.g.objects[piper.0 as usize].is_commander = true;
+    let other = t.hand(P0, "The Prismatic Piper");
+    choose_color(&mut t, P0, Color::Blue);
+    mtg_engine::opening_hand::before_shuffle_actions(&mut t.g);
+    t.g.recompute();
+    let blue = {
+        let mut c = ColorSet::NONE;
+        c.insert(Color::Blue);
+        c
+    };
+    assert_eq!(t.obj(piper).chars.colors, blue);
+    // It keeps referring to that choice as it changes zones.
+    let on_bf =
+        t.g.move_object(piper, Zone::Battlefield, MoveCause::Effect, Some(P0))
+            .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj(on_bf).chars.colors, blue);
+    let in_gy =
+        t.g.move_object(on_bf, Zone::Graveyard(P0), MoveCause::Effect, None)
+            .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj(in_gy).chars.colors, blue);
+    // A Piper that isn't a commander had no choice made: it's colorless.
+    assert_eq!(t.obj(other).chars.colors, ColorSet::NONE);
+}

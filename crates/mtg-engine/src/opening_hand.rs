@@ -13,6 +13,7 @@ use crate::types::{ObjectId, PlayerId};
 /// deck and exile [a card] you drafted that isn't in your deck" (CR 607.2n): the exiled
 /// card is linked to the abilities of cards with that card's name.
 pub fn before_shuffle_actions(g: &mut Game) {
+    pregame_choices(g);
     for p in g.player_ids() {
         for card in g.player(p).library.clone() {
             let filters: Vec<Filter> = g
@@ -58,6 +59,40 @@ pub fn before_shuffle_actions(g: &mut Game) {
         }
     }
     g.events.clear();
+}
+
+/// Choices made before the game begins for characteristic-defining abilities (CR 607.2p),
+/// e.g. "If this card is your commander, choose a color before the game begins."
+pub fn pregame_choices(g: &mut Game) {
+    let ids: Vec<ObjectId> = (0..g.objects.len() as u32)
+        .map(ObjectId)
+        .filter(|id| g.is_live(*id))
+        .collect();
+    for id in ids {
+        let o = g.obj(id);
+        let owner = o.owner;
+        let is_commander = o.is_commander;
+        let kinds: Vec<ChoiceKind> = o
+            .base
+            .abilities
+            .iter()
+            .filter_map(|a| match &a.kind {
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::PregameChoice {
+                        kind,
+                        only_if_commander,
+                    } if is_commander || !*only_if_commander => Some(kind.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        for kind in kinds {
+            let mut ctx = Ctx::new(Some(id), owner);
+            ctx.link = PREGAME_LINK;
+            crate::choices::make_choice(g, owner, &kind, &mut ctx);
+        }
+    }
 }
 
 /// Once mulligans are complete, the starting player may take any such actions, then each

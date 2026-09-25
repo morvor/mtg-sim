@@ -770,6 +770,11 @@ impl Game {
             n.base = card.characteristics(n.face);
         }
         n.is_commander = o.is_commander;
+        // CR 607.2p: a choice made before the game began follows the card.
+        if let Some(c) = o.linked_choices.get(&crate::ability::PREGAME_LINK) {
+            n.linked_choices
+                .insert(crate::ability::PREGAME_LINK, c.clone());
+        }
         n.prev = Some(old);
         let id = self.push_object(n);
         self.objects[old.0 as usize].next = Some(id);

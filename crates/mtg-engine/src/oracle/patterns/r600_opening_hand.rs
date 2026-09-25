@@ -119,3 +119,39 @@ fn before_shuffle(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "before you shuffle your deck", priority: 0, parse: before_shuffle } }
+
+/// "If ~ is your commander, choose a color before the game begins. ~ is the chosen color."
+/// The choice and the characteristic-defining ability are linked (CR 607.2p).
+fn pregame_color_choice(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let (only_if_commander, rest) = if let Some(r) =
+        lower.strip_prefix("if ~ is your commander, choose a color before the game begins. ")
+    {
+        (true, r)
+    } else if let Some(r) = lower.strip_prefix("choose a color before the game begins. ") {
+        (false, r)
+    } else {
+        return None;
+    };
+    if rest != "~ is the chosen color." {
+        return None;
+    }
+    let mut choice = StaticAbility::new(StaticEffect::PregameChoice {
+        kind: ChoiceKind::Color,
+        only_if_commander,
+    });
+    choice.zone = FunctionZone::Anywhere;
+    let mut cda = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::SetLinkedChosenColor],
+    });
+    cda.is_cda = true;
+    cda.zone = FunctionZone::Anywhere;
+    Some(vec![
+        AbilityDef::with_link(AbilityKind::Static(choice), t, PREGAME_LINK),
+        AbilityDef::with_link(AbilityKind::Static(cda), t, PREGAME_LINK),
+    ])
+}
+
+inventory::submit! { AbilityPattern { name: "pregame color choice", priority: 0, parse: pregame_color_choice } }

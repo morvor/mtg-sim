@@ -934,6 +934,13 @@ pub fn apply_mod(
             c.abilities.clear();
         }
         Modification::SetColors(cs) => c.colors = *cs,
+        Modification::SetLinkedChosenColor => {
+            if let Some(col) = g.linked_choice(ctx).and_then(|ch| ch.color) {
+                let mut cs = ColorSet::NONE;
+                cs.insert(col);
+                c.colors = cs;
+            }
+        }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         Modification::AddKeyword(k) => {
@@ -1013,7 +1020,9 @@ pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -
 fn resolve_chosen(f: &Filter, g: &Game, ctx: &Ctx) -> Option<Filter> {
     Some(match f {
         Filter::LinkedChosenColor => Filter::Color(g.linked_choice(ctx)?.color?),
-        Filter::LinkedChosenCreatureType => Filter::Subtype(g.linked_choice(ctx)?.creature_type.clone()?),
+        Filter::LinkedChosenCreatureType => {
+            Filter::Subtype(g.linked_choice(ctx)?.creature_type.clone()?)
+        }
         Filter::And(v) => Filter::And(
             v.iter()
                 .map(|x| resolve_chosen(x, g, ctx))
