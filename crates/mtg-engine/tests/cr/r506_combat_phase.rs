@@ -156,10 +156,7 @@ fn multiplayer_attack_multiple_players_makes_all_opponents_defending() {
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Grizzly Bears");
     go_to(&mut t, Step::DeclareAttackers);
-    assert_eq!(
-        t.g.combat.as_ref().unwrap().defending_players,
-        vec![P1, P2]
-    );
+    assert_eq!(t.g.combat.as_ref().unwrap().defending_players, vec![P1, P2]);
     // No choice of defending player was asked.
     assert_eq!(
         count_asked(&t, P0, |d| matches!(d, Decision::ChooseEntities { .. })),
@@ -212,10 +209,7 @@ fn only_creatures_attack_and_block_and_only_players_planeswalkers_battles_are_at
     go_to(&mut t, Step::DeclareAttackers);
     let opts = attack_options(&t, P0);
     assert_eq!(opts.len(), 1, "only the creature can attack");
-    assert!(opts[0]
-        .1
-        .iter()
-        .all(|e| matches!(e, Entity::Player(_))));
+    assert!(opts[0].1.iter().all(|e| matches!(e, Entity::Player(_))));
     assert!(!t.g.is_attacking(bears));
     // Next turn: only the creature can block.
     t.clear_answers();
@@ -246,11 +240,7 @@ fn noncreature_put_onto_battlefield_attacking_or_blocking_isnt_attacking_or_bloc
     // A noncreature put onto the battlefield blocking isn't blocking either.
     let attacker = t.battlefield(P0, "Grizzly Bears");
     let _ = bears;
-    t.g.combat
-        .as_mut()
-        .unwrap()
-        .attackers
-        .clear();
+    t.g.combat.as_mut().unwrap().attackers.clear();
     mtg_engine::combat::put_onto_battlefield_attacking(&mut t.g, attacker, Entity::Player(P1));
     let wall = enter_with(
         &mut t,
@@ -300,7 +290,13 @@ fn creature_entering_attacking_an_invalid_target_isnt_attacking() {
     // A player no longer in the game.
     t.g.player_loses(P2);
     assert!(!t.g.player(P2).in_game());
-    let a = enter_with(&mut t, P0, vanilla("A", 1, 1), Some(Entity::Player(P2)), None);
+    let a = enter_with(
+        &mut t,
+        P0,
+        vanilla("A", 1, 1),
+        Some(Entity::Player(P2)),
+        None,
+    );
     assert!(t.on_battlefield(a) && !t.g.is_attacking(a));
     // A permanent that isn't a planeswalker or battle.
     let b = enter_with(
@@ -313,10 +309,22 @@ fn creature_entering_attacking_an_invalid_target_isnt_attacking() {
     assert!(t.on_battlefield(b) && !t.g.is_attacking(b));
     // A planeswalker that's no longer on the battlefield.
     t.g.destroy(jace, None);
-    let c = enter_with(&mut t, P0, vanilla("C", 1, 1), Some(Entity::Object(jace)), None);
+    let c = enter_with(
+        &mut t,
+        P0,
+        vanilla("C", 1, 1),
+        Some(Entity::Object(jace)),
+        None,
+    );
     assert!(t.on_battlefield(c) && !t.g.is_attacking(c));
     // A valid target works.
-    let d = enter_with(&mut t, P0, vanilla("D", 1, 1), Some(Entity::Player(P1)), None);
+    let d = enter_with(
+        &mut t,
+        P0,
+        vanilla("D", 1, 1),
+        Some(Entity::Player(P1)),
+        None,
+    );
     assert!(t.g.is_attacking(d));
 }
 
@@ -329,15 +337,33 @@ fn planeswalker_no_longer_controlled_by_a_defending_player_cant_be_attacked_by_e
     // P0 gains control of Jace: it's no longer controlled by a defending player.
     t.g.objects[jace.0 as usize].base_controller = P0;
     t.g.recompute();
-    let a = enter_with(&mut t, P0, vanilla("A", 1, 1), Some(Entity::Object(jace)), None);
+    let a = enter_with(
+        &mut t,
+        P0,
+        vanilla("A", 1, 1),
+        Some(Entity::Object(jace)),
+        None,
+    );
     assert!(t.on_battlefield(a) && !t.g.is_attacking(a));
     // A battle that's no longer protected by a defending player.
     let battle = t.battlefield(P0, "Invasion of Azgol");
     set_protector(&mut t, battle, P1);
-    let b = enter_with(&mut t, P0, vanilla("B", 1, 1), Some(Entity::Object(battle)), None);
+    let b = enter_with(
+        &mut t,
+        P0,
+        vanilla("B", 1, 1),
+        Some(Entity::Object(battle)),
+        None,
+    );
     assert!(t.g.is_attacking(b));
     set_protector(&mut t, battle, P0);
-    let c = enter_with(&mut t, P0, vanilla("C", 1, 1), Some(Entity::Object(battle)), None);
+    let c = enter_with(
+        &mut t,
+        P0,
+        vanilla("C", 1, 1),
+        Some(Entity::Object(battle)),
+        None,
+    );
     assert!(t.on_battlefield(c) && !t.g.is_attacking(c));
 }
 
@@ -462,9 +488,17 @@ fn effect_cant_make_a_battle_a_blocking_creature() {
     );
     let normal = t.battlefield(P0, "Hill Giant");
     to_combat(&mut t, P0);
-    assert!(!mtg_engine::combat::make_attacking(&mut t.g, odd, Entity::Player(P1)));
+    assert!(!mtg_engine::combat::make_attacking(
+        &mut t.g,
+        odd,
+        Entity::Player(P1)
+    ));
     assert!(!t.g.is_attacking(odd));
-    assert!(mtg_engine::combat::make_attacking(&mut t.g, normal, Entity::Player(P1)));
+    assert!(mtg_engine::combat::make_attacking(
+        &mut t.g,
+        normal,
+        Entity::Player(P1)
+    ));
 }
 
 #[test]
@@ -555,7 +589,10 @@ fn attacks_a_player_alone() {
     );
     go_to(&mut t, Step::DeclareAttackers);
     t.resolve_all();
-    let ds = |t: &TestGame, id| t.obj_now(id).has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike);
+    let ds = |t: &TestGame, id| {
+        t.obj_now(id)
+            .has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike)
+    };
     assert!(ds(&t, a));
     assert!(ds(&t, b));
     assert!(!ds(&t, c));

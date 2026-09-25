@@ -110,15 +110,14 @@ fn creatures_assign_damage_equal_to_power_and_nothing_if_zero_or_less() {
     );
     go_to(&mut t, Step::EndOfCombat);
     assert_eq!(t.life(P1), 17);
-    let sources: Vec<ObjectId> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage { source, .. } => Some(*source),
-            _ => None,
-        })
-        .collect();
+    let sources: Vec<ObjectId> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage { source, .. } => Some(*source),
+                _ => None,
+            })
+            .collect();
     assert_eq!(sources, vec![giant]);
 }
 
@@ -168,7 +167,10 @@ fn blocker_divides_damage_among_attackers_it_blocks() {
             "This creature can block an additional creature each combat.",
         ),
     );
-    declare(&mut t, &[(a1, Entity::Player(P1)), (a2, Entity::Player(P1))]);
+    declare(
+        &mut t,
+        &[(a1, Entity::Player(P1)), (a2, Entity::Player(P1))],
+    );
     block(&mut t, P1, &[(guard, a1), (guard, a2)]);
     assign(&mut t, P1, &[0, 4]);
     go_to(&mut t, Step::EndOfCombat);
@@ -189,15 +191,14 @@ fn illegal_damage_assignment_is_undone() {
     // 5 damage from a 4-power creature is illegal; the engine assigns legally instead.
     assign(&mut t, P0, &[4, 1]);
     go_to(&mut t, Step::EndOfCombat);
-    let total: u32 = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage { source, amount, .. } if *source == regrower => Some(*amount),
-            _ => None,
-        })
-        .sum();
+    let total: u32 =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage { source, amount, .. } if *source == regrower => Some(*amount),
+                _ => None,
+            })
+            .sum();
     assert_eq!(total, 4);
 }
 
@@ -274,7 +275,10 @@ fn damage_and_state_based_action_triggers_are_stacked_before_priority() {
     assert_eq!(t.stack_len(), 0);
     t.script.lock().unwrap().asked.clear();
     t.g.advance();
-    assert!(matches!(t.asked().first(), Some((P0, Decision::Priority { .. }))));
+    assert!(matches!(
+        t.asked().first(),
+        Some((P0, Decision::Priority { .. }))
+    ));
     // The damage trigger and the dies trigger (from the SBA) are both on the stack.
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();

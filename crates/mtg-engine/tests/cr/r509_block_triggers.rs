@@ -16,7 +16,8 @@ fn with_text(name: &str, pt: (i32, i32), text: &str) -> CardDef {
 /// P0 attacks P1 with the given creatures; returns at the declare blockers step after
 /// P1's blocks and with triggers resolved.
 fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
-    let decl: Vec<(ObjectId, Entity)> = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
+    let decl: Vec<(ObjectId, Entity)> =
+        attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     declare(t, &decl);
     block(t, P1, blocks);
     go_to(t, Step::DeclareBlockers);
@@ -43,7 +44,13 @@ fn blocks_triggers_once_per_combat() {
     assert_eq!(t.life(P1), 21, "once, though it blocks two creatures");
     // An effect making it block another creature doesn't trigger again: it was already
     // blocking.
-    let a3 = enter_with(&mut t, P0, vanilla("Late", 1, 1), Some(Entity::Player(P1)), None);
+    let a3 = enter_with(
+        &mut t,
+        P0,
+        vanilla("Late", 1, 1),
+        Some(Entity::Player(P1)),
+        None,
+    );
     assert!(block_by_effect(&mut t.g, guard, a3));
     t.g.flush_events();
     t.resolve_all();
@@ -63,7 +70,13 @@ fn blocks_triggers_when_an_effect_makes_a_nonblocker_block_but_not_when_entering
     t.resolve_all();
     assert_eq!(t.life(P1), 21);
     // Put onto the battlefield blocking: it's blocking, but it never "blocked".
-    let late = enter_with(&mut t, P1, with_text("Late Guard", (1, 4), text), None, Some(a));
+    let late = enter_with(
+        &mut t,
+        P1,
+        with_text("Late Guard", (1, 4), text),
+        None,
+        Some(a),
+    );
     assert!(t.g.is_blocking(late));
     assert_eq!(t.g.combat.as_ref().unwrap().blocking(late), vec![a]);
     t.resolve_all();
@@ -87,7 +100,13 @@ fn blocks_a_creature_triggers_for_each_attacker() {
     t.resolve_all();
     assert_eq!(t.life(P1), 23);
     // Not when a creature enters blocking.
-    enter_with(&mut t, P1, with_text("Late Guard", (1, 4), text), None, Some(a1));
+    enter_with(
+        &mut t,
+        P1,
+        with_text("Late Guard", (1, 4), text),
+        None,
+        Some(a1),
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 23);
 }
@@ -102,7 +121,11 @@ fn becomes_blocked_triggers_once_and_only_if_it_was_unblocked() {
     let x = t.battlefield(P1, "Grizzly Bears");
     let y = t.battlefield(P1, "Grizzly Bears");
     fight(&mut t, &[knight, other], &[(x, knight), (y, knight)]);
-    assert_eq!(t.life(P0), 21, "once for two blockers; the other knight is unblocked");
+    assert_eq!(
+        t.life(P0),
+        21,
+        "once for two blockers; the other knight is unblocked"
+    );
     // An effect makes the unblocked knight blocked: it triggers.
     assert!(become_blocked(&mut t.g, other));
     t.g.flush_events();
@@ -210,7 +233,11 @@ fn trigger_characteristics_are_checked_when_blocking_happens() {
     // "Whenever this creature blocks" with a characteristic: checked when it blocks.
     let watcher = triggered(TriggerCond::Blocks(Filter::Color(Color::White)), gain(1));
     let mut t = TestGame::new(2);
-    bf(&mut t, P1, custom_with("White Eye", "Enchantment", None, vec![watcher]));
+    bf(
+        &mut t,
+        P1,
+        custom_with("White Eye", "Enchantment", None, vec![watcher]),
+    );
     let a = t.battlefield(P0, "Grizzly Bears");
     let black = t.battlefield(P1, "Walking Corpse");
     fight(&mut t, &[a], &[(black, a)]);
@@ -258,7 +285,12 @@ fn creature_entering_blocking_isnt_subject_to_block_restrictions_or_requirements
     let flyer = bf(
         &mut t,
         P0,
-        custom_card("Sky Brute", "Creature — Ogre", Some((3, 3)), "Flying\nMenace"),
+        custom_card(
+            "Sky Brute",
+            "Creature — Ogre",
+            Some((3, 3)),
+            "Flying\nMenace",
+        ),
     );
     bf(
         &mut t,

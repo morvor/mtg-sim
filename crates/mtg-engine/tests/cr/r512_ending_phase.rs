@@ -18,7 +18,10 @@ fn ending_phase_is_end_step_then_cleanup_step() {
     });
     let log = steps_this_turn(&t);
     let n = log.len();
-    assert_eq!(&log[n - 3..], &[Step::PostcombatMain, Step::End, Step::Cleanup]);
+    assert_eq!(
+        &log[n - 3..],
+        &[Step::PostcombatMain, Step::End, Step::Cleanup]
+    );
     assert_eq!(Step::End.phase(), Step::Cleanup.phase());
     assert_eq!(Step::End.phase(), mtg_engine::turn::Phase::Ending);
 }
@@ -44,7 +47,11 @@ fn at_end_of_turn_errata_triggers_at_the_beginning_of_the_end_step() {
     // Ball Lightning was printed with "At end of turn, sacrifice Ball Lightning"; its Oracle
     // text reads "At the beginning of the end step, sacrifice this creature."
     let c = card("Ball Lightning");
-    assert!(c.unsupported_text().is_empty(), "{:?}", c.unsupported_text());
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{:?}",
+        c.unsupported_text()
+    );
     let mut t = TestGame::new(2);
     let ball = t.battlefield(P0, "Ball Lightning");
     go_to(&mut t, Step::End);
@@ -227,11 +234,20 @@ fn triggers_during_cleanup_give_priority_and_another_cleanup_step() {
         &[],
     );
     t.g.run_until(10_000, |g| {
-        g.turn.step_log.iter().filter(|s| **s == Step::Cleanup).count() >= 2
+        g.turn
+            .step_log
+            .iter()
+            .filter(|s| **s == Step::Cleanup)
+            .count()
+            >= 2
             || g.turn.active == P1
     });
     assert_eq!(t.g.turn.active, P0);
     assert_eq!(t.g.turn.step, Step::Cleanup, "another cleanup step began");
     t.g.run_until(10_000, |g| g.turn.active == P1);
-    assert_eq!(t.life(P0), 31, "discard trigger and the next cleanup's delayed trigger");
+    assert_eq!(
+        t.life(P0),
+        31,
+        "discard trigger and the next cleanup's delayed trigger"
+    );
 }

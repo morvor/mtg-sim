@@ -137,7 +137,12 @@ fn attacked_planeswalker_or_battle_that_stops_being_one_is_removed_from_combat()
     );
     go_to(&mut t, Step::DeclareAttackers);
     assert_eq!(attack_target(&t, a), Some(Entity::Object(jace)));
-    change_types(&mut t, jace, &[CardType::Artifact], &[CardType::Planeswalker]);
+    change_types(
+        &mut t,
+        jace,
+        &[CardType::Artifact],
+        &[CardType::Planeswalker],
+    );
     // Jace is no longer attacked; the creature keeps attacking, attacking nothing.
     assert!(t.g.is_attacking(a));
     assert_eq!(attack_target(&t, a), None);
@@ -190,7 +195,10 @@ fn restrictions_applied_after_declaration_dont_remove_from_combat() {
     // ...but don't remove anything from combat.
     assert!(t.g.is_attacking(bears) && t.g.is_blocking(giant));
     go_to(&mut t, Step::EndOfCombat);
-    assert!(!t.on_battlefield(bears), "the giant dealt its combat damage");
+    assert!(
+        !t.on_battlefield(bears),
+        "the giant dealt its combat damage"
+    );
     assert_eq!(t.obj_now(giant).damage, 2);
 }
 

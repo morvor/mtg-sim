@@ -23,11 +23,10 @@ fn instant(t: &mut TestGame, p: PlayerId, name: &str, restriction: &str) -> Obje
 fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     let saved = t.g.turn.priority;
     t.g.turn.priority = Some(p);
-    let ok = t
-        .g
-        .legal_actions(p)
-        .iter()
-        .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card));
+    let ok =
+        t.g.legal_actions(p)
+            .iter()
+            .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card));
     t.g.turn.priority = saved;
     ok
 }
@@ -183,7 +182,10 @@ fn before_a_skipped_point_means_before_the_declare_attackers_step_ends() {
     // No attackers: the declare blockers and combat damage steps are skipped.
     go_to(&mut t, Step::DeclareAttackers);
     assert!(t.g.attackers().is_empty());
-    assert!(castable(&mut t, P0, before), "still in the declare attackers step");
+    assert!(
+        castable(&mut t, P0, before),
+        "still in the declare attackers step"
+    );
     go_to(&mut t, Step::EndOfCombat);
     assert!(!castable(&mut t, P0, before));
 }

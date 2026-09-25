@@ -33,7 +33,12 @@ fn at_end_of_combat_triggers_and_until_end_of_combat_effects_expire() {
     bf(
         &mut t,
         P0,
-        custom_card("Victory Bell", "Artifact", None, "At end of combat, you gain 1 life."),
+        custom_card(
+            "Victory Bell",
+            "Artifact",
+            None,
+            "At end of combat, you gain 1 life.",
+        ),
     );
     let a = t.battlefield(P0, "Grizzly Bears");
     declare(&mut t, &[(a, Entity::Player(P1))]);
@@ -83,7 +88,10 @@ fn everything_is_removed_from_combat_after_the_end_of_combat_step() {
     let b = t.battlefield(P0, "Grizzly Bears");
     let jace = t.battlefield(P1, "Jace Beleren");
     let x = t.battlefield(P1, "Craw Wurm");
-    declare(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Object(jace))]);
+    declare(
+        &mut t,
+        &[(a, Entity::Player(P1)), (b, Entity::Object(jace))],
+    );
     block(&mut t, P1, &[(x, a)]);
     go_to(&mut t, Step::EndOfCombat);
     assert!(t.g.is_blocking(x));

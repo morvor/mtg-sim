@@ -110,12 +110,20 @@ pub fn to_combat(t: &mut TestGame, ap: PlayerId) {
 /// Queues the active player's attack declaration.
 pub fn declare(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
     let ap = t.g.turn.active;
-    t.answer(ap, DecisionKind::Attackers, Answer::Attackers(attackers.to_vec()));
+    t.answer(
+        ap,
+        DecisionKind::Attackers,
+        Answer::Attackers(attackers.to_vec()),
+    );
 }
 
 /// Queues a defending player's block declaration.
 pub fn block(t: &mut TestGame, dp: PlayerId, blocks: &[(ObjectId, ObjectId)]) {
-    t.answer(dp, DecisionKind::Blockers, Answer::Blockers(blocks.to_vec()));
+    t.answer(
+        dp,
+        DecisionKind::Blockers,
+        Answer::Blockers(blocks.to_vec()),
+    );
 }
 
 /// Advances until `step` of the current turn begins and the active player has priority.
@@ -127,12 +135,17 @@ pub fn go_to(t: &mut TestGame, step: Step) {
         (g.turn.step == step && g.turn.stage == Stage::Priority && g.turn.priority == Some(ap))
             || g.turn.number != turn
     });
-    assert!(ok && t.g.turn.number == turn, "did not reach {step:?} this turn");
+    assert!(
+        ok && t.g.turn.number == turn,
+        "did not reach {step:?} this turn"
+    );
 }
 
 /// Advances until the given step begins (turn-based actions done), in any turn.
 pub fn go_to_any(t: &mut TestGame, step: Step) {
-    let ok = t.g.run_until(10_000, |g| g.turn.step == step && g.turn.stage == Stage::Priority);
+    let ok = t.g.run_until(10_000, |g| {
+        g.turn.step == step && g.turn.stage == Stage::Priority
+    });
     assert!(ok, "did not reach {step:?}");
 }
 
@@ -169,9 +182,8 @@ pub fn enter_with(
     blocking: Option<ObjectId>,
 ) -> ObjectId {
     let id = t.custom(controller, def, Zone::Exile);
-    let new = t
-        .g
-        .move_object_ev(mtg_engine::replacement::MoveEv {
+    let new =
+        t.g.move_object_ev(mtg_engine::replacement::MoveEv {
             obj: id,
             to: Zone::Battlefield,
             pos: LibraryPosition::Top,

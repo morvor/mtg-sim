@@ -16,7 +16,10 @@ use mtg_engine::*;
 const P4: PlayerId = PlayerId(4);
 
 fn band_of(t: &TestGame, a: ObjectId) -> Option<u32> {
-    t.g.combat.as_ref().and_then(|c| c.attacker(a)).and_then(|x| x.band)
+    t.g.combat
+        .as_ref()
+        .and_then(|c| c.attacker(a))
+        .and_then(|x| x.band)
 }
 
 #[test]
@@ -142,7 +145,10 @@ fn creatures_entering_attacking_ignore_attack_restrictions_and_requirements() {
     );
     assert!(t.obj_now(wall).summoning_sick);
     assert!(t.g.is_attacking(wall));
-    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped), "no attack cost paid");
+    assert!(
+        lands.iter().all(|l| !t.obj_now(*l).tapped),
+        "no attack cost paid"
+    );
     // Same for a creature stated to be attacking.
     let pacified = t.battlefield(P0, "Grizzly Bears");
     apply(
@@ -228,7 +234,13 @@ fn attacking_and_attacked_a_player() {
     assert!(player_is_attacking(&t.g, P0, P1));
     assert!(player_has_attacked(&t.g, P0, P1));
     // Put onto the battlefield attacking P2: P0 is attacking P2 but hasn't attacked P2.
-    enter_with(&mut t, P0, vanilla("Late", 1, 1), Some(Entity::Player(P2)), None);
+    enter_with(
+        &mut t,
+        P0,
+        vanilla("Late", 1, 1),
+        Some(Entity::Player(P2)),
+        None,
+    );
     assert!(player_is_attacking(&t.g, P0, P2));
     assert!(!player_has_attacked(&t.g, P0, P2));
     // After combat, P0 isn't attacking anyone but has still attacked P1 this turn.
@@ -268,10 +280,7 @@ fn reselecting_what_a_creature_attacks() {
     assert_eq!(info.original_target, Some(Entity::Player(P1)));
     assert!(player_has_attacked(&t.g, P0, P1));
     assert!(!player_has_attacked(&t.g, P0, P2));
-    assert_eq!(
-        t.g.defending_player_for(&Ctx::new(Some(a), P0)),
-        Some(P2)
-    );
+    assert_eq!(t.g.defending_player_for(&Ctx::new(Some(a), P0)), Some(P2));
     go_to(&mut t, Step::EndOfCombat);
     assert_eq!(t.life(P2), 18);
     assert_eq!(t.life(P1), 20);
@@ -288,10 +297,22 @@ fn reselected_target_must_be_an_opponent_or_their_permanent() {
     declare(&mut t, &[(a, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
     assert!(!reselect_attack_target(&mut t.g, a, Entity::Player(P0)));
-    assert!(!reselect_attack_target(&mut t.g, a, Entity::Object(my_jace)));
-    assert!(!reselect_attack_target(&mut t.g, a, Entity::Object(their_bears)));
+    assert!(!reselect_attack_target(
+        &mut t.g,
+        a,
+        Entity::Object(my_jace)
+    ));
+    assert!(!reselect_attack_target(
+        &mut t.g,
+        a,
+        Entity::Object(their_bears)
+    ));
     assert_eq!(attack_target(&t, a), Some(Entity::Player(P1)));
-    assert!(reselect_attack_target(&mut t.g, a, Entity::Object(their_jace)));
+    assert!(reselect_attack_target(
+        &mut t.g,
+        a,
+        Entity::Object(their_jace)
+    ));
     assert_eq!(attack_target(&t, a), Some(Entity::Object(their_jace)));
 }
 
@@ -352,7 +373,13 @@ fn creature_put_onto_battlefield_attacking_keeps_the_blockers_and_damage_steps()
     go_to(&mut t, Step::DeclareAttackers);
     assert!(t.g.attackers().is_empty());
     // ...but a creature is put onto the battlefield attacking during the step.
-    enter_with(&mut t, P0, vanilla("Ambusher", 3, 3), Some(Entity::Player(P1)), None);
+    enter_with(
+        &mut t,
+        P0,
+        vanilla("Ambusher", 3, 3),
+        Some(Entity::Player(P1)),
+        None,
+    );
     go_to(&mut t, Step::PostcombatMain);
     assert!(steps_this_turn(&t).contains(&Step::DeclareBlockers));
     assert!(steps_this_turn(&t).contains(&Step::CombatDamage));

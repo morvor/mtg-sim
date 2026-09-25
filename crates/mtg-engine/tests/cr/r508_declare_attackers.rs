@@ -125,7 +125,11 @@ fn requirements_are_maximized_without_breaking_restrictions() {
     let p1 = Entity::Player(P1);
     assert!(attack_declaration_legal(&t.g, &opts, &[(must, p1)]));
     assert!(!attack_declaration_legal(&t.g, &opts, &[(other, p1)]));
-    assert!(!attack_declaration_legal(&t.g, &opts, &[(must, p1), (other, p1)]));
+    assert!(!attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(must, p1), (other, p1)]
+    ));
     assert!(!attack_declaration_legal(&t.g, &opts, &[]));
     // Declaring with the other creature is illegal; the engine declares the legal attack.
     declare(&mut t, &[(other, p1)]);
@@ -145,7 +149,11 @@ fn costs_to_attack_arent_required_to_obey_requirements() {
     to_combat(&mut t, P0);
     let opts = attack_options(&t.g);
     assert!(attack_declaration_legal(&t.g, &opts, &[]));
-    assert!(attack_declaration_legal(&t.g, &opts, &[(must, Entity::Player(P1))]));
+    assert!(attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(must, Entity::Player(P1))]
+    ));
     // The player may choose not to attack.
     go_to(&mut t, Step::DeclareAttackers);
     assert!(t.g.attackers().is_empty());
@@ -286,7 +294,10 @@ fn partial_payment_of_attack_costs_isnt_allowed() {
     );
     go_to(&mut t, Step::DeclareAttackers);
     assert!(t.g.attackers().is_empty());
-    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped), "nothing was paid");
+    assert!(
+        lands.iter().all(|l| !t.obj_now(*l).tapped),
+        "nothing was paid"
+    );
     assert!(!t.obj_now(bears).tapped && !t.obj_now(giant).tapped);
 }
 
@@ -306,7 +317,11 @@ fn chosen_creatures_still_controlled_become_attacking_until_combat_ends() {
             count: Value::c(1),
         }),
     });
-    bf(&mut t, P1, custom_with("Grim Toll", "Enchantment", None, vec![tax]));
+    bf(
+        &mut t,
+        P1,
+        custom_with("Grim Toll", "Enchantment", None, vec![tax]),
+    );
     // Only `a` attacks; P0 sacrifices `b` to pay.
     declare(&mut t, &[(a, Entity::Player(P1))]);
     t.answer_choose(P0, &[Entity::Object(b)]);
@@ -330,7 +345,11 @@ fn chosen_creatures_still_controlled_become_attacking_until_combat_ends() {
             count: Value::c(1),
         }),
     });
-    bf(&mut t, P1, custom_with("Grim Toll", "Enchantment", None, vec![tax]));
+    bf(
+        &mut t,
+        P1,
+        custom_with("Grim Toll", "Enchantment", None, vec![tax]),
+    );
     declare(&mut t, &[(a, Entity::Player(P1))]);
     t.answer_choose(P0, &[Entity::Object(a)]);
     go_to(&mut t, Step::DeclareAttackers);
@@ -544,7 +563,13 @@ fn player_attacks_another_player() {
     t.resolve_all();
     assert_eq!(t.life(P3), 21);
     // A creature put onto the battlefield attacking P2 doesn't trigger it.
-    let d = enter_with(&mut t, P0, vanilla("Late", 1, 1), Some(Entity::Player(P2)), None);
+    let d = enter_with(
+        &mut t,
+        P0,
+        vanilla("Late", 1, 1),
+        Some(Entity::Player(P2)),
+        None,
+    );
     assert!(t.g.is_attacking(d));
     t.resolve_all();
     assert_eq!(t.life(P3), 21);
@@ -589,7 +614,11 @@ fn attack_triggers_use_characteristics_at_declaration() {
     // "Whenever a green creature attacks, you gain 1 life."
     let watcher = triggered(TriggerCond::Attacks(Filter::Color(Color::Green)), gain(1));
     let mut t = TestGame::new(2);
-    bf(&mut t, P0, custom_with("Green Eye", "Enchantment", None, vec![watcher]));
+    bf(
+        &mut t,
+        P0,
+        custom_with("Green Eye", "Enchantment", None, vec![watcher]),
+    );
     let blue = t.battlefield(P0, "Coral Merfolk");
     declare(&mut t, &[(blue, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
@@ -611,7 +640,11 @@ fn attack_triggers_use_characteristics_at_declaration() {
     // A green attacker does trigger it.
     let mut t = TestGame::new(2);
     let watcher = triggered(TriggerCond::Attacks(Filter::Color(Color::Green)), gain(1));
-    bf(&mut t, P0, custom_with("Green Eye", "Enchantment", None, vec![watcher]));
+    bf(
+        &mut t,
+        P0,
+        custom_with("Green Eye", "Enchantment", None, vec![watcher]),
+    );
     let bears = t.battlefield(P0, "Grizzly Bears");
     declare(&mut t, &[(bears, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
@@ -642,6 +675,9 @@ fn attack_triggers_are_put_on_the_stack_before_the_active_player_gets_priority()
     // already on the stack.
     t.g.advance();
     let asked = t.asked();
-    assert!(matches!(asked.first(), Some((P0, Decision::Priority { .. }))));
+    assert!(matches!(
+        asked.first(),
+        Some((P0, Decision::Priority { .. }))
+    ));
     assert_eq!(t.stack_len(), 2);
 }

@@ -72,7 +72,10 @@ fn blockers_must_be_untapped_nonbattles_blocking_creatures_attacking_their_contr
             Some(3),
         ),
     );
-    declare(&mut t, &[(a1, Entity::Player(P1)), (a2, Entity::Player(P2))]);
+    declare(
+        &mut t,
+        &[(a1, Entity::Player(P1)), (a2, Entity::Player(P2))],
+    );
     go_to(&mut t, Step::DeclareAttackers);
     let opts = block_options(&t.g, &[P1]);
     let blockers: Vec<ObjectId> = opts.iter().map(|(b, _)| *b).collect();
@@ -91,7 +94,12 @@ fn evasion_restrictions_are_cumulative_and_fixed_once_blocks_are_declared() {
     let both = bf(
         &mut t,
         P0,
-        custom_card("Shade Hawk", "Creature — Bird", Some((2, 2)), "Flying\nShadow"),
+        custom_card(
+            "Shade Hawk",
+            "Creature — Bird",
+            Some((2, 2)),
+            "Flying\nShadow",
+        ),
     );
     let flyer = t.battlefield(P1, "Serra Angel");
     let shadow = bf(
@@ -102,7 +110,12 @@ fn evasion_restrictions_are_cumulative_and_fixed_once_blocks_are_declared() {
     let shadow_flyer = bf(
         &mut t,
         P1,
-        custom_card("Umbra Hawk", "Creature — Bird", Some((1, 1)), "Flying\nShadow"),
+        custom_card(
+            "Umbra Hawk",
+            "Creature — Bird",
+            Some((1, 1)),
+            "Flying\nShadow",
+        ),
     );
     declare(&mut t, &[(both, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
@@ -152,7 +165,11 @@ fn blocking_requirements_are_maximized() {
     declare(&mut t, &[(menace, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
     let opts = block_options(&t.g, &[P1]);
-    assert!(block_declaration_legal(&t.g, &opts, &[(eager, menace), (plain, menace)]));
+    assert!(block_declaration_legal(
+        &t.g,
+        &opts,
+        &[(eager, menace), (plain, menace)]
+    ));
     assert!(!block_declaration_legal(&t.g, &opts, &[(eager, menace)]));
     assert!(!block_declaration_legal(&t.g, &opts, &[(plain, menace)]));
     assert!(!block_declaration_legal(&t.g, &opts, &[]));
@@ -210,7 +227,12 @@ fn blocks_if_able_this_turn_applies_in_each_combat() {
     let wall = bf(
         &mut t,
         P1,
-        custom_card("Sky Wall", "Creature — Wall", Some((0, 6)), "Defender\nReach"),
+        custom_card(
+            "Sky Wall",
+            "Creature — Wall",
+            Some((0, 6)),
+            "Defender\nReach",
+        ),
     );
     apply(
         &mut t,
@@ -330,6 +352,36 @@ fn attacker_stays_blocked_if_its_blockers_leave() {
 }
 
 #[test]
+fn effects_can_make_attackers_blocked_or_unblocked() {
+    cr!("509.1h");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    declare(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (giant, Entity::Player(P1))],
+    );
+    block(&mut t, P1, &[(wall, bears)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    let ctx = mtg_engine::eval::Ctx::new(None, P0);
+    // "Target unblocked attacking creature becomes blocked."
+    assert!(mtg_engine::combat::become_blocked(&mut t.g, giant));
+    assert!(t.g.matches(giant, &Filter::Blocked, &ctx));
+    // "...become unblocked."
+    mtg_engine::combat::remove_from_combat(&mut t.g, wall);
+    assert!(mtg_engine::combat::become_unblocked(&mut t.g, bears));
+    assert!(t.g.matches(bears, &Filter::Unblocked, &ctx));
+    go_to(&mut t, Step::EndOfCombat);
+    // The unblocked bears dealt damage; the blocked giant (with no blockers) didn't.
+    assert_eq!(t.life(P1), 18);
+    // The combat phase ended: neither is blocked or unblocked any more.
+    go_to(&mut t, Step::PostcombatMain);
+    assert!(!t.g.matches(giant, &Filter::Blocked, &ctx));
+    assert!(!t.g.matches(bears, &Filter::Unblocked, &ctx));
+}
+
+#[test]
 fn abilities_trigger_on_blockers_being_declared() {
     cr!("509.1i", "509.2a");
     let mut t = TestGame::new(2);
@@ -360,7 +412,10 @@ fn abilities_trigger_on_blockers_being_declared() {
     t.script.lock().unwrap().asked.clear();
     // Both triggers are put on the stack before the active player gets priority.
     t.g.advance();
-    assert!(matches!(t.asked().first(), Some((P0, Decision::Priority { .. }))));
+    assert!(matches!(
+        t.asked().first(),
+        Some((P0, Decision::Priority { .. }))
+    ));
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();
     assert_eq!(t.life(P0), 21);

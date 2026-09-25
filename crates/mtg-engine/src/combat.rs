@@ -2172,6 +2172,23 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
     g.dirty = true;
 }
 
+/// "[attacking creature] becomes unblocked" (CR 509.1h): an effect makes a blocked
+/// attacking creature an unblocked creature. Returns true if it became unblocked.
+pub fn become_unblocked(g: &mut Game, attacker: ObjectId) -> bool {
+    let Some(c) = g.combat.as_mut() else {
+        return false;
+    };
+    let Some(ai) = c.attackers.iter_mut().find(|x| x.id == attacker) else {
+        return false;
+    };
+    if !ai.blocked {
+        return false;
+    }
+    ai.blocked = false;
+    g.dirty = true;
+    true
+}
+
 /// "[attacking creature] becomes blocked" (CR 509.1h): an effect makes an attacking
 /// creature blocked without any creature blocking it. Returns true if it became blocked.
 pub fn become_blocked(g: &mut Game, attacker: ObjectId) -> bool {
