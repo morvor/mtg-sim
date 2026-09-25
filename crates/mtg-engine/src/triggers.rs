@@ -1048,14 +1048,29 @@ impl Game {
                     return v;
                 }
                 // The current event is the last one recorded in `turn_events`; an earlier
-                // matching event this turn involving the same player ("their first spell
-                // each turn") means this isn't the first time.
+                // matching event this turn means this isn't the first time. For events of
+                // players ("their first spell each turn") it must be the same player.
+                fn player_event(c: &TriggerCond) -> bool {
+                    match c {
+                        TriggerCond::Where { trigger, .. } => player_event(trigger),
+                        TriggerCond::CastSpell { .. }
+                        | TriggerCond::NthSpellCast { .. }
+                        | TriggerCond::SpellCopied { .. }
+                        | TriggerCond::GainsLife { .. }
+                        | TriggerCond::LosesLife { .. }
+                        | TriggerCond::Draws { .. }
+                        | TriggerCond::Discards { .. }
+                        | TriggerCond::PlayerAttacks(_) => true,
+                        _ => false,
+                    }
+                }
+                let per_player = player_event(inner);
                 let who = v[0].player;
                 let n = self.turn_events.len().saturating_sub(1);
                 let earlier = self.turn_events[..n].iter().any(|e| {
                     self.trigger_matches(inner, src, ctl, e)
                         .iter()
-                        .any(|i| i.player == who)
+                        .any(|i| !per_player || i.player == who)
                 });
                 if earlier {
                     none()

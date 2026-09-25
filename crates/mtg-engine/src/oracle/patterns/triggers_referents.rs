@@ -70,12 +70,9 @@ fn attach_referent(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let to = if rest == "it" || rest == "that creature" {
-        if !b.in_trigger
-            || !matches!(
-                b.it,
-                Sel::TriggerObject | Sel::TriggerOtherObject | Sel::TriggerLki
-            )
-        {
+        // Only a creature still on the battlefield (not one that died and may have been
+        // returned by an earlier instruction).
+        if !b.in_trigger || !matches!(b.it, Sel::TriggerObject | Sel::TriggerOtherObject) {
             return None;
         }
         b.it.clone()
@@ -111,6 +108,23 @@ fn to_owners_library(l: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     let r = l.strip_prefix("put ")?;
+    // "put it onto the battlefield [tapped] [under your control]": the card the trigger is
+    // about (e.g. "when ~ is put into your graveyard from your library").
+    for (suffix, tapped) in [
+        (" onto the battlefield under your control", false),
+        (" onto the battlefield", false),
+        (" onto the battlefield tapped under your control", true),
+        (" onto the battlefield tapped", true),
+    ] {
+        if let Some(w) = r.strip_suffix(suffix) {
+            let what = pronoun(w, b)?;
+            let mut to = Destination::battlefield().under_your_control();
+            if tapped {
+                to = to.tapped();
+            }
+            return Some(Effect::Move { what, to });
+        }
+    }
     for (suffix, to) in [
         (
             " on the bottom of its owner's library",
@@ -213,7 +227,16 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     }
     let (trigger, it, it_player) =
         crate::oracle::triggers::parse_trigger_condition(&cond_s.to_lowercase())?;
-    if matches!(it, Sel::None) || matches!(it_player, PlayerRef::Iterated) {
+    let words: Vec<&str> = el
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .collect();
+    let has = |w: &str| words.contains(&w);
+    if matches!(it, Sel::None)
+        && (has("it") || has("its") || has("them") || el.contains("that creature"))
+    {
+        return None;
+    }
+    if matches!(it_player, PlayerRef::Iterated) && el.contains("that player") {
         return None;
     }
     let body = if let Some((delay, inner)) = super::triggers_delayed::split_delay(&el) {

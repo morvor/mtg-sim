@@ -429,6 +429,24 @@ fn ordinal(w: &str) -> Option<u32> {
 }
 
 fn parse_player_trigger(r: &str) -> Option<Parsed> {
+    // "whenever you're dealt damage": damage from several sources at once is one event.
+    for (p, who) in [
+        ("you're dealt damage", PlayerRel::You),
+        ("you are dealt damage", PlayerRel::You),
+        ("an opponent is dealt damage", PlayerRel::Opponent),
+        ("a player is dealt damage", PlayerRel::Any),
+    ] {
+        if r == p {
+            let c = TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::PlayerDealtDamage {
+                    who,
+                    combat_only: false,
+                }),
+                per: BatchPer::Player,
+            };
+            return Some((c, Sel::None, PlayerRef::TriggerPlayer));
+        }
+    }
     let (who, rest) = player_subject(r)?;
     let tp = || PlayerRef::TriggerPlayer;
     // Life.
@@ -451,7 +469,7 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             .or_else(|| t.strip_prefix("their "))?;
         let (w, t) = split_word(t);
         let n = ordinal(w)?;
-        if end(t) != "card each turn" {
+        if !matches!(end(t), "card each turn" | "card in a turn") {
             return None;
         }
         // Event amount of a draw is its 1-based count this turn.
@@ -708,6 +726,19 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         ));
     }
     let x = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+    // Older wording: "whenever you cast an instant", "a creature" (a spell being cast).
+    let spellified;
+    let x = if parse_spell_phrase(x).is_none() {
+        match parse_object_phrase(x) {
+            Some((f, false, tail)) if end(tail).is_empty() && is_card_type_filter(&f) => {
+                spellified = format!("{x} spell");
+                spellified.as_str()
+            }
+            _ => x,
+        }
+    } else {
+        x
+    };
     let (filter, cond) = parse_spell_phrase(x)?;
     let base = TriggerCond::CastSpell { who, filter };
     let c = match cond {
@@ -804,6 +835,15 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
     Some((Filter::and(parts), cond))
 }
 
+/// A filter made only of card types ("instant", "instant or sorcery", "artifact").
+fn is_card_type_filter(f: &Filter) -> bool {
+    match f {
+        Filter::Type(_) => true,
+        Filter::Or(v) | Filter::And(v) => v.iter().all(is_card_type_filter),
+        _ => false,
+    }
+}
+
 fn mentions_spell(f: &Filter) -> bool {
     match f {
         Filter::Spell => true,
@@ -837,6 +877,37 @@ fn parse_subject(s: &str) -> Option<Subject> {
     };
     if s == "~" {
         return mk(Filter::Source, true, false);
+    }
+    // "a creature dealt damage by ~ this turn", "... by equipped creature this turn"
+    if let Some((head, by)) = s.split_once(" dealt damage by ") {
+        let source = match by.strip_suffix(" this turn")? {
+            "~" => Sel::This,
+            "equipped creature" | "enchanted creature" => Sel::AttachedTo,
+            _ => return None,
+        };
+        let mut subj = parse_subject(head)?;
+        if subj.self_only {
+            return None;
+        }
+        subj.filter = Filter::and(vec![
+            subj.filter,
+            Filter::DealtDamageThisTurnBy(Box::new(source)),
+        ]);
+        return Some(subj);
+    }
+    // "a source", "a source you control", "a source an opponent controls" (CR 120.2: any
+    // object can be a source of damage).
+    for (p, f) in [
+        ("a source", Filter::Any),
+        ("a source you control", Filter::ControlledBy(PlayerRel::You)),
+        (
+            "a source an opponent controls",
+            Filter::ControlledBy(PlayerRel::Opponent),
+        ),
+    ] {
+        if s == p {
+            return mk(f, false, false);
+        }
     }
     if s == "~ or enchanted creature" || s == "~ or equipped creature" {
         return mk(
@@ -1113,6 +1184,22 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             ));
         }
     }
+    for p in [
+        "is put into your graveyard from your library",
+        "are put into your graveyard from your library",
+    ] {
+        if let Some(r) = starts(p) {
+            let cond = TriggerCond::ZoneChange {
+                filter: Filter::and(vec![f.clone(), Filter::OwnedBy(PlayerRel::You)]),
+                from: Some(ZoneKind::Library),
+                to: Some(ZoneKind::Graveyard),
+            };
+            if subj.one_or_more {
+                return Some((batch(cond, false, PlayerRef::You), r));
+            }
+            return Some(((cond, Sel::TriggerObject, PlayerRef::You), r));
+        }
+    }
     // "one or more cards leave your graveyard" (look back in time, CR 603.10a).
     for p in ["leaves your graveyard", "leave your graveyard"] {
         if let Some(r) = starts(p) {
@@ -1190,6 +1277,18 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                     };
                     r = x;
                 }
+            } else if let Some(x) = t.strip_prefix("one of your opponents") {
+                cond = TriggerCond::Where {
+                    trigger: Box::new(cond),
+                    cond: Condition::And(vec![
+                        Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Opponent),
+                        Condition::Not(Box::new(Condition::SelNonEmpty(Sel::TriggerOtherObject))),
+                    ]),
+                };
+                r = x;
+            } else if let Some(x) = t.strip_prefix("for the first time each turn") {
+                cond = TriggerCond::FirstTimeEachTurn(Box::new(cond));
+                r = x;
             } else if let Some(x) = t.strip_prefix("while you control ") {
                 let x2 = x
                     .strip_prefix("a ")
@@ -1439,7 +1538,13 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
     .iter()
     .find_map(|(p, c)| s.strip_prefix(p).map(|r| (*c, r)))?;
     let t = r.trim_start();
-    let recipients: [(&str, DamageRecipient, bool); 8] = [
+    let recipients: [(&str, DamageRecipient, bool); 10] = [
+        (
+            "to one of your opponents",
+            DamageRecipient::Player(PlayerRel::Opponent),
+            true,
+        ),
+        ("to ~", DamageRecipient::Object(Filter::Source), false),
         (
             "to a player or planeswalker",
             DamageRecipient::PlayerOrPlaneswalker(PlayerRel::Any),
@@ -1597,6 +1702,16 @@ mod tests {
             "when you cast ~",
             "whenever one or more cards leave your graveyard",
             "at the beginning of your upkeep and whenever you cast a green spell",
+            "whenever a creature you control with deathtouch deals combat damage to a player",
+            "whenever a creature with a -1/-1 counter on it dies",
+            "whenever ~ attacks for the first time each turn",
+            "whenever a creature deals combat damage to one of your opponents",
+            "whenever you're dealt damage",
+            "whenever a source you control deals damage to you",
+            "whenever you cast an instant",
+            "when you draw your third card in a turn",
+            "whenever a creature dealt damage by ~ this turn dies",
+            "whenever ~ becomes blocked by a non-wall creature",
         ] {
             p(s);
         }

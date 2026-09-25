@@ -347,6 +347,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::HasCounter(None), r)
         } else if let Some((f, r)) = parse_stat_suffix(t) {
             (f, r)
+        } else if let Some((f, r)) = parse_with_suffix(t) {
+            (f, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))
@@ -361,6 +363,52 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = rest;
     }
     Some((Filter::and(parts), plural, s))
+}
+
+/// "with deathtouch", "without first strike", "with a -1/-1 counter on it": a keyword
+/// without parameters, or a counter of a kind.
+fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
+    let (negate, rest) = if let Some(r) = t.strip_prefix("without ") {
+        (true, r)
+    } else {
+        (false, t.strip_prefix("with ")?)
+    };
+    if !negate {
+        if let Some(r) = rest
+            .strip_prefix("a ")
+            .or_else(|| rest.strip_prefix("one or more "))
+        {
+            let (kind, r2) = split_word(r);
+            if let Some(tail) = r2
+                .strip_prefix("counter on it")
+                .or_else(|| r2.strip_prefix("counters on it"))
+            {
+                if kind.starts_with('+')
+                    || kind.starts_with('-')
+                    || kind.chars().all(|c| c.is_alphabetic())
+                {
+                    return Some((Filter::HasCounter(Some(kind.into())), tail));
+                }
+            }
+        }
+    }
+    // Two-word keywords first ("first strike", "double strike").
+    let words: Vec<&str> = rest.splitn(3, ' ').collect();
+    for n in [2usize, 1] {
+        if words.len() < n {
+            continue;
+        }
+        let name = words[..n].join(" ");
+        let name = name.trim_end_matches(',');
+        let Some(k) = KeywordKind::from_name(name) else {
+            continue;
+        };
+        let consumed: usize = words[..n].iter().map(|w| w.len()).sum::<usize>() + (n - 1);
+        let tail = &rest[consumed.min(rest.len())..];
+        let f = Filter::HasKeyword(k);
+        return Some((if negate { Filter::not(f) } else { f }, tail));
+    }
+    None
 }
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".

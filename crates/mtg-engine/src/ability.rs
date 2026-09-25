@@ -829,6 +829,9 @@ pub enum Filter {
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
     /// `"kicker"`).
     CastWithCost(SmolStr),
+    /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
+    /// by ~ this turn").
+    DealtDamageThisTurnBy(Box<Sel>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),

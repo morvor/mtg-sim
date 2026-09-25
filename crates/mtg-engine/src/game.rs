@@ -308,6 +308,8 @@ pub struct TurnHistory {
     pub players_attacked: BTreeSet<PlayerId>,
     pub attackers: Vec<ObjectId>,
     pub objects_dealt_damage: BTreeSet<ObjectId>,
+    /// (source, object) pairs: objects dealt damage this turn and by what.
+    pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
     pub lands_played: BTreeMap<PlayerId, u32>,
     pub tokens_created: BTreeMap<PlayerId, u32>,
     pub cards_left_graveyard: BTreeMap<PlayerId, u32>,

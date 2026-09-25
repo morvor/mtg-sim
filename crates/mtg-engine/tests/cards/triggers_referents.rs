@@ -149,6 +149,53 @@ fn enchanted_creature_means_the_one_this_aura_enchants() {
 }
 
 #[test]
+fn youre_dealt_damage_by_several_sources_triggers_once() {
+    cr!("603.2c", "510.2");
+    assert_supported(&["Darien, King of Kjeldor"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Darien, King of Kjeldor");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.answer_yes(P0, true);
+    t.attack(&[(a, Entity::Player(P0)), (b, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 16);
+    let soldiers = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|id| t.g.obj(**id).chars.has_subtype("Soldier") && t.g.obj(**id).controller == P0)
+        .count();
+    // Darien is a Soldier too.
+    assert_eq!(soldiers, 1 + 4);
+}
+
+#[test]
+fn a_source_you_control_deals_damage_to_you() {
+    cr!("120.2", "603.2");
+    assert_supported(&["Auntie Blyte, Bad Influence"]);
+    let mut t = TestGame::new(2);
+    let auntie = t.battlefield(P0, "Auntie Blyte, Bad Influence");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.counters(auntie, "+1/+1"), 3);
+}
+
+#[test]
+fn put_into_your_graveyard_from_your_library() {
+    cr!("113.6k", "400.7e");
+    assert_supported(&["Narcomoeba"]);
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Narcomoeba");
+    t.answer_yes(P0, true);
+    t.g.mill(P0, 1);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Narcomoeba").len(), 1);
+}
+
+#[test]
 fn that_player_mills_that_many_cards() {
     cr!("510.2", "701.17a");
     assert_supported(&["Crosstown Courier"]);

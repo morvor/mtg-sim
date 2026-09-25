@@ -67,10 +67,12 @@ fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
             ..
         } => return FunctionZone::Stack,
         TriggerCond::ZoneChange {
-            filter: Filter::Source,
+            filter,
+            from,
             to: Some(ZoneKind::Graveyard),
-            ..
-        } => return FunctionZone::Graveyard,
+        } if mentions_source(filter) && *from != Some(ZoneKind::Battlefield) => {
+            return FunctionZone::Graveyard
+        }
         // CR 702.29c: "when you cycle ~" triggers from whatever zone the card winds up in.
         TriggerCond::Cycled {
             filter: Filter::Source,

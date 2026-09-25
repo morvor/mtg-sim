@@ -100,6 +100,25 @@ fn morbid_if_a_creature_died_this_turn() {
 }
 
 #[test]
+fn creature_dealt_damage_by_this_turn_dies() {
+    cr!("603.10a", "510.2");
+    assert_supported(&["Sengir Vampire"]);
+    let mut t = TestGame::new(2);
+    let vampire = t.battlefield(P0, "Sengir Vampire");
+    // A flying 2/2 blocks the 3/3 flyer and dies.
+    let blocker = t.battlefield(P1, "Wind Drake");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(vampire, Entity::Player(P1))], &[(blocker, vampire)]);
+    assert!(t.in_graveyard(P1, "Wind Drake"));
+    assert_eq!(t.counters(vampire, "+1/+1"), 1);
+    // A creature it didn't damage dying doesn't count.
+    t.g.destroy(other, None);
+    t.resolve_all();
+    assert_eq!(t.counters(vampire, "+1/+1"), 1);
+}
+
+#[test]
 fn if_this_is_tapped() {
     cr!("603.4");
     assert_supported(&["Savior of the Small"]);

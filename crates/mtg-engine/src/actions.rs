@@ -1040,6 +1040,7 @@ impl Game {
                     }
                 }
                 self.history.objects_dealt_damage.insert(o);
+                self.history.damage_by_source.insert((source, o));
             }
         }
         self.dirty = true;

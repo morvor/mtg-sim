@@ -406,6 +406,10 @@ impl Game {
                         .as_ref()
                         .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
             }
+            Filter::DealtDamageThisTurnBy(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|s| self.history.damage_by_source.contains(&(s, id))),
             Filter::CastWithCost(name) => {
                 o.zone == Zone::Stack
                     && o.stack
