@@ -51,6 +51,14 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     {
         return None;
     }
+    // "~ has flying as long as it's attacking": "it" is the object itself.
+    let cond = match cond
+        .strip_prefix("it's ")
+        .or_else(|| cond.strip_prefix("it is "))
+    {
+        Some(state) if head.starts_with("~ ") => format!("~ is {state}"),
+        _ => cond.to_string(),
+    };
     let reordered = format!("as long as {cond}, {head}");
     let v = crate::oracle::statics::parse_static(&reordered, ctx)?;
     // Only accept it if the condition was attached to every ability.
@@ -198,14 +206,13 @@ inventory::submit! {
     StaticPattern { name: "k702: keyword cost modifiers", priority: 50, parse: keyword_cost_modifier }
 }
 
-/// Conditions about the object itself: "it's attacking", "~ is equipped", "it's
-/// enchanted or equipped".
+/// Conditions about the object itself: "~ is attacking", "~ is equipped", "~ is
+/// enchanted or equipped". (A trailing "as long as it's attacking" about the object is
+/// rewritten to this form by [`trailing_as_long_as`]; elsewhere "it" may mean another
+/// object.)
 fn self_state_condition(c: &str) -> Option<Condition> {
     let c = end(c);
-    let state = c
-        .strip_prefix("it's ")
-        .or_else(|| c.strip_prefix("it is "))
-        .or_else(|| c.strip_prefix("~ is "))?;
+    let state = c.strip_prefix("~ is ")?;
     let f = match state {
         "attacking" => Filter::Attacking,
         "blocking" => Filter::Blocking,

@@ -61,6 +61,32 @@ fn a_keyword_cost_is_only_the_keywords_own_cost() {
 }
 
 #[test]
+fn equip_cost_reductions_reduce_only_generic_mana_of_equip_costs() {
+    cr!("702.1a");
+    ruling!(
+        "Bureau Headmaster",
+        "Bureau Headmaster’s last ability reduces only the amount of generic mana in equip abilities. For example, it will reduce an equip cost of {1} to {0}, but it will have no effect on an equip cost of {G}."
+    );
+    assert_supported("Bureau Headmaster");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bureau Headmaster");
+    let sword = t.battlefield(P0, "Short Sword");
+    let greatsword = t.battlefield(P0, "Greatsword of Tyr");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Equip {1} costs {0}.
+    t.activate(P0, sword, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(sword).attached_to, Some(Entity::Object(bears)));
+    // Equip {W} still costs {W}.
+    assert!(t.activate(P0, greatsword, 0, &[Entity::Object(bears)]).is_err());
+    t.clear_answers();
+    t.lands(P0, "Plains", 1);
+    t.activate(P0, greatsword, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(greatsword).attached_to, Some(Entity::Object(bears)));
+}
+
+#[test]
 fn a_granted_keyword_variable_is_constantly_reevaluated() {
     cr!("702.1b", "702.45a");
     let mut t = TestGame::new(2);
