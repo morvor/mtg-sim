@@ -306,6 +306,8 @@ impl Game {
             self.objects[old_id.0 as usize].zone = Zone::Nowhere;
             return None;
         }
+        // CR 708.9: a face-down permanent or spell is revealed as it leaves.
+        crate::facedown::moving(self, old_id, m.to);
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != old_id);
         }

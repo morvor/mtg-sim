@@ -227,11 +227,15 @@ impl Game {
             }
         }
 
-        // Layer 1b: face-down (CR 708.2).
+        // Layer 1b: face-down (CR 708.2). What it would be face up is kept (CR 708.10).
         for id in &live {
             if self.obj(*id).face_down {
                 let fd = crate::facedown::face_down_characteristics(self, *id);
-                self.objects[id.0 as usize].chars = fd;
+                let o = &mut self.objects[id.0 as usize];
+                let up = std::mem::replace(&mut o.chars, fd);
+                o.face_up_values = Some(Box::new(up));
+            } else {
+                self.objects[id.0 as usize].face_up_values = None;
             }
         }
         for id in &live {

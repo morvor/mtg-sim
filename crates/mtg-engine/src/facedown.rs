@@ -14,6 +14,24 @@ use smol_str::SmolStr;
 /// (CR 702.168a, 701.58a).
 pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
     let o = g.obj(id);
+    // A face-down spell has the characteristics the ability it was cast with lists.
+    let cast_as = match o.stack.as_deref().map(|s| &s.cast.method) {
+        Some(CastMethod::FaceDown(k)) => Some(k.name()),
+        _ => None,
+    };
+    let kind = cast_as
+        .or(o.choices.text.as_deref())
+        .unwrap_or("")
+        .to_string();
+    kind_characteristics(&kind)
+}
+
+/// The characteristics of a spell cast face down with `kind` (CR 708.2, 708.4).
+pub fn face_down_spell_characteristics(kind: KeywordKind) -> Characteristics {
+    kind_characteristics(kind.name())
+}
+
+fn kind_characteristics(kind: &str) -> Characteristics {
     let mut c = Characteristics {
         name: SmolStr::default(),
         power: Some(2),
@@ -22,7 +40,6 @@ pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
         rules_text: std::sync::Arc::from(""),
         ..Default::default()
     };
-    let kind = o.choices.text.as_deref().unwrap_or("");
     if kind == KeywordKind::Disguise.name() || kind == "Cloak" {
         c.abilities.push(AbilityDef::new(
             AbilityKind::Keyword(Keyword::with_cost(
@@ -35,8 +52,13 @@ pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
     c
 }
 
-/// Turns a face-up permanent face down (e.g. "turn target creature face down"). It gets
-/// a new timestamp (CR 613.7f). Returns true if it did.
+/// The kinds of face-down status recorded on a face-down object (in `choices.text`).
+const FACE_DOWN_KINDS: [&str; 5] = ["Morph", "Megamorph", "Disguise", "Cloak", "Manifest"];
+
+/// Turns a face-up permanent face down (e.g. "turn target creature face down"). It
+/// becomes a 2/2 face-down creature with no text, no name, no subtypes, and no mana cost
+/// (CR 708.2a), and gets a new timestamp (CR 613.7f). A face-down permanent can't be
+/// turned face down: nothing happens (CR 708.2b). Returns true if it did.
 pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
     let o = g.obj(id);
     if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
@@ -46,8 +68,140 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
     let ob = &mut g.objects[id.0 as usize];
     ob.face_down = true;
     ob.timestamp = ts;
+    // No characteristics are listed by the effect: none of those of an earlier face-down
+    // status (such as disguise's ward {2}) apply.
+    if ob
+        .choices
+        .text
+        .as_deref()
+        .is_some_and(|t| FACE_DOWN_KINDS.contains(&t))
+    {
+        ob.choices.text = None;
+    }
     g.dirty = true;
+    g.emit(Event::TurnedFaceDown { obj: id });
     true
+}
+
+/// CR 708.5: a player may look at face-down spells and permanents they control (even
+/// phased-out ones), but not at face-down objects in other zones or controlled by
+/// another player. Face-up objects in public zones can be seen by everyone.
+pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if !o.face_down {
+        return o.zone.is_public() || o.zone == Zone::Hand(p);
+    }
+    matches!(o.zone, Zone::Stack | Zone::Battlefield) && o.controller == p
+}
+
+/// `Event::Custom` name of a face-down object being revealed to all players (CR 708.9).
+pub const REVEALED: &str = "face-down object revealed";
+
+/// Reveals a face-down object (and the face-down components of a merged permanent) to all
+/// players (CR 708.9).
+pub fn reveal(g: &mut Game, id: ObjectId) {
+    let mut objs = vec![id];
+    objs.extend(g.obj(id).merged_with.iter().copied());
+    for o in objs {
+        if !g.obj(o).face_down {
+            continue;
+        }
+        let owner = g.obj(o).owner;
+        let name = g
+            .obj(o)
+            .card
+            .as_ref()
+            .map_or_else(|| "a token".to_string(), |c| c.name.to_string());
+        g.log(|_| format!("{owner} reveals face-down {name}"));
+        g.emit(Event::Custom {
+            name: REVEALED.into(),
+            player: Some(owner),
+            obj: Some(o),
+            amount: 0,
+        });
+    }
+}
+
+/// CR 708.9: a face-down permanent leaving the battlefield, or a face-down spell leaving
+/// the stack for a zone other than the battlefield, is revealed as it moves.
+pub fn moving(g: &mut Game, id: ObjectId, to: Zone) {
+    let o = g.obj(id);
+    let from = o.zone;
+    let merged_face_down = o.merged_with.iter().any(|c| g.obj(*c).face_down);
+    if !(o.face_down || merged_face_down) || to == from {
+        return;
+    }
+    let reveals = match from {
+        Zone::Battlefield => true,
+        Zone::Stack => to != Zone::Battlefield,
+        _ => false,
+    };
+    if reveals {
+        reveal(g, id);
+    }
+}
+
+/// `Effect::Custom`: "reveal [the face-down permanent in `vars::IT`]".
+pub const REVEAL_IT: &str = "facedown:reveal it";
+/// `Condition::Custom`: "if it's a creature card" about a revealed face-down permanent.
+pub const REVEALED_CREATURE_CARD: &str = "facedown:revealed is a creature card";
+
+/// CR 708.12: an effect that needs information about a revealed face-down permanent uses
+/// the characteristics of the object itself, ignoring any continuous effects applying to
+/// it: those of the card (its face that would be up), or a token's own.
+pub fn revealed_characteristics(g: &Game, id: ObjectId) -> Characteristics {
+    let o = g.obj(id);
+    match &o.card {
+        Some(card) => card.characteristics(FaceState::Front),
+        None => o.base.clone(),
+    }
+}
+
+fn it(ctx: &crate::eval::Ctx) -> Vec<ObjectId> {
+    ctx.vars
+        .get(&vars::IT)
+        .map(|v| v.iter().filter_map(|e| e.object()).collect())
+        .unwrap_or_default()
+}
+
+/// `Effect::Custom` effects of this module. Returns true if handled.
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {
+    if name != REVEAL_IT {
+        return false;
+    }
+    for o in it(ctx) {
+        reveal(g, o);
+    }
+    true
+}
+
+/// `Condition::Custom` conditions of this module.
+pub fn custom_condition(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<bool> {
+    if name != REVEALED_CREATURE_CARD {
+        return None;
+    }
+    let objs = it(ctx);
+    Some(
+        !objs.is_empty()
+            && objs.iter().all(|o| {
+                g.obj(*o).card.is_some() && revealed_characteristics(g, *o).is(CardType::Creature)
+            }),
+    )
+}
+
+/// CR 708.9: when a player leaves the game (`Some(p)`), their face-down permanents and
+/// spells are revealed; at the end of the game (`None`), everyone's are.
+pub fn reveal_all(g: &mut Game, owner: Option<PlayerId>) {
+    let ids: Vec<ObjectId> = g
+        .battlefield
+        .iter()
+        .chain(g.stack.iter())
+        .copied()
+        .filter(|id| owner.is_none_or(|p| g.obj(*id).owner == p))
+        .collect();
+    for id in ids {
+        reveal(g, id);
+    }
 }
 
 /// Turns a face-down permanent face up (CR 708.8). Returns true if it did.

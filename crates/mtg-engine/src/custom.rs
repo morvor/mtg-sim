@@ -152,6 +152,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::dice::custom_condition(name, ctx) {
         return b;
     }
+    // "If it's a creature card" about a revealed face-down permanent (CR 708.12).
+    if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
+        return b;
+    }
     let you = ctx.controller;
     let h = &g.history;
     // "you've cast another red spell this turn": a spell of that color (as it was on the
@@ -366,6 +370,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "Roll again", rerolling stored results (CR 706.3c, 706.8b).
     if crate::dice::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Revealing a face-down permanent (CR 708.9, 708.12).
+    if crate::facedown::custom_effect(g, name, ctx) {
         return;
     }
     match name {

@@ -1112,6 +1112,8 @@ impl Game {
     /// Handles a player leaving a multiplayer game (CR 800.4a).
     pub(crate) fn after_player_leaves(&mut self, p: PlayerId) {
         self.players[p.idx()].left_game = true;
+        // CR 708.9: their face-down permanents and spells are revealed.
+        crate::facedown::reveal_all(self, Some(p));
         if self.players_in_game().len() <= 1 {
             return;
         }
@@ -1120,7 +1122,12 @@ impl Game {
 
     /// Ends the game if only one team (or no player) is left (CR 104.2a, 104.4a).
     pub fn check_game_over(&mut self) {
+        let over = self.result.is_some();
         self.decide_game_over();
+        if !over && self.result.is_some() {
+            // CR 708.9: at the end of the game, face-down objects are revealed.
+            crate::facedown::reveal_all(self, None);
+        }
     }
 
     /// Forces a draw (CR 104.4).

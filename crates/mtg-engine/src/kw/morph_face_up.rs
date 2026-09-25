@@ -18,26 +18,22 @@ pub struct MorphFaceUp;
 /// face-up characteristics have morph, megamorph, or disguise.
 fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     let o = g.obj(id);
-    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
+    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;
     }
-    let card = o.card.as_ref()?;
-    card.front()
-        .chars
-        .abilities
-        .iter()
-        .find_map(|a| match &a.kind {
-            AbilityKind::Keyword(k)
-                if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) =>
-            {
-                let megamorph = k
-                    .text
-                    .as_deref()
-                    .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
-                k.cost.clone().map(|c| (megamorph, c))
-            }
-            _ => None,
-        })
+    // The morph cost of what it would be face up: its copiable values as modified by
+    // copy effects (CR 707.3, 708.10), not necessarily the card's.
+    let up = o.face_up_values.as_deref()?;
+    up.abilities.iter().find_map(|a| match &a.kind {
+        AbilityKind::Keyword(k) if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) => {
+            let megamorph = k
+                .text
+                .as_deref()
+                .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
+            k.cost.clone().map(|c| (megamorph, c))
+        }
+        _ => None,
+    })
 }
 
 impl KeywordRules for MorphFaceUp {

@@ -872,6 +872,13 @@ impl Game {
                     crate::facedown::turn_face_up(self, o, false);
                 }
             }
+            Effect::TurnFaceDown { what } => {
+                let mut any = false;
+                for o in self.resolve_objects(what, ctx) {
+                    any |= crate::facedown::turn_face_down(self, o);
+                }
+                ctx.prev_happened = any;
+            }
             Effect::RemoveFromCombat { what } => {
                 for o in self.resolve_objects(what, ctx) {
                     crate::combat::remove_from_combat(self, o);

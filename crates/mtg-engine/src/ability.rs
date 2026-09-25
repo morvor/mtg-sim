@@ -2656,6 +2656,10 @@ pub enum Effect {
     TurnFaceUp {
         what: Sel,
     },
+    /// "Turn [permanents] face down" (CR 708.2a, 708.2b).
+    TurnFaceDown {
+        what: Sel,
+    },
     /// Put a creature/permanent into its owner's library at a position.
     /// (Use Move.)
     /// Remove from combat.
