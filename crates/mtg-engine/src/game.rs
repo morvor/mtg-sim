@@ -60,6 +60,9 @@ pub struct GameConfig {
     /// Max decisions per game (safety valve for infinite loops).
     pub max_actions: u64,
     pub seed: u64,
+    /// Planechase: play with a single communal planar deck (CR 901.15).
+    #[serde(default)]
+    pub single_planar_deck: bool,
 }
 
 impl Default for GameConfig {
@@ -78,6 +81,7 @@ impl Default for GameConfig {
             max_turns: 200,
             max_actions: 200_000,
             seed: 0,
+            single_planar_deck: false,
         }
     }
 }
@@ -549,6 +553,16 @@ impl Game {
         for (i, deck) in decks.into_iter().enumerate() {
             let pid = PlayerId(i as u8);
             for card in deck {
+                // Nontraditional cards aren't part of the deck (CR 108.2a, 108.5).
+                if crate::variants::is_nontraditional(&card) {
+                    let (zone, face_down) = crate::variants::nontraditional_start(&card, pid);
+                    let id = g.create_card_object(card, pid, zone);
+                    g.objects[id.0 as usize].face_down = face_down;
+                    if let Some(list) = g.zone_list_mut(zone) {
+                        list.push(id);
+                    }
+                    continue;
+                }
                 let id = g.create_card_object(card, pid, Zone::Library(pid));
                 g.players[i].library.push(id);
             }

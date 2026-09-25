@@ -111,6 +111,9 @@ impl Game {
         if is_cda || zone == FunctionZone::Anywhere {
             return true;
         }
+        if let FunctionZone::AnywhereExcept(z) = zone {
+            return obj.zone.kind() != Some(z) && !obj.phased_out;
+        }
         match obj.zone {
             Zone::Battlefield => zone == FunctionZone::Battlefield && !obj.phased_out,
             Zone::Stack => zone == FunctionZone::Stack,
@@ -129,6 +132,11 @@ impl Game {
     /// Emblems, planes, phenomena, schemes, vanguards, face-up conspiracies and dungeons
     /// have abilities that function in the command zone (CR 114.4, 311, 312, 313, 314, 315, 309).
     fn command_object_functions(&self, obj: &GameObject) -> bool {
+        // A face-down card in the command zone (a card in a planar or scheme deck, a
+        // hidden agenda) has no functioning abilities.
+        if obj.face_down {
+            return false;
+        }
         obj.kind == ObjKind::Emblem
             || [
                 CardType::Plane,
@@ -166,6 +174,8 @@ impl Game {
             o.chars = o.base.clone();
             o.controller = o.base_controller;
         }
+        // Face-up planes and phenomena are controlled by the planar controller (CR 901.6).
+        crate::planechase::apply_planar_control(self);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self

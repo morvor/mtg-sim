@@ -34,6 +34,16 @@ pub fn parse_condition_ext(c: &str) -> Option<Condition> {
     condition_patterns().iter().find_map(|p| (p.parse)(c))
 }
 
+/// Regroups ability blocks that span several lines (leveler striations, class level
+/// sections) using the registered [`BlockGroupPattern`]s.
+pub fn group_blocks(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
+    let mut blocks = blocks;
+    for p in block_group_patterns() {
+        blocks = (p.group)(blocks, ctx);
+    }
+    blocks
+}
+
 pub fn parse_ability_ext(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     ability_patterns()
         .iter()
