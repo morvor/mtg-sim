@@ -413,6 +413,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::facedown::custom_effect(g, name, ctx) {
         return;
     }
+    // Distributing counters among targets (CR 601.2d).
+    if crate::counter_rules::custom_effect(g, name, ctx) {
+        return;
+    }
     match name {
         crate::kw::suspend::CAST_SUSPENDED => crate::kw::suspend::cast_suspended(g, ctx),
         crate::kw::miracle::CAST_MIRACLE => crate::kw::miracle::cast_miracle(g, ctx),

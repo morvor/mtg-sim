@@ -36,7 +36,9 @@ pub fn parse_cost(s: &str) -> Option<(Cost, bool)> {
             while i < bytes.len() {
                 if bytes[i] == '{' {
                     let j = bytes[i..].iter().position(|c| *c == '}')? + i;
-                    let sym: String = bytes[i + 1..j].iter().collect();
+                    // Symbols are case-insensitive: callers may pass lowercased text
+                    // ("you may pay {e}{e}").
+                    let sym: String = bytes[i + 1..j].iter().collect::<String>().to_uppercase();
                     match sym.as_str() {
                         "T" => cost.parts.push(CostPart::Tap),
                         "Q" => cost.parts.push(CostPart::Untap),

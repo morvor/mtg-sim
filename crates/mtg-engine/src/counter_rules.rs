@@ -297,3 +297,37 @@ pub fn who_puts_counters(g: &Game, target: ObjectId, source: Option<ObjectId>) -
         None => None,
     }
 }
+
+/// Custom effect name prefix for "distribute N [kind] counters among [targets]":
+/// `divided-counters:<target slot>:<kind>`.
+pub const DIVIDED_COUNTERS: &str = "divided-counters:";
+
+/// The custom effect name for distributing counters of `kind` among the targets in `slot`.
+pub fn divided_counters_effect(slot: u8, kind: &str) -> SmolStr {
+    SmolStr::from(format!("{DIVIDED_COUNTERS}{slot}:{kind}"))
+}
+
+/// "Distribute two +1/+1 counters among one or two target creatures" (CR 601.2d): each
+/// target gets the number of counters assigned to it as the spell or ability was put on
+/// the stack. Counters assigned to a target that became illegal aren't put on anything
+/// (CR 608.2b).
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
+    let Some(spec) = name.strip_prefix(DIVIDED_COUNTERS) else {
+        return false;
+    };
+    let Some((slot, kind)) = spec.split_once(':') else {
+        return true;
+    };
+    let Ok(slot) = slot.parse::<usize>() else {
+        return true;
+    };
+    let targets = ctx.targets.get(slot).cloned().unwrap_or_default();
+    let div = ctx.divided.get(slot).cloned().unwrap_or_default();
+    for (i, t) in targets.into_iter().enumerate() {
+        let n = div.get(i).copied().unwrap_or(0);
+        if n > 0 {
+            g.add_counters(t, kind, n, ctx.source);
+        }
+    }
+    true
+}
