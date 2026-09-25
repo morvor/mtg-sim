@@ -111,6 +111,9 @@ pub struct TurnState {
     pub upkeeps: u32,
     /// The player whose turn it was last turn.
     pub previous_active: Option<PlayerId>,
+    /// Steps that have begun this turn, in order (for combat timing windows, CR 506.8).
+    #[serde(default)]
+    pub step_log: Vec<Step>,
 }
 
 impl TurnState {
@@ -130,6 +133,7 @@ impl TurnState {
             extra: false,
             upkeeps: 0,
             previous_active: None,
+            step_log: vec![],
         }
     }
 
@@ -229,6 +233,7 @@ impl Game {
         self.turn.combat_phases = 0;
         self.turn.upkeeps = 0;
         self.turn.cleanup_priority = false;
+        self.turn.step_log.clear();
         self.history = TurnHistory::default();
         self.turn_events.clear();
         for p in self.players.iter_mut() {
@@ -290,6 +295,7 @@ impl Game {
             return;
         }
         self.expire_effects_at_step_begin(step);
+        self.turn.step_log.push(step);
         self.emit(Event::StepBegan { step, active });
         match step {
             Step::Untap => self.untap_step_actions(),
@@ -318,18 +324,7 @@ impl Game {
                 self.turn.combat_phases += 1;
                 crate::combat::begin_combat(self);
             }
-            Step::DeclareAttackers => {
-                crate::combat::declare_attackers_step(self);
-                // CR 508.8: no attackers → skip declare blockers and combat damage steps.
-                if self.combat.as_ref().is_none_or(|c| c.attackers.is_empty()) {
-                    self.turn.schedule.retain(|s| {
-                        !matches!(
-                            s,
-                            Step::DeclareBlockers | Step::CombatDamage | Step::FirstStrikeDamage
-                        )
-                    });
-                }
-            }
+            Step::DeclareAttackers => crate::combat::declare_attackers_step(self),
             Step::DeclareBlockers => crate::combat::declare_blockers_step(self),
             Step::FirstStrikeDamage => crate::combat::combat_damage_step(self, true),
             Step::CombatDamage => {
@@ -440,6 +435,19 @@ impl Game {
         let step = self.turn.step;
         // CR 500.5: effects lasting until end of step expire; mana empties.
         self.empty_mana_pools();
+        if step == Step::DeclareAttackers
+            && self.combat.as_ref().is_none_or(|c| !c.any_attackers)
+        {
+            // CR 508.8: if no creatures were declared as attackers or put onto the
+            // battlefield attacking, skip this combat's declare blockers and combat damage
+            // steps.
+            while matches!(
+                self.turn.schedule.first(),
+                Some(Step::DeclareBlockers | Step::CombatDamage | Step::FirstStrikeDamage)
+            ) {
+                self.turn.schedule.remove(0);
+            }
+        }
         if step == Step::EndOfCombat {
             // CR 511.3 / 500.5a
             crate::combat::end_combat(self);
@@ -527,8 +535,17 @@ impl Game {
         {
             self.players[active.idx()].skips.remove(i);
             if kind == StepKind::Combat {
-                // Skip the whole combat phase.
-                self.turn.schedule.retain(|s| !s.is_combat());
+                // Skip the whole combat phase (only this one, not additional combat phases
+                // later in the turn).
+                while let Some(s) = self.turn.schedule.first().copied() {
+                    if !s.is_combat() {
+                        break;
+                    }
+                    self.turn.schedule.remove(0);
+                    if s == Step::EndOfCombat {
+                        break;
+                    }
+                }
             }
             return true;
         }

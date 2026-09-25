@@ -247,6 +247,9 @@ impl Game {
                 if let Some(target) = m.etb.attacking {
                     crate::combat::put_onto_battlefield_attacking(self, new_id, target);
                 }
+                if let Some(attacker) = m.etb.blocking {
+                    crate::combat::put_onto_battlefield_blocking(self, new_id, attacker);
+                }
             }
             Zone::Library(p) => {
                 let lib = &mut self.players[p.idx()].library;

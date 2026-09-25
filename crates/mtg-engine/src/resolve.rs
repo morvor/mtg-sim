@@ -1236,7 +1236,8 @@ impl Game {
                 return Some(t);
             }
         }
-        combat.defending_players.first().map(|p| Entity::Player(*p))
+        // CR 508.4: otherwise its controller chooses what it's attacking.
+        crate::combat::choose_attack_target_for_new_attacker(self, ctx.controller)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).

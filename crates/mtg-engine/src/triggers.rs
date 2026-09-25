@@ -201,6 +201,10 @@ impl Game {
         ev: &Event,
     ) -> Vec<EventInfo> {
         let ctx = Ctx::new(Some(src), ctl);
+        // Combat trigger conditions (CR 506.5–6, 508.3, 509.3) live in combat.rs.
+        if let Some(v) = crate::combat::combat_trigger_matches(self, cond, &ctx, ev) {
+            return v;
+        }
         let one = |info: EventInfo| vec![info];
         let none = Vec::new;
         match (cond, ev) {

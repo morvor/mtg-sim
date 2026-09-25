@@ -138,6 +138,18 @@ pub enum Event {
     AttackerUnblocked {
         attacker: ObjectId,
     },
+    /// A creature started blocking an attacker other than by being declared as a blocker:
+    /// an effect made it block (`entered == false`), or it was put onto the battlefield
+    /// blocking (`entered == true`) (CR 509.3a–e, 509.4).
+    BlockAdded {
+        blocker: ObjectId,
+        attacker: ObjectId,
+        entered: bool,
+        /// The blocker was already a blocking creature.
+        was_blocking: bool,
+        /// The attacker was already a blocked creature.
+        was_blocked: bool,
+    },
     BecameTarget {
         target: Entity,
         by: ObjectId,

@@ -772,6 +772,11 @@ pub enum Filter {
     /// "creature blocking it", "creature blocked by it" relative to the source.
     BlockingSource,
     BlockedBySource,
+    /// "attacking alone" / "blocking alone" (CR 506.5).
+    AttackingAlone,
+    BlockingAlone,
+    /// Had to attack in the current combat (CR 506.7).
+    HadToAttack,
     Power(Cmp, Box<Value>),
     Toughness(Cmp, Box<Value>),
     ManaValue(Cmp, Box<Value>),
@@ -1017,9 +1022,37 @@ pub enum Condition {
     IsNight,
     /// Source has max speed etc.
     MaxSpeed,
+    /// "only before/after [a point in the combat phase]" timing windows (CR 506.8).
+    CombatTiming(CombatTiming),
     /// This ability's source is tapped/untapped/attacking… via SelMatches(This, …).
     /// Custom conditions implemented in code.
     Custom(SmolStr),
+}
+
+/// A point in the combat phase referred to by timing restrictions (CR 506.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombatPoint {
+    /// "combat" / "the combat phase".
+    Combat,
+    /// "attackers are declared" (the declare attackers step, CR 506.8a).
+    AttackersDeclared,
+    /// "blockers are declared" (the declare blockers step, CR 506.8b).
+    BlockersDeclared,
+    /// "the combat damage step".
+    CombatDamageStep,
+    /// "the end of combat step".
+    EndOfCombatStep,
+}
+
+/// "Cast/activate only [before/after] [point]", optionally "during combat" (CR 506.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CombatTiming {
+    pub point: CombatPoint,
+    /// "after" rather than "before".
+    pub after: bool,
+    /// Also requires "during combat" (CR 506.8c): relative to the current combat phase
+    /// rather than the first combat phase of the turn (CR 506.8d).
+    pub during_combat: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1353,6 +1386,29 @@ pub enum Restriction {
         blocker: Filter,
         attackers: Filter,
     },
+    /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
+    CantAttackAlone(Filter),
+    CantBlockAlone(Filter),
+    /// "No more than N creatures can attack/block each combat" (CR 508.1c, 509.1b).
+    MaxAttackers(u32),
+    MaxBlockers(u32),
+    /// "All creatures able to block [filter] do so" (a blocking requirement for each
+    /// creature able to block it, CR 509.1c).
+    MustBeBlockedByAll(Filter),
+    /// "[attackers] can't attack [defender] (or planeswalkers they control) unless their
+    /// controller pays [cost] for each ..." (CR 508.1d, 508.1h).
+    AttackCost {
+        attackers: Filter,
+        defender: PlayerFilter,
+        planeswalkers: bool,
+        cost: Cost,
+    },
+    /// "[blockers] can't block unless their controller pays [cost] for each blocking
+    /// creature" (CR 509.1c, 509.1d).
+    BlockCost {
+        blockers: Filter,
+        cost: Cost,
+    },
     CantBeTargeted {
         what: Filter,
         by: TargetRestriction,
@@ -1482,6 +1538,15 @@ pub enum StaticEffect {
     RevealTopCard(PlayerRel),
     /// Additional land plays per turn.
     AdditionalLandPlays(PlayerRel, u32),
+    /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
+    /// declared" (CR 506.8). Checked from the card itself while it's being cast.
+    CastOnlyIf(Condition),
+    /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
+    /// "You may exert this creature as it attacks. When you do, [then]."
+    OptionalAttackCost {
+        cost: Cost,
+        then: Option<Box<Body>>,
+    },
     /// "Enchant [filter]" is a keyword; this covers "can be attached only to ..." etc.
     /// Mana abilities that tap for more: handled via Replacement(ProduceMana).
     /// "Prevent all combat damage that would be dealt ..." is a Replacement.
@@ -1564,6 +1629,44 @@ pub enum TriggerCond {
     BecomesBlocked(Filter),
     /// "Whenever [filter] blocks or becomes blocked".
     BlocksOrBecomesBlocked(Filter),
+    /// "Whenever [filter] attacks alone" (CR 506.5).
+    AttacksAlone(Filter),
+    /// "Whenever [filter] attacks a player alone" (CR 506.6).
+    AttacksPlayerAlone(Filter),
+    /// "Whenever [attacker] attacks [you / a planeswalker you control / ...]" (CR 508.3a).
+    AttacksRecipient {
+        attacker: Filter,
+        recipient: DamageRecipient,
+    },
+    /// "Whenever [a player, planeswalker, or battle] is attacked" (CR 508.3b): once per
+    /// attacked player/permanent.
+    IsAttacked(DamageRecipient),
+    /// "Whenever [player] attacks with [N or more] [filter]" (CR 508.3c).
+    PlayerAttacksWith {
+        who: PlayerRel,
+        filter: Filter,
+        min: u32,
+    },
+    /// "Whenever [player] attacks [another player]" (CR 508.3e): once per attacked player.
+    PlayerAttacksPlayer {
+        attacker: PlayerRel,
+        defender: PlayerRel,
+    },
+    /// "Whenever [blocker] blocks a creature" (CR 509.3b): once per attacker blocked.
+    BlocksCreature {
+        blocker: Filter,
+        attacker: Filter,
+    },
+    /// "Whenever [attacker] becomes blocked by a creature" (CR 509.3d): once per blocker.
+    BlockedByCreature {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "Whenever [attacker] becomes blocked by N or more creatures" (CR 509.3e).
+    BlockedByN {
+        attacker: Filter,
+        n: u32,
+    },
     /// "Whenever [source filter] deals (combat) damage to [recipient]".
     DealsDamage {
         source: Filter,
