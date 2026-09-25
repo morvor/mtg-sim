@@ -275,6 +275,33 @@ impl Game {
                     ctx.prev_value = n as i64;
                 }
             }
+            Effect::DealDamageExcess {
+                source,
+                amount,
+                to,
+                excess_to,
+            } => {
+                // CR 120.4a: the excess is split off before replacement and prevention
+                // effects apply to the damage.
+                let src = self.damage_source(source, ctx);
+                let n = self.eval_value(amount, ctx).max(0) as u32;
+                let recipients = self.resolve_sel(to, ctx);
+                let other = self.resolve_sel(excess_to, ctx).into_iter().next();
+                if let Some(src) = src {
+                    let mut evs = Vec::new();
+                    let mut excess_total = 0;
+                    for r in recipients {
+                        let (main, excess) = crate::excess_damage::split_excess(self, src, r, n);
+                        evs.push((src, r, main));
+                        if let (Some(o), true) = (other, excess > 0) {
+                            evs.push((src, o, excess));
+                        }
+                        excess_total += excess;
+                    }
+                    self.deal_damage_batch(evs, false);
+                    ctx.prev_value = excess_total as i64;
+                }
+            }
             Effect::DealDividedDamage { source, slot } => {
                 if let Some(src) = self.damage_source(source, ctx) {
                     let targets = ctx.targets.get(*slot as usize).cloned().unwrap_or_default();

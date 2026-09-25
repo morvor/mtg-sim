@@ -976,6 +976,10 @@ impl Game {
                 combat,
             }));
         }
+        // CR 120.10: what would be excess damage, as the damage is about to be dealt.
+        let excess_before =
+            crate::excess_damage::thresholds_before(self, &crate::excess_damage::damage_events(&finals));
+        let mut dealt: Vec<(ObjectId, Entity, u32)> = Vec::new();
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
         for e in finals {
             match e {
@@ -987,6 +991,7 @@ impl Game {
                 } => {
                     if self.valid_damage_recipient(target) && amount > 0 {
                         self.perform_damage(source, target, amount, combat);
+                        dealt.push((source, target, amount));
                         // CR 120.3f: lifelink — damage causes the source's controller to gain life.
                         if self.obj(source).has_keyword(KeywordKind::Lifelink) {
                             lifelink_gains.push((self.obj(source).controller, amount));
@@ -996,6 +1001,7 @@ impl Game {
                 other => self.execute_repl_event(other),
             }
         }
+        crate::excess_damage::record_excess(self, &excess_before, &dealt, combat);
         for (p, n) in lifelink_gains {
             self.gain_life(p, n);
         }
@@ -1029,8 +1035,9 @@ impl Game {
         match target {
             Entity::Player(p) => {
                 if infect {
-                    // CR 120.3b
-                    self.perform_add_counters(Entity::Player(p), counters::POISON.into(), amount);
+                    // CR 120.3b; the counters can be modified by replacement effects
+                    // (CR 120.4c).
+                    self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);
                 } else {
                     // CR 120.3a (life loss can be replaced as "lose life")
                     for e in self.replace(ReplEvent::LoseLife { player: p, amount }) {
@@ -1058,11 +1065,12 @@ impl Game {
                 }
                 if obj.is_creature() {
                     if wither || infect {
-                        // CR 120.3d
-                        self.perform_add_counters(
+                        // CR 120.3d, 120.4c
+                        self.put_damage_counters(
                             Entity::Object(o),
-                            counters::MINUS1.into(),
+                            counters::MINUS1,
                             amount,
+                            source,
                         );
                     } else {
                         // CR 120.3e
@@ -1091,6 +1099,19 @@ impl Game {
             combat,
         });
         crate::keyword_impls::after_damage(self, source, target, amount, combat);
+    }
+
+    /// Counters that are the result of damage (infect and wither, CR 120.3b, 120.3d),
+    /// as modified by replacement effects that interact with them (CR 120.4c).
+    fn put_damage_counters(&mut self, target: Entity, kind: &str, n: u32, source: ObjectId) {
+        for e in self.replace(ReplEvent::AddCounters {
+            target,
+            kind: kind.into(),
+            n,
+            source: Some(source),
+        }) {
+            self.execute_repl_event(e);
+        }
     }
 
     // ------------------------------------------------------------------

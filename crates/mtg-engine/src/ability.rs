@@ -1781,6 +1781,11 @@ pub enum TriggerCond {
         filter: Filter,
         combat_only: bool,
     },
+    /// "Whenever [filter] is dealt excess damage" (CR 120.10).
+    DealtExcessDamage {
+        filter: Filter,
+        noncombat_only: bool,
+    },
     /// "Whenever [player] is dealt damage".
     PlayerDealtDamage {
         who: PlayerRel,
@@ -2023,6 +2028,15 @@ pub enum Effect {
         source: Sel,
         amount: Value,
         to: Sel,
+    },
+    /// Damage whose excess (beyond lethal damage, loyalty, or defense) is dealt to
+    /// another permanent or player instead (CR 120.4a): "Excess damage is dealt to that
+    /// creature's controller instead."
+    DealDamageExcess {
+        source: Sel,
+        amount: Value,
+        to: Sel,
+        excess_to: Sel,
     },
     /// Divided damage using the division chosen on casting (CR 601.2d).
     DealDividedDamage {

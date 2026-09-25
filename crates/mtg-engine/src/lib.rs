@@ -35,6 +35,7 @@ pub mod designations;
 pub mod dfc;
 pub mod eval;
 pub mod events;
+pub mod excess_damage;
 pub mod facedown;
 pub mod game;
 pub mod keyword_actions;

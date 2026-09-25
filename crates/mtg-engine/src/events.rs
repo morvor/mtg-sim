@@ -91,6 +91,12 @@ pub enum Event {
         amount: u32,
         combat: bool,
     },
+    /// A permanent was dealt excess damage (CR 120.10).
+    ExcessDamage {
+        obj: ObjectId,
+        amount: u32,
+        combat: bool,
+    },
     LifeGained {
         player: PlayerId,
         amount: u32,

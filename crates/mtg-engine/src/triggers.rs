@@ -1215,6 +1215,28 @@ impl Game {
                     none()
                 }
             }
+            (
+                TriggerCond::DealtExcessDamage {
+                    filter,
+                    noncombat_only,
+                },
+                Event::ExcessDamage {
+                    obj,
+                    amount,
+                    combat,
+                },
+            ) => {
+                if !(*noncombat_only && *combat) && self.matches(*obj, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(self.obj(*obj).controller),
+                        amount: *amount as i32,
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Custom(name), ev) => {
                 crate::custom::custom_trigger(self, name, src, ctl, ev)
             }
