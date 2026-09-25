@@ -450,3 +450,61 @@ inventory::submit! {
 inventory::submit! {
     TriggerPattern { name: "day becomes night or night becomes day", priority: 100, parse: day_night_trigger }
 }
+
+/// "Whenever a permanent you control enters tapped": the permanent is checked as it
+/// exists immediately after the event (CR 603.6d).
+fn enters_tapped_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r);
+    let x = r
+        .strip_suffix(" enters tapped")
+        .or_else(|| r.strip_suffix(" enters the battlefield tapped"))?;
+    let x = x
+        .strip_prefix("a ")
+        .or_else(|| x.strip_prefix("an "))
+        .unwrap_or(x);
+    let (f, _, tail) = parse_object_phrase(x)?;
+    if !end(tail).is_empty() || matches!(f, Filter::Source) {
+        return None;
+    }
+    Some((
+        TriggerCond::EntersBattlefield(Filter::and(vec![f, Filter::Tapped])),
+        Sel::TriggerObject,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
+}
+
+inventory::submit! {
+    TriggerPattern { name: "a permanent enters tapped", priority: 100, parse: enters_tapped_trigger }
+}
+
+/// "Permanents enter tapped this turn.", "Until your next turn, creatures your opponents
+/// control enter tapped.": a replacement effect created by a resolving spell or ability
+/// (CR 614.1c, 611.2a).
+fn enter_tapped_for_a_while(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subj, duration) = if let Some(s) = l.strip_suffix(" enter tapped this turn") {
+        (s, Duration::EndOfTurn)
+    } else if let Some(s) = l
+        .strip_prefix("until your next turn, ")
+        .and_then(|r| r.strip_suffix(" enter tapped"))
+    {
+        (s, Duration::UntilYourNextTurn)
+    } else {
+        return None;
+    };
+    let f = subject_list(subj)?;
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+            action: ReplacementAction::EnterTapped,
+            self_replacement: false,
+            optional: false,
+        },
+        duration,
+        uses: None,
+    })
+}
+
+inventory::submit! {
+    EffectPattern { name: "[permanents] enter tapped this turn", priority: 100, parse: enter_tapped_for_a_while }
+}

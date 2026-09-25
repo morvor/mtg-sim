@@ -358,3 +358,50 @@ fn planeswalkers_enter_with_an_additional_loyalty_counter() {
     let jace = t.enter(P0, "Jace Beleren");
     assert_eq!(t.counters(jace, "loyalty"), 4);
 }
+
+#[test]
+fn permanents_enter_tapped_this_turn() {
+    cr!("614.1c", "611.2a", "514.2");
+    assert_supported("Due Respect");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 2);
+    let s = t.hand(P0, "Due Respect");
+    t.cast(P0, s).go();
+    t.resolve();
+    let mine = t.enter(P0, "Grizzly Bears");
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert!(t.obj_now(mine).tapped);
+    assert!(t.obj_now(theirs).tapped);
+    // The effect ends at the end of the turn.
+    t.advance_to(P1, Step::Upkeep);
+    let later = t.enter(P1, "Grizzly Bears");
+    assert!(!t.obj_now(later).tapped);
+}
+
+#[test]
+fn trigger_on_a_permanent_entering_tapped() {
+    cr!("603.6a", "603.6d", "614.1c");
+    assert_supported("Amulet of Vigor");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Amulet of Vigor");
+    let gate = t.hand(P0, "Azorius Guildgate");
+    t.play_land(P0, gate).unwrap();
+    assert!(t.obj_now(gate).tapped);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    assert!(!t.obj_now(gate).tapped);
+    // An untapped permanent entering doesn't trigger it.
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // Nor does an opponent's tapped land.
+    let theirs = t.hand(P1, "Azorius Guildgate");
+    t.set_step(P1, Step::PrecombatMain);
+    t.play_land(P1, theirs).unwrap();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.obj_now(theirs).tapped);
+}
