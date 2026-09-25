@@ -238,6 +238,10 @@ pub enum Event {
     Exploited {
         obj: ObjectId,
     },
+    /// Marks the end of a group of simultaneous events (one action of a resolving spell or
+    /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
+    /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.
+    BatchBoundary,
     /// Any other event identified by name (used by keyword/card implementations).
     Custom {
         name: smol_str::SmolStr,

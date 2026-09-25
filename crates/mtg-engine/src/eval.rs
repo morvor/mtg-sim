@@ -389,6 +389,23 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            Filter::Targets(inner) => {
+                o.zone == Zone::Stack
+                    && o.stack.as_ref().is_some_and(|si| {
+                        si.chosen.iter().any(|cm| {
+                            cm.targets.iter().flatten().any(|t| match t {
+                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                Entity::Player(_) => false,
+                            })
+                        })
+                    })
+            }
+            Filter::CastFrom(z) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
+            }
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }

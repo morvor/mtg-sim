@@ -25,12 +25,135 @@ impl Game {
             self.recompute();
         }
         let events = std::mem::take(&mut self.events);
-        for ev in &events {
+        let mut batch_start = 0;
+        for (i, ev) in events.iter().enumerate() {
+            if matches!(ev, Event::BatchBoundary) {
+                self.check_batch_triggers(&events[batch_start..i]);
+                batch_start = i + 1;
+                continue;
+            }
             self.record_history(ev);
+            // Recorded before detection so "for the first time each turn" can see which
+            // events of this turn precede this one.
+            self.turn_events.push(ev.clone());
             self.check_triggers(ev);
         }
-        self.turn_events.extend(events);
+        self.check_batch_triggers(&events[batch_start..]);
         // Events emitted while detecting triggers (rare) are handled on the next flush.
+    }
+
+    /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
+    pub fn end_event_batch(&mut self) {
+        if self
+            .events
+            .last()
+            .is_some_and(|e| !matches!(e, Event::BatchBoundary))
+        {
+            self.events.push(Event::BatchBoundary);
+        }
+    }
+
+    /// Detects "whenever one or more …" triggers for a batch of simultaneous events
+    /// (CR 603.2c): each such ability triggers once per batch (or once per player involved).
+    fn check_batch_triggers(&mut self, batch: &[Event]) {
+        if batch.is_empty() {
+            return;
+        }
+        let mut sources = self.current_trigger_sources();
+        // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
+        // this batch still see the batch.
+        let mut seen: BTreeSet<(ObjectId, u64)> =
+            sources.iter().map(|(id, _, a)| (*id, a.uid)).collect();
+        for ev in batch {
+            if let Event::ZoneChange {
+                from: Zone::Battlefield,
+                lookback: Some(lb),
+                ..
+            } = ev
+            {
+                for (id, ctl, a) in &lb.sources {
+                    if self.obj(*id).zone != Zone::Battlefield && seen.insert((*id, a.uid)) {
+                        sources.push((*id, *ctl, a.clone()));
+                    }
+                }
+            }
+        }
+        let mut found: Vec<PendingTrigger> = Vec::new();
+        for (src, ctl, a) in sources {
+            let AbilityKind::Triggered(t) = &a.kind else {
+                continue;
+            };
+            let TriggerCond::Batched { trigger, per } = &t.trigger else {
+                continue;
+            };
+            let mut infos: Vec<EventInfo> = Vec::new();
+            for ev in batch {
+                infos.extend(self.trigger_matches(trigger, src, ctl, ev));
+            }
+            if infos.is_empty() {
+                continue;
+            }
+            let key = |i: &EventInfo| match per {
+                BatchPer::Batch => None,
+                BatchPer::Player => i.player.map(|p| Entity::Player(p)),
+                BatchPer::Object => i.object.map(Entity::Object),
+                BatchPer::Other => i.other.map(Entity::Object),
+            };
+            let mut groups: Vec<Vec<EventInfo>> = Vec::new();
+            for info in infos {
+                match groups.iter_mut().find(|g| key(&g[0]) == key(&info)) {
+                    Some(g) => g.push(info),
+                    None => groups.push(vec![info]),
+                }
+            }
+            for g in groups {
+                let mut info = g[0].clone();
+                info.amount = g.iter().map(|i| i.amount).sum();
+                info.objects = Vec::new();
+                for i in &g {
+                    if let Some(o) = i.object.or(i.other) {
+                        if !info.objects.contains(&o) {
+                            info.objects.push(o);
+                        }
+                    }
+                }
+                let mut ctx = Ctx::new(Some(src), ctl);
+                ctx.event = Some(info.clone());
+                if let Some(c) = &t.intervening_if {
+                    if !self.eval_cond(c, &ctx) {
+                        continue;
+                    }
+                }
+                if t.once_per_turn {
+                    let n = self.objects[src.0 as usize]
+                        .triggers_this_turn
+                        .entry(a.uid)
+                        .or_insert(0);
+                    if *n > 0 {
+                        continue;
+                    }
+                    *n += 1;
+                }
+                self.trigger_order += 1;
+                found.push(PendingTrigger {
+                    source: src,
+                    controller: ctl,
+                    ability: a.clone(),
+                    event: info,
+                    source_lki: Some(Box::new(self.obj(src).chars.clone())),
+                    saved: None,
+                    body: None,
+                    order: self.trigger_order,
+                });
+            }
+        }
+        for t in found {
+            if t.ability.is_mana_ability() {
+                self.resolve_trigger_immediately(t);
+            } else {
+                self.pending_triggers.push(t);
+            }
+        }
     }
 
     fn record_history(&mut self, ev: &Event) {
@@ -277,7 +400,13 @@ impl Game {
             ) => {
                 let fm = from.is_none_or(|z| zf.kind() == Some(z));
                 let tm = to.is_none_or(|z| zt.kind() == Some(z));
-                let check = if *zf == Zone::Battlefield { *old } else { *new };
+                // CR 603.10a: leaves-the-battlefield and leaves-a-graveyard triggers look
+                // back in time at the object as it was before the event.
+                let check = if matches!(zf, Zone::Battlefield | Zone::Graveyard(_)) {
+                    *old
+                } else {
+                    *new
+                };
                 if fm && tm && self.matches(check, filter, &ctx) {
                     one(EventInfo {
                         object: Some(*new),
@@ -832,6 +961,74 @@ impl Game {
             (TriggerCond::DayNightChanges, Event::DayNightChanged { .. }) => {
                 one(EventInfo::default())
             }
+            (TriggerCond::AnyOf(conds), ev) => {
+                // CR 603.2c: one event triggers the ability only once.
+                for c in conds {
+                    let v = self.trigger_matches(c, src, ctl, ev);
+                    if !v.is_empty() {
+                        return v;
+                    }
+                }
+                none()
+            }
+            (TriggerCond::Where { trigger, cond }, ev) => self
+                .trigger_matches(trigger, src, ctl, ev)
+                .into_iter()
+                .filter(|info| {
+                    let mut c = Ctx::new(Some(src), ctl);
+                    c.event = Some(info.clone());
+                    self.eval_cond(cond, &c)
+                })
+                .collect(),
+            (TriggerCond::FirstTimeEachTurn(inner), ev) => {
+                let v = self.trigger_matches(inner, src, ctl, ev);
+                if v.is_empty() {
+                    return v;
+                }
+                // The current event is the last one recorded in `turn_events`; any earlier
+                // matching event this turn means this isn't the first time.
+                let n = self.turn_events.len().saturating_sub(1);
+                let earlier = self.turn_events[..n]
+                    .iter()
+                    .any(|e| !self.trigger_matches(inner, src, ctl, e).is_empty());
+                if earlier {
+                    none()
+                } else {
+                    v.into_iter().take(1).collect()
+                }
+            }
+            // Detected per batch of simultaneous events (see `check_batch_triggers`).
+            (TriggerCond::Batched { .. }, _) => none(),
+            (
+                TriggerCond::BlocksCreature { blocker, attacker },
+                Event::BlockersDeclared { blocks },
+            ) => blocks
+                .iter()
+                .filter(|(b, a)| {
+                    self.matches(*b, blocker, &ctx) && self.matches(*a, attacker, &ctx)
+                })
+                .map(|(b, a)| EventInfo {
+                    object: Some(*b),
+                    other: Some(*a),
+                    player: Some(self.obj(*a).controller),
+                    ..Default::default()
+                })
+                .collect(),
+            (
+                TriggerCond::BlockedByCreature { attacker, blocker },
+                Event::BlockersDeclared { blocks },
+            ) => blocks
+                .iter()
+                .filter(|(b, a)| {
+                    self.matches(*a, attacker, &ctx) && self.matches(*b, blocker, &ctx)
+                })
+                .map(|(b, a)| EventInfo {
+                    object: Some(*a),
+                    other: Some(*b),
+                    player: Some(self.obj(*b).controller),
+                    ..Default::default()
+                })
+                .collect(),
             (TriggerCond::Custom(name), ev) => {
                 crate::custom::custom_trigger(self, name, src, ctl, ev)
             }

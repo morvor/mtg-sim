@@ -821,6 +821,11 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// A spell or ability on the stack with at least one target that is an object matching
+    /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
+    Targets(Box<Filter>),
+    /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
+    CastFrom(ZoneKind),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -1653,8 +1658,60 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
+    /// An ability with several trigger conditions ("When ~ enters or dies", "At the
+    /// beginning of your upkeep and whenever you cast a green spell"). It triggers once for
+    /// each event that matches any of them (CR 603.2c): for a single event, the first
+    /// matching condition is used.
+    AnyOf(Vec<TriggerCond>),
+    /// A trigger event qualified by a condition that is part of the trigger event itself
+    /// ("attacks alone", "while you control …", "your second card each turn"). The
+    /// condition is evaluated with the event information when the event occurs; unlike an
+    /// intervening "if" clause (CR 603.4) it isn't checked again on resolution.
+    Where {
+        trigger: Box<TriggerCond>,
+        cond: Condition,
+    },
+    /// "… for the first time each turn": triggers only if no earlier event this turn
+    /// matched the inner trigger condition.
+    FirstTimeEachTurn(Box<TriggerCond>),
+    /// Triggers once for each batch of simultaneous events matching the inner condition
+    /// (CR 603.2c), grouped by `per`: "whenever one or more creatures die" (once per
+    /// batch), "one or more creatures you control deal combat damage to a player" (once
+    /// per damaged player), "whenever ~ is dealt damage" (once however many sources dealt
+    /// damage at the same time). The event info carries all matching objects (`objects`)
+    /// and the total amount; other fields come from the first matching event.
+    Batched {
+        trigger: Box<TriggerCond>,
+        per: BatchPer,
+    },
+    /// "Whenever [blocker] blocks a creature [attacker]": once for each attacking creature
+    /// it blocks (CR 509.3b). Event object = blocker, other = the blocked attacker.
+    BlocksCreature {
+        blocker: Filter,
+        attacker: Filter,
+    },
+    /// "Whenever [attacker] becomes blocked by a creature [blocker]": once for each creature
+    /// blocking it (CR 509.3d). Event object = attacker, other = the blocker.
+    BlockedByCreature {
+        attacker: Filter,
+        blocker: Filter,
+    },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
+}
+
+/// How a [`TriggerCond::Batched`] trigger groups the events of one batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BatchPer {
+    /// Once per batch.
+    Batch,
+    /// Once per player in the events (`EventInfo::player`).
+    Player,
+    /// Once per object the events are about (`EventInfo::object`), e.g. the creature dealt
+    /// damage.
+    Object,
+    /// Once per other object (`EventInfo::other`), e.g. the source dealing damage.
+    Other,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

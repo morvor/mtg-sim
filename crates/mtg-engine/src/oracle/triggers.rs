@@ -13,6 +13,20 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     let lower = cond_s.to_lowercase();
     let (trigger, it, it_player) = parse_trigger_condition(&lower)?;
     let mut eff = eff_s.trim();
+    // "This ability triggers only once each turn." is a rule about the ability, not part
+    // of its effect.
+    let mut once_per_turn = false;
+    for suffix in [
+        "this ability triggers only once each turn.",
+        "this ability triggers only once each turn",
+    ] {
+        let el = eff.to_lowercase();
+        if el.ends_with(suffix) {
+            eff = eff[..eff.len() - suffix.len()].trim_end();
+            once_per_turn = true;
+            break;
+        }
+    }
     // Intervening "if" clause (CR 603.4).
     let mut intervening = None;
     let el = eff.to_lowercase();
@@ -24,21 +38,79 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
             }
         }
     }
+    // A trigger condition with no single referent for "it"/"that player" (e.g. several
+    // conditions joined by "and whenever") can't be used with a body that refers to one.
+    if matches!(it, Sel::None) && mentions_object_pronoun(eff) {
+        return None;
+    }
+    if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
+        return None;
+    }
     let body = parse_trigger_body(eff, ctx, it, it_player)?;
     let mut tr = TriggeredAbility::new(trigger, body);
     tr.intervening_if = intervening;
-    let lower_full = t.to_lowercase();
-    if lower_full.ends_with("this ability triggers only once each turn.") {
-        tr.once_per_turn = true;
-    }
-    if let TriggerCond::CastSpell {
-        filter: Filter::Source,
-        ..
-    } = &tr.trigger
-    {
-        tr.zone = FunctionZone::Stack;
-    }
+    tr.once_per_turn = once_per_turn;
+    tr.zone = trigger_zone(&tr.trigger, &eff.to_lowercase());
     Some(AbilityDef::new(AbilityKind::Triggered(tr), text))
+}
+
+/// The zone a triggered ability functions from (CR 113.6): the battlefield, unless the
+/// trigger can't trigger from there — "when you cast ~" (the stack) and "when ~ is put
+/// into a graveyard from anywhere" (the graveyard; from the battlefield it triggers by
+/// looking back in time), CR 113.6k — or its effect moves ~ out of the graveyard ("return
+/// ~ from your graveyard to your hand") and the trigger condition doesn't put it there
+/// (CR 113.6m).
+fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
+    match trigger {
+        TriggerCond::CastSpell {
+            filter: Filter::Source,
+            ..
+        } => return FunctionZone::Stack,
+        TriggerCond::ZoneChange {
+            filter: Filter::Source,
+            to: Some(ZoneKind::Graveyard),
+            ..
+        } => return FunctionZone::Graveyard,
+        TriggerCond::Dies(f)
+        | TriggerCond::LeavesBattlefield(f)
+        | TriggerCond::ZoneChange { filter: f, .. }
+            if mentions_source(f) =>
+        {
+            return FunctionZone::Battlefield
+        }
+        _ => {}
+    }
+    if eff.contains("~ from your graveyard") {
+        return FunctionZone::Graveyard;
+    }
+    FunctionZone::Battlefield
+}
+
+fn mentions_source(f: &Filter) -> bool {
+    match f {
+        Filter::Source => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_source),
+        _ => false,
+    }
+}
+
+/// Whether effect text uses a pronoun that refers back to the trigger's object.
+fn mentions_object_pronoun(eff: &str) -> bool {
+    let l = format!(" {} ", eff.to_lowercase().replace(['.', ','], " "));
+    [
+        " it ",
+        " its ",
+        " it's ",
+        " them ",
+        " that creature",
+        " that card",
+        " that permanent",
+        " that spell",
+        " that token",
+        " those ",
+    ]
+    .iter()
+    .any(|p| l.contains(p))
 }
 
 fn split_trigger(t: &str) -> Option<(&str, &str)> {
@@ -54,8 +126,23 @@ fn split_trigger(t: &str) -> Option<(&str, &str)> {
 }
 
 /// Returns (trigger, what "it" refers to, what "that player" refers to).
+///
+/// The built-in forms below are tried first, then the patterns registered in
+/// `oracle/patterns/` (which receive the text after "when"/"whenever", or the whole text
+/// for "at ..." conditions).
 pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = l.trim();
+    if let Some(x) = core_trigger_condition(l) {
+        return Some(x);
+    }
+    let r = l
+        .strip_prefix("whenever ")
+        .or_else(|| l.strip_prefix("when "))
+        .unwrap_or(l);
+    crate::oracle_ext::parse_trigger_ext(r)
+}
+
+fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let obj = || Sel::TriggerObject;
     // "At the beginning of ..."
     if let Some(r) = l.strip_prefix("at the beginning of ") {
@@ -200,27 +287,8 @@ pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
             PlayerRef::TriggerPlayer,
         ));
     }
-    if r == "~ deals combat damage" || r == "~ deals damage" {
-        return Some((
-            TriggerCond::DealsDamage {
-                source: Filter::Source,
-                to: DamageRecipient::Any,
-                combat_only: r.contains("combat"),
-            },
-            Sel::This,
-            PlayerRef::TriggerPlayer,
-        ));
-    }
-    if r == "~ is dealt damage" {
-        return Some((
-            TriggerCond::IsDealtDamage {
-                filter: Filter::Source,
-                combat_only: false,
-            },
-            Sel::This,
-            PlayerRef::You,
-        ));
-    }
+    // "~ deals damage" and "~ is dealt damage" trigger once per batch of simultaneous
+    // damage: see patterns/triggers.rs.
     // Cast triggers.
     if let Some((who, rest)) = spell_caster(r) {
         let rest = rest.trim();
@@ -331,10 +399,13 @@ pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
         " enters",
     ] {
         if let Some(x) = r.strip_suffix(suffix) {
+            // "one or more ..." triggers once per batch (CR 603.2c): see patterns/triggers.rs.
+            if x.starts_with("one or more ") {
+                return None;
+            }
             let x = x
                 .strip_prefix("a ")
                 .or_else(|| x.strip_prefix("an "))
-                .or_else(|| x.strip_prefix("one or more "))
                 .unwrap_or(x);
             let (mut f, _, tail) = parse_object_phrase(x)?;
             if !end(tail).is_empty() {
@@ -352,18 +423,22 @@ pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
     }
     // "[filter] dies"
     if let Some(x) = r.strip_suffix(" dies").or_else(|| r.strip_suffix(" die")) {
+        if x.starts_with("one or more ") {
+            return None;
+        }
         let x = x
             .strip_prefix("a ")
             .or_else(|| x.strip_prefix("an "))
-            .or_else(|| x.strip_prefix("one or more "))
             .unwrap_or(x);
         let (f, _, tail) = parse_object_phrase(x)?;
         if !end(tail).is_empty() {
             return None;
         }
+        // "it" is the creature that died: its last known information for values ("its
+        // power"), and the card it became for actions ("return it", CR 400.7e).
         return Some((
             TriggerCond::Dies(f),
-            obj(),
+            Sel::TriggerLki,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerLki)),
         ));
     }
@@ -411,7 +486,7 @@ pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
         ));
     }
     // "a land enters under your control" handled above; landfall ability word stripped.
-    crate::oracle_ext::parse_trigger_ext(r)
+    None
 }
 
 /// "you cast", "an opponent casts", "a player casts".

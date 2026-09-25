@@ -24,6 +24,9 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c).
+        self.end_event_batch();
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
@@ -1066,7 +1069,43 @@ impl Game {
                 }
                 out
             }
+            Sel::This | Sel::TriggerLki => {
+                let v = self.eval_sel(sel, ctx);
+                v.into_iter()
+                    .map(|e| self.follow_zone_change_trigger_object(e, ctx))
+                    .collect()
+            }
             other => self.eval_sel(other, ctx),
+        }
+    }
+
+    /// CR 400.7e: an ability that triggers when an object moves from one zone to another
+    /// can find the new object it became in the zone it moved to, if that zone is public
+    /// ("When ~ dies, return it to its owner's hand"). Information about the object (its
+    /// power, etc.) still uses last known information, via `eval_sel`.
+    fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
+        let Entity::Object(id) = e else {
+            return e;
+        };
+        if self.is_live(id) {
+            return e;
+        }
+        let Some(ev) = ctx.event.as_ref() else {
+            return e;
+        };
+        match (ev.lki, ev.object) {
+            (Some(old), Some(new)) if old == id && new != id => {
+                let public = !matches!(
+                    self.obj(new).zone,
+                    Zone::Hand(_) | Zone::Library(_) | Zone::Outside(_) | Zone::Nowhere
+                );
+                if public {
+                    Entity::Object(new)
+                } else {
+                    e
+                }
+            }
+            _ => e,
         }
     }
 
