@@ -86,7 +86,7 @@ Key invariants:
   `CardDef::custom(...)`.
 - Rules that have genuinely no engine-testable behavior (purely informational text,
   physical-card presentation, tournament/draft procedures) may be listed in
-  `docs/cr-exemptions.tsv` as `rule<TAB>reason`. Be conservative: deck-construction rules,
+  `docs/cr-exemptions/<area>.tsv` as `rule<TAB>reason` (one file per area, to avoid merge conflicts). Be conservative: deck-construction rules,
   for example, are testable via deck validation code.
 
 ## Commands

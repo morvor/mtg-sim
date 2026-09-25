@@ -59,10 +59,23 @@ pub fn cr_citations() -> BTreeMap<String, BTreeSet<String>> {
     out
 }
 
+/// Exemptions from `docs/cr-exemptions.tsv` and every `docs/cr-exemptions/*.tsv`.
 pub fn exemptions() -> BTreeMap<String, String> {
-    let path = repo_root().join("docs/cr-exemptions.tsv");
+    let mut paths = vec![repo_root().join("docs/cr-exemptions.tsv")];
+    if let Ok(rd) = std::fs::read_dir(repo_root().join("docs/cr-exemptions")) {
+        let mut v: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "tsv"))
+            .collect();
+        v.sort();
+        paths.extend(v);
+    }
     let mut out = BTreeMap::new();
-    if let Ok(text) = std::fs::read_to_string(path) {
+    for path in paths {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
         for line in text.lines() {
             let l = line.trim();
             if l.is_empty() || l.starts_with('#') {
@@ -169,6 +182,7 @@ fn cr_coverage(args: &[String]) {
     }
     let mut write = None;
     let mut check = false;
+    let mut range: Option<(String, String)> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -177,9 +191,53 @@ fn cr_coverage(args: &[String]) {
                 i += 1;
             }
             "--check" => check = true,
+            "--range" => {
+                range = Some((args[i + 1].clone(), args[i + 2].clone()));
+                i += 2;
+            }
             _ => {}
         }
         i += 1;
+    }
+    if let Some((lo, hi)) = &range {
+        // Print the status of every rule whose id is within [lo, hi] (inclusive, by document
+        // order prefix: "702.19" includes 702.19a..702.19z).
+        let key = |id: &str| mtg_data::rules::rule_sort_key(id);
+        let (klo, khi) = (key(lo), key(hi));
+        let in_range = |id: &str| {
+            let k = key(id);
+            let base = id.trim_end_matches(|c: char| c.is_ascii_lowercase());
+            let kb = key(base);
+            (k >= klo || kb >= klo) && (k <= khi || kb <= khi)
+        };
+        let mut n = 0;
+        let mut unc = 0;
+        for r in &numbered {
+            if !in_range(&r.id) {
+                continue;
+            }
+            n += 1;
+            let st = match status[&r.id] {
+                Status::Cited => "cited",
+                Status::ViaSubrules => "via-subrules",
+                Status::Exempt => "exempt",
+                Status::Uncovered => {
+                    unc += 1;
+                    "UNCOVERED"
+                }
+            };
+            let first: String = r
+                .text
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(110)
+                .collect();
+            println!("{st:>12}  {:<9} {first}", r.id);
+        }
+        println!("range {lo}..{hi}: {n} rules, {unc} uncovered");
+        return;
     }
     println!(
         "CR coverage: {} cited, {} via subrules, {} exempt, {} uncovered of {} ({:.1}% covered)",
