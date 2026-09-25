@@ -549,6 +549,72 @@ inventory::submit! {
     AbilityPattern { name: "k702: the same is true for", priority: 50, parse: same_is_true_for }
 }
 
+/// The spells of "you may cast [spells] as though they had flash": "spells", "creature
+/// spells", "creature and enchantment spells", "Sliver spells".
+fn spells_phrase(s: &str) -> Option<Filter> {
+    if s == "spells" {
+        return Some(Filter::Any);
+    }
+    let s = s.strip_suffix(" spells")?;
+    let mut fs = Vec::new();
+    for part in s.split(" and ").flat_map(|p| p.split(" or ")) {
+        let (f, _, tail) = parse_object_phrase(part.trim())?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        fs.push(f);
+    }
+    Some(if fs.len() == 1 {
+        fs.pop()?
+    } else {
+        Filter::Or(fs)
+    })
+}
+
+/// "You may cast spells as though they had flash." / "Any player may cast creature and
+/// enchantment spells as though they had flash." / "You may cast ~ as though it had flash
+/// if you pay {2} more to cast it." (CR 601.3b, 601.3c; not the flash keyword itself, but
+/// the same timing permission).
+fn as_though_flash(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let stat = |s: StaticAbility| vec![AbilityDef::new(AbilityKind::Static(s), text)];
+    let (who, r) = if let Some(r) = l.strip_prefix("you may cast ") {
+        (PlayerRel::You, r)
+    } else if let Some(r) = l.strip_prefix("any player may cast ") {
+        (PlayerRel::Any, r)
+    } else {
+        return None;
+    };
+    let spells = r.strip_suffix(" as though they had flash")?;
+    let what = spells_phrase(spells)?;
+    Some(stat(StaticAbility::new(StaticEffect::FlashPermission {
+        who,
+        what,
+    })))
+}
+
+inventory::submit! {
+    StaticPattern { name: "k702: cast as though it had flash", priority: 50, parse: as_though_flash }
+}
+
+/// "You may cast this spell as though it had flash if you pay {2} more to cast it."
+/// (CR 601.3c) — on permanents and on instants/sorceries alike.
+fn flash_for_additional_cost(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    let r = end(&lower).strip_prefix("you may cast ~ as though it had flash if you pay ")?;
+    let cost = crate::oracle::keywords::parse_keyword_cost(r.strip_suffix(" more to cast it")?)?;
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ThisSpell,
+        who: PlayerRel::You,
+        change: CostChange::FlashForAdditionalCost(cost),
+    }));
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), block)])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: flash for an additional cost", priority: 50, parse: flash_for_additional_cost }
+}
+
 /// "You may cast creature spells from the top of your library." / "You may play lands and
 /// cast spells from the top of your library." — permissions to play cards from another
 /// zone; the cards' own timing rules (including flash, CR 702.8a) still apply.
