@@ -1644,6 +1644,8 @@ pub enum Restriction {
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
+    /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
+    SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
     /// "can't search libraries".

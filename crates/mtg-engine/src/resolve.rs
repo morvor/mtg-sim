@@ -1474,8 +1474,15 @@ impl Game {
         let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
             let mut v = self.objects_matching(f, ctx);
-            // Targets outside the battlefield ("target spell can't be countered").
-            for o in ctx.targets.iter().flatten().filter_map(|e| e.object()) {
+            // Targets outside the battlefield ("target spell can't be countered"), and the
+            // resolving spell itself ("the damage [this spell deals] can't be prevented").
+            let extra = ctx
+                .targets
+                .iter()
+                .flatten()
+                .filter_map(|e| e.object())
+                .chain(ctx.source);
+            for o in extra {
                 if !v.contains(&o) && self.matches(o, f, ctx) {
                     v.push(o);
                 }
@@ -1792,7 +1799,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::DoesntUntap(f)
         | Restriction::CantBeCountered(f)
         | Restriction::CantBeSacrificed(f)
-        | Restriction::CantBeRegenerated(f) => Some(f),
+        | Restriction::CantBeRegenerated(f)
+        | Restriction::SourceDamageCantBePrevented(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         _ => None,
     }

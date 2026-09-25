@@ -202,3 +202,65 @@ fn incendiary_oracle_exiles_creatures_it_dealt_damage_this_turn() {
     bolt(&mut t, other);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+// ---------------------------------------------------------------------------
+// Damage that can't be prevented (CR 615.12)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cant_be_prevented_cards_compile() {
+    assert_compiles(&[
+        "Leyline of Punishment",
+        "Pinpoint Avalanche",
+        "Combust",
+        "Excruciator",
+    ]);
+}
+
+#[test]
+fn combusts_damage_ignores_prevention_shields() {
+    cr!("615.12");
+    let mut t = TestGame::new(2);
+    let healer = t.battlefield(P1, "Master Healer");
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.activate(P1, healer, 0, &[Entity::Object(angel)]).unwrap();
+    t.resolve();
+    t.lands(P0, "Mountain", 2);
+    let c = t.hand(P0, "Combust");
+    t.cast(P0, c).target(angel).go();
+    t.resolve();
+    assert!(!t.on_battlefield(angel));
+}
+
+#[test]
+fn only_the_spells_own_damage_is_unpreventable() {
+    cr!("615.12", "615.1a");
+    let mut t = TestGame::new(2);
+    let healer = t.battlefield(P1, "Master Healer");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 3);
+    let c = t.hand(P0, "Combust");
+    t.cast(P0, c).target(angel).go();
+    t.resolve();
+    // After Combust, other damage is prevented as usual.
+    t.activate(P1, healer, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    let b = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b).target(bears).go();
+    t.resolve();
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
+fn leyline_of_punishment_stops_all_prevention() {
+    cr!("615.12");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Punishment");
+    let healer = t.battlefield(P1, "Master Healer");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P1, healer, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    bolt(&mut t, bears);
+    assert!(!t.on_battlefield(bears));
+}

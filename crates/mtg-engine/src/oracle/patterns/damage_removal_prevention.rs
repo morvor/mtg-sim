@@ -16,7 +16,7 @@
 //! - "Prevent all damage that would be dealt by creatures this turn.", "Prevent all
 //!   combat damage that would be dealt to players this turn."
 
-use super::{EffectPattern, StaticPattern};
+use super::{EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::{object_ref, Builder};
 use crate::oracle::phrases::*;
@@ -259,3 +259,63 @@ fn locked(what: Sel) -> Option<Filter> {
 }
 
 inventory::submit! { EffectPattern { name: "damage_removal: prevent damage dealt by", priority: 55, parse: p_prevent_by } }
+
+/// Statics: "Damage can't be prevented.", "Damage that would be dealt by ~ can't be
+/// prevented." (CR 615.12)
+fn s_cant_prevent(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = match l {
+        "damage can't be prevented" => Restriction::DamageCantBePrevented,
+        "damage that would be dealt by ~ can't be prevented" => {
+            Restriction::SourceDamageCantBePrevented(Filter::Source)
+        }
+        _ => return None,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(r))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "damage_removal: static damage can't be prevented", priority: 60, parse: s_cant_prevent } }
+
+/// "~ deals 4 damage to target creature. The damage can't be prevented." in an instant or
+/// sorcery: the spell's damage can't be prevented. The restriction is created first and
+/// names the spell, which deals no other damage.
+fn f_the_damage_cant_be_prevented(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !matches!(
+        l,
+        "the damage can't be prevented" | "this damage can't be prevented"
+    ) || !b.ctx.is_spell()
+    {
+        return false;
+    }
+    let from_this = |e: &Effect| {
+        matches!(
+            e,
+            Effect::DealDamage {
+                source: Sel::This,
+                ..
+            }
+        )
+    };
+    let ok = match &*prev {
+        Effect::Seq(v) => !v.is_empty() && v.iter().all(from_this),
+        e => from_this(e),
+    };
+    if !ok {
+        return false;
+    }
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![
+        Effect::AddRestriction {
+            restriction: Restriction::SourceDamageCantBePrevented(Filter::In(Box::new(
+                Sel::This,
+            ))),
+            duration: Duration::EndOfTurn,
+        },
+        old,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "damage_removal: the damage can't be prevented", priority: 50, apply: f_the_damage_cant_be_prevented } }

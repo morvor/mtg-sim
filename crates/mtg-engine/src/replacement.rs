@@ -694,9 +694,13 @@ impl Game {
         // CR 615.12: prevention effects applied to damage that can't be prevented prevent
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
-        let unpreventable = matches!(ev, ReplEvent::Damage { .. })
-            && crate::prevention::is_prevention(&cand.def.action)
-            && crate::prevention::damage_cant_be_prevented(self);
+        let unpreventable = match &ev {
+            ReplEvent::Damage { source, .. } => {
+                crate::prevention::is_prevention(&cand.def.action)
+                    && crate::prevention::damage_from_cant_be_prevented(self, *source)
+            }
+            _ => false,
+        };
         // Use up one application of limited-use effects.
         if let Some(id) = cand.instance {
             if !unpreventable {
