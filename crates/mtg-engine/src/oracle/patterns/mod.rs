@@ -69,6 +69,25 @@ pub struct AbilityPattern {
 }
 inventory::collect!(AbilityPattern);
 
+/// Regroups the text's ability blocks before they're parsed, for abilities printed over
+/// several lines (e.g. a leveler's level symbol, P/T box, and abilities in one striation).
+/// Grouped lines are joined with newlines into one block.
+pub struct BlockGroupPattern {
+    pub name: &'static str,
+    pub priority: i32,
+    pub group: fn(Vec<String>, &CompileContext) -> Vec<String>,
+}
+inventory::collect!(BlockGroupPattern);
+
+pub fn block_group_patterns() -> &'static [&'static BlockGroupPattern] {
+    static P: OnceLock<Vec<&'static BlockGroupPattern>> = OnceLock::new();
+    P.get_or_init(|| {
+        sorted(inventory::iter::<BlockGroupPattern>.into_iter(), |p| {
+            (p.priority, p.name)
+        })
+    })
+}
+
 fn sorted<T: 'static>(
     it: impl Iterator<Item = &'static T>,
     key: impl Fn(&T) -> (i32, &'static str),

@@ -393,16 +393,9 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
 pub fn keyword_mods(s: &str) -> Option<Vec<Modification>> {
     // "flying", "flying and trample", "first strike, vigilance, and lifelink",
     // "hexproof and indestructible", "protection from red"
-    let s = s.trim().trim_end_matches('.');
-    let parts: Vec<&str> = s
-        .split(", and ")
-        .flat_map(|p| p.split(" and "))
-        .flat_map(|p| p.split(", "))
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect();
+    let parts = super::keywords::split_keyword_phrases(s);
     let mut out = Vec::new();
-    for p in parts {
+    for p in &parts {
         let lines = super::keywords::parse_keyword_line(p, &dummy_ctx())?;
         for a in lines {
             if let AbilityKind::Keyword(k) = &a.kind {

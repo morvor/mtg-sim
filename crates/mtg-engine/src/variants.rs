@@ -59,3 +59,41 @@ pub fn variant_sbas(g: &mut Game) -> bool {
     let _ = g;
     false
 }
+
+/// Nontraditional Magic cards (CR 108.2a): planes, phenomena, vanguards, schemes,
+/// dungeons, and Attractions. They're never part of a player's deck.
+pub fn is_nontraditional(card: &crate::card::CardDef) -> bool {
+    card.faces.iter().any(|f| {
+        let c = &f.chars;
+        [
+            CardType::Plane,
+            CardType::Phenomenon,
+            CardType::Vanguard,
+            CardType::Scheme,
+            CardType::Dungeon,
+        ]
+        .iter()
+        .any(|t| c.card_types.contains(*t))
+            || c.has_subtype("Attraction")
+    })
+}
+
+/// Where a nontraditional card listed with a player's deck starts the game (CR 108.2a,
+/// 108.5): never in the library. Vanguards start face up in the command zone (CR 902.3);
+/// planes, phenomena, schemes and Attractions start face down there as supplementary
+/// decks (CR 901.4, 904.4, 717.2); dungeons begin outside the game (CR 309.2).
+/// Returns (zone, face down).
+pub fn nontraditional_start(
+    card: &crate::card::CardDef,
+    owner: PlayerId,
+) -> (crate::object::Zone, bool) {
+    use crate::object::Zone;
+    let c = &card.front().chars;
+    if c.card_types.contains(CardType::Dungeon) {
+        (Zone::Outside(owner), false)
+    } else if c.card_types.contains(CardType::Vanguard) {
+        (Zone::Command, false)
+    } else {
+        (Zone::Command, true)
+    }
+}

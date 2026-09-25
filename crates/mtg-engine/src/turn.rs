@@ -173,6 +173,8 @@ impl Game {
         for p in self.player_ids() {
             self.shuffle_library(p);
         }
+        // CR 103.3a: supplementary planar decks are shuffled too.
+        crate::planechase::shuffle_planar_decks(self);
         // CR 103.1: randomly determine the starting player (the winner chooses; we let the
         // random winner go first).
         let starting = match self.config.starting_player {
@@ -197,6 +199,8 @@ impl Game {
             crate::mulligan::run_mulligans(self);
         }
         crate::opening_hand::opening_hand_actions(self);
+        // CR 901.5: the starting plane.
+        crate::planechase::set_starting_plane(self);
         self.events.clear();
         self.begin_turn(starting, false);
     }

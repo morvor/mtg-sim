@@ -166,6 +166,13 @@ impl Game {
                         && v.len() as u32 <= max
                         && distinct
                         && v.iter().all(|i| available.contains(i))
+                        && match modal.chooser {
+                            // CR 700.2i: at most that many pawprints' worth of modes.
+                            ModeChooser::Pawprints(budget) => {
+                                v.iter().map(|i| modal.modes[*i].pawprints()).sum::<u32>() <= budget
+                            }
+                            _ => true,
+                        }
                 };
                 match ans {
                     Answer::Indices(v) if valid(&v) => v,
@@ -301,6 +308,16 @@ impl Game {
                         out.push(Entity::Object(o));
                     }
                 }
+                // "target spell or permanent" (e.g. Moonlace).
+                if let TargetKind::Spell(f) = &spec.what {
+                    if filter_allows_permanent(f) {
+                        for o in self.permanent_ids() {
+                            if self.is_legal_target(spec, Entity::Object(o), ctx, stack_obj) {
+                                out.push(Entity::Object(o));
+                            }
+                        }
+                    }
+                }
             }
             TargetKind::Player(_) => {
                 for p in self.players_in_game() {
@@ -374,7 +391,11 @@ impl Game {
                     TargetKind::ObjectOrPlayer(f, _) => {
                         ob.zone == Zone::Battlefield && self.matches(o, f, ctx)
                     }
-                    TargetKind::Spell(f) => ob.is_spell() && self.matches(o, f, ctx),
+                    TargetKind::Spell(f) => {
+                        (ob.is_spell()
+                            || (ob.zone == Zone::Battlefield && filter_allows_permanent(f)))
+                            && self.matches(o, f, ctx)
+                    }
                     TargetKind::Ability(f) => ob.is_stack_ability() && self.matches(o, f, ctx),
                     TargetKind::SpellOrAbility(f) => {
                         ob.zone == Zone::Stack && self.matches(o, f, ctx)
@@ -400,8 +421,11 @@ impl Game {
             // CR 702.11b hexproof (and "hexproof from", 702.11d). An ability's qualities
             // are those of its source (CR 113.7).
             let quality_source = source.map(|s| self.ability_source_of(s));
+            // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
+            let ignore_hexproof =
+                crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
             for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
-                if self.are_opponents(by, ob.controller) {
+                if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {
                         None => return true,
                         Some(f) => {
@@ -453,7 +477,12 @@ impl Game {
         for m in &pl.mods {
             match m {
                 PlayerModification::Shroud => return true,
-                PlayerModification::Hexproof if self.are_opponents(by, p) => return true,
+                PlayerModification::Hexproof
+                    if self.are_opponents(by, p)
+                        && !crate::kw::hexproof::hexproof_ignored(self, Entity::Player(p), by) =>
+                {
+                    return true
+                }
                 PlayerModification::ProtectionFrom(f) => {
                     if let Some(s) = source {
                         if self.matches(self.ability_source_of(s), f, &Ctx::new(None, p)) {
@@ -987,7 +1016,10 @@ impl Game {
                 cast: Some(si.cast.clone()),
                 ..Default::default()
             };
-            etb.controller = Some(controller);
+            // The permanent's controller by default is the player who put the spell on the
+            // stack; an effect that gave another player control of the spell keeps
+            // applying to the permanent (CR 110.2b, 112.4).
+            etb.controller = Some(o.base_controller);
             if o.face_down {
                 etb.face_down = Some(match &si.cast.method {
                     CastMethod::FaceDown(k) => *k,
@@ -1147,6 +1179,16 @@ impl Game {
             }
             _ => false,
         })
+    }
+}
+
+/// Whether a spell-target filter explicitly allows permanents too ("target spell or
+/// permanent" compiles to `Or([Spell, Permanent])`).
+fn filter_allows_permanent(f: &Filter) -> bool {
+    match f {
+        Filter::Permanent => true,
+        Filter::Or(v) | Filter::And(v) => v.iter().any(filter_allows_permanent),
+        _ => false,
     }
 }
 
