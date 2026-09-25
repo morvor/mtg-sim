@@ -13,24 +13,48 @@ fn aura_protection_applies(g: &Game, t: ObjectId, aura: ObjectId) -> bool {
     crate::kw::protection::prevents_attachment(g, t, aura)
 }
 
-/// The "enchant" restriction of an Aura as a filter over objects (None = can enchant a
-/// player, handled via `enchant_player`).
-pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
-    chars
-        .keywords()
-        .find(|k| k.kind == KeywordKind::Enchant)
-        .and_then(|k| k.filter.clone())
-}
-
-/// Whether the Aura's enchant ability allows enchanting players ("Enchant player",
-/// "Enchant opponent").
-pub fn enchant_player(chars: &Characteristics) -> Option<PlayerFilter> {
-    let kw = chars.keywords().find(|k| k.kind == KeywordKind::Enchant)?;
-    match kw.text.as_deref().map(|t| t.to_lowercase()) {
+/// What one enchant ability allows enchanting players, if it's "Enchant player" or
+/// "Enchant opponent" (CR 702.5d).
+fn enchant_kw_player(k: &crate::keywords::Keyword) -> Option<PlayerFilter> {
+    match k.text.as_deref().map(|t| t.to_lowercase()) {
         Some(t) if t.ends_with("player") => Some(PlayerFilter::Any),
         Some(t) if t.ends_with("opponent") => Some(PlayerFilter::Opponent),
         _ => None,
     }
+}
+
+/// The "enchant" restriction of an Aura as a filter over objects (None = it can't enchant
+/// objects: it has no enchant ability, or one of them enchants players, handled via
+/// `enchant_player`). With several enchant abilities, the Aura can enchant only objects
+/// that match all of them (CR 702.5c).
+pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
+    let mut fs = Vec::new();
+    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+        if enchant_kw_player(k).is_some() {
+            return None; // CR 702.5d: can't enchant permanents.
+        }
+        fs.push(k.filter.clone()?);
+    }
+    if fs.is_empty() {
+        return None;
+    }
+    Some(Filter::and(fs))
+}
+
+/// Whether the Aura's enchant abilities allow enchanting players ("Enchant player",
+/// "Enchant opponent"). Every instance must allow it (CR 702.5c, 702.5d).
+pub fn enchant_player(chars: &Characteristics) -> Option<PlayerFilter> {
+    let mut out: Option<PlayerFilter> = None;
+    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+        let pf = enchant_kw_player(k)?;
+        out = Some(match (out, pf) {
+            (Some(PlayerFilter::Opponent), _) | (_, PlayerFilter::Opponent) => {
+                PlayerFilter::Opponent
+            }
+            _ => PlayerFilter::Any,
+        });
+    }
+    out
 }
 
 /// The target an Aura spell requires (CR 303.4a, 702.5a).
@@ -48,14 +72,24 @@ pub fn aura_target_spec(chars: &Characteristics) -> Option<TargetSpec> {
 
 /// Whether `obj` could legally be attached to `to` right now (CR 301.5c, 303.4d, 701.3).
 pub fn can_attach(g: &Game, obj: ObjectId, to: Entity) -> bool {
+    can_attach_as(g, obj, to, false)
+}
+
+/// [`can_attach`], optionally treating `to` as though it were a creature ("equip
+/// planeswalker", CR 702.6e).
+pub fn can_attach_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> bool {
     if Entity::Object(obj) == to {
         return false; // an object can't be attached to itself
     }
-    legal_attachment(g, obj, to)
+    legal_attachment_as(g, obj, to, as_creature)
 }
 
 /// Whether `obj` attached to `to` is legal (used by SBAs 704.5m/n).
 pub fn legal_attachment(g: &Game, obj: ObjectId, to: Entity) -> bool {
+    legal_attachment_as(g, obj, to, false)
+}
+
+fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> bool {
     let o = g.obj(obj);
     let chars = &o.chars;
     if Entity::Object(obj) == to {
@@ -95,7 +129,7 @@ pub fn legal_attachment(g: &Game, obj: ObjectId, to: Entity) -> bool {
                 !aura_protection_applies(g, t, obj)
             } else if chars.has_subtype("Equipment") {
                 // CR 301.5c: Equipment can be attached only to creatures; 702.16d protection.
-                target.is_creature()
+                (target.is_creature() || as_creature)
                     && !crate::kw::protection::prevents_attachment(g, t, obj)
                     && crate::keyword_impls::equip_restriction_ok(g, obj, t)
             } else if chars.has_subtype("Fortification") {
