@@ -677,6 +677,35 @@ impl Game {
                     created.into_iter().map(Entity::Object).collect(),
                 );
             }
+            Effect::CreateTokenAttached {
+                spec,
+                count,
+                controller,
+                to,
+            } => {
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                // What they enter attached to; `None` if it's undefined (CR 303.4i).
+                let attach = self.resolve_sel(to, ctx).first().copied();
+                let players = self.eval_players(controller, ctx);
+                let mut created = Vec::new();
+                for p in players {
+                    let tc = TokenCreate {
+                        chars: crate::tokens::token_characteristics(spec),
+                        card: crate::tokens::predefined_card(spec),
+                        tapped: false,
+                        attacking: None,
+                        copy_of: None,
+                        copy_exceptions: vec![],
+                    };
+                    created.extend(self.create_tokens_attached(p, tc, n, ctx.source, attach));
+                }
+                self.link_to_creator(ctx, &created);
+                ctx.prev_value = created.len() as i64;
+                ctx.set_var(
+                    vars::CREATED,
+                    created.into_iter().map(Entity::Object).collect(),
+                );
+            }
             Effect::CreateTokenCopy {
                 of,
                 count,
@@ -1861,6 +1890,12 @@ impl Game {
         } else {
             None
         };
+        // "Put onto the battlefield attached to [x]": `None` if x is undefined
+        // (CR 301.5e, 303.4i).
+        let attach_to = match (&to.attached_to, to.zone) {
+            (Some(sel), ZoneKind::Battlefield) => Some(self.resolve_sel(sel, ctx).first().copied()),
+            _ => None,
+        };
         let moves: Vec<MoveEv> = objs
             .iter()
             .filter(|o| self.is_live(**o))
@@ -1890,6 +1925,8 @@ impl Game {
                         transformed: to.transformed,
                         attacking: attack,
                         with_mods: with_mods.clone(),
+                        attach_to: attach_to.flatten(),
+                        attach_specified: attach_to.is_some(),
                         ..Default::default()
                     },
                     source: ctx.source,

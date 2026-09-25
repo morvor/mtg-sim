@@ -209,19 +209,14 @@ fn role_token(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(tail).is_empty() {
         return None;
     }
-    Some(Effect::seq(vec![
-        Effect::CreateToken {
-            spec,
-            count: Value::c(1),
-            controller: PlayerRef::You,
-            tapped: false,
-            attacking: false,
-        },
-        Effect::Attach {
-            what: Sel::Var(vars::CREATED),
-            to,
-        },
-    ]))
+    // The Role enters attached to it (CR 303.4f–i): it isn't created if it can't
+    // legally enchant that creature.
+    Some(Effect::CreateTokenAttached {
+        spec,
+        count: Value::c(1),
+        controller: PlayerRef::You,
+        to,
+    })
 }
 
 /// "create two Food tokens named Hot Dog": the effect that creates a predefined token may

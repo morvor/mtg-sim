@@ -87,12 +87,27 @@ impl Game {
                 // covers moves a replacement effect redirected to the battlefield, and
                 // entries a replacement modified (CR 614.17d: check the permanent as it
                 // would exist, taking those replacements into account).
-                if let ReplEvent::Move(mv) = &e {
-                    if mv.to == Zone::Battlefield && self.cant_enter(mv) || self.move_forbidden(mv)
-                    {
-                        continue;
+                let e = match e {
+                    ReplEvent::Move(mut mv) => {
+                        if mv.to == Zone::Battlefield && self.cant_enter(&mv)
+                            || self.move_forbidden(&mv)
+                        {
+                            continue;
+                        }
+                        // What it enters attached to (CR 301.5e, 303.4f–i, 310.10). An Aura
+                        // with nothing it can enchant stays where it is.
+                        if mv.to == Zone::Battlefield
+                            && !crate::attach::entry_attachment(self, &mut mv)
+                        {
+                            for e in crate::attach::aura_left_on_stack(self, &mv) {
+                                finals.push((i, e));
+                            }
+                            continue;
+                        }
+                        ReplEvent::Move(mv)
                     }
-                }
+                    other => other,
+                };
                 finals.push((i, e));
             }
         }
@@ -1532,6 +1547,23 @@ impl Game {
             .collect()
     }
 
+    /// Creates `count` tokens that enter the battlefield attached to `to` (`None`: an
+    /// undefined object or player). An Aura token that can't legally be attached to it
+    /// isn't created; any other token enters unattached (CR 303.4g–i, 301.5e).
+    pub fn create_tokens_attached(
+        &mut self,
+        controller: PlayerId,
+        spec: TokenCreate,
+        count: u32,
+        source: Option<ObjectId>,
+        to: Option<Entity>,
+    ) -> Vec<ObjectId> {
+        let prev = self.token_attach.replace(to);
+        let out = self.create_tokens(controller, spec, count, source);
+        self.token_attach = prev;
+        out
+    }
+
     fn perform_create_token(
         &mut self,
         controller: PlayerId,
@@ -1544,6 +1576,8 @@ impl Game {
         let mut etb = EtbInfo {
             tapped: spec.tapped,
             controller: Some(controller),
+            attach_to: self.token_attach.flatten(),
+            attach_specified: self.token_attach.is_some(),
             ..Default::default()
         };
         if let Some(src) = spec.copy_of {

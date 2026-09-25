@@ -225,9 +225,12 @@ impl Game {
             let is_aura = o.chars.has_subtype("Aura");
             let is_equipment = o.chars.has_subtype("Equipment");
             let is_fortification = o.chars.has_subtype("Fortification");
-            if is_aura && o.chars.is(CardType::Enchantment) && !o.is_creature() {
+            if is_aura && o.chars.is(CardType::Enchantment) {
                 match o.attached_to {
                     None => to_graveyard.push(id),
+                    // CR 303.4d, 310.10: an Aura that's also a creature or a battle becomes
+                    // unattached (704.5p), then is put into its owner's graveyard (704.5m).
+                    Some(_) if o.is_creature() || o.is(CardType::Battle) => unattach.push(id),
                     Some(t) => {
                         if !crate::attach::legal_attachment(self, id, t) {
                             to_graveyard.push(id);

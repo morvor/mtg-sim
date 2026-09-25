@@ -476,6 +476,9 @@ pub struct Game {
     /// Objects entering the battlefield simultaneously right now: effects modifying how
     /// they enter can't choose them to change zones (CR 614.13a, 614.13c).
     pub entering: Vec<ObjectId>,
+    /// While tokens are being created "attached to" an object or player: what they enter
+    /// attached to (`Some(None)`: an undefined object or player), CR 303.4f–i, 301.5e.
+    pub token_attach: Option<Option<Entity>>,
     /// Continuous effects on permanent spells that keep applying to the permanents they
     /// become (CR 611.3d).
     pub carried_effects: Vec<u32>,
@@ -571,6 +574,7 @@ impl Game {
             next_spell_effects: vec![],
             step_start_actions: vec![],
             entering: vec![],
+            token_attach: None,
             carried_effects: vec![],
             stickers: vec![],
             end: Default::default(),

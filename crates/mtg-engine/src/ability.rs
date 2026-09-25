@@ -502,6 +502,10 @@ pub struct Destination {
     /// resolving spell or ability that applies as it enters (CR 611.2e).
     #[serde(default)]
     pub with_mods: Vec<Modification>,
+    /// Battlefield: "put onto the battlefield attached to [object or player]" (CR 301.5e,
+    /// 303.4f–i).
+    #[serde(default)]
+    pub attached_to: Option<Sel>,
 }
 
 impl Destination {
@@ -516,6 +520,7 @@ impl Destination {
             transformed: false,
             with_counters: vec![],
             with_mods: vec![],
+            attached_to: None,
         }
     }
     pub fn battlefield() -> Destination {
@@ -2581,6 +2586,15 @@ pub enum Effect {
         controller: PlayerRef,
         tapped: bool,
         attacking: bool,
+    },
+    /// "Create a Monster Role token attached to it": tokens that enter the battlefield
+    /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
+    /// can't legally enchant it isn't created.
+    CreateTokenAttached {
+        spec: TokenSpec,
+        count: Value,
+        controller: PlayerRef,
+        to: Sel,
     },
     /// Create token copies of objects (CR 707.2, 111.10).
     CreateTokenCopy {
