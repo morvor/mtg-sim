@@ -88,6 +88,9 @@ Key invariants:
   physical-card presentation, tournament/draft procedures) may be listed in
   `docs/cr-exemptions/<area>.tsv` as `rule<TAB>reason` (one file per area, to avoid merge conflicts). Be conservative: deck-construction rules,
   for example, are testable via deck validation code.
+- Rulings with no engine-testable content (release notes, presentation, tournament policy)
+  may be listed in `docs/rulings-exemptions/<batch>.tsv` as `Card<TAB>substring<TAB>reason`.
+  `mtg-tools rulings-coverage --card "Name"` / `--text "substring"` shows per-ruling status.
 
 ## Commands
 
@@ -97,6 +100,7 @@ cargo test -p mtg-engine                       # all engine tests
 cargo test -p mtg-engine --test cr             # one test binary
 cargo run --release -p mtg-tools -- cr-coverage
 cargo run --release -p mtg-tools -- card-coverage
+cargo run --release -p mtg-tools -- rulings-coverage --card "Tarmogoyf"
 cargo run --release -p mtg-tools -- unsupported --limit 50 --filter "enters"
 cargo run --release -p mtg-sim -- --games 200
 ```
