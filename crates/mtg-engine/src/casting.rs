@@ -577,6 +577,9 @@ impl Game {
             by: Some(p),
             lookback: None,
         });
+        // CR 601.2a: effects that apply to the spell as it's cast begin now (CR 610.5,
+        // 611.2f).
+        crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
         let chars = self.obj(id).chars.clone();
 

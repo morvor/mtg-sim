@@ -289,6 +289,8 @@ impl Game {
             self.turn.stage = Stage::End;
             return;
         }
+        // CR 614.10b: an action a skip effect scheduled happens first.
+        crate::skip::run_step_start_actions(self);
         self.expire_effects_at_step_begin(step);
         self.emit(Event::StepBegan { step, active });
         match step {
@@ -457,16 +459,28 @@ impl Game {
 
     fn next_step(&mut self) {
         if self.turn.schedule.is_empty() {
-            // Next turn (CR 500.7: extra turns first).
-            let next = if let Some(p) = self.extra_turns.pop() {
-                if self.player(p).in_game() {
-                    self.begin_turn(p, true);
-                    return;
+            // Next turn (CR 500.7: extra turns first). Skipped turns never begin
+            // (CR 614.10).
+            let mut after = self.turn.active;
+            for _ in 0..1000 {
+                if let Some(p) = self.extra_turns.pop() {
+                    if self.player(p).in_game() {
+                        if crate::skip::consume_turn_skip(self, p) {
+                            continue;
+                        }
+                        self.begin_turn(p, true);
+                        return;
+                    }
                 }
-                self.next_player(self.turn.active)
-            } else {
-                self.next_player(self.turn.active)
-            };
+                let next = self.next_player(after);
+                if crate::skip::consume_turn_skip(self, next) {
+                    after = next;
+                    continue;
+                }
+                self.begin_turn(next, false);
+                return;
+            }
+            let next = self.next_player(after);
             self.begin_turn(next, false);
             return;
         }
@@ -520,6 +534,10 @@ impl Game {
             Step::End => StepKind::End,
             _ => return false,
         };
+        // CR 614.1b: static "skip" effects replace the step with nothing.
+        if crate::skip::static_skip(self, kind, active) {
+            self.players[active.idx()].skips.push(kind);
+        }
         if let Some(i) = self.players[active.idx()]
             .skips
             .iter()

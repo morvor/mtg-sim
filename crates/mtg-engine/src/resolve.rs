@@ -320,6 +320,11 @@ impl Game {
                 mods,
                 duration,
             } => {
+                // CR 611.2b: a "for as long as" duration that already ended means the
+                // effect does nothing.
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
@@ -390,11 +395,14 @@ impl Game {
                 let ts = self.new_timestamp();
                 let objects = self.lock_replacement_objects(def, ctx);
                 let remaining = match &def.action {
-                    ReplacementAction::PreventAmount(v) => {
+                    ReplacementAction::PreventAmount(v)
+                    | ReplacementAction::PreventAndThen(Some(v), _) => {
                         Some(self.eval_value(v, ctx).max(0) as u32)
                     }
                     _ => None,
                 };
+                // Chosen objects the effect refers to are locked in (CR 609.7b, 611.2c).
+                let def = &crate::prevention::lock_def(self, def, ctx);
                 self.replacements.push(ReplacementInstance {
                     id,
                     source: ctx.source,
@@ -412,6 +420,10 @@ impl Game {
                 who,
                 duration,
             } => {
+                // CR 611.2b (Master Thief).
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
@@ -1027,6 +1039,57 @@ impl Game {
             } => {
                 crate::keyword_actions::perform(self, *action, who, what, n, ctx);
             }
+            Effect::ChangeText {
+                what,
+                words,
+                exclude,
+                duration,
+            } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::text_change::exec_change_text(self, objs, *words, exclude, duration, ctx);
+            }
+            Effect::ExileUntil { what, until } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::until::exec_exile_until(self, objs, until, ctx);
+            }
+            Effect::PhaseOutUntil { what, until } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::until::exec_phase_out_until(self, objs, until, ctx);
+            }
+            Effect::SelfReplace {
+                replacement,
+                effect,
+            } => {
+                // CR 614.15: a self-replacement effect applies to this effect's own events,
+                // before other replacement effects (CR 616.1a).
+                let mut def = crate::prevention::lock_def(self, replacement, ctx);
+                def.self_replacement = true;
+                let id = self.new_effect_id();
+                let ts = self.new_timestamp();
+                self.replacements.push(ReplacementInstance {
+                    id,
+                    source: ctx.source,
+                    controller: ctx.controller,
+                    timestamp: ts,
+                    duration: Duration::Permanent,
+                    def,
+                    uses: None,
+                    objects: None,
+                    remaining: None,
+                });
+                self.exec(effect, ctx);
+                self.replacements.retain(|r| r.id != id);
+            }
+            Effect::ChooseSource { who, filter, var } => {
+                crate::prevention::exec_choose_source(self, who, filter, *var, ctx);
+            }
+            Effect::NextSpell {
+                filter,
+                mods,
+                expires,
+            } => {
+                crate::next_spell::exec_next_spell(self, filter, mods, expires, ctx);
+            }
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }
     }
@@ -1192,6 +1255,11 @@ impl Game {
         } else {
             None
         };
+        let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
+            Some((ctx.source, ctx.controller, self.fix_mods(&to.with_mods, ctx)))
+        } else {
+            None
+        };
         let moves: Vec<MoveEv> = objs
             .iter()
             .filter(|o| self.is_live(**o))
@@ -1218,6 +1286,7 @@ impl Game {
                         },
                         transformed: to.transformed,
                         attacking: attack,
+                        with_mods: with_mods.clone(),
                         ..Default::default()
                     },
                     source: ctx.source,

@@ -137,6 +137,13 @@ impl Game {
     pub fn recompute(&mut self) {
         self.dirty = false;
         self.expire_dependent_effects();
+        self.compute_characteristics(true);
+    }
+
+    /// Computes every object's characteristics, then the rule-modifying effects. With
+    /// `side_effects` false (a hypothetical computation, e.g. of how a permanent would
+    /// exist on the battlefield, CR 614.12), changes of control aren't acted on.
+    pub(crate) fn compute_characteristics(&mut self, side_effects: bool) {
         let live = self.live_objects();
         let prev_controllers: Vec<(ObjectId, PlayerId)> = self
             .battlefield
@@ -241,6 +248,11 @@ impl Game {
 
         // Post-processing.
         let turn = self.turn.number;
+        let prev_controllers = if side_effects {
+            prev_controllers
+        } else {
+            vec![]
+        };
         for (id, prev) in prev_controllers {
             if !self.is_live(id) {
                 continue;
@@ -282,6 +294,11 @@ impl Game {
         for e in &self.effects {
             if self.effect_expired(&e.duration, e.source, e.controller) {
                 remove.push(e.id);
+            } else if matches!(&e.affected, Affected::Objects(v) if v.iter().all(|o| !self.is_live(*o)))
+            {
+                // Every object it applied to has left its zone: it can never apply again
+                // (CR 400.7).
+                remove.push(e.id);
             } else if let (Duration::UntilHostLeaves, Affected::Objects(v)) =
                 (&e.duration, &e.affected)
             {
@@ -318,7 +335,12 @@ impl Game {
         self.replacements.retain(|e| !rp.contains(&e.id));
     }
 
-    fn effect_expired(&self, d: &Duration, source: Option<ObjectId>, controller: PlayerId) -> bool {
+    pub(crate) fn effect_expired(
+        &self,
+        d: &Duration,
+        source: Option<ObjectId>,
+        controller: PlayerId,
+    ) -> bool {
         match d {
             Duration::WhileSourceOnBattlefield => {
                 source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
@@ -366,7 +388,10 @@ impl Game {
                 let StaticEffect::Continuous { mods, .. } = &s.effect else {
                     continue;
                 };
-                if !has_layer_mod(mods, layer) || !self.ability_functions(o, s.zone, s.is_cda) {
+                if !has_layer_mod(mods, layer)
+                    || !self.ability_functions(o, s.zone, s.is_cda)
+                    || crate::next_spell::is_cast_grant(s)
+                {
                     continue;
                 }
                 let key = EffKey::Static(*id, a.uid);

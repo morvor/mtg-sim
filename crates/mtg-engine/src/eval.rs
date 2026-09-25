@@ -353,6 +353,13 @@ impl Game {
             Filter::Source => ctx.source == Some(id),
             Filter::Other => ctx.source != Some(id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
+            // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
+            Filter::Objects(v) => v.iter().any(|x| {
+                *x == id
+                    || (self.obj(*x).zone == Zone::Stack
+                        && o.zone == Zone::Battlefield
+                        && self.current(*x) == id)
+            }),
             Filter::AttachedToSource => {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }

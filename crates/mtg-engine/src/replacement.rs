@@ -36,6 +36,14 @@ pub struct EtbInfo {
     pub cast: Option<CastInfo>,
     /// Face to put onto the battlefield (for MDFCs played/cast as back face).
     pub face: Option<FaceState>,
+    /// For a move to exile caused by a replacement effect: the link id under which the
+    /// source records the exiled card (CR 607, 614.14).
+    pub link: Option<u16>,
+    /// A continuous effect of the resolving spell or ability that puts the permanent onto
+    /// the battlefield and says it "is" something: (source, controller, modifications).
+    /// It applies as the permanent enters (CR 611.2e), with a later timestamp than the
+    /// permanent's own static abilities (CR 613.7n).
+    pub with_mods: Option<(Option<ObjectId>, PlayerId, Vec<Modification>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -121,6 +129,18 @@ struct Candidate {
     class: u8,
     text: String,
     instance: Option<u32>,
+    /// Link id of the ability generating the effect (CR 607, 614.14).
+    link: u16,
+}
+
+/// Which replacement effects to look for (see [`Game::replacement_candidates`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CandScope {
+    All,
+    /// Effects that modify how a permanent enters the battlefield.
+    EntryOnly,
+    /// All others.
+    NotEntry,
 }
 
 impl Game {
@@ -138,7 +158,20 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
-        let mut cands = self.replacement_candidates(&ev, &applied);
+        let mut cands = match &ev {
+            // CR 614.12: which effects modify how a permanent enters, and how, is
+            // determined from the permanent as it would exist on the battlefield.
+            ReplEvent::Move(m) if m.to == Zone::Battlefield => {
+                let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
+                let m = m.clone();
+                let ev2 = ev.clone();
+                v.extend(self.with_hypothetical_entry(&m, |g| {
+                    g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)
+                }));
+                v
+            }
+            _ => self.replacement_candidates(&ev, &applied, CandScope::All),
+        };
         if cands.is_empty() {
             return vec![ev];
         }
@@ -200,8 +233,18 @@ impl Game {
         }
     }
 
-    fn replacement_candidates(&self, ev: &ReplEvent, applied: &[ReplKey]) -> Vec<Candidate> {
+    fn replacement_candidates(
+        &self,
+        ev: &ReplEvent,
+        applied: &[ReplKey],
+        scope: CandScope,
+    ) -> Vec<Candidate> {
         let mut out = Vec::new();
+        let in_scope = |d: &ReplacementDef| match scope {
+            CandScope::All => true,
+            CandScope::EntryOnly => matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
+            CandScope::NotEntry => !matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
+        };
         // Static abilities of objects (CR 614.12: include the entering object's own
         // abilities for ETB replacements).
         let mut sources: Vec<(ObjectId, PlayerId, Ability, ReplacementDef)> = self
@@ -211,12 +254,15 @@ impl Game {
             .map(|(s, c, _, a, d)| (*s, *c, a.clone(), d.clone()))
             .collect();
         if let ReplEvent::Move(m) = ev {
-            if m.to == Zone::Battlefield {
+            if m.to == Zone::Battlefield && scope != CandScope::NotEntry {
                 let o = self.obj(m.obj);
                 for a in &o.chars.abilities {
                     if let AbilityKind::Static(s) = &a.kind {
                         if let StaticEffect::Replacement(d) = &s.effect {
-                            if matches!(d.event, ReplacementEvent::EntersBattlefield(_))
+                            // CR 614.12: such an effect comes from the permanent itself
+                            // only if it affects just that permanent ("Permanents enter
+                            // tapped" doesn't affect the permanent that has it).
+                            if matches!(d.event, ReplacementEvent::EntersBattlefield(Filter::Source))
                                 && !sources
                                     .iter()
                                     .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
@@ -235,7 +281,7 @@ impl Game {
         }
         for (src, ctl, a, d) in sources {
             let key = ReplKey::Static(src, a.uid);
-            if applied.contains(&key) {
+            if applied.contains(&key) || !in_scope(&d) {
                 continue;
             }
             let ctx = Ctx::new(Some(src), ctl);
@@ -248,6 +294,7 @@ impl Game {
                     text: format!("{}: {}", self.obj(src).chars.name, a.text),
                     def: d,
                     instance: None,
+                    link: a.link,
                 });
             }
         }
@@ -256,7 +303,7 @@ impl Game {
             if applied.contains(&key) {
                 continue;
             }
-            if inst.uses == Some(0) {
+            if inst.uses == Some(0) || !in_scope(&inst.def) {
                 continue;
             }
             let ctx = Ctx::new(inst.source, inst.controller);
@@ -269,6 +316,7 @@ impl Game {
                     text: format!("effect #{}", inst.id),
                     def: inst.def.clone(),
                     instance: Some(inst.id),
+                    link: 0,
                 });
             }
         }
@@ -280,6 +328,7 @@ impl Game {
                 && self.config.variant == Variant::Commander
                 && matches!(m.to, Zone::Hand(_) | Zone::Library(_))
                 && !applied.contains(&key)
+                && scope != CandScope::EntryOnly
             {
                 out.push(Candidate {
                     key,
@@ -300,10 +349,145 @@ impl Game {
                         optional: true,
                     },
                     instance: None,
+                    link: 0,
                 });
             }
         }
         out
+    }
+
+    /// Whether the resolved replacement/prevention effect with this id would apply to
+    /// the event.
+    pub(crate) fn instance_matches(&self, id: u32, ev: &ReplEvent) -> bool {
+        self.replacements.iter().any(|inst| {
+            inst.id == id
+                && inst.uses != Some(0)
+                && self.repl_event_matches(
+                    &inst.def.event,
+                    &Ctx::new(inst.source, inst.controller),
+                    ev,
+                    inst.objects.as_deref(),
+                )
+        })
+    }
+
+    /// Evaluates `f` with the object of a move onto the battlefield temporarily put there
+    /// as it would exist (CR 614.12, 614.17d): under the player who'll control it, with
+    /// the face, copy effect, counters, and tapped status from replacement effects already
+    /// applied, its own static abilities, and continuous effects that already exist. The
+    /// replacement and restriction effects considered are those that exist now, not ones
+    /// the entering permanent's abilities would create.
+    pub(crate) fn with_hypothetical_entry<R>(
+        &mut self,
+        m: &MoveEv,
+        f: impl FnOnce(&Game) -> R,
+    ) -> R {
+        if self.dirty {
+            self.recompute();
+        }
+        let id = m.obj;
+        let saved_obj = self.objects[id.0 as usize].clone();
+        let saved_bf = self.battlefield.clone();
+        let saved_effects = self.effects.len();
+        let saved_statics = self.statics.clone();
+        let saved_next_ts = self.next_timestamp;
+        let saved_events = self.events.len();
+        let from = self.obj(id).zone;
+        let saved_list = self.zone_list_mut(from).map(|l| l.clone());
+        let controller = self.entry_controller(m);
+        if let Some(l) = self.zone_list_mut(from) {
+            l.retain(|x| *x != id);
+        }
+        {
+            let o = &mut self.objects[id.0 as usize];
+            o.zone = Zone::Battlefield;
+            o.controller = controller;
+            o.base_controller = controller;
+            o.tapped = m.etb.tapped;
+            o.phased_out = false;
+            o.timestamp = saved_next_ts;
+            o.face = if m.etb.transformed {
+                FaceState::Back
+            } else if let Some(fc) = m.etb.face {
+                fc
+            } else {
+                match o.face {
+                    FaceState::Half(_) | FaceState::Fused | FaceState::Flipped => FaceState::Front,
+                    f => f,
+                }
+            };
+            if let Some(card) = o.card.clone() {
+                o.base = card.characteristics(o.face);
+            }
+            if m.etb.face_down.is_some() {
+                o.face_down = true;
+            }
+            for (k, n) in &m.etb.counters {
+                *o.counters.entry(k.clone()).or_insert(0) += n;
+            }
+        }
+        self.battlefield.push(id);
+        if let Some(src) = m.etb.copy_of {
+            let values = Box::new(self.obj(src).copiable.clone());
+            self.effects.push(ContinuousEffect {
+                id: 0,
+                source: Some(id),
+                controller,
+                timestamp: saved_next_ts,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: vec![],
+                layer1: Some(Layer1::Copy {
+                    values,
+                    exceptions: m.etb.copy_exceptions.clone(),
+                }),
+                created_turn: self.turn.number,
+            });
+        }
+        self.compute_characteristics(false);
+        self.statics.replacements = saved_statics.replacements.clone();
+        self.statics.restrictions = saved_statics.restrictions.clone();
+        let r = f(self);
+        self.objects[id.0 as usize] = saved_obj;
+        self.battlefield = saved_bf;
+        if let (Some(l), Some(saved)) = (self.zone_list_mut(from), saved_list) {
+            *l = saved;
+        }
+        self.effects.truncate(saved_effects);
+        self.next_timestamp = saved_next_ts;
+        self.events.truncate(saved_events);
+        self.compute_characteristics(false);
+        r
+    }
+
+    /// Whether a "can't enter the battlefield" effect stops this move (CR 614.17d),
+    /// checking the object as it would exist on the battlefield.
+    pub(crate) fn cant_enter(&mut self, m: &MoveEv) -> bool {
+        let any = self
+            .statics
+            .restrictions
+            .iter()
+            .any(|(_, _, r)| matches!(r, Restriction::CantEnter(_)))
+            || self
+                .rule_effects
+                .iter()
+                .any(|e| matches!(e.restriction, Restriction::CantEnter(_)));
+        if !any {
+            return false;
+        }
+        self.with_hypothetical_entry(m, |g| {
+            let id = m.obj;
+            g.statics.restrictions.iter().any(|(s, c, r)| match r {
+                Restriction::CantEnter(f) => g.matches(id, f, &Ctx::new(Some(*s), *c)),
+                _ => false,
+            }) || g.rule_effects.iter().any(|e| match &e.restriction {
+                Restriction::CantEnter(f) => {
+                    e.objects.as_ref().is_none_or(|v| v.contains(&id))
+                        && g.matches(id, f, &Ctx::new(e.source, e.controller))
+                }
+                _ => false,
+            })
+        })
     }
 
     /// Whether a replacement effect's event pattern matches the proposed event.
@@ -430,16 +614,107 @@ impl Game {
         applied: &[ReplKey],
     ) -> Vec<ReplEvent> {
         let ctx = Ctx::new(cand.source, cand.controller);
+        // CR 615.12: prevention effects applied to damage that can't be prevented prevent
+        // nothing (their other effects still happen), and a shield that prevents nothing
+        // isn't used up (CR 609.7b).
+        let unpreventable = matches!(ev, ReplEvent::Damage { .. })
+            && crate::prevention::is_prevention(&cand.def.action)
+            && crate::prevention::damage_cant_be_prevented(self);
         // Use up one application of limited-use effects.
         if let Some(id) = cand.instance {
-            if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {
-                if let Some(u) = inst.uses.as_mut() {
-                    *u = u.saturating_sub(1);
+            if !unpreventable {
+                if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {
+                    if let Some(u) = inst.uses.as_mut() {
+                        *u = u.saturating_sub(1);
+                    }
                 }
             }
         }
+        let key = match cand.key {
+            ReplKey::Static(o, u) => (o.0 as u64) << 32 ^ u,
+            ReplKey::Instance(i) => (1u64 << 63) | i as u64,
+        };
         let action = cand.def.action.clone();
         match (action, ev) {
+            (
+                ReplacementAction::Prevent
+                | ReplacementAction::PreventAmount(_)
+                | ReplacementAction::PreventAndThen(..),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                // Prevention (CR 615): all of the damage, or a shield of N.
+                let (limit, then) = match &cand.def.action {
+                    ReplacementAction::Prevent => (None, None),
+                    ReplacementAction::PreventAmount(v) => (Some(v.clone()), None),
+                    ReplacementAction::PreventAndThen(v, e) => (v.clone(), Some((**e).clone())),
+                    _ => (None, None),
+                };
+                let inst = cand
+                    .instance
+                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let shield = match &limit {
+                    None => None,
+                    Some(v) => Some(match inst.and_then(|i| self.replacements[i].remaining) {
+                        Some(r) => r,
+                        None => self.eval_value(v, &ctx).max(0) as u32,
+                    }),
+                };
+                let prevented = if unpreventable {
+                    0
+                } else {
+                    shield.map_or(amount, |s| s.min(amount))
+                };
+                if let (Some(i), Some(s)) = (inst, shield) {
+                    if !unpreventable {
+                        let rem = s - prevented;
+                        self.replacements[i].remaining = Some(rem);
+                        if rem == 0 {
+                            self.replacements.remove(i);
+                        }
+                    }
+                }
+                crate::prevention::damage_prevented(
+                    self,
+                    key,
+                    cand.source,
+                    source,
+                    target,
+                    prevented,
+                );
+                if let Some(e) = then {
+                    // CR 615.5: the rest of the effect happens immediately afterward.
+                    let mut c = ctx.clone();
+                    let mut info = event_info_of(&ReplEvent::Damage {
+                        source,
+                        target,
+                        amount,
+                        combat,
+                    });
+                    info.amount = prevented as i32;
+                    c.event = Some(info);
+                    self.post_replacement_effects.push((c, e));
+                }
+                let left = amount - prevented;
+                if left == 0 {
+                    vec![]
+                } else {
+                    vec![ReplEvent::Damage {
+                        source,
+                        target,
+                        amount: left,
+                        combat,
+                    }]
+                }
+            }
+            (ReplacementAction::EnterTransformed, ReplEvent::Move(mut m)) => {
+                m.etb.transformed = true;
+                vec![ReplEvent::Move(m)]
+            }
             (ReplacementAction::EnterTapped, ReplEvent::Move(mut m)) => {
                 m.etb.tapped = true;
                 vec![ReplEvent::Move(m)]
@@ -463,8 +738,8 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterAsCopy { filter, optional }, ReplEvent::Move(mut m)) => {
-                let mut c = ctx.clone();
-                c.source = Some(m.obj);
+                // "enter as a copy of [this creature]" refers to the effect's source.
+                let c = ctx.clone();
                 let cands: Vec<ObjectId> = self
                     .objects_matching(&filter, &c)
                     .into_iter()
@@ -495,6 +770,11 @@ impl Game {
                 let owner = self.obj(m.obj).owner;
                 m.to = Zone::of_kind(dest.zone, owner);
                 m.pos = dest.position;
+                if m.to == Zone::Exile && cand.source.is_some() {
+                    // CR 614.14: cards exiled by the replacement are linked to the source.
+                    m.source = cand.source;
+                    m.etb.link = Some(cand.link);
+                }
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {
@@ -521,42 +801,6 @@ impl Game {
                     self.replacements.retain(|r| r.id != id);
                 }
                 vec![]
-            }
-            (
-                ReplacementAction::PreventAmount(v),
-                ReplEvent::Damage {
-                    source,
-                    target,
-                    amount,
-                    combat,
-                },
-            ) => {
-                let inst = cand
-                    .instance
-                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
-                let shield = match inst.and_then(|i| self.replacements[i].remaining) {
-                    Some(r) => r,
-                    None => self.eval_value(&v, &ctx).max(0) as u32,
-                };
-                let prevented = shield.min(amount);
-                if let Some(i) = inst {
-                    let rem = shield - prevented;
-                    self.replacements[i].remaining = Some(rem);
-                    if rem == 0 {
-                        self.replacements.remove(i);
-                    }
-                }
-                let left = amount - prevented;
-                if left == 0 {
-                    vec![]
-                } else {
-                    vec![ReplEvent::Damage {
-                        source,
-                        target,
-                        amount: left,
-                        combat,
-                    }]
-                }
             }
             (ReplacementAction::Multiply(k), ev) => {
                 vec![scale_event(ev, |n| n.saturating_mul(k.max(0) as u32))]

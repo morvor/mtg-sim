@@ -399,7 +399,10 @@ pub fn phasing_untap_step(g: &mut Game, active: PlayerId) {
         .copied()
         .filter(|id| {
             let o = g.obj(*id);
-            o.phased_out && o.controller == active && !o.phased_out_indirectly
+            o.phased_out
+                && o.controller == active
+                && !o.phased_out_indirectly
+                && !crate::until::held_phased_out(g, *id)
         })
         .collect();
     phase_out(g, out);
@@ -428,6 +431,7 @@ pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
 }
 
 pub fn phase_in(g: &mut Game, id: ObjectId) {
+    crate::until::phased_in_otherwise(g, id);
     g.objects[id.0 as usize].phased_out = false;
     for a in g.battlefield.clone() {
         if g.obj(a).phased_out_indirectly && g.obj(a).attached_to == Some(Entity::Object(id)) {

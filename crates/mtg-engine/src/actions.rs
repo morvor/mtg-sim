@@ -55,6 +55,11 @@ impl Game {
             if !self.is_live(m.obj) {
                 continue;
             }
+            // CR 614.17d: a "can't enter" effect stops the event; it isn't replaced
+            // (CR 614.17c).
+            if m.to == Zone::Battlefield && self.cant_enter(m) {
+                continue;
+            }
             for e in self.replace(ReplEvent::Move(m.clone())) {
                 finals.push((i, e));
             }
@@ -266,6 +271,22 @@ impl Game {
                     });
                 }
                 self.battlefield.push(new_id);
+                if let Some((source, ctl, mods)) = m.etb.with_mods.clone() {
+                    // CR 611.2e, 613.7n.
+                    let id = self.new_effect_id();
+                    let ts = self.new_timestamp();
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source,
+                        controller: ctl,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods,
+                        layer1: None,
+                        created_turn: self.turn.number,
+                    });
+                }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
                 // battle defense (CR 310.4), Saga lore (CR 714.3a), plus effects.
@@ -354,7 +375,7 @@ impl Game {
         // Linked exile (CR 607): remember cards exiled by a source.
         if let (Some(src), Zone::Exile) = (m.source, m.to) {
             if self.is_live(src) {
-                let link = self.current_link;
+                let link = m.etb.link.unwrap_or(self.current_link);
                 self.objects[src.0 as usize]
                     .linked
                     .entry(link)
@@ -993,14 +1014,25 @@ impl Game {
             self.recompute();
         }
         let mut finals = Vec::new();
+        // CR 120.8 / 614.7a: 0 damage isn't dealt.
+        let mut events: Vec<(ObjectId, Entity, u32)> = events
+            .into_iter()
+            .filter(|(_, t, a)| *a > 0 && self.valid_damage_recipient(*t))
+            .collect();
+        // CR 616.1: players choose among replacement effects for simultaneous events in
+        // APNAP order.
+        let apnap = self.apnap();
+        events.sort_by_key(|(_, t, _)| {
+            let p = match t {
+                Entity::Player(p) => *p,
+                Entity::Object(o) => self.obj(*o).controller,
+            };
+            apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
+        });
+        // CR 615.7: which simultaneous damage a prevention shield prevents.
+        crate::prevention::order_for_shields(self, &mut events, combat);
+        let first_event = self.events.len();
         for (s, t, a) in events {
-            // CR 120.8 / 614.7a: 0 damage isn't dealt.
-            if a == 0 || !self.valid_damage_recipient(t) {
-                continue;
-            }
-            if self.damage_cant_be_prevented() {
-                // Prevention effects don't apply, but other replacements still do.
-            }
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
                 target: t,
@@ -1008,6 +1040,7 @@ impl Game {
                 combat,
             }));
         }
+        crate::prevention::merge_prevention_events(self, first_event);
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
         for e in finals {
             match e {
@@ -1033,17 +1066,6 @@ impl Game {
         }
         self.run_post_replacement_effects();
         self.recompute();
-    }
-
-    fn damage_cant_be_prevented(&self) -> bool {
-        self.statics
-            .restrictions
-            .iter()
-            .any(|(_, _, r)| matches!(r, Restriction::DamageCantBePrevented))
-            || self
-                .rule_effects
-                .iter()
-                .any(|e| matches!(e.restriction, Restriction::DamageCantBePrevented))
     }
 
     /// Applies the results of damage (CR 120.3). Lifelink is handled by the caller.

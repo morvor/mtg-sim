@@ -85,6 +85,15 @@ pub enum Event {
         amount: u32,
         combat: bool,
     },
+    /// A prevention effect prevented some or all of the damage that would have been dealt
+    /// (CR 615.13). `by` is the prevention effect's source; `key` identifies the effect.
+    DamagePrevented {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        by: Option<ObjectId>,
+        key: u64,
+    },
     LifeGained {
         player: PlayerId,
         amount: u32,

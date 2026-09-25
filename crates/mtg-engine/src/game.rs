@@ -426,6 +426,13 @@ pub struct Game {
     pub commander_moved_since_last_sba: BTreeSet<ObjectId>,
     /// When a search's decision is answered with the default, find the first matches.
     pub search_finds_by_default: bool,
+    /// One-shot effects waiting "until" an event to undo themselves (CR 610.3, 610.4).
+    pub untils: Vec<crate::until::UntilEffect>,
+    /// Continuous effects waiting for the next spell a player casts (CR 611.2f).
+    pub next_spell_effects: Vec<crate::next_spell::NextSpellEffect>,
+    /// Actions to take as the first thing in the next step that occurs, after a skip
+    /// (CR 614.10b).
+    pub step_start_actions: Vec<(crate::eval::Ctx, Effect)>,
 }
 
 impl Game {
@@ -499,6 +506,9 @@ impl Game {
             mana_hint: None,
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
+            untils: vec![],
+            next_spell_effects: vec![],
+            step_start_actions: vec![],
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
