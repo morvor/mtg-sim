@@ -250,14 +250,22 @@ pub enum Event {
     PhasedIn {
         obj: ObjectId,
     },
+    /// A die was rolled (CR 706): its result after modifiers and its natural result
+    /// (CR 706.2). The planar die has no numerical result (CR 706.7).
     DieRolled {
         player: PlayerId,
         sides: u32,
         result: u32,
+        natural: u32,
+        planar: bool,
     },
+    /// A coin was flipped (CR 705). A flip only cares about heads or tails has neither a
+    /// winner nor a loser (CR 705.2).
     CoinFlipped {
         player: PlayerId,
         won: bool,
+        lost: bool,
+        heads: bool,
     },
     DayNightChanged {
         is_day: bool,

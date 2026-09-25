@@ -303,6 +303,8 @@ pub fn roll_planar_die(g: &mut Game, p: PlayerId) -> PlanarFace {
         obj: None,
         amount: 0,
     });
+    // CR 706.7: it's a die roll, with no numerical result.
+    crate::dice::planar_die_rolled(g, p);
     match face {
         PlanarFace::Blank => {}
         PlanarFace::Chaos => {

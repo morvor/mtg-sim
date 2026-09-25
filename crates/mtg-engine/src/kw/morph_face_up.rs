@@ -56,20 +56,21 @@ fn effects_could_change_abilities(g: &Game) -> bool {
 /// it, it can't be turned face up this way).
 fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     let o = g.obj(id);
-    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
+    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;
     }
     let card = o.card.as_ref()?;
-    // Printed without such an ability: nothing to look at.
-    let printed = face_up_keyword(&card.front().chars.abilities)?;
     let (kind, megamorph, cost) = if effects_could_change_abilities(g) {
-        // The characteristics it would have face up, with the effects that would apply.
+        // The characteristics it would have face up, with the effects that would apply
+        // (including copy effects: a face-down permanent that became a copy of another
+        // has that permanent's copiable values face up, CR 707.3, 708.10).
         let mut h = g.clone();
         h.objects[id.0 as usize].face_down = false;
         h.recompute();
         face_up_keyword(&h.obj(id).chars.abilities)?
     } else {
-        printed
+        // Its printed abilities.
+        face_up_keyword(&card.front().chars.abilities)?
     };
     // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
     let cost = if kind == KeywordKind::Morph {

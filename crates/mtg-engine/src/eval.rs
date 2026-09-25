@@ -57,6 +57,10 @@ pub struct EntryMods {
     pub prepared: bool,
     /// Exceptions to a copy effect it enters with (CR 707.9b).
     pub copy_exceptions: Vec<Modification>,
+    /// Exceptions to a copy effect that are additional effects, conditional, or linked
+    /// triggered abilities (CR 707.9e–707.9g).
+    #[serde(default)]
+    pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
     /// Effects on the permanent performed as it's put onto the battlefield
     /// ([`Effect::OnEntry`]).
     pub on_entry: Vec<Effect>,

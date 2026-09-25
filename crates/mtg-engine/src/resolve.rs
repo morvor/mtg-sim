@@ -872,6 +872,13 @@ impl Game {
                     crate::facedown::turn_face_up(self, o, false);
                 }
             }
+            Effect::TurnFaceDown { what } => {
+                let mut any = false;
+                for o in self.resolve_objects(what, ctx) {
+                    any |= crate::facedown::turn_face_down(self, o);
+                }
+                ctx.prev_happened = any;
+            }
             Effect::RemoveFromCombat { what } => {
                 for o in self.resolve_objects(what, ctx) {
                     crate::combat::remove_from_combat(self, o);
@@ -897,6 +904,45 @@ impl Game {
                 if let Some(e) = ctx.entering.as_mut() {
                     e.copy_exceptions.extend(mods.iter().cloned());
                 }
+            }
+            Effect::EnterCopyExtra {
+                only_if,
+                mods,
+                effect,
+            } => {
+                let saved = ctx.clone();
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copy_extras.push(crate::copy_rules::CopyExtra {
+                        ctx: Ctx {
+                            entering: None,
+                            ..saved
+                        },
+                        only_if: only_if.clone(),
+                        mods: mods.clone(),
+                        effect: (**effect).clone(),
+                    });
+                }
+            }
+            Effect::CopySpellRetargeted { what, target } => {
+                let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
+                for o in self.resolve_objects(what, ctx) {
+                    match &targets {
+                        Some(ts) => {
+                            crate::copy_rules::copy_with_target(
+                                self,
+                                o,
+                                ctx.controller,
+                                ts.clone(),
+                            );
+                        }
+                        None => {
+                            crate::copy_rules::copy_for_each_target(self, o, ctx.controller);
+                        }
+                    }
+                }
+            }
+            Effect::CopyCard { what, named } => {
+                crate::copy_rules::copy_cards(self, what, named, ctx);
             }
             Effect::OnEntry(effect) => {
                 if let Some(e) = ctx.entering.as_mut() {
@@ -1453,6 +1499,8 @@ impl Game {
             } => {
                 crate::next_spell::exec_next_spell(self, filter, mods, expires, ctx);
             }
+            Effect::RollDice(spec) => crate::dice::roll(self, spec, ctx),
+            Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }
     }
