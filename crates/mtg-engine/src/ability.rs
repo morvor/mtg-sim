@@ -787,6 +787,38 @@ pub enum PlayerRel {
     Chosen,
 }
 
+/// What a spell or ability on the stack targets (CR 115.9).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetsFilter {
+    /// "with [N] target(s)": the number of times objects or players were chosen as its
+    /// targets, not how many are still legal (CR 115.9a).
+    Count(u32),
+    /// "that targets [object or player]": some current target matches (CR 115.9b).
+    Targets {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+    /// "that targets only [object or player]": exactly one different object or player was
+    /// chosen as its target(s), and it matches (CR 115.9c).
+    Only {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+}
+
+/// How an effect changes the targets of a spell or ability (CR 115.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetChange {
+    /// "Change the target(s)": each target to another legal target, or none (CR 115.7a).
+    All,
+    /// "Change a target": only one of them (CR 115.7b).
+    One,
+    /// "Change any targets": any number of them (CR 115.7c).
+    Any,
+    /// "Choose new targets": any number may be left unchanged (CR 115.7d).
+    ChooseNew,
+}
+
 /// Object predicates (CR 608.2j: filters check only the stated characteristics).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Filter {
@@ -907,6 +939,9 @@ pub enum Filter {
     /// A spell or ability on the stack with at least one target that is an object matching
     /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
     Targets(Box<Filter>),
+    /// A spell or ability on the stack described by its targets: "with a single target",
+    /// "that targets you", "that targets only [something]" (CR 115.9).
+    StackTargets(Box<TargetsFilter>),
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
@@ -2377,6 +2412,15 @@ pub enum Effect {
         what: Sel,
         count: Value,
         new_targets: bool,
+    },
+    /// "[Player] may change the target(s) of / choose new targets for [spell or ability]"
+    /// (CR 115.7). With `to`, the new target must be that object or player ("change the
+    /// target of target spell to this creature").
+    ChangeTargets {
+        what: Sel,
+        who: PlayerRef,
+        how: TargetChange,
+        to: Option<Sel>,
     },
     /// "[this] becomes a copy of [object]" (CR 707).
     BecomeCopy {

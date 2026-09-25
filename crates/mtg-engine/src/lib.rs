@@ -68,6 +68,7 @@ pub mod skip;
 pub mod splice;
 pub mod stack;
 pub mod stickers;
+pub mod target_rules;
 pub mod testing;
 pub mod text_change;
 pub mod tokens;

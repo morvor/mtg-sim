@@ -691,6 +691,21 @@ impl Game {
                     }
                 }
             }
+            Effect::ChangeTargets { what, who, how, to } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let forced = match to {
+                    Some(sel) => match self.resolve_sel(sel, ctx).into_iter().next() {
+                        Some(e) => Some(e),
+                        None => return,
+                    },
+                    None => None,
+                };
+                let mut changed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    changed |= crate::target_rules::change_targets(self, p, o, *how, forced);
+                }
+                ctx.prev_happened = changed;
+            }
             Effect::BecomeCopy { what, of, duration } => {
                 let targets = self.resolve_objects(what, ctx);
                 let Some(src) = self.resolve_objects(of, ctx).into_iter().next() else {

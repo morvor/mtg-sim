@@ -507,12 +507,16 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)
                 .is_some_and(|t| c.card_types.contains(t)),
+            Filter::StackTargets(tf) => crate::target_rules::stack_targets_match(self, id, tf, ctx),
             Filter::Targets(inner) => {
                 o.zone == Zone::Stack
                     && o.stack.as_ref().is_some_and(|si| {
                         si.chosen.iter().any(|cm| {
                             cm.targets.iter().flatten().any(|t| match t {
-                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                // CR 115.9b: a target that left its zone is ignored.
+                                Entity::Object(x) => {
+                                    self.is_live(*x) && self.matches(*x, inner, ctx)
+                                }
                                 Entity::Player(_) => false,
                             })
                         })
