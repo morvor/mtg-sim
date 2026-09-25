@@ -93,13 +93,14 @@ impl Game {
             v.extend(p.hand.iter().copied());
             v.extend(p.graveyard.iter().copied());
             // CR 604.3: characteristic-defining abilities function in all zones, so cards
-            // in libraries that have one are recomputed too.
+            // in libraries that have one are recomputed too; so are cards with another
+            // static ability that functions everywhere ("if this card would be put into
+            // a graveyard from anywhere").
             v.extend(p.library.iter().copied().filter(|id| {
-                self.obj(*id)
-                    .base
-                    .abilities
-                    .iter()
-                    .any(|a| matches!(&a.kind, AbilityKind::Static(s) if s.is_cda))
+                self.obj(*id).base.abilities.iter().any(|a| {
+                    matches!(&a.kind, AbilityKind::Static(s)
+                        if s.is_cda || s.zone == FunctionZone::Anywhere)
+                })
             }));
         }
         v
