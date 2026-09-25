@@ -905,6 +905,45 @@ impl Game {
                     e.copy_exceptions.extend(mods.iter().cloned());
                 }
             }
+            Effect::EnterCopyExtra {
+                only_if,
+                mods,
+                effect,
+            } => {
+                let saved = ctx.clone();
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copy_extras.push(crate::copy_rules::CopyExtra {
+                        ctx: Ctx {
+                            entering: None,
+                            ..saved
+                        },
+                        only_if: only_if.clone(),
+                        mods: mods.clone(),
+                        effect: (**effect).clone(),
+                    });
+                }
+            }
+            Effect::CopySpellRetargeted { what, target } => {
+                let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
+                for o in self.resolve_objects(what, ctx) {
+                    match &targets {
+                        Some(ts) => {
+                            crate::copy_rules::copy_with_target(
+                                self,
+                                o,
+                                ctx.controller,
+                                ts.clone(),
+                            );
+                        }
+                        None => {
+                            crate::copy_rules::copy_for_each_target(self, o, ctx.controller);
+                        }
+                    }
+                }
+            }
+            Effect::CopyCard { what, named } => {
+                crate::copy_rules::copy_cards(self, what, named, ctx);
+            }
             Effect::OnEntry(effect) => {
                 if let Some(e) = ctx.entering.as_mut() {
                     e.on_entry.push((**effect).clone());

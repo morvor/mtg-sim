@@ -480,6 +480,15 @@ impl Game {
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
                 // battle defense (CR 310.4), Saga lore (CR 714.3a), plus effects.
                 let mut counters_to_add = m.etb.counters.clone();
+                // Copy exceptions that are additional effects or conditional
+                // (CR 707.9e–707.9g).
+                let copy_extras = crate::copy_rules::apply_copy_extras(
+                    self,
+                    new_id,
+                    copy_effect,
+                    &m.etb.copy_extras,
+                    &mut counters_to_add,
+                );
                 let o = self.obj(new_id);
                 if o.is(CardType::Planeswalker) {
                     if let Some(l) = o.chars.loyalty {
@@ -534,7 +543,7 @@ impl Game {
                     }
                 }
                 // "As this enters" effects (CR 614.1c).
-                for (mut c, e) in m.etb.as_enters.clone() {
+                for (mut c, e) in m.etb.as_enters.clone().into_iter().chain(copy_extras) {
                     c.source = Some(new_id);
                     c.controller = controller;
                     let before = self.effects.len();
@@ -1536,8 +1545,18 @@ impl Game {
             ..Default::default()
         };
         if let Some(src) = spec.copy_of {
-            etb.copy_of = Some(src);
-            etb.copy_exceptions = spec.copy_exceptions.clone();
+            match crate::copy_rules::double_faced_copy_face(self, src) {
+                // CR 707.8a: a double-faced token, with the same face up; each face's
+                // characteristics come from the same face of the card.
+                Some(face) if spec.card.is_some() => {
+                    etb.face = Some(face);
+                    etb.copiable_mods = spec.copy_exceptions.clone();
+                }
+                _ => {
+                    etb.copy_of = Some(src);
+                    etb.copy_exceptions = spec.copy_exceptions.clone();
+                }
+            }
         }
         etb.attacking = spec.attacking;
         let new = self.move_object_ev(MoveEv {

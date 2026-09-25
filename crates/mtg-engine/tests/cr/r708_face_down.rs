@@ -199,17 +199,38 @@ fn a_face_down_permanent_cant_be_turned_face_down() {
 fn permanents_put_onto_the_battlefield_face_down_have_no_enters_abilities() {
     cr!("708.3");
     supported("Wall of Omens");
-    supported("Skyshroud Behemoth");
     let mut t = TestGame::new(2);
     let hand = t.hand_size(P0);
     put_face_down(&mut t, P0, "Wall of Omens");
-    let behemoth = put_face_down(&mut t, P0, "Skyshroud Behemoth");
+    let slow = oracle_card(
+        "Slow Beast",
+        "Creature — Beast",
+        "{0}",
+        Some((3, 3)),
+        "This creature enters tapped.\nThis creature enters with two +1/+1 counters on it.",
+    );
+    let card = t.custom(P0, slow, Zone::Hand(P0));
+    run_effect(
+        &mut t,
+        P0,
+        None,
+        Effect::Move {
+            what: Sel::Target(0),
+            to: Destination {
+                face_down: true,
+                ..Destination::battlefield()
+            },
+        },
+        &[Entity::Object(card)],
+    );
+    let beast = t.g.current(card);
     t.resolve_all();
     // Wall of Omens' "When this creature enters, draw a card" didn't trigger.
     assert_eq!(t.hand_size(P0), hand);
-    // Skyshroud Behemoth's fading and "This creature enters tapped" didn't apply.
-    assert!(!t.obj(behemoth).tapped);
-    assert_eq!(t.counters(behemoth, "fade"), 0);
+    // "This creature enters tapped" and "enters with two +1/+1 counters" didn't apply.
+    assert!(t.obj(beast).face_down);
+    assert!(!t.obj(beast).tapped);
+    assert_eq!(t.counters(beast, counters::PLUS1), 0);
     // Cast face down, the same (Alley Assailant: "This creature enters tapped.").
     let a = disguised(&mut t, P0, "Alley Assailant");
     assert!(!t.obj(a).tapped);

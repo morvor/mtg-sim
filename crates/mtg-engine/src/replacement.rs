@@ -25,6 +25,9 @@ pub struct EtbInfo {
     /// Enters as a copy of this object's copiable values (CR 707.9).
     pub copy_of: Option<ObjectId>,
     pub copy_exceptions: Vec<Modification>,
+    /// Parts of the copy effect's exception that are additional effects, conditional, or
+    /// linked triggered abilities (CR 707.9e–707.9g).
+    pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
     /// Modifications to its copiable values from "as this enters" abilities that set
     /// power and toughness (CR 707.2), applied after any copy effect it enters with.
     pub copiable_mods: Vec<Modification>,
@@ -905,6 +908,7 @@ impl Game {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
+                    m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
@@ -944,6 +948,13 @@ impl Game {
                     1,
                 );
                 if let Some(o) = chosen.first() {
+                    if m.etb.copy_of.is_some() {
+                        // CR 707.9e, 707.9g: another copy effect is applied after the one
+                        // it would have entered with: that one's exceptions (and linked
+                        // triggered abilities) don't happen.
+                        m.etb.copy_exceptions.clear();
+                        m.etb.copy_extras.clear();
+                    }
                     m.etb.copy_of = Some(*o);
                 }
                 vec![ReplEvent::Move(m)]

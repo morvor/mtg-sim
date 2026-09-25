@@ -2687,6 +2687,21 @@ pub enum Effect {
     /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
     /// inside [`ReplacementAction::AsEnters`].
     EnterCopyExceptions(Vec<Modification>),
+    /// "... enter as a copy of X, except [if it's a creature,] it enters with N additional
+    /// counters [and has ...]" / "When you do, ...": parts of a copy exception that are
+    /// additional effects (CR 707.9e), conditional (CR 707.9f), or linked triggered
+    /// abilities (CR 707.9g). They happen only if it enters as a copy and no other copy
+    /// effect is applied after this one. Only meaningful inside
+    /// [`ReplacementAction::AsEnters`].
+    EnterCopyExtra {
+        /// Applies only if the copy (without this exception) matches.
+        only_if: Option<Filter>,
+        /// Modifications that become part of its copiable values.
+        mods: Vec<Modification>,
+        /// `EnterWithCounters` (placed as it enters) or an effect performed as it enters
+        /// (e.g. a reflexive triggered ability).
+        effect: Box<Effect>,
+    },
     /// "[It] enters with haste", "as ~ enters, it becomes a 3/3 creature": an effect on
     /// the permanent performed as it's put onto the battlefield, with the permanent as
     /// its source (CR 614.1c). Only meaningful inside [`ReplacementAction::AsEnters`],
@@ -2966,6 +2981,21 @@ pub enum Effect {
         filter: Filter,
         mods: Vec<Modification>,
         expires: Duration,
+    },
+    /// "Copy [spell] for each other [object or player] it could target" (CR 707.10d), or
+    /// "copy [spell]. The copy targets [target]" (`target`, CR 707.10e).
+    CopySpellRetargeted {
+        what: Sel,
+        target: Option<Sel>,
+    },
+    /// "Copy [card]": a copy of each selected card, created in the zone the card is in
+    /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):
+    /// created outside the game from the Oracle card reference (CR 707.13), or from the
+    /// last known information of the card with that name (CR 707.14). The copies are
+    /// stored in `vars::CREATED` ("you may cast the copy").
+    CopyCard {
+        what: Sel,
+        named: Option<crate::copy_rules::NamedCopy>,
     },
     /// "Roll a d20. 1—9 | ..." (CR 706).
     RollDice(Box<crate::dice::DieRoll>),
