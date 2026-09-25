@@ -201,6 +201,9 @@ pub enum ActivationTiming {
     BeforeBlockers,
     YourTurn,
     OpponentsTurn,
+    /// Other combat timing windows: "Activate only before attackers are declared",
+    /// "only during combat after blockers are declared", ... (CR 506.8, 506.8g).
+    CombatWindow(CombatTiming),
 }
 
 /// Where an ability functions (CR 113.6).

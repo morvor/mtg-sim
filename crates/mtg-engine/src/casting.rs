@@ -881,6 +881,10 @@ impl Game {
             ActivationTiming::Combat if !self.turn.step.is_combat() => return false,
             ActivationTiming::YourTurn if self.turn.active != p => return false,
             ActivationTiming::OpponentsTurn if self.turn.active == p => return false,
+            // CR 506.8, 506.8g: combat timing windows.
+            ActivationTiming::CombatWindow(t) if !crate::combat::combat_timing_ok(self, t) => {
+                return false
+            }
             // CR 506.8b, 506.8d–e, 506.8g: "only before blockers are declared".
             ActivationTiming::BeforeBlockers
                 if !crate::combat::combat_timing_ok(

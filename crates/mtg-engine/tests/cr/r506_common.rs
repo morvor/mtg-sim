@@ -189,3 +189,52 @@ pub fn enter_with(
     t.g.flush_events();
     new
 }
+
+/// Executes an effect as if a spell/ability controlled by `controller` resolved with
+/// `targets` in target slot 0.
+pub fn apply(t: &mut TestGame, controller: PlayerId, effect: Effect, targets: &[ObjectId]) {
+    let mut ctx = mtg_engine::eval::Ctx::new(None, controller);
+    ctx.targets = vec![targets.iter().map(|o| Entity::Object(*o)).collect()];
+    t.g.exec(&effect, &mut ctx);
+    t.g.recompute();
+    t.g.flush_events();
+}
+
+/// "Target permanent [gains/loses types] until end of turn."
+pub fn change_types(t: &mut TestGame, id: ObjectId, add: &[CardType], remove: &[CardType]) {
+    let mut mods = Vec::new();
+    if !add.is_empty() {
+        mods.push(Modification::AddTypes(add.to_vec()));
+    }
+    if !remove.is_empty() {
+        mods.push(Modification::RemoveTypes(remove.to_vec()));
+    }
+    apply(
+        t,
+        PlayerId(0),
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods,
+            duration: Duration::EndOfTurn,
+        },
+        &[id],
+    );
+}
+
+/// A custom permanent with loyalty and/or defense set.
+pub fn with_counters_base(mut def: CardDef, loyalty: Option<i32>, defense: Option<i32>) -> CardDef {
+    def.faces[0].chars.loyalty = loyalty;
+    def.faces[0].chars.defense = defense;
+    def
+}
+
+/// Sets a battle's protector.
+pub fn set_protector(t: &mut TestGame, battle: ObjectId, p: PlayerId) {
+    t.g.objects[battle.0 as usize].choices.player = Some(p);
+    t.g.dirty = true;
+    t.g.recompute();
+}
+
+pub fn attack_target(t: &TestGame, a: ObjectId) -> Option<Entity> {
+    t.g.combat.as_ref().and_then(|c| c.attack_target(a))
+}
