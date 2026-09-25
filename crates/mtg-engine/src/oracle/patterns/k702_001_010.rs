@@ -3,8 +3,6 @@
 //!
 //! * "[This] has double strike as long as you have no cards in hand" — a static ability
 //!   with a trailing condition, the same as "As long as [condition], [this] has ...".
-//! * "Instant and sorcery spells you control have deathtouch" (keywords on spells,
-//!   CR 702.2d).
 //! * "Equip costs you pay cost {1} less" / "Equip abilities you activate cost {1} less to
 //!   activate" (CR 702.1a: a "[keyword] cost" is the keyword's own cost).
 //! * Self-state conditions: "it's attacking", "~ is equipped", ...
@@ -135,42 +133,6 @@ pub fn keyword_mods(s: &str) -> Option<Vec<Modification>> {
         }
     }
     (!out.is_empty()).then_some(out)
-}
-
-/// "Instant and sorcery spells you control have deathtouch." — a continuous effect on
-/// spells on the stack (CR 611.3, 702.2d).
-fn spells_have_keywords(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let (subject, kws) = l.split_once(" spells you control have ")?;
-    let mut types = Vec::new();
-    for w in subject
-        .split(" and ")
-        .flat_map(|p| p.split(" or "))
-        .flat_map(|p| p.split(", "))
-        .map(str::trim)
-        .filter(|w| !w.is_empty() && *w != "and/or")
-    {
-        types.push(Filter::Type(CardType::from_word(w)?));
-    }
-    if types.is_empty() {
-        return None;
-    }
-    let mods = keyword_mods(kws)?;
-    let affected = Filter::and(vec![
-        Filter::Or(types),
-        Filter::Spell,
-        Filter::ControlledBy(PlayerRel::You),
-    ]);
-    Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
-            affected,
-            mods,
-        })),
-        text,
-    )])
-}
-
-inventory::submit! {
-    StaticPattern { name: "k702: spells you control have keywords", priority: 50, parse: spells_have_keywords }
 }
 
 /// "Equip costs you pay cost {1} less." / "Equip abilities you activate cost {1} less to
