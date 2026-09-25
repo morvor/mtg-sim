@@ -253,6 +253,39 @@ fn gains_keyword_and_becomes_type(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "gains bushido and becomes a creature type", priority: 100, parse: gains_keyword_and_becomes_type } }
 
+/// "Each creature card in your hand has ninjutsu {1}{U}{B}" (CR 702.49a: ninjutsu
+/// functions while the card is in a hand).
+fn cards_in_hand_have_ninjutsu(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_prefix("each ")?;
+    let (subject, _) = r.split_once(" card in your hand has ninjutsu ")?;
+    let t = text.trim().trim_end_matches('.');
+    let kw_text = &t[t.to_lowercase().find(" has ninjutsu ")? + " has ".len()..];
+    let mut kws = Vec::new();
+    for a in crate::oracle::keywords::parse_keyword_line(kw_text, ctx)? {
+        match &a.kind {
+            AbilityKind::Keyword(k) if k.kind == KeywordKind::Ninjutsu => kws.push(k.clone()),
+            _ => return None,
+        }
+    }
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(subject)?;
+    if !crate::oracle::phrases::end(tail).is_empty() {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(vec![
+            f,
+            Filter::Card,
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
+        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+    });
+    s.zone = FunctionZone::Battlefield;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "cards in your hand have ninjutsu", priority: 100, parse: cards_in_hand_have_ninjutsu } }
+
 /// "Each other Samurai creature you control gets +1/+1 for each point of bushido it has."
 fn per_point_of_bushido(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = l.strip_prefix("each other ")?;

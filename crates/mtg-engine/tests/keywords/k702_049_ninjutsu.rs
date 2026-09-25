@@ -69,6 +69,34 @@ fn ninjutsu_abilities_can_be_made_cheaper() {
 }
 
 #[test]
+fn cards_in_hand_can_be_given_ninjutsu() {
+    cr!("702.49a");
+    let mut t = TestGame::new(2);
+    // Satoru Umezawa: "Each creature card in your hand has ninjutsu {2}{U}{B}."
+    t.battlefield(P0, "Satoru Umezawa");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.hand(P0, "Hill Giant");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    assert!(t
+        .obj_now(giant)
+        .chars
+        .has_keyword(keywords::KeywordKind::Ninjutsu));
+    assert!(!t
+        .obj_now(bolt)
+        .chars
+        .has_keyword(keywords::KeywordKind::Ninjutsu));
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 2);
+    unblocked_attack(&mut t, bears, Entity::Player(P1));
+    t.activate(P0, giant, 0, &[]).unwrap();
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant")[0];
+    assert_eq!(attack_target(&t, g), Some(Entity::Player(P1)));
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
 fn only_an_unblocked_attacker_can_be_returned() {
     cr!("702.49a");
     ruling!(
