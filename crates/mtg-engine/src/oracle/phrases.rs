@@ -293,6 +293,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("target opponent controls"))
         {
             (Filter::ControlledBy(PlayerRel::Target(0)), r)
+        } else if let Some(r) = t.strip_prefix("defending player controls") {
+            // CR 508.5: the player the creature is attacking.
+            (Filter::ControlledBy(PlayerRel::Defending), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t

@@ -51,6 +51,11 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     tr.intervening_if = intervening;
     tr.once_per_turn = once_per_turn;
     tr.zone = trigger_zone(&tr.trigger, &eff.to_lowercase());
+    // CR 113.6: an instant or sorcery is never on the battlefield, so a triggered ability
+    // that would only function there can't be what the text means.
+    if ctx.is_spell() && tr.zone == FunctionZone::Battlefield {
+        return None;
+    }
     Some(AbilityDef::new(AbilityKind::Triggered(tr), text))
 }
 

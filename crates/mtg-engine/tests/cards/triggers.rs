@@ -468,6 +468,29 @@ fn creature_attacks_alone() {
 }
 
 #[test]
+fn attack_trigger_targets_a_creature_defending_player_controls() {
+    cr!("508.5", "603.3d");
+    assert_supported(&["Fiend Binder"]);
+    let mut t = TestGame::new(2);
+    let binder = t.battlefield(P0, "Fiend Binder");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    // An illegal choice (our own creature) is rejected; the defending player's creature
+    // is the only legal target.
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(binder, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert!(t.obj_now(theirs).tapped);
+    assert!(!t.obj_now(mine).tapped);
+}
+
+#[test]
 fn attack_with_two_or_more_creatures() {
     cr!("508.1");
     assert_supported(&["Military Intelligence"]);
