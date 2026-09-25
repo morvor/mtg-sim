@@ -37,6 +37,27 @@ pub struct Ctx {
     pub source_lki: Option<Box<Characteristics>>,
     /// Chosen opponent ("choose an opponent").
     pub chosen_player: Option<PlayerId>,
+    /// Set while an "as this enters" replacement effect is being applied: modifications
+    /// to how the permanent enters made by [`Effect::EnterTapped`] and
+    /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
+    pub entering: Option<EntryMods>,
+}
+
+/// Modifications to how a permanent enters, collected while applying an "as this
+/// enters" replacement effect (CR 614.1c).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EntryMods {
+    pub tapped: bool,
+    pub counters: Vec<(CounterKind, u32)>,
+    /// Enters prepared (CR 722.3a).
+    pub prepared: bool,
+    /// Exceptions to a copy effect it enters with (CR 707.9b).
+    pub copy_exceptions: Vec<Modification>,
+    /// Effects on the permanent performed as it's put onto the battlefield
+    /// ([`Effect::OnEntry`]).
+    pub on_entry: Vec<Effect>,
+    /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
+    pub copiable: Vec<Modification>,
 }
 
 impl Ctx {
@@ -66,6 +87,11 @@ impl Ctx {
 pub trait View {
     fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics;
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId;
+    /// The controller an object is treated as having regardless of its zone (an object
+    /// about to enter the battlefield, CR 614.12).
+    fn controller_override(&self, _id: ObjectId) -> Option<PlayerId> {
+        None
+    }
 }
 
 /// The normal view: an object's computed characteristics.
@@ -102,7 +128,29 @@ impl Game {
                 p != ctx.controller && self.player(p).team == self.player(ctx.controller).team
             }
             PlayerRel::Iterated => ctx.iter_player == Some(p),
+            PlayerRel::Chosen => self.chosen_player_of_source(ctx) == Some(p),
         }
+    }
+
+    /// Choices made for the ability's source ("the chosen color", CR 607.2d): those made
+    /// by the abilities linked to the one being evaluated. An ability with an explicit
+    /// link (including abilities acquired from another object or through a copy effect)
+    /// sees only its linked choices (CR 607.5a); an unlinked ability (link 0) whose
+    /// linked abilities made no choice sees the choices made by any of the source's
+    /// abilities.
+    pub fn source_choices(&self, ctx: &Ctx) -> Option<&Choices> {
+        match self.linked_choice(ctx) {
+            Some(c) => Some(c),
+            None if ctx.link == 0 => ctx.source.map(|s| &self.obj(s).choices),
+            None => None,
+        }
+    }
+
+    /// The player chosen for the source ("choose an opponent"), or the one chosen during
+    /// the current resolution.
+    pub fn chosen_player_of_source(&self, ctx: &Ctx) -> Option<PlayerId> {
+        ctx.chosen_player
+            .or_else(|| self.source_choices(ctx).and_then(|c| c.player))
     }
 
     /// Defending player relative to the source (CR 508.5).
@@ -138,6 +186,7 @@ impl Game {
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
             PlayerFilter::Poisoned => self.player(p).poison() > 0,
+            PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Not(x) => !self.player_filter_matches(x, p, ctx),
@@ -212,7 +261,11 @@ impl Game {
                 .collect(),
             PlayerRef::Owner => ctx.source.map(|s| self.obj(s).owner).into_iter().collect(),
             PlayerRef::Iterated => ctx.iter_player.into_iter().collect(),
-            PlayerRef::ChosenOpponent => ctx.chosen_player.into_iter().collect(),
+            PlayerRef::ChosenOpponent => self
+                .chosen_player_of_source(ctx)
+                .filter(|p| self.player(*p).in_game())
+                .into_iter()
+                .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
         }
     }
@@ -234,6 +287,9 @@ impl Game {
     /// controller (CR 108.4a); we treat their owner as controller for "you control" checks
     /// only where the filter is about a zone the player owns.
     fn filter_controller(&self, view: &dyn View, id: ObjectId) -> PlayerId {
+        if let Some(p) = view.controller_override(id) {
+            return p;
+        }
         let o = self.obj(id);
         match o.zone {
             Zone::Battlefield | Zone::Stack => view.controller(self, id),
@@ -284,9 +340,7 @@ impl Game {
             Filter::AttackingAlone
             | Filter::BlockingAlone
             | Filter::AttackingPlayerAlone
-            | Filter::HadToAttack => {
-                crate::combat::combat_filter(self, f, id)
-            }
+            | Filter::HadToAttack => crate::combat::combat_filter(self, f, id),
             Filter::AttackingPlayer(rel) => self
                 .combat
                 .as_ref()
@@ -327,15 +381,12 @@ impl Game {
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.name.eq_ignore_ascii_case(n),
-            Filter::SameNameAs(sel) => {
-                !c.name.is_empty()
-                    && self
-                        .eval_sel(sel, ctx)
-                        .iter()
-                        .filter_map(|e| e.object())
-                        .any(|x| self.obj(x).chars.name == c.name)
-            }
+            Filter::Named(n) => c.has_name(n),
+            Filter::SameNameAs(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .any(|x| c.shares_name_with(&self.obj(x).chars)),
             Filter::SharesCreatureType(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()
@@ -369,6 +420,13 @@ impl Game {
             Filter::Source => ctx.source == Some(id),
             Filter::Other => ctx.source != Some(id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
+            // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
+            Filter::Objects(v) => v.iter().any(|x| {
+                *x == id
+                    || (self.obj(*x).zone == Zone::Stack
+                        && o.zone == Zone::Battlefield
+                        && self.current(*x) == id)
+            }),
             Filter::AttachedToSource => {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }
@@ -425,6 +483,57 @@ impl Game {
                 .linked_choice(ctx)
                 .and_then(|ch| ch.creature_type.clone())
                 .is_some_and(|t| c.has_subtype(&t)),
+            // CR 607.2d: references to a choice made for the source; an undefined choice
+            // matches nothing (CR 607.5a).
+            Filter::ChosenColor => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.color)
+                .is_some_and(|col| c.colors.contains(col)),
+            // "the chosen type" is whichever type the linked ability chose: a creature
+            // type, a basic land type, or a card type.
+            Filter::ChosenType => match self.source_choices(ctx) {
+                Some(ch) => match ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    Some(t) => self.matches_view(view, id, &Filter::Subtype(t), ctx),
+                    None => ch.card_type.is_some_and(|t| c.card_types.contains(t)),
+                },
+                None => false,
+            },
+            Filter::ChosenName => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_name.as_ref())
+                .is_some_and(|n| !n.is_empty() && c.name.eq_ignore_ascii_case(n)),
+            Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
+            Filter::ChosenCardType => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_type)
+                .is_some_and(|t| c.card_types.contains(t)),
+            Filter::Targets(inner) => {
+                o.zone == Zone::Stack
+                    && o.stack.as_ref().is_some_and(|si| {
+                        si.chosen.iter().any(|cm| {
+                            cm.targets.iter().flatten().any(|t| match t {
+                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                Entity::Player(_) => false,
+                            })
+                        })
+                    })
+            }
+            Filter::CastFrom(z) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
+            }
+            Filter::DealtDamageThisTurnBy(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|s| self.history.damage_by_source.contains(&(s, id))),
+            Filter::CastWithCost(name) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.paid.iter().any(|p| p == name))
+            }
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }
@@ -612,6 +721,12 @@ impl Game {
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
+            Sel::TopOfGraveyard(r) => self
+                .eval_player(r, ctx)
+                .and_then(|p| self.player(p).graveyard.last().copied())
+                .map(Entity::Object)
+                .into_iter()
+                .collect(),
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {
@@ -782,7 +897,7 @@ impl Game {
                 .map(|o| self.mana_value_of(*o) as i64)
                 .max()
                 .unwrap_or(0),
-            Value::ColorsSpent => ctx.cast.as_ref().map_or(0, |c| {
+            Value::ColorsSpent => self.cast_info(ctx).map_or(0, |c| {
                 let mut s = ColorSet::NONE;
                 for m in &c.mana_spent {
                     if let Some(col) = m.color() {
@@ -791,7 +906,7 @@ impl Game {
                 }
                 s.count() as i64
             }),
-            Value::ManaSpent => ctx.cast.as_ref().map_or(0, |c| c.mana_spent.len() as i64),
+            Value::ManaSpent => self.cast_info(ctx).map_or(0, |c| c.mana_spent.len() as i64),
             // The number chosen, paid or noted by the linked ability (CR 607.2e, 607.2g),
             // or else by any of the source's abilities.
             Value::Chosen => self
@@ -799,7 +914,7 @@ impl Game {
                 .and_then(|c| c.number)
                 .or_else(|| ctx.source.and_then(|s| self.obj(s).choices.number))
                 .unwrap_or(0) as i64,
-            Value::TimesKicked => ctx.cast.as_ref().map_or(0, |c| c.times_kicked as i64),
+            Value::TimesKicked => self.cast_info(ctx).map_or(0, |c| c.times_kicked as i64),
             Value::Speed(r) => self
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
@@ -820,6 +935,34 @@ impl Game {
             Value::Max(a, b) => self.eval_value(a, ctx).max(self.eval_value(b, ctx)),
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
         }
+    }
+
+    /// How the spell was cast, for "if it was kicked", "if you cast it", "mana spent to
+    /// cast it" (CR 607.2i): the resolving spell's own information, or, for an ability of
+    /// a permanent (including a triggered ability checking its intervening "if", CR 603.4),
+    /// the spell that became that permanent (CR 400.7d).
+    pub fn cast_info<'a>(&'a self, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+        let resolving_ability = ctx
+            .stack_obj
+            .is_some_and(|s| self.obj(s).kind == ObjKind::StackAbility);
+        let own = if resolving_ability {
+            None
+        } else {
+            ctx.cast.as_ref()
+        };
+        if let Some(c) = own.filter(|c| c.was_cast) {
+            return Some(c);
+        }
+        ctx.source
+            .and_then(|s| {
+                let o = self.obj(s);
+                // A spell on the stack ("when you cast ~, if it was kicked") keeps its
+                // cast information in its stack info.
+                o.cast
+                    .as_deref()
+                    .or_else(|| o.stack.as_ref().map(|si| &si.cast))
+            })
+            .or(own)
     }
 
     // ------------------------------------------------------------------
@@ -849,15 +992,15 @@ impl Game {
             Condition::YourTurn => self.turn.active == ctx.controller,
             Condition::NotYourTurn => self.turn.active != ctx.controller,
             // For a permanent's abilities, how the permanent was cast (CR 607.2i).
-            Condition::CostPaid(name) => ctx
-                .cast
-                .as_ref()
-                .or_else(|| ctx.source.and_then(|s| self.obj(s).cast.as_deref()))
+            Condition::CostPaid(name) => self
+                .cast_info(ctx)
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
-            Condition::WasCast => ctx.cast.as_ref().is_some_and(|c| c.was_cast),
+            Condition::WasCast => self.cast_info(ctx).is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
             Condition::PrevAffectedAny => !ctx.prev_affected.is_empty(),
-            Condition::CastFrom(z) => ctx.cast.as_ref().is_some_and(|c| c.from == Some(*z)),
+            Condition::CastFrom(z) => self
+                .cast_info(ctx)
+                .is_some_and(|c| c.was_cast && c.from == Some(*z)),
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => self.turn.step.is_combat(),
                 PhaseCond::MainPhase => self.turn.step.is_main(),
@@ -884,6 +1027,10 @@ impl Game {
             Condition::IsNight => self.day == Some(false),
             Condition::MaxSpeed => self.player(ctx.controller).speed.unwrap_or(0) >= 4,
             Condition::CombatTiming(t) => crate::combat::combat_timing_ok(self, *t),
+            Condition::Chose(w) => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.text.as_ref())
+                .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
     }

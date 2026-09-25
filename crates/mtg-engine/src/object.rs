@@ -32,6 +32,9 @@ pub struct Characteristics {
     pub life_modifier: Option<i32>,
     /// Oracle text, for display and text-changing effects.
     pub rules_text: Arc<str>,
+    /// Also has the name of each nonlegendary creature card (Spy Kit, CR 612.7).
+    #[serde(default)]
+    pub all_creature_names: bool,
 }
 
 impl Characteristics {
@@ -70,6 +73,21 @@ impl Characteristics {
     }
     pub fn keyword_count(&self, k: KeywordKind) -> usize {
         self.keywords().filter(|kw| kw.kind == k).count()
+    }
+    /// True if the object has the name `n` (CR 201.2): its own name, or, with "all names
+    /// of nonlegendary creature cards" (CR 612.7), any such card's name.
+    pub fn has_name(&self, n: &str) -> bool {
+        (!self.name.is_empty() && self.name.eq_ignore_ascii_case(n))
+            || (self.all_creature_names && crate::text_change::is_nonlegendary_creature_name(n))
+    }
+    /// True if the two objects have at least one name in common.
+    pub fn shares_name_with(&self, other: &Characteristics) -> bool {
+        if self.name.is_empty() && !self.all_creature_names {
+            return false;
+        }
+        (self.all_creature_names && other.all_creature_names)
+            || other.has_name(&self.name)
+            || self.has_name(&other.name)
     }
     /// True if the object has no abilities other than those the compiler couldn't parse.
     pub fn has_no_abilities(&self) -> bool {
@@ -216,6 +234,9 @@ pub struct EventInfo {
     pub spell: Option<ObjectId>,
     /// Objects involved (e.g. all attackers).
     pub objects: Vec<ObjectId>,
+    /// The mana produced, for "whenever [a permanent] is tapped for mana" ("add one mana of
+    /// any type that land produced").
+    pub mana: Vec<ManaType>,
 }
 
 /// The kind of object on the stack.
@@ -297,6 +318,10 @@ pub struct GameObject {
     /// Phased out indirectly (attached to something that phased out, CR 702.26g).
     pub phased_out_indirectly: bool,
     pub counters: BTreeMap<CounterKind, u32>,
+    /// Timestamp of each kind of counter (CR 613.7c): all counters of a kind share the
+    /// timestamp of the most recently placed one.
+    #[serde(default)]
+    pub counter_timestamps: BTreeMap<CounterKind, Timestamp>,
     /// Damage marked (CR 120.6).
     pub damage: u32,
     /// Dealt damage by a deathtouch source since the last SBA check (CR 704.5h).
@@ -349,6 +374,9 @@ pub struct GameObject {
     pub sector: Option<SmolStr>,
     /// Paired with (soulbond).
     pub paired_with: Option<ObjectId>,
+    /// The "prepared" designation (CR 722.3a): the copy of its prepare spell in exile
+    /// that its controller may cast (CR 722.3c).
+    pub prepared: Option<ObjectId>,
 }
 
 impl GameObject {
@@ -377,6 +405,7 @@ impl GameObject {
             phased_out: false,
             phased_out_indirectly: false,
             counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
             damage: 0,
             deathtouch_damage: false,
             attached_to: None,
@@ -406,6 +435,7 @@ impl GameObject {
             is_commander: false,
             sector: None,
             paired_with: None,
+            prepared: None,
         }
     }
 

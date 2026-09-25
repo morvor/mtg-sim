@@ -373,6 +373,10 @@ pub enum ManaRestriction {
     SpellOfType(CardType),
     /// "Spend this mana only to cast a creature spell of the chosen type."
     SpellWithSubtype(Subtype),
+    /// [`ManaRestriction::SpellWithSubtype`] of the type chosen for the mana's source
+    /// (CR 607.2d); bound when the mana is produced. Unbound (no choice was made), it
+    /// permits nothing (CR 607.5a).
+    SpellOfChosenType,
     /// "Spend this mana only to cast spells" (not activate abilities).
     SpellsOnly,
     /// "Spend this mana only to activate abilities."
@@ -409,8 +413,11 @@ impl ManaRestriction {
         match self {
             ManaRestriction::SpellOfType(t) => ctx.is_spell && ctx.card_types.contains(*t),
             ManaRestriction::SpellWithSubtype(s) => {
-                ctx.is_spell && ctx.subtypes.iter().any(|x| x == s)
+                ctx.is_spell
+                    && ctx.card_types.contains(CardType::Creature)
+                    && ctx.subtypes.iter().any(|x| x == s)
             }
+            ManaRestriction::SpellOfChosenType => false,
             ManaRestriction::SpellsOnly => ctx.is_spell,
             ManaRestriction::AbilitiesOnly => ctx.is_ability,
             ManaRestriction::XCostsOnly => ctx.has_x,

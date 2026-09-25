@@ -242,6 +242,25 @@ pub struct TriggeredAbility {
     pub do_once_per_turn: bool,
 }
 
+/// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
+/// it triggers from resolving a mana ability ("is tapped for mana"), has no targets, and
+/// could add mana.
+pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
+    fn from_mana_ability(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::TappedForMana { .. } => true,
+            TriggerCond::ThisTurn(t) | TriggerCond::Where { trigger: t, .. } => {
+                from_mana_ability(t)
+            }
+            _ => false,
+        }
+    }
+    from_mana_ability(trigger)
+        && body.targets.is_empty()
+        && body.modal.is_none()
+        && crate::oracle::effects::is_mana_effect(&body.effect)
+}
+
 impl TriggeredAbility {
     pub fn new(trigger: TriggerCond, body: Body) -> Self {
         TriggeredAbility {
@@ -444,6 +463,10 @@ pub struct Destination {
     pub transformed: bool,
     /// Counters it enters with.
     pub with_counters: Vec<(CounterKind, Value)>,
+    /// Battlefield: "that permanent is [characteristic]" — a continuous effect of the
+    /// resolving spell or ability that applies as it enters (CR 611.2e).
+    #[serde(default)]
+    pub with_mods: Vec<Modification>,
 }
 
 impl Destination {
@@ -457,6 +480,7 @@ impl Destination {
             attacking: false,
             transformed: false,
             with_counters: vec![],
+            with_mods: vec![],
         }
     }
     pub fn battlefield() -> Destination {
@@ -639,6 +663,8 @@ pub enum Sel {
     TriggerSpell,
     /// Union of selections.
     Union(Vec<Sel>),
+    /// The top card of a player's graveyard.
+    TopOfGraveyard(PlayerRef),
 }
 
 /// Refers to one or more players.
@@ -707,6 +733,8 @@ pub enum PlayerFilter {
     Active,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
+    /// One of the players a reference resolves to ("enchanted player").
+    Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),
@@ -755,6 +783,8 @@ pub enum PlayerRel {
     Teammate,
     /// The iterated player in "for each player".
     Iterated,
+    /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
+    Chosen,
 }
 
 /// Object predicates (CR 608.2j: filters check only the stated characteristics).
@@ -831,6 +861,10 @@ pub enum Filter {
     Other,
     /// A member of the selection.
     In(Box<Sel>),
+    /// One of these specific objects, fixed when an effect was created (e.g. "a source of
+    /// your choice", CR 609.7a). A chosen permanent spell also matches the permanent it
+    /// becomes.
+    Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
     /// Attached to something ("equipped", "enchanted").
@@ -858,6 +892,29 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
+    /// nothing while no color is chosen (CR 607.5a).
+    ChosenColor,
+    /// "of the chosen type": has the creature type, land type, or card type chosen for
+    /// the source.
+    ChosenType,
+    /// "with the chosen name": has the card name chosen for the source.
+    ChosenName,
+    /// "of the chosen card type": has the card type chosen for the source.
+    ChosenCardType,
+    /// Has the prepared designation (CR 722.3a).
+    Prepared,
+    /// A spell or ability on the stack with at least one target that is an object matching
+    /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
+    Targets(Box<Filter>),
+    /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
+    CastFrom(ZoneKind),
+    /// A spell for which the named optional additional cost was paid ("a kicked spell":
+    /// `"kicker"`).
+    CastWithCost(SmolStr),
+    /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
+    /// by ~ this turn").
+    DealtDamageThisTurnBy(Box<Sel>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
@@ -1069,6 +1126,8 @@ pub enum Condition {
     MaxSpeed,
     /// "only before/after [a point in the combat phase]" timing windows (CR 506.8).
     CombatTiming(CombatTiming),
+    /// This word (e.g. an anchor word, CR 614.12c) was chosen for the source.
+    Chose(SmolStr),
     /// This ability's source is tapped/untapped/attacking… via SelMatches(This, …).
     /// Custom conditions implemented in code.
     Custom(SmolStr),
@@ -1135,6 +1194,9 @@ pub enum Duration {
     UntilHostLeaves,
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
+    /// "[doesn't untap] during its controller's next untap step": for each affected
+    /// object, until its controller's next untap step has passed (CR 502.3).
+    ThroughNextUntapStep,
 }
 
 /// Layer-specific modifications of characteristics (CR 613).
@@ -1147,6 +1209,33 @@ pub enum Modification {
     ChangeText {
         from: SmolStr,
         to: SmolStr,
+    },
+    /// Sets the name (CR 612.8): the object loses its other names.
+    SetName(SmolStr),
+    /// "Exchange the text boxes of [two objects]" (CR 612.5). As the effect is created,
+    /// it becomes a [`Modification::SetText`] for each object with the other's rules text.
+    ExchangeText,
+    /// Replaces the object's rules text (CR 612.5).
+    SetText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// Has the full text of the selected card (CR 612.6): its name, mana cost, color
+    /// indicator, type line, rules text, and power and toughness.
+    FullTextOf(Box<Sel>),
+    /// Adds rules text following the object's own, without changing its own text (a
+    /// splice ability, CR 612.10, 702.47c).
+    AddText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// "Has all names of nonlegendary creature cards in addition to its name" (CR 612.7).
+    AllCreatureNames,
+    /// A name sticker: adds `word` to the object's name after `position` words (CR 123.6,
+    /// 612.9).
+    NameSticker {
+        word: SmolStr,
+        position: u32,
     },
     // Layer 4
     AddTypes(Vec<CardType>),
@@ -1165,12 +1254,22 @@ pub enum Modification {
     RemoveAllCreatureTypes,
     /// Lands become a basic land type, losing other land types (CR 305.7).
     SetBasicLandType(Vec<Subtype>),
+    /// "is the chosen type in addition to its other types": adds the creature type or
+    /// land type chosen for the effect's source (CR 607.2d). Does nothing while no type
+    /// is chosen (CR 607.5a).
+    AddChosenType,
+    /// "Enchanted land is the chosen type": like [`Modification::SetBasicLandType`] with
+    /// the basic land type chosen for the effect's source (CR 305.7).
+    SetChosenBasicLandType,
     // Layer 5
     SetColors(ColorSet),
     /// "[This] is the chosen color": the color chosen by the linked ability (CR 607.2p).
     /// Does nothing while no color is chosen (CR 607.5a).
     SetLinkedChosenColor,
     AddColors(ColorSet),
+    /// "becomes the color of your choice": the color chosen for the effect's source
+    /// (fixed when a resolving effect is created).
+    SetChosenColor,
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
@@ -1195,7 +1294,14 @@ impl Modification {
         use Modification::*;
         match self {
             SetController(_) => Layer::L2Control,
-            ChangeText { .. } => Layer::L3Text,
+            ChangeText { .. }
+            | SetName(_)
+            | ExchangeText
+            | SetText { .. }
+            | FullTextOf(_)
+            | AddText { .. }
+            | AllCreatureNames
+            | NameSticker { .. } => Layer::L3Text,
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)
@@ -1205,8 +1311,10 @@ impl Modification {
             | SetTypes { .. }
             | AllCreatureTypes
             | RemoveAllCreatureTypes
-            | SetBasicLandType(_) => Layer::L4Type,
-            SetColors(_) | AddColors(_) | SetLinkedChosenColor => Layer::L5Color,
+            | SetBasicLandType(_)
+            | AddChosenType
+            | SetChosenBasicLandType => Layer::L4Type,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -1279,6 +1387,9 @@ pub enum ManaProduction {
     CouldProduce(Filter),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
+    /// One mana of one of the listed types or of the color chosen for the source
+    /// ("Add {R} or one mana of the chosen color").
+    OneOfOrChosenColor(Vec<ManaType>),
     /// N mana of a fixed type.
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
@@ -1286,6 +1397,9 @@ pub enum ManaProduction {
     /// One mana of any type the permanent tapped for mana produced (from the triggering
     /// event, "one mana of any type that land produced").
     AnyTypeProduced,
+    /// One mana of any type the triggering mana ability produced ("add one mana of any
+    /// type that land produced", CR 106.12a).
+    TypeProduced,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1360,6 +1474,9 @@ pub enum ReplacementEvent {
     Mill(PlayerFilter),
     /// "If you would search your library".
     Search(PlayerFilter),
+    /// "As [this permanent] is turned face up, ..." (CR 614.1e): performed with
+    /// [`ReplacementAction::AsEnters`] as the permanent turns face up.
+    TurnedFaceUp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1379,7 +1496,12 @@ pub enum ReplacementAction {
     EnterTapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
-    /// "As this enters, choose ..." — perform the effect as it enters (the choice is stored on the object).
+    /// "As this enters, ..." — the effect is performed while the replacement applies,
+    /// before the permanent enters (CR 614.1c, 614.12a). Choices ([`Effect::Choose`]) are
+    /// stored on the entering object and carried onto the permanent; the entry-modifying
+    /// effects [`Effect::EnterTapped`] and [`Effect::EnterWithCounters`] change how it
+    /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
+    /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
     /// Enters as a copy of (chosen) object (CR 707.9).
     EnterAsCopy { filter: Filter, optional: bool },
@@ -1405,6 +1527,13 @@ pub enum ReplacementAction {
     Also(Box<Effect>),
     /// Regeneration shield (CR 701.19).
     Regenerate,
+    /// Prevent N (or all, when `None`) of the damage, then perform an additional effect
+    /// right afterward that can refer to the amount prevented as the event amount
+    /// (CR 615.5): "prevent that damage. You gain life equal to the damage prevented this
+    /// way."
+    PreventAndThen(Option<Value>, Box<Effect>),
+    /// Enters transformed, with its back face up (CR 616.1d, 712.14).
+    EnterTransformed,
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -1490,7 +1619,8 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
-    /// "[objects] can't enter the battlefield" (CR 608.3e).
+    /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
+    /// [`Restriction::CantEnter`] (CR 614.17d).
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
@@ -1507,6 +1637,9 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
+    /// it would exist on the battlefield.
+    CantEnter(Filter),
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
@@ -1669,6 +1802,15 @@ pub enum StaticEffect {
     /// "Prevent all combat damage that would be dealt ..." is a Replacement.
     /// Custom behavior implemented in code, by name.
     Custom(SmolStr),
+    /// "If you cast a spell this way, it gains [ability]": spells matching `what` that a
+    /// player casts from `zone` using a permission from this object gain the
+    /// modifications; they last until the end of the game, even after the spell becomes a
+    /// permanent and even if this object leaves (CR 611.3d).
+    CastGrant {
+        zone: ZoneKind,
+        what: Filter,
+        mods: Vec<Modification>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1770,11 +1912,13 @@ pub enum TriggerCond {
         defender: PlayerRel,
     },
     /// "Whenever [blocker] blocks a creature" (CR 509.3b): once per attacker blocked.
+    /// Event object = the blocked attacker ("that creature"), other = the blocker.
     BlocksCreature {
         blocker: Filter,
         attacker: Filter,
     },
     /// "Whenever [attacker] becomes blocked by a creature" (CR 509.3d): once per blocker.
+    /// Event object = the blocker ("that creature"), other = the attacker.
     BlockedByCreature {
         attacker: Filter,
         blocker: Filter,
@@ -1885,9 +2029,6 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
-    /// A triggered ability with several trigger conditions ("Whenever A or B, ...");
-    /// it triggers when any of them occurs (CR 603.1b).
-    AnyOf(Vec<TriggerCond>),
     /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
     PhasesOut(Filter),
     /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).
@@ -1904,9 +2045,6 @@ pub enum TriggerCond {
         source: Filter,
         final_chapter: bool,
     },
-    /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
-    /// (CR 106.12a). The event's amount is a bit mask of the types produced.
-    TappedForMana(Filter),
     /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
     /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
     /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is
@@ -1915,8 +2053,97 @@ pub enum TriggerCond {
         cause: Box<TriggerCond>,
         source: Filter,
     },
+    /// An ability with several trigger conditions ("When ~ enters or dies", "At the
+    /// beginning of your upkeep and whenever you cast a green spell"). It triggers once for
+    /// each event that matches any of them (CR 603.2c): for a single event, the first
+    /// matching condition is used.
+    AnyOf(Vec<TriggerCond>),
+    /// A trigger event qualified by a condition that is part of the trigger event itself
+    /// ("attacks alone", "while you control …", "your second card each turn"). The
+    /// condition is evaluated with the event information when the event occurs; unlike an
+    /// intervening "if" clause (CR 603.4) it isn't checked again on resolution.
+    Where {
+        trigger: Box<TriggerCond>,
+        cond: Condition,
+    },
+    /// "… for the first time each turn": triggers only if no earlier event this turn
+    /// matched the inner trigger condition.
+    FirstTimeEachTurn(Box<TriggerCond>),
+    /// Triggers once for each batch of simultaneous events matching the inner condition
+    /// (CR 603.2c), grouped by `per`: "whenever one or more creatures die" (once per
+    /// batch), "one or more creatures you control deal combat damage to a player" (once
+    /// per damaged player), "whenever ~ is dealt damage" (once however many sources dealt
+    /// damage at the same time). The event info carries all matching objects (`objects`)
+    /// and the total amount; other fields come from the first matching event.
+    Batched {
+        trigger: Box<TriggerCond>,
+        per: BatchPer,
+    },
+    /// "Whenever [player] copies a [filter] spell" ("whenever you cast or copy an instant or
+    /// sorcery spell"): a copy of a spell was put onto the stack (CR 707.10).
+    SpellCopied {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// A player performed a named keyword action reported as [`crate::events::Event::Custom`]
+    /// ("scry", "surveil", "proliferate"): "whenever you scry".
+    PlayerAction {
+        name: SmolStr,
+        who: PlayerRel,
+    },
+    /// "Whenever [attacker] attacks [defender] [with N or more [filter]]", "whenever
+    /// [defender] is attacked" (CR 508.3b, 508.3e): once for each player attacked by
+    /// creatures the attacking player controls, when attackers are declared. Needs at least
+    /// `min` attackers matching `with` attacking that player. Event player = the attacked
+    /// player, objects = the creatures attacking them, amount = their number.
+    PlayerAttacked {
+        attacker: PlayerRel,
+        defender: PlayerFilter,
+        with: Filter,
+        min: u32,
+    },
+    /// "Whenever [obj] becomes attached to [other]" (`attached`) / "becomes unattached from
+    /// [other]" (CR 701.3). Event object = the Aura/Equipment, other = the permanent.
+    AttachChanged {
+        attached: bool,
+        obj: Filter,
+        other: Filter,
+    },
+    /// "Whenever [filter] phases in" (`phased_in`) / "phases out" (CR 702.26).
+    Phases {
+        phased_in: bool,
+        filter: Filter,
+    },
+    /// A delayed triggered ability that lasts for the rest of the turn ("until end of
+    /// turn, whenever …", "whenever … this turn", CR 603.7b); removed in the cleanup step
+    /// (CR 514.2).
+    ThisTurn(Box<TriggerCond>),
+    /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
+    /// only: "whenever a source you control deals noncombat damage to an opponent".
+    Noncombat(Box<TriggerCond>),
+    /// "Whenever [filter] is tapped for mana", "whenever [player] taps [filter] for mana"
+    /// (CR 106.12a): a mana ability with {T} in its cost resolved and produced mana. `who`
+    /// is the player who activated it. Event object = the permanent, player = `who`.
+    TappedForMana {
+        who: PlayerRel,
+        filter: Filter,
+    },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
+}
+
+/// How a [`TriggerCond::Batched`] trigger groups the events of one batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BatchPer {
+    /// Once per batch.
+    Batch,
+    /// Once per player in the events (`EventInfo::player`).
+    Player,
+    /// Once per object the events are about (`EventInfo::object`), e.g. the creature dealt
+    /// damage.
+    Object,
+    /// Once per other object (`EventInfo::other`), e.g. the source dealing damage.
+    Other,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2189,6 +2416,42 @@ pub enum Effect {
         who: PlayerRef,
         kind: ChoiceKind,
     },
+    /// "[It] enters tapped": only meaningful inside [`ReplacementAction::AsEnters`], where
+    /// it modifies how the permanent enters (CR 614.1c); elsewhere it does nothing.
+    EnterTapped,
+    /// "[It] enters with N [kind] counters on it": only meaningful inside
+    /// [`ReplacementAction::AsEnters`] (CR 614.1c, 122.6); elsewhere it does nothing.
+    EnterWithCounters {
+        kind: CounterKind,
+        n: Value,
+    },
+    /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
+    /// (CR 722.3a); elsewhere it does nothing.
+    EnterPrepared,
+    /// "... enter as a copy of X, except [exceptions]": if the permanent enters as a copy,
+    /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
+    /// inside [`ReplacementAction::AsEnters`].
+    EnterCopyExceptions(Vec<Modification>),
+    /// "[It] enters with haste", "as ~ enters, it becomes a 3/3 creature": an effect on
+    /// the permanent performed as it's put onto the battlefield, with the permanent as
+    /// its source (CR 614.1c). Only meaningful inside [`ReplacementAction::AsEnters`],
+    /// where it's deferred until right after the permanent enters (before its
+    /// zone-change event); elsewhere it does nothing.
+    OnEntry(Box<Effect>),
+    /// "As ~ enters, it becomes your choice of a 3/3 creature or a 2/2 creature with
+    /// flying": an "as enters" ability that sets power and toughness (and maybe other
+    /// characteristics) modifies the permanent's copiable values (CR 707.2). Only
+    /// meaningful inside [`ReplacementAction::AsEnters`].
+    EnterAs(Vec<Modification>),
+    /// "It becomes day" / "it becomes night" (CR 731.1).
+    SetDayNight {
+        day: bool,
+    },
+    /// "[permanents] become prepared" / "become unprepared" (CR 722.3a–c).
+    SetPrepared {
+        what: Sel,
+        prepared: bool,
+    },
 
     // --- Players ------------------------------------------------------------
     Draw {
@@ -2358,8 +2621,59 @@ pub enum Effect {
         what: Sel,
         n: Value,
     },
+    /// "Change the text of [objects] by replacing all instances of one [kind of word] with
+    /// another" (CR 612): the words are chosen as it resolves; a layer 3 effect results.
+    ChangeText {
+        what: Sel,
+        words: crate::text_change::TextWords,
+        /// Words the new word can't be ("The new creature type can't be Wall").
+        exclude: Vec<SmolStr>,
+        duration: Duration,
+    },
+    /// "Exile [objects] until [event]" (CR 610.3): when the event happens, the objects
+    /// return to the zones they were in (to the battlefield under their owners' control).
+    ExileUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// "[Permanents] phase out until [event]" (CR 610.4).
+    PhaseOutUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// Performs `effect`, with `replacement` applying to the events it causes as a
+    /// self-replacement effect (CR 614.15): "Counter target spell. If that spell is
+    /// countered this way, put it on top of its owner's library instead of into that
+    /// player's graveyard."
+    SelfReplace {
+        replacement: ReplacementDef,
+        effect: Box<Effect>,
+    },
+    /// "A source of your choice" (CR 609.7a): the player chooses a source of damage —
+    /// a permanent, a spell, or a face-up object in the command zone — matching the
+    /// filter. The choice is stored in `var`.
+    ChooseSource {
+        who: PlayerRef,
+        filter: Filter,
+        var: Var,
+    },
+    /// "The next [filter] spell you cast this turn [has ...]" (CR 611.2f): a continuous
+    /// effect that begins to apply to the next matching spell its controller puts on the
+    /// stack. `expires` is how long the effect waits for that spell.
+    NextSpell {
+        filter: Filter,
+        mods: Vec<Modification>,
+        expires: Duration,
+    },
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
+}
+
+/// The event that ends an "until" effect (CR 610.3, 610.4).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UntilEvent {
+    /// "until [this object] leaves the battlefield".
+    SourceLeavesBattlefield,
 }
 
 impl Effect {
@@ -2384,6 +2698,12 @@ impl Effect {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChoiceKind {
     Color,
+    /// "choose a color other than [color]".
+    ColorOtherThan(Color),
+    /// "choose A, B, or C": one of the listed words — creature types, land types, card
+    /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
+    /// (and as the chosen type/color when the word is one).
+    OneOf(Vec<String>),
     CreatureType,
     CardName,
     /// A card name of a nonland card, etc.

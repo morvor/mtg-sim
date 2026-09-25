@@ -187,6 +187,8 @@ impl Game {
         // CR 103.4, 119.1: each player's life total becomes their starting life total
         // (vanguard life modifiers are known now, CR 902.4).
         crate::life_totals::set_starting_life_totals(self);
+        // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
+        crate::variants::begin_game(self);
         // CR 103.4–103.5: draw opening hands, then mulligans.
         let hand_size = self.config.starting_hand_size;
         for p in self.apnap() {
@@ -246,7 +248,7 @@ impl Game {
         self.turn.cleanup_priority = false;
         self.turn.step_log.clear();
         self.turn.attacked_players.clear();
-        self.history = TurnHistory::default();
+        self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
         for p in self.players.iter_mut() {
             p.lands_played_this_turn = 0;
@@ -309,6 +311,8 @@ impl Game {
         self.expire_effects_at_step_begin(step);
         self.turn.step_log.push(step);
         self.emit(Event::StepBegan { step, active });
+        // CR 614.10b: an action a skip effect scheduled is the first thing that happens.
+        crate::skip::run_step_start_actions(self);
         match step {
             Step::Untap => self.untap_step_actions(),
             Step::Upkeep => {
@@ -475,16 +479,28 @@ impl Game {
 
     fn next_step(&mut self) {
         if self.turn.schedule.is_empty() {
-            // Next turn (CR 500.7: extra turns first).
-            let next = if let Some(p) = self.extra_turns.pop() {
-                if self.player(p).in_game() {
-                    self.begin_turn(p, true);
-                    return;
+            // Next turn (CR 500.7: extra turns first). Skipped turns never begin
+            // (CR 614.10).
+            let mut after = self.turn.active;
+            for _ in 0..1000 {
+                if let Some(p) = self.extra_turns.pop() {
+                    if self.player(p).in_game() {
+                        if crate::skip::consume_turn_skip(self, p) {
+                            continue;
+                        }
+                        self.begin_turn(p, true);
+                        return;
+                    }
                 }
-                self.next_player(self.turn.active)
-            } else {
-                self.next_player(self.turn.active)
-            };
+                let next = self.next_player(after);
+                if crate::skip::consume_turn_skip(self, next) {
+                    after = next;
+                    continue;
+                }
+                self.begin_turn(next, false);
+                return;
+            }
+            let next = self.next_player(after);
             self.begin_turn(next, false);
             return;
         }
@@ -543,6 +559,10 @@ impl Game {
             Step::End => StepKind::End,
             _ => return false,
         };
+        // CR 614.1b: static "skip" effects replace the step with nothing.
+        if crate::skip::static_skip(self, kind, active) {
+            self.players[active.idx()].skips.push(kind);
+        }
         if let Some(i) = self.players[active.idx()]
             .skips
             .iter()
@@ -599,12 +619,40 @@ impl Game {
                 self.objects[id.0 as usize].exerted = false;
             }
         }
+        self.expire_through_next_untap_step(active);
+    }
+
+    /// "Doesn't untap during its controller's next untap step": that untap step has now
+    /// passed for the permanents the active player controls (and the effect no longer
+    /// applies to objects that left the battlefield, CR 400.7).
+    fn expire_through_next_untap_step(&mut self, active: PlayerId) {
+        let objects = &self.objects;
+        let battlefield = &self.battlefield;
+        for e in self.rule_effects.iter_mut() {
+            if !matches!(e.duration, Duration::ThroughNextUntapStep) {
+                continue;
+            }
+            if let Some(v) = e.objects.as_mut() {
+                v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
+            }
+        }
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughNextUntapStep)
+                || e.objects.as_ref().is_some_and(|v| !v.is_empty())
+        });
+        self.dirty = true;
     }
 
     pub fn set_day(&mut self, is_day: bool) {
         if self.day != Some(is_day) {
+            let had_designation = self.day.is_some();
             self.day = Some(is_day);
-            self.emit(Event::DayNightChanged { is_day });
+            // CR 731.1a: "day becomes night"/"night becomes day" means losing one
+            // designation and gaining the other; the game first becoming day or night
+            // from neither isn't such a change.
+            if had_designation {
+                self.emit(Event::DayNightChanged { is_day });
+            }
             crate::keyword_impls::day_night_changed(self);
         }
     }
@@ -663,6 +711,9 @@ impl Game {
             o.deathtouch_damage = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
+        self.delayed_triggers
+            .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
         self.dirty = true;
     }
 

@@ -97,6 +97,15 @@ pub enum Event {
         amount: u32,
         combat: bool,
     },
+    /// A prevention effect prevented some or all of the damage that would have been dealt
+    /// (CR 615.13). `by` is the prevention effect's source; `key` identifies the effect.
+    DamagePrevented {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        by: Option<ObjectId>,
+        key: u64,
+    },
     LifeGained {
         player: PlayerId,
         amount: u32,
@@ -259,16 +268,25 @@ pub enum Event {
         player: PlayerId,
         source: Option<ObjectId>,
     },
-    /// A permanent was tapped for mana: a mana ability with {T} in its cost resolved and
-    /// produced mana (CR 106.12a).
-    TappedForMana {
-        obj: ObjectId,
-        player: PlayerId,
-        produced: Vec<crate::mana::ManaType>,
-    },
     Exploited {
         obj: ObjectId,
     },
+    /// A copy of a spell was put onto the stack (CR 707.10); `player` controls the copy.
+    SpellCopied {
+        spell: ObjectId,
+        player: PlayerId,
+    },
+    /// `player` tapped `obj` for mana (CR 106.12): a mana ability of it with {T} in its
+    /// cost resolved and produced `mana` (CR 106.12a).
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        mana: Vec<crate::mana::ManaType>,
+    },
+    /// Marks the end of a group of simultaneous events (one action of a resolving spell or
+    /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
+    /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.
+    BatchBoundary,
     /// Any other event identified by name (used by keyword/card implementations).
     Custom {
         name: smol_str::SmolStr,

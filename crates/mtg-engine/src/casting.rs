@@ -204,6 +204,10 @@ impl Game {
         {
             return true;
         }
+        // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
+        if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
+            return true;
+        }
         // CR 601.3f: a face-down card in exile can be cast only by a player who may look
         // at it; permissions to cast spells "with certain qualities" don't reveal it.
         if o.zone == Zone::Exile && o.face_down {
@@ -294,6 +298,12 @@ impl Game {
                 out.push(gnt.object);
             }
         }
+        // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
+        for c in crate::designations::castable_prepared_copies(self, p) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
         out
     }
 
@@ -309,6 +319,12 @@ impl Game {
         {
             if !out.contains(c) {
                 out.push(*c);
+            }
+        }
+        // CR 609.4: "as though those cards were in your graveyard".
+        for c in crate::as_though::other_graveyard_cards(self, p) {
+            if !out.contains(&c) {
+                out.push(c);
             }
         }
         for c in self.permitted_cards(p) {
@@ -353,10 +369,13 @@ impl Game {
                         out.push(f);
                     }
                 }
-                Some(crate::card::Layout::Adventure) | Some(crate::card::Layout::Prepare) => {
+                Some(crate::card::Layout::Adventure) => {
                     push_face(FaceState::Front, &mut out);
                     push_face(FaceState::Half(1), &mut out);
                 }
+                // CR 722.3: a preparation card can't be cast as its prepare spell; only
+                // the copy created as it becomes prepared can.
+                Some(crate::card::Layout::Prepare) => push_face(FaceState::Front, &mut out),
                 Some(crate::card::Layout::ModalDfc) => {
                     push_face(FaceState::Front, &mut out);
                     push_face(FaceState::Back, &mut out);
@@ -711,6 +730,9 @@ impl Game {
             by: Some(p),
             lookback,
         });
+        // CR 601.2a: effects that apply to the spell as it's cast begin now (CR 610.5,
+        // 611.2f).
+        crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
         let chars = self.obj(id).chars.clone();
 
@@ -763,6 +785,16 @@ impl Game {
         }
         // (Additional costs required by the casting method itself are part of
         // `base_total_cost`.)
+        // CR 702.47a: splice (the spell gains text, CR 612.10). Splice affordability
+        // accounts for every additional cost chosen so far, including the casting
+        // method's own.
+        let mut committed = extra.clone();
+        if let Some(c) = &opt.extra_cost {
+            add_cost(&mut committed, c);
+        }
+        for c in crate::splice::offer_splices(self, p, id, &committed) {
+            add_cost(&mut extra, &c);
+        }
         let base_cost_has_x = match &opt.alt_cost {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
@@ -869,13 +901,32 @@ impl Game {
             si.cast.mana_spent = paid.mana_spent.clone();
             si.cast.cost_objects = paid.objects.clone();
         }
+        // CR 700.14: the player expends N for each N reached by this payment.
+        let spent = paid.mana_spent.len() as u32;
+        if spent > 0 {
+            let total = self.history.spell_mana_spent.entry(p).or_insert(0);
+            let before = *total;
+            *total += spent;
+            for n in before + 1..=before + spent {
+                self.emit(Event::Custom {
+                    name: "expend".into(),
+                    player: Some(p),
+                    obj: None,
+                    amount: n as i32,
+                });
+            }
+        }
         if matches!(from, Zone::Command) && self.obj(id).is_commander {
             *self.players[p.idx()]
                 .commander_casts
                 .entry(chars.name.clone())
                 .or_insert(0) += 1;
         }
-        // 601.2i: the spell becomes cast.
+        // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
+        // this is loses the designation now (CR 722.3c).
+        if from == Zone::Exile && self.obj(card).kind == ObjKind::CardCopy {
+            crate::designations::prepared_copy_left_exile(self, card);
+        }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         self.emit(Event::SpellCast {
             spell: id,
@@ -1327,9 +1378,31 @@ impl Game {
             });
             let tapped_for_mana = act.cost.has_tap();
             self.mana_ability_resolving = tapped_for_mana.then_some(src);
+            let pools_before: Vec<usize> = self
+                .players
+                .iter()
+                .map(|pl| pl.mana_pool.mana.len())
+                .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
             self.mana_ability_resolving = None;
+            // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
+            // produces mana.
+            if tapped_for_mana {
+                let mana: Vec<crate::mana::ManaType> = self
+                    .players
+                    .iter()
+                    .zip(pools_before)
+                    .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                    .collect();
+                if !mana.is_empty() {
+                    self.emit(Event::TappedForMana {
+                        obj: src,
+                        player: p,
+                        mana,
+                    });
+                }
+            }
             self.flush_events();
             return Ok(None);
         }
@@ -1382,6 +1455,17 @@ impl Game {
             .activations_this_turn
             .entry(a.uid)
             .or_insert(0) += 1;
+        // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
+        if a.text == "Cycling"
+            && act
+                .cost
+                .parts
+                .iter()
+                .any(|c| matches!(c, CostPart::DiscardSelf))
+        {
+            let card = self.current(src);
+            self.emit(Event::Cycled { player: p, card });
+        }
         // 602.2i: becomes activated.
         self.log(|g| format!("{p} activates {}", g.describe(src)));
         self.emit(Event::AbilityActivated {
@@ -1443,7 +1527,7 @@ impl Game {
             }
         }
         if let Some(m) = &cost.mana {
-            let need = m.with_x(0);
+            let need = crate::as_though::payment_cost(self, p, &m.with_x(0));
             if need.mana_value() == 0
                 && !need
                     .symbols
@@ -1524,14 +1608,15 @@ impl Game {
                 let Some(o) = so else { return false };
                 *n >= 0 || o.loyalty() >= -*n
             }
-            CostPart::SacrificeSelf => {
-                so.is_some_and(|o| o.zone == Zone::Battlefield && o.controller == p)
-            }
+            // CR 614.17b: a cost that includes an event that can't happen can't be paid.
+            CostPart::SacrificeSelf => so.is_some_and(|o| {
+                o.zone == Zone::Battlefield && o.controller == p && !self.cant_be_sacrificed(o.id)
+            }),
             CostPart::Sacrifice { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p)
+                    .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
                     .count()
                     >= n
             }
@@ -1696,7 +1781,14 @@ impl Game {
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
+            if m.symbols.contains(&crate::mana::ManaSymbol::Infinity) {
+                return Err(Illegal(
+                    "unpayable cost: an object with no mana cost (CR 118.6)".into(),
+                ));
+            }
             let reserve = if cost.has_tap() { src } else { None };
+            // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
+            let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;

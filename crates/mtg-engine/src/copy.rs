@@ -42,6 +42,12 @@ pub fn copy_spell(
     }
     g.dirty = true;
     g.recompute();
+    if orig.kind != ObjKind::StackAbility {
+        g.emit(crate::events::Event::SpellCopied {
+            spell: id,
+            player: controller,
+        });
+    }
     if new_targets {
         let body = g.stack_body(id);
         let mut ctx = Ctx::new(Some(id), controller);

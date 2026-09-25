@@ -45,10 +45,10 @@ fn tapped_for_mana_condition(l: &str) -> Option<TriggerCond> {
         if !end(tail).is_empty() {
             return None;
         }
-        return Some(TriggerCond::TappedForMana(Filter::And(vec![
-            Filter::AttachedToSource,
-            f,
-        ])));
+        return Some(TriggerCond::TappedForMana {
+            who: PlayerRel::Any,
+            filter: Filter::And(vec![Filter::AttachedToSource, f]),
+        });
     }
     for (prefix, yours) in [
         ("whenever a player taps ", false),
@@ -65,7 +65,10 @@ fn tapped_for_mana_condition(l: &str) -> Option<TriggerCond> {
                 return None;
             }
             let f = if yours { f.you_control() } else { f };
-            return Some(TriggerCond::TappedForMana(f));
+            return Some(TriggerCond::TappedForMana {
+                who: PlayerRel::Any,
+                filter: f,
+            });
         }
     }
     None

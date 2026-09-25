@@ -23,13 +23,59 @@ pub enum EffKey {
     Resolved(usize),
     /// A static ability: (source object, ability uid).
     Static(ObjectId, u64),
+    /// The keyword counters of one kind on an object (index into [`KEYWORD_COUNTERS`]),
+    /// which grant their keyword in layer 6 at the counters' timestamp (CR 613.1f, 613.7c).
+    KwCounter(ObjectId, u8),
 }
 
 #[derive(Clone, Debug)]
 struct LayerEff {
     key: EffKey,
-    timestamp: Timestamp,
+    /// Timestamp order (CR 613.7): the timestamp, then a secondary order for abilities
+    /// granted to an object (see [`Game::static_timestamp`]).
+    ts: (Timestamp, Timestamp),
     cda: bool,
+}
+
+/// Bookkeeping for one characteristic computation, shared across layers.
+#[derive(Default)]
+struct LayerState {
+    /// Objects each effect applied to when it started to apply (CR 613.6); static
+    /// abilities keep applying to them in later layers even if the ability is removed.
+    started: HashMap<EffKey, Vec<ObjectId>>,
+    /// The ability each static-ability effect comes from.
+    abilities: HashMap<EffKey, Ability>,
+    /// Timestamp of the effect that granted an ability to an object (CR 613.7a).
+    grants: HashMap<(ObjectId, u64), Timestamp>,
+}
+
+/// Counter kinds that grant keyword abilities (CR 122.1b).
+pub const KEYWORD_COUNTERS: [&str; 15] = [
+    "flying",
+    "first strike",
+    "double strike",
+    "deathtouch",
+    "decayed",
+    "exalted",
+    "haste",
+    "hexproof",
+    "indestructible",
+    "lifelink",
+    "menace",
+    "reach",
+    "shadow",
+    "trample",
+    "vigilance",
+];
+
+fn is_cant_have(m: &Modification) -> bool {
+    matches!(m, Modification::CantHaveKeyword(_))
+}
+
+/// Whether any of the modifications applies in `layer` (other than "can't have"
+/// modifications, which are applied at the end of layer 6).
+fn has_layer_mod(mods: &[Modification], layer: Layer) -> bool {
+    mods.iter().any(|m| m.layer() == layer && !is_cant_have(m))
 }
 
 impl Game {
@@ -100,6 +146,13 @@ impl Game {
     pub fn recompute(&mut self) {
         self.dirty = false;
         self.expire_dependent_effects();
+        self.compute_characteristics(true);
+    }
+
+    /// Computes every object's characteristics, then the rule-modifying effects. With
+    /// `side_effects` false (a hypothetical computation, e.g. of how a permanent would
+    /// exist on the battlefield, CR 614.12), changes of control aren't acted on.
+    pub(crate) fn compute_characteristics(&mut self, side_effects: bool) {
         let live = self.live_objects();
         let prev_controllers: Vec<(ObjectId, PlayerId)> = self
             .battlefield
@@ -119,7 +172,7 @@ impl Game {
             .effects
             .iter()
             .enumerate()
-            .filter(|(_, e)| matches!(e.layer1, Some(Layer1::Copy { .. })))
+            .filter(|(_, e)| e.layer1.is_some())
             .map(|(i, e)| (e.timestamp, i))
             .collect();
         copy_effects.sort();
@@ -128,6 +181,19 @@ impl Game {
             let Affected::Objects(targets) = &eff.affected else {
                 continue;
             };
+            if let Some(Layer1::Copiable(mods)) = &eff.layer1 {
+                let ctx = Ctx::new(eff.source, eff.controller);
+                for t in targets {
+                    if self.is_live(*t) {
+                        let mut c = self.objects[t.0 as usize].chars.clone();
+                        for m in mods {
+                            apply_mod(&mut c, m, self, &ctx, *t);
+                        }
+                        self.objects[t.0 as usize].chars = c;
+                    }
+                }
+                continue;
+            }
             let Some(Layer1::Copy { values, exceptions }) = &eff.layer1 else {
                 continue;
             };
@@ -162,7 +228,7 @@ impl Game {
         }
 
         // Layers 2–7.
-        let mut started: HashMap<EffKey, Vec<ObjectId>> = HashMap::new();
+        let mut st = LayerState::default();
         for layer in [
             Layer::L2Control,
             Layer::L3Text,
@@ -177,7 +243,7 @@ impl Game {
             if layer == Layer::L7cModify {
                 self.apply_pt_counters(&live);
             }
-            self.apply_layer(layer, &live, &mut started);
+            self.apply_layer(layer, &live, &mut st);
             if layer == Layer::L4Type {
                 // CR 305.6: basic land types have intrinsic mana abilities. They're
                 // determined by the object's types after layer 4 (CR 305.7) and can be
@@ -197,8 +263,7 @@ impl Game {
                 }
             }
             if layer == Layer::L6Ability {
-                self.apply_keyword_counters(&live);
-                self.apply_cant_have(&live);
+                self.apply_cant_have(&live, &mut st);
                 // Keywords bring the abilities they stand for (CR 702).
                 for id in &live {
                     let mut c = std::mem::take(&mut self.objects[id.0 as usize].chars);
@@ -210,6 +275,11 @@ impl Game {
 
         // Post-processing.
         let turn = self.turn.number;
+        let prev_controllers = if side_effects {
+            prev_controllers
+        } else {
+            vec![]
+        };
         for (id, prev) in prev_controllers {
             if !self.is_live(id) {
                 continue;
@@ -253,6 +323,11 @@ impl Game {
         for e in &self.effects {
             if self.effect_expired(&e.duration, e.source, e.controller) {
                 remove.push(e.id);
+            } else if matches!(&e.affected, Affected::Objects(v) if v.iter().all(|o| !self.is_live(*o)))
+            {
+                // Every object it applied to has left its zone: it can never apply again
+                // (CR 400.7).
+                remove.push(e.id);
             } else if let (Duration::UntilHostLeaves, Affected::Objects(v)) =
                 (&e.duration, &e.affected)
             {
@@ -289,7 +364,12 @@ impl Game {
         self.replacements.retain(|e| !rp.contains(&e.id));
     }
 
-    fn effect_expired(&self, d: &Duration, source: Option<ObjectId>, controller: PlayerId) -> bool {
+    pub(crate) fn effect_expired(
+        &self,
+        d: &Duration,
+        source: Option<ObjectId>,
+        controller: PlayerId,
+    ) -> bool {
         match d {
             Duration::WhileSourceOnBattlefield => {
                 source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
@@ -304,163 +384,223 @@ impl Game {
         }
     }
 
-    /// Static abilities (with their sources) that could generate continuous effects,
-    /// read from the objects' current (interim) abilities.
-    fn static_sources(&self, live: &[ObjectId]) -> Vec<(ObjectId, Ability)> {
-        let mut out = Vec::new();
-        for id in live {
-            let o = self.obj(*id);
-            for a in &o.chars.abilities {
-                if let AbilityKind::Static(s) = &a.kind {
-                    if matches!(s.effect, StaticEffect::Continuous { .. })
-                        && self.ability_functions(o, s.zone, s.is_cda)
-                    {
-                        out.push((*id, a.clone()));
-                    }
-                }
-            }
-        }
-        out
-    }
-
-    fn apply_layer(
-        &mut self,
+    /// Gathers the continuous effects that apply in `layer` and haven't been applied yet
+    /// in it: effects from resolved spells and abilities, effects of static abilities as
+    /// the objects' interim characteristics currently stand (so an ability removed by an
+    /// earlier effect in the layer no longer generates an effect, and one granted by an
+    /// earlier effect does, CR 613.8a), effects that started to apply in an earlier layer
+    /// (CR 613.6), and keyword counters (CR 613.1f, 613.7c).
+    fn layer_candidates(
+        &self,
         layer: Layer,
         live: &[ObjectId],
-        started: &mut HashMap<EffKey, Vec<ObjectId>>,
-    ) {
-        // Gather effects with a modification in this layer.
+        st: &mut LayerState,
+        done: &std::collections::HashSet<EffKey>,
+    ) -> Vec<LayerEff> {
         let mut effs: Vec<LayerEff> = Vec::new();
         for (i, e) in self.effects.iter().enumerate() {
-            if e.layer1.is_none() && e.mods.iter().any(|m| m.layer() == layer) {
+            let key = EffKey::Resolved(i);
+            if e.layer1.is_none() && has_layer_mod(&e.mods, layer) && !done.contains(&key) {
                 effs.push(LayerEff {
-                    key: EffKey::Resolved(i),
-                    timestamp: e.timestamp,
+                    key,
+                    ts: crate::stickers::effect_timestamp(self, e),
                     cda: false,
                 });
             }
         }
-        let statics = self.static_sources(live);
-        let mut static_map: HashMap<EffKey, Ability> = HashMap::new();
-        for (src, a) in &statics {
+        for id in live {
+            let o = self.obj(*id);
+            for a in &o.chars.abilities {
+                let AbilityKind::Static(s) = &a.kind else {
+                    continue;
+                };
+                let StaticEffect::Continuous { mods, .. } = &s.effect else {
+                    continue;
+                };
+                if !has_layer_mod(mods, layer)
+                    || !self.ability_functions(o, s.zone, s.is_cda)
+                    || crate::next_spell::is_cast_grant(s)
+                {
+                    continue;
+                }
+                let key = EffKey::Static(*id, a.uid);
+                if done.contains(&key) || effs.iter().any(|e| e.key == key) {
+                    continue;
+                }
+                st.abilities.insert(key, a.clone());
+                effs.push(LayerEff {
+                    key,
+                    ts: self.static_timestamp(*id, a.uid, st),
+                    cda: s.is_cda,
+                });
+            }
+        }
+        // Effects that started in an earlier layer continue even if the ability generating
+        // them was removed (CR 613.6).
+        let started: Vec<EffKey> = st.started.keys().copied().collect();
+        for key in started {
+            let EffKey::Static(src, uid) = key else {
+                continue;
+            };
+            if done.contains(&key) || effs.iter().any(|e| e.key == key) {
+                continue;
+            }
+            let Some(a) = st.abilities.get(&key) else {
+                continue;
+            };
             let AbilityKind::Static(s) = &a.kind else {
                 continue;
             };
             let StaticEffect::Continuous { mods, .. } = &s.effect else {
                 continue;
             };
-            if !mods.iter().any(|m| m.layer() == layer) {
-                continue;
+            if has_layer_mod(mods, layer) {
+                effs.push(LayerEff {
+                    key,
+                    ts: self.static_timestamp(src, uid, st),
+                    cda: s.is_cda,
+                });
             }
-            let key = EffKey::Static(*src, a.uid);
-            static_map.insert(key, a.clone());
-            let ts = self.obj(*src).timestamp;
-            effs.push(LayerEff {
-                key,
-                timestamp: ts,
-                cda: s.is_cda,
-            });
         }
-        // Effects that started in an earlier layer continue even if the ability was
-        // removed (CR 613.6).
-        for (key, _) in started.iter() {
-            if let EffKey::Static(src, uid) = key {
-                if static_map.contains_key(key) {
-                    continue;
-                }
-                if let Some(a) = self.find_static_ability(*src, *uid) {
-                    let AbilityKind::Static(s) = &a.kind else {
+        if layer == Layer::L6Ability {
+            // CR 122.1b: keyword counters on a permanent, or on a card in a zone other
+            // than the battlefield.
+            for id in live {
+                let o = self.obj(*id);
+                for (k, n) in &o.counters {
+                    if *n == 0 {
                         continue;
-                    };
-                    let StaticEffect::Continuous { mods, .. } = &s.effect else {
-                        continue;
-                    };
-                    if mods.iter().any(|m| m.layer() == layer) {
-                        static_map.insert(*key, a.clone());
-                        effs.push(LayerEff {
-                            key: *key,
-                            timestamp: self.obj(*src).timestamp,
-                            cda: s.is_cda,
-                        });
                     }
+                    let Some(idx) = KEYWORD_COUNTERS.iter().position(|c| *c == k.as_str()) else {
+                        continue;
+                    };
+                    let key = EffKey::KwCounter(*id, idx as u8);
+                    if done.contains(&key) {
+                        continue;
+                    }
+                    let ts = o.counter_timestamps.get(k).copied().unwrap_or(o.timestamp);
+                    effs.push(LayerEff {
+                        key,
+                        ts: (ts, 0),
+                        cda: false,
+                    });
                 }
             }
         }
-        if effs.is_empty() {
-            return;
-        }
-        // CR 613.3: CDAs first (layers 2–6, and 7a is CDA-only), then timestamp order.
-        effs.sort_by_key(|e| (!e.cda, e.timestamp, key_order(&e.key)));
+        effs
+    }
 
-        let mut remaining = effs;
-        while !remaining.is_empty() {
-            let pick = if remaining.len() == 1 {
-                0
-            } else {
-                self.pick_next_effect(&remaining, layer, live, started, &static_map)
-            };
-            let e = remaining.remove(pick);
-            self.apply_effect_in_layer(&e.key, layer, live, started, &static_map);
+    /// Timestamp order of a static ability's effect (CR 613.7a): the later of the
+    /// object's timestamp and the timestamp of the effect that granted the ability. When
+    /// the object gets a new timestamp, abilities it was granted keep their order after
+    /// its own abilities.
+    fn static_timestamp(&self, src: ObjectId, uid: u64, st: &LayerState) -> (Timestamp, Timestamp) {
+        let obj_ts = self.obj(src).timestamp;
+        match st.grants.get(&(src, uid)) {
+            Some(g) => (obj_ts.max(*g), *g),
+            None => (obj_ts, 0),
         }
     }
 
-    /// Chooses the next effect to apply within a layer, honoring dependencies (CR 613.8).
+    fn apply_layer(&mut self, layer: Layer, live: &[ObjectId], st: &mut LayerState) {
+        let mut done: std::collections::HashSet<EffKey> = std::collections::HashSet::new();
+        // Each iteration re-gathers the effects and re-evaluates dependencies, since
+        // applying an effect can change which effects exist and how they depend on each
+        // other (CR 613.8c).
+        for _ in 0..10_000 {
+            let mut effs = self.layer_candidates(layer, live, st, &done);
+            if effs.is_empty() {
+                break;
+            }
+            // CR 613.3, 613.4a: characteristic-defining abilities apply first.
+            if effs.iter().any(|e| e.cda) {
+                effs.retain(|e| e.cda);
+            }
+            effs.sort_by_key(|e| (e.ts, key_order(&e.key)));
+            let pick = if effs.len() == 1 {
+                0
+            } else {
+                self.pick_next_effect(&effs, layer, live, st)
+            };
+            let e = effs.swap_remove(pick);
+            done.insert(e.key);
+            self.apply_effect_in_layer(&e, layer, live, st, false);
+        }
+    }
+
+    /// Chooses the next effect to apply within a layer (CR 613.8b): an effect waits until
+    /// every effect it depends on has been applied, except that effects in a dependency
+    /// loop are applied in timestamp order. `effs` is sorted by timestamp.
     fn pick_next_effect(
         &mut self,
-        remaining: &[LayerEff],
+        effs: &[LayerEff],
         layer: Layer,
         live: &[ObjectId],
-        started: &HashMap<EffKey, Vec<ObjectId>>,
-        static_map: &HashMap<EffKey, Ability>,
+        st: &mut LayerState,
     ) -> usize {
-        // Only static effects with filters (or dynamic values) can be dependent; skip the
-        // expensive trial application when nothing could depend.
-        let any_dynamic = remaining
-            .iter()
-            .any(|e| matches!(e.key, EffKey::Static(..)));
-        if !any_dynamic {
+        let n = effs.len();
+        // Only static abilities can depend on other effects: resolved effects have a
+        // locked set of affected objects and fixed values (CR 611.2c, 608.2h), and keyword
+        // counters exist regardless of other effects.
+        if !effs.iter().any(|e| matches!(e.key, EffKey::Static(..))) {
             return 0;
         }
-        for (i, a) in remaining.iter().enumerate() {
-            let mut depends_on_any = false;
-            for (j, b) in remaining.iter().enumerate() {
-                if i == j || a.cda != b.cda {
-                    continue;
+        let mut dep = vec![vec![false; n]; n];
+        for i in 0..n {
+            if !matches!(effs[i].key, EffKey::Static(..)) {
+                continue;
+            }
+            for j in 0..n {
+                // CR 613.8a(c): an effect from a characteristic-defining ability and one
+                // that isn't are independent of each other.
+                if i != j
+                    && effs[i].cda == effs[j].cda
+                    && self.depends_on(&effs[i], &effs[j], layer, live, st)
+                {
+                    dep[i][j] = true;
                 }
-                if self.depends_on(&a.key, &b.key, layer, live, started, static_map) {
-                    // Dependency loop check: if b also depends on a, ignore (CR 613.8b).
-                    if !self.depends_on(&b.key, &a.key, layer, live, started, static_map) {
-                        depends_on_any = true;
-                        break;
+            }
+        }
+        // Transitive closure: reach[i][j] = i depends (possibly indirectly) on j.
+        let mut reach = dep.clone();
+        for k in 0..n {
+            for i in 0..n {
+                if reach[i][k] {
+                    for j in 0..n {
+                        if reach[k][j] {
+                            reach[i][j] = true;
+                        }
                     }
                 }
             }
-            if !depends_on_any {
-                return i;
-            }
         }
-        0
+        // An effect may apply once everything it depends on outside its own dependency
+        // loop has been applied.
+        (0..n)
+            .find(|&i| (0..n).all(|j| !dep[i][j] || reach[j][i]))
+            .unwrap_or(0)
     }
 
     /// Whether effect `a` depends on effect `b` in this layer (CR 613.8a): applying `b`
-    /// would change `a`'s existence, what it applies to, or what it does.
+    /// would change `a`'s text or existence, what it applies to, or what it does to any of
+    /// the things it applies to.
     fn depends_on(
         &mut self,
-        a: &EffKey,
-        b: &EffKey,
+        a: &LayerEff,
+        b: &LayerEff,
         layer: Layer,
         live: &[ObjectId],
-        started: &HashMap<EffKey, Vec<ObjectId>>,
-        static_map: &HashMap<EffKey, Ability>,
+        st: &mut LayerState,
     ) -> bool {
-        let before = self.effect_footprint(a, layer, live, started, static_map);
-        let snapshot: Vec<(ObjectId, Characteristics, PlayerId)> = live
+        let before = self.effect_footprint(a, layer, live, st);
+        // Applying `b` only changes the objects it affects.
+        let touched: Vec<ObjectId> = self.effect_footprint(b, layer, live, st).1;
+        let snapshot: Vec<(ObjectId, Characteristics, PlayerId)> = touched
             .iter()
             .map(|id| (*id, self.obj(*id).chars.clone(), self.obj(*id).controller))
             .collect();
-        let mut scratch = started.clone();
-        self.apply_effect_in_layer(b, layer, live, &mut scratch, static_map);
-        let after = self.effect_footprint(a, layer, live, started, static_map);
+        self.apply_effect_in_layer(b, layer, live, st, true);
+        let after = self.effect_footprint(a, layer, live, st);
         for (id, c, ctl) in snapshot {
             let o = &mut self.objects[id.0 as usize];
             o.chars = c;
@@ -472,30 +612,27 @@ impl Game {
     /// (exists, affected objects, evaluated numeric values) for dependency comparison.
     fn effect_footprint(
         &self,
-        key: &EffKey,
+        e: &LayerEff,
         layer: Layer,
         live: &[ObjectId],
-        started: &HashMap<EffKey, Vec<ObjectId>>,
-        static_map: &HashMap<EffKey, Ability>,
+        st: &LayerState,
     ) -> (bool, Vec<ObjectId>, Vec<i64>) {
-        match key {
+        match &e.key {
             EffKey::Resolved(i) => {
-                let e = &self.effects[*i];
-                let ctx = Ctx::new(e.source, e.controller);
-                let affected = match &e.affected {
-                    Affected::Objects(v) => v.clone(),
-                    Affected::Filter(f) => live
-                        .iter()
-                        .copied()
-                        .filter(|o| self.matches(*o, f, &ctx))
-                        .collect(),
+                let eff = &self.effects[*i];
+                let ctx = Ctx::new(eff.source, eff.controller);
+                let affected = match st.started.get(&e.key) {
+                    Some(v) => v.clone(),
+                    None => match &eff.affected {
+                        Affected::Objects(v) => v.clone(),
+                        Affected::Filter(f) => self.static_affected(ObjectId(0), f, live, &ctx),
+                    },
                 };
-                let vals = mod_values(self, &e.mods, layer, &ctx);
+                let vals = mod_values(self, &eff.mods, layer, &ctx);
                 (true, affected, vals)
             }
             EffKey::Static(src, uid) => {
-                let exists = self.obj(*src).chars.abilities.iter().any(|a| a.uid == *uid);
-                let Some(a) = static_map.get(key) else {
+                let Some(a) = st.abilities.get(&e.key) else {
                     return (false, vec![], vec![]);
                 };
                 let AbilityKind::Static(s) = &a.kind else {
@@ -504,14 +641,22 @@ impl Game {
                 let StaticEffect::Continuous { affected, mods } = &s.effect else {
                     return (false, vec![], vec![]);
                 };
-                let ctx = Ctx::for_object(self, *src);
-                let cond = s.condition.as_ref().is_none_or(|c| self.eval_cond(c, &ctx));
-                let aff = match started.get(key) {
+                // Same context as when the effect is applied (see `apply_effect_in_layer`).
+                let mut ctx = Ctx::for_object(self, *src);
+                ctx.link = a.link;
+                let started = st.started.get(&e.key);
+                let o = self.obj(*src);
+                let exists = started.is_some()
+                    || (o.chars.abilities.iter().any(|x| x.uid == *uid)
+                        && self.ability_functions(o, s.zone, s.is_cda)
+                        && s.condition.as_ref().is_none_or(|c| self.eval_cond(c, &ctx)));
+                let aff = match started {
                     Some(v) => v.clone(),
                     None => self.static_affected(*src, affected, live, &ctx),
                 };
-                (exists && cond, aff, mod_values(self, mods, layer, &ctx))
+                (exists, aff, mod_values(self, mods, layer, &ctx))
             }
+            EffKey::KwCounter(obj, _) => (true, vec![*obj], vec![]),
         }
     }
 
@@ -540,47 +685,32 @@ impl Game {
             .collect()
     }
 
-    fn find_static_ability(&self, src: ObjectId, uid: u64) -> Option<Ability> {
-        let o = self.obj(src);
-        o.base
-            .abilities
-            .iter()
-            .chain(o.copiable.abilities.iter())
-            .find(|a| a.uid == uid)
-            .cloned()
-            .or_else(|| {
-                self.effects
-                    .iter()
-                    .flat_map(|e| e.mods.iter())
-                    .find_map(|m| match m {
-                        Modification::AddAbility(a) if a.uid == uid => Some(a.clone()),
-                        _ => None,
-                    })
-            })
-    }
-
+    /// Applies one effect's modifications for this layer. A trial application (for
+    /// dependency checks) doesn't record anything.
     fn apply_effect_in_layer(
         &mut self,
-        key: &EffKey,
+        e: &LayerEff,
         layer: Layer,
         live: &[ObjectId],
-        started: &mut HashMap<EffKey, Vec<ObjectId>>,
-        static_map: &HashMap<EffKey, Ability>,
+        st: &mut LayerState,
+        trial: bool,
     ) {
-        match key {
+        match &e.key {
             EffKey::Resolved(i) => {
-                let e = self.effects[*i].clone();
-                let ctx = Ctx::new(e.source, e.controller);
-                let affected = match started.get(key) {
+                let eff = self.effects[*i].clone();
+                let ctx = Ctx::new(eff.source, eff.controller);
+                let affected = match st.started.get(&e.key) {
                     Some(v) => v.clone(),
                     None => {
-                        let v = match &e.affected {
+                        let v = match &eff.affected {
                             Affected::Objects(v) => {
                                 v.iter().copied().filter(|o| self.is_live(*o)).collect()
                             }
                             Affected::Filter(f) => self.static_affected(ObjectId(0), f, live, &ctx),
                         };
-                        started.insert(*key, v.clone());
+                        if !trial {
+                            st.started.insert(e.key, v.clone());
+                        }
                         v
                     }
                 };
@@ -588,13 +718,11 @@ impl Game {
                     if !self.is_live(t) {
                         continue;
                     }
-                    for m in e.mods.iter().filter(|m| m.layer() == layer) {
-                        self.apply_mod_to(t, m, &ctx);
-                    }
+                    self.apply_mods_to(t, &eff.mods, layer, &ctx, e.ts.0, st, trial);
                 }
             }
             EffKey::Static(src, _uid) => {
-                let Some(a) = static_map.get(key).cloned() else {
+                let Some(a) = st.abilities.get(&e.key).cloned() else {
                     return;
                 };
                 let AbilityKind::Static(s) = &a.kind else {
@@ -605,7 +733,7 @@ impl Game {
                 };
                 let mut ctx = Ctx::for_object(self, *src);
                 ctx.link = a.link;
-                let affected_now = match started.get(key) {
+                let affected_now = match st.started.get(&e.key) {
                     Some(v) => v.clone(),
                     None => {
                         if let Some(c) = &s.condition {
@@ -614,14 +742,53 @@ impl Game {
                             }
                         }
                         let v = self.static_affected(*src, affected, live, &ctx);
-                        started.insert(*key, v.clone());
+                        if !trial {
+                            st.started.insert(e.key, v.clone());
+                        }
                         v
                     }
                 };
                 for t in affected_now {
-                    for m in mods.iter().filter(|m| m.layer() == layer) {
-                        self.apply_mod_to(t, m, &ctx);
-                    }
+                    self.apply_mods_to(t, mods, layer, &ctx, e.ts.0, st, trial);
+                }
+            }
+            EffKey::KwCounter(obj, idx) => {
+                if let Some(kw) = KEYWORD_COUNTERS
+                    .get(*idx as usize)
+                    .and_then(|k| keyword_counter(k))
+                {
+                    let a = keyword_counter_ability(&kw);
+                    self.objects[obj.0 as usize].chars.abilities.push(a);
+                }
+            }
+        }
+    }
+
+    /// Applies an effect's modifications for `layer` to one object, recording the
+    /// timestamp of any ability it grants (CR 613.7a). "Can't have" modifications are
+    /// applied after all other layer 6 effects (see [`Game::apply_cant_have`]).
+    #[allow(clippy::too_many_arguments)]
+    fn apply_mods_to(
+        &mut self,
+        t: ObjectId,
+        mods: &[Modification],
+        layer: Layer,
+        ctx: &Ctx,
+        ts: Timestamp,
+        st: &mut LayerState,
+        trial: bool,
+    ) {
+        for m in mods
+            .iter()
+            .filter(|m| m.layer() == layer && !is_cant_have(m))
+        {
+            let before = self.obj(t).chars.abilities.len();
+            self.apply_mod_to(t, m, ctx);
+            if !trial && matches!(m, Modification::AddAbility(_)) {
+                let after = self.obj(t).chars.abilities.len();
+                for k in before..after {
+                    let uid = self.obj(t).chars.abilities[k].uid;
+                    st.grants.insert((t, uid), ts);
                 }
             }
         }
@@ -634,7 +801,9 @@ impl Game {
             }
             return;
         }
-        let mut chars = std::mem::take(&mut self.objects[target.0 as usize].chars);
+        // Values are evaluated against the current interim characteristics, including the
+        // object's own (e.g. a CDA counting the creatures its controller controls).
+        let mut chars = self.objects[target.0 as usize].chars.clone();
         apply_mod(&mut chars, m, self, ctx, target);
         self.objects[target.0 as usize].chars = chars;
     }
@@ -672,32 +841,66 @@ impl Game {
         }
     }
 
-    /// Keyword counters (flying counters, etc.) grant abilities in layer 6 (CR 122.1b, 613.1f).
-    fn apply_keyword_counters(&mut self, live: &[ObjectId]) {
-        for id in live {
-            let o = &self.objects[id.0 as usize];
-            // CR 122.1b: on a permanent, or on a card in a zone other than the battlefield.
-            if o.counters.is_empty() {
+    /// "Can't have [ability]" effects (CR 613.1f) are applied after every other layer 6
+    /// effect, including keyword counters, so the object doesn't have the ability no
+    /// matter when it was granted.
+    fn apply_cant_have(&mut self, live: &[ObjectId], st: &mut LayerState) {
+        let mut work: Vec<(Vec<ObjectId>, Vec<Modification>, Ctx)> = Vec::new();
+        for (i, e) in self.effects.iter().enumerate() {
+            if e.layer1.is_some() || !e.mods.iter().any(is_cant_have) {
                 continue;
             }
-            let mut add: Vec<Keyword> = Vec::new();
-            for (k, n) in &o.counters {
-                if *n == 0 {
+            let ctx = Ctx::new(e.source, e.controller);
+            let affected = match st.started.get(&EffKey::Resolved(i)) {
+                Some(v) => v.clone(),
+                None => match &e.affected {
+                    Affected::Objects(v) => v.clone(),
+                    Affected::Filter(f) => self.static_affected(ObjectId(0), f, live, &ctx),
+                },
+            };
+            work.push((affected, e.mods.clone(), ctx));
+        }
+        for id in live {
+            let o = self.obj(*id);
+            for a in &o.chars.abilities {
+                let AbilityKind::Static(s) = &a.kind else {
+                    continue;
+                };
+                let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                    continue;
+                };
+                if !mods.iter().any(is_cant_have) || !self.ability_functions(o, s.zone, s.is_cda) {
                     continue;
                 }
-                if let Some(kw) = keyword_counter(k) {
-                    add.push(kw);
-                }
+                let mut ctx = Ctx::for_object(self, *id);
+                ctx.link = a.link;
+                let key = EffKey::Static(*id, a.uid);
+                let aff = match st.started.get(&key) {
+                    Some(v) => v.clone(),
+                    None => {
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &ctx))
+                        {
+                            continue;
+                        }
+                        self.static_affected(*id, affected, live, &ctx)
+                    }
+                };
+                work.push((aff, mods.clone(), ctx));
             }
-            for kw in add {
-                let a = keyword_counter_ability(&kw);
-                self.objects[id.0 as usize].chars.abilities.push(a);
+        }
+        for (affected, mods, ctx) in work {
+            for t in affected {
+                if !self.is_live(t) {
+                    continue;
+                }
+                for m in mods.iter().filter(|m| is_cant_have(m)) {
+                    self.apply_mod_to(t, m, &ctx);
+                }
             }
         }
     }
-
-    /// "can't have [ability]" effects remove the ability after all layer 6 effects.
-    fn apply_cant_have(&mut self, _live: &[ObjectId]) {}
 
     /// Collects functioning non-characteristic static abilities for rule queries.
     fn collect_statics(&mut self) {
@@ -742,57 +945,68 @@ impl Game {
 
     /// Player-affecting effects (CR 613.10): hexproof, hand size, land plays, ...
     fn compute_player_effects(&mut self) {
+        // CR 613.10: effects on players apply after objects' characteristics are
+        // determined, in timestamp order; CR 613.11: rule-modifying effects such as
+        // maximum hand size changes likewise apply in timestamp order.
         let n = self.players.len();
-        let mut mods: Vec<Vec<PlayerModification>> = vec![vec![]; n];
-        for (src, ctl, e) in self.statics.other.clone() {
+        let mut ordered: Vec<(Timestamp, usize, PlayerId, PlayerModification, Ctx)> = Vec::new();
+        for (k, (src, ctl, e)) in self.statics.other.clone().into_iter().enumerate() {
+            let ts = self.obj(src).timestamp;
+            let ctx = Ctx::new(Some(src), ctl);
             match e {
                 StaticEffect::PlayerEffect { affected, effect } => {
-                    let ctx = Ctx::new(Some(src), ctl);
                     for p in self.player_ids() {
                         if self.player_filter_matches(&affected, p, &ctx) {
-                            mods[p.idx()].push(effect.clone());
+                            ordered.push((ts, k, p, effect.clone(), ctx.clone()));
                         }
                     }
                 }
-                StaticEffect::AdditionalLandPlays(rel, k) => {
-                    let ctx = Ctx::new(Some(src), ctl);
+                StaticEffect::AdditionalLandPlays(rel, x) => {
                     for p in self.player_ids() {
                         if self.player_rel_matches(rel, p, &ctx) {
-                            mods[p.idx()].push(PlayerModification::AdditionalLandPlays(k));
+                            ordered.push((
+                                ts,
+                                k,
+                                p,
+                                PlayerModification::AdditionalLandPlays(x),
+                                ctx.clone(),
+                            ));
                         }
                     }
                 }
                 _ => {}
             }
         }
-        let mut pe = self.player_effects.clone();
-        pe.sort_by_key(|e| e.timestamp);
-        for e in pe {
+        let base = self.statics.other.len();
+        for (k, e) in self.player_effects.clone().into_iter().enumerate() {
+            let ctx = Ctx::new(e.source, e.controller);
             for p in e.players {
-                mods[p.idx()].push(e.effect.clone());
+                ordered.push((e.timestamp, base + k, p, e.effect.clone(), ctx.clone()));
             }
+        }
+        ordered.sort_by_key(|(ts, k, ..)| (*ts, *k));
+        let mut mods: Vec<Vec<(PlayerModification, Ctx)>> = vec![vec![]; n];
+        for (_, _, p, m, ctx) in ordered {
+            mods[p.idx()].push((m, ctx));
         }
         for (i, m) in mods.into_iter().enumerate() {
             let mut max_hand: Option<i32> = Some(7);
             let mut land_plays = 1u32;
-            let mut delta = 0i32;
-            for x in &m {
+            for (x, ctx) in &m {
                 match x {
                     PlayerModification::MaxHandSize(v) => {
-                        max_hand = v
-                            .as_ref()
-                            .map(|v| self.eval_value(v, &Ctx::new(None, PlayerId(i as u8))) as i32)
+                        max_hand = v.as_ref().map(|v| self.eval_value(v, ctx) as i32)
                     }
-                    PlayerModification::HandSizeDelta(d) => delta += d,
+                    PlayerModification::HandSizeDelta(d) => max_hand = max_hand.map(|h| h + d),
                     PlayerModification::AdditionalLandPlays(k) => land_plays += k,
                     _ => {}
                 }
             }
             // Vanguard hand modifier (CR 902.3) handled by the variant module via HandSizeDelta.
             let p = &mut self.players[i];
-            p.max_hand_size = max_hand.map(|h| h + delta);
+            p.max_hand_size = max_hand;
             p.land_plays = land_plays;
-            p.mods = m;
+            p.mods = m.into_iter().map(|(x, _)| x).collect();
         }
     }
 }
@@ -810,6 +1024,7 @@ fn key_order(k: &EffKey) -> (u8, u64) {
     match k {
         EffKey::Resolved(i) => (0, *i as u64),
         EffKey::Static(o, u) => (1, (o.0 as u64) << 32 | (*u & 0xffff_ffff)),
+        EffKey::KwCounter(o, i) => (2, (o.0 as u64) << 8 | *i as u64),
     }
 }
 
@@ -886,6 +1101,35 @@ pub fn apply_mod(
     match m {
         Modification::SetController(_) => {}
         Modification::ChangeText { from, to } => crate::text_change::change_text(c, from, to),
+        Modification::SetName(n) => {
+            c.name = n.clone();
+            c.all_creature_names = false;
+        }
+        Modification::AllCreatureNames => c.all_creature_names = true,
+        Modification::NameSticker { word, position } => {
+            c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
+        }
+        // Becomes `SetText` for each object as the effect is created.
+        Modification::ExchangeText => {}
+        Modification::SetText { abilities, text } => {
+            c.abilities = abilities.clone();
+            c.rules_text = std::sync::Arc::from(text.as_str());
+        }
+        Modification::FullTextOf(sel) => {
+            if let Some(t) = g.eval_sel_objects(sel, ctx).first() {
+                crate::text_change::take_full_text(c, &g.obj(*t).base);
+            }
+        }
+        Modification::AddText { abilities, text } => {
+            c.abilities.extend(abilities.iter().cloned());
+            let own = c.rules_text.trim_end();
+            let joined = if own.is_empty() {
+                text.to_string()
+            } else {
+                format!("{own}\n{text}")
+            };
+            c.rules_text = std::sync::Arc::from(joined.as_str());
+        }
         Modification::AddTypes(ts) => {
             for t in ts {
                 c.card_types.insert(*t);
@@ -942,6 +1186,28 @@ pub fn apply_mod(
             }
             c.abilities.clear();
         }
+        Modification::AddChosenType => {
+            // CR 607.2d / 607.5a: the type chosen for the effect's source, if any.
+            if let Some(ch) = g.source_choices(ctx) {
+                if let Some(t) = ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    if !c.subtypes.contains(&t) {
+                        c.subtypes.push(t);
+                    }
+                }
+            }
+        }
+        Modification::SetChosenBasicLandType => {
+            if let Some(t) = g
+                .source_choices(ctx)
+                .and_then(|ch| ch.basic_land_type.clone())
+            {
+                // CR 305.7, as for SetBasicLandType.
+                c.subtypes
+                    .retain(|s| !subtype_lists().land.contains(s.as_str()));
+                c.subtypes.push(t);
+                c.abilities.clear();
+            }
+        }
         Modification::SetColors(cs) => c.colors = *cs,
         Modification::SetLinkedChosenColor => {
             if let Some(col) = g.linked_choice(ctx).and_then(|ch| ch.color) {
@@ -950,11 +1216,17 @@ pub fn apply_mod(
                 c.colors = cs;
             }
         }
+        Modification::SetChosenColor => {
+            if let Some(col) = g.source_choices(ctx).and_then(|ch| ch.color) {
+                c.colors = ColorSet::single(col);
+            }
+        }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         Modification::AddKeyword(k) => {
-            // "Protection from the chosen color": the choice is the granting ability's
-            // (CR 607.2d); an undefined choice grants nothing (CR 607.5a).
+            // "Protection from the chosen color": the choice is the granting ability's,
+            // not the object gaining it's (CR 607.2d); an undefined linked choice grants
+            // nothing (CR 607.5a).
             let mut k = k.clone();
             if let Some(f) = &k.filter {
                 match resolve_chosen(f, g, ctx) {
@@ -962,10 +1234,21 @@ pub fn apply_mod(
                     None => return,
                 }
             }
-            c.abilities.push(AbilityDef::new(
-                AbilityKind::Keyword(k.clone()),
-                k.kind.name(),
-            ))
+            if let (Some(f), Some(ch)) = (k.filter.as_ref(), g.source_choices(ctx)) {
+                if crate::choices::filter_mentions_choice(f) {
+                    k.filter = Some(crate::choices::bind_choices(f, ch));
+                }
+            }
+            // CR 702.16n: "This effect doesn't remove [this Aura]" — remember which
+            // object the protection doesn't remove.
+            if let (Some(t), Some(src)) = (k.text.as_deref(), ctx.source) {
+                if t == crate::choices::DOESNT_REMOVE_SOURCE {
+                    k.text = Some(crate::choices::doesnt_remove_marker(src));
+                }
+            }
+            let name = k.kind.name();
+            c.abilities
+                .push(AbilityDef::new(AbilityKind::Keyword(k), name))
         }
         Modification::RemoveKeyword(k) => c
             .abilities
@@ -1057,10 +1340,15 @@ fn copied_ability(a: &Ability, effect: u32) -> Ability {
     let mut g = m.lock().unwrap();
     g.entry((a.uid, effect))
         .or_insert_with(|| {
-            let link = 0x4000 | ((a.link as u32 * 131 + effect * 37) % 0x3fff) as u16;
-            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+            AbilityDef::with_link(a.kind.clone(), a.text.clone(), copied_link(a.link, effect))
         })
         .clone()
+}
+
+/// The link id an ability with link `link` has when an object has it through the copy
+/// effect `effect` (see [`copied_ability`]).
+pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
+    0x4000 | ((link as u32 * 131 + effect * 37) % 0x3fff) as u16
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
@@ -1125,4 +1413,23 @@ pub fn intrinsic_mana_ability(land_type: &str) -> Option<Ability> {
         _ => return None,
     };
     Some(abilities[i].clone())
+}
+
+/// CR 613.2a: an "as [this] enters" or "as [this] is turned face up" ability that sets
+/// power and toughness generates a copiable effect: continuous effects it created (those
+/// after index `from` in `Game::effects`) that apply only to the permanent and set its
+/// power and toughness become part of its copiable values.
+pub fn as_enters_copiable(g: &mut Game, obj: ObjectId, from: usize) {
+    for e in g.effects.iter_mut().skip(from) {
+        let only_it = matches!(&e.affected, Affected::Objects(v) if v.as_slice() == [obj]);
+        if only_it
+            && e.layer1.is_none()
+            && e.mods.iter().any(|m| matches!(m, Modification::SetPT(..)))
+        {
+            let mods = std::mem::take(&mut e.mods);
+            e.layer1 = Some(Layer1::Copiable(mods));
+            e.duration = Duration::Permanent;
+        }
+    }
+    g.dirty = true;
 }

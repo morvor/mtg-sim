@@ -51,20 +51,53 @@ impl Game {
         }
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
-        for (i, m) in moves.iter().enumerate() {
+        // CR 614.13a, 614.13c: while effects that modify how these objects enter are
+        // applied, the objects entering simultaneously can't be chosen or moved by them.
+        let prev_entering = std::mem::replace(
+            &mut self.entering,
+            moves
+                .iter()
+                .filter(|m| m.to == Zone::Battlefield)
+                .map(|m| m.obj)
+                .collect(),
+        );
+        // CR 616.1: when several players choose among replacement effects for
+        // simultaneous events, they do so in APNAP order.
+        let apnap = self.apnap();
+        let mut order: Vec<usize> = (0..moves.len()).collect();
+        order.sort_by_key(|i| {
+            let o = self.obj(moves[*i].obj);
+            let p = match o.zone {
+                Zone::Battlefield | Zone::Stack => o.controller,
+                _ => o.owner,
+            };
+            apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
+        });
+        for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {
             if !self.can_move(m.obj) {
                 continue;
             }
+            // CR 614.17d: a "can't enter" effect stops the event; it isn't replaced
+            // (CR 614.17c).
+            if m.to == Zone::Battlefield && self.cant_enter(m) {
+                continue;
+            }
             for e in self.replace(ReplEvent::Move(m.clone())) {
-                // An object that can't enter the battlefield stays where it is.
+                // An object that can't enter the battlefield stays where it is. This also
+                // covers moves a replacement effect redirected to the battlefield, and
+                // entries a replacement modified (CR 614.17d: check the permanent as it
+                // would exist, taking those replacements into account).
                 if let ReplEvent::Move(mv) = &e {
-                    if mv.to == Zone::Battlefield && self.cant_enter_battlefield(mv.obj) {
+                    if mv.to == Zone::Battlefield && self.cant_enter(mv) {
                         continue;
                     }
                 }
                 finals.push((i, e));
             }
         }
+        // CR 613.7m: objects entering the battlefield simultaneously get timestamps in
+        // APNAP order.
+        self.order_simultaneous_entries(&mut finals);
         // Look back in time for leaves-the-battlefield triggers and other zone-change
         // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
         // the stack, or a public object being put into a hand or library.
@@ -85,6 +118,14 @@ impl Game {
             None
         };
         let mut out: Vec<Option<ObjectId>> = vec![None; moves.len()];
+        let entering: Vec<ObjectId> = finals
+            .iter()
+            .filter_map(|(_, e)| match e {
+                ReplEvent::Move(m) if m.to == Zone::Battlefield => Some(m.obj),
+                _ => None,
+            })
+            .collect();
+        self.entering = entering;
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -96,15 +137,20 @@ impl Game {
                 other => self.execute_repl_event(other),
             }
         }
+        self.entering = prev_entering;
         self.run_post_replacement_effects();
         self.recompute();
         out
     }
 
-    /// Whether a "can't enter the battlefield" effect applies to an object.
+    /// Whether a "can't enter the battlefield" effect from a static ability applies to an
+    /// object as it currently exists. Moves use [`Game::cant_enter`], which checks the
+    /// object as it would exist on the battlefield (CR 614.17d).
     pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
         self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::CantEnterBattlefield(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
+            Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
+                self.matches(obj, f, &Ctx::new(Some(*s), *c))
+            }
             _ => false,
         })
     }
@@ -118,6 +164,75 @@ impl Game {
                 && o.next.is_none()
                 && o.prev.is_none()
                 && o.kind != ObjKind::StackAbility)
+    }
+
+    /// The player who will control a permanent entering the battlefield with this move.
+    pub fn entry_controller(&self, m: &MoveEv) -> PlayerId {
+        let o = self.obj(m.obj);
+        m.etb
+            .controller
+            .or(if o.zone == Zone::Stack {
+                Some(o.controller)
+            } else {
+                None
+            })
+            .or(m.by)
+            .unwrap_or(o.owner)
+    }
+
+    /// Reorders simultaneous moves onto the battlefield so they receive timestamps in
+    /// APNAP order (CR 613.7m): each player's objects in the order that player chooses,
+    /// the active player's first. Other moves keep their places.
+    fn order_simultaneous_entries(&mut self, finals: &mut [(usize, ReplEvent)]) {
+        let slots: Vec<usize> = finals
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, e))| matches!(e, ReplEvent::Move(m) if m.to == Zone::Battlefield))
+            .map(|(i, _)| i)
+            .collect();
+        if slots.len() < 2 {
+            return;
+        }
+        let mut entries: Vec<Option<(usize, ReplEvent)>> =
+            slots.iter().map(|i| Some(finals[*i].clone())).collect();
+        let controller = |g: &Game, e: &ReplEvent| match e {
+            ReplEvent::Move(m) => g.entry_controller(m),
+            _ => g.turn.active,
+        };
+        let mut ordered: Vec<(usize, ReplEvent)> = Vec::new();
+        for p in self.apnap() {
+            let mine: Vec<usize> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| e.as_ref().is_some_and(|(_, ev)| controller(self, ev) == p))
+                .map(|(k, _)| k)
+                .collect();
+            let order: Vec<usize> = if mine.len() >= 2 {
+                let names = mine
+                    .iter()
+                    .map(|k| match &entries[*k] {
+                        Some((_, ReplEvent::Move(m))) => self.describe(m.obj),
+                        _ => String::new(),
+                    })
+                    .collect();
+                self.ask_order(
+                    p,
+                    "Order objects entering the battlefield (first = oldest)",
+                    names,
+                )
+            } else {
+                (0..mine.len()).collect()
+            };
+            for i in order {
+                if let Some(e) = entries[mine[i]].take() {
+                    ordered.push(e);
+                }
+            }
+        }
+        ordered.extend(entries.into_iter().flatten());
+        for (k, i) in slots.iter().enumerate() {
+            finals[*i] = ordered[k].clone();
+        }
     }
 
     /// Snapshot of the triggered abilities that function right now, with their sources and
@@ -155,6 +270,9 @@ impl Game {
                 self.objects[p.0 as usize].paired_with = None;
             }
         }
+        if from == Zone::Exile && kind == ObjKind::CardCopy {
+            crate::designations::prepared_copy_left_exile(self, old_id);
+        }
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
         // An Aura, Equipment, or Fortification leaving the battlefield becomes unattached.
@@ -164,6 +282,18 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        if m.to == Zone::Battlefield {
+            // Choices made as it entered (CR 614.12a) or while it was cast are the
+            // permanent's choices (CR 607.2d), still linked to the abilities that made
+            // them.
+            let ch = self.obj(old_id).choices.clone();
+            let linked = self.obj(old_id).linked_choices.clone();
+            let n = &mut self.objects[new_id.0 as usize];
+            n.choices = ch;
+            for (link, c) in linked {
+                n.linked_choices.entry(link).or_insert(c);
+            }
+        }
         {
             let face = m.etb.face;
             let n = &mut self.objects[new_id.0 as usize];
@@ -205,9 +335,11 @@ impl Game {
                         n.attached_to = Some(to);
                     }
                 }
+                let mut copy_effect = None;
                 if let Some(src) = m.etb.copy_of {
                     let values = Box::new(self.obj(src).copiable.clone());
                     let id = self.new_effect_id();
+                    copy_effect = Some(id);
                     let ts = self.obj(new_id).timestamp;
                     self.effects.push(ContinuousEffect {
                         id,
@@ -219,12 +351,68 @@ impl Game {
                         mods: vec![],
                         layer1: Some(Layer1::Copy {
                             values,
-                            exceptions: m.etb.copy_exceptions.clone(),
+                            exceptions: m
+                                .etb
+                                .copy_exceptions
+                                .iter()
+                                .chain(&m.etb.copiable_mods)
+                                .cloned()
+                                .collect(),
                         }),
+                        created_turn: self.turn.number,
+                    });
+                } else if !m.etb.copiable_mods.is_empty() {
+                    // CR 707.2, 613.2a: an "as this enters" ability that sets power and
+                    // toughness modifies its copiable values (its own, when it isn't a
+                    // copy).
+                    let id = self.new_effect_id();
+                    let ts = self.obj(new_id).timestamp;
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: Some(new_id),
+                        controller,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods: vec![],
+                        layer1: Some(Layer1::Copiable(m.etb.copiable_mods.clone())),
                         created_turn: self.turn.number,
                     });
                 }
                 self.battlefield.push(new_id);
+                if from == Zone::Stack {
+                    // A text change made to a permanent spell continues to apply to the
+                    // permanent it becomes (Sleight of Mind rulings).
+                    for e in self.effects.iter_mut() {
+                        if e.mods
+                            .iter()
+                            .any(|x| matches!(x, Modification::ChangeText { .. }))
+                            || self.carried_effects.contains(&e.id)
+                        {
+                            if let Affected::Objects(v) = &mut e.affected {
+                                if v.contains(&old_id) {
+                                    v.push(new_id);
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some((source, ctl, mods)) = m.etb.with_mods.clone() {
+                    // CR 611.2e, 613.7n.
+                    let id = self.new_effect_id();
+                    let ts = self.new_timestamp();
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source,
+                        controller: ctl,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods,
+                        layer1: None,
+                        created_turn: self.turn.number,
+                    });
+                }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
                 // battle defense (CR 310.4), Saga lore (CR 714.3a), plus effects.
@@ -265,7 +453,10 @@ impl Game {
                         } = e
                         {
                             if t == new_id {
-                                *self.objects[t.0 as usize].counters.entry(kind).or_insert(0) += n;
+                                let ts = self.new_timestamp();
+                                let ob = &mut self.objects[t.0 as usize];
+                                *ob.counters.entry(kind.clone()).or_insert(0) += n;
+                                ob.counter_timestamps.insert(kind, ts);
                             }
                         }
                     }
@@ -276,7 +467,23 @@ impl Game {
                 for (mut c, e) in m.etb.as_enters.clone() {
                     c.source = Some(new_id);
                     c.controller = controller;
+                    let before = self.effects.len();
                     self.exec(&e, &mut c);
+                    crate::layers::as_enters_copiable(self, new_id, before);
+                }
+                if let Some(eid) = copy_effect {
+                    // CR 607.2d, 707.9: choices made as it entered by the abilities it has
+                    // through the copy effect belong to those abilities as copied.
+                    let n = &mut self.objects[new_id.0 as usize];
+                    let copied: Vec<(u16, crate::object::Choices)> = n
+                        .linked_choices
+                        .iter()
+                        .map(|(k, c)| (crate::layers::copied_link(*k, eid), c.clone()))
+                        .collect();
+                    for (k, c) in copied {
+                        n.linked_choices.entry(k).or_insert(c);
+                    }
+                    self.dirty = true;
                 }
                 if let Some(target) = m.etb.attacking {
                     crate::combat::put_onto_battlefield_attacking(self, new_id, target);
@@ -540,7 +747,13 @@ impl Game {
 
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.
     pub fn mill(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
-        let lib = &self.players[p.idx()].library;
+        // CR 614.13c: cards entering the battlefield from the library aren't milled.
+        let lib: Vec<ObjectId> = self.players[p.idx()]
+            .library
+            .iter()
+            .copied()
+            .filter(|c| !self.entering.contains(c))
+            .collect();
         let k = (n as usize).min(lib.len());
         let top: Vec<ObjectId> = lib[lib.len() - k..].iter().rev().copied().collect();
         let owner = p;
@@ -791,10 +1004,11 @@ impl Game {
                 if !self.is_live(o) {
                     return;
                 }
-                *self.objects[o.0 as usize]
-                    .counters
-                    .entry(kind.clone())
-                    .or_insert(0) += n;
+                // CR 613.7c: every counter of this kind gets the new counter's timestamp.
+                let ts = self.new_timestamp();
+                let ob = &mut self.objects[o.0 as usize];
+                *ob.counters.entry(kind.clone()).or_insert(0) += n;
+                ob.counter_timestamps.insert(kind.clone(), ts);
             }
             Entity::Player(p) => {
                 *self.players[p.idx()]
@@ -848,7 +1062,21 @@ impl Game {
     // ------------------------------------------------------------------
 
     pub fn gain_life(&mut self, p: PlayerId, n: u32) -> u32 {
-        if n == 0 || !self.player(p).in_game() || self.cant_gain_life(p) {
+        if n == 0 || !self.player(p).in_game() {
+            return 0;
+        }
+        if self.cant_gain_life(p) {
+            // CR 614.17c: an event that can't happen can be replaced only by a
+            // self-replacement effect.
+            for e in self.replace_self_only(ReplEvent::GainLife {
+                player: p,
+                amount: n,
+            }) {
+                if !matches!(e, ReplEvent::GainLife { .. }) {
+                    self.execute_repl_event(e);
+                }
+            }
+            self.run_post_replacement_effects();
             return 0;
         }
         let before = self.player(p).life;
@@ -971,14 +1199,25 @@ impl Game {
             self.recompute();
         }
         let mut finals = Vec::new();
+        // CR 120.8 / 614.7a: 0 damage isn't dealt.
+        let mut events: Vec<(ObjectId, Entity, u32)> = events
+            .into_iter()
+            .filter(|(_, t, a)| *a > 0 && self.valid_damage_recipient(*t))
+            .collect();
+        // CR 616.1: players choose among replacement effects for simultaneous events in
+        // APNAP order.
+        let apnap = self.apnap();
+        events.sort_by_key(|(_, t, _)| {
+            let p = match t {
+                Entity::Player(p) => *p,
+                Entity::Object(o) => self.obj(*o).controller,
+            };
+            apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
+        });
+        // CR 615.7: which simultaneous damage a prevention shield prevents.
+        crate::prevention::order_for_shields(self, &mut events, combat);
+        let first_event = self.events.len();
         for (s, t, a) in events {
-            // CR 120.8 / 614.7a: 0 damage isn't dealt.
-            if a == 0 || !self.valid_damage_recipient(t) {
-                continue;
-            }
-            if self.damage_cant_be_prevented() {
-                // Prevention effects don't apply, but other replacements still do.
-            }
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
                 target: t,
@@ -986,6 +1225,7 @@ impl Game {
                 combat,
             }));
         }
+        crate::prevention::merge_prevention_events(self, first_event);
         // CR 120.10: what would be excess damage, as the damage is about to be dealt.
         let excess_before = crate::excess_damage::thresholds_before(
             self,
@@ -1019,17 +1259,6 @@ impl Game {
         }
         self.run_post_replacement_effects();
         self.recompute();
-    }
-
-    fn damage_cant_be_prevented(&self) -> bool {
-        self.statics
-            .restrictions
-            .iter()
-            .any(|(_, _, r)| matches!(r, Restriction::DamageCantBePrevented))
-            || self
-                .rule_effects
-                .iter()
-                .any(|e| matches!(e.restriction, Restriction::DamageCantBePrevented))
     }
 
     /// Applies the results of damage (CR 120.3). Lifelink is handled by the caller.
@@ -1093,6 +1322,7 @@ impl Game {
                     }
                 }
                 self.history.objects_dealt_damage.insert(o);
+                self.history.damage_by_source.insert((source, o));
             }
         }
         self.dirty = true;
@@ -1250,20 +1480,11 @@ impl Game {
         mana: Vec<crate::mana::Mana>,
         source: Option<ObjectId>,
     ) {
-        let produced: Vec<crate::mana::ManaType> = mana.iter().map(|m| m.ty).collect();
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }
         self.emit(Event::ManaAdded { player: p, source });
-        // CR 106.12a: the permanent whose {T} mana ability is resolving was tapped for mana.
-        if let Some(obj) = source.filter(|s| self.mana_ability_resolving == Some(*s)) {
-            if !produced.is_empty() {
-                self.emit(Event::TappedForMana {
-                    obj,
-                    player: p,
-                    produced,
-                });
-            }
-        }
+        // CR 106.12a: "tapped for mana" is reported once the whole mana ability has
+        // resolved, with all the mana it produced (see `Game::activate_ability`).
     }
 }
