@@ -192,6 +192,38 @@ fn time_counter_removed_while_exiled(block: &str, ctx: &CompileContext) -> Optio
 
 inventory::submit! { AbilityPattern { name: "whenever a time counter is removed from ~ while it's exiled", priority: 100, parse: time_counter_removed_while_exiled } }
 
+/// "When the creature ~ haunts dies, [effect]" and "When ~ enters or the creature it
+/// haunts dies, [effect]" (cards with haunt): the "creature it haunts" part functions in
+/// exile, where the card haunts that creature (CR 702.55b–c); the "enters" part is an
+/// ordinary enters ability of the permanent. They're two abilities with the same effect.
+fn haunted_creature_dies(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let (enters, rest) = if let Some(r) = lower.strip_prefix("when the creature ~ haunts dies, ") {
+        (false, r)
+    } else if let Some(r) = lower.strip_prefix("when ~ enters or the creature it haunts dies, ") {
+        (true, r)
+    } else {
+        return None;
+    };
+    let eff = &t[t.len() - rest.len()..];
+    let body = parse_trigger_body(eff, ctx, Sel::TriggerObject, PlayerRef::TriggerPlayer)?;
+    let mut out = Vec::new();
+    if enters {
+        let etb = TriggeredAbility::new(TriggerCond::EntersBattlefield(Filter::Source), body.clone());
+        out.push(AbilityDef::new(AbilityKind::Triggered(etb), t));
+    }
+    let mut dies = TriggeredAbility::new(
+        TriggerCond::Dies(Filter::Custom(crate::kw::haunt::HAUNTED.into())),
+        body,
+    );
+    dies.zone = FunctionZone::Exile;
+    out.push(AbilityDef::new(AbilityKind::Triggered(dies), t));
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "when the creature ~ haunts dies", priority: 100, parse: haunted_creature_dies } }
+
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
 /// looks back in time (CR 603.10a). It triggers however the card gets there.
