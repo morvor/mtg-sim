@@ -264,7 +264,7 @@ fn the_order_of_a_graveyard_and_the_stack_doesnt_change() {
 
 #[test]
 fn a_moving_objects_own_replacement_abilities_apply_from_any_zone() {
-    cr!("400.6");
+    cr!("400.6", "616.1");
     for name in ["Progenitus", "Blightsteel Colossus", "Rest in Peace"] {
         supported(name);
     }
@@ -294,16 +294,39 @@ fn a_moving_objects_own_replacement_abilities_apply_from_any_zone() {
     assert_eq!(t.zone(colossus), Zone::Library(P0));
     assert_eq!(t.graveyard_size(P0), 0);
     // Replacement effects from elsewhere apply too: with Rest in Peace, a sacrificed
-    // creature is exiled. The Colossus's own replacement effect is applied first
-    // (CR 616.1a), so it's shuffled into the library rather than exiled.
+    // creature is exiled.
     t.battlefield(P1, "Rest in Peace");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    let colossus = t.battlefield(P0, "Blightsteel Colossus");
     t.g.sacrifice(bears, P0);
-    t.g.sacrifice(colossus, P0);
     t.settle();
     assert_eq!(t.zone(bears), Zone::Exile);
-    assert_eq!(t.zone(colossus), Zone::Library(P0));
+    // The Colossus's own ability and Rest in Peace both apply to its move. Neither is a
+    // self-replacement effect (CR 614.15), so its controller chooses which to apply
+    // (CR 616.1): either outcome is possible.
+    for choice in [0, 1] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Rest in Peace");
+        let colossus = t.battlefield(P0, "Blightsteel Colossus");
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(choice));
+        let asked = t.asked().len();
+        t.g.sacrifice(colossus, P0);
+        t.settle();
+        let options = t.asked()[asked..]
+            .iter()
+            .find_map(|(p, d)| match d {
+                Decision::ChooseReplacement { options } => Some((*p, options.clone())),
+                _ => None,
+            })
+            .expect("the controller chooses a replacement effect");
+        assert_eq!(options.0, P0);
+        assert_eq!(options.1.len(), 2, "{:?}", options.1);
+        let expected = if options.1[choice].contains("Rest in Peace") {
+            Zone::Exile
+        } else {
+            Zone::Library(P0)
+        };
+        assert_eq!(t.zone(colossus), expected, "chose {:?}", options.1[choice]);
+    }
 }
 
 /// A second replacement effect for cards put into graveyards, contradicting Rest in

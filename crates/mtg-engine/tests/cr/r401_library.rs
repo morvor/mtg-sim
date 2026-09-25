@@ -6,7 +6,7 @@ use crate::r114_common::{probe_lines, spy};
 use crate::r600_common::*;
 use crate::r703_common::{run_effect, supported};
 use mtg_engine::ability::*;
-use mtg_engine::card::{card, CardDef};
+use mtg_engine::card::CardDef;
 use mtg_engine::decision::{Action, Decision};
 use mtg_engine::facedown::can_look_at;
 use mtg_engine::game::GameConfig;
@@ -482,5 +482,4 @@ fn nth_from_the_top_is_compiled_from_oracle_text() {
     t.cast(P0, spell).target(bears).go();
     t.resolve();
     assert_eq!(t.g.player(P1).library[0], t.g.current(bears));
-    let _ = card("Forest");
 }

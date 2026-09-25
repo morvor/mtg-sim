@@ -158,6 +158,33 @@ fn a_player_who_looked_at_a_card_and_exiled_it_face_down_may_keep_looking_at_it(
 }
 
 #[test]
+fn a_player_allowed_to_look_at_a_foretold_card_may_look_at_it_while_it_remains_exiled() {
+    cr!("406.3", "702.143a");
+    supported("Demon Bolt");
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P0, "Demon Bolt");
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::C, 2);
+    t.g.turn.priority = Some(P0);
+    t.g.take_action(
+        P0,
+        Action::Special(mtg_engine::decision::SpecialAction::Foretell { card: bolt }),
+    );
+    let foretold = t.g.current(bolt);
+    assert_eq!(t.zone(foretold), Zone::Exile);
+    assert!(t.obj(foretold).face_down);
+    // "That player may look at that card as long as it remains in exile"; nobody else may.
+    assert!(can_look_at(&t.g, P0, foretold));
+    assert!(!can_look_at(&t.g, P1, foretold));
+    // A later turn: still.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(can_look_at(&t.g, P0, foretold));
+    assert!(!can_look_at(&t.g, P1, foretold));
+}
+
+#[test]
 fn a_face_down_exiled_card_has_no_characteristics_until_turned_face_up_to_be_played() {
     cr!("406.3a");
     let mut t = TestGame::new(2);

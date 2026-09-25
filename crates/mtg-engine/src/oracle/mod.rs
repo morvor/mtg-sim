@@ -382,7 +382,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
     // CR 400.7j: "the exiled card" is the card the cost exiled.
     let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
-        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_MOVED))?,
+        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))?,
         None => effects::parse_body(eff_text, ctx)?,
     };
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost

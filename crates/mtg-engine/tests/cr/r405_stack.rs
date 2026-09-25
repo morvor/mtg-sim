@@ -341,15 +341,21 @@ fn state_based_actions_dont_use_the_stack() {
 fn a_player_who_concedes_leaves_the_game_immediately() {
     cr!("405.6g");
     ruling!(
-        "Everybody Lives!",
-        "Players can always concede from the game, even if they can't otherwise lose the game."
+        "Platinum Angel",
+        "You can concede a game while Platinum Angel on the battlefield"
     );
+    supported("Platinum Angel");
     let mut t = TestGame::new(3);
+    // P1 can't lose the game ("You can't lose the game and your opponents can't win the
+    // game")...
+    t.battlefield(P1, "Platinum Angel");
+    t.g.lose_game(P1);
+    assert!(!t.has_lost(P1), "Platinum Angel is in effect");
     let q = t.custom(P0, free_instant("Quick"), Zone::Hand(P0));
     t.g.take_action(P0, cast_action(q));
     assert_eq!(t.stack_len(), 1);
     t.g.take_action(P0, Action::Pass);
-    // P1 concedes while the spell is on the stack: they're out at once.
+    // ...but P1 can still concede, while the spell is on the stack: they're out at once.
     t.g.take_action(P1, Action::Concede);
     assert!(t.has_lost(P1));
     assert!(!t.player(P1).in_game());

@@ -218,7 +218,7 @@ fn the_owner_arranges_cards_put_into_their_graveyard_at_the_same_time() {
 
 #[test]
 fn an_aura_put_into_the_graveyard_by_a_state_based_action_goes_on_top() {
-    cr!("404.3");
+    cr!("404.1", "404.3", "704.5m");
     ruling!(
         "Bone Dancer",
         "If just the enchanted permanent is destroyed, it’s put into your graveyard first."
@@ -229,18 +229,19 @@ fn an_aura_put_into_the_graveyard_by_a_state_based_action_goes_on_top() {
     let rancor = t.hand(P0, "Rancor");
     t.cast(P0, rancor).target(bears).go();
     t.resolve();
+    let asked = t.asked().len();
     t.g.destroy(bears, None);
     t.settle();
-    // Rancor's own trigger returns it to hand; before that it went on top.
-    let events = crate::r114_common::events_matching(&t, |e| {
-        matches!(e, events::Event::ZoneChange { to: Zone::Graveyard(_), .. })
-    });
-    let order: Vec<String> = events
+    // The destroyed creature went to the graveyard first; the Aura followed later, as a
+    // state-based action, on top of it. They didn't go there at the same time, so their
+    // owner wasn't asked to arrange them. (Rancor's own trigger, which would return it to
+    // its owner's hand, is still on the stack.)
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(
+        names_of(&t, &t.g.player(P0).graveyard.clone()),
+        ["Grizzly Bears", "Rancor"]
+    );
+    assert!(!t.asked()[asked..]
         .iter()
-        .filter_map(|e| match e {
-            events::Event::ZoneChange { new, .. } => Some(t.obj(*new).chars.name.to_string()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(order, ["Grizzly Bears", "Rancor"]);
+        .any(|(_, d)| matches!(d, Decision::Order { .. })));
 }

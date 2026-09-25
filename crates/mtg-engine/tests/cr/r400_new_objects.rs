@@ -351,6 +351,30 @@ fn an_effect_finds_the_object_it_moved_to_a_public_zone() {
     assert!(t.in_exile("Ornithopter"));
     assert_eq!(t.named_on_battlefield("Ornithopter").len(), 2);
     assert_eq!(t.named_on_battlefield("Osgir, the Reconstructor").len(), 1);
+    // "The exiled card" is only what the exile part of the cost moved, not the other
+    // objects the cost moved to a public zone. Tawnos, Solemn Survivor: "{1}{W}{U}{B},
+    // {T}, Sacrifice two artifact tokens, Exile an artifact or creature card from your
+    // graveyard: Create a token that's a copy of the exiled card, except it's an artifact
+    // in addition to its other types."
+    supported("Tawnos, Solemn Survivor");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let tawnos = t.battlefield(P0, "Tawnos, Solemn Survivor");
+    for land in ["Plains", "Island", "Swamp", "Forest"] {
+        t.lands(P0, land, 1);
+    }
+    for _ in 0..2 {
+        let thopter = t.battlefield(P0, "Ornithopter");
+        t.g.objects[thopter.0 as usize].kind = mtg_engine::object::ObjKind::Token;
+    }
+    t.graveyard(P0, "Grizzly Bears");
+    t.activate(P0, tawnos, 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.named_on_battlefield("Ornithopter").is_empty());
+    let copies = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(copies.len(), 1);
+    assert!(t.obj(copies[0]).is_token() && t.obj(copies[0]).is(CardType::Artifact));
 }
 
 // ---------------------------------------------------------------------------

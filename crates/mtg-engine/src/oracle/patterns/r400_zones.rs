@@ -171,22 +171,20 @@ fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option
     let r = end(l).strip_prefix("if ")?;
     let (what, r) = r.split_once(" would be put into ")?;
     let (whose, instead) = r.split_once(" graveyard from anywhere, ")?;
-    let (filter, self_replacement) = match what {
-        "~" => (Filter::Source, true),
-        "a card" => (Filter::Card, false),
-        "a card or token" => (Filter::Any, false),
-        "an instant or sorcery card" => (
-            Filter::and(vec![
-                Filter::Card,
-                Filter::Or(vec![
-                    Filter::Type(crate::types::CardType::Instant),
-                    Filter::Type(crate::types::CardType::Sorcery),
-                ]),
+    let filter = match what {
+        "~" => Filter::Source,
+        "a card" => Filter::Card,
+        "a card or token" => Filter::Any,
+        "an instant or sorcery card" => Filter::and(vec![
+            Filter::Card,
+            Filter::Or(vec![
+                Filter::Type(crate::types::CardType::Instant),
+                Filter::Type(crate::types::CardType::Sorcery),
             ]),
-            false,
-        ),
+        ]),
         _ => return None,
     };
+    let own = matches!(filter, Filter::Source);
     let owner = match whose {
         "a" => None,
         "your" => Some(PlayerRel::You),
@@ -214,10 +212,13 @@ fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option
             to: Some(ZoneKind::Graveyard),
         },
         action: ReplacementAction::MoveInstead(dest),
-        self_replacement,
+        // A static ability's replacement effect, even one that applies only to its own
+        // object, isn't a self-replacement effect (CR 614.15): with another replacement
+        // effect for the same event, the affected object's controller chooses (CR 616.1).
+        self_replacement: false,
         optional: false,
     }));
-    if self_replacement {
+    if own {
         // "From anywhere": the object's own ability applies wherever it is.
         s.zone = FunctionZone::Anywhere;
     }

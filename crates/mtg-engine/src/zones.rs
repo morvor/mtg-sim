@@ -121,32 +121,46 @@ pub fn own_move_replacements(
 }
 
 /// The objects that paying the cost of the spell or ability being resolved moved to a
-/// public zone, as the new objects they became there ("the exiled card", CR 400.7j).
+/// public zone, as the new objects they became there (CR 400.7j).
 pub const COST_MOVED: Var = vars::USER + 130;
+/// The cards an exile cost of the spell or ability being resolved exiled, as the new
+/// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
+/// moved (sacrificed permanents, discarded cards) aren't among them.
+pub const COST_EXILED: Var = vars::USER + 131;
 
 /// CR 400.7j: if the cost of a spell or ability causes an object to move to a public zone,
-/// the spell or ability's effects can find that object. Records, for the objects `paid`
-/// used to pay the cost, the new objects they became in public zones.
+/// the spell or ability's effects can find that object. Records, for the objects used to
+/// pay the cost, the new objects they became in public zones ([`COST_MOVED`]), and the
+/// cards the exile cost exiled ([`COST_EXILED`]).
 pub fn record_cost_moved(
     g: &Game,
-    paid: &[ObjectId],
+    paid: &crate::casting::PaidCost,
     vars: &mut std::collections::BTreeMap<Var, Vec<Entity>>,
 ) {
+    let now_in = |o: &ObjectId, public: &dyn Fn(Zone) -> bool| {
+        let now = g.current(*o);
+        (now != *o && g.is_live(now) && public(g.obj(now).zone)).then_some(Entity::Object(now))
+    };
     let moved: Vec<Entity> = paid
+        .objects
         .iter()
-        .filter_map(|o| {
-            let now = g.current(*o);
-            (now != *o && g.is_live(now) && g.obj(now).zone.is_public())
-                .then_some(Entity::Object(now))
-        })
+        .filter_map(|o| now_in(o, &|z| z.is_public()))
         .collect();
     if !moved.is_empty() {
         vars.insert(COST_MOVED, moved);
     }
+    let exiled: Vec<Entity> = paid
+        .exiled
+        .iter()
+        .filter_map(|o| now_in(o, &|z| z == Zone::Exile))
+        .collect();
+    if !exiled.is_empty() {
+        vars.insert(COST_EXILED, exiled);
+    }
 }
 
 /// For an activated ability whose cost exiles cards from a zone, its effect text with "the
-/// exiled card" turned into "that card", which then refers to [`COST_MOVED`] (CR 400.7j).
+/// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).
 /// `None` if the cost exiles no such card or the text doesn't refer to it.
 pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
     if !cost

@@ -61,12 +61,11 @@ fn only_the_first_main_phase_is_precombat() {
         "each main phase other than the first one is a postcombat main phase"
     );
     let mut t = TestGame::new(2);
-    let pre = t.custom(
+    t.custom(
         P0,
         main_trigger("Morning Sprite", "precombat main phase"),
         Zone::Battlefield,
     );
-    let _ = pre;
     t.custom(
         P0,
         main_trigger("Evening Sprite", "postcombat main phase"),

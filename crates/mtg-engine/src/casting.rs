@@ -1002,7 +1002,7 @@ impl Game {
         }
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         let mut moved = std::collections::BTreeMap::new();
-        crate::zones::record_cost_moved(self, &paid.objects, &mut moved);
+        crate::zones::record_cost_moved(self, &paid, &mut moved);
         if !moved.is_empty() {
             self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
@@ -1573,7 +1573,7 @@ impl Game {
             );
         }
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
-        crate::zones::record_cost_moved(self, &paid.objects, &mut ctx.vars);
+        crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
         *self.objects[src.0 as usize]
             .activations_this_turn
@@ -2098,6 +2098,7 @@ impl Game {
                 let pick = self.ask_objects(p, src, "Choose cards to exile (cost)", cands, n, n);
                 for c in pick {
                     paid.objects.push(c);
+                    paid.exiled.push(c);
                     self.exile_object(c, src);
                 }
             }
@@ -2351,6 +2352,9 @@ pub struct PaidCost {
     pub objects: Vec<ObjectId>,
     /// The permanents among `objects` that were sacrificed.
     pub sacrificed: Vec<ObjectId>,
+    /// The cards among `objects` that an exile cost exiled ("the exiled card",
+    /// CR 400.7j).
+    pub exiled: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

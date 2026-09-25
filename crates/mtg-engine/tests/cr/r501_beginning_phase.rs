@@ -221,7 +221,7 @@ fn after_their_upkeep_step_means_after_the_first_upkeep_ends() {
     let haze = t.battlefield(P0, "Paradox Haze");
     t.g.objects[haze.0 as usize].attached_to = Some(Entity::Player(P0));
     let reset = t.hand(P1, "Reset");
-    t.lands(P1, "Island", 2);
+    let islands = t.lands(P1, "Island", 2);
     t.set_step(P1, Step::End);
     run_to(&mut t, "P0's first upkeep", |g| {
         g.turn.active == P0 && g.turn.step == Step::Upkeep && g.turn.stage == Stage::Priority
@@ -235,9 +235,11 @@ fn after_their_upkeep_step_means_after_the_first_upkeep_ends() {
         g.turn.step == Step::Upkeep && g.turn.upkeeps == 2 && g.turn.stage == Stage::Priority
     });
     assert!(t.cast(P1, reset).try_go().is_ok());
+    assert!(islands.iter().all(|l| t.obj_now(*l).tapped));
     t.resolve_all();
-    // Its lands were untapped by it.
+    // "Untap all lands you control": the lands tapped to cast it are untapped.
     assert!(t.in_graveyard(P1, "Reset"));
+    assert!(islands.iter().all(|l| !t.obj_now(*l).tapped));
 }
 
 #[test]
