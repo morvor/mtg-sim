@@ -289,3 +289,20 @@ fn ward_cost_based_on_power_uses_power_on_resolution() {
     assert_eq!(t.life(P1), 9);
     assert_eq!(t.obj_now(gorger).damage, 0);
 }
+
+#[test]
+fn a_ward_cost_can_be_an_action_the_paying_player_performs() {
+    cr!("702.21a");
+    assert_supported("The Serpent Society");
+    let mut t = TestGame::new(2);
+    let society = t.battlefield(P0, "The Serpent Society");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(society).go();
+    t.answer_yes(P1, true);
+    t.resolve_all();
+    // P1, who paid, got the poison counters; the Bolt resolved.
+    assert_eq!(t.g.player(P1).counter("poison"), 5);
+    assert_eq!(t.g.player(P0).counter("poison"), 0);
+    assert_eq!(t.obj_now(society).damage, 3);
+}

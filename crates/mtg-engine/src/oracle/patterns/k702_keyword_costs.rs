@@ -1,11 +1,11 @@
-//! Oracle patterns for cumulative upkeep costs the generic keyword parser doesn't handle
-//! (CR 702.24a):
+//! Oracle patterns for keyword costs the generic keyword parser doesn't handle:
 //!
-//! * "Cumulative upkeep {G} or {W}": a choice made separately for each age counter,
-//!   the same as paying a hybrid {G/W} for each one;
-//! * "Cumulative upkeep—Pay {B} and 1 life.": several costs joined by "and";
-//! * "Cumulative upkeep—Draw a card.": an action performed as the cost, once for each
-//!   age counter.
+//! * cumulative upkeep (CR 702.24a): "Cumulative upkeep {G} or {W}" — a choice made
+//!   separately for each age counter, the same as paying a hybrid {G/W} for each one;
+//!   "Cumulative upkeep—Pay {B} and 1 life."; "Cumulative upkeep—Draw a card." (an action
+//!   performed as the cost, once for each age counter);
+//! * ward (CR 702.21a): "Ward—You get two poison counters." (an action the player who
+//!   pays the cost performs).
 
 use super::AbilityPattern;
 use crate::ability::*;
@@ -56,6 +56,31 @@ fn action_cost(s: &str, ctx: &CompileContext) -> Option<Cost> {
         parts: vec![CostPart::Effect(Box::new(e))],
     })
 }
+
+/// "Ward—[action]": the player paying the cost performs the action ("you" is that
+/// player; "get five poison counters" means they get them).
+fn ward_action(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let rest = lower.strip_prefix("ward—")?.trim().trim_end_matches('.');
+    if parse_keyword_cost(rest).is_some() {
+        return None;
+    }
+    let action = if rest.starts_with("get ") {
+        format!("you {rest}")
+    } else {
+        rest.to_string()
+    };
+    let cost = action_cost(&action, ctx)?;
+    let kw = Keyword {
+        cost: Some(cost),
+        text: Some(SmolStr::new(text)),
+        ..Keyword::new(KeywordKind::Ward)
+    };
+    Some(vec![AbilityDef::new(AbilityKind::Keyword(kw), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.21 ward action costs", priority: 60, parse: ward_action } }
 
 fn cumulative_upkeep(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let text = block.trim();

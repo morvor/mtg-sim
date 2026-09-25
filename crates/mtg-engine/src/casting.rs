@@ -2066,7 +2066,9 @@ impl Game {
                 }
             }
             CostPart::Effect(e) => {
+                // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
+                c.controller = p;
                 self.exec(e, &mut c);
             }
             CostPart::PayManaCostOf(s) => {
