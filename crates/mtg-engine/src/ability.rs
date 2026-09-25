@@ -1548,8 +1548,6 @@ pub enum Restriction {
     CantBlock(Filter),
     /// "can't attack or block".
     CantAttackOrBlock(Filter),
-    /// "can attack as though it didn't have defender" (CR 702.3b).
-    AttackDespiteDefender(Filter),
     /// "can't attack you or planeswalkers you control".
     CantAttackPlayer {
         attackers: Filter,
@@ -1582,6 +1580,8 @@ pub enum Restriction {
         blocker: Filter,
         attackers: Filter,
     },
+    /// "can attack as though it didn't have defender" (overrides CR 702.3b).
+    AttackDespiteDefender(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),

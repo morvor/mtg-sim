@@ -1748,14 +1748,14 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::CantAttack(f)
         | Restriction::CantBlock(f)
         | Restriction::CantAttackOrBlock(f)
-        | Restriction::AttackDespiteDefender(f)
         | Restriction::MustAttack(f)
         | Restriction::MustBlock(f)
         | Restriction::MustBeBlocked(f)
         | Restriction::CantBeBlocked(f)
         | Restriction::DoesntUntap(f)
         | Restriction::CantBeCountered(f)
-        | Restriction::CantBeSacrificed(f) => Some(f),
+        | Restriction::CantBeSacrificed(f)
+        | Restriction::AttackDespiteDefender(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         _ => None,
     }
