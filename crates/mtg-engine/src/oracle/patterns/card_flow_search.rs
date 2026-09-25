@@ -108,7 +108,7 @@ fn search_count(s: &str) -> Option<(Value, &str)> {
 /// The description of the cards searched for: "basic land card", "Mercenary permanent
 /// card with mana value 3 or less", "card named ~", "instant card or a card with flash",
 /// "basic land cards and/or Gate cards".
-fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
+pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
     let s = s.trim();
     // Alternatives spelled out with their own articles: "an instant card or a card with
     // flash", "a basic land card or a Desert card", "basic land cards and/or Gate cards".

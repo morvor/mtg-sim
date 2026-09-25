@@ -543,6 +543,8 @@ impl Destination {
 pub enum LibraryPosition {
     Top,
     Bottom,
+    /// On the bottom, several cards in a random order (a single card: the bottom).
+    BottomRandom,
     /// Nth from the top (0-based).
     FromTop(u32),
     /// Shuffle into.

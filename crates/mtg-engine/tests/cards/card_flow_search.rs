@@ -92,7 +92,7 @@ fn path_to_exile_lets_the_creatures_controller_search() {
 
 #[test]
 fn imperial_seal_shuffles_then_puts_the_card_on_top() {
-    cr!("701.23a", "701.24a");
+    cr!("701.23a", "701.24b");
     assert_supported("Imperial Seal");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 1);

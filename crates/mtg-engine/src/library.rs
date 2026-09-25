@@ -184,6 +184,10 @@ pub fn dig(
     ctx: &mut Ctx,
 ) {
     let cards = top_cards(g, p, n);
+    ctx.set_var(
+        vars::REVEALED,
+        cards.iter().map(|o| Entity::Object(*o)).collect(),
+    );
     let cands: Vec<ObjectId> = cards
         .iter()
         .copied()
@@ -200,15 +204,65 @@ pub fn dig(
     let moved = g.move_to_destination(taken, take_to, ctx);
     ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     ctx.prev_affected = moved.iter().map(|o| Entity::Object(*o)).collect();
-    if rest_to.zone == ZoneKind::Library {
-        match rest_to.position {
-            LibraryPosition::Bottom => to_bottom(g, p, &rest),
-            LibraryPosition::Shuffled => g.shuffle_library(p),
-            _ => set_top(g, p, &rest),
-        }
-    } else {
-        g.move_to_destination(rest, rest_to, ctx);
+    if take == 0 {
+        // "Look at the top N cards": the looked-at cards are "them" for what follows.
+        ctx.set_var(vars::IT, cards.iter().map(|o| Entity::Object(*o)).collect());
     }
+    place_rest(g, p, rest, rest_to, ctx);
+}
+
+/// Puts the cards left over from looking at or revealing cards from the top of `p`'s
+/// library where `rest_to` says. In the library: `Top` — back on top in the order `p`
+/// chooses; `FromTop(_)` — left where they are; `Bottom` — on the bottom in the order `p`
+/// chooses; `BottomRandom` — on the bottom in a random order; `Shuffled` — shuffled in.
+fn place_rest(
+    g: &mut Game,
+    p: PlayerId,
+    rest: Vec<ObjectId>,
+    rest_to: &Destination,
+    ctx: &mut Ctx,
+) {
+    if rest_to.zone != ZoneKind::Library {
+        g.move_to_destination(rest, rest_to, ctx);
+        return;
+    }
+    match rest_to.position {
+        LibraryPosition::Top => {
+            let order = choose_order(g, p, &rest, "Order the cards to put on top (top first)");
+            set_top(g, p, &order);
+        }
+        LibraryPosition::FromTop(_) => {}
+        LibraryPosition::Bottom => {
+            // Listed top first; the last one ends up at the very bottom.
+            let mut order = choose_order(
+                g,
+                p,
+                &rest,
+                "Order the cards to put on the bottom (top first)",
+            );
+            order.reverse();
+            to_bottom(g, p, &order);
+        }
+        LibraryPosition::BottomRandom => {
+            use rand::seq::SliceRandom;
+            let mut order = rest;
+            order.shuffle(&mut g.rng);
+            to_bottom(g, p, &order);
+        }
+        LibraryPosition::Shuffled => g.shuffle_library(p),
+    }
+}
+
+/// Asks `p` to order `cards` (known to them); returns them in the chosen order.
+fn choose_order(g: &mut Game, p: PlayerId, cards: &[ObjectId], prompt: &str) -> Vec<ObjectId> {
+    let names = cards
+        .iter()
+        .map(|c| g.obj(*c).chars.name.to_string())
+        .collect();
+    g.ask_order(p, prompt, names)
+        .into_iter()
+        .map(|i| cards[i])
+        .collect()
 }
 
 /// Reveal cards from the top until one matches; that card goes to `found_to`, the rest
@@ -235,13 +289,5 @@ pub fn reveal_until(
         let moved = g.move_to_destination(vec![f], found_to, ctx);
         ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     }
-    if rest_to.zone == ZoneKind::Library {
-        match rest_to.position {
-            LibraryPosition::Bottom => to_bottom(g, p, &revealed),
-            LibraryPosition::Shuffled => g.shuffle_library(p),
-            _ => set_top(g, p, &revealed),
-        }
-    } else {
-        g.move_to_destination(revealed, rest_to, ctx);
-    }
+    place_rest(g, p, revealed, rest_to, ctx);
 }
