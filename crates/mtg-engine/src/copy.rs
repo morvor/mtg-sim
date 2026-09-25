@@ -25,6 +25,11 @@ pub fn copy_spell(
     };
     copy.controller = controller;
     copy.base_controller = controller;
+    // A copy of a spell is owned by the player under whose control it was put on the
+    // stack (CR 112.2).
+    if copy.kind == ObjKind::SpellCopy {
+        copy.owner = controller;
+    }
     copy.prev = None;
     copy.next = None;
     if let Some(si) = copy.stack.as_mut() {

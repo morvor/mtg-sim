@@ -8,19 +8,9 @@ use crate::object::*;
 use crate::types::*;
 
 /// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
-/// ignoring protection from effects that say they don't remove this Aura (CR 702.16n).
+/// ignoring protection from effects that say they don't remove it (CR 702.16n, 702.16p).
 fn aura_protection_applies(g: &Game, t: ObjectId, aura: ObjectId) -> bool {
-    let marker = crate::choices::doesnt_remove_marker(aura);
-    let ob = g.obj(t);
-    let ctx = Ctx::new(Some(t), ob.controller);
-    ob.chars
-        .keywords()
-        .filter(|k| k.kind == KeywordKind::Protection)
-        .filter(|k| k.text.as_deref() != Some(marker.as_str()))
-        .any(|k| match &k.filter {
-            None => true,
-            Some(f) => g.matches(aura, f, &ctx),
-        })
+    crate::kw::protection::prevents_attachment(g, t, aura)
 }
 
 /// The "enchant" restriction of an Aura as a filter over objects (None = can enchant a
@@ -106,11 +96,11 @@ pub fn legal_attachment(g: &Game, obj: ObjectId, to: Entity) -> bool {
             } else if chars.has_subtype("Equipment") {
                 // CR 301.5c: Equipment can be attached only to creatures; 702.16d protection.
                 target.is_creature()
-                    && !g.protected_from(t, obj)
+                    && !crate::kw::protection::prevents_attachment(g, t, obj)
                     && crate::keyword_impls::equip_restriction_ok(g, obj, t)
             } else if chars.has_subtype("Fortification") {
                 // CR 301.6: Fortifications attach to lands.
-                target.chars.is_land() && !g.protected_from(t, obj)
+                target.chars.is_land() && !crate::kw::protection::prevents_attachment(g, t, obj)
             } else {
                 false
             }

@@ -57,7 +57,7 @@ pub struct Compiled {
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
-    for block in split_abilities(&norm) {
+    for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
         match parse_ability(&block, ctx) {
             Some(mut abilities) => out.abilities.append(&mut abilities),
             None => {
@@ -124,7 +124,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         }
         s = replace_word(&s, first, "~");
     }
-    const SELF_REFS: [&str; 22] = [
+    const SELF_REFS: [&str; 23] = [
         "this creature",
         "this artifact",
         "this enchantment",
@@ -147,6 +147,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         "this Siege",
         "this Mount",
         "this object",
+        "this scheme",
     ];
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");
@@ -379,7 +380,28 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_loyalty = loyalty;
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
+    act.zone = activated_zone(cost_s, eff_text);
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
+}
+
+/// Where an activated ability functions: one whose cost can be paid only from the hand
+/// ("Exile this card from your hand", "Discard this card") functions from the hand
+/// (CR 113.6j); one whose cost or effect moves the object out of a zone ("Return this card
+/// from your graveyard to the battlefield") functions only in that zone (CR 113.6m).
+fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
+    let (c, e) = (cost.to_lowercase(), effect.to_lowercase());
+    let moves_self_from = |s: &str, zone: &str| {
+        ["~", "this card", "this creature"]
+            .iter()
+            .any(|me| s.contains(&format!("{me} from your {zone}")))
+    };
+    if moves_self_from(&c, "hand") || c.contains("discard ~") || c.contains("discard this card") {
+        FunctionZone::Hand
+    } else if moves_self_from(&c, "graveyard") || moves_self_from(&e, "graveyard") {
+        FunctionZone::Graveyard
+    } else {
+        FunctionZone::Battlefield
+    }
 }
 
 /// Whether a cost or effect moves cards to or from a library (drawing, milling, searching,

@@ -54,6 +54,9 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
     g.replacements.retain(|e| e.controller != p);
     g.delayed_triggers.retain(|d| d.controller != p);
     g.pending_triggers.retain(|t| t.controller != p);
+    // With those control effects gone, control reverts to each object's default
+    // controller (CR 110.2b) before checking what the player still controls.
+    g.recompute();
     // Objects controlled (but not owned) by that player are exiled (CR 800.4a).
     let controlled: Vec<ObjectId> = g
         .battlefield

@@ -7,7 +7,7 @@ use crate::eval::Ctx;
 use crate::events::{Event, MoveCause};
 use crate::game::*;
 use crate::keywords::KeywordKind;
-use crate::mana::{Mana, ManaRestriction, ManaType};
+use crate::mana::ManaType;
 use crate::object::*;
 use crate::replacement::*;
 use crate::types::*;
@@ -75,6 +75,7 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
@@ -621,7 +622,7 @@ impl Game {
                     };
                     let tc = TokenCreate {
                         chars,
-                        card: None,
+                        card: crate::tokens::predefined_card(spec),
                         tapped: *tapped,
                         attacking: attack,
                         copy_of: None,
@@ -988,32 +989,31 @@ impl Game {
                 mana,
                 restriction,
             } => {
-                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                let produced = self.produce_mana(p, mana, ctx);
-                // "of the chosen type": the type chosen for the source (CR 607.2d).
-                let restriction = match restriction {
-                    Some(ManaRestriction::SpellOfChosenType) => Some(
-                        ctx.source
-                            .and_then(|s| self.obj(s).choices.creature_type.clone())
-                            .map(ManaRestriction::SpellWithSubtype)
-                            .unwrap_or(ManaRestriction::SpellOfChosenType),
-                    ),
-                    other => other.clone(),
-                };
-                let snow = ctx
-                    .source
-                    .is_some_and(|s| self.obj(s).chars.has_supertype(Supertype::Snow));
-                let units: Vec<Mana> = produced
-                    .into_iter()
-                    .map(|t| Mana {
-                        ty: t,
-                        snow,
-                        source: ctx.source,
-                        restriction: restriction.clone(),
-                        persistent: false,
-                    })
-                    .collect();
-                self.add_mana(p, units, ctx.source);
+                crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+            }
+            Effect::AddManaWithSpentTrigger {
+                add,
+                spell_filter,
+                body,
+            } => {
+                crate::mana_abilities::resolve_add_mana_with_rider(
+                    self,
+                    add,
+                    spell_filter,
+                    body,
+                    ctx,
+                );
+            }
+            Effect::SetClassLevel { level } => {
+                if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
+                    self.obj_mut(s).class_level = *level;
+                }
+            }
+            Effect::ActivateManaAbilities { who, filter } => {
+                crate::mana_abilities::activate_mana_abilities_of_each(self, who, filter, ctx);
+            }
+            Effect::LoseUnspentMana { who, to } => {
+                crate::mana_abilities::lose_unspent_mana(self, who, to.as_ref(), ctx);
             }
             Effect::AddPlayerCounters { who, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
@@ -1778,6 +1778,58 @@ impl Game {
                 } else {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
+            }
+            ManaProduction::CouldProduceColor(f) => {
+                // CR 106.7: colorless isn't a color.
+                let types: Vec<ManaType> = crate::mana_abilities::types_could_produce(self, f, ctx)
+                    .into_iter()
+                    .filter(|t| *t != ManaType::C)
+                    .collect();
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
+            ManaProduction::ManaCostOf(sel) => {
+                // CR 106.8–106.11: hybrid symbols let the player choose a half; Phyrexian
+                // symbols add one mana of their color; generic and snow symbols add
+                // colorless mana.
+                let symbols: Vec<crate::mana::ManaSymbol> = self
+                    .eval_sel_objects(sel, ctx)
+                    .first()
+                    .and_then(|o| self.obj(*o).chars.mana_cost.clone())
+                    .map(|m| m.symbols.to_vec())
+                    .unwrap_or_default();
+                let mut out = Vec::new();
+                for s in symbols {
+                    match s {
+                        crate::mana::ManaSymbol::TwoHybrid(c) => {
+                            let t = self.choose_mana_color(
+                                p,
+                                ctx,
+                                &[ManaType::from_color(c), ManaType::C],
+                            );
+                            // The generic half {2} adds two colorless mana.
+                            let n = if t == ManaType::C { 2 } else { 1 };
+                            out.extend(std::iter::repeat_n(t, n));
+                        }
+                        other => {
+                            for unit in crate::mana_abilities::symbol_units(other) {
+                                out.push(self.choose_mana_color(p, ctx, &unit));
+                            }
+                        }
+                    }
+                }
+                out
+            }
+            ManaProduction::DoubleUnspent => {
+                // CR 701.10f: add as much of each type as the player already has.
+                let pool = &self.player(p).mana_pool;
+                ManaType::ALL
+                    .iter()
+                    .flat_map(|t| std::iter::repeat_n(*t, pool.count(*t)))
+                    .collect()
             }
             ManaProduction::AnyColorAmong(f) => {
                 let mut cs = ColorSet::NONE;

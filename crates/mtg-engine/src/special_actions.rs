@@ -1,5 +1,6 @@
-//! Special actions (CR 116) that aren't tied to a keyword: turning a face-down permanent
-//! face up (CR 116.2b), actions effects allow later (CR 116.2c), ignoring a static
+//! Special actions (CR 116) that aren't tied to a keyword: turning a face-down manifested
+//! or cloaked permanent face up (CR 116.2b; morph and disguise are in
+//! `kw/morph_face_up.rs`), actions effects allow later (CR 116.2c), ignoring a static
 //! ability's effect (CR 116.2d), discarding a card any time you could cast an instant
 //! (CR 116.2e), and turning a face-down conspiracy face up (CR 116.2j). Keyword special
 //! actions (suspend, foretell, plot, companion) live in `kw/`.
@@ -139,9 +140,10 @@ fn static_actions(g: &Game) -> Vec<(ObjectId, u64, SpecialActionDef)> {
     out
 }
 
-/// The cost of turning a face-down permanent face up (CR 116.2b): its morph or disguise
-/// cost (CR 702.37e, 702.168d), or the mana cost of a manifested or cloaked
-/// creature card (CR 701.40b, 701.58b).
+/// The cost of turning a face-down manifested or cloaked permanent face up (CR 116.2b):
+/// the mana cost of a creature card (CR 701.40b, 701.58b). A permanent with morph or
+/// disguise is turned face up for that cost instead (CR 702.37e, 702.168d), by
+/// `kw/morph_face_up.rs`.
 pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield {
@@ -149,12 +151,11 @@ pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     }
     let card = o.card.as_ref()?;
     let face = card.characteristics(FaceState::Front);
-    for a in &face.abilities {
-        if let AbilityKind::Keyword(k) = &a.kind {
-            if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) {
-                return Some(k.cost.clone().unwrap_or_default());
-            }
-        }
+    if face.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Keyword(k)
+            if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise))
+    }) {
+        return None;
     }
     let kind = o.choices.text.as_deref().unwrap_or("");
     if matches!(kind, "Manifest" | "Cloak") && face.card_types.contains(CardType::Creature) {
@@ -262,9 +263,8 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
             if o.controller != p {
                 return bad("you don't control that permanent");
             }
-            let Some(cost) = turn_face_up_cost(g, obj) else {
-                return bad("can't turn that face up");
-            };
+            // Morph and disguise: see `kw/morph_face_up.rs`.
+            let cost = turn_face_up_cost(g, obj)?;
             if !pay(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p)) {
                 return bad("can't pay the cost");
             }

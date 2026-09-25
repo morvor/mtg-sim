@@ -242,6 +242,16 @@ pub fn custom_trigger(
 }
 
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
+    // "named-token:N:Name": create N tokens by name (CR 111.11).
+    if let Some(spec) = name.strip_prefix("named-token:") {
+        crate::tokens::create_named_tokens(g, spec, ctx);
+        return;
+    }
+    // The planeswalking ability (CR 901.8, 701.31).
+    if name == crate::planechase::PLANESWALK_EFFECT {
+        crate::planechase::planeswalk(g, ctx.controller);
+        return;
+    }
     match name {
         crate::kw::suspend::CAST_SUSPENDED => crate::kw::suspend::cast_suspended(g, ctx),
         crate::kw::miracle::CAST_MIRACLE => crate::kw::miracle::cast_miracle(g, ctx),

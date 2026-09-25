@@ -379,6 +379,35 @@ pub struct GameObject {
     pub prepared: Option<ObjectId>,
 }
 
+/// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
+/// on the stack. Off the stack, X is 0 (CR 107.3g, 107.3m).
+pub fn x_value_of(o: &GameObject) -> i32 {
+    if o.zone == Zone::Stack {
+        o.stack.as_ref().and_then(|s| s.x).unwrap_or(0).max(0)
+    } else {
+        0
+    }
+}
+
+/// How the spell that became a permanent was cast, for that permanent's own
+/// enters-the-battlefield triggered ability: such an ability that refers to X uses the
+/// value of X of the spell (CR 107.3m), and conditions like "if it was kicked" see the
+/// spell's costs.
+pub fn etb_trigger_cast_info(
+    g: &crate::game::Game,
+    t: &crate::game::PendingTrigger,
+) -> Option<CastInfo> {
+    use crate::ability::TriggerCond;
+    let AbilityKind::Triggered(tr) = &t.ability.kind else {
+        return None;
+    };
+    if !matches!(tr.trigger, TriggerCond::EntersBattlefield(_)) || t.event.object != Some(t.source)
+    {
+        return None;
+    }
+    g.try_obj(t.source)?.cast.as_deref().cloned()
+}
+
 impl GameObject {
     pub fn new(
         id: ObjectId,

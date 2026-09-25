@@ -4,7 +4,6 @@
 //! (CR 122.6), and putting an object's counters on another object (CR 122.8, 122.9).
 
 use crate::ability::*;
-use crate::events::Event;
 use crate::game::{Game, PendingTrigger};
 use crate::object::*;
 use crate::replacement::{ReplEvent, ReplKey};
@@ -286,24 +285,6 @@ pub fn put_counters_of(g: &mut Game, from: ObjectId, to: Entity, kind: Option<&s
         total += g.add_counters(to, &k, n, None);
     }
     total
-}
-
-/// CR 122.6: counters a permanent is given as it enters the battlefield are counters put
-/// on it: emits the events for them (`before` is the counters it had before they were
-/// placed).
-pub fn entered_with_counters(g: &mut Game, obj: ObjectId, before: &BTreeMap<CounterKind, u32>) {
-    let now = g.obj(obj).counters.clone();
-    for (k, n) in now {
-        let old = before.get(&k).copied().unwrap_or(0);
-        if n > old {
-            g.history.counters_put += n - old;
-            g.emit(Event::CountersAdded {
-                target: Entity::Object(obj),
-                kind: k,
-                n: n - old,
-            });
-        }
-    }
 }
 
 /// The player who puts counters on a permanent (CR 122.6a): the controller of the spell
