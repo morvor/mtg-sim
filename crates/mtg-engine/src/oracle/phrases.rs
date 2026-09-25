@@ -431,6 +431,11 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
     } else {
         (false, t.strip_prefix("with ")?)
     };
+    // "with no abilities" (CR 113.12: granted abilities count, characteristics and
+    // qualities don't).
+    if let Some(tail) = rest.strip_prefix("no abilities") {
+        return Some((Filter::not(Filter::HasAbilities), tail));
+    }
     if !negate {
         if let Some(r) = rest
             .strip_prefix("a ")

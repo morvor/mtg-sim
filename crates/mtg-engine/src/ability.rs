@@ -231,6 +231,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions everywhere except the given zone, even outside the game (an ability that
+    /// states which zones it doesn't function in, CR 113.6c).
+    AnywhereExcept(ZoneKind),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

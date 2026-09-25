@@ -32,6 +32,7 @@ pub mod combat;
 pub mod copy;
 pub mod custom;
 pub mod decision;
+pub mod deck;
 pub mod designations;
 pub mod dfc;
 pub mod eval;

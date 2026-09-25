@@ -111,6 +111,9 @@ impl Game {
         if is_cda || zone == FunctionZone::Anywhere {
             return true;
         }
+        if let FunctionZone::AnywhereExcept(z) = zone {
+            return obj.zone.kind() != Some(z) && !obj.phased_out;
+        }
         match obj.zone {
             Zone::Battlefield => zone == FunctionZone::Battlefield && !obj.phased_out,
             Zone::Stack => zone == FunctionZone::Stack,
