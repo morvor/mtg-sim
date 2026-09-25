@@ -276,12 +276,15 @@ impl Game {
 
     /// Whether a creature can attack a specific player/planeswalker/battle.
     pub fn can_attack_target(&self, id: ObjectId, target: Entity) -> bool {
-        // "can't attack you (or planeswalkers you control)": the player, or a planeswalker
-        // they control (not a battle they protect).
+        // "can't attack you (or planeswalkers you control)": the player, a planeswalker
+        // they control, or a battle they protect: (player, planeswalker?, battle?).
         let defender = match target {
-            Entity::Player(p) => Some((p, false)),
+            Entity::Player(p) => Some((p, false, false)),
+            Entity::Object(o) if self.obj(o).is(CardType::Battle) => {
+                Some((entity_defender(self, target), false, true))
+            }
             Entity::Object(o) if self.obj(o).is(CardType::Planeswalker) => {
-                Some((self.obj(o).controller, true))
+                Some((self.obj(o).controller, true, false))
             }
             Entity::Object(_) => None,
         };
@@ -294,10 +297,12 @@ impl Game {
                     attackers,
                     defender: pf,
                     planeswalkers,
+                    battles,
                 } => {
                     let ctx = Ctx::new(*s, *c);
-                    defender.is_some_and(|(p, is_pw)| {
+                    defender.is_some_and(|(p, is_pw, is_battle)| {
                         (!is_pw || *planeswalkers)
+                            && (!is_battle || *battles)
                             && self.restriction_applies(id, attackers, &ctx, locked)
                             && self.player_filter_matches(pf, p, &ctx)
                     })

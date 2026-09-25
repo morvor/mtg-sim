@@ -729,6 +729,12 @@ pub enum PlayerFilter {
     GraveyardSize(Cmp, Box<Value>),
     /// The monarch.
     Monarch,
+    /// Controls a number of permanents matching the filter ("controls an Island",
+    /// "controls fewer creatures than you").
+    Controls(Box<Filter>, Cmp, Box<Value>),
+    /// Has a number of counters of a kind ("is poisoned": one or more poison counters,
+    /// CR 122.1f).
+    Counters(SmolStr, Cmp, Box<Value>),
     /// The defending player.
     Defending,
     /// The active player.
@@ -1534,12 +1540,14 @@ pub enum Restriction {
     CantBlock(Filter),
     /// "can't attack or block".
     CantAttackOrBlock(Filter),
-    /// "can't attack you" (`planeswalkers`: "or planeswalkers you control"; battles are
-    /// never included).
+    /// "can't attack you" (`planeswalkers`: "or planeswalkers you control"; `battles`:
+    /// battles the player protects), and "can't attack unless defending player ..."
+    /// (the player it would attack, CR 508.5).
     CantAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
         planeswalkers: bool,
+        battles: bool,
     },
     /// "is goaded" as a static ability: goaded by the source's controller for as long as
     /// the effect applies (CR 701.15b).

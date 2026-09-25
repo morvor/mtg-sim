@@ -193,6 +193,24 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
     }
+    // "with power or toughness 1 or less"
+    if let Some(r) = t.strip_prefix("with power or toughness ") {
+        let (n, r2) = parse_number(r)?;
+        for (tail, cmp) in [("or less", Cmp::Le), ("or greater", Cmp::Ge)] {
+            if let Some(r3) = r2.trim_start().strip_prefix(tail) {
+                if r3.is_empty() || r3.starts_with([' ', ',']) {
+                    return Some((
+                        Filter::Or(vec![
+                            Filter::Power(cmp, Box::new(n.clone())),
+                            Filter::Toughness(cmp, Box::new(n)),
+                        ]),
+                        r3,
+                    ));
+                }
+            }
+        }
+        return None;
+    }
     // "with toughness greater than its power" (each object compared with itself).
     if let Some(r) = t.strip_prefix("with toughness greater than its power") {
         if r.is_empty() || r.starts_with([' ', ',']) {
@@ -1367,6 +1385,7 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
                 attackers: fc,
                 defender: PlayerFilter::You,
                 planeswalkers: p.ends_with("planeswalkers you control"),
+                battles: false,
             }])
         }
         "assigns combat damage equal to its toughness rather than its power"
@@ -1421,6 +1440,12 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         if x.contains(" or more ") {
             return single_restriction(p, f).map(|r| vec![r]);
         }
+        if let Some(b) = and_or_phrase(x) {
+            return Some(vec![Restriction::CantBeBlockedBy {
+                attacker: fc,
+                blocker: Filter::not(b),
+            }]);
+        }
         // "Walls and/or creatures with flying": the suffix belongs to the last noun only,
         // unlike "Walls and creatures you control"; leave such lists alone.
         if let Some((nouns, _)) = x.split_once(" with ") {
@@ -1438,6 +1463,36 @@ fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         }]);
     }
     single_restriction(p, f).map(|r| vec![r])
+}
+
+/// Plural object phrases joined by "and/or": "artifact creatures and/or white
+/// creatures", "Walls and/or creatures with flying", "black and/or red creatures".
+fn and_or_phrase(x: &str) -> Option<Filter> {
+    let parts: Vec<&str> = x.split(" and/or ").collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let whole: Option<Vec<Filter>> = parts
+        .iter()
+        .map(|p| whole_object_phrase(p).filter(|(_, pl)| *pl).map(|(f, _)| f))
+        .collect();
+    if let Some(v) = whole {
+        return Some(Filter::Or(v));
+    }
+    // Colors before one noun.
+    if parts.len() == 2 {
+        let c1 = Color::from_word(parts[0])?;
+        let (w, rest) = parts[1].split_once(' ')?;
+        let c2 = Color::from_word(w)?;
+        let (f, plural) = whole_object_phrase(rest)?;
+        if plural {
+            return Some(Filter::and(vec![
+                Filter::Or(vec![Filter::Color(c1), Filter::Color(c2)]),
+                f,
+            ]));
+        }
+    }
+    None
 }
 
 fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
@@ -1481,6 +1536,12 @@ fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
         | "can attack as though they didn't have defender" => Restriction::AttackDespiteDefender(f),
         _ => {
             let r = p.strip_prefix("can't be blocked by ")?;
+            if let Some(b) = and_or_phrase(r) {
+                return Some(Restriction::CantBeBlockedBy {
+                    attacker: f,
+                    blocker: b,
+                });
+            }
             // "with greater power" compares with ~ itself; other subjects would need a
             // comparison with each attacker.
             if (r.contains("with greater power") || r.contains("with lesser power"))
@@ -1820,9 +1881,29 @@ fn parse_line(
     for (sep, negate) in [(" unless ", true), (" if ", false)] {
         for (i, _) in s.match_indices(sep) {
             let (b, c) = (&s[..i], &s[i + sep.len()..]);
-            let Some(body) = parse_body(b, referent.as_ref(), quotes, text, ctx) else {
+            let Some(mut body) = parse_body(b, referent.as_ref(), quotes, text, ctx) else {
                 continue;
             };
+            // "~ can't attack unless defending player controls an Island": about the
+            // player it would attack (CR 508.5), whether directly or through a
+            // planeswalker or battle.
+            if let Some(pf) = super::statics_conditions::defending_player_condition(c) {
+                let [Out::Restr(Restriction::CantAttack(f))] = body.outs.as_slice() else {
+                    return None;
+                };
+                let defender = if negate {
+                    PlayerFilter::Not(Box::new(pf))
+                } else {
+                    pf
+                };
+                body.outs = vec![Out::Restr(Restriction::CantAttackPlayer {
+                    attackers: f.clone(),
+                    defender,
+                    planeswalkers: true,
+                    battles: true,
+                })];
+                return Some((body, and_all(conds)));
+            }
             if !body.outs.iter().all(|o| matches!(o, Out::Restr(_))) {
                 continue;
             }

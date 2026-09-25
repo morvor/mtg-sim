@@ -117,6 +117,7 @@ pub fn subtype_word(w: &str) -> Option<Subtype> {
     // Plurals the general rule gets wrong: "Horses", "Heroes", "Mice", "Pegasi".
     let irregular = match lower.as_str() {
         "mice" => Some("mouse"),
+        "oxen" => Some("ox"),
         "pegasi" => Some("pegasus"),
         "cyclopes" => Some("cyclops"),
         _ => None,
@@ -243,7 +244,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         if !matches!(f, Filter::Subtype(_)) {
             head_subtypes_only = false;
         }
-        if (w2.ends_with('s') && singular(w2) != w2) || matches!(w2, "mice" | "pegasi") {
+        if (w2.ends_with('s') && singular(w2) != w2) || matches!(w2, "mice" | "pegasi" | "oxen") {
             plural = true;
         }
         heads.push(f);

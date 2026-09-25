@@ -470,6 +470,18 @@ fn control_condition(c: &str) -> Option<Condition> {
             ])));
         }
     }
+    // "you control more creatures than attacking player" (the active player).
+    if let Some(r) = c
+        .strip_prefix("you control more ")
+        .and_then(|r| r.strip_suffix(" than attacking player"))
+    {
+        let f = phrase(r)?;
+        return Some(Condition::Compare(
+            Value::Count(f.clone().you_control()),
+            Cmp::Gt,
+            Value::Count(Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Active)])),
+        ));
+    }
     // Lieutenant: "as long as you control your commander" (CR 903.3).
     if c == "you control your commander" {
         return Some(Condition::Exists(Filter::and(vec![
@@ -515,11 +527,101 @@ fn control_condition(c: &str) -> Option<Condition> {
             let f = phrase(rest)?;
             return Some(Condition::Compare(Value::Count(f.you_control()), cmp, n));
         }
-        // "you control a red or white permanent"
-        let f = phrase(&article(r)?)?;
+        // "you control a red or white permanent", "you control a 1/1 creature"
+        let a = article(r)?;
+        if let Some((pt, rest)) = a.split_once(' ') {
+            if let Some((p, t)) = pt.split_once('/') {
+                let (p, t) = (p.parse::<i32>().ok()?, t.parse::<i32>().ok()?);
+                let f = Filter::and(vec![
+                    phrase(rest)?,
+                    Filter::Power(Cmp::Eq, Box::new(Value::c(p))),
+                    Filter::Toughness(Cmp::Eq, Box::new(Value::c(t))),
+                ]);
+                return Some(Condition::Exists(f.you_control()));
+            }
+        }
+        let f = phrase(&a)?;
         return Some(Condition::Exists(f.you_control()));
     }
     None
+}
+
+/// What a player is like: "controls an Island", "controls an enchantment or an
+/// enchanted permanent", "controls no creatures", "is the monarch", "is poisoned", "has
+/// seven or more cards in their graveyard", "has no cards in hand".
+pub(crate) fn player_predicate(r: &str) -> Option<PlayerFilter> {
+    let r = end(r);
+    match r {
+        "is the monarch" => return Some(PlayerFilter::Monarch),
+        // CR 122.1f
+        "is poisoned" => {
+            return Some(PlayerFilter::Counters(
+                "poison".into(),
+                Cmp::Ge,
+                Box::new(Value::c(1)),
+            ))
+        }
+        _ => {}
+    }
+    if let Some(x) = r.strip_prefix("controls ") {
+        let controls = |f: Filter, cmp: Cmp, n: Value| {
+            PlayerFilter::Controls(Box::new(f), cmp, Box::new(n))
+        };
+        if let Some(y) = x.strip_prefix("no ") {
+            return Some(controls(color_or_phrase(y)?, Cmp::Eq, Value::c(0)));
+        }
+        if let Some((cmp, n, rest)) = amount_cmp(x) {
+            return Some(controls(color_or_phrase(rest)?, cmp, n));
+        }
+        // "an enchantment or an enchanted permanent"
+        let mut alts = Vec::new();
+        for part in x.split(" or ") {
+            let y = part
+                .strip_prefix("a ")
+                .or_else(|| part.strip_prefix("an "))?;
+            alts.push(color_or_phrase(y)?);
+        }
+        let f = if alts.len() == 1 {
+            alts.pop()?
+        } else {
+            Filter::Or(alts)
+        };
+        return Some(controls(f, Cmp::Ge, Value::c(1)));
+    }
+    if let Some(x) = r.strip_prefix("has ") {
+        let (cmp, n, tail) = amount_cmp(x)?;
+        return Some(match end(tail) {
+            "cards in their graveyard" | "card in their graveyard" => {
+                PlayerFilter::GraveyardSize(cmp, Box::new(n))
+            }
+            "cards in hand" | "card in hand" | "cards in their hand" => {
+                PlayerFilter::HandSize(cmp, Box::new(n))
+            }
+            "life" => PlayerFilter::Life(cmp, Box::new(n)),
+            _ => return None,
+        });
+    }
+    None
+}
+
+/// Conditions about the defending player, as a filter on the player a creature would
+/// attack: "defending player controls an Island", "you control more creatures than
+/// defending player".
+pub(crate) fn defending_player_condition(c: &str) -> Option<PlayerFilter> {
+    let c = end(c);
+    if let Some(r) = c.strip_prefix("defending player ") {
+        return player_predicate(r);
+    }
+    // "you control more creatures than defending player": it controls fewer.
+    let r = c
+        .strip_prefix("you control more ")?
+        .strip_suffix(" than defending player")?;
+    let f = color_or_phrase(r)?;
+    Some(PlayerFilter::Controls(
+        Box::new(f.clone()),
+        Cmp::Lt,
+        Box::new(Value::Count(f.you_control())),
+    ))
 }
 
 /// An object phrase, also allowing a leading color choice: "red or white permanent".
@@ -578,6 +680,46 @@ fn comparison_condition(c: &str) -> Option<Condition> {
         )),
         _ => return None,
     })
+}
+
+/// What's on the battlefield or in exile: "there is a Mountain on the battlefield",
+/// "there are five or more Islands on the battlefield", "an enchantment is on the
+/// battlefield", "there are seven or more cards in exile", "a player has no cards in
+/// hand".
+fn board_condition(c: &str) -> Option<Condition> {
+    let c = end(c);
+    if c == "a player has no cards in hand" {
+        return Some(Condition::PlayerMatches(
+            PlayerRef::EachPlayer,
+            PlayerFilter::HandSize(Cmp::Eq, Box::new(Value::c(0))),
+        ));
+    }
+    let single = c
+        .strip_prefix("there is a ")
+        .or_else(|| c.strip_prefix("there is an "))
+        .or_else(|| c.strip_prefix("there's a "))
+        .or_else(|| c.strip_prefix("there's an "))
+        .and_then(|r| r.strip_suffix(" on the battlefield"))
+        .or_else(|| {
+            c.strip_prefix("a ")
+                .or_else(|| c.strip_prefix("an "))
+                .and_then(|r| r.strip_suffix(" is on the battlefield"))
+        });
+    if let Some(r) = single {
+        return Some(Condition::Exists(color_or_phrase(r)?));
+    }
+    let r = c.strip_prefix("there are ")?;
+    let (cmp, n, rest) = amount_cmp(r)?;
+    let rest = rest.trim();
+    if matches!(rest, "cards in exile" | "card in exile") {
+        return Some(Condition::Compare(
+            Value::Count(Filter::InZone(ZoneKind::Exile)),
+            cmp,
+            n,
+        ));
+    }
+    let f = color_or_phrase(rest.strip_suffix(" on the battlefield")?)?;
+    Some(Condition::Compare(Value::Count(f), cmp, n))
 }
 
 /// "white is the most common color among all permanents or is tied for most common".
@@ -726,6 +868,7 @@ fn referent_free_condition(c: &str) -> Option<Condition> {
         .or_else(|| control_condition(c))
         .or_else(|| comparison_condition(c))
         .or_else(|| most_common_color_condition(c))
+        .or_else(|| board_condition(c))
         .or_else(|| history_condition(c))
         .or_else(|| stat_condition(c, None))
         .or_else(|| {
