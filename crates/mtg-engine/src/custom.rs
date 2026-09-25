@@ -163,6 +163,10 @@ pub fn custom_trigger(
     ev: &Event,
 ) -> Vec<EventInfo> {
     let _ = ctl;
+    // "When you unlock this door" (CR 709.5h).
+    if let Some(v) = crate::rooms::custom_trigger(name, src, ev) {
+        return v;
+    }
     if let Some(ns) = name.strip_prefix("chapter:") {
         if let Event::CountersAdded {
             target: Entity::Object(o),

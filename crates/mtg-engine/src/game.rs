@@ -832,6 +832,7 @@ impl Game {
         let id = self.push_object(n);
         self.objects[old.0 as usize].next = Some(id);
         crate::stickers::follow(self, old, id, zone);
+        crate::rooms::entering(self, old, id, zone);
         id
     }
 

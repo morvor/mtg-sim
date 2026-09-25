@@ -2,8 +2,9 @@
 //! or cloaked permanent face up (CR 116.2b; morph and disguise are in
 //! `kw/morph_face_up.rs`), actions effects allow later (CR 116.2c), ignoring a static
 //! ability's effect (CR 116.2d), discarding a card any time you could cast an instant
-//! (CR 116.2e), and turning a face-down conspiracy face up (CR 116.2j). Keyword special
-//! actions (suspend, foretell, plot, companion) live in `kw/`.
+//! (CR 116.2e), turning a face-down conspiracy face up (CR 116.2j), and paying a Room's
+//! unlock cost (CR 116.2m, in `rooms.rs`). Keyword special actions (suspend, foretell,
+//! plot, companion) live in `kw/`.
 //!
 //! Special actions don't use the stack (CR 116.1); the player who takes one receives
 //! priority afterward (CR 116.3), and the choice of how to pay hybrid or Phyrexian mana
@@ -57,6 +58,8 @@ pub struct SpecialState {
     pub deferred_draws: Vec<(PlayerId, ObjectId, u32)>,
     /// Sticker sheets and the stickers on objects (CR 123).
     pub stickers: crate::stickers::StickerState,
+    /// The unlocked designations of Rooms (CR 709.5c).
+    pub rooms: crate::rooms::RoomState,
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
@@ -181,6 +184,8 @@ pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
             }
         }
     }
+    // CR 116.2m: unlock costs of locked halves of Rooms.
+    out.extend(crate::rooms::unlock_actions(g, p));
     // CR 116.2j: face-down conspiracies in the command zone the player owns.
     for id in g.command.iter().copied() {
         let o = g.obj(id);
@@ -244,6 +249,9 @@ pub fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &
 
 /// Takes a special action handled here. Returns None if it isn't one of these.
 pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(), Illegal>> {
+    if let Some(r) = crate::rooms::perform(g, p, sa) {
+        return Some(r);
+    }
     let bad = |s: &str| Some(Err(Illegal(s.into())));
     match sa {
         SpecialAction::TurnFaceUp { obj } => {
