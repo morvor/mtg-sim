@@ -117,37 +117,8 @@ pub fn keyword_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOp
 
 /// Optional additional costs announced while casting (CR 601.2b): (name, cost, repeatable).
 pub fn optional_additional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
-    let o = g.obj(spell);
-    let mut out = Vec::new();
-    for kw in o.chars.keywords() {
-        match kw.kind {
-            // CR 702.33a kicker; multikicker is the same keyword with "multikicker" text.
-            KeywordKind::Kicker => {
-                let repeatable = kw
-                    .text
-                    .as_deref()
-                    .is_some_and(|t| t.to_lowercase().starts_with("multikicker"));
-                if let Some(c) = &kw.cost {
-                    out.push((
-                        if repeatable {
-                            "multikicker".into()
-                        } else {
-                            "kicker".into()
-                        },
-                        c.clone(),
-                        repeatable,
-                    ));
-                }
-                for c in &kw.costs {
-                    out.push(("kicker".into(), c.clone(), false));
-                }
-            }
-            // CR 702.27a buyback: see `kw/buyback.rs`.
-            _ => {}
-        }
-    }
-    out.extend(crate::kw::optional_costs(g, spell));
-    out
+    // Kicker (CR 702.33): see `kw/kicker.rs`; buyback (CR 702.27): `kw/buyback.rs`.
+    crate::kw::optional_costs(g, spell)
 }
 
 /// Lets keywords adjust the spell's targets/effect as cast (overload, bestow, ...).

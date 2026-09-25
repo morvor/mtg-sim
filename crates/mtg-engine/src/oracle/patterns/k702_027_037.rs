@@ -104,8 +104,47 @@ fn cant_cycle(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>
     )])
 }
 
+/// "Creature spells you cast have sticker kicker {1}." (CR 702.33h): the keyword is granted
+/// to those spells while they're on the stack, where it functions.
+fn spells_you_cast_have_sticker_kicker(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let (subject, granted) = end(l).split_once(" spells you cast have ")?;
+    if !granted.starts_with("sticker kicker ") {
+        return None;
+    }
+    let kws: Vec<crate::keywords::Keyword> =
+        crate::oracle::keywords::parse_keyword_line(granted, ctx)?
+            .into_iter()
+            .filter_map(|a| match &a.kind {
+                AbilityKind::Keyword(k) => Some(k.clone()),
+                _ => None,
+            })
+            .collect();
+    if kws.len() != 1 {
+        return None;
+    }
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(subject)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let affected = Filter::and(vec![f, Filter::Spell, Filter::ControlledBy(PlayerRel::You)]);
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected,
+            mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+        })),
+        text,
+    )])
+}
+
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
+}
+inventory::submit! {
+    StaticPattern { name: "k702.33h: spells you cast have sticker kicker", priority: 50, parse: spells_you_cast_have_sticker_kicker }
 }
 inventory::submit! {
     StaticPattern { name: "k702.29: players can't cycle", priority: 50, parse: cant_cycle }

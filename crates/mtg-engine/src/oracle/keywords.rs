@@ -19,6 +19,8 @@ fn names() -> &'static [(String, KeywordKind)] {
             .map(|k| (k.name().to_lowercase(), *k))
             .collect();
         v.push(("multikicker".into(), KeywordKind::Kicker));
+        // CR 702.33h: sticker kicker is a kicker ability (marked by its text).
+        v.push(("sticker kicker".into(), KeywordKind::Kicker));
         // CR 702.37b: megamorph is a variant of morph (marked by its text).
         v.push(("megamorph".into(), KeywordKind::Morph));
         v.push(("typecycling".into(), KeywordKind::Cycling));
