@@ -310,6 +310,7 @@ impl Game {
                         if e.mods
                             .iter()
                             .any(|x| matches!(x, Modification::ChangeText { .. }))
+                            || self.carried_effects.contains(&e.id)
                         {
                             if let Affected::Objects(v) = &mut e.affected {
                                 if v.contains(&old_id) {

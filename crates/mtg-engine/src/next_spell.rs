@@ -92,6 +92,43 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
         }
     }
     g.next_spell_effects = keep;
+    // CR 611.3d: abilities granted to spells cast with a permission, until end of game.
+    let from = g.obj(spell).stack.as_ref().and_then(|s| s.cast.from);
+    let mut carried: Vec<(Option<ObjectId>, PlayerId, Vec<Modification>)> = Vec::new();
+    for id in g.live_objects() {
+        let o = g.obj(id);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::CastGrant { zone, what, mods } = &s.effect else {
+                continue;
+            };
+            if !g.ability_functions(o, s.zone, s.is_cda) || from != Some(*zone) {
+                continue;
+            }
+            let ctx = Ctx::new(Some(id), o.controller);
+            if o.controller == p && g.matches(spell, what, &ctx) {
+                carried.push((Some(id), o.controller, mods.clone()));
+            }
+        }
+    }
+    for (source, controller, mods) in carried {
+        let id = g.new_effect_id();
+        let ts = g.new_timestamp();
+        g.effects.push(ContinuousEffect {
+            id,
+            source,
+            controller,
+            timestamp: ts,
+            duration: Duration::Permanent,
+            affected: Affected::Objects(vec![spell]),
+            mods,
+            layer1: None,
+            created_turn: turn,
+        });
+        g.carried_effects.push(id);
+    }
     // CR 610.5: "spells you cast have ..." abilities of objects.
     for id in g.live_objects() {
         let o = g.obj(id);

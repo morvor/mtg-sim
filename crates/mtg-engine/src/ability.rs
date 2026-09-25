@@ -1526,6 +1526,15 @@ pub enum StaticEffect {
     /// "Prevent all combat damage that would be dealt ..." is a Replacement.
     /// Custom behavior implemented in code, by name.
     Custom(SmolStr),
+    /// "If you cast a spell this way, it gains [ability]": spells matching `what` that a
+    /// player casts from `zone` using a permission from this object gain the
+    /// modifications; they last until the end of the game, even after the spell becomes a
+    /// permanent and even if this object leaves (CR 611.3d).
+    CastGrant {
+        zone: ZoneKind,
+        what: Filter,
+        mods: Vec<Modification>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

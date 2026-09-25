@@ -436,6 +436,9 @@ pub struct Game {
     /// Objects entering the battlefield simultaneously right now: effects modifying how
     /// they enter can't choose them to change zones (CR 614.13a, 614.13c).
     pub entering: Vec<ObjectId>,
+    /// Continuous effects on permanent spells that keep applying to the permanents they
+    /// become (CR 611.3d).
+    pub carried_effects: Vec<u32>,
 }
 
 impl Game {
@@ -513,6 +516,7 @@ impl Game {
             next_spell_effects: vec![],
             step_start_actions: vec![],
             entering: vec![],
+            carried_effects: vec![],
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

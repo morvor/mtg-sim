@@ -175,7 +175,10 @@ fn exile_until_the_source_leaves() {
     // CR 610.3: the card returns immediately after the priest leaves the battlefield (not
     // via the stack). CR 610.3c: under its owner's control.
     cr!("610.3", "610.3c");
-    ruling!("Banisher Priest", "When the card returns to the battlefield, it will be a new object");
+    ruling!(
+        "Banisher Priest",
+        "When the card returns to the battlefield, it will be a new object"
+    );
     ruling!("Oubliette", "won't happen when a permanent phases out");
     let mut t = TestGame::new(2);
     let bear = t.battlefield(P1, "Grizzly Bears");
@@ -260,8 +263,14 @@ fn until_event_before_a_triggered_ability_resolves() {
     // CR 610.3b / 610.4c: Banisher Priest leaves before its ability resolves: the creature
     // isn't exiled (or phased out).
     cr!("610.3b", "610.4c");
-    ruling!("Banisher Priest", "If Banisher Priest leaves the battlefield before its triggered ability resolves");
-    ruling!("Oubliette", "If Oubliette leaves the battlefield before its triggered ability resolves");
+    ruling!(
+        "Banisher Priest",
+        "If Banisher Priest leaves the battlefield before its triggered ability resolves"
+    );
+    ruling!(
+        "Oubliette",
+        "If Oubliette leaves the battlefield before its triggered ability resolves"
+    );
     for phase in [false, true] {
         let mut t = TestGame::new(2);
         let bear = t.battlefield(P1, "Grizzly Bears");
@@ -325,7 +334,10 @@ fn phase_out_until_the_source_leaves() {
     // CR 610.4a: it doesn't phase in during its controller's untap step; if another effect
     // phases it in, the second one-shot effect doesn't happen even if it phases out again.
     cr!("610.4", "610.4a");
-    ruling!("Oubliette", "it phases in immediately after Oubliette leaves the battlefield");
+    ruling!(
+        "Oubliette",
+        "it phases in immediately after Oubliette leaves the battlefield"
+    );
     let mut t = TestGame::new(2);
     let bear = t.battlefield(P1, "Grizzly Bears");
     t.answer_targets(P0, &[Entity::Object(bear)]);
@@ -397,9 +409,9 @@ fn spells_gain_abilities_as_theyre_cast() {
                     Filter::Color(Color::Red),
                     Filter::ControlledBy(PlayerRel::You),
                 ]),
-                vec![Modification::AddKeyword(mtg_engine::keywords::Keyword::new(
-                    KeywordKind::Lifelink,
-                ))],
+                vec![Modification::AddKeyword(
+                    mtg_engine::keywords::Keyword::new(KeywordKind::Lifelink),
+                )],
             )],
         ),
         Zone::Battlefield,
