@@ -418,6 +418,14 @@ fn suspend_x_needs_x_of_at_least_one() {
     t.answer(P0, DecisionKind::X, Answer::Number(0));
     let exiled = suspend(&mut t, P0, commander);
     assert_eq!(t.counters(exiled, TIME), 1);
+    // An X that can't be paid isn't taken either: the largest payable X is.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    let commander = t.hand(P0, "Benalish Commander");
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    let exiled = suspend(&mut t, P0, commander);
+    assert_eq!(t.counters(exiled, TIME), 2);
+    assert_eq!(untapped_lands(&t, P0), 0);
     // Removing several time counters at once triggers once for each.
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 5);
@@ -539,4 +547,38 @@ fn countering_the_cast_trigger_leaves_the_card_exiled() {
     assert_eq!(t.zone(exiled), Zone::Exile);
     assert_eq!(t.counters(exiled, TIME), 0);
     assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn a_rules_changing_effect_of_a_suspended_card_applies_to_later_creatures() {
+    cr!("702.62a", "611.2c");
+    ruling!(
+        "Veiling Oddity",
+        "applies to creatures that weren't on the battlefield as the ability resolved"
+    );
+    ruling!(
+        "Veiling Oddity",
+        "both its triggered ability and the \"you may cast this spell\" part of the suspend ability will trigger"
+    );
+    assert_supported("Veiling Oddity");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let oddity = t.hand(P0, "Veiling Oddity");
+    let exiled = suspend(&mut t, P0, oddity);
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    // The last time counter is removed: suspend's cast ability and "When the last time
+    // counter is removed from this card while it's exiled, creatures can't be blocked
+    // this turn" both trigger in exile.
+    remove_counters(&mut t, exiled, TIME, 4);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    // A creature that arrives afterward can't be blocked this turn either.
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(giant, Entity::Player(P1))], &[(blocker, giant)]);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.obj_now(blocker).damage, 0);
 }

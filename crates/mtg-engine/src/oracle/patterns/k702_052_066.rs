@@ -241,7 +241,16 @@ fn forecast(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     } else {
         crate::oracle::costs::parse_cost(cost_s)?.0
     };
-    let (eff_text, _, _, _) = crate::oracle::costs::split_activation_restrictions(eff_s);
+    // Only the forecast restrictions themselves may be restated (CR 702.57b); any other
+    // restriction would be lost.
+    let (eff_text, timing, max, any_player) =
+        crate::oracle::costs::split_activation_restrictions(eff_s);
+    if any_player
+        || !matches!(timing, ActivationTiming::Instant | ActivationTiming::YourUpkeep)
+        || max.is_some_and(|m| m != 1)
+    {
+        return None;
+    }
     let body = crate::oracle::effects::parse_body(eff_text, ctx)?;
     let act = crate::kw::forecast::forecast_ability(cost, body);
     Some(vec![AbilityDef::new(AbilityKind::Activated(act), t)])

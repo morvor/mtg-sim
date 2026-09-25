@@ -181,8 +181,11 @@ fn several_instances_of_delve_are_redundant() {
     t.lands(P0, "Mountain", 1);
     let shock = t.hand(P0, "Lightning Bolt");
     t.answer_choose(P0, &objects(&cards));
-    t.cast(P0, shock).target(P1).go();
+    let bolt = t.cast(P0, shock).target(P1).go();
+    assert_eq!(t.obj_now(bolt).chars.keyword_count(KeywordKind::Delve), 1);
+    // Its cost has no generic mana, so there's nothing to delve for.
     assert_eq!(delve_offers(&t, P0).len(), 1);
+    assert_eq!(t.graveyard_size(P0), 3);
 }
 
 #[test]

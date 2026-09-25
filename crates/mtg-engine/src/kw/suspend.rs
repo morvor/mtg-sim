@@ -197,13 +197,15 @@ impl KeywordRules for Suspend {
         // with that X, and exiles the card with X time counters.
         let x = if is_suspend_x(&kw) {
             let max = g.max_mana_available(p) as i64;
+            let payable = |g: &Game, x: u32| {
+                g.can_pay_cost(p, &cost_with_x(&kw, x), Some(card), &Ctx::new(Some(card), p))
+            };
             match g.ask(p, Decision::ChooseX { source: card, max }) {
-                Answer::Number(n) if n >= 1 => n as u32,
+                // X can't be 0, and the cost with the chosen X must be payable.
+                Answer::Number(n) if n >= 1 && n <= max && payable(g, n as u32) => n as u32,
                 _ => (1..=max.max(1) as u32)
                     .rev()
-                    .find(|x| {
-                        g.can_pay_cost(p, &cost_with_x(&kw, *x), Some(card), &Ctx::new(Some(card), p))
-                    })
+                    .find(|x| payable(g, *x))
                     .unwrap_or(1),
             }
         } else {

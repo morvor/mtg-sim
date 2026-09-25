@@ -136,3 +136,21 @@ fn each_instance_of_graft_works_separately() {
     assert_eq!(t.counters(mutant, PLUS1), 1);
     assert_eq!(t.counters(bears, PLUS1), 2);
 }
+
+#[test]
+fn graft_moves_nothing_once_the_permanent_has_left_the_battlefield() {
+    cr!("702.58a");
+    let mut t = TestGame::new(2);
+    let troll = t.enter(P0, "Sporeback Troll");
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(stack_triggers(&t, GRAFT).len(), 1);
+    // The Troll leaves with its counters in response: there's no counter "from this
+    // permanent" to move.
+    destroy(&mut t, troll);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(!t.on_battlefield(troll));
+    assert_eq!(t.counters(bears, PLUS1), 0);
+    assert_eq!(t.pt(bears), (2, 2));
+}
