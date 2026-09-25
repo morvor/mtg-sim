@@ -213,3 +213,46 @@ fn expend_four_triggers_once_when_the_fourth_mana_is_spent() {
     t.settle();
     assert_eq!(t.stack_len(), 1);
 }
+
+#[test]
+fn until_end_of_turn_whenever_a_player_taps_an_island() {
+    cr!("603.7b", "605.4a", "514.2");
+    assert_supported(&["High Tide"]);
+    let mut t = TestGame::new(2);
+    let islands = t.lands(P0, "Island", 3);
+    let tide = t.hand(P0, "High Tide");
+    t.activate(P0, islands[0], 0, &[]).unwrap();
+    t.cast(P0, tide).go();
+    t.resolve_all();
+    // Each Island now makes {U}{U}, for either player, without using the stack.
+    t.activate(P0, islands[1], 0, &[]).unwrap();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(pool(&t, P0), vec![ManaType::U, ManaType::U]);
+    let theirs = t.battlefield(P1, "Island");
+    t.activate(P1, theirs, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P1).len(), 2);
+    // Next turn it's gone.
+    t.set_step(P0, mtg_engine::turn::Step::End);
+    t.advance_to(P1, mtg_engine::turn::Step::PrecombatMain);
+    let before = pool(&t, P0).len();
+    t.activate(P0, islands[2], 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0).len(), before + 1);
+}
+
+#[test]
+fn whenever_a_creature_dies_this_turn() {
+    cr!("603.7b", "704.5f");
+    assert_supported(&["Death Frenzy"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Forest", 2);
+    let frenzy = t.hand(P0, "Death Frenzy");
+    t.cast(P0, frenzy).go();
+    t.resolve_all();
+    // Both Bears die after the spell resolved; the Giant survives as a 1/1.
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}

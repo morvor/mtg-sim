@@ -645,6 +645,9 @@ impl Game {
             o.deathtouch_damage = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
+        self.delayed_triggers
+            .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
         self.dirty = true;
     }
 

@@ -231,6 +231,25 @@ pub struct TriggeredAbility {
     pub zone: FunctionZone,
 }
 
+/// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
+/// it triggers from resolving a mana ability ("is tapped for mana"), has no targets, and
+/// could add mana.
+pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
+    fn from_mana_ability(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::TappedForMana { .. } => true,
+            TriggerCond::ThisTurn(t) | TriggerCond::Where { trigger: t, .. } => {
+                from_mana_ability(t)
+            }
+            _ => false,
+        }
+    }
+    from_mana_ability(trigger)
+        && body.targets.is_empty()
+        && body.modal.is_none()
+        && crate::oracle::effects::is_mana_effect(&body.effect)
+}
+
 impl TriggeredAbility {
     pub fn new(trigger: TriggerCond, body: Body) -> Self {
         TriggeredAbility {
@@ -1745,6 +1764,10 @@ pub enum TriggerCond {
         phased_in: bool,
         filter: Filter,
     },
+    /// A delayed triggered ability that lasts for the rest of the turn ("until end of
+    /// turn, whenever …", "whenever … this turn", CR 603.7b); removed in the cleanup step
+    /// (CR 514.2).
+    ThisTurn(Box<TriggerCond>),
     /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
     /// only: "whenever a source you control deals noncombat damage to an opponent".
     Noncombat(Box<TriggerCond>),

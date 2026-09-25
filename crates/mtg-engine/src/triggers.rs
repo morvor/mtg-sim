@@ -283,13 +283,11 @@ impl Game {
             let src = d.source.unwrap_or(ObjectId(0));
             for info in self.trigger_matches(&d.trigger, src, d.controller, ev) {
                 self.trigger_order += 1;
-                let ability = AbilityDef::new(
-                    AbilityKind::Triggered(TriggeredAbility::new(
-                        d.trigger.clone(),
-                        d.body.clone(),
-                    )),
-                    "delayed trigger",
-                );
+                let mut tr = TriggeredAbility::new(d.trigger.clone(), d.body.clone());
+                // "Until end of turn, whenever a player taps an Island for mana, that player
+                // adds an additional {U}" is a mana ability too (CR 605.1b).
+                tr.is_mana_ability = is_triggered_mana_ability(&d.trigger, &d.body);
+                let ability = AbilityDef::new(AbilityKind::Triggered(tr), "delayed trigger");
                 found.push(PendingTrigger {
                     source: src,
                     controller: d.controller,
@@ -1245,6 +1243,8 @@ impl Game {
                     none()
                 }
             }
+            // Removed in the cleanup step; until then it's the inner condition.
+            (TriggerCond::ThisTurn(inner), ev) => self.trigger_matches(inner, src, ctl, ev),
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches(inner, src, ctl, ev)
             }
@@ -1407,11 +1407,18 @@ impl Game {
     }
 
     fn resolve_trigger_immediately(&mut self, t: PendingTrigger) {
-        let body = match &t.ability.kind {
-            AbilityKind::Triggered(tr) => tr.body.clone(),
+        let body = match (&t.body, &t.ability.kind) {
+            (Some(b), _) => b.clone(),
+            (None, AbilityKind::Triggered(tr)) => tr.body.clone(),
             _ => return,
         };
-        let mut ctx = Ctx::new(Some(t.source), t.controller);
+        // Delayed triggers resolve with the context saved when they were created.
+        let mut ctx = t
+            .saved
+            .clone()
+            .unwrap_or_else(|| Ctx::new(Some(t.source), t.controller));
+        ctx.source = Some(t.source);
+        ctx.controller = t.controller;
         ctx.event = Some(t.event.clone());
         self.exec(&body.effect, &mut ctx);
     }

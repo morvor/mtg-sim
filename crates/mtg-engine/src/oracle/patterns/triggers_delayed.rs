@@ -157,6 +157,50 @@ fn has_object_pronoun(s: &str) -> bool {
         })
 }
 
+inventory::submit! {
+    EffectPattern { name: "until end of turn, whenever … / whenever … this turn", priority: 100, parse: this_turn_trigger }
+}
+
+/// "Until end of turn, whenever a player taps an Island for mana, that player adds an
+/// additional {U}", "whenever a creature attacks this turn, put a +1/+1 counter on it": a
+/// delayed triggered ability that lasts until end of turn (CR 603.7b). Its effect refers
+/// to its own trigger event ("it", "that player") and chooses its own targets.
+fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (cond_s, eff) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
+        let (c, e) = split_at_comma(r)?;
+        (c.to_string(), e)
+    } else {
+        let r = l.strip_prefix("whenever ")?;
+        let (c, e) = split_at_comma(r)?;
+        (c.strip_suffix(" this turn")?.to_string(), e)
+    };
+    let (trigger, it, it_player) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever {cond_s}"))?;
+    if matches!(it, Sel::None) && has_object_pronoun(eff) {
+        return None;
+    }
+    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+        body: Box::new(body),
+        once: false,
+    })
+}
+
+/// Splits at the first comma outside quotes.
+fn split_at_comma(s: &str) -> Option<(&str, &str)> {
+    let mut in_quote = false;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '"' => in_quote = !in_quote,
+            ',' if !in_quote => return Some((&s[..i], s[i + 1..].trim_start())),
+            _ => {}
+        }
+    }
+    None
+}
+
 fn delayed_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (trigger, inner) = split_delay(l)?;

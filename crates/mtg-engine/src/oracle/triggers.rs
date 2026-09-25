@@ -58,10 +58,7 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     let body = parse_trigger_body(eff, ctx, it, it_player)?;
     // CR 605.1b: a triggered ability without targets that triggers from resolving a mana
     // ability and could add mana is a mana ability (it resolves immediately, CR 605.4a).
-    let is_mana_ability = matches!(trigger, TriggerCond::TappedForMana { .. })
-        && body.targets.is_empty()
-        && body.modal.is_none()
-        && super::effects::is_mana_effect(&body.effect);
+    let is_mana_ability = is_triggered_mana_ability(&trigger, &body);
     let mut tr = TriggeredAbility::new(trigger, body);
     tr.is_mana_ability = is_mana_ability;
     tr.intervening_if = intervening;
