@@ -136,6 +136,9 @@ pub enum ModeChooser {
     Controller,
     Opponent,
     Random,
+    /// The controller chooses modes whose total number of pawprint symbols is at most this
+    /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
+    Pawprints(u32),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -145,6 +148,15 @@ pub struct Mode {
     pub effect: Effect,
     /// Spree / tiered additional cost for choosing this mode.
     pub cost: Option<Cost>,
+}
+
+impl Mode {
+    /// The number of pawprint symbols ({P}) listed for this mode (CR 107.18, 700.2i):
+    /// they indicate the mode and aren't a cost.
+    pub fn pawprints(&self) -> u32 {
+        let head = self.text.split('—').next().unwrap_or("");
+        head.matches("{P}").count() as u32
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -219,6 +231,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions everywhere except the given zone, even outside the game (an ability that
+    /// states which zones it doesn't function in, CR 113.6c).
+    AnywhereExcept(ZoneKind),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -248,7 +263,7 @@ pub struct TriggeredAbility {
 pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
     fn from_mana_ability(t: &TriggerCond) -> bool {
         match t {
-            TriggerCond::TappedForMana { .. } => true,
+            TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
             TriggerCond::ThisTurn(t) | TriggerCond::Where { trigger: t, .. } => {
                 from_mana_ability(t)
             }
@@ -424,6 +439,9 @@ pub enum CostPart {
     },
     /// Arbitrary effect performed as a cost (e.g. "Blight 1").
     Effect(Box<Effect>),
+    /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
+    /// object is a spell on the stack (CR 107.3h).
+    PayManaCostOf(Box<Sel>),
 }
 
 // ---------------------------------------------------------------------------
@@ -892,6 +910,9 @@ pub enum Filter {
     FaceDown,
     /// Has a mana cost with {X}.
     HasX,
+    /// Has a Phyrexian mana symbol in its mana cost ("a spell with {H} in its mana cost",
+    /// CR 107.4g: {H} means any of the fifteen Phyrexian mana symbols).
+    HasPhyrexianMana,
     /// Is a commander (CR 903.3).
     Commander,
     /// Modified: has counters, or is equipped/enchanted by a permanent its controller controls (CR 700.9).
@@ -1036,6 +1057,15 @@ pub enum Value {
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
     CardTypesAmong(Filter),
+    /// Number of different color pairs (CR 105.5) among matching objects that are
+    /// exactly two colors.
+    ColorPairsAmong(Filter),
+    /// The source permanent's class level (CR 716.2d: a permanent without a level is
+    /// treated as level 1).
+    ClassLevel,
+    /// The value of X of another object ("put X +1/+1 counters on it" for "a spell with
+    /// {X} in its mana cost"): the value used by that object (CR 107.3e).
+    XOf(Box<Sel>),
     /// Greatest power among objects matching.
     GreatestPower(Filter),
     GreatestManaValue(Filter),
@@ -1393,8 +1423,12 @@ pub enum ManaProduction {
     AnyCombination(Value),
     /// One mana of one of the listed types (chosen).
     OneOf(Vec<ManaType>),
-    /// Mana of any type that a land an opponent controls could produce, etc.
+    /// One mana of any type that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any type that a land you control could produce".
     CouldProduce(Filter),
+    /// One mana of any *color* that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any color that a land an opponent controls could produce".
+    CouldProduceColor(Filter),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
     /// One mana of one of the listed types or of the color chosen for the source
@@ -1407,6 +1441,12 @@ pub enum ManaProduction {
     /// One mana of any type the permanent tapped for mana produced (from the triggering
     /// event, "one mana of any type that land produced").
     AnyTypeProduced,
+    /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
+    /// to enchanted permanent's mana cost", CR 106.8–106.11).
+    ManaCostOf(Sel),
+    /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
+    /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
+    DoubleUnspent,
     /// One mana of any type the triggering mana ability produced ("add one mana of any
     /// type that land produced", CR 106.12a).
     TypeProduced,
@@ -1994,6 +2034,12 @@ pub enum TriggerCond {
     },
     BecomesTapped(Filter),
     BecomesUntapped(Filter),
+    /// "Whenever [filter] is tapped for mana of a specified type" / "Whenever you tap a
+    /// permanent for {C}" (CR 106.12a): only if that type of mana was produced.
+    TappedForManaOfType {
+        filter: Filter,
+        mana: ManaType,
+    },
     /// "Whenever [filter] becomes the target of a spell or ability [opponent controls]".
     BecomesTarget {
         filter: Filter,
@@ -2473,6 +2519,31 @@ pub enum Effect {
         who: PlayerRef,
         mana: ManaProduction,
         restriction: Option<ManaRestriction>,
+    },
+    /// "Add [mana]. When that mana is spent to cast [a spell], [effect]." (CR 106.6): the
+    /// inner `AddMana` adds mana carrying a delayed triggered ability that triggers when
+    /// that mana is spent (one per mana produced, CR 106.6a).
+    AddManaWithSpentTrigger {
+        add: Box<Effect>,
+        spell_filter: Filter,
+        body: Box<Body>,
+    },
+    /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
+    /// 716.2a).
+    SetClassLevel {
+        level: u32,
+    },
+    /// "[Player] activates a mana ability of each [filter] they control" (Drain Power).
+    ActivateManaAbilities {
+        who: PlayerRef,
+        filter: Filter,
+    },
+    /// "[Player] loses all unspent mana [and you add the mana lost this way]" (CR 106.13):
+    /// empties the player's mana pool; the lost mana (with its sources, restrictions, and
+    /// riders) is added to `to`'s mana pool, if any.
+    LoseUnspentMana {
+        who: PlayerRef,
+        to: Option<PlayerRef>,
     },
     AddPlayerCounters {
         who: PlayerRef,

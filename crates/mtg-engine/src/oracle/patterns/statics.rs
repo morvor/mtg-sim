@@ -790,8 +790,10 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
+    // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
     let your_graveyard = || {
         Filter::and(vec![
+            Filter::Card,
             Filter::InZone(ZoneKind::Graveyard),
             Filter::OwnedBy(PlayerRel::You),
         ])
@@ -799,13 +801,16 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     match s {
         "card in your hand" | "cards in your hand" => return Some(Value::HandSize(PlayerRef::You)),
         "card in your graveyard" | "cards in your graveyard" => {
-            return Some(Value::GraveyardSize(PlayerRef::You))
+            return Some(Value::CardsInGraveyard(PlayerRef::You, Filter::Card))
         }
         "card in all players' hands" | "cards in all players' hands" => {
             return Some(Value::Count(Filter::InZone(ZoneKind::Hand)))
         }
         "card in all graveyards" | "cards in all graveyards" => {
-            return Some(Value::Count(Filter::InZone(ZoneKind::Graveyard)))
+            return Some(Value::Count(Filter::and(vec![
+                Filter::Card,
+                Filter::InZone(ZoneKind::Graveyard),
+            ])))
         }
         "basic land type among lands you control" | "basic land types among lands you control" => {
             return Some(Value::Domain)
@@ -814,7 +819,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             return Some(Value::CardTypesAmong(your_graveyard()))
         }
         "card type among cards in all graveyards" | "card types among cards in all graveyards" => {
-            return Some(Value::CardTypesAmong(Filter::InZone(ZoneKind::Graveyard)))
+            return Some(Value::CardTypesAmong(Filter::and(vec![
+                Filter::Card,
+                Filter::InZone(ZoneKind::Graveyard),
+            ])))
         }
         _ => {}
     }

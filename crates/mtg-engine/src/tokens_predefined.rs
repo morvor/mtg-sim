@@ -6,9 +6,11 @@ use crate::mana::{ManaCost, ManaRestriction, ManaType};
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// A predefined artifact token. Its definition doesn't name it, so its name is its subtype
+/// plus "Token" (CR 111.4), e.g. "Treasure Token".
 fn artifact(name: &str, subtype: &str, abilities: Vec<Ability>) -> TokenSpec {
     TokenSpec {
-        name: SmolStr::new(name),
+        name: SmolStr::default(),
         colors: ColorSet::NONE,
         supertypes: vec![],
         card_types: vec![CardType::Artifact],
@@ -183,10 +185,7 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
                 Effect::AddMana {
                     who: PlayerRef::You,
                     mana: ManaProduction::Fixed(vec![ManaType::C]),
-                    restriction: Some(ManaRestriction::AnyOf(vec![
-                        ManaRestriction::SpellOfType(CardType::Artifact),
-                        ManaRestriction::AbilitiesOnly,
-                    ])),
+                    restriction: Some(ManaRestriction::NotNonartifactSpell),
                 },
                 vec![],
                 true,
@@ -326,6 +325,102 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
             t.colors = [Color::Red, Color::Green].into_iter().collect();
             t
         }
+        // 111.10i: the front face; see [`incubator_card`] for both faces.
+        "incubator" => artifact(
+            "Incubator",
+            "Incubator",
+            vec![activated(
+                Cost::mana(ManaCost::parse("{2}").unwrap()),
+                Effect::Transform { what: Sel::This },
+                vec![],
+                false,
+                false,
+                "{2}: Transform this token.",
+            )],
+        ),
+        // 111.10n
+        "sorcerer" => role(
+            "Sorcerer",
+            vec![
+                Modification::ModifyPT(Value::c(1), Value::c(1)),
+                Modification::AddAbility(AbilityDef::new(
+                    AbilityKind::Triggered(TriggeredAbility::new(
+                        TriggerCond::Attacks(Filter::Source),
+                        Body::effect(Effect::Scry { who: PlayerRef::You, n: Value::c(1) }),
+                    )),
+                    "Whenever this creature attacks, scry 1.",
+                )),
+            ],
+            vec![],
+        ),
+        // 111.10r
+        "young hero" => role(
+            "Young Hero",
+            vec![Modification::AddAbility(AbilityDef::new(
+                AbilityKind::Triggered({
+                    let mut t = TriggeredAbility::new(
+                        TriggerCond::Attacks(Filter::Source),
+                        Body::effect(Effect::AddCounters { what: Sel::This, kind: counters::PLUS1.into(), n: Value::c(1) }),
+                    );
+                    t.intervening_if = Some(Condition::SelMatches(Sel::This, Filter::Toughness(Cmp::Le, Box::new(Value::c(3)))));
+                    t
+                }),
+                "Whenever this creature attacks, if its toughness is 3 or less, put a +1/+1 counter on it.",
+            ))],
+            vec![],
+        ),
+        // 111.10w
+        "vibranium" => {
+            let mut t = artifact(
+                "Vibranium",
+                "Vibranium",
+                vec![
+                    AbilityDef::new(AbilityKind::Keyword(Keyword::new(KeywordKind::Indestructible)), "Indestructible"),
+                    activated(
+                        Cost::tap(),
+                        Effect::AddMana {
+                            who: PlayerRef::You,
+                            mana: ManaProduction::Fixed(vec![ManaType::C]),
+                            restriction: Some(ManaRestriction::NotNonartifactSpell),
+                        },
+                        vec![],
+                        true,
+                        false,
+                        "{T}: Add {C}. This mana can't be spent to cast a nonartifact spell.",
+                    ),
+                ],
+            );
+            t.scryfall_name = Some(SmolStr::new("Vibranium"));
+            t
+        }
         _ => return None,
     })
+}
+
+/// The Incubator token (CR 111.10i) as a double-faced token: the front face is a
+/// colorless Incubator artifact with "{2}: Transform this token."; the back face is a 0/0
+/// colorless Phyrexian artifact creature named Phyrexian Token.
+pub fn incubator_card() -> std::sync::Arc<crate::card::CardDef> {
+    static CARD: std::sync::OnceLock<std::sync::Arc<crate::card::CardDef>> =
+        std::sync::OnceLock::new();
+    CARD.get_or_init(|| {
+        let spec = predefined("incubator").expect("incubator");
+        let front = crate::tokens::token_characteristics(&spec);
+        let mut back = front.clone();
+        back.name = SmolStr::new("Phyrexian Token");
+        back.card_types = [CardType::Artifact, CardType::Creature]
+            .into_iter()
+            .collect();
+        back.subtypes = vec![SmolStr::new("Phyrexian")].into_iter().collect();
+        back.abilities = vec![];
+        back.power = Some(0);
+        back.toughness = Some(0);
+        let mut def = crate::card::CardDef::custom(front);
+        def.layout = crate::card::Layout::DoubleFacedToken;
+        let mut back_face = def.faces[0].clone();
+        back_face.chars = back;
+        def.faces.push(back_face);
+        std::sync::Arc::new(def)
+    })
+    .clone()
 }

@@ -242,7 +242,9 @@ fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
 }
 
 fn your_graveyard() -> Filter {
+    // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
     Filter::and(vec![
+        Filter::Card,
         Filter::InZone(ZoneKind::Graveyard),
         Filter::OwnedBy(PlayerRel::You),
     ])

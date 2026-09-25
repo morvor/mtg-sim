@@ -111,6 +111,9 @@ impl Game {
         if is_cda || zone == FunctionZone::Anywhere {
             return true;
         }
+        if let FunctionZone::AnywhereExcept(z) = zone {
+            return obj.zone.kind() != Some(z) && !obj.phased_out;
+        }
         match obj.zone {
             Zone::Battlefield => zone == FunctionZone::Battlefield && !obj.phased_out,
             Zone::Stack => zone == FunctionZone::Stack,
@@ -129,6 +132,11 @@ impl Game {
     /// Emblems, planes, phenomena, schemes, vanguards, face-up conspiracies and dungeons
     /// have abilities that function in the command zone (CR 114.4, 311, 312, 313, 314, 315, 309).
     fn command_object_functions(&self, obj: &GameObject) -> bool {
+        // A face-down card in the command zone (a card in a planar or scheme deck, a
+        // hidden agenda) has no functioning abilities.
+        if obj.face_down {
+            return false;
+        }
         obj.kind == ObjKind::Emblem
             || [
                 CardType::Plane,
@@ -166,6 +174,8 @@ impl Game {
             o.chars = o.base.clone();
             o.controller = o.base_controller;
         }
+        // Face-up planes and phenomena are controlled by the planar controller (CR 901.6).
+        crate::planechase::apply_planar_control(self);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self
@@ -1015,11 +1025,27 @@ impl Game {
                     _ => {}
                 }
             }
+            // "You have protection from the chosen card name": the choice is the source's
+            // (CR 607.2d); the player's protection keeps the chosen value.
+            let bound: Vec<PlayerModification> = m
+                .into_iter()
+                .map(|(x, ctx)| match x {
+                    PlayerModification::ProtectionFrom(f)
+                        if crate::choices::filter_mentions_choice(&f) =>
+                    {
+                        PlayerModification::ProtectionFrom(match self.source_choices(&ctx) {
+                            Some(ch) => crate::choices::bind_choices(&f, ch),
+                            None => Filter::not(Filter::Any),
+                        })
+                    }
+                    other => other,
+                })
+                .collect();
             // Vanguard hand modifier (CR 902.3) handled by the variant module via HandSizeDelta.
             let p = &mut self.players[i];
             p.max_hand_size = max_hand;
             p.land_plays = land_plays;
-            p.mods = m.into_iter().map(|(x, _)| x).collect();
+            p.mods = bound;
         }
     }
 }
@@ -1252,11 +1278,11 @@ pub fn apply_mod(
                     k.filter = Some(crate::choices::bind_choices(f, ch));
                 }
             }
-            // CR 702.16n: "This effect doesn't remove [this Aura]" — remember which
-            // object the protection doesn't remove.
+            // CR 702.16n, 702.16p: "This effect doesn't remove [this Aura / what's
+            // already attached]" — remember which object granted the protection.
             if let (Some(t), Some(src)) = (k.text.as_deref(), ctx.source) {
-                if t == crate::choices::DOESNT_REMOVE_SOURCE {
-                    k.text = Some(crate::choices::doesnt_remove_marker(src));
+                if let Some(m) = crate::kw::protection::bind_marker(t, src) {
+                    k.text = Some(m);
                 }
             }
             let name = k.kind.name();

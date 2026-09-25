@@ -799,6 +799,7 @@ impl Game {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
         } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+            || extra.parts.iter().any(cost_part_has_x)
             // A variable additional cost ("As an additional cost to cast this spell, pay X
             // life", CR 601.2b, 607.2j).
             || chars.abilities.iter().any(|a| match &a.kind {
@@ -827,7 +828,9 @@ impl Game {
                 _ => max.max(0),
             };
         }
-        cast_info.x = Some(x as i32);
+        // The spell's cast info records X only if a value was chosen for one of its costs:
+        // that's the X its permanent's enters abilities use (CR 107.3m).
+        cast_info.x = base_cost_has_x.then_some(x as i32);
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
             si.cast = cast_info.clone();
@@ -953,6 +956,10 @@ impl Game {
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
+        }
+        // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        if let Some(m) = cost.mana.as_mut() {
+            *m = m.with_x(x);
         }
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
@@ -1696,6 +1703,9 @@ impl Game {
                     >= n
             }
             CostPart::Effect(_) => true,
+            CostPart::PayManaCostOf(s) => {
+                crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
+            }
         }
     }
 
@@ -2047,6 +2057,11 @@ impl Game {
                 let mut c = ctx.clone();
                 self.exec(e, &mut c);
             }
+            CostPart::PayManaCostOf(s) => {
+                if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
+                    return bad("can't pay mana cost");
+                }
+            }
         }
         Ok(())
     }
@@ -2133,7 +2148,7 @@ fn cost_part_pays_last(c: &CostPart) -> bool {
     )
 }
 
-fn cost_part_has_x(c: &CostPart) -> bool {
+pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
     let is_x = |v: &Value| matches!(v, Value::X);
     match c {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),

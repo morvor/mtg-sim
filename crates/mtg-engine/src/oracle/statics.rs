@@ -12,16 +12,9 @@ fn static_ability(effect: StaticEffect, text: &str) -> Ability {
 }
 
 fn keyword_list_mods(s: &str) -> Option<Vec<Modification>> {
-    let s = end(s);
-    let parts: Vec<&str> = s
-        .split(", and ")
-        .flat_map(|p| p.split(" and "))
-        .flat_map(|p| p.split(", "))
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect();
+    let parts = super::keywords::split_keyword_phrases(end(s));
     let mut out = Vec::new();
-    for p in parts {
+    for p in &parts {
         let tl = TypeLine::default();
         let ctx = CompileContext {
             card_name: "",
@@ -290,6 +283,7 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         }
     }
     // CDA: "~'s power and toughness are each equal to [value]".
+    // (Phrases this doesn't understand fall through to the pattern registry.)
     if let Some(v) = l
         .strip_prefix("~'s power and toughness are each equal to ")
         .and_then(|r| parse_value_phrase(r, &mut Builder::new(ctx)))
