@@ -200,6 +200,9 @@ fn spells_you_control_have(l: &str, text: &str, _ctx: &CompileContext) -> Option
     for w in words {
         match w {
             "and" | "or" => {}
+            _ if crate::types::Color::from_word(w).is_some() => {
+                adjectives.push(Filter::Color(crate::types::Color::from_word(w)?));
+            }
             _ => {
                 let (f, _, tail) = parse_object_phrase(w)?;
                 if !end(tail).is_empty() {

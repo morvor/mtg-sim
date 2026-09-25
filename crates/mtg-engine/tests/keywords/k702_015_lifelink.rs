@@ -36,6 +36,26 @@ fn lifelink_damage_gains_its_controller_that_much_life() {
 }
 
 #[test]
+fn prevented_damage_isnt_dealt_so_lifelink_gains_nothing() {
+    cr!("702.15b", "702.16e");
+    let mut t = TestGame::new(2);
+    // Absolute Virtue: "You have protection from each of your opponents."
+    t.battlefield(P0, "Absolute Virtue");
+    let child = t.battlefield(P1, "Child of Night");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(child, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 20);
+    // Unprevented, it would have: the same attack against an unprotected player.
+    let mut t = TestGame::new(2);
+    let child = t.battlefield(P1, "Child of Night");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(child, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.life(P1), 22);
+}
+
+#[test]
 fn lifelink_gains_life_for_the_sources_controller_not_its_owner() {
     cr!("702.15b");
     assert_supported("Act of Treason");
