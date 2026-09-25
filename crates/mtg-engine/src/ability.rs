@@ -1534,11 +1534,19 @@ pub enum Restriction {
     CantBlock(Filter),
     /// "can't attack or block".
     CantAttackOrBlock(Filter),
-    /// "can't attack you or planeswalkers you control".
+    /// "can't attack you" (`planeswalkers`: "or planeswalkers you control"; battles are
+    /// never included).
     CantAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
+        planeswalkers: bool,
     },
+    /// "is goaded" as a static ability: goaded by the source's controller for as long as
+    /// the effect applies (CR 701.15b).
+    Goaded(Filter),
+    /// "assigns combat damage equal to its toughness rather than its power" (modifies
+    /// CR 510.1a).
+    DamageByToughness(Filter),
     /// "attacks each combat if able".
     MustAttack(Filter),
     /// "blocks each combat if able".

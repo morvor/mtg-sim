@@ -276,18 +276,49 @@ impl Game {
 
     /// Whether a creature can attack a specific player/planeswalker/battle.
     pub fn can_attack_target(&self, id: ObjectId, target: Entity) -> bool {
-        let defender = entity_defender(self, target);
-        // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
-        !self.all_restrictions().iter().any(|(s, c, r, _)| match r {
-            Restriction::CantAttackPlayer {
-                attackers,
-                defender: pf,
-            } => {
-                let ctx = Ctx::new(*s, *c);
-                self.matches(id, attackers, &ctx) && self.player_filter_matches(pf, defender, &ctx)
+        // "can't attack you (or planeswalkers you control)": the player, or a planeswalker
+        // they control (not a battle they protect).
+        let defender = match target {
+            Entity::Player(p) => Some((p, false)),
+            Entity::Object(o) if self.obj(o).is(CardType::Planeswalker) => {
+                Some((self.obj(o).controller, true))
             }
-            _ => false,
-        })
+            Entity::Object(_) => None,
+        };
+        // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
+        !self
+            .all_restrictions()
+            .iter()
+            .any(|(s, c, r, locked)| match r {
+                Restriction::CantAttackPlayer {
+                    attackers,
+                    defender: pf,
+                    planeswalkers,
+                } => {
+                    let ctx = Ctx::new(*s, *c);
+                    defender.is_some_and(|(p, is_pw)| {
+                        (!is_pw || *planeswalkers)
+                            && self.restriction_applies(id, attackers, &ctx, locked)
+                            && self.player_filter_matches(pf, p, &ctx)
+                    })
+                }
+                _ => false,
+            })
+    }
+
+    /// The players a creature is goaded by: goad actions (CR 701.15a) and static "is
+    /// goaded" effects, which goad it for their source's controller.
+    pub fn goaders(&self, id: ObjectId) -> Vec<PlayerId> {
+        let mut out = self.obj(id).goaded_by.clone();
+        for (s, c, r, locked) in self.all_restrictions() {
+            if let Restriction::Goaded(f) = &r {
+                // CR 701.15d: the same player goading it again has no effect.
+                if !out.contains(&c) && self.restriction_applies(id, f, &Ctx::new(s, c), &locked) {
+                    out.push(c);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a creature can block at all (CR 509.1a).
@@ -668,7 +699,7 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
         }
         // CR 701.15b: a goaded creature attacks each combat if able and attacks a player
         // other than the goading player if able.
-        let goaders = g.obj(id).goaded_by.clone();
+        let goaders = g.goaders(id);
         if !goaders.is_empty() {
             out.push(AttackRequirement::Attacks(id));
             out.push(AttackRequirement::AttacksPlayerOtherThan(id, goaders));
@@ -1759,6 +1790,13 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
 }
 
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
+    // "assigns combat damage equal to its toughness rather than its power".
+    if g.restricted_obj(id, |r| match r {
+        Restriction::DamageByToughness(f) => Some(f),
+        _ => None,
+    }) {
+        return g.obj(id).toughness().max(0) as u32;
+    }
     crate::keyword_impls::combat_damage_amount(g, id)
 }
 

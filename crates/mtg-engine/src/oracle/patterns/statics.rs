@@ -161,6 +161,12 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // "with toughness greater than its power" (each object compared with itself).
+    if let Some(r) = t.strip_prefix("with toughness greater than its power") {
+        if r.is_empty() || r.starts_with([' ', ',']) {
+            return Some((Filter::Custom("toughness_gt_power".into()), r));
+        }
+    }
     // Comparisons with this object's power: "with power less than ~'s power", "with
     // greater power" (than ~).
     let this_power = || Box::new(Value::PowerOf(Box::new(Sel::This)));
@@ -292,14 +298,14 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
 }
 
 /// An object phrase that must be the whole text.
-fn whole_object_phrase(s: &str) -> Option<(Filter, bool)> {
+pub(crate) fn whole_object_phrase(s: &str) -> Option<(Filter, bool)> {
     let (f, plural, rest) = object_phrase(s)?;
     end(rest).is_empty().then_some((f, plural))
 }
 
 /// Lists of nouns sharing suffixes: "Wolves and Werewolves you control" means "Wolves
 /// or Werewolves you control" (either kind is affected).
-fn union_nouns(s: &str) -> String {
+pub(crate) fn union_nouns(s: &str) -> String {
     s.replace(", and ", ", or ").replace(" and ", " or ")
 }
 
@@ -321,7 +327,7 @@ pub(crate) struct Subject {
     pub creatures: bool,
 }
 
-fn filter_mentions(f: &Filter, pred: &dyn Fn(&Filter) -> bool) -> bool {
+pub(crate) fn filter_mentions(f: &Filter, pred: &dyn Fn(&Filter) -> bool) -> bool {
     if pred(f) {
         return true;
     }
@@ -417,6 +423,8 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
         ("enchanted land", CardType::Land, true, false),
         ("fortified land", CardType::Land, true, false),
         ("enchanted artifact", CardType::Artifact, false, false),
+        ("enchanted artifact creature", CardType::Creature, false, true),
+        ("enchanted equipment", CardType::Artifact, false, false),
         ("enchanted enchantment", CardType::Enchantment, false, false),
         (
             "enchanted planeswalker",
@@ -448,7 +456,7 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
 
 /// Whether a filter can match anything but permanents (spells, cards in other zones):
 /// static abilities here only affect permanents.
-fn mentions_other_zones(f: &Filter) -> bool {
+pub(crate) fn mentions_other_zones(f: &Filter) -> bool {
     match f {
         Filter::Spell | Filter::PermanentCard | Filter::Card => true,
         Filter::InZone(z) => *z != ZoneKind::Battlefield,
@@ -694,7 +702,7 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
 
 const VERBS: &[&str] = &[
     "get", "gets", "have", "has", "is", "are", "isn't", "aren't", "can't", "can", "lose", "loses",
-    "attack", "attacks", "block", "blocks", "doesn't", "don't", "must",
+    "attack", "attacks", "block", "blocks", "doesn't", "don't", "must", "assign", "assigns",
 ];
 
 fn starts_with_verb(s: &str) -> bool {
@@ -1176,6 +1184,19 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
     let fc = f.clone();
     match p {
+        // CR 701.15b; a static "is goaded" goads for the source's controller.
+        "is goaded" | "are goaded" => return Some(vec![Restriction::Goaded(fc)]),
+        "can't attack you" | "can't attack you or planeswalkers you control" => {
+            return Some(vec![Restriction::CantAttackPlayer {
+                attackers: fc,
+                defender: PlayerFilter::You,
+                planeswalkers: p.ends_with("planeswalkers you control"),
+            }])
+        }
+        "assigns combat damage equal to its toughness rather than its power"
+        | "assign combat damage equal to their toughness rather than their power" => {
+            return Some(vec![Restriction::DamageByToughness(fc)])
+        }
         "attack or block each combat if able" | "attacks or blocks each combat if able" => {
             return Some(vec![
                 Restriction::MustAttack(fc.clone()),
@@ -1252,6 +1273,7 @@ fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
         "can't be blocked" => Restriction::CantBeBlocked(f),
         "attack each combat if able" | "attacks each combat if able" => Restriction::MustAttack(f),
         "block each combat if able" | "blocks each combat if able" => Restriction::MustBlock(f),
+        "must be blocked if able" => Restriction::MustBeBlocked(f),
         "doesn't untap during its controller's untap step"
         | "doesn't untap during your untap step"
         | "don't untap during their controllers' untap steps"
@@ -1357,6 +1379,14 @@ fn parse_predicate(
         }
         return Some(out);
     }
+    if matches!(p, "is goaded" | "are goaded") {
+        return Some(
+            restriction_predicate(p, &subj.filter)?
+                .into_iter()
+                .map(Out::Restr)
+                .collect(),
+        );
+    }
     if let Some(r) = p
         .strip_prefix("is ")
         .or_else(|| p.strip_prefix("are "))
@@ -1410,6 +1440,31 @@ fn parse_body(
         }
         None => s,
     };
+    // "Enchanted creature's activated abilities can't be activated": the possessive
+    // subject is the pronoun of the "its activated abilities" predicate.
+    if let Some((subj_text, pred)) = s.split_once("'s activated abilities ") {
+        let subject = parse_subject(subj_text, referent, ctx)?;
+        if subject.it.is_none() {
+            return None;
+        }
+        let p = format!("its activated abilities {pred}");
+        let outs = restriction_predicate(&p, &subject.filter)?
+            .into_iter()
+            .map(Out::Restr)
+            .collect();
+        return Some(Body { subject, outs });
+    }
+    // "You control enchanted creature" (layer 2, CR 613.1b).
+    if let Some(r) = s.strip_prefix("you control ") {
+        let subject = parse_subject(r, referent, ctx)?;
+        if !matches!(subject.filter, Filter::AttachedToSource) {
+            return None;
+        }
+        return Some(Body {
+            subject,
+            outs: vec![Out::Mod(Modification::SetController(PlayerRef::You))],
+        });
+    }
     if let Some(body) = parse_player_body(s) {
         return Some(body);
     }

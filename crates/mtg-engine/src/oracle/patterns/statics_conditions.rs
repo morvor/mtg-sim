@@ -90,6 +90,9 @@ fn state_filter(s: &str) -> Option<Filter> {
         "multicolored" => Some(Filter::Multicolored),
         "monocolored" => Some(Filter::Monocolored),
         "legendary" => Some(Filter::Supertype(Supertype::Legendary)),
+        // CR 506.5.
+        "attacking alone" => Some(Filter::AttackingAlone),
+        "blocking alone" => Some(Filter::BlockingAlone),
         _ => None,
     };
     if simple.is_some() {
@@ -573,6 +576,11 @@ fn history_condition(c: &str) -> Option<Condition> {
 
 /// "~'s power is 4 or greater", "~'s toughness is 3 or less".
 fn stat_condition(c: &str, it: Option<&Sel>) -> Option<Condition> {
+    stat_condition_sel(c, it).map(|(cond, _)| cond)
+}
+
+/// [`stat_condition`] and the object it's about.
+fn stat_condition_sel(c: &str, it: Option<&Sel>) -> Option<(Condition, Sel)> {
     let c = end(c);
     let (sel, r) = if let Some(r) = c.strip_prefix("~'s ") {
         (Sel::This, r)
@@ -587,16 +595,27 @@ fn stat_condition(c: &str, it: Option<&Sel>) -> Option<Condition> {
         return None;
     };
     let (v, r) = if let Some(r) = r.strip_prefix("power is ") {
-        (Value::PowerOf(Box::new(sel)), r)
+        (Value::PowerOf(Box::new(sel.clone())), r)
     } else if let Some(r) = r.strip_prefix("toughness is ") {
-        (Value::ToughnessOf(Box::new(sel)), r)
+        (Value::ToughnessOf(Box::new(sel.clone())), r)
     } else {
         return None;
     };
+    // "its toughness is greater than its power"
+    for (p, cmp) in [("greater than its ", Cmp::Gt), ("less than its ", Cmp::Lt)] {
+        if let Some(stat) = end(r).strip_prefix(p) {
+            let other = match stat {
+                "power" => Value::PowerOf(Box::new(sel.clone())),
+                "toughness" => Value::ToughnessOf(Box::new(sel.clone())),
+                _ => return None,
+            };
+            return Some((Condition::Compare(v, cmp, other), sel));
+        }
+    }
     let (cmp, n, tail) = amount_cmp(r)?;
     end(tail)
         .is_empty()
-        .then_some(Condition::Compare(v, cmp, n))
+        .then_some((Condition::Compare(v, cmp, n), sel))
 }
 
 /// Hand size: "you have no cards in hand" (hellbent).
@@ -645,8 +664,8 @@ pub(crate) fn parse_static_condition(
             return Some((cond, Some(sel)));
         }
     }
-    if let Some(cond) = stat_condition(c, it) {
-        return Some((cond, it.cloned()));
+    if let Some((cond, sel)) = stat_condition_sel(c, it) {
+        return Some((cond, Some(sel)));
     }
     if let Some(cond) = referent_free_condition(c) {
         return Some((cond, None));

@@ -13,6 +13,8 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     match name {
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
+        // "with toughness greater than its power".
+        "toughness_gt_power" => g.obj(id).toughness() > g.obj(id).power(),
         _ => false,
     }
 }

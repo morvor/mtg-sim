@@ -215,6 +215,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     // Head nouns joined by "or", "and/or", commas.
     let mut heads: Vec<Filter> = Vec::new();
+    // Heads not yet narrowed by a following noun ("instant or sorcery | spell").
+    let mut unnarrowed = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
     loop {
@@ -245,17 +247,22 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         let (nw, nrest) = split_word(s);
         let nw2 = nw.trim_end_matches(',');
         if let Some(nf) = head_noun(nw2) {
-            let last = heads.pop().unwrap();
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
-            // "permanent card": a card with a permanent type (CR 110.4a), not an
-            // object on the battlefield.
-            let last = match (last, &nf) {
-                (Filter::Permanent, Filter::Any) => Filter::PermanentCard,
-                (l, _) => l,
-            };
-            heads.push(Filter::and(vec![last, nf]));
+            // The noun narrows every head of this "or" list: "instant or sorcery
+            // spells" are instant spells or sorcery spells.
+            for h in &mut heads[unnarrowed..] {
+                let last = std::mem::replace(h, Filter::Any);
+                // "permanent card": a card with a permanent type (CR 110.4a), not an
+                // object on the battlefield.
+                let last = match (last, &nf) {
+                    (Filter::Permanent, Filter::Any) => Filter::PermanentCard,
+                    (l, _) => l,
+                };
+                *h = Filter::and(vec![last, nf.clone()]);
+            }
+            unnarrowed = heads.len();
             s = nrest;
             // allow "creature card or artifact card"
             let t = s.trim_start();
