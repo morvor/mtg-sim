@@ -243,3 +243,52 @@ fn reveal_or_control_a_dragon_for_a_counter() {
     let d = t.enter(P0, "Dragon's Disciple");
     assert_eq!(t.counters(d, "+1/+1"), 0);
 }
+
+// ---------------------------------------------------------------------------
+// "Each other [X] you control enters with an additional counter" (CR 614.1d)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn metallic_mimic_adds_counters_to_the_chosen_type() {
+    cr!("614.1d", "614.12", "607.2d", "122.6");
+    assert_supported("Metallic Mimic");
+    let mut t = TestGame::new(2);
+    let i = types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Bear")
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    let mimic = t.enter(P0, "Metallic Mimic");
+    // Not itself ("each other").
+    assert_eq!(t.counters(mimic, "+1/+1"), 0);
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    let elves = t.enter(P0, "Llanowar Elves");
+    assert_eq!(t.counters(elves, "+1/+1"), 0);
+    // Not an opponent's Bear.
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert_eq!(t.counters(theirs, "+1/+1"), 0);
+}
+
+#[test]
+fn additional_counters_for_non_humans() {
+    cr!("614.1d", "122.6");
+    assert_supported("Grumgully, the Generous");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grumgully, the Generous");
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    let human = t.enter(P0, "Elite Vanguard");
+    assert_eq!(t.counters(human, "+1/+1"), 0);
+}
+
+#[test]
+fn planeswalkers_enter_with_an_additional_loyalty_counter() {
+    cr!("614.1d", "306.5b");
+    assert_supported("Oath of Gideon");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Gideon");
+    let jace = t.enter(P0, "Jace Beleren");
+    assert_eq!(t.counters(jace, "loyalty"), 4);
+}

@@ -1,7 +1,7 @@
 //! Replacement effects that modify how *other* permanents enter (CR 614.1d, 614.12):
 //! "Creatures your opponents control enter tapped."
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, TriggerPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
@@ -83,6 +83,78 @@ fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     Some(vec![AbilityDef::new(
         AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
         block,
+    )])
+}
+
+/// "Each other creature you control of the chosen type enters with an additional +1/+1
+/// counter on it.", "Nontoken creatures you control enter with an additional +1/+1
+/// counter on them for each ...": ETB replacement effects on other permanents
+/// (CR 614.1d, 122.6).
+fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let l = end(l);
+    let (subj, rest) = if let Some(r) = l.strip_prefix("each ") {
+        let (s, rest) = r.split_once(" enters with an additional ")?;
+        let (f, plural, tail) = parse_object_phrase(s)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        (f, rest)
+    } else {
+        let (s, rest) = l.split_once(" enter with an additional ")?;
+        let f = subject_list(s)?;
+        (f, rest)
+    };
+    if matches!(subj, Filter::Source) {
+        return None;
+    }
+    // "+1/+1 counter on it", "two +1/+1 counters on them for each ..."
+    let (n, r) = match parse_number(rest) {
+        Some((n, r)) if !rest.starts_with('+') && !rest.starts_with('-') => (n, r),
+        _ => (Value::c(1), rest),
+    };
+    let r = r
+        .trim_start()
+        .strip_prefix("additional ")
+        .unwrap_or(r.trim_start());
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = strip(r, "counters").or_else(|| strip(r, "counter"))?;
+    let r = r
+        .strip_prefix("on it")
+        .or_else(|| r.strip_prefix("on them"))?
+        .trim();
+    let n = if r.is_empty() {
+        n
+    } else {
+        let each = r.strip_prefix("for each ")?;
+        let v = match each {
+            "creature that died under your control this turn" => {
+                Value::Custom("creatures_you_controlled_died_this_turn".into())
+            }
+            _ => {
+                let (f, _, tail) = parse_object_phrase(each)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                Value::Count(f)
+            }
+        };
+        match n {
+            Value::Const(1) => v,
+            other => Value::Mul(Box::new(other), Box::new(v)),
+        }
+    };
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(subj)),
+        action: ReplacementAction::EnterWithCounters(kind, n),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
     )])
 }
 
@@ -207,6 +279,9 @@ inventory::submit! {
 }
 inventory::submit! {
     AbilityPattern { name: "enter as a copy", priority: 50, parse: enter_as_copy }
+}
+inventory::submit! {
+    StaticPattern { name: "others enter with additional counters", priority: 100, parse: others_enter_with_counters }
 }
 inventory::submit! {
     AbilityPattern { name: "it becomes day as ~ enters", priority: 50, parse: day_as_enters }
