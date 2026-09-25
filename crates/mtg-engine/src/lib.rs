@@ -50,6 +50,7 @@ pub mod layers;
 pub mod library;
 pub mod mana;
 pub mod mana_abilities;
+pub mod match_play;
 pub mod mulligan;
 pub mod multiplayer;
 pub mod next_spell;

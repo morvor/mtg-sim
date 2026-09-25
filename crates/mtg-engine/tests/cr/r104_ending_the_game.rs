@@ -574,3 +574,43 @@ fn with_limited_range_a_loop_is_a_draw_for_players_involved_and_in_range() {
     assert!(t.g.player(P2).in_game() && t.g.player(P3).in_game());
     assert_eq!(t.g.result, None);
 }
+
+// ---------------------------------------------------------------------------
+// Tournaments
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_judges_game_loss_penalty_loses_the_game_even_while_you_cant_lose() {
+    cr!("104.3k");
+    ruling!(
+        "Platinum Angel",
+        "You will lose a game if you concede, if you're penalized with a Game Loss"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Platinum Angel");
+    // Platinum Angel stops game effects...
+    t.g.players[0].life = 0;
+    t.settle();
+    assert!(!t.has_lost(P0));
+    // ... but not a penalty.
+    t.g.game_loss_penalty(P0);
+    assert!(t.has_lost(P0));
+    assert_eq!(t.g.result, win(&[P1]));
+}
+
+#[test]
+fn all_players_may_agree_to_an_intentional_draw() {
+    cr!("104.4i");
+    // Everyone must agree.
+    let mut t = TestGame::new(3);
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, false);
+    assert!(!t.g.propose_intentional_draw());
+    assert_eq!(t.g.result, None);
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, true);
+    assert!(t.g.propose_intentional_draw());
+    assert_eq!(t.g.result, Some(GameResult::Draw));
+}

@@ -313,6 +313,29 @@ impl Game {
         self.check_game_over();
     }
 
+    /// In a tournament, a judge's penalty makes a player lose the game (CR 104.3k). Like
+    /// conceding, this isn't stopped by effects that say the player can't lose.
+    pub fn game_loss_penalty(&mut self, p: PlayerId) {
+        self.log(|_g| format!("{p} receives a game loss penalty"));
+        self.player_loses(p);
+    }
+
+    /// In a tournament, all players in the game may agree to an intentional draw
+    /// (CR 104.4i): each player still in the game is asked, and the game is a draw only if
+    /// all of them agree. Returns whether it was.
+    pub fn propose_intentional_draw(&mut self) -> bool {
+        if self.result.is_some() {
+            return false;
+        }
+        for p in self.apnap() {
+            if !self.ask_yes_no(p, None, "Agree to an intentional draw?", false) {
+                return false;
+            }
+        }
+        self.draw_game();
+        true
+    }
+
     /// Whether the game was a draw for `p` (CR 104.4).
     pub fn drew_game(&self, p: PlayerId) -> bool {
         self.end.drew.contains(&p) || self.result == Some(GameResult::Draw)

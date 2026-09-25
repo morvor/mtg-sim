@@ -100,6 +100,9 @@ impl Game {
         for p in self.players.iter_mut() {
             p.drew_from_empty_library = false;
         }
+        // A player who can't lose the game doesn't (CR 101.2); that isn't an action
+        // performed.
+        losers.retain(|p| !self.cant_lose_game(*p));
 
         // --- Objects ------------------------------------------------------------
         let mut to_graveyard: Vec<ObjectId> = Vec::new(); // put into graveyard (not destroyed)
