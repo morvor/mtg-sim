@@ -504,6 +504,7 @@ impl Game {
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
+                    m.etb.copy_exceptions.extend(em.copy_exceptions);
                     if em.prepared {
                         // CR 722.3a/c: it gains the designation (and its prepare-spell
                         // copy is created) as it's put onto the battlefield.

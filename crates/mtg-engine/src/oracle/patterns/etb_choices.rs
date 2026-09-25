@@ -698,6 +698,14 @@ fn more_conditions(c: &str) -> Option<Condition> {
         "an opponent lost life this turn" => {
             return Some(Condition::Custom("opponent_lost_life_this_turn".into()))
         }
+        "you were the starting player" => {
+            return Some(Condition::Custom("you_were_the_starting_player".into()))
+        }
+        "you weren't the starting player" => {
+            return Some(Condition::Not(Box::new(Condition::Custom(
+                "you_were_the_starting_player".into(),
+            ))))
+        }
         "it wasn't cast or no mana was spent to cast it" => {
             return Some(Condition::Or(vec![
                 Condition::Not(Box::new(Condition::WasCast)),
@@ -751,8 +759,26 @@ fn control_either(c: &str) -> Option<Condition> {
 
 /// "choose a creature type" etc. as an effect of a spell or ability; the choice is
 /// stored on the source (CR 607.2d).
-fn choose_effect(l: &str, _b: &mut Builder) -> Option<Effect> {
-    choose_clause(l)
+fn choose_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let e = choose_clause(l)?;
+    // "Choose an opponent. You and that player each ...": "that player" is the chosen one.
+    let chose_player = |e: &Effect| {
+        matches!(
+            e,
+            Effect::Choose {
+                kind: ChoiceKind::Opponent | ChoiceKind::Player,
+                ..
+            }
+        )
+    };
+    let any = match &e {
+        Effect::Seq(v) => v.iter().any(chose_player),
+        other => chose_player(other),
+    };
+    if any {
+        b.it_player = PlayerRef::ChosenOpponent;
+    }
+    Some(e)
 }
 
 /// "add {R} or one mana of the chosen color", "add two mana of the chosen color".

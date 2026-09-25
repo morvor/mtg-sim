@@ -91,6 +91,8 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
             .permanents_left
             .iter()
             .any(|o| g.obj(*o).controller == ctx.controller),
+        // "you were the starting player" (CR 103.1).
+        "you_were_the_starting_player" => g.turn.starting_player == ctx.controller,
         // "an opponent lost life this turn".
         "opponent_lost_life_this_turn" => g
             .history

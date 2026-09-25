@@ -172,6 +172,18 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         None => (false, r),
     };
     let r = r.strip_prefix("as a copy of ")?;
+    let (r, exceptions) = match r.split_once(", except ") {
+        Some((a, _)) => {
+            // Take the exception text from the original block (same offsets: the block
+            // is ASCII here) to keep quoted abilities' capitalization.
+            if !block.is_ascii() {
+                return None;
+            }
+            let start = l.find(", except ")? + ", except ".len();
+            (a, copy_exceptions(end(&block[start..]), ctx)?)
+        }
+        None => (r, vec![]),
+    };
     let r = r
         .strip_prefix("any ")
         .or_else(|| r.strip_prefix("a "))
@@ -207,7 +219,74 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if tapped {
         out.push(rep(ReplacementAction::EnterTapped, true));
     }
+    if !exceptions.is_empty() {
+        out.push(rep(
+            ReplacementAction::AsEnters(Box::new(Effect::EnterCopyExceptions(exceptions))),
+            true,
+        ));
+    }
     Some(out)
+}
+
+/// Copy exceptions (CR 707.9b): "it's a Shapeshifter Rogue in addition to its other
+/// types", "it's an artifact in addition to its other types", "it has \"[ability]\"",
+/// "it isn't legendary", joined by "and".
+fn copy_exceptions(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
+    let mut out = Vec::new();
+    let mut rest = s.trim();
+    while !rest.is_empty() {
+        let lower = rest.to_lowercase();
+        if let Some(r) = lower.strip_prefix("it has \"") {
+            let close = r.find('"')?;
+            let inner = &rest["it has \"".len().."it has \"".len() + close];
+            for a in crate::oracle::parse_ability(inner, ctx)? {
+                if matches!(a.kind, AbilityKind::Unsupported(_)) {
+                    return None;
+                }
+                out.push(Modification::AddAbility(a));
+            }
+            rest = &rest["it has \"".len() + close + 1..];
+        } else if let Some(r) = lower.strip_prefix("it isn't legendary") {
+            out.push(Modification::RemoveSupertypes(vec![
+                crate::types::Supertype::Legendary,
+            ]));
+            rest = &rest[rest.len() - r.len()..];
+        } else if let Some(r) = lower
+            .strip_prefix("it's an ")
+            .or_else(|| lower.strip_prefix("it's a "))
+        {
+            let (types, after) = r.split_once(" in addition to its other types")?;
+            let mut card_types = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                if let Some(t) = crate::types::CardType::from_word(w) {
+                    card_types.push(t);
+                } else {
+                    subtypes.push(subtype_word(w)?);
+                }
+            }
+            if !card_types.is_empty() {
+                out.push(Modification::AddTypes(card_types));
+            }
+            if !subtypes.is_empty() {
+                out.push(Modification::AddSubtypes(subtypes));
+            }
+            rest = &rest[rest.len() - after.len()..];
+        } else {
+            return None;
+        }
+        let t = rest.trim_start();
+        rest = t
+            .strip_prefix(", and ")
+            .or_else(|| t.strip_prefix("and "))
+            .or_else(|| t.strip_prefix(", "))
+            .unwrap_or(t)
+            .trim();
+        if rest == "." {
+            break;
+        }
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 // ---------------------------------------------------------------------------

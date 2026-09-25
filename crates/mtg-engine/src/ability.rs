@@ -1941,6 +1941,10 @@ pub enum Effect {
     /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
     /// (CR 722.3a); elsewhere it does nothing.
     EnterPrepared,
+    /// "... enter as a copy of X, except [exceptions]": if the permanent enters as a copy,
+    /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
+    /// inside [`ReplacementAction::AsEnters`].
+    EnterCopyExceptions(Vec<Modification>),
     /// "It becomes day" / "it becomes night" (CR 731.1).
     SetDayNight {
         day: bool,

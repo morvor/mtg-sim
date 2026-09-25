@@ -654,6 +654,11 @@ impl Game {
                     e.prepared = true;
                 }
             }
+            Effect::EnterCopyExceptions(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copy_exceptions.extend(mods.iter().cloned());
+                }
+            }
             Effect::SetDayNight { day } => self.set_day(*day),
             Effect::SetPrepared { what, prepared } => {
                 for o in self.resolve_objects(what, ctx) {

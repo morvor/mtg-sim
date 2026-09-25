@@ -51,6 +51,8 @@ pub struct EntryMods {
     pub counters: Vec<(CounterKind, u32)>,
     /// Enters prepared (CR 722.3a).
     pub prepared: bool,
+    /// Exceptions to a copy effect it enters with (CR 707.9b).
+    pub copy_exceptions: Vec<Modification>,
 }
 
 impl Ctx {

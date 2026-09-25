@@ -180,6 +180,72 @@ fn vesuva_enters_tapped_as_a_copy_of_a_land() {
     assert_eq!(t.life(P0), 18);
 }
 
+#[test]
+fn copy_with_type_exceptions() {
+    cr!("707.9", "707.9b");
+    assert_supported("Phyrexian Metamorph");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Phyrexian Metamorph");
+    let now = t.g.current(m);
+    let c = &t.g.obj(now).chars;
+    assert_eq!(c.name.as_str(), "Grizzly Bears");
+    assert!(c.is(types::CardType::Artifact));
+    assert!(c.is(types::CardType::Creature));
+    assert!(c.has_subtype("Bear"));
+    // The exception is part of its copiable values (CR 707.9b).
+    assert!(t.g.obj(now).copiable.is(types::CardType::Artifact));
+}
+
+#[test]
+fn copy_with_subtype_exceptions() {
+    cr!("707.9b");
+    assert_supported("Glasspool Mimic // Glasspool Shore");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Glasspool Mimic // Glasspool Shore");
+    let now = t.g.current(m);
+    let c = &t.g.obj(now).chars;
+    assert!(c.has_subtype("Bear"));
+    assert!(c.has_subtype("Shapeshifter"));
+    assert!(c.has_subtype("Rogue"));
+}
+
+#[test]
+fn copy_with_ability_exception() {
+    cr!("707.9b");
+    assert_supported("Mercurial Pretender");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Mercurial Pretender");
+    let now = t.g.current(m);
+    // "{2}{U}{U}: Return this creature to its owner's hand."
+    t.lands(P0, "Island", 4);
+    t.activate(P0, now, 0, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_hand(P0, "Mercurial Pretender"));
+}
+
+#[test]
+fn enters_tapped_if_you_were_the_starting_player() {
+    cr!("614.1d", "103.1");
+    // Rising Chicane: "If you were the starting player, this land enters tapped."
+    let c = card("Rising Chicane");
+    assert!(!c
+        .unsupported_text()
+        .iter()
+        .any(|u| u.contains("starting player")));
+    let mut t = TestGame::new(2);
+    assert_eq!(t.g.turn.starting_player, P0);
+    let a = t.enter(P0, "Rising Chicane");
+    assert!(t.obj_now(a).tapped);
+    let b = t.enter(P1, "Rising Chicane");
+    assert!(!t.obj_now(b).tapped);
+}
+
 // ---------------------------------------------------------------------------
 // Adamant; "if you do or if ..."
 // ---------------------------------------------------------------------------
