@@ -40,7 +40,9 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         return None;
     }
     let (head, cond) = l.split_once(" as long as ")?;
-    if cond.contains(" as long as ")
+    // "... for as long as ..." is a duration, not a condition.
+    if head.ends_with(" for")
+        || cond.contains(" as long as ")
         || !(head.contains(" has ")
             || head.contains(" have ")
             || head.contains(" gets ")
@@ -232,6 +234,19 @@ fn attack_despite_defender_static(
 ) -> Option<Vec<Ability>> {
     let l = end(l);
     let head = strip_despite_defender(l)?;
+    // "As long as [condition], it can attack ...": "it" is the condition's subject, so
+    // it means this object only if the condition is about this object ("As long as
+    // equipped creature has defender, it can attack ..." is about the equipped creature).
+    let subject_filter = |s: &str| -> Option<Filter> {
+        if s.trim() == "it" {
+            if let Some(cond) = text.to_lowercase().strip_prefix("as long as ") {
+                if !cond.starts_with('~') {
+                    return None;
+                }
+            }
+        }
+        static_subject(s)
+    };
     let restriction = |f: Filter| {
         AbilityDef::new(
             AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
@@ -241,14 +256,14 @@ fn attack_despite_defender_static(
         )
     };
     if let Some(subject) = head.strip_suffix(" can attack") {
-        return Some(vec![restriction(static_subject(subject)?)]);
+        return Some(vec![restriction(subject_filter(subject)?)]);
     }
     // "[subject] gets +2/+2 and can attack ...": the rest of the ability, then this.
     let rest = head.strip_suffix(" and can attack")?;
     let subject = [" gets ", " has ", " get ", " have "]
         .iter()
         .find_map(|v| rest.split_once(v).map(|(s, _)| s))?;
-    let f = static_subject(subject)?;
+    let f = subject_filter(subject)?;
     let mut v = crate::oracle::statics::parse_static(rest, ctx)?;
     if v.is_empty() || !v.iter().all(|a| matches!(a.kind, AbilityKind::Static(_))) {
         return None;
@@ -264,7 +279,9 @@ inventory::submit! {
 
 /// "~ can attack this turn as though it didn't have defender", "target creature with
 /// defender can attack this turn as though it didn't have defender", "creatures you
-/// control with defender can attack this turn as though they didn't have defender".
+/// control with defender can attack this turn as though they didn't have defender",
+/// "~ gets +3/-1 until end of turn and can attack this turn as though it didn't have
+/// defender".
 fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (l, until_eot) = match l.strip_prefix("until end of turn, ") {
@@ -272,17 +289,37 @@ fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (l, false),
     };
     let head = strip_despite_defender(l)?;
+    let permission = |sel: Sel| Effect::AddRestriction {
+        restriction: Restriction::AttackDespiteDefender(Filter::In(Box::new(sel))),
+        duration: Duration::EndOfTurn,
+    };
+    // "[subject] gets +3/+0 until end of turn and can attack this turn ...": the
+    // permission is for the subject of the first half. (The second half alone has no
+    // subject, and "it" there would be the trigger's object, e.g. the spell cast.)
+    if let Some(first) = head.strip_suffix(" and can attack this turn") {
+        if until_eot {
+            return None;
+        }
+        let saved_targets = b.targets.len();
+        let saved_it = b.it.clone();
+        let e = crate::oracle::effects::parse_clause(first, b);
+        let what = match &e {
+            Some(Effect::Modify { what, .. }) => Some(what.clone()),
+            _ => None,
+        };
+        let (Some(e), Some(what)) = (e, what) else {
+            b.targets.truncate(saved_targets);
+            b.it = saved_it;
+            return None;
+        };
+        return Some(Effect::seq(vec![e, permission(what)]));
+    }
     let subject = head
         .strip_suffix(" can attack this turn")
-        .or_else(|| head.strip_suffix(" can attack").filter(|_| until_eot))
-        .or_else(|| {
-            // Subjectless second half: "~ gets +3/-1 until end of turn and can attack
-            // this turn as though it didn't have defender".
-            (head == "can attack this turn").then_some("")
-        })?
+        .or_else(|| head.strip_suffix(" can attack").filter(|_| until_eot))?
         .trim();
     let sel = match subject {
-        "" | "it" | "that creature" => b.it.clone(),
+        "it" | "that creature" => b.it.clone(),
         "~" => Sel::This,
         s if s.contains("target ") => {
             let (spec, tail) = parse_target(s)?;
@@ -301,10 +338,7 @@ fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             Sel::All(f)
         }
     };
-    Some(Effect::AddRestriction {
-        restriction: Restriction::AttackDespiteDefender(Filter::In(Box::new(sel))),
-        duration: Duration::EndOfTurn,
-    })
+    Some(permission(sel))
 }
 
 inventory::submit! {
@@ -449,6 +483,11 @@ fn keyword_with_variable(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
         return None;
     }
     let affected = static_subject(subject)?;
+    // X is evaluated once for the static's source; "where X is its mana value" on
+    // "each creature card ... has encore {X}" would need a value per affected object.
+    if !matches!(affected, Filter::Source) && (value.contains("its ") || value.contains(" it")) {
+        return None;
+    }
     let kw = one_keyword(kw)?;
     let x = counter_count(value).or_else(|| {
         let mut b = Builder::new(ctx);

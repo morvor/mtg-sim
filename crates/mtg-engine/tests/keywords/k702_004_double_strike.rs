@@ -116,7 +116,7 @@ fn giving_double_strike_to_a_first_striker_after_it_dealt_damage_lets_it_deal_ag
 
 #[test]
 fn gaining_double_strike_after_first_strike_damage_without_first_strike_deals_once() {
-    cr!("702.4d", "702.4b");
+    cr!("702.4b");
     // A creature that had neither first strike nor double strike as the first step began
     // deals regular damage only, even if it gains double strike.
     let mut t = TestGame::new(2);
@@ -202,7 +202,7 @@ fn metalcraft_double_strike_is_checked_as_each_damage_step_begins() {
 
 #[test]
 fn double_strike_and_trample_after_the_blocker_dies_in_the_first_step() {
-    cr!("702.4b", "702.19e");
+    cr!("702.4b", "702.19d");
     ruling!(
         "Temur Battle Rage",
         "If an attacking creature with double strike and trample destroys all of its blocking creatures with first-strike combat damage, all of its normal combat damage is assigned to the player, planeswalker, or battle that creature's attacking."

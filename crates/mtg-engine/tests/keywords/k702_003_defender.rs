@@ -49,7 +49,7 @@ fn defender_granted_by_an_aura_stops_attacks() {
 
 #[test]
 fn an_attacking_creature_that_gains_defender_stays_attacking() {
-    cr!("702.3b", "506.4");
+    cr!("702.3b", "506.4a");
     ruling!(
         "Pillar of War",
         "Defender only matters when Pillar of War could be declared as an attacking creature. If Pillar of War is already attacking, it becoming not enchanted doesn’t cause it to be removed from combat."
@@ -185,4 +185,33 @@ fn creature_types_dont_confer_defender() {
     assert!(t.obj_now(bears).chars.has_subtype("Wall"));
     t.set_step(P0, Step::BeginningOfCombat);
     assert!(can_attack(&mut t, bears));
+}
+
+#[test]
+fn a_triggered_permission_to_attack_applies_to_the_creature_not_the_spell() {
+    cr!("702.3b");
+    ruling!(
+        "Nivix Cyclops",
+        "Nivix Cyclops still has defender after its triggered ability resolves, although it will be able to attack."
+    );
+    assert_supported("Nivix Cyclops");
+    let mut t = TestGame::new(2);
+    // Nivix Cyclops: 1/4 defender, "Whenever you cast an instant or sorcery spell, this
+    // creature gets +3/+0 until end of turn and can attack this turn as though it didn't
+    // have defender."
+    let cyclops = t.battlefield(P0, "Nivix Cyclops");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!can_attack(&mut t, cyclops));
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.pt(cyclops), (4, 4));
+    // It still has defender, but it (not the spell that triggered it) can attack.
+    assert!(t.obj_now(cyclops).has_keyword(KeywordKind::Defender));
+    assert!(can_attack(&mut t, cyclops));
+    declare(&mut t, &[(cyclops, Entity::Player(P1))]);
+    go_to(&mut t, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 13);
 }

@@ -166,6 +166,16 @@ fn the_same_is_true_for_grants_every_variant_of_each_listed_keyword() {
     let mut t = TestGame::new(2);
     let wanderer = t.battlefield(P0, "Cairn Wanderer");
     assert!(!t.obj_now(wanderer).has_keyword(KeywordKind::Flying));
+    // Only creature cards count: Smuggler's Copter (a Vehicle with flying) doesn't.
+    t.graveyard(P1, "Smuggler's Copter");
+    t.g.recompute();
+    assert!(!t.obj_now(wanderer).has_keyword(KeywordKind::Flying));
+    // Only the listed keywords are granted: not Darksteel Myr's indestructible.
+    t.graveyard(P1, "Darksteel Myr");
+    t.g.recompute();
+    assert!(!t
+        .obj_now(wanderer)
+        .has_keyword(KeywordKind::Indestructible));
     t.graveyard(P1, "Serra Angel");
     t.graveyard(P1, "Wind Drake");
     t.graveyard(P0, "White Knight");
@@ -198,7 +208,7 @@ fn the_same_is_true_for_grants_every_variant_of_each_listed_keyword() {
         .collect();
     assert_eq!(walk.len(), 1);
     assert!(matches!(&walk[0], Some(Filter::Subtype(s)) if s == "Swamp"));
-    // Keywords that aren't listed aren't granted, and noncreature cards don't count.
+    // Deathtouch is listed too.
     t.graveyard(P0, "Typhoid Rats");
     t.g.recompute();
     assert!(t.obj_now(wanderer).has_keyword(KeywordKind::Deathtouch));
@@ -313,9 +323,15 @@ fn odric_grants_listed_keywords_to_the_creatures_there_as_it_resolves() {
         assert!(o.has_keyword(KeywordKind::Flying));
         assert!(!o.has_keyword(KeywordKind::Trample));
     }
-    // The Knight already had first strike: it now has two instances, which is the same.
-    assert_eq!(instances(&t, knight, KeywordKind::FirstStrike), 2);
     // A creature that comes under P0's control later doesn't gain them.
     let late = t.battlefield(P0, "Grizzly Bears");
     assert!(!t.obj_now(late).has_keyword(KeywordKind::Flying));
+    // The Knight already had first strike: it now has two instances, which work like
+    // one. The 2/1 deals its damage once, in the first-strike damage step.
+    assert_eq!(instances(&t, knight, KeywordKind::FirstStrike), 2);
+    declare(&mut t, &[(knight, Entity::Player(P1))]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    assert_eq!(t.life(P1), 18);
+    go_to(&mut t, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 18);
 }

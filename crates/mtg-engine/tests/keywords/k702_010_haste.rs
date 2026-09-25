@@ -126,7 +126,7 @@ fn multiple_instances_of_haste_are_redundant() {
 
 #[test]
 fn losing_haste_after_attacking_doesnt_remove_from_combat() {
-    cr!("702.10b", "506.4");
+    cr!("702.10b", "506.4a");
     ruling!(
         "Fervor",
         "If an attacking creature loses haste, perhaps because Fervor leaves the battlefield after attackers have been declared, it won't be removed from combat."
