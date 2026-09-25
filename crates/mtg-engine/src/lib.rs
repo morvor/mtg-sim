@@ -33,6 +33,7 @@ pub mod custom;
 pub mod decision;
 pub mod designations;
 pub mod dfc;
+pub mod draw_rules;
 pub mod eval;
 pub mod events;
 pub mod excess_damage;

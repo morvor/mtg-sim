@@ -621,6 +621,13 @@ impl Game {
             (ReplacementAction::Instead(effect), ev) => {
                 let mut c = ctx.clone();
                 c.event = Some(event_info_of(&ev));
+                // CR 121.7: card draws resulting from a replacement or prevention effect
+                // happen after the parts of the original event that weren't replaced.
+                if !matches!(ev, ReplEvent::Draw { .. }) && crate::draw_rules::draws_cards(&effect)
+                {
+                    self.post_replacement_effects.push((c, *effect));
+                    return vec![];
+                }
                 self.repl_context.push(applied.to_vec());
                 self.exec(&effect, &mut c);
                 self.repl_context.pop();

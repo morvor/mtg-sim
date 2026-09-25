@@ -438,6 +438,11 @@ impl Game {
 
     /// Draws `n` cards one at a time (CR 121.2). Returns the cards drawn.
     pub fn draw_cards(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
+        // CR 121.2a: effects referring to the number of cards drawn apply first.
+        if let Some(out) = crate::draw_rules::replace_multiple_draws(self, p, n) {
+            self.run_post_replacement_effects();
+            return out;
+        }
         let mut out = Vec::new();
         for _ in 0..n {
             if !self.player(p).in_game() {
@@ -446,13 +451,16 @@ impl Game {
             if self.draw_restricted(p) {
                 break;
             }
-            let before = self.player(p).hand.clone();
+            // CR 614.11b: cards drawn because a replacement effect replaced the draw aren't
+            // the card this draw drew.
             for e in self.replace(ReplEvent::Draw { player: p }) {
-                self.execute_repl_event(e);
-            }
-            for c in self.player(p).hand.clone() {
-                if !before.contains(&c) {
-                    out.push(c);
+                match e {
+                    ReplEvent::Draw { player } if player == p => {
+                        if let Some(c) = self.perform_draw(player) {
+                            out.push(c);
+                        }
+                    }
+                    other => self.execute_repl_event(other),
                 }
             }
         }
@@ -460,14 +468,9 @@ impl Game {
         out
     }
 
+    /// CR 121.2b: "can't draw more than N cards each turn" applies to individual draws.
     fn draw_restricted(&self, p: PlayerId) -> bool {
-        let drawn = self.history.cards_drawn.get(&p).copied().unwrap_or(0);
-        self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::MaxDrawsPerTurn(pf, n) => {
-                self.player_filter_matches(pf, p, &Ctx::new(Some(*s), *c)) && drawn >= *n
-            }
-            _ => false,
-        })
+        crate::draw_rules::draws_left(self, p) == Some(0)
     }
 
     fn perform_draw(&mut self, p: PlayerId) -> Option<ObjectId> {

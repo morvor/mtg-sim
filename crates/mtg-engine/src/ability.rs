@@ -1312,6 +1312,9 @@ pub enum ReplacementEvent {
     Dies(Filter),
     /// A player matching would draw a card.
     Draw(PlayerFilter),
+    /// A player matching would draw `min` or more cards (an effect that refers to the
+    /// number of cards drawn, CR 121.2a, 616.1g).
+    DrawCards { who: PlayerFilter, min: u32 },
     /// Damage would be dealt. `source`/`target` filter the damage event.
     Damage {
         source: Filter,

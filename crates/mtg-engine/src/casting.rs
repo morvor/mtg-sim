@@ -1610,7 +1610,9 @@ impl Game {
                     .count()
                     >= n
             }
-            CostPart::Effect(_) => true,
+            // CR 121.2b: a cost that includes drawing more cards than the player may draw
+            // can't be paid.
+            CostPart::Effect(e) => crate::draw_rules::can_choose(self, e, ctx),
         }
     }
 

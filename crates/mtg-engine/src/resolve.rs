@@ -48,12 +48,14 @@ impl Game {
             Effect::May { who, effect } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let text = format!("{effect:?}");
-                let yes = self.ask_yes_no(
-                    p,
-                    ctx.source,
-                    &format!("You may: {}", truncate(&text, 120)),
-                    true,
-                );
+                // CR 121.2b, 121.3: a player can't choose to draw more cards than they may.
+                let yes = crate::draw_rules::can_choose(self, effect, ctx)
+                    && self.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("You may: {}", truncate(&text, 120)),
+                        true,
+                    );
                 ctx.prev_happened = yes;
                 if yes {
                     // Effects that can fail to do what they say (sacrificing, paying,
@@ -699,7 +701,9 @@ impl Game {
             Effect::Draw { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut drawn = Vec::new();
-                for p in self.eval_players(who, ctx) {
+                // CR 121.2c: the active player draws first, then the others in turn order.
+                let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
+                for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
                 ctx.prev_value = drawn.len() as i64;
