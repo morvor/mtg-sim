@@ -14,6 +14,8 @@
 use crate::ability::*;
 use crate::casting::{CastOption, Illegal};
 use crate::decision::{Action, SpecialAction};
+use crate::eval::Ctx;
+use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
@@ -168,6 +170,27 @@ pub trait KeywordRules: Sync + Send {
     }
     fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
         false
+    }
+    /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        None
+    }
+    /// Performs a named [`Effect::Custom`] this implementation defines; returns true if it
+    /// was one.
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        false
+    }
+    /// Matches a named [`TriggerCond::Custom`] this implementation defines against an
+    /// event, for the triggered ability of `src` controlled by `ctl`.
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        src: ObjectId,
+        ctl: PlayerId,
+        ev: &Event,
+    ) -> Option<Vec<EventInfo>> {
+        None
     }
 }
 
@@ -443,4 +466,26 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
             return;
         }
     }
+}
+
+pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_condition(g, name, ctx))
+}
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    registry().iter().any(|r| r.custom_effect(g, name, ctx))
+}
+
+pub fn custom_trigger(
+    g: &Game,
+    name: &str,
+    src: ObjectId,
+    ctl: PlayerId,
+    ev: &Event,
+) -> Option<Vec<EventInfo>> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
 }

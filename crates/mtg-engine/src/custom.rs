@@ -140,6 +140,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     let _ = (g, ctx);
+    // Conditions defined by keyword implementations (`kw/`).
+    if let Some(b) = crate::kw::custom_condition(g, name, ctx) {
+        return b;
+    }
     // "you both own and control [this] and its meld partner" (CR 701.42a).
     if let Some(b) = crate::merge::custom_condition(g, name, ctx) {
         return b;
@@ -233,6 +237,10 @@ pub fn custom_trigger(
     ev: &Event,
 ) -> Vec<EventInfo> {
     let _ = ctl;
+    // Triggers defined by keyword implementations (`kw/`).
+    if let Some(v) = crate::kw::custom_trigger(g, name, src, ctl, ev) {
+        return v;
+    }
     // "When you unlock this door" (CR 709.5h), "Whenever this creature mutates".
     if let Some(v) = crate::rooms::custom_trigger(name, src, ev)
         .or_else(|| crate::merge::custom_trigger(name, src, ev))
@@ -318,6 +326,10 @@ pub fn custom_trigger(
 }
 
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
+    // Effects defined by keyword implementations (`kw/`).
+    if crate::kw::custom_effect(g, name, ctx) {
+        return;
+    }
     // "named-token:N:Name": create N tokens by name (CR 111.11).
     if let Some(spec) = name.strip_prefix("named-token:") {
         crate::tokens::create_named_tokens(g, spec, ctx);

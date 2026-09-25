@@ -19,6 +19,8 @@ fn names() -> &'static [(String, KeywordKind)] {
             .map(|k| (k.name().to_lowercase(), *k))
             .collect();
         v.push(("multikicker".into(), KeywordKind::Kicker));
+        // CR 702.37b: megamorph is a variant of morph (marked by its text).
+        v.push(("megamorph".into(), KeywordKind::Morph));
         v.push(("typecycling".into(), KeywordKind::Cycling));
         v.push(("landcycling".into(), KeywordKind::Cycling));
         v.push(("partner with".into(), KeywordKind::Partner));
@@ -164,6 +166,11 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
                 ])
             } else if ty == "land" {
                 Filter::Type(CardType::Land)
+            } else if ty == "artifact land" {
+                Filter::and(vec![
+                    Filter::Type(CardType::Artifact),
+                    Filter::Type(CardType::Land),
+                ])
             } else {
                 Filter::Subtype(subtype_word(ty)?)
             };
@@ -252,6 +259,13 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         // CR 702.22b: "bands with other [quality]" is banding with a quality.
         KeywordKind::Banding if name.as_str() == "bands with other" => {
             kw.filter = Some(crate::kw::banding::quality_filter(rest, rest_raw)?);
+        }
+        // CR 702.33b: "Kicker [cost 1] and/or [cost 2]" means "Kicker [cost 1], kicker
+        // [cost 2]": the second cost is kept in `costs`.
+        KeywordKind::Kicker if rest_raw.contains(" and/or ") => {
+            let (a, b) = rest_raw.split_once(" and/or ")?;
+            kw.cost = Some(parse_keyword_cost(a)?);
+            kw.costs = vec![parse_keyword_cost(b)?];
         }
         _ => {
             if rest.is_empty() {

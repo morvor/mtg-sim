@@ -83,6 +83,7 @@ impl KeywordRules for MorphFaceUp {
             return Some(Err(Illegal("not your permanent".into())));
         }
         // CR 107.3d: X is chosen immediately before the cost is paid.
+        let mut chosen_x = None;
         if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
             let max = g.max_mana_available(p) as i64;
             let x = match g.ask(p, Decision::ChooseX { source: obj, max }) {
@@ -90,10 +91,19 @@ impl KeywordRules for MorphFaceUp {
                 _ => 0,
             };
             cost.mana = Some(m.with_x(x as u32));
+            chosen_x = Some(x as i32);
         }
         let ctx = Ctx::new(Some(obj), p);
         if !g.pay_cost(p, &cost, Some(obj), &ctx) {
             return Some(Err(Illegal("can't pay the cost to turn it face up".into())));
+        }
+        // CR 702.37f: other abilities of the permanent that refer to X use the value
+        // chosen as the special action was taken (see `etb_trigger_cast_info`).
+        if let Some(x) = chosen_x {
+            g.objects[obj.0 as usize]
+                .cast
+                .get_or_insert_with(Default::default)
+                .x = Some(x);
         }
         crate::facedown::turn_face_up(g, obj, true);
         // CR 702.37b: megamorph puts a +1/+1 counter on it as it's turned face up.

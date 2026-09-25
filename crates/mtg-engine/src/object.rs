@@ -335,6 +335,10 @@ pub struct GameObject {
     /// Hasn't been continuously controlled since its controller's most recent turn began
     /// (CR 302.6 "summoning sickness").
     pub summoning_sick: bool,
+    /// Timestamp of the moment it came under its current controller's control (it was
+    /// created, or control of it changed), e.g. for echo (CR 702.30a).
+    #[serde(default)]
+    pub control_since: Timestamp,
     pub stack: Option<Box<StackInfo>>,
     /// How this permanent was cast, if it was.
     pub cast: Option<Box<CastInfo>>,
@@ -405,7 +409,11 @@ pub fn etb_trigger_cast_info(
     let AbilityKind::Triggered(tr) = &t.ability.kind else {
         return None;
     };
-    if !matches!(tr.trigger, TriggerCond::EntersBattlefield(_)) || t.event.object != Some(t.source)
+    // CR 702.37f: "When this is turned face up" abilities use the X of its morph cost.
+    if !matches!(
+        tr.trigger,
+        TriggerCond::EntersBattlefield(_) | TriggerCond::TurnedFaceUp(_)
+    ) || t.event.object != Some(t.source)
     {
         return None;
     }
@@ -445,6 +453,7 @@ impl GameObject {
             attached_to: None,
             timestamp: 0,
             summoning_sick: true,
+            control_since: 0,
             stack: None,
             cast: None,
             choices: Choices::default(),

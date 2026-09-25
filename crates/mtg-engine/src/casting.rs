@@ -413,7 +413,7 @@ impl Game {
             // permitted by a rule or effect given the characteristics it would have.
             if !in_hand {
                 out.retain(|opt| {
-                    let chars = self.face_characteristics(card, opt.face);
+                    let chars = self.option_characteristics(card, opt);
                     self.permission_allows(p, card, &chars, false)
                 });
             }
@@ -421,10 +421,19 @@ impl Game {
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
         // Lands can't be cast (CR 305.9).
         out.retain(|opt| {
-            let chars = self.face_characteristics(card, opt.face);
+            let chars = self.option_characteristics(card, opt);
             !chars.is_land()
         });
         out
+    }
+
+    /// Characteristics a card would have as a spell cast this way (CR 601.3e): those of
+    /// the chosen face, or a face-down spell's (CR 702.37c, 708.2a).
+    pub fn option_characteristics(&self, card: ObjectId, opt: &CastOption) -> Characteristics {
+        if let CastMethod::FaceDown(_) = opt.method {
+            return crate::facedown::face_down_characteristics(self, card);
+        }
+        self.face_characteristics(card, opt.face)
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
@@ -445,7 +454,7 @@ impl Game {
     /// Whether the player could begin casting the card this way right now (timing,
     /// permissions, targets, and an optimistic cost check).
     pub fn can_begin_cast(&self, p: PlayerId, card: ObjectId, opt: &CastOption) -> bool {
-        let chars = self.face_characteristics(card, opt.face);
+        let chars = self.option_characteristics(card, opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
@@ -649,7 +658,7 @@ impl Game {
             .into_iter()
             .find(|o| o.method == method)
             .ok_or_else(|| Illegal(format!("no such casting method {method:?}")))?;
-        let chars = self.face_characteristics(card, opt.face);
+        let chars = self.option_characteristics(card, &opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
             return Err(Illegal("timing".into()));
         }

@@ -66,20 +66,7 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
             text,
         )],
         // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
-        // CR 702.29a: "[Cost], Discard this card: Draw a card."
-        K::Cycling => {
-            let mut cost = kw.cost.clone().unwrap_or_default();
-            cost.parts.push(CostPart::DiscardSelf);
-            let mut act = ActivatedAbility::new(
-                cost,
-                Body::effect(Effect::Draw {
-                    who: PlayerRef::You,
-                    n: Value::c(1),
-                }),
-            );
-            act.zone = FunctionZone::Hand;
-            vec![AbilityDef::new(AbilityKind::Activated(act), "Cycling")]
-        }
+        // CR 702.29 cycling and typecycling: see `kw/cycling.rs`.
         _ => crate::kw::derived(kw),
     }
 }
