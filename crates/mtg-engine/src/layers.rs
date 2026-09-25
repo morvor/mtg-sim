@@ -997,11 +997,27 @@ impl Game {
                     _ => {}
                 }
             }
+            // "You have protection from the chosen card name": the choice is the source's
+            // (CR 607.2d); the player's protection keeps the chosen value.
+            let bound: Vec<PlayerModification> = m
+                .into_iter()
+                .map(|(x, ctx)| match x {
+                    PlayerModification::ProtectionFrom(f)
+                        if crate::choices::filter_mentions_choice(&f) =>
+                    {
+                        PlayerModification::ProtectionFrom(match self.source_choices(&ctx) {
+                            Some(ch) => crate::choices::bind_choices(&f, ch),
+                            None => Filter::not(Filter::Any),
+                        })
+                    }
+                    other => other,
+                })
+                .collect();
             // Vanguard hand modifier (CR 902.3) handled by the variant module via HandSizeDelta.
             let p = &mut self.players[i];
             p.max_hand_size = max_hand;
             p.land_plays = land_plays;
-            p.mods = m.into_iter().map(|(x, _)| x).collect();
+            p.mods = bound;
         }
     }
 }

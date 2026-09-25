@@ -38,19 +38,24 @@ pub fn parse_keyword_line(text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     let parts = split_keyword_list(t);
     let mut out = Vec::new();
     for part in parts {
-        let kw = parse_one_keyword(part.trim(), ctx)?;
-        out.extend(compile_keyword(kw, part.trim()));
+        let part = part.trim();
+        for kw in parse_one_keyword(part, ctx)? {
+            out.extend(compile_keyword(kw, part));
+        }
     }
     Some(out)
 }
 
 /// Splits "Flying, first strike" but not "Ward—Pay 3 life, then ..." or costs with commas.
-fn split_keyword_list(t: &str) -> Vec<&str> {
+/// The qualities of a protection or hexproof ability stay together: "Protection from
+/// blue, from black, and from red", "Hexproof from artifacts, creatures, and
+/// enchantments".
+fn split_keyword_list(t: &str) -> Vec<String> {
     // Keyword lines with a cost after an em dash may contain commas in the cost.
     if t.contains('—') {
-        return vec![t];
+        return vec![t.to_string()];
     }
-    let mut out = Vec::new();
+    let mut raw = Vec::new();
     let mut start = 0;
     let mut depth = 0;
     for (i, ch) in t.char_indices() {
@@ -58,27 +63,87 @@ fn split_keyword_list(t: &str) -> Vec<&str> {
             '{' => depth += 1,
             '}' => depth -= 1,
             ',' | ';' if depth == 0 => {
-                out.push(&t[start..i]);
+                raw.push(&t[start..i]);
                 start = i + 1;
             }
             _ => {}
         }
     }
-    out.push(&t[start..]);
+    raw.push(&t[start..]);
+    merge_quality_fragments(raw.into_iter().map(str::trim), ", ")
+}
+
+/// Rejoins list fragments that continue the qualities of a preceding "protection from" /
+/// "hexproof from" phrase ("from black", "and from red", "and enchantments") to it,
+/// using `sep` (the separator they were split on).
+fn merge_quality_fragments<'a>(parts: impl Iterator<Item = &'a str>, sep: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in parts {
+        let lower = p.to_lowercase();
+        let continues = out.last().is_some_and(|prev| {
+            let prev = prev.to_lowercase();
+            (prev.starts_with("protection from") || prev.starts_with("hexproof from"))
+                && (lower.starts_with("from ")
+                    || lower.starts_with("and from ")
+                    || (!lower.is_empty() && !is_keyword_phrase(&lower)))
+        });
+        match out.last_mut() {
+            Some(prev) if continues => {
+                prev.push_str(sep);
+                prev.push_str(p);
+            }
+            _ => out.push(p.to_string()),
+        }
+    }
     out
 }
 
-fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
+/// Whether a fragment of a keyword list starts a keyword of its own.
+fn is_keyword_phrase(lower: &str) -> bool {
+    let lower = lower.trim();
+    lower.ends_with("walk")
+        || names().iter().any(|(n, _)| {
+            lower.starts_with(n.as_str())
+                && lower[n.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_alphanumeric())
+        })
+}
+
+/// Splits a list of keywords granted by an effect ("flying and trample", "first strike,
+/// vigilance, and lifelink", "flying and protection from black and from red") into one
+/// phrase per keyword.
+pub fn split_keyword_phrases(s: &str) -> Vec<String> {
+    let s = s.trim().trim_end_matches('.');
+    let mut parts: Vec<&str> = Vec::new();
+    for a in s.split(", and ") {
+        for b in a.split(" and ") {
+            for c in b.split(", ") {
+                parts.push(c.trim());
+            }
+        }
+    }
+    // Rejoining "from" fragments with " and " keeps "protection from black and from red"
+    // (and comma lists, whose "from ..." parts are equivalent) together.
+    merge_quality_fragments(parts.into_iter().filter(|p| !p.is_empty()), " and ")
+}
+
+fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
     let lower = part.to_lowercase();
-    // Landwalk variants: "islandwalk", "nonbasic landwalk", "legendary landwalk".
+    // Landwalk variants (CR 702.14a): "islandwalk", "nonbasic landwalk", "legendary
+    // landwalk", "snow swampwalk".
     if let Some(stem) = lower.strip_suffix("walk") {
-        if !stem.is_empty() && !stem.contains(' ') || stem.ends_with("land") {
+        let snow_type = stem
+            .strip_prefix("snow ")
+            .is_some_and(|t| !t.is_empty() && !t.contains(' '));
+        if !stem.is_empty() && !stem.contains(' ') || stem.ends_with("land") || snow_type {
             let filter = landwalk_filter(stem)?;
-            return Some(Keyword {
+            return Some(vec![Keyword {
                 filter: Some(filter),
                 text: Some(SmolStr::new(part)),
                 ..Keyword::new(KeywordKind::Landwalk)
-            });
+            }]);
         }
     }
     // Typecycling: "swampcycling {2}", "basic landcycling {1}", "wizardcycling {3}".
@@ -97,12 +162,12 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
             } else {
                 Filter::Subtype(subtype_word(ty)?)
             };
-            return Some(Keyword {
+            return Some(vec![Keyword {
                 cost: Some(cost),
                 filter: Some(filter),
                 text: Some(SmolStr::new(part)),
                 ..Keyword::new(KeywordKind::Cycling)
-            });
+            }]);
         }
     }
     let (name, kind) = names().iter().find(|(n, _)| {
@@ -118,15 +183,27 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
     kw.text = Some(SmolStr::new(part));
     let _ = ctx;
     match kind {
-        KeywordKind::Protection => {
-            kw.filter = Some(protection_filter(rest.strip_prefix("from")?.trim())?);
-        }
-        KeywordKind::Hexproof => {
-            if let Some(r) = rest.strip_prefix("from") {
-                kw.filter = Some(protection_filter(r.trim())?);
-            } else if !rest.is_empty() {
+        // CR 702.16g–i, 702.11f–g: "from A and from B" and "from each [characteristic]"
+        // are shorthand for separate abilities, one per quality.
+        KeywordKind::Protection | KeywordKind::Hexproof => {
+            let qualities = if name.as_str() == "hexproof from" {
+                protection_qualities(rest)?
+            } else if let Some(r) = rest.strip_prefix("from ") {
+                protection_qualities(r)?
+            } else if rest.is_empty() && *kind == KeywordKind::Hexproof {
+                return Some(vec![kw]);
+            } else {
                 return None;
-            }
+            };
+            return Some(
+                qualities
+                    .into_iter()
+                    .map(|f| Keyword {
+                        filter: Some(f),
+                        ..kw.clone()
+                    })
+                    .collect(),
+            );
         }
         KeywordKind::Enchant => {
             let r = rest;
@@ -187,7 +264,7 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
             }
         }
     }
-    Some(kw)
+    Some(vec![kw])
 }
 
 fn cost_then_number(s: &str) -> Option<(Cost, i32)> {
@@ -212,41 +289,93 @@ pub fn parse_keyword_cost(s: &str) -> Option<Cost> {
     super::costs::parse_cost(&s.replace('—', ", ")).map(|(c, _)| c)
 }
 
-/// "from red", "from everything", "from creatures", "from each color", "from multicolored".
+/// "from red", "from everything", "from creatures", "from each color", "from multicolored"
+/// as a single filter (the union of its qualities).
 pub fn protection_filter(s: &str) -> Option<Filter> {
+    let mut fs = protection_qualities(s)?;
+    Some(if fs.len() == 1 {
+        fs.pop().unwrap()
+    } else {
+        Filter::Or(fs)
+    })
+}
+
+/// The qualities of a protection or hexproof ability, one per separate ability (the text
+/// after "from"): "red" → [red]; "black and from red" and "blue, from black, and from
+/// red" → one per color (CR 702.16g, 702.11f); "each color" → one per color (CR 702.16h,
+/// 702.11g); "artifacts and enchantments" → [artifact or enchantment].
+pub fn protection_qualities(s: &str) -> Option<Vec<Filter>> {
     let s = s.trim().trim_end_matches('.');
-    if s == "everything" {
-        return Some(Filter::Any);
+    let s = s.strip_prefix("from ").unwrap_or(s);
+    let mut out = Vec::new();
+    for part in s
+        .split(", and from ")
+        .flat_map(|p| p.split(", from "))
+        .flat_map(|p| p.split(" and from "))
+    {
+        let part = part.trim();
+        // CR 702.16h, 702.11g: "each color" stands for one ability per color.
+        if part == "each color" || part == "all colors" {
+            out.extend(Color::ALL.iter().map(|c| Filter::Color(*c)));
+            continue;
+        }
+        out.push(single_quality(part)?);
     }
-    if s == "each color" || s == "all colors" {
-        return Some(Filter::not(Filter::Colorless));
+    (!out.is_empty()).then_some(out)
+}
+
+/// One quality ("red", "creatures", "artifacts, creatures, and enchantments", "mana
+/// value 3 or greater").
+fn single_quality(s: &str) -> Option<Filter> {
+    let s = s.trim();
+    match s {
+        // CR 702.16j
+        "everything" => return Some(Filter::Any),
+        "multicolored" => return Some(Filter::Multicolored),
+        "monocolored" => return Some(Filter::Monocolored),
+        "colorless" => return Some(Filter::Colorless),
+        // CR 607.2d: "protection from the chosen color" (linked to "choose a color").
+        "the chosen color" => return Some(Filter::ChosenColor),
+        // CR 702.16k: protection from a player is protection from each object that
+        // player controls (or owns, outside the battlefield and stack).
+        "the chosen player" => return Some(Filter::ControlledBy(PlayerRel::Chosen)),
+        // CR 702.16a: a quality is a card name only if the ability says it's a name.
+        "the chosen card name" | "the chosen name" => return Some(Filter::ChosenName),
+        "each of your opponents" | "your opponents" => {
+            return Some(Filter::ControlledBy(PlayerRel::Opponent))
+        }
+        // CR 702.16a: a supertype quality applies to sources with that supertype.
+        "snow" => return Some(Filter::Supertype(Supertype::Snow)),
+        "spells that are one or more colors" => {
+            return Some(Filter::and(vec![
+                Filter::Spell,
+                Filter::not(Filter::Colorless),
+            ]))
+        }
+        _ => {}
     }
-    if s == "multicolored" {
-        return Some(Filter::Multicolored);
+    if let Some(r) = s.strip_prefix("mana value ") {
+        let (n, cmp) = if let Some(n) = r.strip_suffix(" or greater") {
+            (n, Cmp::Ge)
+        } else if let Some(n) = r.strip_suffix(" or less") {
+            (n, Cmp::Le)
+        } else {
+            (r, Cmp::Eq)
+        };
+        let n: i32 = n.trim().parse().ok()?;
+        return Some(Filter::ManaValue(cmp, Box::new(Value::Const(n))));
     }
-    if s == "monocolored" {
-        return Some(Filter::Monocolored);
-    }
-    if s == "colorless" {
-        return Some(Filter::Colorless);
-    }
-    // CR 607.2d: "protection from the chosen color" (linked to "choose a color").
-    if s == "the chosen color" {
-        return Some(Filter::ChosenColor);
-    }
-    // CR 702.16k: protection from a player is protection from each object that player
-    // controls (or owns, outside the battlefield and stack).
-    if s == "the chosen player" {
-        return Some(Filter::ControlledBy(PlayerRel::Chosen));
-    }
-    // "red and from white" / "red and white" / "white and from blue"
+    // "red and white", "artifacts and enchantments", "artifacts, creatures, and
+    // enchantments": a union of qualities.
     let parts: Vec<&str> = s
-        .split(" and from ")
+        .split(", and ")
         .flat_map(|p| p.split(" and "))
+        .flat_map(|p| p.split(", "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
         .collect();
     let mut fs = Vec::new();
     for p in parts {
-        let p = p.trim();
         if let Some(c) = Color::from_word(p) {
             fs.push(Filter::Color(c));
         } else if let Some((f, _, tail)) = parse_object_phrase(p) {
@@ -258,10 +387,10 @@ pub fn protection_filter(s: &str) -> Option<Filter> {
             return None;
         }
     }
-    Some(if fs.len() == 1 {
-        fs.pop().unwrap()
-    } else {
-        Filter::Or(fs)
+    Some(match fs.len() {
+        0 => return None,
+        1 => fs.pop().unwrap(),
+        _ => Filter::Or(fs),
     })
 }
 
@@ -287,6 +416,11 @@ fn landwalk_filter(stem: &str) -> Option<Filter> {
         "desert" | "island" | "swamp" | "mountain" | "forest" | "plains" => {
             Filter::Subtype(subtype_word(stem)?)
         }
+        // CR 702.14c: "snow swampwalk" — both the supertype and the subtype.
+        other if other.starts_with("snow ") => Filter::and(vec![
+            Filter::Supertype(Supertype::Snow),
+            landwalk_filter(&other["snow ".len()..])?,
+        ]),
         other => Filter::Subtype(subtype_word(other)?),
     })
 }
