@@ -280,7 +280,10 @@ impl Game {
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
             // CR 509.1h: attackers are neither blocked nor unblocked until blockers are declared.
             Filter::Unblocked => self.combat.as_ref().is_some_and(|cb| cb.is_unblocked(id)),
-            Filter::AttackingAlone | Filter::BlockingAlone | Filter::HadToAttack => {
+            Filter::AttackingAlone
+            | Filter::BlockingAlone
+            | Filter::AttackingPlayerAlone
+            | Filter::HadToAttack => {
                 crate::combat::combat_filter(self, f, id)
             }
             Filter::AttackingPlayer(rel) => self

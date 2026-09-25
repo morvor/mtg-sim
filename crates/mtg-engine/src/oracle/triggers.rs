@@ -64,7 +64,8 @@ pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
             "each upkeep" | "each player's upkeep" => (TriggerStep::Upkeep, PlayerRel::Any),
             "each opponent's upkeep" => (TriggerStep::Upkeep, PlayerRel::Opponent),
             "your end step" => (TriggerStep::End, PlayerRel::You),
-            "each end step" => (TriggerStep::End, PlayerRel::Any),
+            // CR 513.1a: "at end of turn" was errata'd to "at the beginning of the end step".
+            "each end step" | "the end step" => (TriggerStep::End, PlayerRel::Any),
             "each opponent's end step" => (TriggerStep::End, PlayerRel::Opponent),
             "the next end step" | "the beginning of the next end step" => {
                 (TriggerStep::End, PlayerRel::Any)

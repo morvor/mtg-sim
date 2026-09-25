@@ -2206,6 +2206,12 @@ pub fn combat_filter(g: &Game, f: &Filter, id: ObjectId) -> bool {
     match f {
         Filter::AttackingAlone => c.attackers.len() == 1 && c.attackers[0].id == id,
         Filter::BlockingAlone => c.blockers.len() == 1 && c.blockers[0].id == id,
+        Filter::AttackingPlayerAlone => match c.attack_target(id) {
+            Some(t @ Entity::Player(_)) => {
+                c.attackers.iter().filter(|a| a.target == Some(t)).count() == 1
+            }
+            _ => false,
+        },
         Filter::HadToAttack => c.had_to_attack.contains(&id),
         _ => false,
     }

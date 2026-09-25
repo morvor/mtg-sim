@@ -775,6 +775,8 @@ pub enum Filter {
     /// "attacking alone" / "blocking alone" (CR 506.5).
     AttackingAlone,
     BlockingAlone,
+    /// "attacking a player alone" (CR 506.6).
+    AttackingPlayerAlone,
     /// Had to attack in the current combat (CR 506.7).
     HadToAttack,
     Power(Cmp, Box<Value>),
