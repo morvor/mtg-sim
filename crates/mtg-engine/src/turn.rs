@@ -111,6 +111,13 @@ pub struct TurnState {
     pub upkeeps: u32,
     /// The player whose turn it was last turn.
     pub previous_active: Option<PlayerId>,
+    /// Steps that have begun this turn, in order (for combat timing windows, CR 506.8).
+    #[serde(default)]
+    pub step_log: Vec<Step>,
+    /// (attacking player, attacked player) pairs for creatures declared as attackers this
+    /// turn (CR 508.6: "has attacked [a player]").
+    #[serde(default)]
+    pub attacked_players: Vec<(PlayerId, PlayerId)>,
 }
 
 impl TurnState {
@@ -130,6 +137,8 @@ impl TurnState {
             extra: false,
             upkeeps: 0,
             previous_active: None,
+            step_log: vec![],
+            attacked_players: vec![],
         }
     }
 
@@ -158,6 +167,8 @@ impl Game {
     /// Shuffles libraries, determines the starting player, draws opening hands, runs
     /// mulligans, and begins the first turn.
     pub fn start(&mut self) {
+        // CR 607.2n: actions taken before shuffling decks to start the game.
+        crate::opening_hand::before_shuffle_actions(self);
         // CR 103.3: each player shuffles their deck.
         for p in self.player_ids() {
             self.shuffle_library(p);
@@ -173,6 +184,8 @@ impl Game {
         };
         self.turn.starting_player = starting;
         self.turn.active = starting;
+        // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
+        crate::variants::begin_game(self);
         // CR 103.4–103.5: draw opening hands, then mulligans.
         let hand_size = self.config.starting_hand_size;
         for p in self.apnap() {
@@ -183,6 +196,7 @@ impl Game {
         if !self.config.skip_mulligans {
             crate::mulligan::run_mulligans(self);
         }
+        crate::opening_hand::opening_hand_actions(self);
         self.events.clear();
         self.begin_turn(starting, false);
     }
@@ -229,7 +243,9 @@ impl Game {
         self.turn.combat_phases = 0;
         self.turn.upkeeps = 0;
         self.turn.cleanup_priority = false;
-        self.history = TurnHistory::default();
+        self.turn.step_log.clear();
+        self.turn.attacked_players.clear();
+        self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
         for p in self.players.iter_mut() {
             p.lands_played_this_turn = 0;
@@ -290,7 +306,10 @@ impl Game {
             return;
         }
         self.expire_effects_at_step_begin(step);
+        self.turn.step_log.push(step);
         self.emit(Event::StepBegan { step, active });
+        // CR 614.10b: an action a skip effect scheduled is the first thing that happens.
+        crate::skip::run_step_start_actions(self);
         match step {
             Step::Untap => self.untap_step_actions(),
             Step::Upkeep => {
@@ -318,18 +337,7 @@ impl Game {
                 self.turn.combat_phases += 1;
                 crate::combat::begin_combat(self);
             }
-            Step::DeclareAttackers => {
-                crate::combat::declare_attackers_step(self);
-                // CR 508.8: no attackers → skip declare blockers and combat damage steps.
-                if self.combat.as_ref().is_none_or(|c| c.attackers.is_empty()) {
-                    self.turn.schedule.retain(|s| {
-                        !matches!(
-                            s,
-                            Step::DeclareBlockers | Step::CombatDamage | Step::FirstStrikeDamage
-                        )
-                    });
-                }
-            }
+            Step::DeclareAttackers => crate::combat::declare_attackers_step(self),
             Step::DeclareBlockers => crate::combat::declare_blockers_step(self),
             Step::FirstStrikeDamage => crate::combat::combat_damage_step(self, true),
             Step::CombatDamage => {
@@ -440,6 +448,17 @@ impl Game {
         let step = self.turn.step;
         // CR 500.5: effects lasting until end of step expire; mana empties.
         self.empty_mana_pools();
+        if step == Step::DeclareAttackers && self.combat.as_ref().is_none_or(|c| !c.any_attackers) {
+            // CR 508.8: if no creatures were declared as attackers or put onto the
+            // battlefield attacking, skip this combat's declare blockers and combat damage
+            // steps.
+            while matches!(
+                self.turn.schedule.first(),
+                Some(Step::DeclareBlockers | Step::CombatDamage | Step::FirstStrikeDamage)
+            ) {
+                self.turn.schedule.remove(0);
+            }
+        }
         if step == Step::EndOfCombat {
             // CR 511.3 / 500.5a
             crate::combat::end_combat(self);
@@ -457,20 +476,35 @@ impl Game {
 
     fn next_step(&mut self) {
         if self.turn.schedule.is_empty() {
-            // Next turn (CR 500.7: extra turns first).
-            let next = if let Some(p) = self.extra_turns.pop() {
-                if self.player(p).in_game() {
-                    self.begin_turn(p, true);
-                    return;
+            // Next turn (CR 500.7: extra turns first). Skipped turns never begin
+            // (CR 614.10).
+            let mut after = self.turn.active;
+            for _ in 0..1000 {
+                if let Some(p) = self.extra_turns.pop() {
+                    if self.player(p).in_game() {
+                        if crate::skip::consume_turn_skip(self, p) {
+                            continue;
+                        }
+                        self.begin_turn(p, true);
+                        return;
+                    }
                 }
-                self.next_player(self.turn.active)
-            } else {
-                self.next_player(self.turn.active)
-            };
+                let next = self.next_player(after);
+                if crate::skip::consume_turn_skip(self, next) {
+                    after = next;
+                    continue;
+                }
+                self.begin_turn(next, false);
+                return;
+            }
+            let next = self.next_player(after);
             self.begin_turn(next, false);
             return;
         }
         let mut next = self.turn.schedule.remove(0);
+        if next == Step::CombatDamage && self.dirty {
+            self.recompute();
+        }
         if next == Step::CombatDamage
             && self.combat.as_ref().is_some_and(|c| !c.first_strike_step)
             && crate::combat::any_first_strike(self)
@@ -483,7 +517,7 @@ impl Game {
         self.turn.stage = Stage::Begin;
         self.turn.priority = None;
         self.turn.passes = 0;
-        // Conditional statics may depend on the step ("during combat").
+        // Static abilities whose conditions depend on the step are re-evaluated.
         self.dirty = true;
     }
 
@@ -522,6 +556,10 @@ impl Game {
             Step::End => StepKind::End,
             _ => return false,
         };
+        // CR 614.1b: static "skip" effects replace the step with nothing.
+        if crate::skip::static_skip(self, kind, active) {
+            self.players[active.idx()].skips.push(kind);
+        }
         if let Some(i) = self.players[active.idx()]
             .skips
             .iter()
@@ -529,8 +567,17 @@ impl Game {
         {
             self.players[active.idx()].skips.remove(i);
             if kind == StepKind::Combat {
-                // Skip the whole combat phase.
-                self.turn.schedule.retain(|s| !s.is_combat());
+                // Skip the whole combat phase (only this one, not additional combat phases
+                // later in the turn).
+                while let Some(s) = self.turn.schedule.first().copied() {
+                    if !s.is_combat() {
+                        break;
+                    }
+                    self.turn.schedule.remove(0);
+                    if s == Step::EndOfCombat {
+                        break;
+                    }
+                }
             }
             return true;
         }
@@ -563,12 +610,46 @@ impl Game {
         for id in to_untap {
             self.untap(id);
         }
+        // CR 701.43a: exertion lasts until its controller's next untap step.
+        for id in self.battlefield.clone() {
+            if self.obj(id).controller == active {
+                self.objects[id.0 as usize].exerted = false;
+            }
+        }
+        self.expire_through_next_untap_step(active);
+    }
+
+    /// "Doesn't untap during its controller's next untap step": that untap step has now
+    /// passed for the permanents the active player controls (and the effect no longer
+    /// applies to objects that left the battlefield, CR 400.7).
+    fn expire_through_next_untap_step(&mut self, active: PlayerId) {
+        let objects = &self.objects;
+        let battlefield = &self.battlefield;
+        for e in self.rule_effects.iter_mut() {
+            if !matches!(e.duration, Duration::ThroughNextUntapStep) {
+                continue;
+            }
+            if let Some(v) = e.objects.as_mut() {
+                v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
+            }
+        }
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughNextUntapStep)
+                || e.objects.as_ref().is_some_and(|v| !v.is_empty())
+        });
+        self.dirty = true;
     }
 
     pub fn set_day(&mut self, is_day: bool) {
         if self.day != Some(is_day) {
+            let had_designation = self.day.is_some();
             self.day = Some(is_day);
-            self.emit(Event::DayNightChanged { is_day });
+            // CR 731.1a: "day becomes night"/"night becomes day" means losing one
+            // designation and gaining the other; the game first becoming day or night
+            // from neither isn't such a change.
+            if had_designation {
+                self.emit(Event::DayNightChanged { is_day });
+            }
             crate::keyword_impls::day_night_changed(self);
         }
     }
@@ -625,6 +706,9 @@ impl Game {
             o.deathtouch_damage = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
+        self.delayed_triggers
+            .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
         self.dirty = true;
     }
 

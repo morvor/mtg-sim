@@ -1276,7 +1276,7 @@ fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
         },
         "can't be sacrificed" => Restriction::CantBeSacrificed(f),
         "can't be blocked by more than one creature" => {
-            Restriction::MaxBlockers { attacker: f, n: 1 }
+            Restriction::MaxBlockedBy { attacker: f, n: 1 }
         }
         // Overrides CR 702.3b.
         "can attack as though it didn't have defender"
