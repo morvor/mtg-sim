@@ -301,12 +301,22 @@ impl Game {
         }
         // CR 208.3, 302.4, 301.7a: power and toughness are characteristics only creatures
         // have; a noncreature permanent has none, even with a printed power and toughness
-        // (such as a Vehicle).
+        // (such as a Vehicle). Likewise loyalty is a characteristic only planeswalkers have
+        // (CR 306.5) and defense one only battles have (CR 310.4).
         for id in &live {
             let o = &mut self.objects[id.0 as usize];
-            if o.zone == Zone::Battlefield && !o.chars.is(CardType::Creature) {
+            if o.zone != Zone::Battlefield {
+                continue;
+            }
+            if !o.chars.is(CardType::Creature) {
                 o.chars.power = None;
                 o.chars.toughness = None;
+            }
+            if !o.chars.is(CardType::Planeswalker) {
+                o.chars.loyalty = None;
+            }
+            if !o.chars.is(CardType::Battle) {
+                o.chars.defense = None;
             }
         }
 
