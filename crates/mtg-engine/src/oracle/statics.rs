@@ -525,6 +525,9 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::Count(f), rest.to_string()));
     }
+    if let Some(r) = s.strip_prefix("the sacrificed ") {
+        return sacrificed_value(r);
+    }
     for (p, v) in [
         ("its power", Value::PowerOf(Box::new(b.it.clone()))),
         ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
@@ -542,6 +545,31 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     let (n, rest) = parse_number(s)?;
     Some((n, rest.to_string()))
+}
+
+/// "[the sacrificed] creature's power", "artifact's mana value": a characteristic of the
+/// permanent sacrificed to pay the cost (its last known information).
+fn sacrificed_value(r: &str) -> Option<(Value, String)> {
+    let (noun, r) = r.split_once("'s ")?;
+    if !matches!(
+        noun,
+        "creature" | "artifact" | "permanent" | "land" | "enchantment"
+    ) {
+        return None;
+    }
+    let what = Box::new(Sel::Var(vars::SACRIFICED));
+    for (p, v) in [
+        ("power", Value::PowerOf(what.clone())),
+        ("toughness", Value::ToughnessOf(what.clone())),
+        ("mana value", Value::ManaValueOf(what.clone())),
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with([' ', ',', '.']) {
+                return Some((v, rest.to_string()));
+            }
+        }
+    }
+    None
 }
 
 /// "*/*" P/T with a CDA line that the compiler didn't catch: nothing to add by default.
