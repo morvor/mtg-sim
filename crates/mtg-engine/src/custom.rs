@@ -15,16 +15,106 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     }
 }
 
+fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+    g.cast_info(ctx)
+}
+
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     let _ = (g, ctx);
+    // "mana_spent_of:U": amount of mana of one type spent to cast it (adamant).
+    if let Some(t) = name.strip_prefix("mana_spent_of:") {
+        let Some(t) = t
+            .chars()
+            .next()
+            .and_then(crate::mana::ManaType::from_letter)
+        else {
+            return 0;
+        };
+        return cast_info(g, ctx).map_or(0, |c| {
+            c.mana_spent.iter().filter(|m| **m == t).count() as i64
+        });
+    }
     match name {
+        // "at least three mana of the same color was spent to cast it" (adamant).
+        "max_mana_spent_of_one_color" => cast_info(g, ctx).map_or(0, |c| {
+            [
+                crate::mana::ManaType::W,
+                crate::mana::ManaType::U,
+                crate::mana::ManaType::B,
+                crate::mana::ManaType::R,
+                crate::mana::ManaType::G,
+            ]
+            .iter()
+            .map(|t| c.mana_spent.iter().filter(|m| *m == t).count() as i64)
+            .max()
+            .unwrap_or(0)
+        }),
+        // Creatures that died under the controller's control this turn.
+        "creatures_you_controlled_died_this_turn" => g
+            .history
+            .creatures_died
+            .iter()
+            .filter(|o| g.obj(**o).controller == ctx.controller)
+            .count() as i64,
+        // "the total number of cards in all players' hands"
+        "cards_in_all_hands" => g
+            .players_in_game()
+            .into_iter()
+            .map(|p| g.player(p).hand.len() as i64)
+            .sum(),
+        // "the total life lost by your opponents this turn"
+        "life_lost_by_opponents_this_turn" => g
+            .history
+            .life_lost
+            .iter()
+            .filter(|(p, _)| g.are_opponents(ctx.controller, **p))
+            .map(|(_, n)| *n as i64)
+            .sum(),
+        // Number of spells the controller has cast this turn.
+        "spells_you_cast_this_turn" => g
+            .history
+            .spells_cast
+            .iter()
+            .filter(|(p, _)| *p == ctx.controller)
+            .count() as i64,
         _ => 0,
     }
 }
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     let _ = (g, ctx);
+    // "you've cast another red spell this turn": a spell of that color (as it was on the
+    // stack) other than the source.
+    if let Some(c) = name.strip_prefix("you_cast_another_spell_this_turn:") {
+        let Some(color) = c.chars().next().and_then(Color::from_letter) else {
+            return false;
+        };
+        return g.history.spells_cast.iter().any(|(p, o)| {
+            *p == ctx.controller && Some(*o) != ctx.source && g.obj(*o).chars.colors.contains(color)
+        });
+    }
     match name {
+        // "you attacked this turn" (raid): you declared one or more attackers this turn
+        // (CR 508.1).
+        "you_attacked_this_turn" => g
+            .history
+            .attackers
+            .iter()
+            .any(|a| g.obj(*a).controller == ctx.controller),
+        // "a permanent left the battlefield under your control this turn" (revolt).
+        "permanent_left_under_your_control_this_turn" => g
+            .history
+            .permanents_left
+            .iter()
+            .any(|o| g.obj(*o).controller == ctx.controller),
+        // "you were the starting player" (CR 103.1).
+        "you_were_the_starting_player" => g.turn.starting_player == ctx.controller,
+        // "an opponent lost life this turn".
+        "opponent_lost_life_this_turn" => g
+            .history
+            .life_lost
+            .iter()
+            .any(|(p, n)| *n > 0 && g.are_opponents(ctx.controller, *p)),
         _ => false,
     }
 }

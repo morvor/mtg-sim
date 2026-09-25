@@ -51,6 +51,16 @@ impl Game {
         }
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
+        // CR 614.13a, 614.13c: while effects that modify how these objects enter are
+        // applied, the objects entering simultaneously can't be chosen or moved by them.
+        let prev_entering = std::mem::replace(
+            &mut self.entering,
+            moves
+                .iter()
+                .filter(|m| m.to == Zone::Battlefield)
+                .map(|m| m.obj)
+                .collect(),
+        );
         // CR 616.1: when several players choose among replacement effects for
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
@@ -115,7 +125,7 @@ impl Game {
                 _ => None,
             })
             .collect();
-        let prev_entering = std::mem::replace(&mut self.entering, entering);
+        self.entering = entering;
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -260,6 +270,9 @@ impl Game {
                 self.objects[p.0 as usize].paired_with = None;
             }
         }
+        if from == Zone::Exile && kind == ObjKind::CardCopy {
+            crate::designations::prepared_copy_left_exile(self, old_id);
+        }
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
         // An Aura, Equipment, or Fortification leaving the battlefield becomes unattached.
@@ -269,6 +282,18 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        if m.to == Zone::Battlefield {
+            // Choices made as it entered (CR 614.12a) or while it was cast are the
+            // permanent's choices (CR 607.2d), still linked to the abilities that made
+            // them.
+            let ch = self.obj(old_id).choices.clone();
+            let linked = self.obj(old_id).linked_choices.clone();
+            let n = &mut self.objects[new_id.0 as usize];
+            n.choices = ch;
+            for (link, c) in linked {
+                n.linked_choices.entry(link).or_insert(c);
+            }
+        }
         {
             let face = m.etb.face;
             let n = &mut self.objects[new_id.0 as usize];
@@ -310,9 +335,11 @@ impl Game {
                         n.attached_to = Some(to);
                     }
                 }
+                let mut copy_effect = None;
                 if let Some(src) = m.etb.copy_of {
                     let values = Box::new(self.obj(src).copiable.clone());
                     let id = self.new_effect_id();
+                    copy_effect = Some(id);
                     let ts = self.obj(new_id).timestamp;
                     self.effects.push(ContinuousEffect {
                         id,
@@ -324,8 +351,31 @@ impl Game {
                         mods: vec![],
                         layer1: Some(Layer1::Copy {
                             values,
-                            exceptions: m.etb.copy_exceptions.clone(),
+                            exceptions: m
+                                .etb
+                                .copy_exceptions
+                                .iter()
+                                .chain(&m.etb.copiable_mods)
+                                .cloned()
+                                .collect(),
                         }),
+                        created_turn: self.turn.number,
+                    });
+                } else if !m.etb.copiable_mods.is_empty() {
+                    // CR 707.2, 613.2a: an "as this enters" ability that sets power and
+                    // toughness modifies its copiable values (its own, when it isn't a
+                    // copy).
+                    let id = self.new_effect_id();
+                    let ts = self.obj(new_id).timestamp;
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: Some(new_id),
+                        controller,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods: vec![],
+                        layer1: Some(Layer1::Copiable(m.etb.copiable_mods.clone())),
                         created_turn: self.turn.number,
                     });
                 }
@@ -417,6 +467,20 @@ impl Game {
                     let before = self.effects.len();
                     self.exec(&e, &mut c);
                     crate::layers::as_enters_copiable(self, new_id, before);
+                }
+                if let Some(eid) = copy_effect {
+                    // CR 607.2d, 707.9: choices made as it entered by the abilities it has
+                    // through the copy effect belong to those abilities as copied.
+                    let n = &mut self.objects[new_id.0 as usize];
+                    let copied: Vec<(u16, crate::object::Choices)> = n
+                        .linked_choices
+                        .iter()
+                        .map(|(k, c)| (crate::layers::copied_link(*k, eid), c.clone()))
+                        .collect();
+                    for (k, c) in copied {
+                        n.linked_choices.entry(k).or_insert(c);
+                    }
+                    self.dirty = true;
                 }
                 if let Some(target) = m.etb.attacking {
                     crate::combat::put_onto_battlefield_attacking(self, new_id, target);

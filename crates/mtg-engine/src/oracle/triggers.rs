@@ -53,8 +53,21 @@ fn split_trigger(t: &str) -> Option<(&str, &str)> {
     None
 }
 
-/// Returns (trigger, what "it" refers to, what "that player" refers to).
+/// Returns (trigger, what "it" refers to, what "that player" refers to). Falls back to
+/// the pluggable [`crate::oracle::patterns::TriggerPattern`]s when the built-in phrases
+/// don't match.
 pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    parse_trigger_condition_core(l).or_else(|| {
+        let l = l.trim();
+        let r = l
+            .strip_prefix("whenever ")
+            .or_else(|| l.strip_prefix("when "))
+            .unwrap_or(l);
+        crate::oracle_ext::parse_trigger_ext(r)
+    })
+}
+
+fn parse_trigger_condition_core(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = l.trim();
     let obj = || Sel::TriggerObject;
     // CR 511.2: "at end of combat" triggers as the end of combat step begins.

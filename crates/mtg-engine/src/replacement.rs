@@ -25,12 +25,18 @@ pub struct EtbInfo {
     /// Enters as a copy of this object's copiable values (CR 707.9).
     pub copy_of: Option<ObjectId>,
     pub copy_exceptions: Vec<Modification>,
+    /// Modifications to its copiable values from "as this enters" abilities that set
+    /// power and toughness (CR 707.2), applied after any copy effect it enters with.
+    pub copiable_mods: Vec<Modification>,
     pub face_down: Option<KeywordKind>,
     pub transformed: bool,
     pub attacking: Option<Entity>,
     pub blocking: Option<ObjectId>,
     pub attach_to: Option<Entity>,
-    /// "As this enters, ..." effects to perform as it enters: (source ability ctx, effect).
+    /// Effects to perform right after it is put onto the battlefield, before its
+    /// zone-change event is emitted: (source ability ctx, effect). ("As this enters"
+    /// replacement effects run earlier, while the replacement applies; see
+    /// [`ReplacementAction::AsEnters`].)
     pub as_enters: Vec<(Ctx, Effect)>,
     /// Cast info carried from the stack.
     pub cast: Option<CastInfo>,
@@ -272,12 +278,30 @@ impl Game {
         if let ReplEvent::Move(m) = ev {
             if m.to == Zone::Battlefield && scope != CandScope::NotEntry {
                 let o = self.obj(m.obj);
-                for a in &o.chars.abilities {
+                // CR 614.12, 707.9: once it's entering as a copy, the copied object's
+                // "as this enters" / "enters with" abilities apply instead of its own.
+                // A card entering with another face up (a modal DFC's back face played
+                // as a land, or entering transformed) has that face's abilities.
+                let face = if m.etb.transformed {
+                    Some(FaceState::Back)
+                } else {
+                    m.etb.face
+                };
+                let face_chars = match (face, &o.card) {
+                    (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
+                    _ => None,
+                };
+                let abilities = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => &self.obj(c).copiable.abilities,
+                    (None, Some(fc)) => &fc.abilities,
+                    (None, None) => &o.chars.abilities,
+                };
+                for a in abilities {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // CR 614.12: only effects that affect just that permanent apply
+                        // from the permanent itself ("Permanents enter tapped" doesn't
+                        // affect the permanent that has it).
                         if let StaticEffect::Replacement(d) = &s.effect {
-                            // CR 614.12: such an effect comes from the permanent itself
-                            // only if it affects just that permanent ("Permanents enter
-                            // tapped" doesn't affect the permanent that has it).
                             if matches!(
                                 d.event,
                                 ReplacementEvent::EntersBattlefield(Filter::Source)
@@ -625,9 +649,28 @@ impl Game {
 
     /// Checks an entering object against a filter "as it would exist on the battlefield"
     /// (CR 614.12). We approximate with its current characteristics plus the
-    /// modifications already made to how it enters.
+    /// modifications already made to how it enters, and the player who will control it.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
-        self.matches(m.obj, f, ctx)
+        let view = EnteringView {
+            obj: m.obj,
+            controller: self.entering_controller(m),
+        };
+        self.matches_view(&view, m.obj, f, ctx)
+    }
+
+    /// The player who will control a permanent entering the battlefield (as in
+    /// `perform_move`).
+    pub fn entering_controller(&self, m: &MoveEv) -> PlayerId {
+        let o = self.obj(m.obj);
+        m.etb
+            .controller
+            .or(if o.zone == Zone::Stack {
+                Some(o.controller)
+            } else {
+                None
+            })
+            .or(m.by)
+            .unwrap_or(o.owner)
     }
 
     fn apply_replacement(
@@ -745,7 +788,10 @@ impl Game {
             }
             (ReplacementAction::EnterWithCounters(k, v), ReplEvent::Move(mut m)) => {
                 let mut c = ctx.clone();
-                c.source = Some(m.obj);
+                // The amount is computed for the replacement effect's source: the entering
+                // permanent itself, or e.g. "each other creature you control enters with X
+                // additional counters, where X is the number of counters on ~".
+                c.source = cand.source.or(Some(m.obj));
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
@@ -755,10 +801,40 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::AsEnters(e), ReplEvent::Move(mut m)) => {
+                // CR 614.12a: choices required by a replacement effect that modifies how a
+                // permanent enters are made before it enters. The effect runs now, with
+                // the entering object as its source; choices are stored on that object
+                // and carried onto the permanent (see `perform_move`), and entry
+                // modifications ("it enters tapped") are applied to this event.
                 let mut c = ctx.clone();
                 c.source = Some(m.obj);
+                c.controller = m.etb.controller.unwrap_or(cand.controller);
                 c.cast = m.etb.cast.clone();
-                m.etb.as_enters.push((c, *e));
+                c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
+                c.entering = Some(crate::eval::EntryMods::default());
+                self.exec(&e, &mut c);
+                if let Some(em) = c.entering.take() {
+                    m.etb.tapped |= em.tapped;
+                    m.etb.counters.extend(em.counters);
+                    m.etb.copy_exceptions.extend(em.copy_exceptions);
+                    m.etb.copiable_mods.extend(em.copiable);
+                    // CR 614.1c: "it enters with haste" — performed on the permanent as
+                    // it's put onto the battlefield.
+                    for e in em.on_entry {
+                        m.etb.as_enters.push((c.clone(), e));
+                    }
+                    if em.prepared {
+                        // CR 722.3a/c: it gains the designation (and its prepare-spell
+                        // copy is created) as it's put onto the battlefield.
+                        m.etb.as_enters.push((
+                            c.clone(),
+                            Effect::SetPrepared {
+                                what: Sel::This,
+                                prepared: true,
+                            },
+                        ));
+                    }
+                }
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterAsCopy { filter, optional }, ReplEvent::Move(mut m)) => {
@@ -901,6 +977,29 @@ impl Game {
                         || ob.is(CardType::Battle))
             }
         }
+    }
+}
+
+/// Characteristics of an object about to enter the battlefield, with the controller it
+/// will have there (CR 614.12).
+struct EnteringView {
+    obj: ObjectId,
+    controller: PlayerId,
+}
+
+impl crate::eval::View for EnteringView {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        &g.obj(id).chars
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.obj {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.obj).then_some(self.controller)
     }
 }
 

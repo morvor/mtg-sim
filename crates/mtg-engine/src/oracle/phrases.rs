@@ -247,6 +247,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
+            // "permanent card": a card with a permanent type (CR 110.4a), not an
+            // object on the battlefield.
+            let last = match (last, &nf) {
+                (Filter::Permanent, Filter::Any) => Filter::PermanentCard,
+                (l, _) => l,
+            };
             heads.push(Filter::and(vec![last, nf]));
             s = nrest;
             // allow "creature card or artifact card"
@@ -346,6 +352,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {
             (Filter::Blocking, r)
+        } else if let Some((f, r)) = parse_chosen_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -353,6 +361,47 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = rest;
     }
     Some((Filter::and(parts), plural, s))
+}
+
+/// References to a choice made for the source (CR 607.2d): "of the chosen type",
+/// "of the chosen color", "with the chosen name", "of the chosen card type".
+fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
+    for (p, f) in [
+        ("of the chosen creature type", Filter::ChosenType),
+        ("of the chosen card type", Filter::ChosenCardType),
+        ("of the chosen type", Filter::ChosenType),
+        ("of the chosen color", Filter::ChosenColor),
+        ("that's the chosen color", Filter::ChosenColor),
+        ("that are the chosen color", Filter::ChosenColor),
+        ("with the chosen name", Filter::ChosenName),
+        // "Choose a creature type. ... creatures of that type": the choice just made.
+        ("of that type", Filter::ChosenType),
+        ("of that color", Filter::ChosenColor),
+        ("with that name", Filter::ChosenName),
+        (
+            "that aren't of the chosen type",
+            Filter::not(Filter::ChosenType),
+        ),
+        (
+            "that isn't of the chosen type",
+            Filter::not(Filter::ChosenType),
+        ),
+        (
+            "that aren't the chosen color",
+            Filter::not(Filter::ChosenColor),
+        ),
+        (
+            "that isn't the chosen color",
+            Filter::not(Filter::ChosenColor),
+        ),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',', '.']) {
+                return Some((f, r));
+            }
+        }
+    }
+    None
 }
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".
@@ -366,6 +415,22 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
     } else {
         return None;
     };
+    // "with mana value equal to the chosen number" (CR 607.2d)
+    for (p, cmp) in [
+        ("equal to the chosen number", Cmp::Eq),
+        ("greater than or equal to the chosen number", Cmp::Ge),
+        ("less than or equal to the chosen number", Cmp::Le),
+    ] {
+        if let Some(r) = rest.strip_prefix(p) {
+            let v = Box::new(Value::Chosen);
+            let f = match stat {
+                "power" => Filter::Power(cmp, v),
+                "toughness" => Filter::Toughness(cmp, v),
+                _ => Filter::ManaValue(cmp, v),
+            };
+            return Some((f, r));
+        }
+    }
     let (n, rest) = parse_number(rest)?;
     let rest = rest.trim_start();
     let (cmp, rest) = if let Some(r) = rest.strip_prefix("or less") {

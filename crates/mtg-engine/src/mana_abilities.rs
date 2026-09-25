@@ -41,12 +41,31 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 vec![ALL_COLORS.to_vec(); g.eval_value(n, ctx).max(0) as usize]
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
-            ManaProduction::ChosenColor(n) => match g.linked_choice(ctx).and_then(|c| c.color) {
-                Some(c) => {
-                    vec![vec![ManaType::from_color(c)]; g.eval_value(n, ctx).max(0) as usize]
+            ManaProduction::ChosenColor(n) => {
+                // CR 607.2d: the color chosen by the linked ability; CR 607.5a: no mana if
+                // no color was chosen.
+                match g
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
+                    .map(ManaType::from_color)
+                {
+                    Some(c) => vec![vec![c]; g.eval_value(n, ctx).max(0) as usize],
+                    None => vec![],
                 }
-                None => vec![],
-            },
+            }
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = g
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
+                    .map(ManaType::from_color)
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![u]
+            }
             ManaProduction::CouldProduce(f) => {
                 let t = types_could_produce(g, f, ctx);
                 if t.is_empty() {

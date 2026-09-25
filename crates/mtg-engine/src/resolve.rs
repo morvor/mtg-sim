@@ -7,7 +7,7 @@ use crate::eval::Ctx;
 use crate::events::{Event, MoveCause};
 use crate::game::*;
 use crate::keywords::KeywordKind;
-use crate::mana::{Mana, ManaType};
+use crate::mana::{Mana, ManaRestriction, ManaType};
 use crate::object::*;
 use crate::replacement::*;
 use crate::types::*;
@@ -23,6 +23,9 @@ impl Game {
         }
         if self.dirty {
             self.recompute();
+        }
+        if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
+            return;
         }
         match e {
             Effect::Noop => {}
@@ -690,6 +693,51 @@ impl Game {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 crate::choices::make_choice(self, p, kind, ctx);
             }
+            // CR 614.1c: modify how the permanent enters (only while applying an "as this
+            // enters" replacement effect).
+            Effect::EnterTapped => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.tapped = true;
+                }
+            }
+            Effect::EnterPrepared => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.prepared = true;
+                }
+            }
+            Effect::EnterCopyExceptions(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copy_exceptions.extend(mods.iter().cloned());
+                }
+            }
+            Effect::OnEntry(effect) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.on_entry.push((**effect).clone());
+                }
+            }
+            Effect::EnterAs(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copiable.extend(mods.iter().cloned());
+                }
+            }
+            Effect::SetDayNight { day } => self.set_day(*day),
+            Effect::SetPrepared { what, prepared } => {
+                for o in self.resolve_objects(what, ctx) {
+                    if *prepared {
+                        crate::designations::become_prepared(self, o);
+                    } else {
+                        crate::designations::become_unprepared(self, o);
+                    }
+                }
+            }
+            Effect::EnterWithCounters { kind, n } => {
+                let k = self.eval_value(n, ctx).max(0) as u32;
+                if let Some(e) = ctx.entering.as_mut() {
+                    if k > 0 {
+                        e.counters.push((kind.clone(), k));
+                    }
+                }
+            }
 
             // --- Players -----------------------------------------------------------
             Effect::Draw { who, n } => {
@@ -793,6 +841,16 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let produced = self.produce_mana(p, mana, ctx);
+                // "of the chosen type": the type chosen for the source (CR 607.2d).
+                let restriction = match restriction {
+                    Some(ManaRestriction::SpellOfChosenType) => Some(
+                        ctx.source
+                            .and_then(|s| self.obj(s).choices.creature_type.clone())
+                            .map(ManaRestriction::SpellWithSubtype)
+                            .unwrap_or(ManaRestriction::SpellOfChosenType),
+                    ),
+                    other => other.clone(),
+                };
                 let snow = ctx
                     .source
                     .is_some_and(|s| self.obj(s).chars.has_supertype(Supertype::Snow));
@@ -1206,6 +1264,44 @@ impl Game {
         }
     }
 
+    /// While an "as this enters" replacement effect is being applied (CR 614.12a), the
+    /// entering object isn't on the battlefield yet. Tapping it or putting counters on it
+    /// modifies how it enters (CR 614.1c, 122.6); other effects on it happen as it's put
+    /// onto the battlefield. Returns true if `e` was handled that way.
+    fn effect_on_entering_object(&mut self, e: &Effect, ctx: &mut Ctx) -> bool {
+        match e {
+            Effect::Tap { what: Sel::This } => {
+                if let Some(em) = ctx.entering.as_mut() {
+                    em.tapped = true;
+                }
+                true
+            }
+            Effect::AddCounters {
+                what: Sel::This,
+                kind,
+                n,
+            } => {
+                let k = self.eval_value(n, ctx).max(0) as u32;
+                if let Some(em) = ctx.entering.as_mut() {
+                    if k > 0 {
+                        em.counters.push((kind.clone(), k));
+                    }
+                }
+                true
+            }
+            Effect::Untap { what: Sel::This }
+            | Effect::Modify {
+                what: Sel::This, ..
+            } => {
+                if let Some(em) = ctx.entering.as_mut() {
+                    em.on_entry.push(e.clone());
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn resolve_objects(&mut self, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
         self.resolve_sel(sel, ctx)
             .into_iter()
@@ -1243,6 +1339,43 @@ impl Game {
                     Some(p) => Modification::SetController(player_const(p)),
                     None => m.clone(),
                 },
+                // Values chosen for the source are locked in as the effect is created
+                // (CR 608.2h, 607.2d).
+                Modification::AddKeyword(k)
+                    if k.filter
+                        .as_ref()
+                        .is_some_and(crate::choices::filter_mentions_choice) =>
+                {
+                    let mut k = k.clone();
+                    if let (Some(f), Some(src)) = (k.filter.as_ref(), ctx.source) {
+                        k.filter = Some(crate::choices::bind_choices(f, &self.obj(src).choices));
+                    }
+                    Modification::AddKeyword(k)
+                }
+                Modification::SetChosenColor => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.color) {
+                        Some(c) => Modification::SetColors(ColorSet::single(c)),
+                        None => m.clone(),
+                    }
+                }
+                Modification::AddChosenType => {
+                    match ctx.source.and_then(|s| {
+                        let ch = &self.obj(s).choices;
+                        ch.creature_type.clone().or(ch.basic_land_type.clone())
+                    }) {
+                        Some(t) => Modification::AddSubtypes(vec![t]),
+                        None => m.clone(),
+                    }
+                }
+                Modification::SetChosenBasicLandType => {
+                    match ctx
+                        .source
+                        .and_then(|s| self.obj(s).choices.basic_land_type.clone())
+                    {
+                        Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
                 other => other.clone(),
             })
             .collect()
@@ -1329,7 +1462,11 @@ impl Game {
             None
         };
         let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
-            Some((ctx.source, ctx.controller, self.fix_mods(&to.with_mods, ctx)))
+            Some((
+                ctx.source,
+                ctx.controller,
+                self.fix_mods(&to.with_mods, ctx),
+            ))
         } else {
             None
         };
@@ -1421,10 +1558,23 @@ impl Game {
                     .collect()
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = self
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
+                    .map(ManaType::from_color)
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![self.choose_mana_color(p, ctx, &u)]
+            }
             ManaProduction::ChosenColor(n) => {
                 // CR 607.5a: an undefined choice produces nothing.
                 let k = self.eval_value(n, ctx).max(0) as usize;
-                match self.linked_choice(ctx).and_then(|c| c.color) {
+                match self.source_choices(ctx).and_then(|c| c.color) {
                     Some(c) => vec![ManaType::from_color(c); k],
                     None => vec![],
                 }

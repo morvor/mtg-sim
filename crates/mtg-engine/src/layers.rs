@@ -1181,6 +1181,28 @@ pub fn apply_mod(
             }
             c.abilities.clear();
         }
+        Modification::AddChosenType => {
+            // CR 607.2d / 607.5a: the type chosen for the effect's source, if any.
+            if let Some(ch) = g.source_choices(ctx) {
+                if let Some(t) = ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    if !c.subtypes.contains(&t) {
+                        c.subtypes.push(t);
+                    }
+                }
+            }
+        }
+        Modification::SetChosenBasicLandType => {
+            if let Some(t) = g
+                .source_choices(ctx)
+                .and_then(|ch| ch.basic_land_type.clone())
+            {
+                // CR 305.7, as for SetBasicLandType.
+                c.subtypes
+                    .retain(|s| !subtype_lists().land.contains(s.as_str()));
+                c.subtypes.push(t);
+                c.abilities.clear();
+            }
+        }
         Modification::SetColors(cs) => c.colors = *cs,
         Modification::SetLinkedChosenColor => {
             if let Some(col) = g.linked_choice(ctx).and_then(|ch| ch.color) {
@@ -1189,11 +1211,17 @@ pub fn apply_mod(
                 c.colors = cs;
             }
         }
+        Modification::SetChosenColor => {
+            if let Some(col) = g.source_choices(ctx).and_then(|ch| ch.color) {
+                c.colors = ColorSet::single(col);
+            }
+        }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         Modification::AddKeyword(k) => {
-            // "Protection from the chosen color": the choice is the granting ability's
-            // (CR 607.2d); an undefined choice grants nothing (CR 607.5a).
+            // "Protection from the chosen color": the choice is the granting ability's,
+            // not the object gaining it's (CR 607.2d); an undefined linked choice grants
+            // nothing (CR 607.5a).
             let mut k = k.clone();
             if let Some(f) = &k.filter {
                 match resolve_chosen(f, g, ctx) {
@@ -1201,10 +1229,21 @@ pub fn apply_mod(
                     None => return,
                 }
             }
-            c.abilities.push(AbilityDef::new(
-                AbilityKind::Keyword(k.clone()),
-                k.kind.name(),
-            ))
+            if let (Some(f), Some(ch)) = (k.filter.as_ref(), g.source_choices(ctx)) {
+                if crate::choices::filter_mentions_choice(f) {
+                    k.filter = Some(crate::choices::bind_choices(f, ch));
+                }
+            }
+            // CR 702.16n: "This effect doesn't remove [this Aura]" — remember which
+            // object the protection doesn't remove.
+            if let (Some(t), Some(src)) = (k.text.as_deref(), ctx.source) {
+                if t == crate::choices::DOESNT_REMOVE_SOURCE {
+                    k.text = Some(crate::choices::doesnt_remove_marker(src));
+                }
+            }
+            let name = k.kind.name();
+            c.abilities
+                .push(AbilityDef::new(AbilityKind::Keyword(k), name))
         }
         Modification::RemoveKeyword(k) => c
             .abilities
@@ -1296,10 +1335,15 @@ fn copied_ability(a: &Ability, effect: u32) -> Ability {
     let mut g = m.lock().unwrap();
     g.entry((a.uid, effect))
         .or_insert_with(|| {
-            let link = 0x4000 | ((a.link as u32 * 131 + effect * 37) % 0x3fff) as u16;
-            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+            AbilityDef::with_link(a.kind.clone(), a.text.clone(), copied_link(a.link, effect))
         })
         .clone()
+}
+
+/// The link id an ability with link `link` has when an object has it through the copy
+/// effect `effect` (see [`copied_ability`]).
+pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
+    0x4000 | ((link as u32 * 131 + effect * 37) % 0x3fff) as u16
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {

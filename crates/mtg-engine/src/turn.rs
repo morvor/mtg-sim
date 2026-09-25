@@ -620,8 +620,14 @@ impl Game {
 
     pub fn set_day(&mut self, is_day: bool) {
         if self.day != Some(is_day) {
+            let had_designation = self.day.is_some();
             self.day = Some(is_day);
-            self.emit(Event::DayNightChanged { is_day });
+            // CR 731.1a: "day becomes night"/"night becomes day" means losing one
+            // designation and gaining the other; the game first becoming day or night
+            // from neither isn't such a change.
+            if had_designation {
+                self.emit(Event::DayNightChanged { is_day });
+            }
             crate::keyword_impls::day_night_changed(self);
         }
     }

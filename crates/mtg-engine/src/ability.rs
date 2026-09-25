@@ -760,6 +760,8 @@ pub enum PlayerRel {
     Teammate,
     /// The iterated player in "for each player".
     Iterated,
+    /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
+    Chosen,
 }
 
 /// Object predicates (CR 608.2j: filters check only the stated characteristics).
@@ -867,6 +869,18 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
+    /// nothing while no color is chosen (CR 607.5a).
+    ChosenColor,
+    /// "of the chosen type": has the creature type, land type, or card type chosen for
+    /// the source.
+    ChosenType,
+    /// "with the chosen name": has the card name chosen for the source.
+    ChosenName,
+    /// "of the chosen card type": has the card type chosen for the source.
+    ChosenCardType,
+    /// Has the prepared designation (CR 722.3a).
+    Prepared,
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
@@ -1078,6 +1092,8 @@ pub enum Condition {
     MaxSpeed,
     /// "only before/after [a point in the combat phase]" timing windows (CR 506.8).
     CombatTiming(CombatTiming),
+    /// This word (e.g. an anchor word, CR 614.12c) was chosen for the source.
+    Chose(SmolStr),
     /// This ability's source is tapped/untapped/attacking… via SelMatches(This, …).
     /// Custom conditions implemented in code.
     Custom(SmolStr),
@@ -1201,12 +1217,22 @@ pub enum Modification {
     RemoveAllCreatureTypes,
     /// Lands become a basic land type, losing other land types (CR 305.7).
     SetBasicLandType(Vec<Subtype>),
+    /// "is the chosen type in addition to its other types": adds the creature type or
+    /// land type chosen for the effect's source (CR 607.2d). Does nothing while no type
+    /// is chosen (CR 607.5a).
+    AddChosenType,
+    /// "Enchanted land is the chosen type": like [`Modification::SetBasicLandType`] with
+    /// the basic land type chosen for the effect's source (CR 305.7).
+    SetChosenBasicLandType,
     // Layer 5
     SetColors(ColorSet),
     /// "[This] is the chosen color": the color chosen by the linked ability (CR 607.2p).
     /// Does nothing while no color is chosen (CR 607.5a).
     SetLinkedChosenColor,
     AddColors(ColorSet),
+    /// "becomes the color of your choice": the color chosen for the effect's source
+    /// (fixed when a resolving effect is created).
+    SetChosenColor,
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
@@ -1248,8 +1274,10 @@ impl Modification {
             | SetTypes { .. }
             | AllCreatureTypes
             | RemoveAllCreatureTypes
-            | SetBasicLandType(_) => Layer::L4Type,
-            SetColors(_) | AddColors(_) | SetLinkedChosenColor => Layer::L5Color,
+            | SetBasicLandType(_)
+            | AddChosenType
+            | SetChosenBasicLandType => Layer::L4Type,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -1322,6 +1350,9 @@ pub enum ManaProduction {
     CouldProduce(Filter),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
+    /// One mana of one of the listed types or of the color chosen for the source
+    /// ("Add {R} or one mana of the chosen color").
+    OneOfOrChosenColor(Vec<ManaType>),
     /// N mana of a fixed type.
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
@@ -1416,7 +1447,12 @@ pub enum ReplacementAction {
     EnterTapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
-    /// "As this enters, choose ..." — perform the effect as it enters (the choice is stored on the object).
+    /// "As this enters, ..." — the effect is performed while the replacement applies,
+    /// before the permanent enters (CR 614.1c, 614.12a). Choices ([`Effect::Choose`]) are
+    /// stored on the entering object and carried onto the permanent; the entry-modifying
+    /// effects [`Effect::EnterTapped`] and [`Effect::EnterWithCounters`] change how it
+    /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
+    /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
     /// Enters as a copy of (chosen) object (CR 707.9).
     EnterAsCopy { filter: Filter, optional: bool },
@@ -2207,6 +2243,42 @@ pub enum Effect {
         who: PlayerRef,
         kind: ChoiceKind,
     },
+    /// "[It] enters tapped": only meaningful inside [`ReplacementAction::AsEnters`], where
+    /// it modifies how the permanent enters (CR 614.1c); elsewhere it does nothing.
+    EnterTapped,
+    /// "[It] enters with N [kind] counters on it": only meaningful inside
+    /// [`ReplacementAction::AsEnters`] (CR 614.1c, 122.6); elsewhere it does nothing.
+    EnterWithCounters {
+        kind: CounterKind,
+        n: Value,
+    },
+    /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
+    /// (CR 722.3a); elsewhere it does nothing.
+    EnterPrepared,
+    /// "... enter as a copy of X, except [exceptions]": if the permanent enters as a copy,
+    /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
+    /// inside [`ReplacementAction::AsEnters`].
+    EnterCopyExceptions(Vec<Modification>),
+    /// "[It] enters with haste", "as ~ enters, it becomes a 3/3 creature": an effect on
+    /// the permanent performed as it's put onto the battlefield, with the permanent as
+    /// its source (CR 614.1c). Only meaningful inside [`ReplacementAction::AsEnters`],
+    /// where it's deferred until right after the permanent enters (before its
+    /// zone-change event); elsewhere it does nothing.
+    OnEntry(Box<Effect>),
+    /// "As ~ enters, it becomes your choice of a 3/3 creature or a 2/2 creature with
+    /// flying": an "as enters" ability that sets power and toughness (and maybe other
+    /// characteristics) modifies the permanent's copiable values (CR 707.2). Only
+    /// meaningful inside [`ReplacementAction::AsEnters`].
+    EnterAs(Vec<Modification>),
+    /// "It becomes day" / "it becomes night" (CR 731.1).
+    SetDayNight {
+        day: bool,
+    },
+    /// "[permanents] become prepared" / "become unprepared" (CR 722.3a–c).
+    SetPrepared {
+        what: Sel,
+        prepared: bool,
+    },
 
     // --- Players ------------------------------------------------------------
     Draw {
@@ -2448,6 +2520,12 @@ impl Effect {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChoiceKind {
     Color,
+    /// "choose a color other than [color]".
+    ColorOtherThan(Color),
+    /// "choose A, B, or C": one of the listed words — creature types, land types, card
+    /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
+    /// (and as the chosen type/color when the word is one).
+    OneOf(Vec<String>),
     CreatureType,
     CardName,
     /// A card name of a nonland card, etc.

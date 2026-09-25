@@ -779,7 +779,10 @@ impl Game {
             let mut c2 = ctx.clone();
             c2.targets = cm.targets.clone();
             for (i, slot) in cm.targets.iter().enumerate() {
-                let spec = &specs[i.min(specs.len().saturating_sub(1))];
+                let Some(spec) = specs.get(i.min(specs.len().saturating_sub(1))) else {
+                    new_targets.push(slot.clone());
+                    continue;
+                };
                 let mut legal = Vec::new();
                 for t in slot {
                     any_target = true;

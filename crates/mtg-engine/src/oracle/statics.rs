@@ -414,7 +414,13 @@ pub fn parse_spell_static(text: &str, _ctx: &CompileContext) -> Option<Ability> 
 }
 
 /// Conditions: "you control an artifact", "you have 10 or less life", "it's your turn".
-pub fn parse_condition(c: &str, _ctx: &CompileContext) -> Option<Condition> {
+/// Falls back to the pluggable [`crate::oracle::patterns::ConditionPattern`]s when the
+/// built-in phrases don't match.
+pub fn parse_condition(c: &str, ctx: &CompileContext) -> Option<Condition> {
+    parse_condition_core(c, ctx).or_else(|| crate::oracle_ext::parse_condition_ext(end(c)))
+}
+
+fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
     let c = end(c);
     match c {
         "it's your turn" => return Some(Condition::YourTurn),
