@@ -33,6 +33,10 @@ pub enum MoveCause {
     Cost,
     /// Returned to the command zone (commander rule).
     Commander,
+    /// A dungeon card brought from outside the game into the command zone by the venture
+    /// into the dungeon keyword action (CR 309.2a, 701.49): the only way a dungeon card
+    /// can be brought into the game (CR 309.2d).
+    Venture,
     Other,
 }
 

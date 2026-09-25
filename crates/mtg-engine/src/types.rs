@@ -194,6 +194,24 @@ impl ColorSet {
     pub fn iter(self) -> impl Iterator<Item = Color> {
         Color::ALL.into_iter().filter(move |c| self.contains(*c))
     }
+    /// The ten color pairs (CR 105.5): every set of exactly two of the five colors.
+    pub fn color_pairs() -> [ColorSet; 10] {
+        let mut out = [ColorSet::NONE; 10];
+        let mut i = 0;
+        for a in 0..5 {
+            for b in a + 1..5 {
+                let mut s = ColorSet::single(Color::ALL[a]);
+                s.insert(Color::ALL[b]);
+                out[i] = s;
+                i += 1;
+            }
+        }
+        out
+    }
+    /// Exactly two of the five colors (CR 105.5).
+    pub fn is_color_pair(self) -> bool {
+        self.count() == 2
+    }
     /// Parses Scryfall color arrays like `["W","U"]`.
     pub fn from_letters<S: AsRef<str>>(letters: &[S]) -> Self {
         let mut s = ColorSet::NONE;

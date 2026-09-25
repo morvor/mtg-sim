@@ -291,7 +291,8 @@ impl Game {
         }
         let o = self.obj(id);
         match o.zone {
-            Zone::Battlefield | Zone::Stack => view.controller(self, id),
+            // Objects in the command zone have controllers too (CR 109.4c–g).
+            Zone::Battlefield | Zone::Stack | Zone::Command => view.controller(self, id),
             _ => o.owner,
         }
     }
@@ -329,8 +330,9 @@ impl Game {
             }
             Filter::OwnedBy(rel) => self.player_rel_matches(*rel, o.owner, ctx),
             Filter::InZone(z) => o.zone.kind() == Some(*z),
-            Filter::Tapped => o.tapped,
-            Filter::Untapped => !o.tapped,
+            // Only permanents have status (CR 110.5d).
+            Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
+            Filter::Untapped => o.zone == Zone::Battlefield && !o.tapped,
             Filter::Attacking => self.is_attacking(id),
             Filter::Blocking => self.is_blocking(id),
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
@@ -449,6 +451,10 @@ impl Game {
             }
             Filter::FaceDown => o.face_down,
             Filter::HasX => c.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+            Filter::HasPhyrexianMana => c
+                .mana_cost
+                .as_ref()
+                .is_some_and(|m| m.symbols.iter().any(|s| s.is_phyrexian())),
             Filter::Commander => o.is_commander,
             Filter::Modified => {
                 o.counters.values().any(|n| *n > 0)
@@ -883,6 +889,23 @@ impl Game {
                     set = set.union(self.obj(o).chars.card_types);
                 }
                 set.count() as i64
+            }
+            Value::ClassLevel => ctx
+                .source
+                .map_or(1, |s| self.obj(s).class_level.max(1) as i64),
+            Value::XOf(s) => self
+                .eval_sel_objects(s, ctx)
+                .first()
+                .map_or(0, |o| crate::object::x_value_of(self.obj(*o)) as i64),
+            Value::ColorPairsAmong(f) => {
+                let mut pairs: Vec<ColorSet> = Vec::new();
+                for o in self.objects_matching(f, ctx) {
+                    let c = self.obj(o).chars.colors;
+                    if c.is_color_pair() && !pairs.contains(&c) {
+                        pairs.push(c);
+                    }
+                }
+                pairs.len() as i64
             }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)

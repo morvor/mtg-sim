@@ -79,7 +79,7 @@ impl Game {
             }
             // CR 614.17d: a "can't enter" effect stops the event; it isn't replaced
             // (CR 614.17c).
-            if m.to == Zone::Battlefield && self.cant_enter(m) {
+            if m.to == Zone::Battlefield && self.cant_enter(m) || self.move_forbidden(m) {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
@@ -88,7 +88,8 @@ impl Game {
                 // entries a replacement modified (CR 614.17d: check the permanent as it
                 // would exist, taking those replacements into account).
                 if let ReplEvent::Move(mv) = &e {
-                    if mv.to == Zone::Battlefield && self.cant_enter(mv) {
+                    if mv.to == Zone::Battlefield && self.cant_enter(mv) || self.move_forbidden(mv)
+                    {
                         continue;
                     }
                 }
@@ -155,10 +156,53 @@ impl Game {
         })
     }
 
+    /// Zone changes the rules forbid outright; the object stays where it is. Instant and
+    /// sorcery cards (and token copies of them) can't enter the battlefield unless they
+    /// enter face down (CR 110.4, 111.5, 708.2), and nontraditional cards can't be brought
+    /// into the game from outside it (CR 108.5) — a dungeon card only by venturing into
+    /// the dungeon (CR 309.2a, 309.2d).
+    pub fn move_forbidden(&self, mv: &MoveEv) -> bool {
+        let o = self.obj(mv.obj);
+        if mv.to == Zone::Battlefield && mv.etb.face_down.is_none() {
+            let face = if mv.etb.transformed {
+                Some(FaceState::Back)
+            } else {
+                mv.etb.face
+            };
+            let types = match (face, &o.card) {
+                (Some(f), Some(card)) if o.kind == ObjKind::Card => {
+                    card.characteristics(f).card_types
+                }
+                _ => o.chars.card_types,
+            };
+            if types.contains(CardType::Instant) || types.contains(CardType::Sorcery) {
+                return true;
+            }
+        }
+        if matches!(o.zone, Zone::Outside(_)) && !matches!(mv.to, Zone::Outside(_)) {
+            if let Some(card) = &o.card {
+                let venture = mv.cause == MoveCause::Venture
+                    && mv.to == Zone::Command
+                    && card.front().chars.card_types.contains(CardType::Dungeon);
+                if crate::variants::is_nontraditional(card) && !venture {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
     /// newly created object (a token or card) that hasn't been put anywhere yet.
     pub fn can_move(&self, id: ObjectId) -> bool {
         let o = self.obj(id);
+        // A token that has left the battlefield stays where it is (CR 111.8). (A copy of a
+        // permanent spell on the stack becomes a token as it resolves, CR 111.13.)
+        if o.kind == ObjKind::Token
+            && !matches!(o.zone, Zone::Battlefield | Zone::Nowhere | Zone::Stack)
+        {
+            return false;
+        }
         self.is_live(id)
             || (o.zone == Zone::Nowhere
                 && o.next.is_none()
@@ -282,6 +326,17 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        if from == Zone::Stack && m.to == Zone::Battlefield {
+            // Effects of resolved spells and abilities that changed a permanent spell
+            // continue to apply to the permanent it becomes (CR 112.4, 110.2b).
+            for e in self.effects.iter_mut() {
+                if let Affected::Objects(v) = &mut e.affected {
+                    for x in v.iter_mut().filter(|x| **x == old_id) {
+                        *x = new_id;
+                    }
+                }
+            }
+        }
         if m.to == Zone::Battlefield {
             // Choices made as it entered (CR 614.12a) or while it was cast are the
             // permanent's choices (CR 607.2d), still linked to the abilities that made
@@ -455,7 +510,16 @@ impl Game {
                                 let ts = self.new_timestamp();
                                 let ob = &mut self.objects[t.0 as usize];
                                 *ob.counters.entry(kind.clone()).or_insert(0) += n;
-                                ob.counter_timestamps.insert(kind, ts);
+                                ob.counter_timestamps.insert(kind.clone(), ts);
+                                // Counters it's given as it enters are "put" on it (CR 122.6),
+                                // e.g. a Saga's first lore counter triggers chapter I (714.3a).
+                                if n > 0 {
+                                    self.emit(Event::CountersAdded {
+                                        target: Entity::Object(t),
+                                        kind,
+                                        n,
+                                    });
+                                }
                             }
                         }
                     }

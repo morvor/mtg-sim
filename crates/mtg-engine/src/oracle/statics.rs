@@ -271,12 +271,13 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         }
     }
     // CDA: "~'s power and toughness are each equal to [value]".
-    if let Some(r) = l.strip_prefix("~'s power and toughness are each equal to ") {
-        let mut b = Builder::new(ctx);
-        let (v, tail) = parse_value_phrase(r, &mut b)?;
-        if !end(&tail).is_empty() {
-            return None;
-        }
+    // (Phrases this doesn't understand fall through to the pattern registry.)
+    if let Some((v, tail)) = l
+        .strip_prefix("~'s power and toughness are each equal to ")
+        .and_then(|r| parse_value_phrase(r, &mut Builder::new(ctx)))
+        .filter(|(_, tail)| end(tail).is_empty())
+    {
+        let _ = tail;
         let mut s = StaticAbility::new(StaticEffect::Continuous {
             affected: Filter::Source,
             mods: vec![Modification::CdaPT(Some(v.clone()), Some(v))],
@@ -285,12 +286,12 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         s.zone = FunctionZone::Anywhere;
         return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
     }
-    if let Some(r) = l.strip_prefix("~'s power is equal to ") {
-        let mut b = Builder::new(ctx);
-        let (v, tail) = parse_value_phrase(r, &mut b)?;
-        if !end(&tail).is_empty() {
-            return None;
-        }
+    if let Some((v, tail)) = l
+        .strip_prefix("~'s power is equal to ")
+        .and_then(|r| parse_value_phrase(r, &mut Builder::new(ctx)))
+        .filter(|(_, tail)| end(tail).is_empty())
+    {
+        let _ = tail;
         let mut s = StaticAbility::new(StaticEffect::Continuous {
             affected: Filter::Source,
             mods: vec![Modification::CdaPT(Some(v), None)],

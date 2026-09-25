@@ -1318,6 +1318,24 @@ impl Game {
                     none()
                 }
             }
+            (
+                TriggerCond::TappedForManaOfType { filter, mana: ty },
+                Event::TappedForMana { obj, player, mana },
+            ) => {
+                // CR 106.12a: "tapped for mana of a specified type" triggers only if that
+                // type of mana was produced.
+                if mana.contains(ty) && self.matches(*obj, filter, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(*player),
+                        amount: mana.len() as i32,
+                        mana: mana.clone(),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Cycled { who, filter }, Event::Cycled { player, card }) => {
                 if self.player_rel_matches(*who, *player, &ctx) && self.matches(*card, filter, &ctx)
                 {
@@ -1790,6 +1808,12 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
+        } else if let Some(ci) = crate::object::etb_trigger_cast_info(self, &t) {
+            // CR 107.3m: the permanent's enters ability uses its spell's value of X.
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.x = ci.x;
+                si.cast = ci;
+            }
         }
         self.emit(Event::AbilityTriggeredOnStack {
             ability: id,
