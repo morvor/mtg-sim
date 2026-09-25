@@ -29,6 +29,23 @@ inventory::submit! {
     EffectPattern { name: "draws an additional card", priority: 100, parse: additional_card }
 }
 inventory::submit! {
+    EffectPattern { name: "(you may) have it deal ...", priority: 100, parse: have_it_deal }
+}
+
+/// "[you may] have it deal 2 damage to any target", "have ~ deal damage equal to its
+/// power to target creature": the object named deals the damage.
+fn have_it_deal(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("have ")?;
+    let (subject, rest) = ["it ", "~ ", "that creature "]
+        .into_iter()
+        .find_map(|s| r.strip_prefix(s).map(|x| (s.trim_end(), x)))?;
+    let rest = rest.strip_prefix("deal ")?;
+    if subject != "~" && matches!(b.it, Sel::None) {
+        return None;
+    }
+    parse_clause(&format!("{subject} deals {rest}"), b)
+}
+inventory::submit! {
     AbilityPattern { name: "trigger with delayed or 'that many' body", priority: 100, parse: trigger_with_event_body }
 }
 
@@ -45,6 +62,10 @@ fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
         "that permanent's ",
         "that card's ",
         "that spell's ",
+        "that land's ",
+        "that artifact's ",
+        "that enchantment's ",
+        "that token's ",
     ] {
         s = s.replace(p, "its ");
     }

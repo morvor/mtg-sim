@@ -290,3 +290,32 @@ fn that_player_draws_an_additional_card() {
     // The normal draw plus one additional card.
     assert_eq!(t.hand_size(P1), hand + 2);
 }
+
+#[test]
+fn you_may_have_it_deal_damage() {
+    cr!("603.6a", "120.3");
+    assert_supported(&["Aether Charge"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Aether Charge");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    enter(&mut t, P0, "Leatherback Baloth");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    // A non-Beast doesn't trigger it.
+    enter(&mut t, P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn damage_to_that_lands_controller() {
+    cr!("603.6a", "201.5c");
+    assert_supported(&["Zo-Zu the Punisher"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Zo-Zu the Punisher");
+    enter(&mut t, P1, "Mountain");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 20);
+}
