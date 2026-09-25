@@ -15,16 +15,8 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     }
 }
 
-/// How the spell (or, for its abilities, the permanent) was cast: the resolving spell's
-/// cast info, or the source permanent's.
 fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
-    match ctx.cast.as_ref() {
-        Some(c) if c.was_cast => Some(c),
-        _ => ctx
-            .source
-            .and_then(|s| g.obj(s).cast.as_deref())
-            .or(ctx.cast.as_ref()),
-    }
+    g.cast_info(ctx)
 }
 
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {

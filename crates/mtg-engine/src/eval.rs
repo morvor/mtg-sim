@@ -127,6 +127,19 @@ impl Game {
         }
     }
 
+    /// How "it" was cast, for abilities that refer to it ("if it was kicked", "if you cast
+    /// it from your hand", "the mana spent to cast it", CR 607.2i): the resolving spell's
+    /// own cast info, or — for abilities of a permanent — how that permanent was cast.
+    pub fn cast_info<'a>(&'a self, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+        match ctx.cast.as_ref() {
+            Some(c) if c.was_cast => Some(c),
+            _ => ctx
+                .source
+                .and_then(|s| self.obj(s).cast.as_deref())
+                .or(ctx.cast.as_ref()),
+        }
+    }
+
     /// Choices made for the ability's source ("the chosen color", CR 607.2d).
     pub fn source_choices(&self, ctx: &Ctx) -> Option<&Choices> {
         ctx.source.map(|s| &self.obj(s).choices)
@@ -775,7 +788,7 @@ impl Game {
                 .map(|o| self.mana_value_of(*o) as i64)
                 .max()
                 .unwrap_or(0),
-            Value::ColorsSpent => ctx.cast.as_ref().map_or(0, |c| {
+            Value::ColorsSpent => self.cast_info(ctx).map_or(0, |c| {
                 let mut s = ColorSet::NONE;
                 for m in &c.mana_spent {
                     if let Some(col) = m.color() {
@@ -784,12 +797,12 @@ impl Game {
                 }
                 s.count() as i64
             }),
-            Value::ManaSpent => ctx.cast.as_ref().map_or(0, |c| c.mana_spent.len() as i64),
+            Value::ManaSpent => self.cast_info(ctx).map_or(0, |c| c.mana_spent.len() as i64),
             Value::Chosen => ctx
                 .source
                 .and_then(|s| self.obj(s).choices.number)
                 .unwrap_or(0) as i64,
-            Value::TimesKicked => ctx.cast.as_ref().map_or(0, |c| c.times_kicked as i64),
+            Value::TimesKicked => self.cast_info(ctx).map_or(0, |c| c.times_kicked as i64),
             Value::Speed(r) => self
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
@@ -838,14 +851,15 @@ impl Game {
                 .any(|p| self.player_filter_matches(f, p, ctx)),
             Condition::YourTurn => self.turn.active == ctx.controller,
             Condition::NotYourTurn => self.turn.active != ctx.controller,
-            Condition::CostPaid(name) => ctx
-                .cast
-                .as_ref()
+            Condition::CostPaid(name) => self
+                .cast_info(ctx)
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
-            Condition::WasCast => ctx.cast.as_ref().is_some_and(|c| c.was_cast),
+            Condition::WasCast => self.cast_info(ctx).is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
             Condition::PrevAffectedAny => !ctx.prev_affected.is_empty(),
-            Condition::CastFrom(z) => ctx.cast.as_ref().is_some_and(|c| c.from == Some(*z)),
+            Condition::CastFrom(z) => self
+                .cast_info(ctx)
+                .is_some_and(|c| c.was_cast && c.from == Some(*z)),
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => self.turn.step.is_combat(),
                 PhaseCond::MainPhase => self.turn.step.is_main(),
