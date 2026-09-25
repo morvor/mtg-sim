@@ -7,7 +7,6 @@
 //! * a face-up object in the command zone turned face down becomes a new object (CR 400.9);
 //! * cards outside the game are affected only by their own characteristic-defining
 //!   abilities (CR 400.11c);
-//! * prevention effects follow a permanent spell to the permanent it becomes (CR 400.7c);
 //! * playing with the top card of a library revealed (CR 401.5, 401.6);
 //! * who may look at face-down cards in exile (CR 406.3).
 
@@ -221,40 +220,6 @@ pub fn turn_face_down_in_command(g: &mut Game, id: ObjectId) -> ObjectId {
     g.command.push(new);
     g.dirty = true;
     new
-}
-
-/// CR 400.7c: prevention effects that apply to damage from a permanent spell continue to
-/// apply to damage from the permanent it becomes.
-pub fn spell_became_permanent(g: &mut Game, spell: ObjectId, permanent: ObjectId) {
-    for r in g.replacements.iter_mut() {
-        let prevents = matches!(
-            r.def.action,
-            ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
-        );
-        if !prevents {
-            continue;
-        }
-        if let ReplacementEvent::Damage { source, .. } = &mut r.def.event {
-            add_to_locked(source, spell, permanent);
-        }
-    }
-}
-
-/// Adds `new` wherever a locked-in object list names `old`.
-fn add_to_locked(f: &mut Filter, old: ObjectId, new: ObjectId) {
-    match f {
-        Filter::Objects(v) => {
-            if v.contains(&old) && !v.contains(&new) {
-                v.push(new);
-            }
-        }
-        Filter::And(v) | Filter::Or(v) => {
-            for x in v.iter_mut() {
-                add_to_locked(x, old, new);
-            }
-        }
-        _ => {}
-    }
 }
 
 // ---------------------------------------------------------------------------

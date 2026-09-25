@@ -350,6 +350,8 @@ impl Game {
         if from == Zone::Stack && m.to == Zone::Battlefield {
             // Effects of resolved spells and abilities that changed a permanent spell
             // continue to apply to the permanent it becomes (CR 112.4, 110.2b, 400.7a).
+            // (Prevention effects for damage from it follow it through `Filter::Objects`,
+            // CR 400.7c.)
             for e in self.effects.iter_mut() {
                 if let Affected::Objects(v) = &mut e.affected {
                     for x in v.iter_mut().filter(|x| **x == old_id) {
@@ -357,8 +359,6 @@ impl Game {
                     }
                 }
             }
-            // CR 400.7c: and so do prevention effects for damage from it.
-            crate::zones::spell_became_permanent(self, old_id, new_id);
         }
         if m.to == Zone::Battlefield {
             // Choices made as it entered (CR 614.12a) or while it was cast are the
