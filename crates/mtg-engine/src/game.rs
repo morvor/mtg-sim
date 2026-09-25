@@ -460,6 +460,8 @@ pub struct Game {
     pub carried_effects: Vec<u32>,
     /// The continuous effects that are stickers on objects (CR 123).
     pub stickers: Vec<u32>,
+    /// Game-ending bookkeeping: draws for individual players, mandatory loops (CR 104).
+    pub end: crate::game_end::EndState,
 }
 
 impl Game {
@@ -542,6 +544,7 @@ impl Game {
             entering: vec![],
             carried_effects: vec![],
             stickers: vec![],
+            end: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -1061,24 +1064,15 @@ impl Game {
         // time, before the player's objects leave the game (CR 800.4a).
         self.flush_events();
         self.after_player_leaves(p);
+        self.on_player_lost(p);
         if !self.losing_simultaneously {
             self.check_game_over();
         }
     }
 
+    /// An effect says that a player wins the game (CR 104.2b); see [`Game::players_win`].
     pub fn player_wins(&mut self, p: PlayerId) {
-        if self.result.is_some() {
-            return;
-        }
-        // CR 104.2a / 104.3h: a player wins by an effect; all opponents lose.
-        let team = self.player(p).team;
-        for q in self.player_ids() {
-            if self.player(q).team != team && self.player(q).in_game() {
-                self.players[q.idx()].has_lost = true;
-                self.emit(Event::PlayerLost { player: q });
-            }
-        }
-        self.check_game_over();
+        self.players_win(&[p]);
     }
 
     /// Handles a player leaving a multiplayer game (CR 800.4a).
@@ -1090,20 +1084,9 @@ impl Game {
         crate::multiplayer::remove_player_objects(self, p);
     }
 
+    /// Ends the game if only one team (or no player) is left (CR 104.2a, 104.4a).
     pub fn check_game_over(&mut self) {
-        if self.result.is_some() {
-            return;
-        }
-        let remaining: Vec<PlayerId> = self.players_in_game();
-        let teams: BTreeSet<u8> = remaining.iter().map(|p| self.player(*p).team).collect();
-        if remaining.is_empty() {
-            self.result = Some(GameResult::Draw);
-        } else if teams.len() == 1 {
-            for p in &remaining {
-                self.players[p.idx()].has_won = true;
-            }
-            self.result = Some(GameResult::Win(remaining));
-        }
+        self.decide_game_over();
     }
 
     /// Forces a draw (CR 104.4).

@@ -39,6 +39,7 @@ pub mod eval;
 pub mod events;
 pub mod facedown;
 pub mod game;
+pub mod game_end;
 pub mod keyword_actions;
 pub mod keyword_actions_impl;
 pub mod keyword_impls;

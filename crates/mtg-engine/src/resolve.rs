@@ -1056,16 +1056,14 @@ impl Game {
                 crate::tokens::create_emblem(self, ctx.controller, abilities.clone(), ctx.source);
             }
             Effect::WinGame { who } => {
-                for p in self.eval_players(who, ctx) {
-                    self.player_wins(p);
-                }
+                // CR 104.2b, 104.3f: players named together win simultaneously.
+                let ps = self.eval_players(who, ctx);
+                self.players_win(&ps);
             }
             Effect::LoseGame { who } => {
-                for p in self.eval_players(who, ctx) {
-                    for e in self.replace(ReplEvent::LoseGame { player: p }) {
-                        self.execute_repl_event(e);
-                    }
-                }
+                // CR 104.3e; "can't lose" effects win (CR 101.2).
+                let ps = self.eval_players(who, ctx);
+                self.lose_game_simultaneously(&ps);
             }
             Effect::CastCard {
                 who,

@@ -504,7 +504,7 @@ fn active_team(g: &Game) -> Vec<PlayerId> {
 /// Whether `b` is within `a`'s range of influence (CR 801.2): at most N seats away,
 /// counting only players still in the game. Unlimited range if the option isn't used.
 pub fn within_range(g: &Game, a: PlayerId, b: PlayerId) -> bool {
-    let Some(n) = g.config.range_of_influence else {
+    let Some(n) = g.range_of_influence(a) else {
         return true;
     };
     if a == b {

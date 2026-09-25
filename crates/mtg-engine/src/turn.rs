@@ -390,6 +390,13 @@ impl Game {
             return;
         }
         let actions = self.legal_actions(p);
+        // CR 104.4b: a loop of mandatory actions is a draw.
+        let forced = actions
+            .iter()
+            .all(|a| matches!(a, Action::Pass | Action::Concede));
+        if self.check_mandatory_loop(forced) {
+            return;
+        }
         let answer = self.ask(
             p,
             Decision::Priority {

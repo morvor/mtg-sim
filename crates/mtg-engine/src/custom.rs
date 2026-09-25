@@ -217,6 +217,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::tokens::create_named_tokens(g, spec, ctx);
         return;
     }
+    // "The game is a draw" (CR 104.4c, 104.4e).
+    if crate::game_end::custom_effect(g, name, ctx) {
+        return;
+    }
     // The planeswalking ability (CR 901.8, 701.31).
     if name == crate::planechase::PLANESWALK_EFFECT {
         crate::planechase::planeswalk(g, ctx.controller);

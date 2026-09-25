@@ -1,7 +1,6 @@
 //! State-based actions (CR 704) and the priority-time "settle" loop (CR 117.5, 704.3).
 
 use crate::ability::*;
-use crate::eval::Ctx;
 use crate::events::MoveCause;
 use crate::game::*;
 use crate::keywords::KeywordKind;
@@ -15,6 +14,7 @@ impl Game {
     /// neither happens (CR 704.3, 117.5). Returns true if anything happened.
     pub fn settle(&mut self) -> bool {
         let mut did = false;
+        let mut settled = false;
         for _ in 0..1000 {
             self.flush_events();
             if self.result.is_some() {
@@ -30,7 +30,12 @@ impl Game {
                 did = true;
                 continue;
             }
+            settled = true;
             break;
+        }
+        if !settled && self.result.is_none() {
+            // CR 104.4b: state-based actions keep happening forever.
+            self.endless_settle_loop();
         }
         did
     }
@@ -464,28 +469,10 @@ impl Game {
             }
         }
 
-        // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3).
-        let simultaneous = losers.len() > 1;
-        self.losing_simultaneously = simultaneous;
-        for p in losers {
-            let ctx = Ctx::new(None, p);
-            let cant_lose = self
-                .player_restricted(p, |r| matches!(r, Restriction::CantLoseGame(_)))
-                || self
-                    .player(p)
-                    .has_mod(|m| matches!(m, PlayerModification::CantLoseGame));
-            let _ = ctx;
-            if cant_lose {
-                continue;
-            }
-            for e in self.replace(ReplEvent::LoseGame { player: p }) {
-                self.execute_repl_event(e);
-            }
-        }
-        if simultaneous {
-            self.losing_simultaneously = false;
-            self.check_game_over();
-        }
+        // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3); "can't
+        // lose" effects apply (CR 101.2).
+        let losers: Vec<PlayerId> = losers.into_iter().collect();
+        self.lose_game_simultaneously(&losers);
         self.recompute();
         true
     }
