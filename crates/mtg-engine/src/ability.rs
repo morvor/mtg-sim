@@ -1936,6 +1936,10 @@ pub enum Effect {
     /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
     /// (CR 722.3a); elsewhere it does nothing.
     EnterPrepared,
+    /// "It becomes day" / "it becomes night" (CR 731.1).
+    SetDayNight {
+        day: bool,
+    },
     /// "[permanents] become prepared" / "become unprepared" (CR 722.3a–c).
     SetPrepared {
         what: Sel,

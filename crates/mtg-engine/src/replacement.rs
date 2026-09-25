@@ -218,11 +218,16 @@ impl Game {
                 let o = self.obj(m.obj);
                 for a in &o.chars.abilities {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // CR 614.12: only effects that affect just that permanent apply
+                        // from the permanent itself ("Permanents enter tapped" doesn't
+                        // affect the permanent that has it).
                         if let StaticEffect::Replacement(d) = &s.effect {
-                            if matches!(d.event, ReplacementEvent::EntersBattlefield(_))
-                                && !sources
-                                    .iter()
-                                    .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
+                            if matches!(
+                                d.event,
+                                ReplacementEvent::EntersBattlefield(Filter::Source)
+                            ) && !sources
+                                .iter()
+                                .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
                             {
                                 sources.push((
                                     m.obj,
@@ -421,9 +426,28 @@ impl Game {
 
     /// Checks an entering object against a filter "as it would exist on the battlefield"
     /// (CR 614.12). We approximate with its current characteristics plus the
-    /// modifications already made to how it enters.
+    /// modifications already made to how it enters, and the player who will control it.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
-        self.matches(m.obj, f, ctx)
+        let view = EnteringView {
+            obj: m.obj,
+            controller: self.entering_controller(m),
+        };
+        self.matches_view(&view, m.obj, f, ctx)
+    }
+
+    /// The player who will control a permanent entering the battlefield (as in
+    /// `perform_move`).
+    pub fn entering_controller(&self, m: &MoveEv) -> PlayerId {
+        let o = self.obj(m.obj);
+        m.etb
+            .controller
+            .or(if o.zone == Zone::Stack {
+                Some(o.controller)
+            } else {
+                None
+            })
+            .or(m.by)
+            .unwrap_or(o.owner)
     }
 
     fn apply_replacement(
@@ -658,6 +682,29 @@ impl Game {
                         || ob.is(CardType::Battle))
             }
         }
+    }
+}
+
+/// Characteristics of an object about to enter the battlefield, with the controller it
+/// will have there (CR 614.12).
+struct EnteringView {
+    obj: ObjectId,
+    controller: PlayerId,
+}
+
+impl crate::eval::View for EnteringView {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        &g.obj(id).chars
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.obj {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.obj).then_some(self.controller)
     }
 }
 

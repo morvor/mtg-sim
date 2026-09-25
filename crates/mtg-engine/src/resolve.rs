@@ -654,6 +654,7 @@ impl Game {
                     e.prepared = true;
                 }
             }
+            Effect::SetDayNight { day } => self.set_day(*day),
             Effect::SetPrepared { what, prepared } => {
                 for o in self.resolve_objects(what, ctx) {
                     if *prepared {

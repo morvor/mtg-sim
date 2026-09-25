@@ -80,6 +80,11 @@ impl Ctx {
 pub trait View {
     fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics;
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId;
+    /// The controller an object is treated as having regardless of its zone (an object
+    /// about to enter the battlefield, CR 614.12).
+    fn controller_override(&self, _id: ObjectId) -> Option<PlayerId> {
+        None
+    }
 }
 
 /// The normal view: an object's computed characteristics.
@@ -264,6 +269,9 @@ impl Game {
     /// controller (CR 108.4a); we treat their owner as controller for "you control" checks
     /// only where the filter is about a zone the player owns.
     fn filter_controller(&self, view: &dyn View, id: ObjectId) -> PlayerId {
+        if let Some(p) = view.controller_override(id) {
+            return p;
+        }
         let o = self.obj(id);
         match o.zone {
             Zone::Battlefield | Zone::Stack => view.controller(self, id),
