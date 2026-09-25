@@ -51,7 +51,19 @@ impl Game {
         }
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
-        for (i, m) in moves.iter().enumerate() {
+        // CR 616.1: when several players choose among replacement effects for
+        // simultaneous events, they do so in APNAP order.
+        let apnap = self.apnap();
+        let mut order: Vec<usize> = (0..moves.len()).collect();
+        order.sort_by_key(|i| {
+            let o = self.obj(moves[*i].obj);
+            let p = match o.zone {
+                Zone::Battlefield | Zone::Stack => o.controller,
+                _ => o.owner,
+            };
+            apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
+        });
+        for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {
             if !self.can_move(m.obj) {
                 continue;
             }

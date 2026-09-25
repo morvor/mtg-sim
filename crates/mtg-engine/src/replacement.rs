@@ -903,6 +903,7 @@ fn repl_class(d: &ReplacementDef, ev: &ReplEvent) -> u8 {
             match &d.action {
                 ReplacementAction::EnterUnderControl(_) => return 1,
                 ReplacementAction::EnterAsCopy { .. } => return 2,
+                ReplacementAction::EnterTransformed => return 3,
                 _ => {}
             }
         }
