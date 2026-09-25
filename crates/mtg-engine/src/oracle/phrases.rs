@@ -386,6 +386,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
+        } else if let Some(r) = t.strip_prefix("on the battlefield") {
+            (Filter::InZone(ZoneKind::Battlefield), r)
         } else if let Some(r) = t.strip_prefix("with flying") {
             (Filter::HasKeyword(KeywordKind::Flying), r)
         } else if let Some(r) = t.strip_prefix("without flying") {
@@ -597,6 +599,10 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         min = 0;
         max = n;
         s = r2;
+    } else if let Some(r) = strip(s, "one or two ") {
+        min = 1;
+        max = Value::Const(2);
+        s = r;
     } else if let Some((n, r)) = parse_number(s) {
         if strip(r, "target").is_some() || strip(r, "other target").is_some() {
             if let Value::Const(k) = n {

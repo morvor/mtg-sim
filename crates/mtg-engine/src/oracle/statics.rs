@@ -528,6 +528,14 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the sacrificed ") {
         return sacrificed_value(r);
     }
+    if let Some(r) = s.strip_prefix("the greatest power among ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::GreatestPower(f), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the greatest mana value among ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::GreatestManaValue(f), rest.to_string()));
+    }
     for (p, v) in [
         ("its power", Value::PowerOf(Box::new(b.it.clone()))),
         ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
