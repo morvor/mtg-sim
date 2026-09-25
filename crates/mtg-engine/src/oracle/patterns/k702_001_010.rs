@@ -29,7 +29,7 @@ fn with_text(v: Vec<Ability>, text: &str) -> Vec<Ability> {
 /// [subject] has [keywords]". (An ability pattern, since the static parser commits to
 /// "~ has ..." lines before trying pluggable static patterns.)
 fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if ctx.is_spell() || block.contains('\n') || block.contains(':') || block.contains('"') {
+    if block.contains('\n') || block.contains(':') || block.contains('"') {
         return None;
     }
     let lower = block.to_lowercase();
@@ -61,7 +61,36 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     {
         return None;
     }
+    let v: Vec<Ability> = v.into_iter().map(|a| conditional_flash_zone(&a)).collect();
+    // On instants and sorceries, only "this spell has flash as long as ..." is a static.
+    if ctx.is_spell()
+        && !v.iter().all(
+            |a| matches!(&a.kind, AbilityKind::Static(s) if s.zone == FunctionZone::Anywhere),
+        )
+    {
+        return None;
+    }
     Some(with_text(v, block))
+}
+
+/// "[This] has flash as long as ..." modifies how the object can be cast, so it functions
+/// in every zone it could be cast from and on the stack (CR 113.6e, 601.3d, 702.8a).
+fn conditional_flash_zone(a: &Ability) -> Ability {
+    if let AbilityKind::Static(s) = &a.kind {
+        if let StaticEffect::Continuous { affected, mods } = &s.effect {
+            if matches!(affected, Filter::Source)
+                && !mods.is_empty()
+                && mods.iter().all(
+                    |m| matches!(m, Modification::AddKeyword(k) if k.kind == KeywordKind::Flash),
+                )
+            {
+                let mut s = s.clone();
+                s.zone = FunctionZone::Anywhere;
+                return AbilityDef::with_link(AbilityKind::Static(s), a.text.clone(), a.link);
+            }
+        }
+    }
+    a.clone()
 }
 
 inventory::submit! {
@@ -311,6 +340,59 @@ fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! {
     EffectPattern { name: "k702: attack despite defender this turn", priority: 50, parse: attack_despite_defender_effect }
+}
+
+/// "You may cast creature spells from the top of your library." / "You may play lands and
+/// cast spells from the top of your library." — permissions to play cards from another
+/// zone; the cards' own timing rules (including flash, CR 702.8a) still apply.
+fn play_from_top_of_library(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l
+        .strip_prefix("you may ")?
+        .strip_suffix(" from the top of your library")?;
+    let (lands, spells_part) = if let Some(s) = r.strip_prefix("play lands and cast ") {
+        (true, Some(s))
+    } else if r == "play lands" {
+        (true, None)
+    } else {
+        (false, Some(r.strip_prefix("cast ")?))
+    };
+    let what = match spells_part {
+        None => Filter::Type(CardType::Land),
+        Some("spells") => Filter::Any,
+        Some(s) => {
+            let mut fs = Vec::new();
+            for part in s.split(" and ").flat_map(|p| p.split(" or ")) {
+                let (f, _, tail) = parse_object_phrase(part.trim())?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                fs.push(f);
+            }
+            if fs.len() == 1 {
+                fs.pop()?
+            } else {
+                Filter::Or(fs)
+            }
+        }
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::PlayPermission(
+            PlayPermission {
+                who: PlayerRel::You,
+                zone: ZoneKind::Library,
+                top_only: true,
+                what,
+                lands,
+                spells: spells_part.is_some(),
+                cost: None,
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! {
+    StaticPattern { name: "k702: play from the top of your library", priority: 50, parse: play_from_top_of_library }
 }
 
 /// "As long as [condition], ~ gets +2/+2 and can attack as though it didn't have
