@@ -548,3 +548,58 @@ fn cinder_wall_is_destroyed_at_end_of_combat_after_blocking() {
     assert!(!t.on_battlefield(wall));
     assert!(t.in_graveyard(P1, "Cinder Wall"));
 }
+
+#[test]
+fn slave_of_bolas_sacrifices_the_stolen_creature_at_the_next_end_step() {
+    cr!("603.7a", "701.21a");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Mountain", 2);
+    let s = t.hand(P0, "Slave of Bolas");
+    t.cast(P0, s).target(bears).go();
+    t.resolve();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn spinal_embrace_gains_life_equal_to_the_sacrificed_creatures_toughness() {
+    cr!("603.7a", "608.2h");
+    let mut t = TestGame::new(2);
+    let mastodon = t.battlefield(P1, "Siege Mastodon");
+    t.lands(P0, "Island", 5);
+    t.lands(P0, "Swamp", 1);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let s = t.hand(P0, "Spinal Embrace");
+    t.cast(P0, s).target(mastodon).go();
+    t.resolve();
+    assert_eq!(t.obj_now(mastodon).controller, P0);
+    assert_eq!(t.life(P0), 20, "no life yet");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Siege Mastodon"));
+    assert_eq!(t.life(P0), 25, "Siege Mastodon's toughness is 5");
+}
+
+#[test]
+fn spinal_embrace_gains_nothing_if_the_creature_is_gone() {
+    cr!("603.7a", "701.21a");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 5);
+    t.lands(P0, "Swamp", 1);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let s = t.hand(P0, "Spinal Embrace");
+    t.cast(P0, s).target(bears).go();
+    t.resolve();
+    // The creature leaves before the delayed trigger resolves: nothing is sacrificed.
+    t.g.destroy(bears, None);
+    t.settle();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+}

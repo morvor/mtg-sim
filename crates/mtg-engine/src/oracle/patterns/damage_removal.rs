@@ -802,12 +802,17 @@ fn p_edict(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "damage_removal: edict", priority: 50, parse: p_edict } }
 
-/// Parses "destroy/exile/return X [to its owner's hand] at end of combat|at the beginning
-/// of the next end step". Returns (verb, object text, tail, step).
+/// Parses "destroy/exile/sacrifice/return X [to its owner's hand] at end of combat|at
+/// the beginning of the next end step" (or with the time first: "at the beginning of the
+/// next end step, sacrifice it"). Returns (verb, object text, tail, step).
 fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)> {
     let (body, step) = if let Some(x) = l.strip_suffix(" at end of combat") {
         (x, TriggerStep::EndOfCombat)
     } else if let Some(x) = l.strip_suffix(" at the beginning of the next end step") {
+        (x, TriggerStep::End)
+    } else if let Some(x) = l.strip_prefix("at end of combat, ") {
+        (x, TriggerStep::EndOfCombat)
+    } else if let Some(x) = l.strip_prefix("at the beginning of the next end step, ") {
         (x, TriggerStep::End)
     } else {
         return None;
@@ -816,6 +821,8 @@ fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)> {
         ("destroy", r)
     } else if let Some(r) = body.strip_prefix("exile ") {
         ("exile", r)
+    } else if let Some(r) = body.strip_prefix("sacrifice ") {
+        ("sacrifice", r)
     } else if let Some(r) = body.strip_prefix("return ") {
         ("return", r)
     } else {
@@ -837,6 +844,16 @@ fn delayed_removal(verb: &str, what: Sel, tail: &str, step: TriggerStep) -> Opti
             what: delayed,
             face_down: false,
             link: false,
+        },
+        // "Sacrifice it": only its controller can sacrifice it, so nothing happens if
+        // you no longer control it (CR 701.21a).
+        ("sacrifice", "") => Effect::If {
+            cond: Condition::SelMatches(
+                delayed.clone(),
+                Filter::ControlledBy(PlayerRel::You),
+            ),
+            then: Box::new(Effect::SacrificeObjects { what: delayed }),
+            otherwise: Box::new(Effect::Noop),
         },
         ("return", "to its owner's hand" | "to their owners' hands" | "to their owner's hand") => {
             Effect::Move {
@@ -931,6 +948,51 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "damage_removal: delayed after create/return", priority: 50, apply: f_delayed_after } }
+
+/// The delayed "sacrifice it" created by `delayed_removal` at the end of an effect.
+fn delayed_sacrifice(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(delayed_sacrifice),
+        Effect::AtNext { effect, .. } => match &mut **effect {
+            Effect::If { then, .. } if matches!(**then, Effect::SacrificeObjects { .. }) => {
+                Some(&mut **then)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// "At the beginning of the next end step, sacrifice it. If you do, you gain life equal to
+/// its toughness.": the "if you do" part happens in the delayed trigger, after the
+/// sacrifice, and "it" is the sacrificed permanent (last known information).
+fn f_delayed_if_you_do(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if you do, ") else {
+        return false;
+    };
+    let Some(then) = delayed_sacrifice(prev) else {
+        return false;
+    };
+    let targets = b.targets.len();
+    let it = std::mem::replace(&mut b.it, Sel::Var(DELAYED));
+    let e = crate::oracle::effects::parse_clause(r, b);
+    b.it = it;
+    let Some(e) = e.filter(|_| b.targets.len() == targets) else {
+        return false;
+    };
+    let sac = std::mem::replace(then, Effect::Noop);
+    *then = Effect::Seq(vec![
+        sac,
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "damage_removal: if you do after a delayed sacrifice", priority: 45, apply: f_delayed_if_you_do } }
 
 // ---------------------------------------------------------------------------
 // Follow-up sentences
