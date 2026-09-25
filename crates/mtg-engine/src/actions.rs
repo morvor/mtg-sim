@@ -52,7 +52,7 @@ impl Game {
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         for (i, m) in moves.iter().enumerate() {
-            if !self.is_live(m.obj) {
+            if !self.can_move(m.obj) {
                 continue;
             }
             // CR 614.17d: a "can't enter" effect stops the event; it isn't replaced
@@ -94,6 +94,17 @@ impl Game {
         self.run_post_replacement_effects();
         self.recompute();
         out
+    }
+
+    /// Whether an object can be moved to a zone: it's a current object in some zone, or a
+    /// newly created object (a token or card) that hasn't been put anywhere yet.
+    pub fn can_move(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        self.is_live(id)
+            || (o.zone == Zone::Nowhere
+                && o.next.is_none()
+                && o.prev.is_none()
+                && o.kind != ObjKind::StackAbility)
     }
 
     /// The player who will control a permanent entering the battlefield with this move.
@@ -187,7 +198,7 @@ impl Game {
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
         let old_id = m.obj;
-        if !self.is_live(old_id) {
+        if !self.can_move(old_id) {
             return None;
         }
         let from = self.obj(old_id).zone;
@@ -271,6 +282,22 @@ impl Game {
                     });
                 }
                 self.battlefield.push(new_id);
+                if from == Zone::Stack {
+                    // A text change made to a permanent spell continues to apply to the
+                    // permanent it becomes (Sleight of Mind rulings).
+                    for e in self.effects.iter_mut() {
+                        if e.mods
+                            .iter()
+                            .any(|x| matches!(x, Modification::ChangeText { .. }))
+                        {
+                            if let Affected::Objects(v) = &mut e.affected {
+                                if v.contains(&old_id) {
+                                    v.push(new_id);
+                                }
+                            }
+                        }
+                    }
+                }
                 if let Some((source, ctl, mods)) = m.etb.with_mods.clone() {
                     // CR 611.2e, 613.7n.
                     let id = self.new_effect_id();

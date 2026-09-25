@@ -304,6 +304,56 @@ pub fn replace_words(text: &str, from: &str, to: &str) -> String {
     out
 }
 
+/// Gives an object the full text of a card (CR 612.6): the text representing its name,
+/// mana cost, color indicator, type line, rules text, power, and toughness. Its color
+/// follows its new mana cost and color indicator (CR 202.2).
+pub fn take_full_text(c: &mut Characteristics, of: &Characteristics) {
+    c.name = of.name.clone();
+    c.mana_cost = of.mana_cost.clone();
+    c.color_indicator = of.color_indicator;
+    c.colors = of.colors;
+    c.supertypes = of.supertypes;
+    c.card_types = of.card_types;
+    c.subtypes = of.subtypes.clone();
+    c.abilities = of.abilities.clone();
+    c.rules_text = of.rules_text.clone();
+    c.power = of.power;
+    c.toughness = of.toughness;
+    c.loyalty = of.loyalty;
+    c.defense = of.defense;
+}
+
+/// "Exchange the text boxes of [two objects]" (CR 612.5): each loses its rules text and
+/// gets the rules text the other had as the effect began (abilities granted by other
+/// effects aren't part of the rules text, CR 612.3). Returns the per-object modification
+/// lists, or `None` if the modifications don't ask for an exchange of two objects.
+pub fn exchange_mods(
+    g: &Game,
+    objs: &[crate::types::ObjectId],
+    mods: &[Modification],
+) -> Option<Vec<(crate::types::ObjectId, Vec<Modification>)>> {
+    if !mods.iter().any(|m| matches!(m, Modification::ExchangeText)) || objs.len() != 2 {
+        return None;
+    }
+    let text = |o: crate::types::ObjectId| {
+        let c = &g.obj(o).copiable;
+        Modification::SetText {
+            abilities: c.abilities.clone(),
+            text: SmolStr::new(&*c.rules_text),
+        }
+    };
+    let rest: Vec<Modification> = mods
+        .iter()
+        .filter(|m| !matches!(m, Modification::ExchangeText))
+        .cloned()
+        .collect();
+    let mut a = rest.clone();
+    a.push(text(objs[1]));
+    let mut b = rest;
+    b.push(text(objs[0]));
+    Some(vec![(objs[0], a), (objs[1], b)])
+}
+
 /// "Change the text of [objects] by replacing all instances of one [kind of word] with
 /// another": the controller chooses the words as the effect resolves, then a layer 3
 /// continuous effect is created (CR 612.1, 613.1c). `exclude_to` lists words the new word

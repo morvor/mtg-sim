@@ -550,6 +550,12 @@ impl Game {
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
+            Sel::TopOfGraveyard(r) => self
+                .eval_player(r, ctx)
+                .and_then(|p| self.player(p).graveyard.last().copied())
+                .map(Entity::Object)
+                .into_iter()
+                .collect(),
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {

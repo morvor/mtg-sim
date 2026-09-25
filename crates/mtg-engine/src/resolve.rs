@@ -334,19 +334,30 @@ impl Game {
                     return;
                 }
                 let fixed = self.fix_mods(mods, ctx);
-                let id = self.new_effect_id();
                 let ts = self.new_timestamp();
-                self.effects.push(ContinuousEffect {
-                    id,
-                    source: ctx.source,
-                    controller: ctx.controller,
-                    timestamp: ts,
-                    duration: duration.clone(),
-                    affected: Affected::Objects(objs),
-                    mods: fixed,
-                    layer1: None,
-                    created_turn: self.turn.number,
-                });
+                // CR 612.5: an exchange of text boxes gives each object the other's text.
+                let parts: Vec<(Option<ObjectId>, Vec<Modification>)> =
+                    match crate::text_change::exchange_mods(self, &objs, &fixed) {
+                        Some(v) => v.into_iter().map(|(o, m)| (Some(o), m)).collect(),
+                        None => vec![(None, fixed)],
+                    };
+                for (o, part) in parts {
+                    let id = self.new_effect_id();
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: ctx.source,
+                        controller: ctx.controller,
+                        timestamp: ts,
+                        duration: duration.clone(),
+                        affected: Affected::Objects(match o {
+                            Some(o) => vec![o],
+                            None => objs.clone(),
+                        }),
+                        mods: part,
+                        layer1: None,
+                        created_turn: self.turn.number,
+                    });
+                }
                 self.dirty = true;
             }
             Effect::AddRestriction {

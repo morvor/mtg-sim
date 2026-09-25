@@ -616,6 +616,8 @@ pub enum Sel {
     TriggerSpell,
     /// Union of selections.
     Union(Vec<Sel>),
+    /// The top card of a player's graveyard.
+    TopOfGraveyard(PlayerRef),
 }
 
 /// Refers to one or more players.
@@ -1079,6 +1081,19 @@ pub enum Modification {
         from: SmolStr,
         to: SmolStr,
     },
+    /// Sets the name (CR 612.8): the object loses its other names.
+    SetName(SmolStr),
+    /// "Exchange the text boxes of [two objects]" (CR 612.5). As the effect is created,
+    /// it becomes a [`Modification::SetText`] for each object with the other's rules text.
+    ExchangeText,
+    /// Replaces the object's rules text (CR 612.5).
+    SetText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// Has the full text of the selected card (CR 612.6): its name, mana cost, color
+    /// indicator, type line, rules text, and power and toughness.
+    FullTextOf(Box<Sel>),
     // Layer 4
     AddTypes(Vec<CardType>),
     RemoveTypes(Vec<CardType>),
@@ -1123,7 +1138,9 @@ impl Modification {
         use Modification::*;
         match self {
             SetController(_) => Layer::L2Control,
-            ChangeText { .. } => Layer::L3Text,
+            ChangeText { .. } | SetName(_) | ExchangeText | SetText { .. } | FullTextOf(_) => {
+                Layer::L3Text
+            }
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)

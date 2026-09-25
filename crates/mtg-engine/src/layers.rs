@@ -1051,6 +1051,18 @@ pub fn apply_mod(
     match m {
         Modification::SetController(_) => {}
         Modification::ChangeText { from, to } => crate::text_change::change_text(c, from, to),
+        Modification::SetName(n) => c.name = n.clone(),
+        // Becomes `SetText` for each object as the effect is created.
+        Modification::ExchangeText => {}
+        Modification::SetText { abilities, text } => {
+            c.abilities = abilities.clone();
+            c.rules_text = std::sync::Arc::from(text.as_str());
+        }
+        Modification::FullTextOf(sel) => {
+            if let Some(t) = g.eval_sel_objects(sel, ctx).first() {
+                crate::text_change::take_full_text(c, &g.obj(*t).base);
+            }
+        }
         Modification::AddTypes(ts) => {
             for t in ts {
                 c.card_types.insert(*t);
