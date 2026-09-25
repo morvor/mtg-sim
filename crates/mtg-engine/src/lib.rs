@@ -69,6 +69,7 @@ pub mod splice;
 pub mod stack;
 pub mod start;
 pub mod stickers;
+pub mod teams;
 pub mod testing;
 pub mod text_change;
 pub mod tokens;

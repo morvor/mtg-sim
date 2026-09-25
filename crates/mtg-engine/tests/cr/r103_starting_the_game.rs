@@ -800,3 +800,133 @@ fn in_other_multiplayer_games_no_one_skips_their_first_draw() {
     assert!(t.g.turn.step_log.contains(&Step::Draw));
     assert_eq!(t.hand_size(P0), 8);
 }
+
+// ---------------------------------------------------------------------------
+// Shared team turns (Two-Headed Giant)
+// ---------------------------------------------------------------------------
+
+fn two_headed_giant(extra: GameConfig, decks: Vec<Vec<Arc<CardDef>>>) -> TestGame {
+    pregame(
+        GameConfig {
+            variant: Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..extra
+        },
+        decks,
+    )
+}
+
+#[test]
+fn with_shared_team_turns_a_starting_team_is_chosen_and_teams_take_turns() {
+    cr!("103.1a");
+    let mut t = two_headed_giant(
+        GameConfig {
+            first_turn_chooser: Some(P3),
+            skip_mulligans: true,
+            ..config()
+        },
+        (0..4).map(|_| fillers(40)).collect(),
+    );
+    t.answer_choose(P3, &[Entity::Player(P0)]);
+    t.g.start();
+    // P3 chose between the two teams.
+    let chosen: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(chosen[0], vec![Entity::Player(P2), Entity::Player(P0)]);
+    assert_eq!(t.g.start.starting_team, Some(0));
+    assert_eq!(t.g.turn.starting_player, P0);
+    // It's the whole team's turn; then the other team's.
+    assert!(t.g.is_active_player(P0) && t.g.is_active_player(P1));
+    assert!(!t.g.is_active_player(P2));
+    to_main(&mut t, P2);
+    assert_eq!(t.g.turn.number, 2);
+    assert!(t.g.is_active_player(P3) && !t.g.is_active_player(P1));
+    to_main(&mut t, P0);
+    assert_eq!(t.g.turn.number, 3);
+}
+
+#[test]
+fn with_shared_team_turns_the_starting_team_declares_mulligans_first() {
+    cr!("103.5d");
+    let mut t = two_headed_giant(
+        GameConfig {
+            starting_player: Some(P1),
+            ..config()
+        },
+        (0..4).map(|_| fillers(40)).collect(),
+    );
+    // P1 keeps; its teammate may still mulligan afterwards.
+    t.answer(P0, DecisionKind::Mulligan, Answer::Bool(true));
+    t.answer(P3, DecisionKind::Mulligan, Answer::Bool(true));
+    t.g.start();
+    let order: Vec<PlayerId> = t
+        .asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::Mulligan { .. }))
+        .map(|(p, _)| p)
+        .collect();
+    // First round: the starting team (P1, then P0), then the other team; second round:
+    // those who mulliganed.
+    assert_eq!(order, vec![P1, P0, P2, P3, P0, P3]);
+    // Multiplayer: the first mulligan is free (CR 103.5c).
+    assert_eq!(t.hand_size(P0), 7);
+    assert_eq!(t.hand_size(P3), 7);
+}
+
+#[test]
+fn with_shared_team_turns_the_starting_team_takes_opening_hand_actions_first() {
+    cr!("103.6c");
+    let mut t = two_headed_giant(
+        GameConfig {
+            starting_player: Some(P1),
+            skip_mulligans: true,
+            ..config()
+        },
+        (0..4)
+            .map(|_| copies("Leyline of Sanctity", 20))
+            .collect(),
+    );
+    t.g.start();
+    let mut order: Vec<PlayerId> = Vec::new();
+    for (p, d) in t.asked() {
+        if matches!(d, Decision::YesNo { .. }) && order.last() != Some(&p) {
+            order.push(p);
+        }
+    }
+    assert_eq!(order, vec![P1, P0, P2, P3]);
+}
+
+#[test]
+fn in_two_headed_giant_the_team_who_plays_first_skips_its_first_draw_step() {
+    cr!("103.8b");
+    let mut t = two_headed_giant(
+        GameConfig {
+            starting_player: Some(P0),
+            skip_mulligans: true,
+            ..config()
+        },
+        (0..4).map(|_| fillers(40)).collect(),
+    );
+    t.g.start();
+    to_main(&mut t, P0);
+    assert!(!t.g.turn.step_log.contains(&Step::Draw));
+    assert_eq!((t.hand_size(P0), t.hand_size(P1)), (7, 7));
+    // A land P1 taps during the turn untaps in the team's next untap step.
+    let land = t.g.create_card_object(card("Forest"), P1, Zone::Battlefield);
+    t.g.battlefield.push(land);
+    t.g.objects[land.0 as usize].tapped = true;
+    to_main(&mut t, P2);
+    // The other team draws: each of its players (CR 805.4b).
+    assert!(t.g.turn.step_log.contains(&Step::Draw));
+    assert_eq!((t.hand_size(P2), t.hand_size(P3)), (8, 8));
+    assert!(t.g.obj(land).tapped);
+    to_main(&mut t, P0);
+    assert_eq!((t.hand_size(P0), t.hand_size(P1)), (8, 8));
+    assert!(!t.g.obj(land).tapped);
+}

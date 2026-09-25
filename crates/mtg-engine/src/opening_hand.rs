@@ -96,9 +96,10 @@ pub fn pregame_choices(g: &mut Game) {
 }
 
 /// Once mulligans are complete, the starting player may take any such actions, then each
-/// other player in turn order (CR 103.6).
+/// other player in turn order (CR 103.6); with shared team turns, each player on the
+/// starting team, then each player on each other team in turn order (CR 103.6c).
 pub fn opening_hand_actions(g: &mut Game) {
-    for p in g.apnap() {
+    for p in g.pregame_order() {
         opening_hand_actions_for(g, p);
     }
     g.flush_events();

@@ -261,16 +261,20 @@ impl Game {
             o.activations_this_turn.clear();
             o.triggers_this_turn.clear();
         }
-        // CR 302.6: permanents the active player has controlled continuously since the turn
-        // began are no longer "summoning sick".
+        // CR 302.6: permanents the active player (with shared team turns, each player on
+        // the active team, CR 805.4a) has controlled continuously since the turn began are
+        // no longer "summoning sick".
+        let actives = self.active_players();
         let bf = self.battlefield.clone();
         for id in bf {
-            if self.obj(id).controller == active {
+            if actives.contains(&self.obj(id).controller) {
                 self.objects[id.0 as usize].summoning_sick = false;
             }
         }
         // Effects that last "until your next turn" end (CR 611.2b).
-        self.expire_until_next_turn(active);
+        for p in actives {
+            self.expire_until_next_turn(p);
+        }
         // Goad ends at the goading player's next turn (CR 701.15b).
         for o in self.objects.iter_mut() {
             o.goaded_by.retain(|p| *p != active);
@@ -321,7 +325,11 @@ impl Game {
                 self.turn.upkeeps += 1;
             }
             Step::Draw => {
-                self.draw_cards(active, 1);
+                // With shared team turns, each player on the active team draws
+                // (CR 805.4b).
+                for p in self.active_players() {
+                    self.draw_cards(p, 1);
+                }
             }
             Step::PrecombatMain | Step::PostcombatMain => {
                 self.turn.main_phases += 1;
@@ -492,7 +500,7 @@ impl Game {
                         return;
                     }
                 }
-                let next = self.next_player(after);
+                let next = self.next_turn_player(after);
                 if crate::skip::consume_turn_skip(self, next) {
                     after = next;
                     continue;
@@ -500,7 +508,7 @@ impl Game {
                 self.begin_turn(next, false);
                 return;
             }
-            let next = self.next_player(after);
+            let next = self.next_turn_player(after);
             self.begin_turn(next, false);
             return;
         }
@@ -596,17 +604,20 @@ impl Game {
     /// Whether `active` skips the draw step of this turn because it's the starting
     /// player's first turn (CR 103.8a–c).
     pub fn first_turn_draw_skipped(&self, active: PlayerId) -> bool {
+        // CR 103.8b: in Two-Headed Giant, the team who plays first skips it.
         let skips = self
             .config
             .starting_player_skips_draw
-            .unwrap_or(self.is_two_player());
+            .unwrap_or(self.is_two_player() || self.config.variant == Variant::TwoHeadedGiant);
         skips && active == self.turn.starting_player && self.turn.number == 1 && !self.turn.extra
     }
 
     fn untap_step_actions(&mut self) {
         let active = self.turn.active;
         // CR 502.1: phasing.
-        crate::keyword_impls::phasing_untap_step(self, active);
+        for p in self.active_players() {
+            crate::keyword_impls::phasing_untap_step(self, p);
+        }
         // CR 502.2: day/night.
         if let Some(is_day) = self.day {
             if self.turn.number > 1 {
@@ -618,25 +629,28 @@ impl Game {
                 }
             }
         }
-        // CR 502.3: untap.
-        self.recompute();
-        let mut to_untap: Vec<ObjectId> = self
-            .permanents()
-            .filter(|o| o.controller == active && o.tapped)
-            .map(|o| o.id)
-            .filter(|id| !self.doesnt_untap(*id))
-            .collect();
-        self.limit_untaps(active, &mut to_untap);
-        for id in to_untap {
-            self.untap(id);
-        }
-        // CR 701.43a: exertion lasts until its controller's next untap step.
-        for id in self.battlefield.clone() {
-            if self.obj(id).controller == active {
-                self.objects[id.0 as usize].exerted = false;
+        // CR 502.3: untap (each player on the active team, CR 805.4a).
+        let _ = active;
+        for active in self.active_players() {
+            self.recompute();
+            let mut to_untap: Vec<ObjectId> = self
+                .permanents()
+                .filter(|o| o.controller == active && o.tapped)
+                .map(|o| o.id)
+                .filter(|id| !self.doesnt_untap(*id))
+                .collect();
+            self.limit_untaps(active, &mut to_untap);
+            for id in to_untap {
+                self.untap(id);
             }
+            // CR 701.43a: exertion lasts until its controller's next untap step.
+            for id in self.battlefield.clone() {
+                if self.obj(id).controller == active {
+                    self.objects[id.0 as usize].exerted = false;
+                }
+            }
+            self.expire_through_next_untap_step(active);
         }
-        self.expire_through_next_untap_step(active);
     }
 
     /// "Doesn't untap during its controller's next untap step": that untap step has now
@@ -699,10 +713,12 @@ impl Game {
     }
 
     fn cleanup_actions(&mut self) {
-        let active = self.turn.active;
-        // CR 514.1: discard to maximum hand size.
+        // CR 514.1: discard to maximum hand size (each player on the active team).
         self.recompute();
-        if let Some(max) = self.player(active).max_hand_size {
+        for active in self.active_players() {
+            let Some(max) = self.player(active).max_hand_size else {
+                continue;
+            };
             let hand = self.player(active).hand.clone();
             let excess = hand.len() as i32 - max.max(0);
             if excess > 0 {
@@ -799,7 +815,7 @@ impl Game {
     /// Whether the current step is a main phase of the active player with an empty stack
     /// (sorcery timing, CR 307.1).
     pub fn is_sorcery_timing(&self, p: PlayerId) -> bool {
-        self.turn.active == p && self.turn.step.is_main() && self.stack.is_empty()
+        self.is_active_player(p) && self.turn.step.is_main() && self.stack.is_empty()
     }
 
     /// Checks whether the zone is a hand/library for hidden info purposes.

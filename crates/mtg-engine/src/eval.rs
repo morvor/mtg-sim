@@ -1030,8 +1030,8 @@ impl Game {
                 .eval_players(r, ctx)
                 .into_iter()
                 .any(|p| self.player_filter_matches(f, p, ctx)),
-            Condition::YourTurn => self.turn.active == ctx.controller,
-            Condition::NotYourTurn => self.turn.active != ctx.controller,
+            Condition::YourTurn => self.is_active_player(ctx.controller),
+            Condition::NotYourTurn => !self.is_active_player(ctx.controller),
             // For a permanent's abilities, how the permanent was cast (CR 607.2i).
             Condition::CostPaid(name) => self
                 .cast_info(ctx)

@@ -1005,13 +1005,21 @@ impl Game {
                     && !(*s == Step::FirstStrikeDamage && *step != TriggerStep::CombatDamage);
                 // "At the beginning of your precombat main phase" only for the first main phase.
                 let main_ok = !(*step == TriggerStep::PrecombatMain && self.turn.main_phases > 1);
-                if matches_step && main_ok && self.player_rel_matches(*whose, *active, &ctx) {
-                    one(EventInfo {
-                        player: Some(*active),
-                        ..Default::default()
-                    })
+                // With shared team turns, it's the step of each player on the active team
+                // ("your upkeep" for a teammate too, CR 805.4d).
+                let whose_step = if self.uses_shared_team_turns() {
+                    self.active_players()
+                        .into_iter()
+                        .find(|p| self.player_rel_matches(*whose, *p, &ctx))
                 } else {
-                    none()
+                    Some(*active).filter(|p| self.player_rel_matches(*whose, *p, &ctx))
+                };
+                match whose_step {
+                    Some(p) if matches_step && main_ok => one(EventInfo {
+                        player: Some(p),
+                        ..Default::default()
+                    }),
+                    _ => none(),
                 }
             }
             (

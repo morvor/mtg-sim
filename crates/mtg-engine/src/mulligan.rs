@@ -28,8 +28,9 @@ pub fn run_mulligans(g: &mut Game) {
     let mut kept: Vec<bool> = vec![false; g.players.len()];
     loop {
         // CR 103.5: the starting player declares first, then each other player in turn
-        // order (the starting player is the active player, CR 101.4e).
-        let order = g.apnap();
+        // order (the starting player is the active player, CR 101.4e); with shared team
+        // turns, the starting team's players first (CR 103.5d).
+        let order = g.pregame_order();
         let mut mulling = Vec::new();
         for p in order {
             if kept[p.idx()] {

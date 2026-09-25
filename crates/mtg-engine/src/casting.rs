@@ -144,7 +144,8 @@ impl Game {
 
     pub fn can_play_land_now(&self, p: PlayerId) -> bool {
         // CR 305.2, 505.6b: active player, main phase, empty stack, land play available.
-        self.turn.active == p
+        // With shared team turns each player on the active team may (CR 805.4c).
+        self.is_active_player(p)
             && self.turn.step.is_main()
             && self.stack.is_empty()
             && self.turn.priority == Some(p)
@@ -1097,13 +1098,13 @@ impl Game {
         }
         match act.timing {
             ActivationTiming::YourUpkeep
-                if !(self.turn.active == p && self.turn.step == crate::turn::Step::Upkeep) =>
+                if !(self.is_active_player(p) && self.turn.step == crate::turn::Step::Upkeep) =>
             {
                 return false
             }
             ActivationTiming::Combat if !self.turn.step.is_combat() => return false,
-            ActivationTiming::YourTurn if self.turn.active != p => return false,
-            ActivationTiming::OpponentsTurn if self.turn.active == p => return false,
+            ActivationTiming::YourTurn if !self.is_active_player(p) => return false,
+            ActivationTiming::OpponentsTurn if self.is_active_player(p) => return false,
             // CR 506.8, 506.8g: combat timing windows.
             ActivationTiming::CombatWindow(t) if !crate::combat::combat_timing_ok(self, t) => {
                 return false

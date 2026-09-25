@@ -39,6 +39,8 @@ pub struct StickerSheet {
 pub struct StartState {
     /// The player who chose who takes the first turn (CR 103.1).
     pub chooser: Option<PlayerId>,
+    /// With shared team turns, the team that takes the first turn (CR 103.1a).
+    pub starting_team: Option<u8>,
     /// Each player's starting deck (CR 103.2a): the cards in it when it was determined.
     pub starting_decks: BTreeMap<PlayerId, Vec<ObjectId>>,
     /// The companion card each player revealed from outside the game (CR 103.2b).
@@ -168,8 +170,17 @@ impl Game {
 /// CR 103.1: the players determine (randomly, by default) which of them chooses who takes
 /// the first turn, and that player chooses. In a match, the configured chooser (the loser
 /// of the previous game) chooses. In an Archenemy game the archenemy goes first
-/// (CR 103.1b).
+/// (CR 103.1b). With shared team turns a starting team is chosen (CR 103.1a, 805.3),
+/// represented by its first player.
 pub fn choose_starting_player(g: &mut Game) -> PlayerId {
+    let p = choose_starting_player_inner(g);
+    if g.uses_shared_team_turns() {
+        g.start.starting_team = Some(g.player(p).team);
+    }
+    p
+}
+
+fn choose_starting_player_inner(g: &mut Game) -> PlayerId {
     if let Some(p) = g.config.starting_player {
         return p;
     }
@@ -182,12 +193,23 @@ pub fn choose_starting_player(g: &mut Game) -> PlayerId {
         None => PlayerId(g.random_range(0, n - 1) as u8),
     };
     g.start.chooser = Some(chooser);
-    // The chooser's own seat is the default answer.
-    let mut cands: Vec<Entity> = vec![Entity::Player(chooser)];
-    cands.extend(
+    let shared = g.uses_shared_team_turns();
+    let options: Vec<PlayerId> = if shared {
+        g.team_representatives()
+    } else {
         g.player_ids()
+    };
+    // The chooser's own seat (or team) is the default answer.
+    let own = options
+        .iter()
+        .copied()
+        .find(|p| shared && g.player(*p).team == g.player(chooser).team)
+        .unwrap_or(chooser);
+    let mut cands: Vec<Entity> = vec![Entity::Player(own)];
+    cands.extend(
+        options
             .into_iter()
-            .filter(|p| *p != chooser)
+            .filter(|p| *p != own)
             .map(Entity::Player),
     );
     g.ask_entities(
@@ -200,7 +222,7 @@ pub fn choose_starting_player(g: &mut Game) -> PlayerId {
     )
     .first()
     .and_then(|e| e.player())
-    .unwrap_or(chooser)
+    .unwrap_or(own)
 }
 
 /// CR 103.2: the additional steps taken after the starting player has been determined, in
