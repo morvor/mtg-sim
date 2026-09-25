@@ -286,6 +286,59 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
+/// The search in `e` (possibly optional: "you may search ...").
+fn search_mut(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Search { .. } => Some(e),
+        Effect::May { effect, .. } => search_mut(effect),
+        _ => None,
+    }
+}
+
+/// "If you control a Dragon, put that card onto the battlefield tapped instead." after a
+/// search: the found card goes somewhere else when the condition holds as the ability
+/// resolves (CR 608.2c) — the search itself still happens either way.
+fn search_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    let Some(x) = x.strip_suffix(" instead") else {
+        return false;
+    };
+    let Some(x) = x.strip_prefix("put ").and_then(strip_pronoun) else {
+        return false;
+    };
+    let Some(Effect::Search { who, .. }) = search_mut(prev) else {
+        return false;
+    };
+    let Some(to) = destination(x.trim(), &who.clone()) else {
+        return false;
+    };
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let mut alt = prev.clone();
+    if let Some(Effect::Search { to: t, .. }) = search_mut(&mut alt) {
+        *t = to;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(alt),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! {
+    // Before the general "if [condition], [effect] instead" (priority 60), which would
+    // replace the whole search.
+    FollowupPattern { name: "card_flow: if [condition], put that card [somewhere] instead", priority: 55, apply: search_instead }
+}
+
 /// "Then that player shuffles." after a search of another player's library.
 fn that_player_shuffles(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     if !matches!(l, "then that player shuffles" | "that player shuffles") {

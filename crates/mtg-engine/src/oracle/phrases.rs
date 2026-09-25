@@ -365,6 +365,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             group_start = heads.len();
             s = nrest;
             // "Dragon creature cards": a subtype narrowed by a card type, then by "card".
+            let mut ends_in_card = matches!(nw2, "card" | "cards");
             let (cw, crest) = split_word(s);
             let cw2 = cw.trim_end_matches(',');
             if matches!(cw2, "card" | "cards")
@@ -379,10 +380,27 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 heads.push(Filter::and(vec![last, Filter::Card]));
                 group_start = heads.len();
                 s = crest;
+                ends_in_card = true;
             }
             // allow "creature card or artifact card"
             let t = s.trim_start();
             if let Some(r) = t.strip_prefix("or ") {
+                // "basic land card or Gate card": adjectives before a complete "... card"
+                // phrase describe only that phrase, not the alternative after "or" (but
+                // "nontoken artifact creature or Vehicle" is one description).
+                if ends_in_card && parts.iter().any(|p| !matches!(p, Filter::Other)) {
+                    let adjs: Vec<Filter> = parts
+                        .iter()
+                        .filter(|p| !matches!(p, Filter::Other))
+                        .cloned()
+                        .collect();
+                    parts.retain(|p| matches!(p, Filter::Other));
+                    for h in heads.iter_mut() {
+                        let mut v = adjs.clone();
+                        v.push(h.clone());
+                        *h = Filter::and(v);
+                    }
+                }
                 s = r;
                 continue;
             }

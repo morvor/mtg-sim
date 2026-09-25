@@ -29,18 +29,25 @@ fn light_up_the_stage_lasts_until_the_end_of_your_next_turn() {
     let bolt = t.library_top(P0, "Lightning Bolt");
     let mountain = t.library_top(P0, "Mountain");
     let spell = t.hand(P0, "Light Up the Stage");
+    let forest = t.hand(P0, "Forest");
     t.cast(P0, spell).go();
     t.resolve();
     let bolt_x = t.g.current(bolt);
     let mountain_x = t.g.current(mountain);
     assert_eq!(t.zone(bolt_x), Zone::Exile);
     assert_eq!(t.zone(mountain_x), Zone::Exile);
-    // The land can be played from exile (it uses the land play).
+    // With this turn's land play used, the exiled land can't be played.
+    t.play_land(P0, forest).expect("play a land from hand");
+    assert!(t.play_land(P0, mountain_x).is_err());
+    // Next turn: not in the upkeep (not a main phase)...
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.play_land(P0, mountain_x).is_err());
+    // ...but in the main phase, with a land play available, it can (it uses the land play).
+    t.advance_to(P0, Step::PrecombatMain);
     t.play_land(P0, mountain_x).expect("play the exiled land");
     assert_eq!(t.named_on_battlefield("Mountain").len(), 4);
-    // The Bolt is still playable on P0's next turn...
-    t.advance_to(P0, Step::Upkeep);
-    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1);
+    // The Bolt is still playable on P0's next turn.
     let bolt_x = t.g.current(bolt);
     assert!(t.cast_with(P0, bolt_x, &[Entity::Player(P1)]).is_ok());
     t.resolve();
@@ -115,7 +122,7 @@ fn chandra_fire_artisan_exiles_the_top_card_to_play_this_turn() {
         .iter()
         .all(|u| !u.contains("Exile the top")));
     let mut t = TestGame::new(2);
-    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Mountain", 2);
     let chandra = t.battlefield(P0, "Chandra, Fire Artisan");
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.activate(P0, chandra, 0, &[]).unwrap();
@@ -126,4 +133,9 @@ fn chandra_fire_artisan_exiles_the_top_card_to_play_this_turn() {
     t.resolve();
     assert_eq!(t.life(P1), 17);
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    // The permission was for the exiled card: the Bolt (a new object in the graveyard)
+    // can't be cast again, even with mana available.
+    let bolt_gy = t.g.current(bolt);
+    assert!(t.cast_with(P0, bolt_gy, &[Entity::Player(P1)]).is_err());
+    assert_eq!(t.life(P1), 17);
 }

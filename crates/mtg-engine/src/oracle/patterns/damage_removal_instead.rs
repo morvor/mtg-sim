@@ -48,6 +48,11 @@ fn damage_amount(x: &str, prev: &Effect) -> Option<Effect> {
     })
 }
 
+/// Whether an effect refers to the objects the previous instruction produced (`vars::IT`).
+fn mentions_it(e: &Effect) -> bool {
+    serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::IT)))
+}
+
 fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = l.strip_prefix("if ") else {
         return false;
@@ -75,6 +80,12 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = replacement else {
         return false;
     };
+    // "... put that card onto the battlefield instead": a replacement that acts on what
+    // the previous sentence produced ("it", "that card") can't stand in for it.
+    if mentions_it(&e) {
+        b.targets.truncate(targets);
+        return false;
+    }
     let old = std::mem::replace(prev, Effect::Noop);
     *prev = Effect::If {
         cond,

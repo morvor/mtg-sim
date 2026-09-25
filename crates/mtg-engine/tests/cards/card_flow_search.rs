@@ -31,7 +31,7 @@ fn last_choice_candidates(t: &TestGame) -> Vec<Entity> {
 
 #[test]
 fn rathi_assassin_searches_for_a_small_mercenary_permanent_card() {
-    cr!("701.23a", "110.4a");
+    cr!("701.23a");
     assert_supported("Rathi Assassin");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 3);
@@ -64,18 +64,16 @@ fn path_to_exile_lets_the_creatures_controller_search() {
     for accept in [true, false] {
         let mut t = TestGame::new(2);
         t.lands(P0, "Plains", 1);
+        // "Whenever an opponent shuffles their library": shows whether P1 shuffled.
+        let trickster = t.battlefield(P0, "Cosi's Trickster");
         let bear = t.battlefield(P1, "Grizzly Bears");
         let forest = t.library_top(P1, "Forest");
-        // Filler cards on top of the Forest; declining leaves the order untouched.
-        for _ in 0..3 {
-            t.library_top(P1, "Grizzly Bears");
-        }
-        let before = t.g.player(P1).library.clone();
         let path = t.hand(P0, "Path to Exile");
         t.answer_yes(P1, accept);
         t.answer_choose(P1, &[Entity::Object(forest)]);
+        t.answer_yes(P0, true);
         t.cast(P0, path).target(bear).go();
-        t.resolve();
+        t.resolve_all();
         assert!(t.in_exile("Grizzly Bears"));
         let lands = t.named_on_battlefield("Forest");
         if accept {
@@ -83,9 +81,10 @@ fn path_to_exile_lets_the_creatures_controller_search() {
             // The land enters tapped under the searching player's control.
             assert_eq!(t.g.obj(lands[0]).controller, P1);
             assert!(t.g.obj(lands[0]).tapped);
+            assert_eq!(t.counters(trickster, "+1/+1"), 1, "P1 shuffled");
         } else {
             assert!(lands.is_empty());
-            assert_eq!(t.g.player(P1).library, before);
+            assert_eq!(t.counters(trickster, "+1/+1"), 0, "P1 didn't shuffle");
         }
     }
 }
@@ -96,6 +95,9 @@ fn imperial_seal_shuffles_then_puts_the_card_on_top() {
     assert_supported("Imperial Seal");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 1);
+    // P0 is P1's opponent: P0 shuffling triggers it (CR 701.24b: shuffle triggers still
+    // trigger even though the found card isn't part of the shuffle).
+    let trickster = t.battlefield(P1, "Cosi's Trickster");
     let wanted = t.library_top(P0, "Lightning Bolt");
     for _ in 0..5 {
         t.library_top(P0, "Grizzly Bears");
@@ -103,18 +105,21 @@ fn imperial_seal_shuffles_then_puts_the_card_on_top() {
     let seal = t.hand(P0, "Imperial Seal");
     let lib = t.library_size(P0);
     t.answer_choose(P0, &[Entity::Object(wanted)]);
+    t.answer_yes(P1, true);
     t.cast(P0, seal).go();
-    t.resolve();
-    // The same card (no zone change) is now on top, and the library size is unchanged.
+    t.resolve_all();
+    // The same card (it never left the library) is now on top, and the library size is
+    // unchanged.
     assert_eq!(t.g.player(P0).library.last(), Some(&wanted));
     assert_eq!(t.zone(wanted), Zone::Library(P0));
     assert_eq!(t.library_size(P0), lib);
     assert_eq!(t.life(P0), 18);
+    assert_eq!(t.counters(trickster, "+1/+1"), 1, "P0 shuffled");
 }
 
 #[test]
 fn squadron_hawk_finds_up_to_three_cards_named_squadron_hawk() {
-    cr!("701.23a", "201.2a");
+    cr!("701.23a");
     assert_supported("Squadron Hawk");
     let mut t = TestGame::new(2);
     let hawks: Vec<ObjectId> = (0..4).map(|_| t.library_top(P0, "Squadron Hawk")).collect();
@@ -162,14 +167,18 @@ fn extract_exiles_a_card_from_target_players_library_and_they_shuffle() {
     assert_supported("Extract");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
+    // "Whenever an opponent shuffles their library": P1 shuffles.
+    let trickster = t.battlefield(P0, "Cosi's Trickster");
     let bolt = t.library_top(P1, "Lightning Bolt");
     let extract = t.hand(P0, "Extract");
     let lib = t.library_size(P1);
     t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.answer_yes(P0, true);
     t.cast(P0, extract).target(P1).go();
-    t.resolve();
+    t.resolve_all();
     assert!(t.in_exile("Lightning Bolt"));
     assert_eq!(t.library_size(P1), lib - 1);
+    assert_eq!(t.counters(trickster, "+1/+1"), 1, "P1 shuffled");
     // P0 searched P1's library.
     let asked_p0 = t
         .asked()
@@ -203,4 +212,57 @@ fn sarkhan_unbroken_puts_any_number_of_dragons_onto_the_battlefield() {
     let offered = last_choice_candidates(&t);
     assert!(!offered.contains(&Entity::Object(bears)));
     assert_eq!(t.named_on_battlefield("Shivan Dragon").len(), 2);
+}
+
+#[test]
+fn embermouth_sentinel_puts_the_found_land_onto_the_battlefield_instead() {
+    cr!("701.23a", "608.2c");
+    assert_supported("Embermouth Sentinel");
+    for dragon in [false, true] {
+        let mut t = TestGame::new(2);
+        if dragon {
+            t.battlefield(P0, "Shivan Dragon");
+        }
+        let forest = t.library_top(P0, "Forest");
+        for _ in 0..3 {
+            t.library_top(P0, "Grizzly Bears");
+        }
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(forest)]);
+        t.enter(P0, "Embermouth Sentinel");
+        t.resolve_all();
+        // The search happens either way; only where the card goes changes.
+        assert!(t.asked().iter().any(|(p, d)| *p == P0
+            && matches!(d, Decision::ChooseEntities { candidates, .. }
+                if candidates.contains(&Entity::Object(forest)))));
+        let lands = t.named_on_battlefield("Forest");
+        if dragon {
+            assert_eq!(lands.len(), 1);
+            assert!(t.g.obj(lands[0]).tapped);
+        } else {
+            assert!(lands.is_empty());
+            assert_eq!(t.g.player(P0).library.last(), Some(&forest));
+        }
+    }
+}
+
+#[test]
+fn compass_gnome_finds_a_basic_land_or_any_cave() {
+    cr!("701.23a");
+    assert_supported("Compass Gnome");
+    let mut t = TestGame::new(2);
+    let maw = t.library_top(P0, "Cavernous Maw"); // a nonbasic Cave land
+    let forest = t.library_top(P0, "Forest");
+    let wilds = t.library_top(P0, "Evolving Wilds"); // nonbasic, not a Cave
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(maw)]);
+    t.enter(P0, "Compass Gnome");
+    t.resolve_all();
+    let mut offered = last_choice_candidates(&t);
+    assert!(!offered.contains(&Entity::Object(wilds)));
+    offered.sort();
+    let mut expected = vec![Entity::Object(maw), Entity::Object(forest)];
+    expected.sort();
+    assert_eq!(offered, expected);
+    assert_eq!(t.g.player(P0).library.last(), Some(&maw));
 }
