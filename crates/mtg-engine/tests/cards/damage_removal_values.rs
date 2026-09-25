@@ -19,6 +19,10 @@ fn sacrificed_creature_cards_compile() {
         "Thud",
         "Rite of Consumption",
         "Bushmeat Poacher",
+        "Feed the Pack",
+        "Tip the Scales",
+        "Tribute to Hunger",
+        "Consuming Vapors",
     ]);
 }
 
@@ -311,4 +315,23 @@ fn folk_medicine_counts_creatures_you_control() {
     t.cast(P0, f).go();
     t.resolve();
     assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn tribute_to_hunger_gains_life_equal_to_the_sacrificed_creatures_toughness() {
+    cr!("608.2h", "701.21a");
+    let mut t = TestGame::new(2);
+    let mastodon = t.battlefield(P1, "Siege Mastodon");
+    t.lands(P1, "Forest", 1);
+    let growth = t.hand(P1, "Giant Growth");
+    t.cast(P1, growth).target(mastodon).go();
+    t.resolve();
+    t.lands(P0, "Swamp", 3);
+    let s = t.hand(P0, "Tribute to Hunger");
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Siege Mastodon"));
+    // "That creature" is the sacrificed Mastodon: toughness 8 (5 + 3) as it was
+    // sacrificed, not the 5 it has in the graveyard.
+    assert_eq!(t.life(P0), 28);
 }

@@ -75,7 +75,14 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
     let (p, t, tail) = parse_pt_mod(r)?;
     let where_x = match where_text {
         Some(v) => {
-            let (val, rest) = parse_value_phrase(v, b)?;
+            // "that creature's power" names the creature the subject introduced ("target
+            // creature gets +X/+X ..., where X is that creature's power"), or an earlier
+            // antecedent; never the source itself.
+            let v = match v.strip_prefix("that creature's ") {
+                Some(r) if !matches!(b.it, Sel::This | Sel::None) => format!("its {r}"),
+                _ => v.to_string(),
+            };
+            let (val, rest) = parse_value_phrase(&v, b)?;
             if !end(&rest).trim().is_empty() {
                 return None;
             }

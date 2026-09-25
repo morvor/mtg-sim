@@ -749,7 +749,10 @@ fn p_exile_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
         "all graveyards" | "each graveyard" => gy(None),
         "your graveyard" => gy(Some(PlayerRel::You)),
         "each opponent's graveyard" | "all opponents' graveyards" => gy(Some(PlayerRel::Opponent)),
-        "that player's graveyard" => gy(Some(player_rel_of(&b.it_player)?)),
+        // (Without a tracked antecedent "that player" still defaults to "you".)
+        "that player's graveyard" if !matches!(b.it_player, PlayerRef::You) => {
+            gy(Some(player_rel_of(&b.it_player)?))
+        }
         "target player's graveyard" | "target opponent's graveyard" => {
             let (pf, text) = if r.starts_with("target player") {
                 (PlayerFilter::Any, "target player")
@@ -819,6 +822,16 @@ fn p_edict(l: &str, b: &mut Builder) -> Option<Effect> {
     let (f, _, tail) = parse_object_phrase(r2)?;
     if !end(tail).is_empty() {
         return None;
+    }
+    // "You gain life equal to that creature's toughness": the permanent one player
+    // sacrificed this way (last known information).
+    if n.as_const() == Some(1)
+        && !matches!(
+            who,
+            PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+        )
+    {
+        b.it = Sel::Var(vars::SACRIFICED);
     }
     Some(Effect::Sacrifice {
         who,

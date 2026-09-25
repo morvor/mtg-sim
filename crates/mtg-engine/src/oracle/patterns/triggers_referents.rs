@@ -50,9 +50,12 @@ inventory::submit! {
 }
 
 /// "that creature's controller", "that creature's power", "that permanent's owner":
-/// possessives of the trigger's object read like "its".
+/// possessives of the trigger's object read like "its". Oracle text calls the source
+/// itself "this creature"/"~", never "that creature", so when "it" still means the
+/// source the antecedent wasn't tracked (a discarded card, a sacrificed permanent, the
+/// spell that targeted the source) and the phrase isn't rewritten.
 fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
-    if matches!(b.it, Sel::None) {
+    if matches!(b.it, Sel::None | Sel::This) {
         return None;
     }
     let mut s = end(l).to_string();
