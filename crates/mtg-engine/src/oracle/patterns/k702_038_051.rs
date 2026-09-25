@@ -141,23 +141,14 @@ fn spell_keywords(s: &str, ctx: &CompileContext, sunburst: bool) -> Option<Vec<K
     (!kws.is_empty()).then_some(kws)
 }
 
-/// "The next [quality] spell you cast this turn has [keyword]", "When you next cast [a
-/// quality] spell this turn, that spell gains [keyword]" (CR 611.2f).
+/// "The next [quality] spell you cast this turn has [keyword]" (CR 611.2f): the spell has
+/// it as it's cast, so a cost-changing keyword (convoke, affinity) applies to its cost.
 fn next_spell_has(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (subject, kw_text) = if let Some(r) = l.strip_prefix("the next ") {
-        match r.strip_prefix("spell you cast this turn has ") {
-            Some(k) => ("", k),
-            None => r.split_once(" spell you cast this turn has ")?,
-        }
-    } else {
-        let r = l.strip_prefix("when you next cast ")?;
-        let r = r
-            .strip_prefix("an ")
-            .or_else(|| r.strip_prefix("a "))
-            .unwrap_or(r);
-        r.split_once(" spell this turn, that spell gains ")?
+    let r = l.strip_prefix("the next ")?;
+    let (subject, kw_text) = match r.strip_prefix("spell you cast this turn has ") {
+        Some(k) => ("", k),
+        None => r.split_once(" spell you cast this turn has ")?,
     };
-    let subject = if subject == "spell" { "" } else { subject };
     let kws = spell_keywords(kw_text, b.ctx, true)?;
     let mut parts = spell_quality(subject)?;
     parts.push(Filter::Spell);
@@ -167,6 +158,38 @@ fn next_spell_has(l: &str, b: &mut Builder) -> Option<Effect> {
         expires: Duration::EndOfTurn,
     })
 }
+
+/// "When you next cast [a quality] spell this turn, that spell gains [keyword]" (Solar
+/// Array): a delayed triggered ability (CR 603.7) that triggers once, when such a spell
+/// becomes cast (CR 601.2i) — including a spell whose costs were being paid as it was
+/// created — and gives the spell the keyword as it resolves.
+fn when_you_next_cast_gains(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l.strip_prefix("when you next cast ")?;
+    let r = r
+        .strip_prefix("an ")
+        .or_else(|| r.strip_prefix("a "))
+        .unwrap_or(r);
+    let (subject, kw_text) = r.split_once(" spell this turn, that spell gains ")?;
+    let subject = if subject == "spell" { "" } else { subject };
+    let kws = spell_keywords(kw_text, b.ctx, true)?;
+    let mut parts = spell_quality(subject)?;
+    parts.push(Filter::Spell);
+    Some(Effect::DelayedTrigger {
+        // "This turn": it ends with the turn (CR 603.7b).
+        trigger: TriggerCond::ThisTurn(Box::new(TriggerCond::CastSpell {
+            who: PlayerRel::You,
+            filter: Filter::And(parts),
+        })),
+        body: Box::new(Body::effect(Effect::Modify {
+            what: Sel::TriggerObject,
+            mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+            duration: Duration::Permanent,
+        })),
+        once: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "when you next cast a spell this turn, that spell gains [keyword]", priority: 100, parse: when_you_next_cast_gains } }
 
 inventory::submit! { EffectPattern { name: "the next spell you cast this turn has [keyword]", priority: 100, parse: next_spell_has } }
 

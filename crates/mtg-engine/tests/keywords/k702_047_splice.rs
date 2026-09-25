@@ -67,19 +67,23 @@ fn splice_onto_instant_or_sorcery() {
     cr!("702.47a");
     ruling!(
         "Everdream",
-        "The abilities spliced onto the spell happen last, after all of that spell’s other effects."
+        "If the spell this card is spliced onto causes its targets to become illegal while it’s resolving (for example, by removing them from the battlefield), you’ll still draw a card."
     );
     assert_supported("Everdream");
+    assert_supported("Unsummon");
     let mut t = TestGame::new(2);
-    t.lands(P0, "Mountain", 1);
-    t.lands(P0, "Island", 3);
-    let bolt = t.hand(P0, "Lightning Bolt");
+    // Unsummon is an instant: Everdream ("Splice onto instant or sorcery {2}{U}") can be
+    // spliced onto it.
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Island", 4);
+    let unsummon = t.hand(P0, "Unsummon");
     t.hand(P0, "Everdream");
     splice(&mut t, P0, true);
-    t.cast(P0, bolt).target(P1).go();
+    t.cast(P0, unsummon).target(giant).go();
+    assert!(t.g.permanents().all(|o| !o.chars.is_land() || o.tapped));
     t.resolve_all();
-    assert_eq!(t.life(P1), 17);
-    // Drew a card; Everdream is still in hand.
+    // The Giant left the battlefield as the spell resolved; the card is still drawn.
+    assert!(t.in_hand(P1, "Hill Giant"));
     assert_eq!(t.hand_size(P0), 2);
     assert!(t.in_hand(P0, "Everdream"));
 }
@@ -327,7 +331,7 @@ fn the_spell_loses_the_spliced_text_when_it_leaves_the_stack() {
 
 #[test]
 fn a_copy_of_the_spell_has_the_spliced_text_too() {
-    cr!("702.47c", "702.47e");
+    cr!("702.47c", "707.10");
     ruling!(
         "Everdream",
         "If a spell is copied, choices made while casting it are copied, so the copy will have the same abilities spliced onto it as the original."

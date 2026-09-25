@@ -234,6 +234,17 @@ fn the_next_spell_can_be_given_storm() {
     cast_at(&mut t, P0, b2, &[Entity::Player(P1)]);
     t.settle();
     assert!(triggers_named(&t, "Storm").is_empty());
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+    // A later storm spell counts the Spellslinger and both Lightning Bolts, but not the
+    // copy of the first Bolt: three copies.
+    t.lands(P0, "Mountain", 2);
+    let shot = t.hand(P0, "Grapeshot");
+    cast_at(&mut t, P0, shot, &[Entity::Player(P1)]);
+    t.resolve();
+    assert_eq!(spell_copies_on_stack(&t, "Grapeshot"), 3);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 7);
 }
 
 #[test]
@@ -258,4 +269,32 @@ fn each_instance_of_storm_triggers_separately() {
     t.resolve_all();
     // One copy from each instance, plus the original.
     assert_eq!(t.life(P1), 17 - 3);
+}
+
+#[test]
+fn countering_the_original_before_the_trigger_resolves_still_makes_copies() {
+    cr!("702.40a", "608.2h");
+    ruling!(
+        "Grapeshot",
+        "Countering a spell with storm won't affect the copies."
+    );
+    let mut t = TestGame::new(2);
+    bolt(&mut t, P0, P1);
+    bolt(&mut t, P0, P1);
+    t.lands(P0, "Mountain", 2);
+    let shot = t.hand(P0, "Grapeshot");
+    let spell = cast_at(&mut t, P0, shot, &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Storm").len(), 1);
+    // In response to the storm trigger, P1 counters Grapeshot itself. The trigger still
+    // copies it, as it last existed on the stack.
+    t.lands(P1, "Island", 2);
+    let cs = t.hand(P1, "Counterspell");
+    cast_at(&mut t, P1, cs, &[Entity::Object(spell)]);
+    t.resolve(); // Counterspell
+    assert!(t.in_graveyard(P0, "Grapeshot"));
+    t.resolve(); // the storm trigger
+    assert_eq!(spell_copies_on_stack(&t, "Grapeshot"), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14 - 2);
 }

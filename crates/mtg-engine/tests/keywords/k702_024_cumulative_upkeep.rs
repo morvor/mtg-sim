@@ -163,6 +163,27 @@ fn an_action_can_be_the_cost() {
 }
 
 #[test]
+fn an_opponent_is_chosen_for_each_age_counter() {
+    cr!("702.24a");
+    ruling!(
+        "Wall of Shards",
+        "you may choose a different opponent for each age counter, or you can choose the same opponent multiple times"
+    );
+    assert_supported("Wall of Shards");
+    let mut t = TestGame::new(3);
+    // "Cumulative upkeep—An opponent gains 1 life."
+    let wall = t.battlefield(P0, "Wall of Shards");
+    t.g.add_counters(Entity::Object(wall), "age", 1, None);
+    next_upkeep(&mut t, P0);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.resolve();
+    assert!(t.on_battlefield(wall));
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 21, 21));
+}
+
+#[test]
 fn drawing_cards_as_the_cost() {
     cr!("702.24a");
     ruling!(

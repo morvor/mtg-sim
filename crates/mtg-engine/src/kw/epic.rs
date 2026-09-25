@@ -5,11 +5,9 @@
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
-use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
 use crate::game::{ContinuousEffect, DelayedTrigger, Game, RuleEffect};
 use crate::keywords::{Keyword, KeywordKind};
-use crate::object::{ObjKind, StackKind, Zone};
 use crate::types::*;
 use smol_str::SmolStr;
 
@@ -20,29 +18,15 @@ pub const EPIC_COPY: &str = "epic:copy the spell";
 /// The variable holding the epic spell (as it last existed on the stack).
 const EPIC_SPELL: Var = vars::USER + 93;
 
-/// Puts a copy of the spell `lki` (as it last existed on the stack) onto the stack under
-/// `p`'s control, without its epic ability (CR 702.50a, 707.10).
+/// Puts a copy of the spell `lki` (as it last existed on the stack, CR 608.2h) onto the
+/// stack under `p`'s control, without its epic ability (CR 702.50a, 707.10).
 pub fn copy_without_epic(g: &mut Game, lki: ObjectId, p: PlayerId) -> Option<ObjectId> {
-    let orig = g.obj(lki).clone();
-    orig.stack.as_ref()?;
-    let mut copy = orig.clone();
-    copy.kind = ObjKind::SpellCopy;
-    copy.controller = p;
-    copy.base_controller = p;
-    copy.owner = p;
-    copy.zone = Zone::Stack;
-    copy.prev = None;
-    copy.next = None;
-    if let Some(si) = copy.stack.as_mut() {
-        si.kind = StackKind::Spell;
-        // A copy isn't cast (CR 707.10).
-        si.cast.was_cast = false;
-    }
-    let id = ObjectId(g.objects.len() as u32);
-    copy.id = id;
-    copy.timestamp = g.new_timestamp();
-    g.objects.push(copy);
-    g.stack.push(id);
+    let has_targets = g
+        .obj(lki)
+        .stack
+        .as_deref()
+        .is_some_and(|s| s.chosen.iter().any(|c| c.targets.iter().any(|t| !t.is_empty())));
+    let id = crate::copy::copy_spell(g, lki, p, has_targets)?;
     let eid = g.new_effect_id();
     let ts = g.new_timestamp();
     g.effects.push(ContinuousEffect {
@@ -59,26 +43,6 @@ pub fn copy_without_epic(g: &mut Game, lki: ObjectId, p: PlayerId) -> Option<Obj
     g.dirty = true;
     g.recompute();
     g.log(|g| format!("{p} copies {} (epic)", g.describe(id)));
-    g.emit(crate::events::Event::SpellCopied { spell: id, player: p });
-    let has_targets = g
-        .obj(id)
-        .stack
-        .as_deref()
-        .is_some_and(|s| s.chosen.iter().any(|c| c.targets.iter().any(|t| !t.is_empty())));
-    if has_targets
-        && matches!(
-            g.ask(
-                p,
-                Decision::YesNo {
-                    source: Some(id),
-                    prompt: "Choose new targets for the copy?".into(),
-                },
-            ),
-            Answer::Bool(true)
-        )
-    {
-        crate::target_rules::change_targets(g, p, id, TargetChange::ChooseNew, None);
-    }
     Some(id)
 }
 

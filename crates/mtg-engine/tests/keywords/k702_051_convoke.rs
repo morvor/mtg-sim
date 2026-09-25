@@ -285,14 +285,29 @@ fn the_number_of_creatures_that_convoked_it() {
     assert_supported("Ancient Imperiosaur");
     assert_supported("Zephyr Singer");
     let mut t = TestGame::new(2);
-    let c: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
-    t.lands(P0, "Forest", 3);
+    // Ancient Imperiosaur {5}{G}{G} with nine creatures: at most seven can convoke it.
+    let c: Vec<ObjectId> = (0..9).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
     let dino = t.hand(P0, "Ancient Imperiosaur");
-    convoke_with(&mut t, P0, &c);
+    convoke_with(&mut t, P0, &c[..7]);
     t.cast(P0, dino).go();
+    let (n, max) = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseEntities {
+                prompt,
+                candidates,
+                max,
+                ..
+            } if prompt.contains("convoke") => Some((candidates.len(), max)),
+            _ => None,
+        })
+        .expect("convoke offered");
+    assert_eq!((n, max), (9, 7));
+    assert_eq!(c.iter().filter(|x| tapped(&t, **x)).count(), 7);
     t.resolve_all();
     let dino = t.named_on_battlefield("Ancient Imperiosaur")[0];
-    assert_eq!(t.counters(dino, counters::PLUS1), 8);
+    assert_eq!(t.counters(dino, counters::PLUS1), 14);
     // Zephyr Singer: a flying counter on each creature that convoked it.
     let blue = t.battlefield(P0, "Merfolk of the Pearl Trident");
     let red = t.battlefield(P0, "Hill Giant");
@@ -344,14 +359,17 @@ fn multiple_instances_of_convoke_are_redundant() {
         "{2}{G}",
     );
     let mut t = TestGame::new(2);
-    let g1 = t.battlefield(P0, "Grizzly Bears");
-    t.lands(P0, "Forest", 1);
+    let bears: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    t.lands(P0, "Forest", 2);
     let w = t.custom(P0, def, Zone::Hand(P0));
-    // One Bears can pay only one mana; the rest can't be paid.
-    convoke_with(&mut t, P0, &[g1]);
-    convoke_with(&mut t, P0, &[g1]);
-    assert!(t.cast(P0, w).try_go().is_err());
+    // One choice of creatures covers the whole spell: after tapping one Bears, the other
+    // instance doesn't offer the untapped ones again.
+    convoke_with(&mut t, P0, &bears[..1]);
+    t.cast(P0, w).go();
     assert_eq!(convoke_asked(&t), 1);
+    assert!(tapped(&t, bears[0]));
+    assert!(!tapped(&t, bears[1]) && !tapped(&t, bears[2]));
+    assert!(t.g.permanents().all(|o| !o.chars.is_land() || o.tapped));
 }
 
 #[test]
@@ -383,25 +401,22 @@ fn a_spell_has_convoke_whether_or_not_creatures_are_tapped() {
 
 #[test]
 fn the_next_spell_can_be_given_convoke() {
-    cr!("702.51a", "702.51d");
-    ruling!(
-        "Wand of the Worldsoul",
-        "If the next spell you cast after Wand of the Worldsoul's ability resolves already has convoke, giving it convoke again doesn't have any real benefit."
-    );
+    cr!("702.51a");
     assert_supported("Wand of the Worldsoul");
     let mut t = TestGame::new(2);
     let wand = t.battlefield(P0, "Wand of the Worldsoul");
     let c: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
     let giant = t.hand(P0, "Hill Giant");
+    let giant2 = t.hand(P0, "Hill Giant");
     // "{T}: The next spell you cast this turn has convoke."
     t.activate(P0, wand, 1, &[]).unwrap();
     t.resolve_all();
-    // Hill Giant {3}{R} is castable: two creatures and... not enough.
     let castable = |t: &mut TestGame, x: ObjectId| {
         t.g.legal_actions(P0)
             .iter()
             .any(|a| matches!(a, Action::Cast { card, .. } if *card == x))
     };
+    // Hill Giant {3}{R}: two creatures pay {2}, two Mountains the rest.
     assert!(!castable(&mut t, giant));
     t.lands(P0, "Mountain", 2);
     assert!(castable(&mut t, giant));
@@ -410,12 +425,41 @@ fn the_next_spell_can_be_given_convoke() {
     assert!(c.iter().all(|x| tapped(&t, *x)));
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
-    // Only the next spell had it; Stoke the Flames has its own convoke (once).
-    t.clear_answers();
+    // Only the next spell had it: two more creatures and two Mountains don't pay for the
+    // second Hill Giant.
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    assert!(!castable(&mut t, giant2));
+}
+
+#[test]
+fn giving_convoke_to_a_spell_with_convoke_adds_nothing() {
+    cr!("702.51d");
+    ruling!(
+        "Wand of the Worldsoul",
+        "If the next spell you cast after Wand of the Worldsoul's ability resolves already has convoke, giving it convoke again doesn't have any real benefit."
+    );
+    let mut t = TestGame::new(2);
+    let wand = t.battlefield(P0, "Wand of the Worldsoul");
+    let reds: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Hill Giant")).collect();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 1);
+    t.activate(P0, wand, 1, &[]).unwrap();
+    t.resolve_all();
+    // Stoke the Flames {2}{R}{R} now has convoke twice; the creatures are chosen once.
     let stoke = t.hand(P0, "Stoke the Flames");
-    let more: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Hill Giant")).collect();
-    convoke_with(&mut t, P0, &more);
-    t.cast(P0, stoke).target(P1).go();
+    convoke_with(&mut t, P0, &reds);
+    let spell = t.cast(P0, stoke).target(P1).go();
+    assert_eq!(
+        t.obj_now(spell)
+            .chars
+            .keyword_count(keywords::KeywordKind::Convoke),
+        2
+    );
+    assert_eq!(convoke_asked(&t), 1);
+    assert!(reds.iter().all(|r| tapped(&t, *r)));
+    assert!(!tapped(&t, bears));
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
 }
@@ -430,12 +474,21 @@ fn convoke_from_two_sources_is_redundant() {
     let mut t = TestGame::new(2);
     let e1 = t.battlefield(P0, "Chief Engineer");
     let e2 = t.battlefield(P0, "Chief Engineer");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Wastes", 2);
     let jugg = t.hand(P0, "Juggernaut");
+    // Juggernaut has convoke twice; the creatures are chosen once.
     convoke_with(&mut t, P0, &[e1, e2]);
-    t.cast(P0, jugg).go();
+    let spell = t.cast(P0, jugg).go();
+    assert_eq!(
+        t.obj_now(spell)
+            .chars
+            .keyword_count(keywords::KeywordKind::Convoke),
+        2
+    );
     assert_eq!(convoke_asked(&t), 1);
     assert!(tapped(&t, e1) && tapped(&t, e2));
+    assert!(!tapped(&t, bears));
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Juggernaut").len(), 1);
 }

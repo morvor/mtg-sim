@@ -6,6 +6,7 @@ use mtg_engine::ability::*;
 use mtg_engine::card::CardDef;
 use mtg_engine::object::{Characteristics, Zone};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::{counters, CardType};
 use mtg_engine::*;
 use smol_str::SmolStr;
@@ -266,4 +267,68 @@ fn each_instance_of_sunburst_works_separately() {
     t.resolve_all();
     let m = t.named_on_battlefield("Double Sunburst Myr")[0];
     assert_eq!(p1p1(&t, m), 4);
+}
+
+/// The distinct colors of mana spent to cast `spell`.
+fn colors_spent(t: &TestGame, spell: ObjectId) -> u32 {
+    let mut colors: Vec<types::Color> = t
+        .obj_now(spell)
+        .stack
+        .as_ref()
+        .expect("a spell")
+        .cast
+        .mana_spent
+        .iter()
+        .filter_map(|m| m.color())
+        .collect();
+    colors.sort();
+    colors.dedup();
+    colors.len() as u32
+}
+
+#[test]
+fn solar_arrays_mana_spent_on_an_artifact_spell_gives_it_sunburst() {
+    cr!("702.44a", "603.7");
+    ruling!(
+        "Solar Array",
+        "Sunburst checks what mana was actually spent to cast the spell."
+    );
+    let mut t = TestGame::new(2);
+    let array = t.battlefield(P0, "Solar Array");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Wastes", 1);
+    // Selfcraft Mechan {3}{U}: Solar Array is tapped for mana while its costs are paid.
+    // The spell is the next artifact spell cast after the ability resolved, so its
+    // delayed triggered ability triggers.
+    let mechan = t.hand(P0, "Selfcraft Mechan");
+    let spell = t.cast(P0, mechan).go();
+    assert!(t.obj_now(array).tapped);
+    let n = colors_spent(&t, spell);
+    assert!(n >= 2);
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    let m = t.named_on_battlefield("Selfcraft Mechan")[0];
+    assert_eq!(p1p1(&t, m), n);
+}
+
+#[test]
+fn solar_arrays_delayed_trigger_lasts_only_this_turn() {
+    cr!("702.44a", "603.7b");
+    let mut t = TestGame::new(2);
+    let array = t.battlefield(P0, "Solar Array");
+    t.activate(P0, array, 0, &[]).unwrap();
+    // The mana empties; on P0's next turn, the next artifact spell doesn't gain sunburst.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 1);
+    let myr = t.hand(P0, "Suntouched Myr");
+    // Suntouched Myr has its own sunburst: one instance, two colors.
+    let spell = t.cast(P0, myr).go();
+    assert_eq!(colors_spent(&t, spell), 2);
+    t.resolve_all();
+    let m = t.named_on_battlefield("Suntouched Myr")[0];
+    assert_eq!(p1p1(&t, m), 2);
 }
