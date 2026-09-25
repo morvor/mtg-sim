@@ -1197,14 +1197,27 @@ pub enum ManaProduction {
     AnyCombination(Value),
     /// One mana of one of the listed types (chosen).
     OneOf(Vec<ManaType>),
-    /// Mana of any type that a land an opponent controls could produce, etc.
+    /// One mana of any type that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any type that a land you control could produce".
     CouldProduce(Filter),
+    /// One mana of any *color* that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any color that a land an opponent controls could produce".
+    CouldProduceColor(Filter),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
     /// N mana of a fixed type.
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of any type the triggering permanent produced ("that player adds one mana
+    /// of any type that land produced"): read from the tapped-for-mana event.
+    AnyTypeProduced,
+    /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
+    /// to enchanted permanent's mana cost", CR 106.8–106.11).
+    ManaCostOf(Sel),
+    /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
+    /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
+    DoubleUnspent,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1656,6 +1669,14 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
+    /// "Whenever [player] taps [filter] for mana" / "Whenever [filter] is tapped for
+    /// mana" / "... for {C}" (CR 106.12a): a mana ability with {T} in its cost resolves
+    /// and produces mana (of the given type, if any).
+    TappedForMana {
+        filter: Filter,
+        who: PlayerRel,
+        mana: Option<ManaType>,
+    },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1931,6 +1952,26 @@ pub enum Effect {
         who: PlayerRef,
         mana: ManaProduction,
         restriction: Option<ManaRestriction>,
+    },
+    /// "Add [mana]. When that mana is spent to cast [a spell], [effect]." (CR 106.6): the
+    /// inner `AddMana` adds mana carrying a delayed triggered ability that triggers when
+    /// that mana is spent (one per mana produced, CR 106.6a).
+    AddManaWithSpentTrigger {
+        add: Box<Effect>,
+        spell_filter: Filter,
+        body: Box<Body>,
+    },
+    /// "[Player] activates a mana ability of each [filter] they control" (Drain Power).
+    ActivateManaAbilities {
+        who: PlayerRef,
+        filter: Filter,
+    },
+    /// "[Player] loses all unspent mana [and you add the mana lost this way]" (CR 106.13):
+    /// empties the player's mana pool; the lost mana (with its sources, restrictions, and
+    /// riders) is added to `to`'s mana pool, if any.
+    LoseUnspentMana {
+        who: PlayerRef,
+        to: Option<PlayerRef>,
     },
     AddPlayerCounters {
         who: PlayerRef,

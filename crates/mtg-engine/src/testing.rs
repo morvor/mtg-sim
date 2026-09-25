@@ -201,6 +201,9 @@ impl TestGame {
         };
         if step.is_main() {
             g.turn.main_phases = 1;
+        } else if matches!(step, Step::Untap | Step::Upkeep | Step::Draw) {
+            // No main phase has begun yet this turn.
+            g.turn.main_phases = 0;
         }
         if step.is_combat() && g.combat.is_none() {
             crate::combat::begin_combat(g);

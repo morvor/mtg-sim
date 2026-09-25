@@ -368,6 +368,9 @@ pub enum ManaRestriction {
     InstantOrSorcery,
     /// "Spend this mana only to cast noncreature spells."
     NoncreatureSpell,
+    /// "This mana can't be spent to cast a nonartifact spell." (Powerstone, CR 111.10h):
+    /// it can pay for anything except casting a nonartifact spell.
+    NotNonartifactSpell,
     /// Several restrictions, any of which permits the spend.
     AnyOf(Vec<ManaRestriction>),
 }
@@ -404,10 +407,35 @@ impl ManaRestriction {
             ManaRestriction::NoncreatureSpell => {
                 ctx.is_spell && !ctx.card_types.contains(CardType::Creature)
             }
+            ManaRestriction::NotNonartifactSpell => {
+                !ctx.is_spell || ctx.card_types.contains(CardType::Artifact)
+            }
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
         }
     }
 }
+
+/// A delayed triggered ability created by the spell or ability that produced a unit of
+/// mana, which triggers when that mana is spent to cast a matching spell (CR 106.6,
+/// 603.7a). Each unit of mana carries its own, so an effect that increases the amount of
+/// mana produced creates one per mana (CR 106.6a).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManaRider {
+    pub id: u64,
+    /// The spell the mana must be spent to cast.
+    pub spell_filter: crate::ability::Filter,
+    /// The triggered ability's effect ("that spell" is the spell the mana was spent on).
+    pub body: crate::ability::Body,
+    pub controller: crate::types::PlayerId,
+    pub source: Option<ObjectId>,
+}
+
+impl PartialEq for ManaRider {
+    fn eq(&self, o: &Self) -> bool {
+        self.id == o.id
+    }
+}
+impl Eq for ManaRider {}
 
 /// A single unit of mana in a pool.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -421,6 +449,9 @@ pub struct Mana {
     /// Doesn't empty from the pool at end of steps/phases (e.g. Upwelling-style effects
     /// or "until end of turn" mana).
     pub persistent: bool,
+    /// "When that mana is spent to cast ..." (CR 106.6).
+    #[serde(default)]
+    pub rider: Option<Box<ManaRider>>,
 }
 
 impl Mana {
@@ -431,6 +462,7 @@ impl Mana {
             source: None,
             restriction: None,
             persistent: false,
+            rider: None,
         }
     }
     pub fn can_spend(&self, ctx: &SpendContext) -> bool {

@@ -832,6 +832,30 @@ impl Game {
             (TriggerCond::DayNightChanges, Event::DayNightChanged { .. }) => {
                 one(EventInfo::default())
             }
+            (
+                TriggerCond::TappedForMana { filter, who, mana },
+                Event::TappedForMana { obj, player, types },
+            ) => {
+                // CR 106.12a: triggers when such a mana ability resolves and produces
+                // mana (of the specified type).
+                let type_ok = match mana {
+                    Some(t) => types.contains(t),
+                    None => !types.is_empty(),
+                };
+                if type_ok
+                    && self.player_rel_matches(*who, *player, &ctx)
+                    && self.matches(*obj, filter, &ctx)
+                {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(*player),
+                        amount: crate::mana_abilities::mana_type_mask(types),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Custom(name), ev) => {
                 crate::custom::custom_trigger(self, name, src, ctl, ev)
             }

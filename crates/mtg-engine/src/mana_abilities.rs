@@ -57,6 +57,43 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::CouldProduceColor(f) => {
+                let t: Vec<ManaType> = types_could_produce(g, f, ctx)
+                    .into_iter()
+                    .filter(|t| *t != ManaType::C)
+                    .collect();
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
+            ManaProduction::AnyTypeProduced => {
+                let t = mask_types(ctx.event.as_ref().map_or(0, |e| e.amount));
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
+            ManaProduction::ManaCostOf(sel) => {
+                let mut units = Vec::new();
+                if let Some(o) = g.eval_sel_objects(sel, ctx).first() {
+                    if let Some(mc) = &g.obj(*o).chars.mana_cost {
+                        for s in &mc.symbols {
+                            units.extend(symbol_units(*s));
+                        }
+                    }
+                }
+                units
+            }
+            ManaProduction::DoubleUnspent => {
+                let pool = &g.player(ctx.controller).mana_pool;
+                ManaType::ALL
+                    .iter()
+                    .flat_map(|t| std::iter::repeat_n(vec![*t], pool.count(*t)))
+                    .collect()
+            }
             ManaProduction::AnyColorAmong(f) => {
                 let mut cs = ColorSet::NONE;
                 for o in g.objects_matching(f, ctx) {
@@ -106,40 +143,413 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
             merged
         }
         Effect::If { then, .. } => production_units(g, then, ctx),
+        Effect::AddManaWithSpentTrigger { add, .. } => production_units(g, add, ctx),
         _ => None,
     }
 }
 
-/// Mana types that permanents matching `f` could produce (CR 106.7).
+/// Mana types that permanents matching `f` could produce (CR 106.7): any type an ability
+/// of that permanent would produce if it resolved now, taking replacement effects into
+/// account in any order and ignoring whether its costs could be paid.
 pub fn types_could_produce(g: &Game, f: &Filter, ctx: &Ctx) -> Vec<ManaType> {
+    let mut path = Vec::new();
     let mut out: Vec<ManaType> = Vec::new();
     for o in g.objects_matching(f, ctx) {
-        for a in &g.obj(o).chars.abilities {
-            if let AbilityKind::Activated(act) = &a.kind {
-                if act.is_mana_ability {
-                    let c = Ctx::new(Some(o), g.obj(o).controller);
-                    // Avoid infinite recursion through CouldProduce chains.
-                    if let Effect::AddMana {
-                        mana: ManaProduction::CouldProduce(_),
-                        ..
-                    } = &act.body.effect
-                    {
-                        continue;
+        for t in could_produce_of(g, o, &mut path) {
+            if !out.contains(&t) {
+                out.push(t);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Types one permanent could produce. `path` holds the permanents whose "could produce"
+/// abilities are being evaluated, so that mutually referential abilities (two Exotic
+/// Orchards) don't recurse forever: a permanent can't help itself produce mana.
+fn could_produce_of(g: &Game, o: ObjectId, path: &mut Vec<ObjectId>) -> Vec<ManaType> {
+    if path.contains(&o) {
+        return vec![];
+    }
+    path.push(o);
+    let mut out: Vec<ManaType> = Vec::new();
+    for a in &g.obj(o).chars.abilities {
+        let AbilityKind::Activated(act) = &a.kind else {
+            continue;
+        };
+        if !act.is_mana_ability {
+            continue;
+        }
+        let c = Ctx::new(Some(o), g.obj(o).controller);
+        let mut types: Vec<ManaType> = Vec::new();
+        collect_could_produce(g, &act.body.effect, &c, path, &mut types);
+        if act.cost.has_tap() && !types.is_empty() {
+            // Replacement effects that apply when it's tapped for mana (CR 106.7, 106.12b).
+            types = replaced_types_any_order(g, o, &types);
+        }
+        for t in types {
+            if !out.contains(&t) {
+                out.push(t);
+            }
+        }
+    }
+    path.pop();
+    out
+}
+
+fn collect_could_produce(
+    g: &Game,
+    e: &Effect,
+    c: &Ctx,
+    path: &mut Vec<ObjectId>,
+    out: &mut Vec<ManaType>,
+) {
+    let push = |t: ManaType, out: &mut Vec<ManaType>| {
+        if !out.contains(&t) {
+            out.push(t);
+        }
+    };
+    match e {
+        Effect::AddMana {
+            mana: ManaProduction::CouldProduce(f),
+            ..
+        }
+        | Effect::AddMana {
+            mana: ManaProduction::CouldProduceColor(f),
+            ..
+        } => {
+            let colors_only = matches!(
+                e,
+                Effect::AddMana {
+                    mana: ManaProduction::CouldProduceColor(_),
+                    ..
+                }
+            );
+            for x in g.objects_matching(f, c) {
+                for t in could_produce_of(g, x, path) {
+                    if !(colors_only && t == ManaType::C) {
+                        push(t, out);
                     }
-                    if let Some(units) = production_units(g, &act.body.effect, &c) {
-                        for u in units {
-                            for t in u {
-                                if !out.contains(&t) {
-                                    out.push(t);
-                                }
-                            }
-                        }
+                }
+            }
+        }
+        Effect::Seq(v) => {
+            for x in v {
+                collect_could_produce(g, x, c, path, out);
+            }
+        }
+        Effect::ChooseOne { options, .. } => {
+            for (_, x) in options {
+                collect_could_produce(g, x, c, path, out);
+            }
+        }
+        Effect::If {
+            then, otherwise, ..
+        } => {
+            collect_could_produce(g, then, c, path, out);
+            collect_could_produce(g, otherwise, c, path, out);
+        }
+        other => {
+            if let Some(units) = production_units(g, other, c) {
+                for u in units {
+                    for t in u {
+                        push(t, out);
                     }
                 }
             }
         }
     }
+}
+
+/// Bitmask of mana types (bit i = `ManaType::ALL[i]`), used to carry the types a
+/// permanent produced in a tapped-for-mana trigger's event info.
+pub fn mana_type_mask(types: &[ManaType]) -> i32 {
+    let mut m = 0;
+    for t in types {
+        if let Some(i) = ManaType::ALL.iter().position(|x| x == t) {
+            m |= 1 << i;
+        }
+    }
+    m
+}
+
+pub fn mask_types(mask: i32) -> Vec<ManaType> {
+    ManaType::ALL
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| mask & (1 << i) != 0)
+        .map(|(_, t)| *t)
+        .collect()
+}
+
+/// The ways one mana symbol could be added to a mana pool (CR 106.8–106.11): each inner
+/// vector is one unit of mana and the types it could be.
+pub fn symbol_units(s: ManaSymbol) -> Vec<Vec<ManaType>> {
+    let col = ManaType::from_color;
+    match s {
+        ManaSymbol::Colored(c) | ManaSymbol::Phyrexian(c) => vec![vec![col(c)]],
+        ManaSymbol::Generic(n) => vec![vec![ManaType::C]; n as usize],
+        ManaSymbol::Colorless | ManaSymbol::Snow => vec![vec![ManaType::C]],
+        ManaSymbol::Hybrid(a, b) | ManaSymbol::PhyrexianHybrid(a, b) => {
+            vec![vec![col(a), col(b)]]
+        }
+        ManaSymbol::ColorlessHybrid(c) => vec![vec![ManaType::C, col(c)]],
+        ManaSymbol::TwoHybrid(c) => vec![vec![col(c), ManaType::C]],
+        // X is 0 off the stack (CR 107.3g); other variable/unusual symbols add nothing.
+        _ => vec![],
+    }
+}
+
+/// The mana replacement effects (CR 106.12b) that apply when `perm` is tapped for mana:
+/// (source, controller, definition), in timestamp order.
+fn produce_mana_replacements(
+    g: &Game,
+    perm: ObjectId,
+) -> Vec<(ObjectId, PlayerId, ReplacementDef)> {
+    let mut v: Vec<(u64, ObjectId, PlayerId, ReplacementDef)> = g
+        .statics
+        .replacements
+        .iter()
+        .filter_map(|(s, c, ts, _, d)| match &d.event {
+            ReplacementEvent::ProduceMana(f) if g.matches(perm, f, &Ctx::new(Some(*s), *c)) => {
+                Some((*ts, *s, *c, d.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    v.sort_by_key(|x| x.0);
+    v.into_iter().map(|(_, s, c, d)| (s, c, d)).collect()
+}
+
+/// Applies one mana replacement to the produced types.
+fn apply_mana_replacement(d: &ReplacementDef, types: &[ManaType]) -> Vec<ManaType> {
+    match &d.action {
+        // "it produces twice/three times as much of that mana instead".
+        ReplacementAction::Multiply(k) => types
+            .iter()
+            .flat_map(|t| std::iter::repeat_n(*t, (*k).max(0) as usize))
+            .collect(),
+        // "it produces {B} instead of any other type and amount".
+        ReplacementAction::Instead(e) => match &**e {
+            Effect::AddMana {
+                mana: ManaProduction::Fixed(v),
+                ..
+            } => v.clone(),
+            _ => types.to_vec(),
+        },
+        _ => types.to_vec(),
+    }
+}
+
+/// Union of the types produced after applying the replacements in every possible order
+/// (for "could produce", CR 106.7).
+fn replaced_types_any_order(g: &Game, perm: ObjectId, types: &[ManaType]) -> Vec<ManaType> {
+    let reps = produce_mana_replacements(g, perm);
+    if reps.is_empty() {
+        return types.to_vec();
+    }
+    let n = reps.len().min(4);
+    let mut out: Vec<ManaType> = Vec::new();
+    let mut idx: Vec<usize> = (0..n).collect();
+    permute(&mut idx, 0, &mut |order| {
+        let mut ts = types.to_vec();
+        for i in order {
+            ts = apply_mana_replacement(&reps[*i].2, &ts);
+        }
+        for t in ts {
+            if !out.contains(&t) {
+                out.push(t);
+            }
+        }
+    });
     out
+}
+
+fn permute(v: &mut Vec<usize>, k: usize, f: &mut dyn FnMut(&[usize])) {
+    if k == v.len() {
+        f(v);
+        return;
+    }
+    for i in k..v.len() {
+        v.swap(k, i);
+        permute(v, k + 1, f);
+        v.swap(k, i);
+    }
+}
+
+/// "[Player] activates a mana ability of each [filter] they control" (Drain Power): for
+/// each such permanent with a mana ability that can be activated, the player chooses one
+/// and activates it.
+pub fn activate_mana_abilities_of_each(g: &mut Game, who: &PlayerRef, filter: &Filter, ctx: &Ctx) {
+    for p in g.eval_players(who, ctx) {
+        let perms: Vec<ObjectId> = g
+            .permanents()
+            .filter(|o| o.controller == p)
+            .map(|o| o.id)
+            .filter(|id| g.matches(*id, filter, ctx))
+            .collect();
+        for perm in perms {
+            if !g.is_live(perm) || g.obj(perm).zone != Zone::Battlefield {
+                continue;
+            }
+            let usable: Vec<Ability> = g
+                .obj(perm)
+                .chars
+                .abilities
+                .iter()
+                .filter(|a| match &a.kind {
+                    AbilityKind::Activated(act) => {
+                        act.is_mana_ability && g.can_activate(p, perm, a, act)
+                    }
+                    _ => false,
+                })
+                .cloned()
+                .collect();
+            if usable.is_empty() {
+                continue;
+            }
+            let i = g.ask_option(
+                p,
+                Some(perm),
+                "Choose a mana ability to activate",
+                usable.iter().map(|a| a.text.clone()).collect(),
+            );
+            let _ = g.activate_ability(p, perm, usable[i.min(usable.len() - 1)].uid);
+        }
+    }
+}
+
+/// "[Player] loses all unspent mana [and you add the mana lost this way]" (CR 106.13).
+/// The mana moves with its sources, restrictions, and riders unchanged.
+pub fn lose_unspent_mana(g: &mut Game, who: &PlayerRef, to: Option<&PlayerRef>, ctx: &Ctx) {
+    let players = g.eval_players(who, ctx);
+    let dest = to.and_then(|r| g.eval_player(r, ctx));
+    let mut lost: Vec<Mana> = Vec::new();
+    for p in players {
+        lost.extend(std::mem::take(&mut g.players[p.idx()].mana_pool.mana));
+    }
+    if let Some(d) = dest {
+        if !lost.is_empty() {
+            for m in lost {
+                g.players[d.idx()].mana_pool.add(m);
+            }
+            g.emit(crate::events::Event::ManaAdded {
+                player: d,
+                source: ctx.source,
+            });
+        }
+    }
+}
+
+/// Resolves an `Effect::AddMana` (CR 106.3–106.12): determines the mana produced, applies
+/// replacement effects if a permanent is being tapped for mana (CR 106.12b; restrictions
+/// apply to all the mana produced, CR 106.6a), adds it to the player's mana pool
+/// (CR 106.4), and reports the permanent as tapped for mana (CR 106.12a).
+pub fn resolve_add_mana(
+    g: &mut Game,
+    who: &PlayerRef,
+    mana: &ManaProduction,
+    restriction: &Option<ManaRestriction>,
+    ctx: &Ctx,
+) {
+    add_mana_with(g, who, mana, restriction, None, ctx);
+}
+
+/// Resolves `Effect::AddManaWithSpentTrigger` (CR 106.6): each unit of mana produced by
+/// the inner `AddMana` carries its own delayed triggered ability (CR 106.6a).
+pub fn resolve_add_mana_with_rider(
+    g: &mut Game,
+    add: &Effect,
+    spell_filter: &Filter,
+    body: &Body,
+    ctx: &mut Ctx,
+) {
+    match add {
+        Effect::AddMana {
+            who,
+            mana,
+            restriction,
+        } => {
+            let rider = ManaRider {
+                id: 0,
+                spell_filter: spell_filter.clone(),
+                body: body.clone(),
+                controller: ctx.controller,
+                source: ctx.source,
+            };
+            add_mana_with(g, who, mana, restriction, Some(rider), ctx);
+        }
+        other => g.exec(other, ctx),
+    }
+}
+
+fn add_mana_with(
+    g: &mut Game,
+    who: &PlayerRef,
+    mana: &ManaProduction,
+    restriction: &Option<ManaRestriction>,
+    rider: Option<ManaRider>,
+    ctx: &Ctx,
+) {
+    let p = g.eval_player(who, ctx).unwrap_or(ctx.controller);
+    let mut produced = g.produce_mana(p, mana, ctx);
+    // Tapped for mana: a mana ability of this permanent with {T} in its cost is resolving.
+    let tapped = g
+        .mana_ability_resolving
+        .filter(|s| Some(*s) == ctx.source && g.obj(*s).zone == Zone::Battlefield);
+    if let (Some(perm), false) = (tapped, produced.is_empty()) {
+        let mut reps = produce_mana_replacements(g, perm);
+        // CR 616.1: the affected player chooses the order.
+        while !reps.is_empty() {
+            let i = if reps.len() == 1 {
+                0
+            } else {
+                let options = reps
+                    .iter()
+                    .map(|(s, _, _)| g.obj(*s).chars.name.to_string())
+                    .collect();
+                match g.ask(p, crate::decision::Decision::ChooseReplacement { options }) {
+                    crate::decision::Answer::Index(i) if i < reps.len() => i,
+                    _ => 0,
+                }
+            };
+            let (_, _, d) = reps.remove(i);
+            produced = apply_mana_replacement(&d, &produced);
+        }
+    }
+    let snow = ctx
+        .source
+        .is_some_and(|s| g.obj(s).chars.has_supertype(Supertype::Snow));
+    let units: Vec<Mana> = produced
+        .iter()
+        .map(|t| Mana {
+            ty: *t,
+            snow,
+            source: ctx.source,
+            restriction: restriction.clone(),
+            persistent: false,
+            // A separate delayed triggered ability for each mana (CR 106.6a).
+            rider: rider.as_ref().map(|r| {
+                Box::new(ManaRider {
+                    id: crate::ability::next_ability_uid(),
+                    ..r.clone()
+                })
+            }),
+        })
+        .collect();
+    if units.is_empty() {
+        // CR 106.5: mana of an undefined type isn't produced.
+        return;
+    }
+    g.add_mana(p, units, ctx.source);
+    if let Some(perm) = tapped {
+        g.emit(crate::events::Event::TappedForMana {
+            obj: perm,
+            player: ctx.controller,
+            types: produced,
+        });
+    }
 }
 
 /// Mana abilities the player could activate right now to pay a cost.
@@ -648,9 +1058,47 @@ pub fn pay_mana(
     let mut spent = Vec::new();
     let mut idxs = plan.pool_indices.clone();
     idxs.sort_unstable_by(|a, b| b.cmp(a));
+    let mut riders = Vec::new();
     for i in idxs {
         let m = g.players[p.idx()].mana_pool.mana.remove(i);
         spent.push(m.ty);
+        if let Some(r) = m.rider {
+            riders.push(r);
+        }
+    }
+    // "When that mana is spent to cast ..." (CR 106.6): the delayed triggers trigger now
+    // and are put on the stack the next time a player would receive priority.
+    if let (true, Some(spell)) = (spend.is_spell, spend.source) {
+        for r in riders.into_iter().rev() {
+            let rctx = Ctx::new(r.source, r.controller);
+            if !g.matches(spell, &r.spell_filter, &rctx) {
+                continue;
+            }
+            g.trigger_order += 1;
+            let ability = AbilityDef::new(
+                AbilityKind::Triggered(TriggeredAbility::new(
+                    TriggerCond::Custom("mana spent".into()),
+                    r.body.clone(),
+                )),
+                "When that mana is spent",
+            );
+            let order = g.trigger_order;
+            g.pending_triggers.push(crate::game::PendingTrigger {
+                source: r.source.unwrap_or(spell),
+                controller: r.controller,
+                ability,
+                event: crate::object::EventInfo {
+                    object: Some(spell),
+                    spell: Some(spell),
+                    player: Some(p),
+                    ..Default::default()
+                },
+                source_lki: None,
+                saved: None,
+                body: None,
+                order,
+            });
+        }
     }
     Some(spent)
 }

@@ -235,6 +235,13 @@ pub enum Event {
         player: PlayerId,
         source: Option<ObjectId>,
     },
+    /// A permanent was tapped for mana (CR 106.12): a mana ability with {T} in its cost
+    /// resolved and produced mana of these types.
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        types: Vec<crate::mana::ManaType>,
+    },
     Exploited {
         obj: ObjectId,
     },

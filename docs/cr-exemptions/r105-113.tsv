@@ -1,0 +1,2 @@
+106.4a	Announcing the mana left in a pool after paying a cost is a communication procedure between players; the engine keeps every mana pool as public game state (Player::mana_pool), so there is nothing to execute.
+106.4b	Announcing unspent mana when passing priority is a communication procedure between players; the engine keeps every mana pool as public game state (Player::mana_pool), so there is nothing to execute.

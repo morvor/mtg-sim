@@ -183,10 +183,7 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
                 Effect::AddMana {
                     who: PlayerRef::You,
                     mana: ManaProduction::Fixed(vec![ManaType::C]),
-                    restriction: Some(ManaRestriction::AnyOf(vec![
-                        ManaRestriction::SpellOfType(CardType::Artifact),
-                        ManaRestriction::AbilitiesOnly,
-                    ])),
+                    restriction: Some(ManaRestriction::NotNonartifactSpell),
                 },
                 vec![],
                 true,
