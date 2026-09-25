@@ -53,6 +53,7 @@ pub mod library;
 pub mod life_totals;
 pub mod mana;
 pub mod mana_abilities;
+pub mod merge;
 pub mod mulligan;
 pub mod multiplayer;
 pub mod next_spell;

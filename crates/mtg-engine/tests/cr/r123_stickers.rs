@@ -64,6 +64,8 @@ fn put(
 ) -> bool {
     t.answer(p, DecisionKind::Option, Answer::Index(choice));
     let r = stickers::put_from_sheets(&mut t.g, p, obj, kind, None, false);
+    // The answer isn't used if there was only one sticker to choose.
+    t.clear_answers();
     t.g.recompute();
     r
 }
@@ -109,8 +111,8 @@ fn sticker_sheets_are_chosen_before_play() {
     let mut dup = sheets(10);
     dup[9].name = "Sheet 0".into();
     assert!(stickers::choose_sheets(&mut t.g, P0, dup, SheetFormat::Constructed).is_err());
-    let chosen = stickers::choose_sheets(&mut t.g, P0, sheets(12), SheetFormat::Constructed)
-        .unwrap();
+    let chosen =
+        stickers::choose_sheets(&mut t.g, P0, sheets(12), SheetFormat::Constructed).unwrap();
     assert_eq!(chosen.len(), 3);
     assert_eq!(stickers::sheets_of(&t.g, P0).len(), 3);
     // Limited: up to three sheets from the player's pool.
@@ -123,7 +125,11 @@ fn sticker_sheets_are_chosen_before_play() {
 fn players_have_access_only_to_the_stickers_on_their_chosen_sheets() {
     cr!("123.2c");
     let mut t = TestGame::new(2);
-    limited(&mut t, P0, vec![sheet("Mine", vec![name_st("Space", 0), art()])]);
+    limited(
+        &mut t,
+        P0,
+        vec![sheet("Mine", vec![name_st("Space", 0), art()])],
+    );
     limited(&mut t, P1, vec![sheet("Theirs", vec![pt_st(9, 9, 0)])]);
     // P0 has access to exactly the two stickers on their sheet; the sheets stay revealed
     // (anyone can see them).
@@ -132,7 +138,13 @@ fn players_have_access_only_to_the_stickers_on_their_chosen_sheets() {
     assert!(options.iter().all(|s| s.player == P0));
     assert_eq!(stickers::sheets_of(&t.g, P1)[0].name, "Theirs");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    assert!(!put(&mut t, P0, bears, Some(StickerType::PowerToughness), 0));
+    assert!(!put(
+        &mut t,
+        P0,
+        bears,
+        Some(StickerType::PowerToughness),
+        0
+    ));
 }
 
 #[test]
@@ -143,12 +155,18 @@ fn a_player_chooses_a_sticker_not_already_on_an_object_they_own() {
     limited(
         &mut t,
         P0,
-        vec![sheet("Twins", vec![name_st("Space", 0), name_st("Space", 0)])],
+        vec![sheet(
+            "Twins",
+            vec![name_st("Space", 0), name_st("Space", 0)],
+        )],
     );
     let bears = t.battlefield(P0, "Grizzly Bears");
     let elves = t.battlefield(P0, "Llanowar Elves");
     assert!(put(&mut t, P0, bears, None, 0));
-    assert_eq!(stickers::available(&t.g, P0, P0, None, None, false).len(), 1);
+    assert_eq!(
+        stickers::available(&t.g, P0, P0, None, None, false).len(),
+        1
+    );
     assert!(put(&mut t, P0, elves, None, 0));
     // Both are on objects P0 owns: none is left.
     let ogre = t.battlefield(P0, "Gray Ogre");
@@ -220,14 +238,12 @@ fn a_stickered_object_has_a_sticker_on_it_now() {
     assert!(put(&mut t, P0, bears, None, 0));
     assert!(t.obj(winner).has_keyword(KeywordKind::Trample));
     // Once it has no sticker on it, it isn't stickered, though it had one before.
-    let in_hand = t
-        .g
-        .move_object(bears, Zone::Hand(P0), MoveCause::Effect, Some(P0))
-        .unwrap();
-    let back = t
-        .g
-        .move_object(in_hand, Zone::Battlefield, MoveCause::Effect, Some(P0))
-        .unwrap();
+    let in_hand =
+        t.g.move_object(bears, Zone::Hand(P0), MoveCause::Effect, Some(P0))
+            .unwrap();
+    let back =
+        t.g.move_object(in_hand, Zone::Battlefield, MoveCause::Effect, Some(P0))
+            .unwrap();
     t.g.recompute();
     assert!(!stickers::is_stickered(&t.g, back));
     assert!(!t.obj(winner).has_keyword(KeywordKind::Trample));
@@ -241,18 +257,16 @@ fn stickers_stay_on_objects_moving_to_public_zones_only() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     assert!(put(&mut t, P0, bears, None, 0));
     // To the graveyard (public): the sticker applies to the new object.
-    let dead = t
-        .g
-        .move_object(bears, Zone::Graveyard(P0), MoveCause::Effect, Some(P0))
-        .unwrap();
+    let dead =
+        t.g.move_object(bears, Zone::Graveyard(P0), MoveCause::Effect, Some(P0))
+            .unwrap();
     t.g.recompute();
     assert!(stickers::is_stickered(&t.g, dead));
     assert_eq!(t.obj(dead).chars.power, Some(4));
     // Into the library (hidden): it doesn't.
-    let lib = t
-        .g
-        .move_object(dead, Zone::Library(P0), MoveCause::Effect, Some(P0))
-        .unwrap();
+    let lib =
+        t.g.move_object(dead, Zone::Library(P0), MoveCause::Effect, Some(P0))
+            .unwrap();
     t.g.recompute();
     assert!(!stickers::is_stickered(&t.g, lib));
     assert_eq!(t.obj(lib).chars.power, Some(2));
@@ -268,7 +282,10 @@ fn name_stickers_add_a_word_where_the_controller_chooses() {
     limited(
         &mut t,
         P0,
-        vec![sheet("Words", vec![name_st("Sheep's", 0), name_st("Big", 0)])],
+        vec![sheet(
+            "Words",
+            vec![name_st("Sheep's", 0), name_st("Big", 0)],
+        )],
     );
     let wolf = t.battlefield(P0, "Wolf in _____ Clothing");
     // The controller chooses: at the beginning or after any number of words.
@@ -280,7 +297,9 @@ fn name_stickers_add_a_word_where_the_controller_chooses() {
     });
     t.answer(P0, DecisionKind::Option, Answer::Index(0)); // the "Sheep's" sticker
     t.answer(P0, DecisionKind::Option, Answer::Index(2)); // after two words
-    assert!(stickers::put_from_sheets(&mut t.g, P0, wolf, None, None, false));
+    assert!(stickers::put_from_sheets(
+        &mut t.g, P0, wolf, None, None, false
+    ));
     t.g.recompute();
     assert_eq!(t.obj(wolf).chars.name, "Wolf in Sheep's _____ Clothing");
     // The choices: the beginning, or after one, two or three of its words.
@@ -344,7 +363,11 @@ fn letters_and_unique_vowels_on_a_name_sticker() {
 fn ability_stickers_grant_their_abilities() {
     cr!("123.7", "123.7a");
     let mut t = TestGame::new(2);
-    limited(&mut t, P0, vec![sheet("Wings", vec![flying_st(), flying_st()])]);
+    limited(
+        &mut t,
+        P0,
+        vec![sheet("Wings", vec![flying_st(), flying_st()])],
+    );
     let bears = t.battlefield(P0, "Grizzly Bears");
     assert!(put(&mut t, P0, bears, None, 0));
     assert!(t.obj(bears).has_keyword(KeywordKind::Flying));
@@ -385,7 +408,12 @@ fn power_and_toughness_stickers_set_power_and_toughness() {
         P0,
         vec![sheet(
             "Stats",
-            vec![pt_st(5, 1, 0), pt_st(1, 5, 0), pt_st(7, 7, 0), name_st("Big", 0)],
+            vec![
+                pt_st(5, 1, 0),
+                pt_st(1, 5, 0),
+                pt_st(7, 7, 0),
+                name_st("Big", 0),
+            ],
         )],
     );
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -396,7 +424,13 @@ fn power_and_toughness_stickers_set_power_and_toughness() {
     assert_eq!(t.pt(bears), (1, 5));
     // On a Vehicle card in a zone other than the battlefield.
     let copter = t.graveyard(P0, "Smuggler's Copter");
-    assert!(put(&mut t, P0, copter, Some(StickerType::PowerToughness), 0));
+    assert!(put(
+        &mut t,
+        P0,
+        copter,
+        Some(StickerType::PowerToughness),
+        0
+    ));
     assert_eq!(t.obj(copter).chars.power, Some(7));
     // The power of a sticker is the value printed on a power and toughness sticker;
     // other stickers (the name sticker) have none. Effects on the creature don't change
@@ -428,4 +462,135 @@ fn an_art_sticker_is_only_a_marker() {
         .g
         .matches(bears, &Filter::HasSticker(Some(StickerType::Art)), &ctx));
     assert!(stickers::is_stickered(&t.g, bears));
+}
+
+/// Graf Rats and Midnight Scavengers meld into Chittering Host (5/6) at the beginning of
+/// P0's combat.
+fn meld_host(t: &mut TestGame) -> ObjectId {
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.advance_to_step(mtg_engine::turn::Step::BeginningOfCombat);
+    t.settle();
+    t.resolve_all();
+    t.named_on_battlefield("Chittering Host")[0]
+}
+
+#[test]
+fn stickers_on_melded_cards_are_on_the_melded_permanent_in_their_order() {
+    cr!("123.5a");
+    let mut t = TestGame::new(2);
+    limited(
+        &mut t,
+        P0,
+        vec![sheet("Stats", vec![pt_st(1, 9, 0), pt_st(8, 2, 0)])],
+    );
+    let rats = t.battlefield(P0, "Graf Rats");
+    let scavengers = t.battlefield(P0, "Midnight Scavengers");
+    // The 1/9 sticker goes on Graf Rats first, then the 8/2 on Midnight Scavengers.
+    assert!(put(&mut t, P0, rats, None, 0));
+    assert!(put(&mut t, P0, scavengers, None, 0));
+    let host = meld_host(&mut t);
+    // Both stickers are on Chittering Host; the later one takes precedence.
+    assert_eq!(stickers::stickers_on(&t.g, host).len(), 2);
+    assert_eq!(t.pt(host), (8, 2));
+    // In the other order, the other one does.
+    let mut t = TestGame::new(2);
+    limited(
+        &mut t,
+        P0,
+        vec![sheet("Stats", vec![pt_st(1, 9, 0), pt_st(8, 2, 0)])],
+    );
+    let rats = t.battlefield(P0, "Graf Rats");
+    let scavengers = t.battlefield(P0, "Midnight Scavengers");
+    assert!(put(&mut t, P0, scavengers, None, 1));
+    assert!(put(&mut t, P0, rats, None, 0));
+    let host = meld_host(&mut t);
+    assert_eq!(t.pt(host), (1, 9));
+}
+
+#[test]
+fn a_sticker_on_a_mutating_spell_is_on_the_merged_permanent() {
+    cr!("123.5b");
+    let mut t = TestGame::new(2);
+    limited(&mut t, P0, vec![sheet("Big", vec![pt_st(9, 9, 0)])]);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    // Gemrazer gets a sticker, then is exiled (a public zone: the sticker stays), and P0
+    // may cast it from exile.
+    let gem = t.battlefield(P0, "Gemrazer");
+    assert!(put(&mut t, P0, gem, None, 0));
+    let gem =
+        t.g.move_object(gem, Zone::Exile, MoveCause::Effect, Some(P0))
+            .unwrap();
+    t.g.recompute();
+    assert!(stickers::is_stickered(&t.g, gem));
+    mtg_engine::casting::grant_play_permission(
+        &mut t.g,
+        P0,
+        vec![gem],
+        Duration::EndOfTurn,
+        false,
+        None,
+    );
+    // It mutates under Grizzly Bears: the merged permanent is the Bears, with the sticker.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::G, 3);
+    t.cast(P0, gem)
+        .method(CastMethod::Keyword(KeywordKind::Mutate))
+        .target(bears)
+        .go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.resolve();
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Grizzly Bears");
+    assert!(stickers::is_stickered(&t.g, bears));
+    assert_eq!(t.pt(bears), (9, 9));
+}
+
+#[test]
+fn a_melded_permanents_stickers_stay_with_the_card_its_owner_chooses() {
+    cr!("123.5c");
+    let setup = |t: &mut TestGame| -> ObjectId {
+        limited(t, P0, vec![sheet("Stats", vec![pt_st(8, 2, 0), art()])]);
+        let rats = t.battlefield(P0, "Graf Rats");
+        let scavengers = t.battlefield(P0, "Midnight Scavengers");
+        assert!(put(t, P0, rats, Some(StickerType::PowerToughness), 0));
+        assert!(put(t, P0, scavengers, Some(StickerType::Art), 0));
+        meld_host(t)
+    };
+    let card_in = |t: &TestGame, zone: &[ObjectId], name: &str| -> ObjectId {
+        *zone.iter().find(|o| t.obj(**o).chars.name == name).unwrap()
+    };
+    // Chittering Host dies: P0 chooses Midnight Scavengers to keep both stickers.
+    let mut t = TestGame::new(2);
+    let host = setup(&mut t);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.g.move_object(host, Zone::Graveyard(P0), MoveCause::Effect, None);
+    t.g.recompute();
+    let gy = t.g.players[P0.idx()].graveyard.clone();
+    let rats = card_in(&t, &gy, "Graf Rats");
+    let scavengers = card_in(&t, &gy, "Midnight Scavengers");
+    assert!(!stickers::is_stickered(&t.g, rats));
+    assert_eq!(stickers::stickers_on(&t.g, scavengers).len(), 2);
+    assert_eq!(t.obj(scavengers).chars.power, Some(8));
+    assert_eq!(t.obj(rats).chars.power, Some(2));
+    // Choosing Graf Rats instead.
+    let mut t = TestGame::new(2);
+    let host = setup(&mut t);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.g.move_object(host, Zone::Exile, MoveCause::Effect, None);
+    t.g.recompute();
+    let ex = t.g.exile.clone();
+    let rats = card_in(&t, &ex, "Graf Rats");
+    let scavengers = card_in(&t, &ex, "Midnight Scavengers");
+    assert_eq!(stickers::stickers_on(&t.g, rats).len(), 2);
+    assert!(!stickers::is_stickered(&t.g, scavengers));
+    // To a hidden zone, no card keeps them.
+    let mut t = TestGame::new(2);
+    let host = setup(&mut t);
+    t.g.move_object(host, Zone::Hand(P0), MoveCause::Effect, None);
+    t.g.recompute();
+    let hand = t.g.players[P0.idx()].hand.clone();
+    assert_eq!(hand.len(), 2);
+    assert!(hand.iter().all(|o| !stickers::is_stickered(&t.g, *o)));
 }

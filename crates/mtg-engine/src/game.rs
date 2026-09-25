@@ -833,6 +833,7 @@ impl Game {
         self.objects[old.0 as usize].next = Some(id);
         crate::stickers::follow(self, old, id, zone);
         crate::rooms::entering(self, old, id, zone);
+        crate::merge::incarnation(self, old, id);
         id
     }
 

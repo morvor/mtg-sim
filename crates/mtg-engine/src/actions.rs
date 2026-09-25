@@ -632,6 +632,10 @@ impl Game {
                 from: host,
             });
         }
+        if from == Zone::Battlefield {
+            // CR 730.3: the other components of a merged or melded permanent.
+            crate::merge::after_leaving(self, old_id, new_id, &m);
+        }
         Some(new_id)
     }
 

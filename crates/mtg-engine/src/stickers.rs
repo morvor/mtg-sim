@@ -186,6 +186,35 @@ pub fn follow(g: &mut Game, old: ObjectId, new: ObjectId, to: Zone) {
     }
 }
 
+/// The stickers on any of `from` are also on `to` (CR 123.5a: cards melding into one
+/// permanent). Their timestamps keep their relative order (CR 613.7k).
+pub fn redirect(g: &mut Game, from: &[ObjectId], to: ObjectId) {
+    let ids = g.stickers.clone();
+    for e in g.effects.iter_mut().filter(|e| ids.contains(&e.id)) {
+        if let Affected::Objects(v) = &mut e.affected {
+            if v.iter().any(|o| from.contains(o)) && !v.contains(&to) {
+                v.push(to);
+            }
+        }
+    }
+    g.dirty = true;
+}
+
+/// Moves the stickers on `from` to `to` (CR 123.5c: the object a melded or merged
+/// permanent became that keeps its stickers).
+pub fn transfer(g: &mut Game, from: ObjectId, to: ObjectId) {
+    let ids = g.stickers.clone();
+    for e in g.effects.iter_mut().filter(|e| ids.contains(&e.id)) {
+        if let Affected::Objects(v) = &mut e.affected {
+            if v.contains(&from) {
+                v.retain(|o| *o != from);
+                v.push(to);
+            }
+        }
+    }
+    g.dirty = true;
+}
+
 /// CR 123.5b, 613.7k: `obj`, with stickers on it, becomes part of the merged permanent
 /// `merged`: its stickers are on the merged permanent, and each receives a new timestamp
 /// at that time, keeping their relative order.
