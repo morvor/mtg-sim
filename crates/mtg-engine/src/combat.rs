@@ -71,6 +71,10 @@ pub struct CombatState {
     pub declared_blockers: Vec<ObjectId>,
     /// Attackers removed from combat, with the defending player they had (CR 508.5).
     pub removed_attackers: Vec<(ObjectId, PlayerId)>,
+    /// Attackers removed from combat, with the player, planeswalker, or battle they were
+    /// attacking (e.g. for ninjutsu, CR 702.49c).
+    #[serde(default)]
+    pub removed_attack_targets: Vec<(ObjectId, Entity)>,
 }
 
 impl CombatState {
@@ -1259,6 +1263,22 @@ pub fn block_requirements(
             }
         }
     }
+    // "[blocker] blocks [attacker] this combat if able" (CR 702.39a).
+    for (s, c, r, locked) in g.all_restrictions() {
+        if let Restriction::MustBlockAttacker { blocker, attacker } = &r {
+            let ctx = Ctx::new(s, c);
+            for (b, atts) in options {
+                if !g.restriction_applies(*b, blocker, &ctx, &locked) {
+                    continue;
+                }
+                for a in atts {
+                    if g.matches(*a, attacker, &ctx) {
+                        out.push(BlockRequirement::BlocksAttacker(*b, *a));
+                    }
+                }
+            }
+        }
+    }
     out
 }
 
@@ -2083,6 +2103,9 @@ pub fn remove_from_combat(g: &mut Game, id: ObjectId) {
     let Some(c) = g.combat.as_mut() else { return };
     if let Some(p) = dp {
         c.removed_attackers.push((id, p));
+    }
+    if let Some(t) = c.attack_target(id) {
+        c.removed_attack_targets.push((id, t));
     }
     c.attackers.retain(|a| a.id != id);
     for a in c.attackers.iter_mut() {

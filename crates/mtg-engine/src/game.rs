@@ -304,6 +304,10 @@ pub struct DelayedTrigger {
     pub created_turn: u32,
     /// For "at the beginning of the next end step": don't fire in the step it was created in.
     pub created_step: Option<crate::turn::Step>,
+    /// A delayed trigger that can trigger more than once lasts "for the rest of the game"
+    /// rather than for the turn (e.g. epic, CR 702.50a).
+    #[serde(default)]
+    pub for_rest_of_game: bool,
 }
 
 /// A triggered ability waiting to be put on the stack (CR 603.3).

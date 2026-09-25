@@ -590,7 +590,9 @@ impl Game {
                 let lib = &mut self.players[p.idx()].library;
                 match m.pos {
                     LibraryPosition::Top => lib.push(new_id),
-                    LibraryPosition::Bottom => lib.insert(0, new_id),
+                    LibraryPosition::Bottom | LibraryPosition::BottomRandom => {
+                        lib.insert(0, new_id)
+                    }
                     LibraryPosition::FromTop(n) => {
                         let idx = lib.len().saturating_sub(n as usize);
                         lib.insert(idx, new_id);

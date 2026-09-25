@@ -202,6 +202,50 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<Vec<EventInfo>> {
         None
     }
+    /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
+    /// number of spells cast before a storm spell (CR 702.40a).
+    fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+        None
+    }
+    /// A named object filter (`Filter::Custom(name)`) evaluated by this implementation,
+    /// e.g. "creature that convoked it" (CR 702.51c).
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: ObjectId,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        None
+    }
+    /// Once the total cost of `spell` is locked in (CR 601.2f), ways this keyword lets its
+    /// controller pay part of it other than with mana, performed as the total cost is paid
+    /// (CR 601.2h): e.g. tapping creatures for convoke (CR 702.51a–b), or sacrificing the
+    /// permanent offered for offering, which reduces the mana to pay by its mana cost
+    /// (CR 702.48a–c). Takes what was paid out of `cost`.
+    fn pay_mana_otherwise(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        cost: &mut Cost,
+    ) -> Result<(), Illegal> {
+        Ok(())
+    }
+    /// For the check whether `card` could be cast with `method`: takes out of `cost` what
+    /// this keyword could pay other than with mana (see
+    /// [`KeywordRules::pay_mana_otherwise`]).
+    fn payable_otherwise(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+        method: &CastMethod,
+        cost: &mut Cost,
+    ) {
+    }
 }
 
 /// Keyword-defined state-based actions (see [`KeywordRules::state_based_actions`]).
@@ -545,4 +589,182 @@ pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Co
         }
     }
     cost
+}
+
+pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+    registry().iter().find_map(|r| r.custom_value(g, name, ctx))
+}
+
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &crate::eval::Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_filter(g, name, id, ctx))
+}
+
+/// Keyword instances of `chars` with distinct kinds: several instances of a payment
+/// keyword are redundant (e.g. CR 702.51d).
+fn distinct_kinds(chars: &Characteristics) -> Vec<Keyword> {
+    let mut out: Vec<Keyword> = Vec::new();
+    for kw in chars.keywords() {
+        if !out.iter().any(|k| k.kind == kw.kind) {
+            out.push(kw.clone());
+        }
+    }
+    out
+}
+
+/// CR 601.2h: lets keywords of the spell pay part of its total cost other than with mana.
+pub fn pay_mana_otherwise(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    cost: &mut Cost,
+) -> Result<(), Illegal> {
+    let kws = distinct_kinds(&g.obj(spell).chars);
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            r.pay_mana_otherwise(g, p, spell, kw, cost)?;
+        }
+    }
+    Ok(())
+}
+
+/// A card seen as the spell its caster would put on the stack.
+struct AsSpell<'c> {
+    id: ObjectId,
+    chars: &'c Characteristics,
+    caster: PlayerId,
+}
+
+impl crate::eval::View for AsSpell<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.caster
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.id).then_some(self.caster)
+    }
+}
+
+/// The characteristics `card` would have as a spell `p` casts, including the keywords
+/// that static abilities give such spells ("Artifact spells you cast have convoke"), for
+/// checking whether it could be cast (CR 601.3e). As it's cast, the spell on the stack
+/// gets them from the layer system.
+pub fn with_granted_spell_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+) -> Characteristics {
+    let mut out = chars.clone();
+    let sources: Vec<ObjectId> = g
+        .permanents()
+        .map(|o| o.id)
+        .chain(g.command.iter().copied())
+        .collect();
+    for src in sources {
+        let o = g.obj(src);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            if !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let ctx = crate::eval::Ctx::new(Some(src), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            let granted: Vec<&Keyword> = mods
+                .iter()
+                .filter_map(|m| match m {
+                    Modification::AddKeyword(k) => Some(k),
+                    _ => None,
+                })
+                .collect();
+            // Judged as the spell it would be: with these characteristics, controlled by
+            // its caster.
+            let view = AsSpell {
+                id: card,
+                chars,
+                caster: p,
+            };
+            if granted.is_empty()
+                || !g.matches_view(
+                    &view,
+                    card,
+                    &crate::casting::as_spell_filter(affected),
+                    &ctx,
+                )
+            {
+                continue;
+            }
+            for k in granted {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
+    // "The next [quality] spell you cast this turn has [keyword]" (CR 611.2f).
+    let view = AsSpell {
+        id: card,
+        chars,
+        caster: p,
+    };
+    for e in &g.next_spell_effects {
+        let expired = matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+            && e.created_turn != g.turn.number;
+        let ctx = crate::eval::Ctx::new(e.source, e.player);
+        if e.player != p
+            || expired
+            || !g.matches_view(
+                &view,
+                card,
+                &crate::casting::as_spell_filter(&e.filter),
+                &ctx,
+            )
+        {
+            continue;
+        }
+        for m in &e.mods {
+            if let Modification::AddKeyword(k) = m {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// What of `cost` the keywords of `chars` could pay other than with mana.
+pub fn payable_otherwise(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    method: &CastMethod,
+    cost: &mut Cost,
+) {
+    for kw in &distinct_kinds(chars) {
+        for r in impls_for(kw.kind) {
+            r.payable_otherwise(g, p, card, kw, method, cost);
+        }
+    }
 }

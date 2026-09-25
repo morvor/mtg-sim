@@ -1157,10 +1157,23 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let found = crate::library::search(self, p, owner, filter, n, ctx);
                 let _ = reveal;
-                let res = self.move_to_destination(found, to, ctx);
-                if *shuffle {
+                let res = if *shuffle
+                    && to.zone == ZoneKind::Library
+                    && matches!(to.position, LibraryPosition::Top)
+                {
+                    // "Then shuffle and put that card on top" (CR 701.24b): the found
+                    // cards stay in the library but aren't shuffled, then go on top (no
+                    // zone change).
                     self.shuffle_library(owner);
-                }
+                    crate::library::put_on_top(self, owner, &found);
+                    found
+                } else {
+                    let res = self.move_to_destination(found, to, ctx);
+                    if *shuffle {
+                        self.shuffle_library(owner);
+                    }
+                    res
+                };
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -1275,6 +1288,7 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    for_rest_of_game: false,
                 });
             }
             Effect::Reflexive { body } => {
@@ -1321,6 +1335,7 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    for_rest_of_game: false,
                 });
             }
             Effect::CreateEmblem { who, abilities } => {
@@ -1751,6 +1766,15 @@ impl Game {
                 *f = Filter::Any;
             }
         }
+        // "Target creature blocks this creature this combat if able": both creatures are
+        // the objects named as the effect began.
+        if let Restriction::MustBlockAttacker { blocker, attacker } = &mut r {
+            for f in [blocker, attacker] {
+                if filter_references_specific(f) {
+                    *f = Filter::Objects(self.named_objects(f, ctx));
+                }
+            }
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
@@ -1768,24 +1792,29 @@ impl Game {
         let mut r = r.clone();
         let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
-            let mut v = self.objects_matching(f, ctx);
-            // Targets outside the battlefield ("target spell can't be countered"), and the
-            // resolving spell itself ("the damage [this spell deals] can't be prevented").
-            let extra = ctx
-                .targets
-                .iter()
-                .flatten()
-                .filter_map(|e| e.object())
-                .chain(ctx.source);
-            for o in extra {
-                if !v.contains(&o) && self.matches(o, f, ctx) {
-                    v.push(o);
-                }
-            }
-            Some(v)
+            Some(self.named_objects(f, ctx))
         } else {
             None
         }
+    }
+
+    /// The objects a filter naming specific objects matches as an effect begins.
+    fn named_objects(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
+        let mut v = self.objects_matching(f, ctx);
+        // Targets outside the battlefield ("target spell can't be countered"), and the
+        // resolving spell itself ("the damage [this spell deals] can't be prevented").
+        let extra = ctx
+            .targets
+            .iter()
+            .flatten()
+            .filter_map(|e| e.object())
+            .chain(ctx.source);
+        for o in extra {
+            if !v.contains(&o) && self.matches(o, f, ctx) {
+                v.push(o);
+            }
+        }
+        v
     }
 
     fn lock_replacement_objects(&self, d: &ReplacementDef, ctx: &Ctx) -> Option<Vec<ObjectId>> {

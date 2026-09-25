@@ -3,7 +3,13 @@
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
+use crate::eval::Ctx;
+use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
+
+/// `Value::Custom`: the total of N over the bushido abilities of the object a continuous
+/// effect is being applied to ("for each point of bushido it has").
+pub const BUSHIDO_POINTS: &str = "bushido:points of bushido it has";
 
 pub struct Bushido;
 
@@ -27,6 +33,21 @@ impl KeywordRules for Bushido {
             )),
             format!("Bushido {n}"),
         )])
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != BUSHIDO_POINTS {
+            return None;
+        }
+        let it = ctx.var_objects(vars::AFFECTED).first().copied();
+        Some(it.map_or(0, |o| {
+            g.obj(o)
+                .chars
+                .keywords()
+                .filter(|k| k.kind == KeywordKind::Bushido)
+                .map(|k| k.n.unwrap_or(0).max(0) as i64)
+                .sum()
+        }))
     }
 }
 

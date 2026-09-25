@@ -14,6 +14,10 @@ pub const HAS_NONMANA_ACTIVATED_ABILITY: &str = "has_nonmana_activated_ability";
 
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
+    // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
+    if let Some(b) = crate::kw::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
@@ -44,6 +48,10 @@ fn cast_info<'a>(g: &'a Game, ctx: &'a Ctx) -> Option<&'a CastInfo> {
 pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     // Values referring to stickers (CR 123.6d, 123.6e, 123.8a).
     if let Some(v) = crate::stickers::sticker_value(g, name, ctx) {
+        return v;
+    }
+    // Values computed by keyword implementations (e.g. storm, CR 702.40a).
+    if let Some(v) = crate::kw::custom_value(g, name, ctx) {
         return v;
     }
     // Die roll results (CR 706).

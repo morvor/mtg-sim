@@ -524,9 +524,11 @@ impl Game {
                 }
             }
         }
-        // Optimistic cost check.
+        // Optimistic cost check, with the keywords the spell would be given as it's cast.
+        let chars = crate::kw::with_granted_spell_keywords(self, p, card, &chars);
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
+        crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
 
@@ -964,6 +966,9 @@ impl Game {
         crate::cost_rules::spend_any_type(self, p, id, &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
+        // CR 702.51a–b: once the total cost is determined, keywords such as convoke may
+        // pay part of it other than with mana.
+        crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
             is_spell: true,

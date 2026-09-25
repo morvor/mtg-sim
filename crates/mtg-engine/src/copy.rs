@@ -13,7 +13,11 @@ pub fn copy_spell(
     controller: PlayerId,
     new_targets: bool,
 ) -> Option<ObjectId> {
-    if !g.is_live(spell) || g.obj(spell).zone != Zone::Stack {
+    // A spell that has left the stack (e.g. countered in response to storm's trigger) is
+    // copied as it last existed there (CR 608.2h); its old object keeps that information.
+    let o = g.obj(spell);
+    let spell_lki = !g.is_live(spell) && o.kind != ObjKind::StackAbility && o.stack.is_some();
+    if o.zone != Zone::Stack || !(g.is_live(spell) || spell_lki) {
         return None;
     }
     let orig = g.obj(spell).clone();
@@ -44,6 +48,8 @@ pub fn copy_spell(
     if let Some(ctx) = g.saved_ctx.get(&spell).cloned() {
         g.saved_ctx.insert(id, ctx);
     }
+    // Cards spliced onto the spell were choices made while casting it (CR 702.47).
+    crate::splice::copy_splices(g, spell, id);
     g.dirty = true;
     g.recompute();
     if orig.kind != ObjKind::StackAbility {

@@ -4,11 +4,30 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::keywords::{compile_keyword, parse_keyword_cost};
 use crate::oracle::patterns::AbilityPattern;
+use crate::oracle::effects::{parse_effect_text, Builder};
 use crate::oracle::CompileContext;
 use crate::types::*;
 use smol_str::SmolStr;
 
-fn splice(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+/// A splice cost: mana, other costs ("Sacrifice two Mountains"), or an action performed
+/// as the cost ("An opponent gains 5 life"), which can't have targets.
+fn splice_cost(s: &str, ctx: &CompileContext) -> Option<Cost> {
+    if let Some(c) = parse_keyword_cost(s) {
+        return Some(c);
+    }
+    let action = s.trim().trim_start_matches('—').trim().to_lowercase();
+    let mut b = Builder::new(ctx);
+    let e = parse_effect_text(&action, &mut b)?;
+    if !b.targets.is_empty() {
+        return None;
+    }
+    Some(Cost {
+        mana: None,
+        parts: vec![CostPart::Effect(Box::new(e))],
+    })
+}
+
+fn splice(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim().trim_end_matches('.');
     let rest = t.strip_prefix("Splice onto ")?;
     let lower = rest.to_lowercase();
@@ -25,7 +44,7 @@ fn splice(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     } else {
         return None;
     };
-    let cost = parse_keyword_cost(rest[len..].trim())?;
+    let cost = splice_cost(rest[len..].trim(), ctx)?;
     let kw = Keyword {
         cost: Some(cost),
         filter: Some(quality),
