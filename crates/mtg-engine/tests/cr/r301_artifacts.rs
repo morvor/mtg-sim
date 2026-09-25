@@ -176,6 +176,7 @@ fn equipped_creature_refers_to_what_a_non_equipment_permanent_is_attached_to() {
 #[test]
 fn a_fortification_is_attached_to_a_land_by_fortify() {
     cr!("301.6", "702.67a");
+    ruling!("Darksteel Garrison", "Fortification is to lands what Equipment is to creatures");
     let mut t = TestGame::new(2);
     let garrison = t.battlefield(P0, "Darksteel Garrison");
     let bears = t.battlefield(P0, "Grizzly Bears");

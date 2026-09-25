@@ -130,6 +130,7 @@ fn a_face_up_planes_abilities_function_from_the_command_zone() {
 #[test]
 fn the_planar_controller_controls_the_face_up_plane() {
     cr!("311.5");
+    ruling!("Krosa", "the next player in turn order");
     let mut t = planechase_game(3, false);
     // P1's plane, face up during P0's turn.
     let deck = add_planar_deck(&mut t, P1, &["Krosa"]);
@@ -155,6 +156,7 @@ fn the_planar_controller_controls_the_face_up_plane() {
 #[test]
 fn a_plane_turned_face_down_becomes_a_new_object() {
     cr!("311.6");
+    ruling!("Goldmeadow", "becomes a new object with no relation to its previous existence");
     let mut t = planechase_game(2, false);
     let deck = add_planar_deck(&mut t, P0, &["Krosa", "Goldmeadow"]);
     planechase::set_starting_plane(&mut t.g);

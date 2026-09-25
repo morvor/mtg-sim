@@ -247,6 +247,7 @@ fn put_attached(t: &mut TestGame, card: ObjectId, to: Vec<Entity>) {
 #[test]
 fn an_aura_put_onto_the_battlefield_attached_to_something_it_cant_enchant_stays_where_it_is() {
     cr!("303.4i");
+    ruling!("Monstrous Rage", "In such cases, the Role token isn");
     let mut t = TestGame::new(2);
     let forest = t.battlefield(P1, "Forest");
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -370,6 +371,61 @@ fn an_aura_turned_face_up_is_attached_according_to_its_face_up_characteristics()
 }
 
 #[test]
+fn an_aura_turned_face_up_without_being_attached_goes_to_the_graveyard() {
+    cr!("303.4k");
+    ruling!(
+        "Gift of Doom",
+        "or if you choose not to attach it to a creature, it"
+    );
+    ruling!("Gift of Doom", "may be chosen this way");
+    // Declining to attach it: it's an Aura attached to nothing.
+    let mut t = TestGame::new(2);
+    let fodder = t.battlefield(P0, "Llanowar Elves");
+    let theirs = t.battlefield(P1, "Gladecover Scout");
+    t.lands(P0, "Swamp", 3);
+    let c = t.hand(P0, "Gift of Doom");
+    t.cast(P0, c)
+        .method(CastMethod::FaceDown(KeywordKind::Morph))
+        .go();
+    t.resolve();
+    let gift = t.g.current(c);
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    t.answer_yes(P0, false);
+    t.g.turn.priority = Some(P0);
+    t.g.perform_action(
+        P0,
+        Action::Special(SpecialAction::TurnFaceUp { obj: gift }),
+    )
+    .unwrap();
+    t.settle();
+    assert!(t.in_graveyard(P0, "Gift of Doom"));
+    // Attaching it doesn't target: an opponent's creature with hexproof can be chosen.
+    let mut t = TestGame::new(2);
+    let fodder = t.battlefield(P0, "Llanowar Elves");
+    let scout = t.battlefield(P1, "Gladecover Scout");
+    t.lands(P0, "Swamp", 3);
+    let c = t.hand(P0, "Gift of Doom");
+    t.cast(P0, c)
+        .method(CastMethod::FaceDown(KeywordKind::Morph))
+        .go();
+    t.resolve();
+    let gift = t.g.current(c);
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(scout)]);
+    t.g.turn.priority = Some(P0);
+    t.g.perform_action(
+        P0,
+        Action::Special(SpecialAction::TurnFaceUp { obj: gift }),
+    )
+    .unwrap();
+    t.settle();
+    let gift = t.g.current(gift);
+    assert_eq!(t.obj(gift).attached_to, Some(Entity::Object(scout)));
+    let _ = theirs;
+}
+
+#[test]
 fn enchanted_refers_to_what_a_non_aura_permanent_is_attached_to() {
     cr!("303.4m");
     // An Equipment whose ability refers to the "enchanted creature".
@@ -393,6 +449,7 @@ fn enchanted_refers_to_what_a_non_aura_permanent_is_attached_to() {
 #[test]
 fn a_saga_is_an_enchantment_with_lore_counters_and_chapter_abilities() {
     cr!("303.5");
+    ruling!("History of Benalia", "As a Saga enters the battlefield, its controller puts a lore counter on it");
     let mut t = TestGame::new(2);
     mana_for(&mut t, P0, "{1}{W}{W}");
     let c = t.hand(P0, "History of Benalia");
@@ -409,6 +466,7 @@ fn a_saga_is_an_enchantment_with_lore_counters_and_chapter_abilities() {
 #[test]
 fn a_class_is_an_enchantment_that_gains_levels() {
     cr!("303.6");
+    ruling!("Ranger Class", "Gaining a level is a normal activated ability");
     let mut t = TestGame::new(2);
     mana_for(&mut t, P0, "{1}{G}");
     let c = t.hand(P0, "Ranger Class");
@@ -434,6 +492,9 @@ fn a_class_is_an_enchantment_that_gains_levels() {
 #[test]
 fn only_the_newest_role_a_player_controls_on_a_permanent_stays() {
     cr!("303.7", "303.7a");
+    ruling!("Monstrous Rage", "each of those Roles except the one with the most recent timestamp");
+    ruling!("Monstrous Rage", "A permanent can have multiple Roles attached to it if each one is controlled by a different player");
+    ruling!("Monstrous Rage", "Each one has the Aura and Role subtypes");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     // Monstrous Rage: a Monster Role attached to the target.

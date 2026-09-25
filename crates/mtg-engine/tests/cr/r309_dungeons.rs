@@ -45,6 +45,7 @@ fn dungeons_in_command(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 #[test]
 fn a_dungeon_is_a_nontraditional_card_that_isnt_part_of_a_deck() {
     cr!("309.1", "309.2");
+    ruling!("Lost Mine of Phandelver", "Dungeon cards are nontraditional Magic cards that begin outside the game");
     let card = mtg_engine::card::card(MINE);
     assert!(mtg_engine::variants::is_nontraditional(&card));
     // Listed with a deck, it doesn't go into the library: it begins outside the game.

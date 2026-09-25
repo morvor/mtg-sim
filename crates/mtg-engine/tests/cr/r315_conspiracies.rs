@@ -23,6 +23,7 @@ fn copies(name: &str, n: usize) -> Vec<Arc<CardDef>> {
 #[test]
 fn conspiracies_arent_used_in_constructed_play() {
     cr!("315.1");
+    ruling!("Power Play", "Conspiracies aren't legal for any sanctioned Constructed format");
     let mut deck = copies("Forest", 60);
     let side = vec![card("Power Play")];
     let problems = check_constructed_with(&deck, &side, &NameEquivalence::default());
@@ -45,6 +46,7 @@ fn conspiracies_arent_used_in_constructed_play() {
 #[test]
 fn conspiracies_start_the_game_in_the_command_zone_from_the_sideboard() {
     cr!("315.2");
+    ruling!("Weight Advantage", "Conspiracies are never put into your deck");
     let mut t = pregame(
         GameConfig {
             limited: true,
@@ -73,6 +75,7 @@ fn conspiracies_start_the_game_in_the_command_zone_from_the_sideboard() {
 #[test]
 fn conspiracy_cards_remain_in_the_command_zone_and_cant_be_brought_into_the_game() {
     cr!("315.3");
+    ruling!("Power Play", "Conspiracies are colorless, have no mana cost, and can");
     // Listed with a deck, a conspiracy isn't part of the library.
     let mut deck = fillers(40);
     deck.push(card("Power Play"));
@@ -126,6 +129,8 @@ fn conspiracies_have_no_subtypes() {
 #[test]
 fn a_face_up_conspiracys_static_and_triggered_abilities_function() {
     cr!("315.5");
+    ruling!("Iterative Analysis", "static and triggered abilities function as long as that conspiracy is face-up in the command zone");
+    ruling!("Weight Advantage", "a 2/3 creature will assign 3 combat damage rather than 2");
     let mut t = TestGame::new(2);
     // Static: Weight Advantage — "Each creature you control assigns combat damage equal to
     // its toughness rather than its power."
@@ -234,6 +239,7 @@ fn a_conspiracy_is_owned_and_controlled_by_the_player_who_put_it_into_the_comman
 #[test]
 fn only_its_controller_may_look_at_a_face_down_conspiracy() {
     cr!("315.7");
+    ruling!("Power Play", "face-up conspiracies at any time");
     let mut t = TestGame::new(2);
     let c = t.command(P0, "Iterative Analysis");
     t.g.objects[c.0 as usize].face_down = true;

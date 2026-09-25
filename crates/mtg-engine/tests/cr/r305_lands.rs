@@ -134,6 +134,7 @@ fn a_player_cant_play_a_land_during_another_players_turn() {
 #[test]
 fn putting_a_land_onto_the_battlefield_isnt_playing_a_land() {
     cr!("305.4");
+    ruling!("Rampant Growth", "does not count toward your one per turn limit");
     let mut t = TestGame::new(2);
     let in_library = t.library_top(P0, "Forest");
     let in_hand = t.hand(P0, "Forest");
@@ -151,6 +152,7 @@ fn putting_a_land_onto_the_battlefield_isnt_playing_a_land() {
 #[test]
 fn land_subtypes_are_single_words_and_a_land_may_have_several() {
     cr!("305.5");
+    ruling!("Underground Sea", "mana abilities associated with both of its basic land types");
     assert_eq!(subtypes_of("Mountain"), vec!["Mountain"]);
     assert_eq!(subtypes_of("Underground Sea"), vec!["Island", "Swamp"]);
     // "Urza's" is a land type of its own.
@@ -167,6 +169,7 @@ fn land_subtypes_are_single_words_and_a_land_may_have_several() {
 #[test]
 fn a_land_is_basic_only_if_it_has_the_basic_supertype() {
     cr!("305.8");
+    ruling!("Underground Sea", "Things that affect basic land types do");
     // Blood Moon: "Nonbasic lands are Mountains." Underground Sea has basic land types
     // but not the basic supertype: it's nonbasic.
     let mut t = TestGame::new(2);

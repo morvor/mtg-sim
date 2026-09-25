@@ -81,6 +81,7 @@ fn battle_subtypes_are_battle_types() {
 #[test]
 fn defense_is_printed_off_the_battlefield_and_counters_on_it() {
     cr!("310.4", "310.4a", "310.4b", "310.4c");
+    ruling!("Invasion of Segovia", "A battle enters the battlefield with that number of defense counters");
     let mut t = TestGame::new(2);
     let card = t.hand(P0, SEGOVIA);
     assert_eq!(t.obj(card).chars.defense, Some(4));
@@ -118,6 +119,7 @@ fn defense_is_printed_off_the_battlefield_and_counters_on_it() {
 #[test]
 fn battles_can_be_attacked_and_damage_removes_defense_counters() {
     cr!("310.5", "310.6");
+    ruling!("Invasion of Segovia", "Damage dealt to a battle causes that many defense counters to be removed from it");
     let mut t = TestGame::new(2);
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
@@ -136,6 +138,7 @@ fn battles_can_be_attacked_and_damage_removes_defense_counters() {
 #[test]
 fn a_siege_with_no_defense_waits_for_its_triggered_abilities() {
     cr!("310.7");
+    ruling!("Invasion of Segovia", "the source of a triggered ability that has triggered but not yet left the stack, that battle is put into its owner");
     let mut t = TestGame::new(2);
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
@@ -205,6 +208,7 @@ fn a_battle_with_no_battle_type_is_protected_by_its_controller() {
 #[test]
 fn a_siege_is_protected_by_an_opponent_of_its_controller() {
     cr!("310.12", "310.12a", "310.9a");
+    ruling!("Invasion of Segovia", "As a Siege enters the battlefield, its controller chooses an opponent to be its protector");
     let mut t = three_players();
     let b = enter_siege(&mut t, P0, P2);
     // The choice was among P0's opponents only.
@@ -223,6 +227,7 @@ fn can_attack_battle(t: &mut TestGame, active: PlayerId, b: ObjectId) -> bool {
 #[test]
 fn a_battles_protector_cant_attack_it_but_other_players_can() {
     cr!("310.9b");
+    ruling!("Invasion of Segovia", "A battle can be attacked by all players other than its protector");
     let mut t = three_players();
     let b = enter_siege(&mut t, P0, P1);
     // Its own controller can attack a Siege: its protector is a defending player for them.
@@ -236,6 +241,7 @@ fn a_battles_protector_cant_attack_it_but_other_players_can() {
 #[test]
 fn only_the_protector_may_block_creatures_attacking_a_battle() {
     cr!("310.9c");
+    ruling!("Invasion of Segovia", "Only creatures controlled by a battle");
     let mut t = three_players();
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
@@ -302,6 +308,7 @@ fn effects_referring_to_who_protects_a_battle_mean_its_protector() {
 #[test]
 fn a_battle_has_one_protector_at_a_time() {
     cr!("310.9f", "310.11");
+    ruling!("Invasion of Segovia", "protector ever gains control of it, they choose a new player to be its protector");
     let mut t = three_players();
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
@@ -411,6 +418,7 @@ fn a_battle_cant_be_attached_to_anything() {
 #[test]
 fn a_battle_without_a_protector_gets_one_once_it_isnt_being_attacked() {
     cr!("310.11");
+    ruling!("Invasion of Segovia", "if the protector of a battle leaves the game and that battle is not currently being attacked");
     let mut t = three_players();
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
@@ -440,6 +448,7 @@ fn a_battle_without_a_protector_gets_one_once_it_isnt_being_attacked() {
 #[test]
 fn a_defeated_siege_is_exiled_and_may_be_cast_transformed_for_free() {
     cr!("310.12b");
+    ruling!("Invasion of Segovia", "Sieges each have an intrinsic triggered ability");
     let mut t = TestGame::new(2);
     let b = enter_siege(&mut t, P0, P1);
     t.resolve_all();
