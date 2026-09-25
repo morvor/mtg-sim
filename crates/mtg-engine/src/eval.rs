@@ -746,9 +746,7 @@ impl Game {
                 }
                 s.count() as i64
             }),
-            Value::ManaSpent => self
-                .cast_info(ctx)
-                .map_or(0, |c| c.mana_spent.len() as i64),
+            Value::ManaSpent => self.cast_info(ctx).map_or(0, |c| c.mana_spent.len() as i64),
             Value::Chosen => ctx
                 .source
                 .and_then(|s| self.obj(s).choices.number)
