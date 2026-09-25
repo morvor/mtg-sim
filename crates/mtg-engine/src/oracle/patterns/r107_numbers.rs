@@ -162,9 +162,10 @@ fn minus_x_loyalty(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "r107 minus x loyalty", priority: 70, parse: minus_x_loyalty } }
 
-/// "[trigger], you may pay [cost]. If you do, [effect]." (e.g. Flameblast Dragon: "you may
-/// pay {X}{R}. If you do, it deals X damage to any target"). An X in the cost isn't
-/// defined by the ability, so the controller chooses it as they pay (CR 107.3f).
+/// "[trigger], you may pay [cost]. If you do, [effect]. [If you don't, [effect].]" (e.g.
+/// Flameblast Dragon: "you may pay {X}{R}. If you do, it deals X damage to any target").
+/// An X in the cost isn't defined by the ability, so the controller chooses it as they pay
+/// (CR 107.3f).
 fn may_pay_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = block.trim().to_lowercase();
     if !(lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at ")) {
@@ -174,22 +175,40 @@ fn may_pay_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let cond_s = &lower[..idx];
     let rest = &lower[idx + ", you may pay ".len()..];
     let (cost_s, then_s) = rest.split_once(". if you do, ")?;
+    // "If you don't, ..." is what happens when the cost isn't paid. An "otherwise" may
+    // refer to another condition in the text, so leave such text to the core compiler.
+    let (then_s, else_s) = match then_s.split_once(". if you don't, ") {
+        Some((a, b)) => (a, Some(b)),
+        None => (then_s, None),
+    };
+    if then_s.contains("otherwise") || else_s.is_some_and(|e| e.contains("otherwise")) {
+        return None;
+    }
     let (trigger, it, it_player) = crate::oracle::triggers::parse_trigger_condition(cond_s)?;
     let (cost, loyalty) = crate::oracle::costs::parse_cost(cost_s)?;
     if loyalty {
         return None;
     }
-    let then = crate::oracle::effects::parse_trigger_body(then_s, ctx, it, it_player)?;
-    if then.modal.is_some() {
-        return None;
-    }
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = it.clone();
+    b.it_player = it_player.clone();
+    let then = crate::oracle::effects::parse_effect_text(then_s, &mut b)?;
+    let otherwise = match else_s {
+        Some(e) => {
+            b.it = it;
+            b.it_player = it_player;
+            crate::oracle::effects::parse_effect_text(e, &mut b)?
+        }
+        None => Effect::Noop,
+    };
     let body = Body {
-        targets: then.targets,
+        targets: b.targets,
         effect: Effect::PayOptional {
             who: PlayerRef::You,
             cost,
-            then: Box::new(then.effect),
-            otherwise: Box::new(Effect::Noop),
+            then: Box::new(then),
+            otherwise: Box::new(otherwise),
         },
         modal: None,
     };

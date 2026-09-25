@@ -72,7 +72,8 @@ fn a_copy_of_a_spell_is_a_spell() {
     t.resolve();
     let copy = *t.g.stack.last().unwrap();
     assert_eq!(t.obj(copy).kind, ObjKind::SpellCopy);
-    assert!(t.obj(copy).card.is_none() || t.obj(copy).kind == ObjKind::SpellCopy);
+    // It isn't a card, but it's a spell.
+    assert!(!matches(&t, copy, &Filter::Card, P0));
     assert!(matches(&t, copy, &Filter::Spell, P0));
     // It can be countered by Counterspell like any spell.
     let cs = t.hand(P1, "Counterspell");

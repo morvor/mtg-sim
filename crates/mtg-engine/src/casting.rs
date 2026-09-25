@@ -828,7 +828,9 @@ impl Game {
                 _ => max.max(0),
             };
         }
-        cast_info.x = Some(x as i32);
+        // The spell's cast info records X only if a value was chosen for one of its costs:
+        // that's the X its permanent's enters abilities use (CR 107.3m).
+        cast_info.x = base_cost_has_x.then_some(x as i32);
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
             si.cast = cast_info.clone();

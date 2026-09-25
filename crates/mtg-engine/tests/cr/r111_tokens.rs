@@ -344,35 +344,60 @@ fn a_token_leaving_the_battlefield_triggers_then_ceases_to_exist() {
     assert!(!t.g.is_live(t.g.current(soldier)));
 }
 
+/// Momentary Blink's effect: "Exile target creature you control, then return it to the
+/// battlefield under its owner's control."
+fn blink() -> mtg_engine::card::CardDef {
+    let mut to = Destination::battlefield();
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(vars::IT))));
+    card_with(
+        "Blink Test",
+        "{0}",
+        "Instant",
+        None,
+        vec![spell_ab(
+            vec![TargetSpec::object(
+                Filter::creature().you_control(),
+                "target creature you control",
+            )],
+            Effect::seq(vec![
+                Effect::Exile {
+                    what: Sel::Target(0),
+                    face_down: false,
+                    link: false,
+                },
+                Effect::Move {
+                    what: Sel::Var(vars::IT),
+                    to,
+                },
+            ]),
+        )],
+    )
+}
+
 #[test]
 fn a_token_that_left_the_battlefield_cant_come_back() {
     cr!("111.8");
     ruling!(
-        "Kitchen Finks",
-        "If a token with no -1/-1 counters on it has persist, the ability will trigger when the token is put into the graveyard. However, the token will cease to exist and can't return to the battlefield."
+        "Momentary Blink",
+        "If a token is exiled this way, it will cease to exist and won't return to the battlefield."
     );
     let mut t = TestGame::new(2);
-    // A token copy of Kitchen Finks has persist.
-    let finks = t.battlefield(P1, "Kitchen Finks");
-    let image = t.hand(P0, "Spitting Image");
-    t.lands(P0, "Island", 6);
-    t.cast(P0, image).target(finks).go();
+    // A card is exiled and returns as a new object.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let b = put_in_hand(&mut t, P0, blink());
+    t.cast(P0, b).target(bears).go();
     t.resolve();
-    t.resolve_all();
-    let token = tokens_of(&t, P0)[0];
-    assert_eq!(t.obj(token).chars.name.as_str(), "Kitchen Finks");
-    let life = t.life(P0);
-    let murder = t.hand(P0, "Murder");
-    t.lands(P0, "Swamp", 3);
-    t.cast(P0, murder).target(token).go();
+    assert!(t.on_battlefield(bears));
+    assert_ne!(t.g.current(bears), bears);
+    // A token is exiled, can't come back, and ceases to exist.
+    let soldier = run_text(&mut t, P0, "Create a 1/1 white Soldier creature token.")[0];
+    let b = put_in_hand(&mut t, P0, blink());
+    t.cast(P0, b).target(soldier).go();
     t.resolve();
-    // Persist triggered and resolved, but the token stayed where it was and then ceased
-    // to exist.
-    t.resolve_all();
+    assert!(!t.on_battlefield(soldier));
     assert!(tokens_of(&t, P0).is_empty());
-    assert_eq!(t.named_on_battlefield("Kitchen Finks").len(), 1);
-    // No new Finks entered, so no life was gained.
-    assert_eq!(t.life(P0), life);
+    assert!(!t.g.is_live(t.g.current(soldier)));
+    assert!(t.g.exile.iter().all(|x| !t.obj(*x).is_token()));
 }
 
 #[test]

@@ -158,8 +158,9 @@ impl Game {
 
     /// Zone changes the rules forbid outright; the object stays where it is. Instant and
     /// sorcery cards (and token copies of them) can't enter the battlefield unless they
-    /// enter face down (CR 110.4, 111.5, 708.2), and nontraditional cards other than
-    /// dungeons can't be brought into the game from outside it (CR 108.5).
+    /// enter face down (CR 110.4, 111.5, 708.2), and nontraditional cards can't be brought
+    /// into the game from outside it (CR 108.5) — a dungeon card only by venturing into
+    /// the dungeon (CR 309.2a, 309.2d).
     pub fn move_forbidden(&self, mv: &MoveEv) -> bool {
         let o = self.obj(mv.obj);
         if mv.to == Zone::Battlefield && mv.etb.face_down.is_none() {
@@ -180,8 +181,10 @@ impl Game {
         }
         if matches!(o.zone, Zone::Outside(_)) && !matches!(mv.to, Zone::Outside(_)) {
             if let Some(card) = &o.card {
-                let dungeon = card.front().chars.card_types.contains(CardType::Dungeon);
-                if crate::variants::is_nontraditional(card) && !dungeon {
+                let venture = mv.cause == MoveCause::Venture
+                    && mv.to == Zone::Command
+                    && card.front().chars.card_types.contains(CardType::Dungeon);
+                if crate::variants::is_nontraditional(card) && !venture {
                     return true;
                 }
             }

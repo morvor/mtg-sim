@@ -238,7 +238,7 @@ fn a_card_that_isnt_a_permanent_or_spell_is_controlled_by_its_owner() {
 
 #[test]
 fn nontraditional_cards_cant_be_brought_in_from_outside_the_game() {
-    cr!("108.5");
+    cr!("108.5", "309.2d");
     let mut t = TestGame::new(2);
     // Death Wish: "You may put a card you own from outside the game into your hand."
     let plane = sideboard(&mut t, P0, "Bad Wolf Bay");
@@ -250,7 +250,8 @@ fn nontraditional_cards_cant_be_brought_in_from_outside_the_game() {
     t.resolve();
     assert_eq!(t.zone(plane), Zone::Outside(P0));
     assert!(!t.in_hand(P0, "Bad Wolf Bay"));
-    // A dungeon card can be brought into the game (into the command zone).
+    // A dungeon card isn't brought in by an effect other than venturing into the dungeon
+    // either: it remains outside the game.
     let dungeon = sideboard(&mut t, P0, "Lost Mine of Phandelver");
     let enter = card_with(
         "Enter the Dungeon",
@@ -279,5 +280,18 @@ fn nontraditional_cards_cant_be_brought_in_from_outside_the_game() {
     t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, e).go();
     t.resolve();
-    assert_eq!(t.zone(dungeon), Zone::Command);
+    assert_eq!(t.zone(dungeon), Zone::Outside(P0));
+    assert!(t.g.command.iter().all(|c| t.obj(*c).base.name.as_str() != "Lost Mine of Phandelver"));
+    // Venturing into the dungeon puts it into the command zone (CR 309.2a); that doesn't
+    // work for the plane.
+    let r = t
+        .g
+        .move_object(plane, Zone::Command, MoveCause::Venture, Some(P0));
+    assert!(r.is_none());
+    assert_eq!(t.zone(plane), Zone::Outside(P0));
+    let d = t
+        .g
+        .move_object(dungeon, Zone::Command, MoveCause::Venture, Some(P0))
+        .expect("the dungeon enters the command zone");
+    assert_eq!(t.obj(d).zone, Zone::Command);
 }

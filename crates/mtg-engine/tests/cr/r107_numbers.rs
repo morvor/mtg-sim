@@ -542,6 +542,42 @@ fn x_only_in_the_text_is_chosen_as_the_cost_is_paid() {
 }
 
 #[test]
+fn x_chosen_as_an_optional_cost_is_paid_and_if_you_dont() {
+    cr!("107.3f");
+    let mut t = TestGame::new(2);
+    // X appears only in the cost the ability asks for; declining to pay does the
+    // "If you don't" part instead.
+    let def = card_from_text(
+        "Toll Shrine",
+        "{1}",
+        "Enchantment",
+        None,
+        "At the beginning of your upkeep, you may pay {X}. If you do, you gain X life. If you don't, you lose 2 life.",
+    );
+    put(&mut t, P0, def);
+    t.lands(P0, "Plains", 3);
+    t.set_step(P0, Step::Untap);
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve();
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(
+        t.g.battlefield
+            .iter()
+            .filter(|b| t.g.obj(**b).tapped)
+            .count(),
+        2
+    );
+    // Declined: no X is chosen and the other branch happens.
+    t.set_step(P0, Step::Untap);
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve();
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
 fn x_in_a_mana_cost_is_zero_outside_the_stack() {
     cr!("107.3g");
     let mut t = TestGame::new(2);
@@ -728,6 +764,29 @@ fn enters_ability_uses_the_spells_x() {
     t.resolve();
     let e = t.named_on_battlefield("Endless One")[0];
     assert_eq!(t.counters(e, "+1/+1"), 3);
+}
+
+#[test]
+fn an_enters_ability_of_a_spell_without_x_chooses_its_own_x() {
+    cr!("107.3f", "107.3m");
+    let mut t = TestGame::new(2);
+    // Squealing Devil ({1}{R}): "When this creature enters, you may pay {X}. If you do,
+    // target creature gets +X/+0 until end of turn." No X was chosen for the spell, so
+    // the ability's X is chosen as its cost is paid.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 5);
+    let devil = t.hand(P0, "Squealing Devil");
+    t.cast(P0, devil).go();
+    t.answer(
+        P0,
+        DecisionKind::Targets,
+        Answer::Entities(vec![Entity::Object(bears)]),
+    );
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.resolve();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 2));
 }
 
 #[test]

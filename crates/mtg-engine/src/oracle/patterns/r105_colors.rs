@@ -152,8 +152,7 @@ fn color_subject<'a>(s: &'a str, b: &mut Builder) -> Option<(Sel, &'a str)> {
 }
 
 /// "target creature becomes blue until end of turn", "target spell or permanent becomes
-/// colorless", "target creature becomes black in addition to its other colors",
-/// "target creature becomes the color or colors of your choice until end of turn"
+/// colorless", "target creature becomes black in addition to its other colors"
 /// (CR 105.3).
 fn becomes_color(l: &str, b: &mut Builder) -> Option<Effect> {
     let (duration, l) = color_duration(l);
