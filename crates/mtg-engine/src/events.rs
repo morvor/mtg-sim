@@ -73,6 +73,12 @@ pub enum Event {
         ability: ObjectId,
         source: ObjectId,
     },
+    /// An activated or triggered ability finished resolving (CR 608.2p).
+    AbilityResolved {
+        ability: ObjectId,
+        source: ObjectId,
+        controller: PlayerId,
+    },
     SpellResolved {
         spell: ObjectId,
     },
@@ -84,6 +90,15 @@ pub enum Event {
         target: Entity,
         amount: u32,
         combat: bool,
+    },
+    /// A prevention effect prevented some or all of the damage that would have been dealt
+    /// (CR 615.13). `by` is the prevention effect's source; `key` identifies the effect.
+    DamagePrevented {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        by: Option<ObjectId>,
+        key: u64,
     },
     LifeGained {
         player: PlayerId,
@@ -137,6 +152,18 @@ pub enum Event {
     },
     AttackerUnblocked {
         attacker: ObjectId,
+    },
+    /// A creature started blocking an attacker other than by being declared as a blocker:
+    /// an effect made it block (`entered == false`), or it was put onto the battlefield
+    /// blocking (`entered == true`) (CR 509.3a–e, 509.4).
+    BlockAdded {
+        blocker: ObjectId,
+        attacker: ObjectId,
+        entered: bool,
+        /// The blocker was already a blocking creature.
+        was_blocking: bool,
+        /// The attacker was already a blocked creature.
+        was_blocked: bool,
     },
     BecameTarget {
         target: Entity,
@@ -238,6 +265,22 @@ pub enum Event {
     Exploited {
         obj: ObjectId,
     },
+    /// A copy of a spell was put onto the stack (CR 707.10); `player` controls the copy.
+    SpellCopied {
+        spell: ObjectId,
+        player: PlayerId,
+    },
+    /// `player` tapped `obj` for mana (CR 106.12): a mana ability of it with {T} in its
+    /// cost resolved and produced `mana` (CR 106.12a).
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        mana: Vec<crate::mana::ManaType>,
+    },
+    /// Marks the end of a group of simultaneous events (one action of a resolving spell or
+    /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
+    /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.
+    BatchBoundary,
     /// Any other event identified by name (used by keyword/card implementations).
     Custom {
         name: smol_str::SmolStr,

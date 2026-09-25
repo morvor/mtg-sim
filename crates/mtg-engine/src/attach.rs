@@ -7,6 +7,22 @@ use crate::keywords::KeywordKind;
 use crate::object::*;
 use crate::types::*;
 
+/// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
+/// ignoring protection from effects that say they don't remove this Aura (CR 702.16n).
+fn aura_protection_applies(g: &Game, t: ObjectId, aura: ObjectId) -> bool {
+    let marker = crate::choices::doesnt_remove_marker(aura);
+    let ob = g.obj(t);
+    let ctx = Ctx::new(Some(t), ob.controller);
+    ob.chars
+        .keywords()
+        .filter(|k| k.kind == KeywordKind::Protection)
+        .filter(|k| k.text.as_deref() != Some(marker.as_str()))
+        .any(|k| match &k.filter {
+            None => true,
+            Some(f) => g.matches(aura, f, &ctx),
+        })
+}
+
 /// The "enchant" restriction of an Aura as a filter over objects (None = can enchant a
 /// player, handled via `enchant_player`).
 pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
@@ -86,7 +102,7 @@ pub fn legal_attachment(g: &Game, obj: ObjectId, to: Entity) -> bool {
                     return false;
                 }
                 // CR 702.16c: can't be enchanted by Auras with the protected quality.
-                !g.protected_from(t, obj)
+                !aura_protection_applies(g, t, obj)
             } else if chars.has_subtype("Equipment") {
                 // CR 301.5c: Equipment can be attached only to creatures; 702.16d protection.
                 target.is_creature()

@@ -107,6 +107,23 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
             s = s.replace(n.as_str(), "~");
         }
     }
+    // Legendary cards are also called by the first word(s) of their name ("Whenever Edgar
+    // attacks" on Edgar Markov, "Zur" for Zur the Enchanter, "Jedit Ojanen" for Jedit
+    // Ojanen of Efrava): the longest such prefix first.
+    if let Some(first) = short_first_name(ctx) {
+        let words: Vec<&str> = ctx.card_name.split(' ').collect();
+        for k in (2..words.len()).rev() {
+            let prefix = words[..k].join(" ");
+            if words[k - 1]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase())
+            {
+                s = replace_word(&s, &prefix, "~");
+            }
+        }
+        s = replace_word(&s, first, "~");
+    }
     const SELF_REFS: [&str; 22] = [
         "this creature",
         "this artifact",
@@ -135,6 +152,74 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         s = replace_ci(&s, r, "~");
     }
     s
+}
+
+/// The first word of a legendary card's name when it can stand for the card: not a
+/// subtype ("Ajani", "Sliver"), a title ("Captain", "General") or an article.
+fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
+    if !ctx.type_line.supertypes.contains(Supertype::Legendary) || ctx.card_name.contains(',') {
+        return None;
+    }
+    let (first, _) = ctx.card_name.split_once(' ')?;
+    let ok = first.chars().count() >= 3
+        && first.chars().next().is_some_and(|c| c.is_uppercase())
+        && first
+            .chars()
+            .all(|c| c.is_alphabetic() || c == '-' || c == '\'')
+        && !first.ends_with("'s")
+        && !matches!(
+            first,
+            "The"
+                | "Captain"
+                | "General"
+                | "Lord"
+                | "Lady"
+                | "King"
+                | "Queen"
+                | "Space"
+                | "Lander"
+                | "Marit"
+                | "Mitotic"
+                | "Doctor"
+                | "Professor"
+                | "Sir"
+        )
+        && crate::types::subtype_kind(first).is_none();
+    ok.then_some(first)
+}
+
+/// Replaces whole-word, case-sensitive occurrences of `word` ("Edgar" but not
+/// "Edgarian"; "Edgar's" is fine).
+fn replace_word(s: &str, word: &str, rep: &str) -> String {
+    let is_word = |c: char| c.is_alphanumeric() || c == '-';
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while let Some(pos) = s[i..].find(word) {
+        let start = i + pos;
+        let end = start + word.len();
+        let before = s[..start].chars().next_back();
+        let after = s[end..].chars().next();
+        // Part of a longer proper name ("a token named Tuktuk the Returned").
+        let rest = &s[end..];
+        let rest = rest
+            .strip_prefix(" the ")
+            .or_else(|| rest.strip_prefix(" of "))
+            .or_else(|| rest.strip_prefix(' '))
+            .unwrap_or("");
+        let longer_name = rest.chars().next().is_some_and(|c| c.is_uppercase());
+        out.push_str(&s[i..start]);
+        if before.is_some_and(|c| is_word(c) || c == '\'')
+            || after.is_some_and(is_word)
+            || longer_name
+        {
+            out.push_str(word);
+        } else {
+            out.push_str(rep);
+        }
+        i = end;
+    }
+    out.push_str(&s[i..]);
+    out
 }
 
 fn replace_ci(s: &str, pat: &str, rep: &str) -> String {
@@ -280,7 +365,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
     let body = effects::parse_body(eff_text, ctx)?;
-    let is_mana = effects::is_mana_effect(&body.effect) && body.targets.is_empty() && !loyalty;
+    // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
+    // nor its effect moves a card to or from a library.
+    let is_mana = effects::is_mana_effect(&body.effect)
+        && body.targets.is_empty()
+        && !loyalty
+        && !touches_library(&cost, &body.effect);
     let mut act = ActivatedAbility::new(cost, body);
     act.timing = timing;
     act.max_per_turn = max_per_turn;
@@ -288,6 +378,19 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
+}
+
+/// Whether a cost or effect moves cards to or from a library (drawing, milling, searching,
+/// surveilling, putting cards into a library, ...).
+fn touches_library(cost: &Cost, effect: &Effect) -> bool {
+    let text = format!(
+        "{} {}",
+        serde_json::to_string(cost).unwrap_or_default(),
+        serde_json::to_string(effect).unwrap_or_default()
+    );
+    ["Library", "Draw", "Mill", "Search", "Surveil", "Explore"]
+        .iter()
+        .any(|w| text.contains(w))
 }
 
 /// Shifts `Sel::Target(i)` references by `offset` (used when combining spell bodies).

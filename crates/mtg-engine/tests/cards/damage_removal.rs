@@ -335,7 +335,8 @@ fn puncturing_blow_exiles_the_creature_if_it_dies_this_turn() {
     cr!("614.1a", "614.6", "700.4");
     let mut t = TestGame::new(2);
     let dreadmaw = t.battlefield(P1, "Colossal Dreadmaw");
-    t.lands(P0, "Mountain", 4);
+    // Four for Puncturing Blow, one for Shock.
+    t.lands(P0, "Mountain", 5);
     let p = t.hand(P0, "Puncturing Blow");
     t.cast(P0, p).target(dreadmaw).go();
     t.resolve();

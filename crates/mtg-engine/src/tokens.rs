@@ -45,6 +45,7 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
         hand_modifier: None,
         life_modifier: None,
         rules_text: std::sync::Arc::from(""),
+        all_creature_names: false,
     }
 }
 

@@ -112,7 +112,12 @@ impl Game {
             match o.kind {
                 ObjKind::Token if o.zone != Zone::Battlefield => cease.push(id),
                 ObjKind::SpellCopy if o.zone != Zone::Stack => cease.push(id),
-                ObjKind::CardCopy if !matches!(o.zone, Zone::Stack | Zone::Battlefield) => {
+                // CR 722.3c: a prepared permanent's prepare-spell copy stays in exile.
+                ObjKind::CardCopy
+                    if !matches!(o.zone, Zone::Stack | Zone::Battlefield)
+                        && !(o.zone == Zone::Exile
+                            && crate::designations::is_prepared_copy(self, id)) =>
+                {
                     cease.push(id)
                 }
                 _ => {}
@@ -459,6 +464,9 @@ impl Game {
             }
         }
 
+        // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3).
+        let simultaneous = losers.len() > 1;
+        self.losing_simultaneously = simultaneous;
         for p in losers {
             let ctx = Ctx::new(None, p);
             let cant_lose = self
@@ -473,6 +481,10 @@ impl Game {
             for e in self.replace(ReplEvent::LoseGame { player: p }) {
                 self.execute_repl_event(e);
             }
+        }
+        if simultaneous {
+            self.losing_simultaneously = false;
+            self.check_game_over();
         }
         self.recompute();
         true

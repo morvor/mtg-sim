@@ -15,6 +15,30 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             let i = g.ask_option(p, Some(src), "Choose a color", opts);
             g.objects[src.0 as usize].choices.color = Some(Color::ALL[i.min(4)]);
         }
+        ChoiceKind::ColorOtherThan(except) => {
+            let cols: Vec<Color> = Color::ALL.iter().copied().filter(|c| c != except).collect();
+            let opts: Vec<String> = cols.iter().map(|c| c.word().to_string()).collect();
+            let i = g.ask_option(p, Some(src), "Choose a color", opts);
+            g.objects[src.0 as usize].choices.color =
+                cols.get(i).copied().or(cols.first().copied());
+        }
+        ChoiceKind::OneOf(words) => {
+            let i = g.ask_option(p, Some(src), "Choose one", words.clone());
+            let Some(w) = words.get(i).or(words.first()) else {
+                return;
+            };
+            let ch = &mut g.objects[src.0 as usize].choices;
+            ch.text = Some(SmolStr::new(w));
+            if let Some(c) = Color::from_word(w) {
+                ch.color = Some(c);
+            } else if let Some(t) = CardType::from_word(w) {
+                ch.card_type = Some(t);
+            } else if is_basic_land_type(w) {
+                ch.basic_land_type = Some(SmolStr::new(w));
+            } else if is_creature_type(w) {
+                ch.creature_type = Some(SmolStr::new(w));
+            }
+        }
         ChoiceKind::CreatureType => {
             let list: Vec<String> = subtype_lists().creature.clone();
             let i = g.ask_option(p, Some(src), "Choose a creature type", list.clone());
@@ -42,8 +66,18 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                     prompt: "Name a card".into(),
                 },
             ) {
-                Answer::Text(t) => t,
+                Answer::Text(t) => t.trim().to_string(),
                 _ => String::new(),
+            };
+            let filter = match kind {
+                ChoiceKind::CardNameFiltered(f) => Some(f.as_str()),
+                _ => None,
+            };
+            // An invalid answer names nothing (the choice stays undefined, CR 607.5a).
+            let name = if valid_card_name(&name, filter) {
+                name
+            } else {
+                String::new()
             };
             g.objects[src.0 as usize].choices.card_name = Some(SmolStr::new(name));
         }
@@ -79,6 +113,147 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.text =
                 Some(if i == 0 { "odd".into() } else { "even".into() });
         }
+        ChoiceKind::Word(words) => {
+            let i = g.ask_option(p, Some(src), "Choose one", words.clone());
+            g.objects[src.0 as usize].choices.text =
+                words.get(i).or(words.first()).map(SmolStr::new);
+        }
+    }
+    // CR 607.2d: the choice belongs to the abilities linked to the one that made it.
+    let made = g.obj(src).choices.clone();
+    let entry = g.objects[src.0 as usize]
+        .linked_choices
+        .entry(ctx.link)
+        .or_default();
+    match kind {
+        ChoiceKind::Color | ChoiceKind::ColorOtherThan(_) => entry.color = made.color,
+        // A word choice may also name a color or type (see above).
+        ChoiceKind::OneOf(_) => {
+            if let Some(w) = made.text.clone() {
+                if Color::from_word(&w).is_some() {
+                    entry.color = made.color;
+                } else if CardType::from_word(&w).is_some() {
+                    entry.card_type = made.card_type;
+                } else if is_basic_land_type(&w) {
+                    entry.basic_land_type = made.basic_land_type;
+                } else if is_creature_type(&w) {
+                    entry.creature_type = made.creature_type;
+                }
+                entry.text = Some(w);
+            }
+        }
+        ChoiceKind::CreatureType => entry.creature_type = made.creature_type,
+        ChoiceKind::BasicLandType => entry.basic_land_type = made.basic_land_type,
+        ChoiceKind::CardType => entry.card_type = made.card_type,
+        ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => entry.card_name = made.card_name,
+        ChoiceKind::Number { .. } => entry.number = made.number,
+        ChoiceKind::Opponent | ChoiceKind::Player => entry.player = made.player,
+        ChoiceKind::OddOrEven | ChoiceKind::Word(_) => entry.text = made.text,
     }
     g.dirty = true;
+}
+
+/// Whether a filter refers to a choice made for its source ("of the chosen color").
+pub fn filter_mentions_choice(f: &crate::ability::Filter) -> bool {
+    use crate::ability::Filter;
+    match f {
+        Filter::ChosenColor | Filter::ChosenType | Filter::ChosenName | Filter::ChosenCardType => {
+            true
+        }
+        // "with mana value equal to the chosen number"
+        Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v) => {
+            matches!(**v, crate::ability::Value::Chosen)
+        }
+        Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_choice),
+        Filter::Not(x) => filter_mentions_choice(x),
+        _ => false,
+    }
+}
+
+/// Replaces references to chosen values with the values chosen for a particular object,
+/// for abilities granted to other objects (CR 607.2d). An undefined choice matches
+/// nothing (CR 607.5a).
+pub fn bind_choices(
+    f: &crate::ability::Filter,
+    ch: &crate::object::Choices,
+) -> crate::ability::Filter {
+    use crate::ability::Filter;
+    let nothing = || Filter::not(Filter::Any);
+    match f {
+        Filter::ChosenColor => ch.color.map(Filter::Color).unwrap_or_else(nothing),
+        Filter::ChosenType => ch
+            .creature_type
+            .clone()
+            .or(ch.basic_land_type.clone())
+            .map(Filter::Subtype)
+            .or(ch.card_type.map(Filter::Type))
+            .unwrap_or_else(nothing),
+        Filter::ChosenName => ch
+            .card_name
+            .clone()
+            .filter(|n| !n.is_empty())
+            .map(Filter::Named)
+            .unwrap_or_else(nothing),
+        Filter::ChosenCardType => ch.card_type.map(Filter::Type).unwrap_or_else(nothing),
+        Filter::ManaValue(c, v) | Filter::Power(c, v) | Filter::Toughness(c, v)
+            if matches!(**v, crate::ability::Value::Chosen) =>
+        {
+            let Some(n) = ch.number else {
+                return nothing();
+            };
+            let v = Box::new(crate::ability::Value::Const(n));
+            match f {
+                Filter::ManaValue(..) => Filter::ManaValue(*c, v),
+                Filter::Power(..) => Filter::Power(*c, v),
+                _ => Filter::Toughness(*c, v),
+            }
+        }
+        Filter::And(v) => Filter::And(v.iter().map(|x| bind_choices(x, ch)).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(|x| bind_choices(x, ch)).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(bind_choices(x, ch))),
+        other => other.clone(),
+    }
+}
+
+/// Marker text on a granted protection keyword: "This effect doesn't remove [this
+/// object]" (CR 702.16n). Bound to the granting object's id when applied.
+pub const DOESNT_REMOVE_SOURCE: &str = "doesn't remove source";
+
+/// The bound form of [`DOESNT_REMOVE_SOURCE`] for a particular object.
+pub fn doesnt_remove_marker(src: crate::types::ObjectId) -> SmolStr {
+    SmolStr::new(format!("doesn't remove #{}", src.0))
+}
+
+/// Whether `name` is the name of a real card (any face) satisfying the restriction of a
+/// "choose a [nonland/creature] card name" instruction (CR 201.4, 201.4a); a split
+/// card's combined name isn't a name (CR 201.4b).
+pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
+    if name.is_empty() || name.contains("//") {
+        return false;
+    }
+    let Some(c) = mtg_data::cards().by_name(name) else {
+        return false;
+    };
+    if !c.is_playable_card() {
+        return false;
+    }
+    let faces = c.faces();
+    let type_line = faces
+        .iter()
+        .find(|f| f.name.eq_ignore_ascii_case(name))
+        .and_then(|f| f.type_line.clone())
+        .or_else(|| c.type_line.clone())
+        .unwrap_or_default();
+    // "nonland", "creature", "noncreature, nonland", "nonbasic land": each word is a
+    // (super)type the card must have, or with "non", must not have.
+    let type_line = type_line.to_lowercase();
+    let has = |w: &str| type_line.split_whitespace().any(|t| t == w);
+    filter.is_none_or(|f| {
+        f.split([',', ' '])
+            .filter(|w| !w.is_empty())
+            .all(|w| match w.strip_prefix("non") {
+                Some(t) => !has(t),
+                None => has(w),
+            })
+    })
 }

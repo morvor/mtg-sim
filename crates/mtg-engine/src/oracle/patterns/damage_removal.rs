@@ -127,6 +127,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         divide: None,
         chosen_by_opponent: false,
         text: String::new(),
+        condition: None,
     };
     Some((spec, any_number, rest))
 }

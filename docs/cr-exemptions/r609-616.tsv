@@ -1,0 +1,1 @@
+609.5	Statement about card wording: the game defines no default rule for ties, so there is no engine behavior to test; tie handling is part of each card's own text (e.g. voting, CR 701.38).

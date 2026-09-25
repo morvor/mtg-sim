@@ -37,6 +37,27 @@ pub struct Ctx {
     pub source_lki: Option<Box<Characteristics>>,
     /// Chosen opponent ("choose an opponent").
     pub chosen_player: Option<PlayerId>,
+    /// Set while an "as this enters" replacement effect is being applied: modifications
+    /// to how the permanent enters made by [`Effect::EnterTapped`] and
+    /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
+    pub entering: Option<EntryMods>,
+}
+
+/// Modifications to how a permanent enters, collected while applying an "as this
+/// enters" replacement effect (CR 614.1c).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EntryMods {
+    pub tapped: bool,
+    pub counters: Vec<(CounterKind, u32)>,
+    /// Enters prepared (CR 722.3a).
+    pub prepared: bool,
+    /// Exceptions to a copy effect it enters with (CR 707.9b).
+    pub copy_exceptions: Vec<Modification>,
+    /// Effects on the permanent performed as it's put onto the battlefield
+    /// ([`Effect::OnEntry`]).
+    pub on_entry: Vec<Effect>,
+    /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
+    pub copiable: Vec<Modification>,
 }
 
 impl Ctx {
@@ -66,6 +87,11 @@ impl Ctx {
 pub trait View {
     fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics;
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId;
+    /// The controller an object is treated as having regardless of its zone (an object
+    /// about to enter the battlefield, CR 614.12).
+    fn controller_override(&self, _id: ObjectId) -> Option<PlayerId> {
+        None
+    }
 }
 
 /// The normal view: an object's computed characteristics.
@@ -102,7 +128,29 @@ impl Game {
                 p != ctx.controller && self.player(p).team == self.player(ctx.controller).team
             }
             PlayerRel::Iterated => ctx.iter_player == Some(p),
+            PlayerRel::Chosen => self.chosen_player_of_source(ctx) == Some(p),
         }
+    }
+
+    /// Choices made for the ability's source ("the chosen color", CR 607.2d): those made
+    /// by the abilities linked to the one being evaluated. An ability with an explicit
+    /// link (including abilities acquired from another object or through a copy effect)
+    /// sees only its linked choices (CR 607.5a); an unlinked ability (link 0) whose
+    /// linked abilities made no choice sees the choices made by any of the source's
+    /// abilities.
+    pub fn source_choices(&self, ctx: &Ctx) -> Option<&Choices> {
+        match self.linked_choice(ctx) {
+            Some(c) => Some(c),
+            None if ctx.link == 0 => ctx.source.map(|s| &self.obj(s).choices),
+            None => None,
+        }
+    }
+
+    /// The player chosen for the source ("choose an opponent"), or the one chosen during
+    /// the current resolution.
+    pub fn chosen_player_of_source(&self, ctx: &Ctx) -> Option<PlayerId> {
+        ctx.chosen_player
+            .or_else(|| self.source_choices(ctx).and_then(|c| c.player))
     }
 
     /// Defending player relative to the source (CR 508.5).
@@ -137,6 +185,7 @@ impl Game {
             PlayerFilter::Monarch => self.monarch == Some(p),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Not(x) => !self.player_filter_matches(x, p, ctx),
@@ -211,7 +260,11 @@ impl Game {
                 .collect(),
             PlayerRef::Owner => ctx.source.map(|s| self.obj(s).owner).into_iter().collect(),
             PlayerRef::Iterated => ctx.iter_player.into_iter().collect(),
-            PlayerRef::ChosenOpponent => ctx.chosen_player.into_iter().collect(),
+            PlayerRef::ChosenOpponent => self
+                .chosen_player_of_source(ctx)
+                .filter(|p| self.player(*p).in_game())
+                .into_iter()
+                .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
         }
     }
@@ -233,6 +286,9 @@ impl Game {
     /// controller (CR 108.4a); we treat their owner as controller for "you control" checks
     /// only where the filter is about a zone the player owns.
     fn filter_controller(&self, view: &dyn View, id: ObjectId) -> PlayerId {
+        if let Some(p) = view.controller_override(id) {
+            return p;
+        }
         let o = self.obj(id);
         match o.zone {
             Zone::Battlefield | Zone::Stack => view.controller(self, id),
@@ -278,9 +334,12 @@ impl Game {
             Filter::Attacking => self.is_attacking(id),
             Filter::Blocking => self.is_blocking(id),
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
-            Filter::Unblocked => {
-                self.is_attacking(id) && !self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id))
-            }
+            // CR 509.1h: attackers are neither blocked nor unblocked until blockers are declared.
+            Filter::Unblocked => self.combat.as_ref().is_some_and(|cb| cb.is_unblocked(id)),
+            Filter::AttackingAlone
+            | Filter::BlockingAlone
+            | Filter::AttackingPlayerAlone
+            | Filter::HadToAttack => crate::combat::combat_filter(self, f, id),
             Filter::AttackingPlayer(rel) => self
                 .combat
                 .as_ref()
@@ -308,18 +367,25 @@ impl Game {
                 .toughness
                 .is_some_and(|t| cmp.eval(t as i64, self.eval_value(v, ctx))),
             Filter::ManaValue(cmp, v) => {
-                cmp.eval(self.mana_value_of(id) as i64, self.eval_value(v, ctx))
+                // Uses the viewed characteristics' mana cost (CR 601.3e), with X on the
+                // stack (CR 107.3f) as in `mana_value_of`.
+                let mv = match &c.mana_cost {
+                    None => 0,
+                    Some(mc) if o.zone == Zone::Stack => {
+                        let x = o.stack.as_ref().and_then(|s| s.x).unwrap_or(0).max(0);
+                        mc.mana_value_with_x(x as u32)
+                    }
+                    Some(mc) => mc.mana_value(),
+                };
+                cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.name.eq_ignore_ascii_case(n),
-            Filter::SameNameAs(sel) => {
-                !c.name.is_empty()
-                    && self
-                        .eval_sel(sel, ctx)
-                        .iter()
-                        .filter_map(|e| e.object())
-                        .any(|x| self.obj(x).chars.name == c.name)
-            }
+            Filter::Named(n) => c.has_name(n),
+            Filter::SameNameAs(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .any(|x| c.shares_name_with(&self.obj(x).chars)),
             Filter::SharesCreatureType(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()
@@ -353,6 +419,13 @@ impl Game {
             Filter::Source => ctx.source == Some(id),
             Filter::Other => ctx.source != Some(id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
+            // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
+            Filter::Objects(v) => v.iter().any(|x| {
+                *x == id
+                    || (self.obj(*x).zone == Zone::Stack
+                        && o.zone == Zone::Battlefield
+                        && self.current(*x) == id)
+            }),
             Filter::AttachedToSource => {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }
@@ -389,8 +462,86 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            Filter::LinkedChosenColor => self
+                .linked_choice(ctx)
+                .and_then(|ch| ch.color)
+                .is_some_and(|col| c.colors.contains(col)),
+            Filter::ManaValueOfChosenQuality => {
+                let mv = c.mana_cost.as_ref().map_or(0, |m| m.mana_value());
+                match self
+                    .linked_choice(ctx)
+                    .and_then(|ch| ch.text.clone())
+                    .as_deref()
+                {
+                    Some("odd") => mv % 2 == 1,
+                    Some("even") => mv % 2 == 0,
+                    _ => false,
+                }
+            }
+            Filter::LinkedChosenCreatureType => self
+                .linked_choice(ctx)
+                .and_then(|ch| ch.creature_type.clone())
+                .is_some_and(|t| c.has_subtype(&t)),
+            // CR 607.2d: references to a choice made for the source; an undefined choice
+            // matches nothing (CR 607.5a).
+            Filter::ChosenColor => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.color)
+                .is_some_and(|col| c.colors.contains(col)),
+            // "the chosen type" is whichever type the linked ability chose: a creature
+            // type, a basic land type, or a card type.
+            Filter::ChosenType => match self.source_choices(ctx) {
+                Some(ch) => match ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    Some(t) => self.matches_view(view, id, &Filter::Subtype(t), ctx),
+                    None => ch.card_type.is_some_and(|t| c.card_types.contains(t)),
+                },
+                None => false,
+            },
+            Filter::ChosenName => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_name.as_ref())
+                .is_some_and(|n| !n.is_empty() && c.name.eq_ignore_ascii_case(n)),
+            Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
+            Filter::ChosenCardType => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_type)
+                .is_some_and(|t| c.card_types.contains(t)),
+            Filter::Targets(inner) => {
+                o.zone == Zone::Stack
+                    && o.stack.as_ref().is_some_and(|si| {
+                        si.chosen.iter().any(|cm| {
+                            cm.targets.iter().flatten().any(|t| match t {
+                                Entity::Object(x) => self.matches(*x, inner, ctx),
+                                Entity::Player(_) => false,
+                            })
+                        })
+                    })
+            }
+            Filter::CastFrom(z) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
+            }
+            Filter::DealtDamageThisTurnBy(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|s| self.history.damage_by_source.contains(&(s, id))),
+            Filter::CastWithCost(name) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.paid.iter().any(|p| p == name))
+            }
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
+    }
+
+    /// The choices made by the abilities linked to the ability being evaluated (its
+    /// source's choices for `ctx.link`), if any (CR 607.2d, 607.5a).
+    pub fn linked_choice(&self, ctx: &Ctx) -> Option<&crate::object::Choices> {
+        let s = ctx.source?;
+        self.obj(s).linked_choices.get(&ctx.link)
     }
 
     /// Mana value of an object (CR 202.3), accounting for X on the stack (CR 107.3f) and
@@ -471,10 +622,17 @@ impl Game {
             Sel::Target(slot) => ctx.targets.get(*slot as usize).cloned().unwrap_or_default(),
             Sel::AllTargets => ctx.targets.iter().flatten().copied().collect(),
             Sel::Var(v) => ctx.vars.get(v).cloned().unwrap_or_default(),
+            // CR 603.6: an ability can't find an object that went to a zone hidden from its
+            // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
                 .event
                 .as_ref()
                 .and_then(|e| e.object)
+                .filter(|o| match self.obj(*o).zone {
+                    Zone::Library(_) => false,
+                    Zone::Hand(p) => p == ctx.controller,
+                    _ => true,
+                })
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
@@ -533,6 +691,25 @@ impl Game {
             Sel::Choose { store, .. } => store
                 .and_then(|v| ctx.vars.get(&v).cloned())
                 .unwrap_or_default(),
+            Sel::ExiledWithCardsNamed(name) => self
+                .named_exiles
+                .iter()
+                .filter(|(p, n, _)| *p == ctx.controller && n == name)
+                .map(|(_, _, o)| self.current(*o))
+                .filter(|o| self.is_live(*o) && self.obj(*o).zone == Zone::Exile)
+                .map(Entity::Object)
+                .collect(),
+            Sel::CreatorLinked => ctx
+                .source
+                .and_then(|s| self.obj(s).created_by)
+                .map(|(c, link)| {
+                    self.obj(c)
+                        .linked
+                        .get(&link)
+                        .map(|v| v.iter().map(|o| Entity::Object(self.current(*o))).collect())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default(),
             Sel::Linked => ctx
                 .source
                 .map(|s| {
@@ -543,6 +720,12 @@ impl Game {
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
+            Sel::TopOfGraveyard(r) => self
+                .eval_player(r, ctx)
+                .and_then(|p| self.player(p).graveyard.last().copied())
+                .map(Entity::Object)
+                .into_iter()
+                .collect(),
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {
@@ -581,16 +764,19 @@ impl Game {
                 .count() as i64,
             Value::PowerOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.obj(*o).power() as i64),
+                .iter()
+                .map(|o| self.obj(*o).power() as i64)
+                .sum(),
             Value::ToughnessOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .first()
                 .map_or(0, |o| self.obj(*o).toughness() as i64),
+            // CR 607.3: several objects give several answers, which are summed.
             Value::ManaValueOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.mana_value_of(*o) as i64),
+                .iter()
+                .map(|o| self.mana_value_of(*o) as i64)
+                .sum(),
             Value::LoyaltyOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .first()
@@ -686,7 +872,7 @@ impl Game {
                 .map(|s| {
                     self.obj(s)
                         .triggers_this_turn
-                        .get(&ctx.ability_uid)
+                        .get(&(ctx.ability_uid | crate::triggers::turn_keys::RESOLVED))
                         .copied()
                         .unwrap_or(0) as i64
                 })
@@ -710,7 +896,7 @@ impl Game {
                 .map(|o| self.mana_value_of(*o) as i64)
                 .max()
                 .unwrap_or(0),
-            Value::ColorsSpent => ctx.cast.as_ref().map_or(0, |c| {
+            Value::ColorsSpent => self.cast_info(ctx).map_or(0, |c| {
                 let mut s = ColorSet::NONE;
                 for m in &c.mana_spent {
                     if let Some(col) = m.color() {
@@ -719,12 +905,15 @@ impl Game {
                 }
                 s.count() as i64
             }),
-            Value::ManaSpent => ctx.cast.as_ref().map_or(0, |c| c.mana_spent.len() as i64),
-            Value::Chosen => ctx
-                .source
-                .and_then(|s| self.obj(s).choices.number)
+            Value::ManaSpent => self.cast_info(ctx).map_or(0, |c| c.mana_spent.len() as i64),
+            // The number chosen, paid or noted by the linked ability (CR 607.2e, 607.2g),
+            // or else by any of the source's abilities.
+            Value::Chosen => self
+                .linked_choice(ctx)
+                .and_then(|c| c.number)
+                .or_else(|| ctx.source.and_then(|s| self.obj(s).choices.number))
                 .unwrap_or(0) as i64,
-            Value::TimesKicked => ctx.cast.as_ref().map_or(0, |c| c.times_kicked as i64),
+            Value::TimesKicked => self.cast_info(ctx).map_or(0, |c| c.times_kicked as i64),
             Value::Speed(r) => self
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
@@ -745,6 +934,34 @@ impl Game {
             Value::Max(a, b) => self.eval_value(a, ctx).max(self.eval_value(b, ctx)),
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
         }
+    }
+
+    /// How the spell was cast, for "if it was kicked", "if you cast it", "mana spent to
+    /// cast it" (CR 607.2i): the resolving spell's own information, or, for an ability of
+    /// a permanent (including a triggered ability checking its intervening "if", CR 603.4),
+    /// the spell that became that permanent (CR 400.7d).
+    pub fn cast_info<'a>(&'a self, ctx: &'a Ctx) -> Option<&'a CastInfo> {
+        let resolving_ability = ctx
+            .stack_obj
+            .is_some_and(|s| self.obj(s).kind == ObjKind::StackAbility);
+        let own = if resolving_ability {
+            None
+        } else {
+            ctx.cast.as_ref()
+        };
+        if let Some(c) = own.filter(|c| c.was_cast) {
+            return Some(c);
+        }
+        ctx.source
+            .and_then(|s| {
+                let o = self.obj(s);
+                // A spell on the stack ("when you cast ~, if it was kicked") keeps its
+                // cast information in its stack info.
+                o.cast
+                    .as_deref()
+                    .or_else(|| o.stack.as_ref().map(|si| &si.cast))
+            })
+            .or(own)
     }
 
     // ------------------------------------------------------------------
@@ -773,14 +990,16 @@ impl Game {
                 .any(|p| self.player_filter_matches(f, p, ctx)),
             Condition::YourTurn => self.turn.active == ctx.controller,
             Condition::NotYourTurn => self.turn.active != ctx.controller,
-            Condition::CostPaid(name) => ctx
-                .cast
-                .as_ref()
+            // For a permanent's abilities, how the permanent was cast (CR 607.2i).
+            Condition::CostPaid(name) => self
+                .cast_info(ctx)
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
-            Condition::WasCast => ctx.cast.as_ref().is_some_and(|c| c.was_cast),
+            Condition::WasCast => self.cast_info(ctx).is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
             Condition::PrevAffectedAny => !ctx.prev_affected.is_empty(),
-            Condition::CastFrom(z) => ctx.cast.as_ref().is_some_and(|c| c.from == Some(*z)),
+            Condition::CastFrom(z) => self
+                .cast_info(ctx)
+                .is_some_and(|c| c.was_cast && c.from == Some(*z)),
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => self.turn.step.is_combat(),
                 PhaseCond::MainPhase => self.turn.step.is_main(),
@@ -790,12 +1009,27 @@ impl Game {
                 }
                 PhaseCond::EndStep => self.turn.step == crate::turn::Step::End,
             },
+            Condition::ChosenWord(w) => self
+                .linked_choice(ctx)
+                .and_then(|c| c.text.as_deref())
+                .is_some_and(|t| t == w.as_str()),
+            Condition::AllTriggerConditionsThisTurn(conds) => conds.iter().all(|c| {
+                self.turn_events
+                    .iter()
+                    .chain(self.events.iter())
+                    .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+            }),
             Condition::CitysBlessing => self.player(ctx.controller).has_citys_blessing,
             Condition::IsMonarch => self.monarch == Some(ctx.controller),
             Condition::HasInitiative => self.initiative == Some(ctx.controller),
             Condition::IsDay => self.day == Some(true),
             Condition::IsNight => self.day == Some(false),
             Condition::MaxSpeed => self.player(ctx.controller).speed.unwrap_or(0) >= 4,
+            Condition::CombatTiming(t) => crate::combat::combat_timing_ok(self, *t),
+            Condition::Chose(w) => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.text.as_ref())
+                .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
     }

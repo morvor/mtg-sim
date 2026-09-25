@@ -41,9 +41,14 @@ impl<'c> Builder<'c> {
     }
     pub fn add_target(&mut self, mut spec: TargetSpec, text: &str) -> u8 {
         spec.text = text.to_string();
+        // A target player doesn't become "it" ("target opponent loses life equal to its
+        // power" — "its" is still the object from before).
+        let is_player = matches!(spec.what, TargetKind::Player(_));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
-        self.it = Sel::Target(slot);
+        if !is_player {
+            self.it = Sel::Target(slot);
+        }
         slot
     }
 }
