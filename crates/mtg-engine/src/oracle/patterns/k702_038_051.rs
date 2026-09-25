@@ -4,7 +4,8 @@
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::keywords::compile_keyword;
-use crate::oracle::patterns::AbilityPattern;
+use crate::oracle::effects::Builder;
+use crate::oracle::patterns::{AbilityPattern, EffectPattern};
 use crate::oracle::CompileContext;
 use smol_str::SmolStr;
 
@@ -39,3 +40,26 @@ fn outlaw() -> Filter {
 }
 
 inventory::submit! { AbilityPattern { name: "k702_038_051 keywords", priority: 100, parse: keyword_line } }
+
+/// "An opponent gains N life" (e.g. a splice cost, CR 702.47a): the player chooses one of
+/// their opponents, who gains the life.
+fn an_opponent_gains_life(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let n: i32 = l
+        .strip_prefix("an opponent gains ")?
+        .strip_suffix(" life")?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(Effect::Seq(vec![
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Opponent,
+        },
+        Effect::GainLife {
+            who: PlayerRef::ChosenOpponent,
+            n: Value::c(n),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "an opponent gains N life", priority: 100, parse: an_opponent_gains_life } }

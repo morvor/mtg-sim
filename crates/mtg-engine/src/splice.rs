@@ -69,6 +69,25 @@ pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -
     if chosen.is_empty() {
         return vec![];
     }
+    // CR 702.47b: the cards are revealed all at once, and their controller chooses the
+    // order in which their effects happen (after the main spell's).
+    if chosen.len() > 1 {
+        let names: Vec<String> = chosen
+            .iter()
+            .map(|(c, _)| g.obj(*c).chars.name.to_string())
+            .collect();
+        let order = g.ask_order(p, "Order the effects of the spliced cards", names);
+        let old = std::mem::take(&mut chosen);
+        chosen = order.into_iter().map(|i| old[i].clone()).collect();
+    }
+    for (card, _) in &chosen {
+        g.emit(crate::events::Event::Custom {
+            name: "revealed".into(),
+            player: Some(p),
+            obj: Some(*card),
+            amount: 0,
+        });
+    }
     // CR 702.47c: the spell gains the rules text of each spliced card, after its own;
     // the main spell's effects happen first (CR 702.47b). The effect ends when the spell
     // leaves the stack (CR 702.47e), as it then becomes a new object.
@@ -98,4 +117,31 @@ pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -
     });
     g.recompute();
     chosen.into_iter().map(|(_, c)| c).collect()
+}
+
+/// Whether a continuous effect is the text a spell gained from cards spliced onto it.
+fn is_splice_effect(e: &ContinuousEffect, spell: ObjectId) -> bool {
+    e.source == Some(spell)
+        && matches!(&e.affected, Affected::Objects(v) if v.as_slice() == [spell])
+        && e.mods
+            .iter()
+            .all(|m| matches!(m, Modification::AddText { .. }))
+}
+
+/// A copy of a spell copies the choices made while casting it, including the cards
+/// spliced onto it (CR 707.10): the copy gains the same text.
+pub fn copy_splices(g: &mut Game, from: ObjectId, to: ObjectId) {
+    let spliced: Vec<ContinuousEffect> = g
+        .effects
+        .iter()
+        .filter(|e| is_splice_effect(e, from))
+        .cloned()
+        .collect();
+    for mut e in spliced {
+        e.id = g.new_effect_id();
+        e.source = Some(to);
+        e.affected = Affected::Objects(vec![to]);
+        g.effects.push(e);
+        g.dirty = true;
+    }
 }

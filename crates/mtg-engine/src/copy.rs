@@ -44,6 +44,8 @@ pub fn copy_spell(
     if let Some(ctx) = g.saved_ctx.get(&spell).cloned() {
         g.saved_ctx.insert(id, ctx);
     }
+    // Cards spliced onto the spell were choices made while casting it (CR 702.47).
+    crate::splice::copy_splices(g, spell, id);
     g.dirty = true;
     g.recompute();
     if orig.kind != ObjKind::StackAbility {
