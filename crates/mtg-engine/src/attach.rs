@@ -9,6 +9,18 @@ use crate::object::*;
 use crate::replacement::{MoveEv, ReplEvent};
 use crate::types::*;
 
+/// `Filter::Custom` name: an object the source could legally be attached to right now
+/// (CR 301.5c, 303.4k, 701.3).
+pub const SOURCE_CAN_ATTACH: &str = "source_can_attach";
+
+/// Custom filters about attaching. Returns `None` if `name` isn't one.
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    (name == SOURCE_CAN_ATTACH).then(|| {
+        ctx.source
+            .is_some_and(|s| can_attach(g, s, Entity::Object(id)))
+    })
+}
+
 /// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
 /// ignoring protection from effects that say they don't remove it (CR 702.16n, 702.16p).
 fn aura_protection_applies(g: &Game, t: ObjectId, aura: ObjectId) -> bool {

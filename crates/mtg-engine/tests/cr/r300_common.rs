@@ -73,6 +73,8 @@ pub fn mana_for(t: &mut TestGame, p: PlayerId, cost: &str) {
 pub fn check_sorcery_timing(name: &str, cost: &str) {
     // Not during an opponent's turn.
     let mut t = TestGame::new(2);
+    // Something for an Aura to enchant.
+    t.battlefield(P1, "Grizzly Bears");
     let c = t.hand(P0, name);
     mana_for(&mut t, P0, cost);
     t.set_step(P1, Step::PrecombatMain);

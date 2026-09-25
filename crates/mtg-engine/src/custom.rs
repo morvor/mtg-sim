@@ -18,6 +18,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::kw::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "an object it could be attached to" (CR 303.4k).
+    if let Some(b) = crate::attach::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
