@@ -106,6 +106,20 @@ fn activate_only_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             extra = Some(sentence);
         }
     }
+    // Where the ability functions (CR 113.6): "Activate only if ~ is in your graveyard"
+    // means it's activated from the graveyard; other conditions about where the object
+    // is aren't handled here.
+    let from_graveyard = cond_s == "~ is in your graveyard";
+    if !from_graveyard
+        && ["~ is ", "~ isn't ", "this card is "]
+            .iter()
+            .any(|p| cond_s.contains(p))
+        && ["graveyard", "hand", "exile", "library", "battlefield"]
+            .iter()
+            .any(|z| cond_s.contains(z))
+    {
+        return None;
+    }
     let cond = crate::oracle::statics::parse_condition(cond_s, ctx)?;
     let mut rest: Vec<String> = sentences
         .iter()
@@ -129,6 +143,9 @@ fn activate_only_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         return None;
     };
     let mut act = act.clone();
+    if from_graveyard {
+        act.zone = FunctionZone::Graveyard;
+    }
     act.condition = Some(match act.condition.take() {
         Some(c) => Condition::And(vec![c, cond]),
         None => cond,
