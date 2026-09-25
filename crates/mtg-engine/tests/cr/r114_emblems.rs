@@ -18,6 +18,21 @@ fn walker(t: &mut TestGame, p: PlayerId, name: &str, loyalty: u32) -> ObjectId {
     pw
 }
 
+/// The index (among its activated abilities) of the ability of `pw` that creates an
+/// emblem.
+fn emblem_ability(t: &TestGame, pw: ObjectId) -> usize {
+    t.obj(pw)
+        .chars
+        .abilities
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AbilityKind::Activated(act) => Some(act),
+            _ => None,
+        })
+        .position(|act| format!("{:?}", act.body.effect).contains("CreateEmblem"))
+        .expect("no emblem ability")
+}
+
 fn emblems(t: &TestGame) -> Vec<ObjectId> {
     t.g.command
         .iter()
@@ -35,7 +50,7 @@ fn a_player_gets_an_emblem_in_the_command_zone_and_owns_and_controls_it() {
     );
     let mut t = TestGame::new(2);
     let ob = walker(&mut t, P0, "Ob Nixilis Reignited", 8);
-    t.activate(P0, ob, 2, &[Entity::Player(P1)]).unwrap();
+    t.activate(P0, ob, emblem_ability(&t, ob), &[Entity::Player(P1)]).unwrap();
     t.resolve();
     let e = emblems(&t);
     assert_eq!(e.len(), 1);
@@ -64,7 +79,7 @@ fn each_opponent_gets_an_emblem_that_triggers_on_their_own_upkeep() {
     );
     let mut t = TestGame::new(3);
     let chandra = walker(&mut t, P0, "Chandra, Awakened Inferno", 6);
-    t.activate(P0, chandra, 0, &[]).unwrap();
+    t.activate(P0, chandra, emblem_ability(&t, chandra), &[]).unwrap();
     t.resolve();
     let owners: Vec<PlayerId> = emblems(&t).iter().map(|e| t.obj(*e).owner).collect();
     assert_eq!(owners.len(), 2);
@@ -73,7 +88,7 @@ fn each_opponent_gets_an_emblem_that_triggers_on_their_own_upkeep() {
     t.g.objects[chandra.0 as usize]
         .activations_this_turn
         .clear();
-    t.activate(P0, chandra, 0, &[]).unwrap();
+    t.activate(P0, chandra, emblem_ability(&t, chandra), &[]).unwrap();
     t.resolve();
     // P0's own upkeep: nothing.
     t.advance_to(P1, Step::Upkeep);
@@ -89,8 +104,8 @@ fn an_emblem_has_no_characteristics_other_than_its_abilities() {
     ruling!("Koth, Fire of Resistance", "Koth's emblem is colorless");
     let mut t = TestGame::new(2);
     let koth = walker(&mut t, P0, "Koth, Fire of Resistance", 7);
-    // (Its second ability isn't supported; the emblem ability is the second one listed.)
-    t.activate(P0, koth, 1, &[]).unwrap();
+    let ult = emblem_ability(&t, koth);
+    t.activate(P0, koth, ult, &[]).unwrap();
     t.resolve();
     let e = emblems(&t)[0];
     let c = &t.obj(e).chars;
@@ -119,14 +134,14 @@ fn abilities_of_emblems_function_in_the_command_zone() {
     let mut t = TestGame::new(2);
     let sorin = walker(&mut t, P0, "Sorin, Lord of Innistrad", 2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.activate(P0, sorin, 1, &[]).unwrap();
+    t.activate(P0, sorin, emblem_ability(&t, sorin), &[]).unwrap();
     t.resolve();
     // Sorin is gone (no loyalty left); the emblem keeps working from the command zone.
     t.settle();
     assert!(!t.on_battlefield(sorin));
     assert_eq!(t.pt(bears), (3, 2));
     let sorin2 = walker(&mut t, P0, "Sorin, Lord of Innistrad", 2);
-    t.activate(P0, sorin2, 1, &[]).unwrap();
+    t.activate(P0, sorin2, emblem_ability(&t, sorin2), &[]).unwrap();
     t.resolve();
     assert_eq!(t.pt(bears), (4, 2));
 }
@@ -140,7 +155,7 @@ fn an_emblem_is_neither_a_card_nor_a_permanent() {
     );
     let mut t = TestGame::new(2);
     let sorin = walker(&mut t, P0, "Sorin, Lord of Innistrad", 5);
-    t.activate(P0, sorin, 1, &[]).unwrap();
+    t.activate(P0, sorin, emblem_ability(&t, sorin), &[]).unwrap();
     t.resolve();
     let e = emblems(&t)[0];
     let ctx = mtg_engine::eval::Ctx::new(None, P0);
