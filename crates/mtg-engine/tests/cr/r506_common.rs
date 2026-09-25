@@ -238,3 +238,24 @@ pub fn set_protector(t: &mut TestGame, battle: ObjectId, p: PlayerId) {
 pub fn attack_target(t: &TestGame, a: ObjectId) -> Option<Entity> {
     t.g.combat.as_ref().and_then(|c| c.attack_target(a))
 }
+
+/// Players who received priority during `step` of the current turn, in order, starting
+/// when the step begins. Leaves the game at the end of that step.
+pub fn priority_order_in(t: &mut TestGame, step: Step) -> Vec<PlayerId> {
+    let turn = t.g.turn.number;
+    let ok = t.g.run_until(10_000, |g| {
+        (g.turn.step == step && g.turn.stage == Stage::Priority) || g.turn.number != turn
+    });
+    assert!(ok && t.g.turn.number == turn && t.g.turn.step == step);
+    t.script.lock().unwrap().asked.clear();
+    let mut guard = 0;
+    while t.g.turn.step == step && t.g.turn.stage == Stage::Priority && guard < 1000 {
+        t.g.advance();
+        guard += 1;
+    }
+    t.asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::Priority { .. }))
+        .map(|(p, _)| p)
+        .collect()
+}
