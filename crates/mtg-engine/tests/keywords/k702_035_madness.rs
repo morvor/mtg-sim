@@ -328,3 +328,28 @@ fn a_madness_card_that_isnt_cast_can_be_found_in_the_graveyard_afterward() {
     assert!(t.in_graveyard(P0, "Fiery Temper"));
     assert!(!t.in_hand(P0, "Fiery Temper"));
 }
+
+#[test]
+fn a_granted_madness_ability_can_cost_the_cards_mana_cost() {
+    cr!("702.35a");
+    assert_supported("Falkenrath Gorger");
+    let mut t = TestGame::new(2);
+    empty_hand(&mut t, P0);
+    t.battlefield(P0, "Falkenrath Gorger");
+    t.lands(P0, "Swamp", 3);
+    let hawk = t.hand(P0, "Vampire Nighthawk");
+    t.hand(P0, "Grizzly Bears");
+    assert!(t.obj_now(hawk).has_keyword(KeywordKind::Madness));
+    // An opponent's Vampire card doesn't have it.
+    let theirs = t.hand(P1, "Vampire Nighthawk");
+    assert!(!t.obj_now(theirs).has_keyword(KeywordKind::Madness));
+    mind_rot_p0(&mut t);
+    assert!(t.in_exile("Vampire Nighthawk"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    t.answer_yes(P0, true);
+    t.resolve();
+    // Cast for {1}{B}{B}, its mana cost.
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert!(t.on_battlefield(hawk));
+}

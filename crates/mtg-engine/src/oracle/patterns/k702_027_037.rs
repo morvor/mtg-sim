@@ -239,7 +239,8 @@ fn cards_in_hand_have_cycling(
     }
     let phrase = format!("{quality} card");
     let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(&phrase)?;
-    if !end(tail).is_empty() {
+    // "creature card": the head noun may leave "card" unparsed.
+    if !matches!(end(tail), "" | "card") {
         return None;
     }
     let mut parts = vec![f, Filter::InZone(ZoneKind::Hand)];
@@ -253,6 +254,49 @@ fn cards_in_hand_have_cycling(
     )])
 }
 
+/// "Each Vampire creature card you own that isn't on the battlefield has madness. The
+/// madness cost is equal to its mana cost." (see `kw/madness.rs`).
+fn cards_you_own_have_madness(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("each ")?;
+    let (quality, rest) = r.split_once(" card you own that isn't on the battlefield has madness")?;
+    if !matches!(end(rest), "" | ". the madness cost is equal to its mana cost") {
+        return None;
+    }
+    let phrase = format!("{quality} card");
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(&phrase)?;
+    // "creature card": the head noun may leave "card" unparsed.
+    if !matches!(end(tail), "" | "card") {
+        return None;
+    }
+    // One effect per zone where the ability matters: the hand (where the discard
+    // replacement functions), exile (the trigger and casting), and the graveyard.
+    let out = [ZoneKind::Hand, ZoneKind::Exile, ZoneKind::Graveyard]
+        .into_iter()
+        .map(|z| {
+            let affected = Filter::and(vec![
+                f.clone(),
+                Filter::OwnedBy(PlayerRel::You),
+                Filter::InZone(z),
+            ]);
+            let s = StaticAbility::new(StaticEffect::Continuous {
+                affected,
+                mods: vec![Modification::AddKeyword(
+                    crate::keywords::Keyword::new(KeywordKind::Madness).text("Madness"),
+                )],
+            });
+            AbilityDef::new(AbilityKind::Static(s), text)
+        })
+        .collect();
+    Some(out)
+}
+
+inventory::submit! {
+    StaticPattern { name: "k702.35: cards you own have madness", priority: 50, parse: cards_you_own_have_madness }
+}
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
 }

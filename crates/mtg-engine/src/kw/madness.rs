@@ -23,12 +23,17 @@ pub const CAST_MADNESS: &str = "madness_cast";
 
 pub struct Madness;
 
+/// The card's madness cost. A madness ability granted with "The madness cost is equal to
+/// its mana cost" has no cost of its own.
 fn madness_cost(g: &Game, card: ObjectId) -> Option<Cost> {
-    g.obj(card)
-        .chars
+    let o = g.obj(card);
+    o.chars
         .keywords()
         .find(|k| k.kind == KeywordKind::Madness)
-        .map(|k| k.cost.clone().unwrap_or_default())
+        .map(|k| match &k.cost {
+            Some(c) => c.clone(),
+            None => Cost::mana(o.chars.mana_cost.clone().unwrap_or_default()),
+        })
 }
 
 impl KeywordRules for Madness {
