@@ -806,11 +806,16 @@ impl Game {
         // object's own (e.g. a CDA counting the creatures its controller controls). P/T
         // values may refer to the affected object itself.
         let mut chars = self.objects[target.0 as usize].chars.clone();
+        let computed = |v: &Value| !matches!(v, Value::Const(_));
+        let needs_target = match m {
+            Modification::ModifyPT(p, t) => computed(p) || computed(t),
+            Modification::SetPT(p, t) | Modification::CdaPT(p, t) => {
+                p.as_ref().is_some_and(computed) || t.as_ref().is_some_and(computed)
+            }
+            _ => false,
+        };
         let with_target;
-        let ctx = if matches!(
-            m,
-            Modification::ModifyPT(..) | Modification::SetPT(..) | Modification::CdaPT(..)
-        ) {
+        let ctx = if needs_target {
             let mut c = ctx.clone();
             c.set_var(vars::AFFECTED, vec![Entity::Object(target)]);
             with_target = c;
