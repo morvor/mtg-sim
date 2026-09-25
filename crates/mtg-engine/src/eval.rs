@@ -787,7 +787,14 @@ impl Game {
                 return Some(c);
             }
         }
-        ctx.source.and_then(|s| self.obj(s).cast.as_deref())
+        ctx.source.and_then(|s| {
+            let o = self.obj(s);
+            // A spell on the stack ("when you cast ~, if it was kicked") keeps its cast
+            // information in its stack info.
+            o.cast
+                .as_deref()
+                .or_else(|| o.stack.as_ref().map(|si| &si.cast))
+        })
     }
 
     // ------------------------------------------------------------------
