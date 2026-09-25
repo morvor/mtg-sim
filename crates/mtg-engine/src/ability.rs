@@ -1019,6 +1019,9 @@ pub enum Condition {
     PrevAffectedAny,
     /// The spell/ability was cast from the given zone.
     CastFrom(ZoneKind),
+    /// Whether all of these trigger conditions have occurred this turn, regardless of
+    /// whether any ability triggered on them (CR 603.1b).
+    AllTriggerConditionsThisTurn(Vec<TriggerCond>),
     /// Game-state predicates about the current turn.
     Phase(PhaseCond),
     /// You have the city's blessing (CR 702.131).
@@ -1689,6 +1692,9 @@ pub enum TriggerCond {
         who: PlayerRel,
         n: u32,
     },
+    /// A triggered ability with several trigger conditions ("Whenever A or B, ...");
+    /// it triggers when any of them occurs (CR 603.1b).
+    AnyOf(Vec<TriggerCond>),
     /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
     PhasesOut(Filter),
     /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).

@@ -31,6 +31,7 @@ pub mod turn_keys {
 /// from the game immediately before the event (CR 603.10).
 pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
     match (cond, ev) {
+        (TriggerCond::AnyOf(v), ev) => v.iter().any(|c| looks_back(c, ev)),
         // CR 603.10a: leaves-the-battlefield abilities.
         (
             TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_),
@@ -1057,6 +1058,10 @@ impl Game {
             (TriggerCond::DayNightChanges, Event::DayNightChanged { .. }) => {
                 one(EventInfo::default())
             }
+            (TriggerCond::AnyOf(conds), ev) => conds
+                .iter()
+                .flat_map(|c| self.trigger_matches_ctx(c, base, ev))
+                .collect(),
             (TriggerCond::PhasesOut(f), Event::PhasedOut { obj }) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {

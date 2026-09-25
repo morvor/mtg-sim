@@ -800,6 +800,12 @@ impl Game {
                 }
                 PhaseCond::EndStep => self.turn.step == crate::turn::Step::End,
             },
+            Condition::AllTriggerConditionsThisTurn(conds) => conds.iter().all(|c| {
+                self.turn_events
+                    .iter()
+                    .chain(self.events.iter())
+                    .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+            }),
             Condition::CitysBlessing => self.player(ctx.controller).has_citys_blessing,
             Condition::IsMonarch => self.monarch == Some(ctx.controller),
             Condition::HasInitiative => self.initiative == Some(ctx.controller),
