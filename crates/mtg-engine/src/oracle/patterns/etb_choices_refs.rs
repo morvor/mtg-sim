@@ -1,8 +1,9 @@
 //! Abilities that refer to a choice made as the permanent entered ("the chosen name",
 //! "the chosen type", "the chosen player"), linked by CR 607.2d.
 
-use super::{AbilityPattern, TriggerPattern};
+use super::{AbilityPattern, EffectPattern, TriggerPattern};
 use crate::ability::*;
+use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
@@ -184,8 +185,72 @@ fn doesnt_remove_self(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
     marked.then_some(out)
 }
 
+/// The subject of a clause: "~", "it", "target creature you control", "another target
+/// creature you control", "any number of target creatures", "enchanted creature".
+fn subject(s: &str, b: &mut Builder) -> Option<Sel> {
+    let s = s.trim();
+    match s {
+        "~" => return Some(Sel::This),
+        "it" | "that creature" => return Some(b.it.clone()),
+        "enchanted creature" | "equipped creature" => return Some(Sel::AttachedTo),
+        _ => {}
+    }
+    let (spec, tail) = parse_target(s)?;
+    // "target spell or permanent" would be restricted to spells by the target phrase
+    // parser; leave such mixed targets unsupported.
+    let ok = match &spec.what {
+        TargetKind::Object(_) => true,
+        TargetKind::Spell(f) => !matches!(f, Filter::Or(_)),
+        _ => false,
+    };
+    if !end(tail).is_empty() || !ok {
+        return None;
+    }
+    Some(Sel::Target(b.add_target(spec, s)))
+}
+
+/// "[X] gains protection from the color of your choice until end of turn", "[X] becomes
+/// the color of your choice until end of turn": a color is chosen as the effect resolves
+/// and locked into the effect (CR 608.2h).
+fn color_of_your_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (l, duration) = match l.strip_suffix(" until end of turn") {
+        Some(x) => (x, Duration::EndOfTurn),
+        None => (l, Duration::Permanent),
+    };
+    let (subj, m) = if let Some(x) = l
+        .strip_suffix(" gains protection from the color of your choice")
+        .or_else(|| l.strip_suffix(" gain protection from the color of your choice"))
+    {
+        let mut k = crate::keywords::Keyword::new(crate::keywords::KeywordKind::Protection);
+        k.filter = Some(Filter::ChosenColor);
+        (x, Modification::AddKeyword(k))
+    } else if let Some(x) = l
+        .strip_suffix(" becomes the color of your choice")
+        .or_else(|| l.strip_suffix(" become the color of your choice"))
+    {
+        (x, Modification::SetChosenColor)
+    } else {
+        return None;
+    };
+    let what = subject(subj, b)?;
+    Some(Effect::seq(vec![
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Color,
+        },
+        Effect::Modify {
+            what,
+            mods: vec![m],
+            duration,
+        },
+    ]))
+}
+
 inventory::submit! {
     AbilityPattern { name: "chosen name restrictions", priority: 50, parse: chosen_restrictions }
+}
+inventory::submit! {
+    EffectPattern { name: "color of your choice", priority: 100, parse: color_of_your_choice }
 }
 inventory::submit! {
     AbilityPattern { name: "this effect doesn't remove ~", priority: 50, parse: doesnt_remove_self }

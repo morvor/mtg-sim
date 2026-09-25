@@ -1113,6 +1113,9 @@ pub enum Modification {
     // Layer 5
     SetColors(ColorSet),
     AddColors(ColorSet),
+    /// "becomes the color of your choice": the color chosen for the effect's source
+    /// (fixed when a resolving effect is created).
+    SetChosenColor,
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
@@ -1150,7 +1153,7 @@ impl Modification {
             | SetBasicLandType(_)
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
-            SetColors(_) | AddColors(_) => Layer::L5Color,
+            SetColors(_) | AddColors(_) | SetChosenColor => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,

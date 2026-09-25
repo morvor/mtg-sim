@@ -929,6 +929,11 @@ pub fn apply_mod(
             }
         }
         Modification::SetColors(cs) => c.colors = *cs,
+        Modification::SetChosenColor => {
+            if let Some(col) = ctx.source.and_then(|s| g.obj(s).choices.color) {
+                c.colors = ColorSet::single(col);
+            }
+        }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(a.clone()),
         Modification::AddKeyword(k) => {

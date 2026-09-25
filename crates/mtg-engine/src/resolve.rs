@@ -1137,6 +1137,25 @@ impl Game {
                     Some(p) => Modification::SetController(player_const(p)),
                     None => m.clone(),
                 },
+                // Values chosen for the source are locked in as the effect is created
+                // (CR 608.2h, 607.2d).
+                Modification::AddKeyword(k)
+                    if k.filter
+                        .as_ref()
+                        .is_some_and(crate::choices::filter_mentions_choice) =>
+                {
+                    let mut k = k.clone();
+                    if let (Some(f), Some(src)) = (k.filter.as_ref(), ctx.source) {
+                        k.filter = Some(crate::choices::bind_choices(f, &self.obj(src).choices));
+                    }
+                    Modification::AddKeyword(k)
+                }
+                Modification::SetChosenColor => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.color) {
+                        Some(c) => Modification::SetColors(ColorSet::single(c)),
+                        None => m.clone(),
+                    }
+                }
                 other => other.clone(),
             })
             .collect()
