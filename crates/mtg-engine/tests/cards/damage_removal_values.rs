@@ -178,3 +178,85 @@ fn timberwatch_elf_counts_elves_on_the_battlefield() {
     // Three Elves (both players').
     assert_eq!(t.pt(bears), (5, 5));
 }
+
+// ---------------------------------------------------------------------------
+// "For each"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn for_each_cards_compile() {
+    assert_compiles(&[
+        "Lotleth Giant",
+        "Black Market Tycoon",
+        "Folk Medicine",
+        "Decree of Pain",
+        "Multani's Decree",
+        "Fracturing Gust",
+    ]);
+}
+
+#[test]
+fn lotleth_giant_deals_damage_for_each_creature_card_in_your_graveyard() {
+    cr!("608.2h", "120.3a");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Llanowar Elves");
+    t.graveyard(P0, "Forest");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Lotleth Giant");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn decree_of_pain_draws_a_card_for_each_creature_it_destroyed() {
+    cr!("608.2h", "701.19c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    let boa = t.battlefield(P1, "River Boa");
+    // An indestructible creature isn't destroyed and isn't counted.
+    t.battlefield(P1, "Darksteel Myr");
+    t.lands(P1, "Forest", 1);
+    t.activate(P1, boa, 0, &[]).unwrap();
+    t.resolve();
+    t.lands(P0, "Swamp", 8);
+    let hand = t.hand_size(P0);
+    let d = t.hand(P0, "Decree of Pain");
+    t.cast(P0, d).go();
+    t.resolve();
+    assert!(!t.on_battlefield(boa), "can't be regenerated");
+    assert_eq!(t.named_on_battlefield("Darksteel Myr").len(), 1);
+    // Decree of Pain left the hand; three creatures were destroyed.
+    assert_eq!(t.hand_size(P0), hand + 3);
+}
+
+#[test]
+fn multanis_decree_gains_life_for_each_enchantment_destroyed() {
+    cr!("608.2h");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let pacifism = t.battlefield(P0, "Pacifism");
+    assert!(t.g.attach(pacifism, Entity::Object(bears)));
+    t.battlefield(P1, "Circle of Protection: Red");
+    t.battlefield(P1, "Circle of Protection: Red");
+    t.lands(P0, "Forest", 4);
+    let d = t.hand(P0, "Multani's Decree");
+    t.cast(P0, d).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 26);
+}
+
+#[test]
+fn folk_medicine_counts_creatures_you_control() {
+    cr!("608.2h", "119.3");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    let f = t.hand(P0, "Folk Medicine");
+    t.cast(P0, f).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 22);
+}
