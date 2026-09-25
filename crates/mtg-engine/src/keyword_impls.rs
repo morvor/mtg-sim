@@ -37,18 +37,14 @@ fn cache() -> &'static Mutex<HashMap<String, Vec<Ability>>> {
 /// The abilities a keyword instance stands for. Cached per distinct keyword instance so
 /// ability uids are stable across recomputation.
 pub fn derived_abilities(kw: &Keyword) -> Vec<Ability> {
-    derived_abilities_nth(kw, 0)
+    derived_abilities_keyed(kw, format!("{kw:?}"))
 }
 
-/// The abilities the `nth` of several identical instances of a keyword on one object
-/// stands for: each instance's abilities are distinct abilities that work separately
-/// (e.g. CR 702.43b, 702.44d), so they get their own uids.
-fn derived_abilities_nth(kw: &Keyword, nth: usize) -> Vec<Ability> {
-    let key = if nth == 0 {
-        format!("{kw:?}")
-    } else {
-        format!("{kw:?}#{nth}")
-    };
+/// The abilities of the keyword instance cached under `key`. The `n`th of several
+/// identical instances of a keyword on one object (n > 0) is keyed `"{kw:?}#{n}"`: each
+/// instance's abilities are distinct abilities that work separately (e.g. CR 702.43b,
+/// 702.44d), so they get their own uids.
+fn derived_abilities_keyed(kw: &Keyword, key: String) -> Vec<Ability> {
     if let Some(v) = cache().lock().unwrap().get(&key) {
         return v.clone();
     }
@@ -88,10 +84,15 @@ pub fn expand_keywords(chars: &mut Characteristics) {
     let mut seen: Vec<String> = Vec::new();
     for a in &chars.abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
-            let key = format!("{k:?}");
-            let nth = seen.iter().filter(|s| **s == key).count();
-            seen.push(key);
-            extra.extend(derived_abilities_nth(k, nth));
+            let base = format!("{k:?}");
+            let nth = seen.iter().filter(|s| **s == base).count();
+            let key = if nth == 0 {
+                base.clone()
+            } else {
+                format!("{base}#{nth}")
+            };
+            seen.push(base);
+            extra.extend(derived_abilities_keyed(k, key));
         }
     }
     chars.abilities.extend(extra);
