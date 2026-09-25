@@ -57,6 +57,17 @@ fn split_trigger(t: &str) -> Option<(&str, &str)> {
 pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = l.trim();
     let obj = || Sel::TriggerObject;
+    // CR 511.2: "at end of combat" triggers as the end of combat step begins.
+    if l == "at end of combat" {
+        return Some((
+            TriggerCond::BeginningOf {
+                step: TriggerStep::EndOfCombat,
+                whose: PlayerRel::Any,
+            },
+            Sel::This,
+            PlayerRef::ActivePlayer,
+        ));
+    }
     // "At the beginning of ..."
     if let Some(r) = l.strip_prefix("at the beginning of ") {
         let (step, whose) = match r {

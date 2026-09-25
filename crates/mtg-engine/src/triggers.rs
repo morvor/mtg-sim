@@ -146,8 +146,13 @@ impl Game {
             if let TriggerCond::BeginningOf { .. } = d.trigger {
                 // "at the beginning of the next end step" doesn't fire in the step it was
                 // created in (CR 513.2).
+                // A cleanup step can be followed by another cleanup step in the same turn,
+                // which is "the next cleanup step" (CR 514.3a).
                 if let Event::StepBegan { step, .. } = ev {
-                    if d.created_step == Some(*step) && d.created_turn == self.turn.number {
+                    if d.created_step == Some(*step)
+                        && d.created_turn == self.turn.number
+                        && *step != Step::Cleanup
+                    {
                         continue;
                     }
                 }
