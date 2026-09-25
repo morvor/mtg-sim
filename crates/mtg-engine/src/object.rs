@@ -317,6 +317,10 @@ pub struct GameObject {
     pub phased_out: bool,
     /// Phased out indirectly (attached to something that phased out, CR 702.26g).
     pub phased_out_indirectly: bool,
+    /// The player under whose control it phased out: it phases in during that player's
+    /// untap step (CR 702.26a, 702.26n).
+    #[serde(default)]
+    pub phased_out_under: Option<PlayerId>,
     pub counters: BTreeMap<CounterKind, u32>,
     /// Timestamp of each kind of counter (CR 613.7c): all counters of a kind share the
     /// timestamp of the most recently placed one.
@@ -433,6 +437,7 @@ impl GameObject {
             face_down: false,
             phased_out: false,
             phased_out_indirectly: false,
+            phased_out_under: None,
             counters: BTreeMap::new(),
             counter_timestamps: BTreeMap::new(),
             damage: 0,

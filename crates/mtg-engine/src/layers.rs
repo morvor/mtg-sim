@@ -381,12 +381,14 @@ impl Game {
         controller: PlayerId,
     ) -> bool {
         match d {
-            Duration::WhileSourceOnBattlefield => {
-                source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
-            }
+            // CR 702.26f: "for as long as" durations can't see a phased-out permanent.
+            Duration::WhileSourceOnBattlefield => source.is_none_or(|s| {
+                !self.is_live(s) || self.obj(s).zone != Zone::Battlefield || self.obj(s).phased_out
+            }),
             Duration::WhileYouControlSource => source.is_none_or(|s| {
                 !self.is_live(s)
                     || self.obj(s).zone != Zone::Battlefield
+                    || self.obj(s).phased_out
                     || self.obj(s).controller != controller
             }),
             Duration::WhileCondition(c) => !self.eval_cond(c, &Ctx::new(source, controller)),

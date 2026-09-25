@@ -494,6 +494,8 @@ impl Game {
                     }
                 }
                 let next = self.next_player(after);
+                // CR 702.26n: turns of players who left the game would have begun.
+                crate::kw::phasing::turns_would_have_begun(self, after, next);
                 if crate::skip::consume_turn_skip(self, next) {
                     after = next;
                     continue;
