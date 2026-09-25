@@ -823,13 +823,11 @@ impl Game {
                     add_cost(&mut extra, &cost);
                     cast_info.paid.push(name.clone());
                 }
-                if n > 0 {
+                // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks the
+                // spell. (Other repeatable costs, such as replicate, don't.)
+                if n > 0 && name.as_str() == "multikicker" {
                     cast_info.times_kicked += n;
-                    // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks
-                    // the spell.
-                    if name.as_str() == "multikicker" {
-                        cast_info.paid.push("kicker".into());
-                    }
+                    cast_info.paid.push("kicker".into());
                 }
             } else if self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
                 && matches!(

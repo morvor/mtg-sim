@@ -59,6 +59,13 @@ pub trait KeywordRules: Sync + Send {
     ) -> Vec<(SmolStr, Cost, bool)> {
         vec![]
     }
+    /// Optional additional costs announced while casting `spell` that depend on all of its
+    /// keywords together rather than on one instance of a keyword, e.g. several instances
+    /// of replicate, each paid separately (CR 702.56b). Called for every registered
+    /// implementation, after the per-instance [`KeywordRules::optional_costs`].
+    fn spell_optional_costs(&self, g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
+        vec![]
+    }
     /// Adjust the targets/effect of a spell being cast (e.g. overload).
     fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
         body
@@ -336,6 +343,9 @@ pub fn optional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
         for r in impls_for(kw.kind) {
             out.extend(r.optional_costs(g, spell, kw));
         }
+    }
+    for r in registry() {
+        out.extend(r.spell_optional_costs(g, spell));
     }
     out
 }

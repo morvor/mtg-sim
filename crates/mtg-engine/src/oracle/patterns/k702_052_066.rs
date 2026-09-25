@@ -5,7 +5,7 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::parse_trigger_body;
 use crate::oracle::keywords::compile_keyword;
-use crate::oracle::patterns::{AbilityPattern, ConditionPattern};
+use crate::oracle::patterns::{AbilityPattern, ConditionPattern, StaticPattern};
 use crate::oracle::CompileContext;
 use crate::types::counters;
 
@@ -17,6 +17,16 @@ fn keyword_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     if let Some(r) = lower.strip_prefix("recover—") {
         let cost = half_life_cost(r)?;
         let kw = Keyword::with_cost(KeywordKind::Recover, cost).text(t);
+        return Some(compile_keyword(kw, t));
+    }
+    // CR 702.56a: "Replicate—Pay {E}{E}{E}." (Reiterating Bolt).
+    if let Some(r) = lower.strip_prefix("replicate—pay ") {
+        let symbols = &t[t.len() - r.len()..];
+        if !symbols.starts_with('{') {
+            return None;
+        }
+        let (cost, _) = crate::oracle::costs::parse_cost(symbols)?;
+        let kw = Keyword::with_cost(KeywordKind::Replicate, cost).text(t);
         return Some(compile_keyword(kw, t));
     }
     None
@@ -37,6 +47,55 @@ fn half_life_cost(s: &str) -> Option<Cost> {
 }
 
 inventory::submit! { AbilityPattern { name: "k702_052_066 keywords", priority: 100, parse: keyword_line } }
+
+/// "Each [quality] spell you cast has replicate. The replicate cost is equal to its mana
+/// cost." (Hatchery Sliver, Djinn Illuminatus): the spells have replicate as they're cast
+/// (CR 702.56a), with a cost that is the spell's own mana cost (see `kw/replicate.rs`).
+fn spells_have_replicate(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let subject = l
+        .strip_prefix("each ")?
+        .strip_suffix(
+            " spell you cast has replicate. the replicate cost is equal to its mana cost",
+        )?;
+    let mut parts = vec![spell_quality(subject)?];
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    let kw = Keyword::with_cost(
+        KeywordKind::Replicate,
+        crate::kw::replicate::its_mana_cost(),
+    )
+    .text("replicate");
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(parts),
+        mods: vec![Modification::AddKeyword(kw)],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+/// The quality of "each [quality] spell": "instant and sorcery" (either type), or one card
+/// type or subtype ("Sliver", "Saga", "creature").
+fn spell_quality(subject: &str) -> Option<Filter> {
+    let types: Vec<&str> = subject.split(" and ").collect();
+    let mut fs = Vec::new();
+    for t in &types {
+        let t = t.trim();
+        if t.contains(' ') {
+            return None;
+        }
+        let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(t)?;
+        if !crate::oracle::phrases::end(tail).is_empty() {
+            return None;
+        }
+        fs.push(f);
+    }
+    Some(if fs.len() == 1 {
+        fs.pop()?
+    } else {
+        Filter::Or(fs)
+    })
+}
+
+inventory::submit! { StaticPattern { name: "each [quality] spell you cast has replicate", priority: 100, parse: spells_have_replicate } }
 
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and

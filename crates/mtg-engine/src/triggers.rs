@@ -422,9 +422,13 @@ impl Game {
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
+            base.ability_uid = a.uid;
             for info in self.trigger_matches_ctx(&t.trigger, &base, ev) {
                 let mut ctx = Ctx::new(Some(src), ctl);
                 ctx.link = a.link;
+                // Which ability this is (e.g. one of several instances of a keyword,
+                // CR 702.56b), as when it resolves.
+                ctx.ability_uid = a.uid;
                 ctx.event = Some(info.clone());
                 // CR 603.4: intervening "if" must be true when the event occurs.
                 if let Some(c) = &t.intervening_if {
