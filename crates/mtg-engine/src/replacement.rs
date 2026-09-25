@@ -30,7 +30,10 @@ pub struct EtbInfo {
     pub attacking: Option<Entity>,
     pub blocking: Option<ObjectId>,
     pub attach_to: Option<Entity>,
-    /// "As this enters, ..." effects to perform as it enters: (source ability ctx, effect).
+    /// Effects to perform right after it is put onto the battlefield, before its
+    /// zone-change event is emitted: (source ability ctx, effect). ("As this enters"
+    /// replacement effects run earlier, while the replacement applies; see
+    /// [`ReplacementAction::AsEnters`].)
     pub as_enters: Vec<(Ctx, Effect)>,
     /// Cast info carried from the stack.
     pub cast: Option<CastInfo>,
@@ -456,10 +459,22 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::AsEnters(e), ReplEvent::Move(mut m)) => {
+                // CR 614.12a: choices required by a replacement effect that modifies how a
+                // permanent enters are made before it enters. The effect runs now, with
+                // the entering object as its source; choices are stored on that object
+                // and carried onto the permanent (see `perform_move`), and entry
+                // modifications ("it enters tapped") are applied to this event.
                 let mut c = ctx.clone();
                 c.source = Some(m.obj);
+                c.controller = m.etb.controller.unwrap_or(cand.controller);
                 c.cast = m.etb.cast.clone();
-                m.etb.as_enters.push((c, *e));
+                c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
+                c.entering = Some(crate::eval::EntryMods::default());
+                self.exec(&e, &mut c);
+                if let Some(em) = c.entering.take() {
+                    m.etb.tapped |= em.tapped;
+                    m.etb.counters.extend(em.counters);
+                }
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterAsCopy { filter, optional }, ReplEvent::Move(mut m)) => {

@@ -15,6 +15,13 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             let i = g.ask_option(p, Some(src), "Choose a color", opts);
             g.objects[src.0 as usize].choices.color = Some(Color::ALL[i.min(4)]);
         }
+        ChoiceKind::ColorOtherThan(except) => {
+            let cols: Vec<Color> = Color::ALL.iter().copied().filter(|c| c != except).collect();
+            let opts: Vec<String> = cols.iter().map(|c| c.word().to_string()).collect();
+            let i = g.ask_option(p, Some(src), "Choose a color", opts);
+            g.objects[src.0 as usize].choices.color =
+                cols.get(i).copied().or(cols.first().copied());
+        }
         ChoiceKind::CreatureType => {
             let list: Vec<String> = subtype_lists().creature.clone();
             let i = g.ask_option(p, Some(src), "Choose a creature type", list.clone());
@@ -81,4 +88,49 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
         }
     }
     g.dirty = true;
+}
+
+/// Whether a filter refers to a choice made for its source ("of the chosen color").
+pub fn filter_mentions_choice(f: &crate::ability::Filter) -> bool {
+    use crate::ability::Filter;
+    match f {
+        Filter::ChosenColor | Filter::ChosenType | Filter::ChosenName | Filter::ChosenCardType => {
+            true
+        }
+        Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_choice),
+        Filter::Not(x) => filter_mentions_choice(x),
+        _ => false,
+    }
+}
+
+/// Replaces references to chosen values with the values chosen for a particular object,
+/// for abilities granted to other objects (CR 607.2d). An undefined choice matches
+/// nothing (CR 607.5a).
+pub fn bind_choices(
+    f: &crate::ability::Filter,
+    ch: &crate::object::Choices,
+) -> crate::ability::Filter {
+    use crate::ability::Filter;
+    let nothing = || Filter::not(Filter::Any);
+    match f {
+        Filter::ChosenColor => ch.color.map(Filter::Color).unwrap_or_else(nothing),
+        Filter::ChosenType => ch
+            .creature_type
+            .clone()
+            .or(ch.basic_land_type.clone())
+            .map(Filter::Subtype)
+            .or(ch.card_type.map(Filter::Type))
+            .unwrap_or_else(nothing),
+        Filter::ChosenName => ch
+            .card_name
+            .clone()
+            .filter(|n| !n.is_empty())
+            .map(Filter::Named)
+            .unwrap_or_else(nothing),
+        Filter::ChosenCardType => ch.card_type.map(Filter::Type).unwrap_or_else(nothing),
+        Filter::And(v) => Filter::And(v.iter().map(|x| bind_choices(x, ch)).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(|x| bind_choices(x, ch)).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(bind_choices(x, ch))),
+        other => other.clone(),
+    }
 }

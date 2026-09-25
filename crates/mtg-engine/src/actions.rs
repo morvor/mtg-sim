@@ -52,7 +52,7 @@ impl Game {
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         for (i, m) in moves.iter().enumerate() {
-            if !self.is_live(m.obj) {
+            if !self.can_move(m.obj) {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
@@ -88,6 +88,14 @@ impl Game {
         out
     }
 
+    /// Whether an object can be moved: it's in a zone, or it's a new object not yet put
+    /// into any zone (a token being created, CR 111.1, or a card put onto the
+    /// battlefield by a test). Objects that ceased to exist can't be moved.
+    fn can_move(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        self.is_live(id) || (o.zone == Zone::Nowhere && o.next.is_none() && o.prev.is_none())
+    }
+
     /// Snapshot of triggered abilities of permanents on the battlefield right now.
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         let mut snap = LookbackSnapshot::default();
@@ -110,7 +118,7 @@ impl Game {
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
         let old_id = m.obj;
-        if !self.is_live(old_id) {
+        if !self.can_move(old_id) {
             return None;
         }
         let from = self.obj(old_id).zone;
@@ -133,6 +141,12 @@ impl Game {
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
         let new_id = self.create_incarnation(old_id, m.to);
+        if m.to == Zone::Battlefield {
+            // Choices made as it entered (CR 614.12a) or while it was cast are the
+            // permanent's choices (CR 607.2d).
+            let ch = self.obj(old_id).choices.clone();
+            self.objects[new_id.0 as usize].choices = ch;
+        }
         {
             let face = m.etb.face;
             let n = &mut self.objects[new_id.0 as usize];

@@ -37,6 +37,18 @@ pub struct Ctx {
     pub source_lki: Option<Box<Characteristics>>,
     /// Chosen opponent ("choose an opponent").
     pub chosen_player: Option<PlayerId>,
+    /// Set while an "as this enters" replacement effect is being applied: modifications
+    /// to how the permanent enters made by [`Effect::EnterTapped`] and
+    /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
+    pub entering: Option<EntryMods>,
+}
+
+/// Modifications to how a permanent enters, collected while applying an "as this
+/// enters" replacement effect (CR 614.1c).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EntryMods {
+    pub tapped: bool,
+    pub counters: Vec<(CounterKind, u32)>,
 }
 
 impl Ctx {
@@ -102,7 +114,20 @@ impl Game {
                 p != ctx.controller && self.player(p).team == self.player(ctx.controller).team
             }
             PlayerRel::Iterated => ctx.iter_player == Some(p),
+            PlayerRel::Chosen => self.chosen_player_of_source(ctx) == Some(p),
         }
+    }
+
+    /// Choices made for the ability's source ("the chosen color", CR 607.2d).
+    pub fn source_choices(&self, ctx: &Ctx) -> Option<&Choices> {
+        ctx.source.map(|s| &self.obj(s).choices)
+    }
+
+    /// The player chosen for the source ("choose an opponent"), or the one chosen during
+    /// the current resolution.
+    pub fn chosen_player_of_source(&self, ctx: &Ctx) -> Option<PlayerId> {
+        ctx.chosen_player
+            .or_else(|| self.source_choices(ctx).and_then(|c| c.player))
     }
 
     /// Defending player relative to the source (CR 508.5).
@@ -211,7 +236,11 @@ impl Game {
                 .collect(),
             PlayerRef::Owner => ctx.source.map(|s| self.obj(s).owner).into_iter().collect(),
             PlayerRef::Iterated => ctx.iter_player.into_iter().collect(),
-            PlayerRef::ChosenOpponent => ctx.chosen_player.into_iter().collect(),
+            PlayerRef::ChosenOpponent => self
+                .chosen_player_of_source(ctx)
+                .filter(|p| self.player(*p).in_game())
+                .into_iter()
+                .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
         }
     }
@@ -389,6 +418,29 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            // CR 607.2d: references to a choice made for the source; an undefined choice
+            // matches nothing (CR 607.5a).
+            Filter::ChosenColor => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.color)
+                .is_some_and(|col| c.colors.contains(col)),
+            // "the chosen type" is whichever type the linked ability chose: a creature
+            // type, a basic land type, or a card type.
+            Filter::ChosenType => match self.source_choices(ctx) {
+                Some(ch) => match ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    Some(t) => self.matches_view(view, id, &Filter::Subtype(t), ctx),
+                    None => ch.card_type.is_some_and(|t| c.card_types.contains(t)),
+                },
+                None => false,
+            },
+            Filter::ChosenName => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_name.as_ref())
+                .is_some_and(|n| !n.is_empty() && c.name.eq_ignore_ascii_case(n)),
+            Filter::ChosenCardType => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.card_type)
+                .is_some_and(|t| c.card_types.contains(t)),
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }

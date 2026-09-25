@@ -346,6 +346,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {
             (Filter::Blocking, r)
+        } else if let Some((f, r)) = parse_chosen_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -353,6 +355,27 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = rest;
     }
     Some((Filter::and(parts), plural, s))
+}
+
+/// References to a choice made for the source (CR 607.2d): "of the chosen type",
+/// "of the chosen color", "with the chosen name", "of the chosen card type".
+fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
+    for (p, f) in [
+        ("of the chosen creature type", Filter::ChosenType),
+        ("of the chosen card type", Filter::ChosenCardType),
+        ("of the chosen type", Filter::ChosenType),
+        ("of the chosen color", Filter::ChosenColor),
+        ("that's the chosen color", Filter::ChosenColor),
+        ("that are the chosen color", Filter::ChosenColor),
+        ("with the chosen name", Filter::ChosenName),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',', '.']) {
+                return Some((f, r));
+            }
+        }
+    }
+    None
 }
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".

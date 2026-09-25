@@ -42,12 +42,28 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
             ManaProduction::ChosenColor(n) => {
-                let c = ctx
+                // CR 607.5a: no mana if no color was chosen.
+                match ctx
                     .source
                     .and_then(|s| g.obj(s).choices.color)
                     .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![vec![c]; g.eval_value(n, ctx).max(0) as usize]
+                {
+                    Some(c) => vec![vec![c]; g.eval_value(n, ctx).max(0) as usize],
+                    None => vec![],
+                }
+            }
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = ctx
+                    .source
+                    .and_then(|s| g.obj(s).choices.color)
+                    .map(ManaType::from_color)
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![u]
             }
             ManaProduction::CouldProduce(f) => {
                 let t = types_could_produce(g, f, ctx);

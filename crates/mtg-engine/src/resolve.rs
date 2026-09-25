@@ -642,6 +642,21 @@ impl Game {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 crate::choices::make_choice(self, p, kind, ctx);
             }
+            // CR 614.1c: modify how the permanent enters (only while applying an "as this
+            // enters" replacement effect).
+            Effect::EnterTapped => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.tapped = true;
+                }
+            }
+            Effect::EnterWithCounters { kind, n } => {
+                let k = self.eval_value(n, ctx).max(0) as u32;
+                if let Some(e) = ctx.entering.as_mut() {
+                    if k > 0 {
+                        e.counters.push((kind.clone(), k));
+                    }
+                }
+            }
 
             // --- Players -----------------------------------------------------------
             Effect::Draw { who, n } => {
@@ -1278,14 +1293,30 @@ impl Game {
                     .collect()
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
-            ManaProduction::ChosenColor(n) => {
-                let k = self.eval_value(n, ctx).max(0) as usize;
-                let c = ctx
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = ctx
                     .source
                     .and_then(|s| self.obj(s).choices.color)
                     .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![c; k]
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![self.choose_mana_color(p, ctx, &u)]
+            }
+            ManaProduction::ChosenColor(n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                // CR 607.5a: an undefined choice produces no mana.
+                match ctx
+                    .source
+                    .and_then(|s| self.obj(s).choices.color)
+                    .map(ManaType::from_color)
+                {
+                    Some(c) => vec![c; k],
+                    None => vec![],
+                }
             }
             ManaProduction::CouldProduce(f) => {
                 let types = crate::mana_abilities::types_could_produce(self, f, ctx);

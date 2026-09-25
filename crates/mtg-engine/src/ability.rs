@@ -725,6 +725,8 @@ pub enum PlayerRel {
     Teammate,
     /// The iterated player in "for each player".
     Iterated,
+    /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
+    Chosen,
 }
 
 /// Object predicates (CR 608.2j: filters check only the stated characteristics).
@@ -821,6 +823,16 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
+    /// nothing while no color is chosen (CR 607.5a).
+    ChosenColor,
+    /// "of the chosen type": has the creature type, land type, or card type chosen for
+    /// the source.
+    ChosenType,
+    /// "with the chosen name": has the card name chosen for the source.
+    ChosenName,
+    /// "of the chosen card type": has the card type chosen for the source.
+    ChosenCardType,
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -1087,6 +1099,13 @@ pub enum Modification {
     RemoveAllCreatureTypes,
     /// Lands become a basic land type, losing other land types (CR 305.7).
     SetBasicLandType(Vec<Subtype>),
+    /// "is the chosen type in addition to its other types": adds the creature type or
+    /// land type chosen for the effect's source (CR 607.2d). Does nothing while no type
+    /// is chosen (CR 607.5a).
+    AddChosenType,
+    /// "Enchanted land is the chosen type": like [`Modification::SetBasicLandType`] with
+    /// the basic land type chosen for the effect's source (CR 305.7).
+    SetChosenBasicLandType,
     // Layer 5
     SetColors(ColorSet),
     AddColors(ColorSet),
@@ -1124,7 +1143,9 @@ impl Modification {
             | SetTypes { .. }
             | AllCreatureTypes
             | RemoveAllCreatureTypes
-            | SetBasicLandType(_) => Layer::L4Type,
+            | SetBasicLandType(_)
+            | AddChosenType
+            | SetChosenBasicLandType => Layer::L4Type,
             SetColors(_) | AddColors(_) => Layer::L5Color,
             AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
@@ -1198,6 +1219,9 @@ pub enum ManaProduction {
     CouldProduce(Filter),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
+    /// One mana of one of the listed types or of the color chosen for the source
+    /// ("Add {R} or one mana of the chosen color").
+    OneOfOrChosenColor(Vec<ManaType>),
     /// N mana of a fixed type.
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
@@ -1286,7 +1310,12 @@ pub enum ReplacementAction {
     EnterTapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
-    /// "As this enters, choose ..." — perform the effect as it enters (the choice is stored on the object).
+    /// "As this enters, ..." — the effect is performed while the replacement applies,
+    /// before the permanent enters (CR 614.1c, 614.12a). Choices ([`Effect::Choose`]) are
+    /// stored on the entering object and carried onto the permanent; the entry-modifying
+    /// effects [`Effect::EnterTapped`] and [`Effect::EnterWithCounters`] change how it
+    /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
+    /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
     /// Enters as a copy of (chosen) object (CR 707.9).
     EnterAsCopy { filter: Filter, optional: bool },
@@ -1893,6 +1922,15 @@ pub enum Effect {
         who: PlayerRef,
         kind: ChoiceKind,
     },
+    /// "[It] enters tapped": only meaningful inside [`ReplacementAction::AsEnters`], where
+    /// it modifies how the permanent enters (CR 614.1c); elsewhere it does nothing.
+    EnterTapped,
+    /// "[It] enters with N [kind] counters on it": only meaningful inside
+    /// [`ReplacementAction::AsEnters`] (CR 614.1c, 122.6); elsewhere it does nothing.
+    EnterWithCounters {
+        kind: CounterKind,
+        n: Value,
+    },
 
     // --- Players ------------------------------------------------------------
     Draw {
@@ -2076,6 +2114,8 @@ impl Effect {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChoiceKind {
     Color,
+    /// "choose a color other than [color]".
+    ColorOtherThan(Color),
     CreatureType,
     CardName,
     /// A card name of a nonland card, etc.

@@ -906,13 +906,44 @@ pub fn apply_mod(
             }
             c.abilities.clear();
         }
+        Modification::AddChosenType => {
+            // CR 607.2d / 607.5a: the type chosen for the effect's source, if any.
+            if let Some(ch) = ctx.source.map(|s| &g.obj(s).choices) {
+                if let Some(t) = ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+                    if !c.subtypes.contains(&t) {
+                        c.subtypes.push(t);
+                    }
+                }
+            }
+        }
+        Modification::SetChosenBasicLandType => {
+            if let Some(t) = ctx
+                .source
+                .and_then(|s| g.obj(s).choices.basic_land_type.clone())
+            {
+                // CR 305.7, as for SetBasicLandType.
+                c.subtypes
+                    .retain(|s| !subtype_lists().land.contains(s.as_str()));
+                c.subtypes.push(t);
+                c.abilities.clear();
+            }
+        }
         Modification::SetColors(cs) => c.colors = *cs,
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(a.clone()),
-        Modification::AddKeyword(k) => c.abilities.push(AbilityDef::new(
-            AbilityKind::Keyword(k.clone()),
-            k.kind.name(),
-        )),
+        Modification::AddKeyword(k) => {
+            // A granted "protection from the chosen color" refers to the choice made for
+            // the effect's source, not for the object gaining it (CR 607.2d).
+            let mut k = k.clone();
+            if let (Some(f), Some(src)) = (k.filter.as_ref(), ctx.source) {
+                if crate::choices::filter_mentions_choice(f) {
+                    k.filter = Some(crate::choices::bind_choices(f, &g.obj(src).choices));
+                }
+            }
+            let name = k.kind.name();
+            c.abilities
+                .push(AbilityDef::new(AbilityKind::Keyword(k), name))
+        }
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
