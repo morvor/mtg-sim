@@ -629,7 +629,11 @@ impl Game {
         let base_cost_has_x = match &opt.alt_cost {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
-        } || extra.mana.as_ref().is_some_and(|m| m.has_x());
+        } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+            || extra.parts.iter().any(cost_part_has_x)
+            // CR 107.3a: an X in an additional cost is announced too ("As an additional
+            // cost to cast this spell, pay X life").
+            || crate::object::own_additional_cost_has_x(&chars, cost_part_has_x);
         let mut x: i64 = 0;
         if base_cost_has_x {
             let max = self.max_mana_available(p) as i64;
@@ -737,6 +741,10 @@ impl Game {
             if opt.alt_cost.is_none() {
                 add_cost(&mut cost, e);
             }
+        }
+        // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        if let Some(m) = cost.mana.as_mut() {
+            *m = m.with_x(x);
         }
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
@@ -1363,6 +1371,9 @@ impl Game {
                     >= n
             }
             CostPart::Effect(_) => true,
+            CostPart::PayManaCostOf(s) => {
+                crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
+            }
         }
     }
 
@@ -1708,6 +1719,11 @@ impl Game {
                 let mut c = ctx.clone();
                 self.exec(e, &mut c);
             }
+            CostPart::PayManaCostOf(s) => {
+                if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
+                    return bad("can't pay mana cost");
+                }
+            }
         }
         Ok(())
     }
@@ -1737,7 +1753,7 @@ pub fn add_cost(total: &mut Cost, c: &Cost) {
     total.parts.extend(c.parts.iter().cloned());
 }
 
-fn cost_part_has_x(c: &CostPart) -> bool {
+pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
     let is_x = |v: &Value| matches!(v, Value::X);
     match c {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),

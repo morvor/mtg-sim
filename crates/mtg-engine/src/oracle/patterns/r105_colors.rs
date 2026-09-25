@@ -5,7 +5,7 @@
 
 use crate::ability::*;
 use crate::oracle::effects::Builder;
-use crate::oracle::patterns::{AbilityPattern, EffectPattern, StaticPattern};
+use crate::oracle::patterns::{AbilityPattern, EffectPattern};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 use crate::types::*;
@@ -108,7 +108,14 @@ fn attached_color_static(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
     )])
 }
 
-inventory::submit! { StaticPattern { name: "r105 attached color", priority: 50, parse: attached_color_static } }
+/// The core static parser stops at any "enchanted creature ..." line it can't parse, so
+/// this is registered as a whole-ability pattern.
+fn attached_color_block(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.trim().to_lowercase();
+    attached_color_static(end(&lower), block, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "r105 attached color", priority: 50, parse: attached_color_block } }
 
 /// Duration suffixes for color-changing effects.
 fn color_duration(s: &str) -> (Duration, &str) {

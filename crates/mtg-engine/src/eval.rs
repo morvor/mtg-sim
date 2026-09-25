@@ -698,6 +698,10 @@ impl Game {
                 }
                 set.count() as i64
             }
+            Value::XOf(s) => self
+                .eval_sel_objects(s, ctx)
+                .first()
+                .map_or(0, |o| crate::object::x_value_of(self.obj(*o)) as i64),
             Value::ColorPairsAmong(f) => {
                 let mut pairs: Vec<ColorSet> = Vec::new();
                 for o in self.objects_matching(f, ctx) {

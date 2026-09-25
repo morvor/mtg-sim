@@ -991,6 +991,12 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
+        } else if let Some(ci) = crate::object::etb_trigger_cast_info(self, &t) {
+            // CR 107.3m: the permanent's enters ability uses its spell's value of X.
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.x = ci.x;
+                si.cast = ci;
+            }
         }
         self.emit(Event::AbilityTriggeredOnStack {
             ability: id,

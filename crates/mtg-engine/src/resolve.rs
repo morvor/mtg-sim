@@ -63,6 +63,7 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {

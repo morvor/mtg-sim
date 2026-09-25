@@ -392,6 +392,9 @@ pub enum CostPart {
     },
     /// Arbitrary effect performed as a cost (e.g. "Blight 1").
     Effect(Box<Effect>),
+    /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
+    /// object is a spell on the stack (CR 107.3h).
+    PayManaCostOf(Box<Sel>),
 }
 
 // ---------------------------------------------------------------------------
@@ -927,6 +930,9 @@ pub enum Value {
     /// Number of different color pairs (CR 105.5) among matching objects that are
     /// exactly two colors.
     ColorPairsAmong(Filter),
+    /// The value of X of another object ("put X +1/+1 counters on it" for "a spell with
+    /// {X} in its mana cost"): the value used by that object (CR 107.3e).
+    XOf(Box<Sel>),
     /// Greatest power among objects matching.
     GreatestPower(Filter),
     GreatestManaValue(Filter),

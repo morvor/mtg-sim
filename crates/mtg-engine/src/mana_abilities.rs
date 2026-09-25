@@ -357,6 +357,85 @@ fn permute(v: &mut Vec<usize>, k: usize, f: &mut dyn FnMut(&[usize])) {
     }
 }
 
+/// The mana cost an effect instructs a player to pay for "its mana cost" (CR 107.3h): X
+/// is 0 unless the object is a spell on the stack, in which case it's the value chosen
+/// or determined as it was cast.
+pub fn mana_cost_to_pay(g: &Game, sel: &Sel, ctx: &Ctx) -> Option<ManaCost> {
+    let o = g.eval_sel_objects(sel, ctx).first().copied()?;
+    let obj = g.obj(o);
+    let mc = obj.chars.mana_cost.clone()?;
+    Some(mc.with_x(crate::object::x_value_of(obj) as u32))
+}
+
+pub fn can_pay_mana_cost_of(
+    g: &Game,
+    p: PlayerId,
+    sel: &Sel,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    match mana_cost_to_pay(g, sel, ctx) {
+        None => false,
+        Some(m) if m.mana_value() == 0 && m.symbols.is_empty() => true,
+        Some(m) => {
+            find_payment(
+                &g.player(p).mana_pool.mana,
+                &m,
+                &SpendContext::default(),
+                g.player(p).life.max(0) as u32,
+            )
+            .is_some()
+                || plan_payment(g, p, &m, &SpendContext::default(), src).is_some()
+        }
+    }
+}
+
+pub fn pay_mana_cost_of(
+    g: &mut Game,
+    p: PlayerId,
+    sel: &Sel,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    let Some(m) = mana_cost_to_pay(g, sel, ctx) else {
+        return false;
+    };
+    let spend = SpendContext {
+        is_ability: true,
+        source: src,
+        ..Default::default()
+    };
+    pay_mana(g, p, &m, &spend, None).is_some()
+}
+
+/// Fixes the value of X in a cost paid while a spell or ability resolves ("you may pay
+/// {X}", "unless its controller pays {X}"). If the resolving spell or ability defines X
+/// (it was announced for its costs, CR 107.3a, or inherited, CR 107.3m–n), that value is
+/// used (CR 107.3i); otherwise the controller chooses it as the cost is paid (CR 107.3f),
+/// and that choice is the value of X for the rest of the resolution.
+pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
+    let Some(m) = cost.mana.as_ref().filter(|m| m.has_x()) else {
+        return cost.clone();
+    };
+    let defined = ctx
+        .stack_obj
+        .and_then(|s| g.try_obj(s))
+        .and_then(|o| o.stack.as_ref())
+        .is_some_and(|si| si.x.is_some());
+    if !defined {
+        let p = ctx.controller;
+        let max = g.max_mana_available(p) as i64;
+        let src = ctx.source.or(ctx.stack_obj).unwrap_or(ObjectId(0));
+        ctx.x = match g.ask(p, crate::decision::Decision::ChooseX { source: src, max }) {
+            crate::decision::Answer::Number(n) if n >= 0 => n as i32,
+            _ => 0,
+        };
+    }
+    let mut out = cost.clone();
+    out.mana = Some(m.with_x(ctx.x.max(0) as u32));
+    out
+}
+
 /// "[Player] activates a mana ability of each [filter] they control" (Drain Power): for
 /// each such permanent with a mana ability that can be activated, the player chooses one
 /// and activates it.
