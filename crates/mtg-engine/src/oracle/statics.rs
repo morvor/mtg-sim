@@ -203,7 +203,11 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         .map(|r| format!("gets {r}"))
         .or_else(|| l.strip_prefix("~ has ").map(|r| format!("has {r}")))
     {
-        return anthem(&r, Filter::Source, text);
+        // Falls through to the registered patterns otherwise ("~ has ward {X}, where X
+        // is ...").
+        if let Some(v) = anthem(&r, Filter::Source, text) {
+            return Some(v);
+        }
     }
     // Cost modifiers.
     if let Some(a) = parse_cost_modifier(l, text) {

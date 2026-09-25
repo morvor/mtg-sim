@@ -46,10 +46,6 @@ pub fn derived_abilities(kw: &Keyword) -> Vec<Ability> {
     v
 }
 
-fn this_creature() -> Filter {
-    Filter::Source
-}
-
 fn build_derived(kw: &Keyword) -> Vec<Ability> {
     use KeywordKind as K;
     let text = kw.kind.name();
@@ -69,28 +65,6 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
             )),
             text,
         )],
-        // CR 702.21a: "Whenever this permanent becomes the target of a spell or ability an
-        // opponent controls, counter it unless that player pays [cost]."
-        K::Ward => {
-            let cost = kw.cost.clone().unwrap_or_default();
-            vec![AbilityDef::new(
-                AbilityKind::Triggered(TriggeredAbility::new(
-                    TriggerCond::BecomesTarget {
-                        filter: this_creature(),
-                        by: PlayerRel::Opponent,
-                    },
-                    Body::effect(Effect::PayOptional {
-                        who: PlayerRef::TriggerPlayer,
-                        cost,
-                        then: Box::new(Effect::Noop),
-                        otherwise: Box::new(Effect::CounterSpell {
-                            what: Sel::TriggerSpell,
-                        }),
-                    }),
-                )),
-                format!("Ward"),
-            )]
-        }
         // CR 702.6a: "[Cost]: Attach to target creature you control. Equip only as a sorcery."
         K::Equip => {
             let cost = kw.cost.clone().unwrap_or_default();

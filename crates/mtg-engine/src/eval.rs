@@ -22,6 +22,10 @@ pub struct Ctx {
     pub targets: Vec<Vec<Entity>>,
     pub divided: Vec<Vec<u32>>,
     pub x: i32,
+    /// X was defined by the resolving ability's text ([`Effect::SetX`], e.g. "ward {X},
+    /// where X is ...", CR 702.21b), so no player chooses it when a cost with X is paid.
+    #[serde(default)]
+    pub x_defined: bool,
     pub vars: BTreeMap<Var, Vec<Entity>>,
     pub nums: BTreeMap<Var, i64>,
     pub event: Option<EventInfo>,

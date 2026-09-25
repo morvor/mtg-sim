@@ -435,11 +435,12 @@ pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
     let Some(m) = cost.mana.as_ref().filter(|m| m.has_x()) else {
         return cost.clone();
     };
-    let defined = ctx
-        .stack_obj
-        .and_then(|s| g.try_obj(s))
-        .and_then(|o| o.stack.as_ref())
-        .is_some_and(|si| si.x.is_some());
+    let defined = ctx.x_defined
+        || ctx
+            .stack_obj
+            .and_then(|s| g.try_obj(s))
+            .and_then(|o| o.stack.as_ref())
+            .is_some_and(|si| si.x.is_some());
     if !defined {
         let p = ctx.controller;
         let max = g.max_mana_available(p) as i64;

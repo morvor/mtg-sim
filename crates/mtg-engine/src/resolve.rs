@@ -156,6 +156,7 @@ impl Game {
             }
             Effect::SetX { value } => {
                 ctx.x = self.eval_value(value, ctx) as i32;
+                ctx.x_defined = true;
             }
 
             // --- Objects -------------------------------------------------------
