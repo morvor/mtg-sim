@@ -1490,6 +1490,12 @@ pub enum StaticEffect {
         who: PlayerRel,
         what: Filter,
     },
+    /// "You may spend [types] mana as though it were mana of any color to pay [costs]"
+    /// (CR 602.1e). An empty list means mana of any type.
+    SpendAsAnyColor {
+        applies_to: CostTarget,
+        types: Vec<ManaType>,
+    },
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."

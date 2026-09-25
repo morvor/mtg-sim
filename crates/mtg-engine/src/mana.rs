@@ -381,6 +381,10 @@ pub struct SpendContext {
     pub subtypes: Vec<Subtype>,
     pub has_x: bool,
     pub source: Option<ObjectId>,
+    /// Mana types that may be spent as though they were mana of any color for this
+    /// payment (e.g. "You may spend blue mana as though it were mana of any color to pay
+    /// the activation costs of this creature's abilities", CR 602.1e).
+    pub any_color: Vec<ManaType>,
 }
 
 impl ManaRestriction {
@@ -535,7 +539,16 @@ pub fn find_payment(
     let usable: Vec<bool> = pool.iter().map(|m| m.can_spend(ctx)).collect();
     let mut used = vec![false; pool.len()];
     let mut plan = PaymentPlan::default();
-    if solve(pool, &usable, &reqs, 0, &mut used, &mut plan, max_life) {
+    if solve(
+        pool,
+        &usable,
+        &reqs,
+        0,
+        &mut used,
+        &mut plan,
+        max_life,
+        &ctx.any_color,
+    ) {
         plan.pool_indices.sort_unstable();
         Some(plan)
     } else {
@@ -543,10 +556,11 @@ pub fn find_payment(
     }
 }
 
-fn matches_color(m: &Mana, c: Color) -> bool {
-    m.ty.color() == Some(c)
+fn matches_color(m: &Mana, c: Color, any: &[ManaType]) -> bool {
+    m.ty.color() == Some(c) || any.contains(&m.ty)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn solve(
     pool: &[Mana],
     usable: &[bool],
@@ -555,6 +569,7 @@ fn solve(
     used: &mut Vec<bool>,
     plan: &mut PaymentPlan,
     max_life: u32,
+    any: &[ManaType],
 ) -> bool {
     if i == reqs.len() {
         return true;
@@ -606,26 +621,26 @@ fn solve(
         false
     };
     let next = |used: &mut Vec<bool>, plan: &mut PaymentPlan| {
-        solve(pool, usable, reqs, i + 1, used, plan, max_life)
+        solve(pool, usable, reqs, i + 1, used, plan, max_life, any)
     };
     match req {
-        Req::Colored(c) => try_unit(&|m| matches_color(m, c), used, plan, &next),
+        Req::Colored(c) => try_unit(&|m| matches_color(m, c, any), used, plan, &next),
         Req::Colorless => try_unit(&|m| m.ty == ManaType::C, used, plan, &next),
         Req::Snow => try_unit(&|m| m.snow, used, plan, &next),
         Req::Hybrid(a, b) => try_unit(
-            &|m| matches_color(m, a) || matches_color(m, b),
+            &|m| matches_color(m, a, any) || matches_color(m, b, any),
             used,
             plan,
             &next,
         ),
         Req::ColorlessHybrid(c) => try_unit(
-            &|m| matches_color(m, c) || m.ty == ManaType::C,
+            &|m| matches_color(m, c, any) || m.ty == ManaType::C,
             used,
             plan,
             &next,
         ),
         Req::TwoHybrid(c) => {
-            if try_unit(&|m| matches_color(m, c), used, plan, &next) {
+            if try_unit(&|m| matches_color(m, c, any), used, plan, &next) {
                 return true;
             }
             // Pay two generic instead: splice two Generic reqs at the end.
@@ -633,10 +648,10 @@ fn solve(
             rest.push(Req::Generic);
             rest.push(Req::Generic);
             rest.sort_by_key(|r| r.rank());
-            solve(pool, usable, &rest, 0, used, plan, max_life)
+            solve(pool, usable, &rest, 0, used, plan, max_life, any)
         }
         Req::Phyrexian(c) => {
-            if try_unit(&|m| matches_color(m, c), used, plan, &next) {
+            if try_unit(&|m| matches_color(m, c, any), used, plan, &next) {
                 return true;
             }
             if max_life >= plan.life + 2 {
@@ -650,7 +665,7 @@ fn solve(
         }
         Req::PhyrexianHybrid(a, b) => {
             if try_unit(
-                &|m| matches_color(m, a) || matches_color(m, b),
+                &|m| matches_color(m, a, any) || matches_color(m, b, any),
                 used,
                 plan,
                 &next,

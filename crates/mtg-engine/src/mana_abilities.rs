@@ -323,10 +323,22 @@ pub fn plan_payment(
 ) -> Option<Vec<(ManaSource, Vec<ManaType>)>> {
     let reqs = expand(cost)?;
     let sources = mana_sources(g, p, reserve);
+    // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
+    // any colored requirement.
+    let widen = |mut types: Vec<ManaType>| {
+        if types.iter().any(|t| spend.any_color.contains(t)) {
+            for c in ALL_COLORS {
+                if !types.contains(&c) {
+                    types.push(c);
+                }
+            }
+        }
+        types
+    };
     let mut units: Vec<Unit> = Vec::new();
     for (i, m) in g.player(p).mana_pool.mana.iter().enumerate() {
         units.push(Unit {
-            types: vec![m.ty],
+            types: widen(vec![m.ty]),
             snow: m.snow,
             source: None,
             pool_index: Some(i),
@@ -337,7 +349,7 @@ pub fn plan_payment(
         let snow = g.obj(s.obj).chars.has_supertype(Supertype::Snow);
         for u in &s.units {
             units.push(Unit {
-                types: u.clone(),
+                types: widen(u.clone()),
                 snow,
                 source: Some(si),
                 pool_index: None,

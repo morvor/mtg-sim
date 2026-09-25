@@ -573,3 +573,55 @@ fn restrictions_on_acquired_abilities_apply_per_granting_object() {
     assert!(t.activate(P0, bears, 1, &[]).is_err());
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn a_modification_of_how_the_activation_cost_may_be_paid_applies_to_the_total_cost() {
+    cr!("602.1e");
+    // Quicksilver Elemental-like: "{R}: This creature gets +1/+0 until end of turn. You may
+    // spend blue mana as though it were mana of any color to pay the activation costs of
+    // this creature's abilities." Another effect makes the ability cost {G} more.
+    let elemental = CB::new("Blue Payer")
+        .creature(3, 4)
+        .ability(act(
+            mana_cost("{R}"),
+            Body::effect(Effect::Modify {
+                what: Sel::This,
+                mods: vec![Modification::ModifyPT(Value::c(1), Value::c(0))],
+                duration: Duration::EndOfTurn,
+            }),
+        ))
+        .ability(stat(StaticEffect::SpendAsAnyColor {
+            applies_to: CostTarget::Abilities(Filter::Source),
+            types: vec![mtg_engine::mana::ManaType::U],
+        }))
+        .build();
+    let taxer = CB::new("Green Tax")
+        .enchantment()
+        .ability(stat(StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::Abilities(Filter::creature()),
+            who: PlayerRel::Any,
+            change: CostChange::IncreaseMana(mana("{G}")),
+        })))
+        .build();
+    let mut t = TestGame::new(2);
+    let e = t.custom(P0, elemental, Zone::Battlefield);
+    t.custom(P1, taxer, Zone::Battlefield);
+    let islands = t.lands(P0, "Island", 2);
+    // Total cost {R}{G}, paid entirely with blue mana.
+    t.activate(P0, e, 0, &[]).unwrap();
+    assert!(islands.iter().all(|i| t.obj(*i).tapped));
+    t.resolve();
+    assert_eq!(t.pt(e), (4, 4));
+    // Without the permission, blue mana can't pay for it.
+    let mut t = TestGame::new(2);
+    let plain = t.custom(
+        P0,
+        CB::new("Plain Pumper")
+            .creature(3, 4)
+            .ability(act(mana_cost("{R}"), Body::effect(gain(1))))
+            .build(),
+        Zone::Battlefield,
+    );
+    t.lands(P0, "Island", 2);
+    assert!(t.activate(P0, plain, 0, &[]).is_err());
+}

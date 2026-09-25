@@ -831,6 +831,7 @@ impl Game {
             subtypes: chars.subtypes.to_vec(),
             has_x: base_cost_has_x,
             source: Some(id),
+            any_color: self.any_color_mana(p, id, false),
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -1218,6 +1219,7 @@ impl Game {
                 is_ability: true,
                 card_types: src_chars.card_types,
                 source: Some(src),
+                any_color: self.any_color_mana(p, src, true),
                 ..Default::default()
             };
             self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
@@ -1264,10 +1266,13 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
+        // CR 602.1e: a modification of how the activation cost may be paid applies to the
+        // total cost.
         let spend = SpendContext {
             is_ability: true,
             card_types: src_chars.card_types,
             source: Some(src),
+            any_color: self.any_color_mana(p, src, true),
             ..Default::default()
         };
         let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
@@ -1293,6 +1298,35 @@ impl Game {
         });
         self.flush_events();
         Ok(Some(id))
+    }
+
+    /// Mana types `p` may spend as though they were mana of any color to pay for the
+    /// spell `src` (`ability == false`) or the activated abilities of `src` (CR 602.1e).
+    pub fn any_color_mana(&self, p: PlayerId, src: ObjectId, ability: bool) -> Vec<ManaType> {
+        let mut out = Vec::new();
+        for (s, c, e) in &self.statics.other {
+            let StaticEffect::SpendAsAnyColor { applies_to, types } = e else {
+                continue;
+            };
+            if *c != p {
+                continue;
+            }
+            let ctx = Ctx::new(Some(*s), *c);
+            let applies = match applies_to {
+                CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
+                CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
+                CostTarget::ThisSpell => !ability && src == *s,
+                CostTarget::Keyword(_) => false,
+            };
+            if applies {
+                if types.is_empty() {
+                    out.extend(ManaType::ALL);
+                } else {
+                    out.extend(types.iter().copied());
+                }
+            }
+        }
+        out
     }
 
     // ------------------------------------------------------------------
@@ -1324,8 +1358,17 @@ impl Game {
             {
                 return true;
             }
-            let plan =
-                crate::mana_abilities::plan_payment(self, p, &need, &SpendContext::default(), src);
+            let spend = SpendContext {
+                any_color: src
+                    .map(|s| {
+                        let mut v = self.any_color_mana(p, s, true);
+                        v.extend(self.any_color_mana(p, s, false));
+                        v
+                    })
+                    .unwrap_or_default(),
+                ..Default::default()
+            };
+            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
             return plan.is_some();
         }
         true
