@@ -66,6 +66,33 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     ob.face_down = false;
     ob.timestamp = ts; // CR 613.7f
     g.dirty = true;
+    g.recompute();
+    // CR 614.1e: "As [this] is turned face up, ..." replacement effects apply as it turns
+    // face up, before anything sees it face up.
+    let effects: Vec<(crate::eval::Ctx, Effect)> = g
+        .obj(id)
+        .chars
+        .abilities
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AbilityKind::Static(s) => match &s.effect {
+                StaticEffect::Replacement(ReplacementDef {
+                    event: ReplacementEvent::TurnedFaceUp,
+                    action: ReplacementAction::AsEnters(e),
+                    ..
+                }) => {
+                    let mut ctx = crate::eval::Ctx::for_object(g, id);
+                    ctx.link = a.link;
+                    Some((ctx, (**e).clone()))
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    for (mut ctx, e) in effects {
+        g.exec(&e, &mut ctx);
+    }
     g.emit(Event::TurnedFaceUp { obj: id });
     true
 }

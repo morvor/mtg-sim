@@ -1235,14 +1235,15 @@ impl Game {
                 let Some(o) = so else { return false };
                 *n >= 0 || o.loyalty() >= -*n
             }
-            CostPart::SacrificeSelf => {
-                so.is_some_and(|o| o.zone == Zone::Battlefield && o.controller == p)
-            }
+            // CR 614.17b: a cost that includes an event that can't happen can't be paid.
+            CostPart::SacrificeSelf => so.is_some_and(|o| {
+                o.zone == Zone::Battlefield && o.controller == p && !self.cant_be_sacrificed(o.id)
+            }),
             CostPart::Sacrifice { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p)
+                    .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
                     .count()
                     >= n
             }

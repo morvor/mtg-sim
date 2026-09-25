@@ -148,10 +148,22 @@ impl Game {
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0)
+        self.replace_rec(ev, applied, 0, false)
     }
 
-    fn replace_rec(&mut self, ev: ReplEvent, applied: Vec<ReplKey>, depth: u32) -> Vec<ReplEvent> {
+    /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
+    pub fn replace_self_only(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replace_rec(ev, applied, 0, true)
+    }
+
+    fn replace_rec(
+        &mut self,
+        ev: ReplEvent,
+        applied: Vec<ReplKey>,
+        depth: u32,
+        self_only: bool,
+    ) -> Vec<ReplEvent> {
         if depth > 32 {
             return vec![ev];
         }
@@ -172,6 +184,9 @@ impl Game {
             }
             _ => self.replacement_candidates(&ev, &applied, CandScope::All),
         };
+        if self_only {
+            cands.retain(|c| c.def.self_replacement);
+        }
         if cands.is_empty() {
             return vec![ev];
         }
@@ -195,13 +210,13 @@ impl Game {
         if cand.def.optional {
             let who = cand.controller;
             if !self.ask_yes_no(who, cand.source, &format!("Apply: {}?", cand.text), true) {
-                return self.replace_rec(ev, applied, depth + 1);
+                return self.replace_rec(ev, applied, depth + 1, self_only);
             }
         }
         let results = self.apply_replacement(&cand, ev, &applied);
         let mut out = Vec::new();
         for r in results {
-            out.extend(self.replace_rec(r, applied.clone(), depth + 1));
+            out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only));
         }
         out
     }

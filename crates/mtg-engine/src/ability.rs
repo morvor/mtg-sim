@@ -1293,6 +1293,9 @@ pub enum ReplacementEvent {
     Mill(PlayerFilter),
     /// "If you would search your library".
     Search(PlayerFilter),
+    /// "As [this permanent] is turned face up, ..." (CR 614.1e): performed with
+    /// [`ReplacementAction::AsEnters`] as the permanent turns face up.
+    TurnedFaceUp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

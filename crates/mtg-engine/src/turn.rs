@@ -289,10 +289,10 @@ impl Game {
             self.turn.stage = Stage::End;
             return;
         }
-        // CR 614.10b: an action a skip effect scheduled happens first.
-        crate::skip::run_step_start_actions(self);
         self.expire_effects_at_step_begin(step);
         self.emit(Event::StepBegan { step, active });
+        // CR 614.10b: an action a skip effect scheduled is the first thing that happens.
+        crate::skip::run_step_start_actions(self);
         match step {
             Step::Untap => self.untap_step_actions(),
             Step::Upkeep => {

@@ -1117,7 +1117,12 @@ impl Game {
             } => {
                 let p = self.eval_player(chooser, ctx).unwrap_or(ctx.controller);
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                let cands = self.objects_matching(filter, ctx);
+                // CR 614.13a: objects entering the battlefield right now can't be chosen.
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(filter, ctx)
+                    .into_iter()
+                    .filter(|o| !self.entering.contains(o))
+                    .collect();
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 let picked: Vec<Entity> = self
                     .ask_objects(p, ctx.source, "Choose", cands, min, n)

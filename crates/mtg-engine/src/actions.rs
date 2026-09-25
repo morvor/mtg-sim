@@ -80,6 +80,14 @@ impl Game {
             None
         };
         let mut out: Vec<Option<ObjectId>> = vec![None; moves.len()];
+        let entering: Vec<ObjectId> = finals
+            .iter()
+            .filter_map(|(_, e)| match e {
+                ReplEvent::Move(m) if m.to == Zone::Battlefield => Some(m.obj),
+                _ => None,
+            })
+            .collect();
+        let prev_entering = std::mem::replace(&mut self.entering, entering);
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -91,6 +99,7 @@ impl Game {
                 other => self.execute_repl_event(other),
             }
         }
+        self.entering = prev_entering;
         self.run_post_replacement_effects();
         self.recompute();
         out
@@ -529,13 +538,16 @@ impl Game {
             if self.draw_restricted(p) {
                 break;
             }
-            let before = self.player(p).hand.clone();
+            // CR 614.11b: cards drawn because a replacement effect replaced the draw aren't
+            // the card this draw drew.
             for e in self.replace(ReplEvent::Draw { player: p }) {
-                self.execute_repl_event(e);
-            }
-            for c in self.player(p).hand.clone() {
-                if !before.contains(&c) {
-                    out.push(c);
+                match e {
+                    ReplEvent::Draw { player } if player == p => {
+                        if let Some(c) = self.perform_draw(player) {
+                            out.push(c);
+                        }
+                    }
+                    other => self.execute_repl_event(other),
                 }
             }
         }
@@ -617,7 +629,13 @@ impl Game {
 
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.
     pub fn mill(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
-        let lib = &self.players[p.idx()].library;
+        // CR 614.13c: cards entering the battlefield from the library aren't milled.
+        let lib: Vec<ObjectId> = self.players[p.idx()]
+            .library
+            .iter()
+            .copied()
+            .filter(|c| !self.entering.contains(c))
+            .collect();
         let k = (n as usize).min(lib.len());
         let top: Vec<ObjectId> = lib[lib.len() - k..].iter().rev().copied().collect();
         let owner = p;
@@ -920,7 +938,21 @@ impl Game {
     // ------------------------------------------------------------------
 
     pub fn gain_life(&mut self, p: PlayerId, n: u32) -> u32 {
-        if n == 0 || !self.player(p).in_game() || self.cant_gain_life(p) {
+        if n == 0 || !self.player(p).in_game() {
+            return 0;
+        }
+        if self.cant_gain_life(p) {
+            // CR 614.17c: an event that can't happen can be replaced only by a
+            // self-replacement effect.
+            for e in self.replace_self_only(ReplEvent::GainLife {
+                player: p,
+                amount: n,
+            }) {
+                if !matches!(e, ReplEvent::GainLife { .. }) {
+                    self.execute_repl_event(e);
+                }
+            }
+            self.run_post_replacement_effects();
             return 0;
         }
         let before = self.player(p).life;

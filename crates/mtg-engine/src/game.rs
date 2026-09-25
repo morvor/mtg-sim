@@ -433,6 +433,9 @@ pub struct Game {
     /// Actions to take as the first thing in the next step that occurs, after a skip
     /// (CR 614.10b).
     pub step_start_actions: Vec<(crate::eval::Ctx, Effect)>,
+    /// Objects entering the battlefield simultaneously right now: effects modifying how
+    /// they enter can't choose them to change zones (CR 614.13a, 614.13c).
+    pub entering: Vec<ObjectId>,
 }
 
 impl Game {
@@ -509,6 +512,7 @@ impl Game {
             untils: vec![],
             next_spell_effects: vec![],
             step_start_actions: vec![],
+            entering: vec![],
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
