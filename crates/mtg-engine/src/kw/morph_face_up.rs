@@ -14,30 +14,37 @@ use crate::types::*;
 
 pub struct MorphFaceUp;
 
-/// Whether it has megamorph, and the cost to turn `id` face up, if it's a face-down permanent whose
-/// face-up characteristics have morph, megamorph, or disguise.
+/// The morph, megamorph, or disguise ability among `abilities`: (is megamorph, cost).
+fn face_up_keyword(abilities: &[Ability]) -> Option<(bool, Cost)> {
+    abilities.iter().find_map(|a| match &a.kind {
+        AbilityKind::Keyword(k) if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) => {
+            let megamorph = k
+                .text
+                .as_deref()
+                .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
+            k.cost.clone().map(|c| (megamorph, c))
+        }
+        _ => None,
+    })
+}
+
+/// Whether it has megamorph, and the cost to turn `id` face up, if it's a face-down
+/// permanent that would have morph, megamorph, or disguise if it were face up (CR 702.37e:
+/// if it wouldn't have a morph cost face up, e.g. because of an effect that would apply to
+/// it, it can't be turned face up this way).
 fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
         return None;
     }
     let card = o.card.as_ref()?;
-    card.front()
-        .chars
-        .abilities
-        .iter()
-        .find_map(|a| match &a.kind {
-            AbilityKind::Keyword(k)
-                if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) =>
-            {
-                let megamorph = k
-                    .text
-                    .as_deref()
-                    .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
-                k.cost.clone().map(|c| (megamorph, c))
-            }
-            _ => None,
-        })
+    // Printed without such an ability: nothing to look at.
+    face_up_keyword(&card.front().chars.abilities)?;
+    // The characteristics it would have face up, with the effects that would apply.
+    let mut h = g.clone();
+    h.objects[id.0 as usize].face_down = false;
+    h.recompute();
+    face_up_keyword(&h.obj(id).chars.abilities)
 }
 
 impl KeywordRules for MorphFaceUp {
