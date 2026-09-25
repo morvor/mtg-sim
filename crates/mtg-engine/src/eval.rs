@@ -53,6 +53,11 @@ pub struct EntryMods {
     pub prepared: bool,
     /// Exceptions to a copy effect it enters with (CR 707.9b).
     pub copy_exceptions: Vec<Modification>,
+    /// Effects on the permanent performed as it's put onto the battlefield
+    /// ([`Effect::OnEntry`]).
+    pub on_entry: Vec<Effect>,
+    /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
+    pub copiable: Vec<Modification>,
 }
 
 impl Ctx {

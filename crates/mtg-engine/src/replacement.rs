@@ -25,6 +25,9 @@ pub struct EtbInfo {
     /// Enters as a copy of this object's copiable values (CR 707.9).
     pub copy_of: Option<ObjectId>,
     pub copy_exceptions: Vec<Modification>,
+    /// Modifications to its copiable values from "as this enters" abilities that set
+    /// power and toughness (CR 707.2), applied after any copy effect it enters with.
+    pub copiable_mods: Vec<Modification>,
     pub face_down: Option<KeywordKind>,
     pub transformed: bool,
     pub attacking: Option<Entity>,
@@ -517,6 +520,12 @@ impl Game {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
+                    m.etb.copiable_mods.extend(em.copiable);
+                    // CR 614.1c: "it enters with haste" — performed on the permanent as
+                    // it's put onto the battlefield.
+                    for e in em.on_entry {
+                        m.etb.as_enters.push((c.clone(), e));
+                    }
                     if em.prepared {
                         // CR 722.3a/c: it gains the designation (and its prepare-spell
                         // copy is created) as it's put onto the battlefield.

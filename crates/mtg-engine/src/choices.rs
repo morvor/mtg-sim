@@ -124,6 +124,10 @@ pub fn filter_mentions_choice(f: &crate::ability::Filter) -> bool {
         Filter::ChosenColor | Filter::ChosenType | Filter::ChosenName | Filter::ChosenCardType => {
             true
         }
+        // "with mana value equal to the chosen number"
+        Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v) => {
+            matches!(**v, crate::ability::Value::Chosen)
+        }
         Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_choice),
         Filter::Not(x) => filter_mentions_choice(x),
         _ => false,
@@ -155,6 +159,19 @@ pub fn bind_choices(
             .map(Filter::Named)
             .unwrap_or_else(nothing),
         Filter::ChosenCardType => ch.card_type.map(Filter::Type).unwrap_or_else(nothing),
+        Filter::ManaValue(c, v) | Filter::Power(c, v) | Filter::Toughness(c, v)
+            if matches!(**v, crate::ability::Value::Chosen) =>
+        {
+            let Some(n) = ch.number else {
+                return nothing();
+            };
+            let v = Box::new(crate::ability::Value::Const(n));
+            match f {
+                Filter::ManaValue(..) => Filter::ManaValue(*c, v),
+                Filter::Power(..) => Filter::Power(*c, v),
+                _ => Filter::Toughness(*c, v),
+            }
+        }
         Filter::And(v) => Filter::And(v.iter().map(|x| bind_choices(x, ch)).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(|x| bind_choices(x, ch)).collect()),
         Filter::Not(x) => Filter::Not(Box::new(bind_choices(x, ch))),

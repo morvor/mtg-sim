@@ -1945,6 +1945,17 @@ pub enum Effect {
     /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
     /// inside [`ReplacementAction::AsEnters`].
     EnterCopyExceptions(Vec<Modification>),
+    /// "[It] enters with haste", "as ~ enters, it becomes a 3/3 creature": an effect on
+    /// the permanent performed as it's put onto the battlefield, with the permanent as
+    /// its source (CR 614.1c). Only meaningful inside [`ReplacementAction::AsEnters`],
+    /// where it's deferred until right after the permanent enters (before its
+    /// zone-change event); elsewhere it does nothing.
+    OnEntry(Box<Effect>),
+    /// "As ~ enters, it becomes your choice of a 3/3 creature or a 2/2 creature with
+    /// flying": an "as enters" ability that sets power and toughness (and maybe other
+    /// characteristics) modifies the permanent's copiable values (CR 707.2). Only
+    /// meaningful inside [`ReplacementAction::AsEnters`].
+    EnterAs(Vec<Modification>),
     /// "It becomes day" / "it becomes night" (CR 731.1).
     SetDayNight {
         day: bool,

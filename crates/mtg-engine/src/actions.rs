@@ -205,7 +205,33 @@ impl Game {
                         mods: vec![],
                         layer1: Some(Layer1::Copy {
                             values,
-                            exceptions: m.etb.copy_exceptions.clone(),
+                            exceptions: m
+                                .etb
+                                .copy_exceptions
+                                .iter()
+                                .chain(&m.etb.copiable_mods)
+                                .cloned()
+                                .collect(),
+                        }),
+                        created_turn: self.turn.number,
+                    });
+                } else if !m.etb.copiable_mods.is_empty() {
+                    // CR 707.2: an "as this enters" ability that sets power and toughness
+                    // modifies its copiable values (its own, when it isn't a copy).
+                    let values = Box::new(self.obj(new_id).base.clone());
+                    let id = self.new_effect_id();
+                    let ts = self.obj(new_id).timestamp;
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: Some(new_id),
+                        controller,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods: vec![],
+                        layer1: Some(Layer1::Copy {
+                            values,
+                            exceptions: m.etb.copiable_mods.clone(),
                         }),
                         created_turn: self.turn.number,
                     });

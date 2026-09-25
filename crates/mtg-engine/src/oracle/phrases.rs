@@ -415,6 +415,22 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
     } else {
         return None;
     };
+    // "with mana value equal to the chosen number" (CR 607.2d)
+    for (p, cmp) in [
+        ("equal to the chosen number", Cmp::Eq),
+        ("greater than or equal to the chosen number", Cmp::Ge),
+        ("less than or equal to the chosen number", Cmp::Le),
+    ] {
+        if let Some(r) = rest.strip_prefix(p) {
+            let v = Box::new(Value::Chosen);
+            let f = match stat {
+                "power" => Filter::Power(cmp, v),
+                "toughness" => Filter::Toughness(cmp, v),
+                _ => Filter::ManaValue(cmp, v),
+            };
+            return Some((f, r));
+        }
+    }
     let (n, rest) = parse_number(rest)?;
     let rest = rest.trim_start();
     let (cmp, rest) = if let Some(r) = rest.strip_prefix("or less") {

@@ -94,6 +94,16 @@ fn parse_etb(l: &str, ctx: &CompileContext) -> Option<Vec<StaticEffect>> {
             Box::new(body),
         ))]);
     }
+    // "~ enters with X +1/+1 counters on it. If X is 5 or more, it enters with an
+    // additional X +1/+1 counters on it.": one replacement effect per sentence.
+    let sentences = split_sentences(l);
+    if sentences.len() > 1 {
+        let mut v = Vec::new();
+        for s in sentences {
+            v.extend(parse_etb(&s.to_lowercase(), ctx)?);
+        }
+        return Some(v);
+    }
     // "If [condition], ~ enters [tapped / with counters]."
     if let Some(r) = l.strip_prefix("if ") {
         for p in SELF_PRONOUNS {
@@ -172,13 +182,89 @@ fn entry(s: &str, ctx: &CompileContext) -> Option<Effect> {
         .strip_prefix("tapped with ")
         .or_else(|| s.strip_prefix("tapped and with "))
     {
-        let c = counters(r, ctx)?;
+        let c = with_parts(r, ctx)?;
         return Some(Effect::seq(vec![Effect::EnterTapped, c]));
     }
     if let Some(r) = s.strip_prefix("with ") {
-        return counters(r, ctx);
+        return with_parts(r, ctx);
     }
     None
+}
+
+/// What a permanent enters with: counters and/or abilities joined by "and" ("two +1/+1
+/// counters on it and with flying", "two +1/+1 counters and a lifelink counter on it",
+/// "a +1/+1 counter on it for each red creature you control and a +1/+1 counter on it
+/// for each green creature you control").
+fn with_parts(s: &str, ctx: &CompileContext) -> Option<Effect> {
+    let s = end(s);
+    if let Some(e) = counters(s, ctx).or_else(|| entry_abilities(s, ctx)) {
+        return Some(e);
+    }
+    for (i, _) in s.match_indices(" and ") {
+        let (a, b) = (&s[..i], &s[i + " and ".len()..]);
+        let b = b.strip_prefix("with ").unwrap_or(b);
+        // "two +1/+1 counters and a lifelink counter on it": both share "on it".
+        let ea = counters(a, ctx).or_else(|| {
+            if a.contains(" on ") {
+                return None;
+            }
+            let at = b.find(" on it")?;
+            counters(&format!("{a}{}", &b[at..at + " on it".len()]), ctx)
+        });
+        let Some(ea) = ea else { continue };
+        if let Some(eb) = with_parts(b, ctx) {
+            return Some(Effect::seq(vec![ea, eb]));
+        }
+    }
+    None
+}
+
+/// "flying", "haste", "first strike": abilities a permanent enters with, which it has
+/// for as long as it remains on the battlefield (CR 614.1c).
+fn entry_abilities(s: &str, ctx: &CompileContext) -> Option<Effect> {
+    Some(Effect::OnEntry(Box::new(Effect::Modify {
+        what: Sel::This,
+        mods: keyword_list(s, ctx)?,
+        duration: Duration::Permanent,
+    })))
+}
+
+/// "flying", "flying and haste", "first strike, vigilance, and lifelink".
+fn keyword_list(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
+    let mut mods = Vec::new();
+    for p in s
+        .split(", and ")
+        .flat_map(|p| p.split(" and "))
+        .flat_map(|p| p.split(", "))
+    {
+        let p = p.trim();
+        if p.is_empty() || p.contains("counter") || p.contains('"') {
+            return None;
+        }
+        for a in crate::oracle::keywords::parse_keyword_line(p, ctx)? {
+            match &a.kind {
+                AbilityKind::Keyword(k) => mods.push(Modification::AddKeyword(k.clone())),
+                _ => return None,
+            }
+        }
+    }
+    (!mods.is_empty()).then_some(mods)
+}
+
+/// "a 3/3 creature", "a 2/2 creature with flying": the characteristics an "as enters"
+/// ability gives the permanent (CR 707.2).
+fn creature_form(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
+    let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (pt, r) = r.split_once(' ')?;
+    let (p, t) = pt.split_once('/')?;
+    let p: i32 = p.parse().ok()?;
+    let t: i32 = t.parse().ok()?;
+    let mut mods = vec![Modification::SetPT(Some(Value::c(p)), Some(Value::c(t)))];
+    let r = r.strip_prefix("creature")?.trim();
+    if !r.is_empty() {
+        mods.extend(keyword_list(r.strip_prefix("with ")?, ctx)?);
+    }
+    Some(mods)
 }
 
 /// "a +1/+1 counter on it", "X +1/+1 counters on it, where X is ...", "a number of
@@ -187,35 +273,7 @@ fn entry(s: &str, ctx: &CompileContext) -> Option<Effect> {
 fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
     let s = end(s);
     if let Some(r) = s.strip_prefix("your choice of ") {
-        let (a, b) = r.split_once(" or ")?;
-        let (_, a) = parse_number(a)?;
-        let (ka, a) = crate::oracle::costs::counter_kind(a)?;
-        if end(a) != "counter" {
-            return None;
-        }
-        let (_, b) = parse_number(b)?;
-        let (kb, b) = crate::oracle::costs::counter_kind(b)?;
-        let b = strip(b, "counter")?;
-        on_self(b)?;
-        return Some(Effect::ChooseOne {
-            who: PlayerRef::You,
-            options: vec![
-                (
-                    format!("{ka} counter"),
-                    Effect::EnterWithCounters {
-                        kind: ka,
-                        n: Value::c(1),
-                    },
-                ),
-                (
-                    format!("{kb} counter"),
-                    Effect::EnterWithCounters {
-                        kind: kb,
-                        n: Value::c(1),
-                    },
-                ),
-            ],
-        });
+        return counter_choice(r);
     }
     if let Some(r) = s.strip_prefix("a number of ") {
         let (kind, r) = crate::oracle::costs::counter_kind(r)?;
@@ -224,8 +282,15 @@ fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
         let v = strip(r, "equal to ").and_then(|v| etb_value(v, ctx))?;
         return Some(Effect::EnterWithCounters { kind, n: v });
     }
+    // "an additional X +1/+1 counters on it", "an additional +1/+1 counter on it"
+    let (s, additional) = match s.strip_prefix("an additional ") {
+        Some(r) => (r, true),
+        None => (s, false),
+    };
     let (n, r) = if let Some(r) = s.strip_prefix("twice x ") {
         (Value::Mul(Box::new(Value::c(2)), Box::new(Value::X)), r)
+    } else if additional && (s.starts_with('+') || s.starts_with('-')) {
+        (Value::c(1), s)
     } else {
         parse_number(s)?
     };
@@ -250,6 +315,81 @@ fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
         return None;
     };
     Some(Effect::EnterWithCounters { kind, n })
+}
+
+/// "a reach counter or a vigilance counter on it", "a +1/+1, first strike, or vigilance
+/// counter on it", "two different counters on it from among menace, deathtouch, and
+/// lifelink": the choice is made as the permanent enters (CR 614.12a).
+fn counter_choice(r: &str) -> Option<Effect> {
+    let r = end(r);
+    let one = |k: &CounterKind| Effect::EnterWithCounters {
+        kind: k.clone(),
+        n: Value::c(1),
+    };
+    let options = if let Some(x) = r.strip_prefix("two different counters on it from among ") {
+        let kinds = counter_list(x)?;
+        let mut options = Vec::new();
+        for (i, a) in kinds.iter().enumerate() {
+            for b in &kinds[i + 1..] {
+                options.push((
+                    format!("{a} and {b} counters"),
+                    Effect::seq(vec![one(a), one(b)]),
+                ));
+            }
+        }
+        options
+    } else {
+        let body = on_self_suffix(r)?;
+        let kinds = if let Some((a, b)) = body.split_once(" counter or ") {
+            let a = a.strip_prefix("a ")?;
+            let b = b.strip_prefix("a ")?.strip_suffix(" counter")?;
+            vec![counter_name(a)?, counter_name(b)?]
+        } else {
+            let list = body.strip_prefix("a ")?.strip_suffix(" counter")?;
+            counter_list(list)?
+        };
+        kinds
+            .iter()
+            .map(|k| (format!("{k} counter"), one(k)))
+            .collect()
+    };
+    (options.len() >= 2).then_some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options,
+    })
+}
+
+/// "X on it" -> "X".
+fn on_self_suffix(s: &str) -> Option<&str> {
+    ["on it", "on him", "on her", "on them"]
+        .iter()
+        .find_map(|p| s.strip_suffix(&format!(" {p}")))
+}
+
+/// A counter kind: "+1/+1", "flying", "first strike" (CR 122.1b).
+fn counter_name(s: &str) -> Option<CounterKind> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if crate::layers::keyword_counter(s).is_some() {
+        return Some(s.into());
+    }
+    let (k, rest) = crate::oracle::costs::counter_kind(s)?;
+    rest.trim().is_empty().then_some(k)
+}
+
+/// "menace, deathtouch, and lifelink", "+1/+1, first strike, or vigilance"
+fn counter_list(s: &str) -> Option<Vec<CounterKind>> {
+    let mut out = Vec::new();
+    for p in s
+        .split(", and ")
+        .flat_map(|p| p.split(", or "))
+        .flat_map(|p| p.split(", "))
+    {
+        out.push(counter_name(p)?);
+    }
+    (out.len() >= 2).then_some(out)
 }
 
 /// Strips "on it" (or "on him"/"on her"/"on them") and returns the rest.
@@ -308,6 +448,19 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
         }
     }
     let _ = ctx;
+    // "creature that player controls" after "choose an opponent" (CR 607.2d)
+    for sfx in [" that player controls", " the chosen player controls"] {
+        if let Some(r) = s.strip_suffix(sfx) {
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            return Some(Value::Count(Filter::and(vec![
+                f,
+                Filter::ControlledBy(PlayerRel::Chosen),
+            ])));
+        }
+    }
     let (f, _, tail) = parse_object_phrase(s)?;
     if !end(tail).is_empty() {
         return None;
@@ -465,6 +618,29 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    // "it becomes your choice of a 3/3 creature, a 2/2 creature with flying, or a 1/6
+    // creature with defender" (CR 707.2: part of its copiable values)
+    if let Some(r) = SELF_PRONOUNS
+        .iter()
+        .find_map(|p| l.strip_prefix(&format!("{p} becomes your choice of ")))
+    {
+        if !ctx.type_line.card_types.contains(CardType::Creature) {
+            return None;
+        }
+        let mut options = Vec::new();
+        for part in r
+            .split(", or ")
+            .flat_map(|p| p.split(", "))
+            .flat_map(|p| p.split(" or "))
+        {
+            let part = part.trim();
+            options.push((part.to_string(), Effect::EnterAs(creature_form(part, ctx)?)));
+        }
+        return (options.len() >= 2).then_some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        });
+    }
     // "~ enters tapped unless you revealed a Dragon card this way or you control a Dragon"
     if let Some(r) = SELF_PRONOUNS
         .iter()
@@ -605,6 +781,16 @@ fn etb_condition_atom(c: &str, ctx: &CompileContext) -> Option<Condition> {
     let c = end(c);
     if c.starts_with("you revealed ") && c.ends_with(" this way") {
         return Some(Condition::PrevHappened);
+    }
+    // "X is 5 or more": the value of X chosen as the permanent spell was cast (CR 107.3m)
+    if let Some(r) = c.strip_prefix("x is ") {
+        let (n, rest) = parse_number(r)?;
+        let cmp = match end(rest) {
+            "or more" | "or greater" => Cmp::Ge,
+            "or less" => Cmp::Le,
+            _ => return None,
+        };
+        return Some(Condition::Compare(Value::X, cmp, n));
     }
     parse_condition(c, ctx)
 }
@@ -1018,7 +1204,10 @@ fn anchor_words(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     (seen == words.len()).then_some(out)
 }
 
-/// "~ is the chosen type in addition to its other types."
+/// "~ is the chosen type in addition to its other types.", "~ is the chosen color.",
+/// "All nonland permanents are the chosen color.", "Lands you control are the chosen
+/// type in addition to their other types.": characteristic-changing statics using the
+/// choice made for the source (CR 607.2d; layers 4 and 5, CR 613.1d–e).
 fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() {
         return None;
@@ -1033,12 +1222,64 @@ fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
             Filter::AttachedToSource,
             vec![Modification::SetChosenBasicLandType],
         ),
-        _ => return None,
+        _ => {
+            let (subj, pred) = l
+                .split_once(" is the chosen ")
+                .or_else(|| l.split_once(" are the chosen "))?;
+            let mods = match pred {
+                "color" => vec![Modification::SetChosenColor],
+                "type in addition to its other types"
+                | "type in addition to their other types"
+                | "creature type in addition to its other creature types"
+                | "creature type in addition to their other creature types" => {
+                    vec![Modification::AddChosenType]
+                }
+                _ => return None,
+            };
+            (chosen_static_subject(subj)?, mods)
+        }
     };
     Some(vec![static_ability(
         StaticEffect::Continuous { affected, mods },
         block,
     )])
+}
+
+/// Subjects of [`chosen_type_static`]: "~", "enchanted land", "each creature you
+/// control", "all nonland permanents", "lands you control" (permanents only).
+fn chosen_static_subject(s: &str) -> Option<Filter> {
+    match s {
+        "~" => return Some(Filter::Source),
+        "enchanted creature" | "enchanted land" | "enchanted permanent" | "equipped creature" => {
+            return Some(Filter::AttachedToSource)
+        }
+        _ => {}
+    }
+    let (r, want_plural) = if let Some(r) = s.strip_prefix("each ") {
+        (r, false)
+    } else if let Some(r) = s.strip_prefix("all ") {
+        (r, true)
+    } else {
+        (s, true)
+    };
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural != want_plural || !end(tail).is_empty() {
+        return None;
+    }
+    // Objects not on the battlefield ("cards", "spells") aren't handled here.
+    if filter_mentions_other_zones(&f) {
+        return None;
+    }
+    Some(f)
+}
+
+fn filter_mentions_other_zones(f: &Filter) -> bool {
+    match f {
+        Filter::Card | Filter::Spell | Filter::InZone(_) | Filter::PermanentCard => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_other_zones),
+        Filter::Not(x) => filter_mentions_other_zones(x),
+        _ => false,
+    }
 }
 
 inventory::submit! {

@@ -659,6 +659,16 @@ impl Game {
                     e.copy_exceptions.extend(mods.iter().cloned());
                 }
             }
+            Effect::OnEntry(effect) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.on_entry.push((**effect).clone());
+                }
+            }
+            Effect::EnterAs(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copiable.extend(mods.iter().cloned());
+                }
+            }
             Effect::SetDayNight { day } => self.set_day(*day),
             Effect::SetPrepared { what, prepared } => {
                 for o in self.resolve_objects(what, ctx) {
