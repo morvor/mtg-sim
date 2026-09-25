@@ -38,6 +38,12 @@ pub struct ZoneState {
     /// How many special actions are being taken right now (CR 401.5).
     #[serde(default)]
     pub special_actions: u32,
+    /// Face-down cards in exile and the pile each was put in: cards exiled face down at
+    /// the same time by the same source form a pile (CR 406.4).
+    #[serde(default)]
+    pub piles: Vec<(ObjectId, u32)>,
+    #[serde(default)]
+    pub next_pile: u32,
 }
 
 /// `Event::Custom` name: the top card of a player's library became revealed (CR 401.5).
@@ -602,6 +608,97 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
             }
         }
     }
+}
+
+/// CR 406.4: cards exiled face down at the same time (`exiled`: the new objects and the
+/// source that exiled each) are kept in piles by how they were exiled.
+pub fn face_down_exiled(g: &mut Game, exiled: Vec<(ObjectId, Option<ObjectId>)>) {
+    if exiled.is_empty() {
+        return;
+    }
+    let mut groups: Vec<(Option<ObjectId>, u32)> = Vec::new();
+    for (o, src) in exiled {
+        let pile = match groups.iter().find(|(s, _)| *s == src) {
+            Some((_, p)) => *p,
+            None => {
+                let p = g.zones.next_pile;
+                g.zones.next_pile += 1;
+                groups.push((src, p));
+                p
+            }
+        };
+        g.zones.piles.push((o, pile));
+    }
+    let live: Vec<(ObjectId, u32)> = g
+        .zones
+        .piles
+        .iter()
+        .copied()
+        .filter(|(o, _)| g.is_live(*o) && g.obj(*o).zone == Zone::Exile && g.obj(*o).face_down)
+        .collect();
+    g.zones.piles = live;
+}
+
+/// The pile a face-down exiled card is in (CR 406.4). A card with no recorded pile is a
+/// pile of its own.
+fn pile_of(g: &Game, id: ObjectId) -> (bool, u32) {
+    match g.zones.piles.iter().find(|(o, _)| *o == id) {
+        Some((_, p)) => (true, *p),
+        None => (false, id.0),
+    }
+}
+
+/// CR 406.4: a player instructed to choose exiled cards may choose a specific face-down
+/// card only if they may look at it; otherwise they choose a pile of face-down exiled
+/// cards, and a card is chosen at random from within that pile. Asks `p` to choose
+/// between `min` and `max` of `cands` on those terms.
+pub fn choose_objects(
+    g: &mut Game,
+    p: PlayerId,
+    source: Option<ObjectId>,
+    prompt: &str,
+    cands: Vec<ObjectId>,
+    min: u32,
+    max: u32,
+) -> Vec<ObjectId> {
+    let hidden = |g: &Game, id: ObjectId| {
+        let o = g.obj(id);
+        o.zone == Zone::Exile && o.face_down && !may_look(g, p, id)
+    };
+    if !cands.iter().any(|c| hidden(g, *c)) {
+        return g.ask_objects(p, source, prompt, cands, min, max);
+    }
+    // Each pile is offered once, represented by one of its cards.
+    let mut offered: Vec<ObjectId> = Vec::new();
+    let mut piles: Vec<(ObjectId, (bool, u32), Vec<ObjectId>)> = Vec::new();
+    for c in cands {
+        if !hidden(g, c) {
+            offered.push(c);
+            continue;
+        }
+        let key = pile_of(g, c);
+        match piles.iter_mut().find(|(_, k, _)| *k == key) {
+            Some((_, _, members)) => members.push(c),
+            None => {
+                piles.push((c, key, vec![c]));
+                offered.push(c);
+            }
+        }
+    }
+    let min = min.min(offered.len() as u32);
+    let chosen = g.ask_objects(p, source, prompt, offered, min, max);
+    let mut out = Vec::new();
+    for c in chosen {
+        match piles.iter_mut().find(|(r, _, _)| *r == c) {
+            Some((_, _, members)) if !members.is_empty() => {
+                use rand::Rng;
+                let i = g.rng.gen_range(0..members.len());
+                out.push(members.remove(i));
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Performs a zone-related `Effect::Custom`, if `name` is one.

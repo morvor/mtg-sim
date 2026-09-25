@@ -209,9 +209,10 @@ impl Game {
         if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
             return true;
         }
-        // CR 601.3f: a face-down card in exile can be cast only by a player who may look
-        // at it; permissions to cast spells "with certain qualities" don't reveal it.
-        if o.zone == Zone::Exile && o.face_down {
+        // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
+        // to cast spells "with certain qualities" only by a player who may look at it
+        // (and then only if the resulting spell has those qualities).
+        if o.zone == Zone::Exile && o.face_down && !crate::zones::may_look(self, p, card) {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {

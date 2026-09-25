@@ -139,6 +139,16 @@ impl Game {
             })
             .collect();
         self.entering = entering;
+        // CR 406.4: cards exiled face down together form a pile.
+        let face_down_exiles: Vec<(usize, Option<ObjectId>)> = finals
+            .iter()
+            .filter_map(|(i, e)| match e {
+                ReplEvent::Move(m) if m.to == Zone::Exile && m.etb.face_down.is_some() => {
+                    Some((*i, m.source))
+                }
+                _ => None,
+            })
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -151,6 +161,13 @@ impl Game {
             }
         }
         self.entering = prev_entering;
+        crate::zones::face_down_exiled(
+            self,
+            face_down_exiles
+                .into_iter()
+                .filter_map(|(i, src)| out[i].map(|o| (o, src)))
+                .collect(),
+        );
         self.run_post_replacement_effects();
         self.recompute();
         let entered: Vec<ObjectId> = out.iter().flatten().copied().collect();

@@ -1546,11 +1546,13 @@ impl Game {
                     .filter(|o| !self.entering.contains(o))
                     .collect();
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
-                let picked: Vec<Entity> = self
-                    .ask_objects(p, ctx.source, "Choose", cands, min, n)
-                    .into_iter()
-                    .map(Entity::Object)
-                    .collect();
+                // CR 406.4: face-down exiled cards the player can't look at are chosen by
+                // pile.
+                let picked: Vec<Entity> =
+                    crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect();
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
