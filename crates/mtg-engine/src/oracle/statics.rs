@@ -188,7 +188,11 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         }
     }
     // "[filter] get +N/+N [and have ...]" / "[filter] have [keywords]"
-    if let Some((f, _, rest)) = parse_object_phrase(l) {
+    // (Spells on the stack are left to the registry's patterns, which grant only the
+    // keywords the engine applies to a spell.)
+    if let Some((f, _, rest)) =
+        parse_object_phrase(l).filter(|(f, _, _)| f.zone() != Some(ZoneKind::Stack))
+    {
         let rest = rest.trim();
         if rest.starts_with("get ")
             || rest.starts_with("gets ")

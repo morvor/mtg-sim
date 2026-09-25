@@ -247,6 +247,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     // Head nouns joined by "or", "and/or", commas.
     let mut heads: Vec<Filter> = Vec::new();
+    // Start of the heads joined since the last narrowing noun ("instant or sorcery"
+    // before "spell").
+    let mut group_start = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
     loop {
@@ -307,22 +310,29 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         let (nw, nrest) = split_word(s);
         let nw2 = nw.trim_end_matches(',');
         if let Some(nf) = head_noun(nw2) {
-            let last = match (heads.pop().unwrap(), &nf) {
-                // "permanent card" / "permanent spell" (CR 110.4a-b): not on the
-                // battlefield, but with a permanent card type.
-                (Filter::Permanent, Filter::Card | Filter::Spell) => Filter::PermanentCard,
-                (last, _) => last,
-            };
+            // The noun narrows every head joined since the last narrowing: "instant or
+            // sorcery spell", "artifact and enchantment cards".
+            let group: Vec<Filter> = heads
+                .drain(group_start..)
+                .map(|last| match (last, &nf) {
+                    // "permanent card" / "permanent spell" (CR 110.4a-b): not on the
+                    // battlefield, but with a permanent card type.
+                    (Filter::Permanent, Filter::Card | Filter::Spell | Filter::Any) => {
+                        Filter::PermanentCard
+                    }
+                    (last, _) => last,
+                })
+                .collect();
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
-            // "permanent card": a card with a permanent type (CR 110.4a), not an
-            // object on the battlefield.
-            let last = match (last, &nf) {
-                (Filter::Permanent, Filter::Any) => Filter::PermanentCard,
-                (l, _) => l,
+            let joined = if group.len() == 1 {
+                group.into_iter().next().unwrap()
+            } else {
+                Filter::Or(group)
             };
-            heads.push(Filter::and(vec![last, nf]));
+            heads.push(Filter::and(vec![joined, nf]));
+            group_start = heads.len();
             s = nrest;
             // allow "creature card or artifact card"
             let t = s.trim_start();

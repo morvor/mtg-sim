@@ -87,7 +87,10 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
             if !mentions_x(&p) && !mentions_x(&t) {
                 return None;
             }
-            (subst_x(p, x), subst_x(t, x))
+            // CR 107.1b: a calculation yielding a negative X uses 0 instead ("+X/+X,
+            // where X is its power" on a creature with negative power).
+            let x = Value::Max(Box::new(x.clone()), Box::new(Value::c(0)));
+            (subst_x(p, &x), subst_x(t, &x))
         }
         None => {
             if mentions_x(&p) || mentions_x(&t) {
