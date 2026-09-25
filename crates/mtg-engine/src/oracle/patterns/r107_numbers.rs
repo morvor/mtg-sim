@@ -45,7 +45,16 @@ fn nonnegative(v: Value) -> Value {
 /// Replaces `Value::X` (and optionally `Value::Y` written as the variable `y`) in an
 /// effect.
 fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
-    let json = serde_json::to_value(e).ok()?;
+    substitute_x_in(e, x)
+}
+
+/// Replaces `Value::X` in any part of an ability (an effect, a target's number or
+/// division).
+fn substitute_x_in<T: serde::Serialize + serde::de::DeserializeOwned>(
+    t: &T,
+    x: &Value,
+) -> Option<T> {
+    let json = serde_json::to_value(t).ok()?;
     let xv = serde_json::to_value(x).ok()?;
     let out = subst(json, &serde_json::Value::String("X".into()), &xv);
     serde_json::from_value(out).ok()
@@ -80,8 +89,15 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
+    let first_target = b.targets.len();
     let e = crate::oracle::effects::parse_clause(clause, b)?;
-    substitute_x(&e, &nonnegative(v))
+    let x = nonnegative(v);
+    // "Return up to X target permanents ..., where X is ...": the defined X is also the
+    // number of targets (or the amount divided among them).
+    for i in first_target..b.targets.len() {
+        b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
+    }
+    substitute_x(&e, &x)
 }
 
 inventory::submit! { EffectPattern { name: "r107 where x is", priority: 70, parse: where_x_is } }

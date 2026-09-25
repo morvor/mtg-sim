@@ -222,6 +222,12 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay".
+    if l.starts_with("you may pay ") {
+        if let Some(e) = parse_simple(l, b) {
+            return Some(e);
+        }
+    }
     if let Some(r) = l.strip_prefix("you may ") {
         let e = parse_clause(r, b)?;
         return Some(Effect::May {
