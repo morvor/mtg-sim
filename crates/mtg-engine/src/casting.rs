@@ -998,7 +998,10 @@ impl Game {
         if who != p && !act.any_player {
             return false;
         }
-        if self.turn.priority != Some(p) && !act.is_mana_ability {
+        // CR 602.2, 605.3a: abilities are activated by a player with priority; mana
+        // abilities also while a mana payment is being made (casting, activating, or an
+        // effect asking for a payment).
+        if self.turn.priority != Some(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
         // Timing.
@@ -1181,6 +1184,15 @@ impl Game {
         act: &ActivatedAbility,
     ) -> Result<Option<ObjectId>, Illegal> {
         let src_chars = self.obj(src).chars.clone();
+        // CR 602.2a: an ability activated from a hidden zone reveals the card.
+        if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
+            self.emit(Event::Custom {
+                name: "revealed".into(),
+                player: Some(p),
+                obj: Some(src),
+                amount: 0,
+            });
+        }
         let mut ctx = Ctx::new(Some(src), p);
         ctx.ability_uid = a.uid;
         ctx.link = a.link;

@@ -920,7 +920,7 @@ pub fn apply_mod(
         }
         Modification::SetColors(cs) => c.colors = *cs,
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
-        Modification::AddAbility(a) => c.abilities.push(a.clone()),
+        Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         Modification::AddKeyword(k) => c.abilities.push(AbilityDef::new(
             AbilityKind::Keyword(k.clone()),
             k.kind.name(),
@@ -957,6 +957,32 @@ pub fn apply_mod(
             }
         }
     }
+}
+
+/// An ability an object acquires from another object. It's a distinct ability from
+/// identically worded abilities the object has or acquires from other objects, so
+/// restrictions on its use apply only to it as acquired from that object (CR 602.5c),
+/// and linked abilities acquired together are linked only to each other (CR 607.5).
+/// Derived abilities are cached so their identity is stable across recomputation.
+pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -> Ability {
+    use std::sync::{Mutex, OnceLock};
+    let Some(src) = from.filter(|s| *s != target) else {
+        return a.clone();
+    };
+    static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
+    let m = CACHE.get_or_init(Default::default);
+    let mut g = m.lock().unwrap();
+    g.entry((a.uid, src.0))
+        .or_insert_with(|| {
+            let link = if a.link == 0 {
+                0
+            } else {
+                // A link id distinct from those of printed abilities (small numbers).
+                0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x7fff) as u16
+            };
+            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+        })
+        .clone()
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
