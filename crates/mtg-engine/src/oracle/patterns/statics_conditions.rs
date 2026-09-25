@@ -245,13 +245,35 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
             PlayerFilter::GraveyardSize(cmp, Box::new(n)),
         ));
     }
-    // "there is a Lesson card in your graveyard"
+    // "there is a Lesson card in your graveyard", "there's a ...", "a Warrior card is in
+    // your graveyard", "an instant card and a sorcery card are in your graveyard".
     if let Some(r) = c
         .strip_prefix("there is a ")
         .or_else(|| c.strip_prefix("there is an "))
+        .or_else(|| c.strip_prefix("there's a "))
+        .or_else(|| c.strip_prefix("there's an "))
     {
         let f = graveyard_cards(r)?;
         return Some(Condition::Exists(f));
+    }
+    if let Some(body) = c
+        .strip_suffix(" is in your graveyard")
+        .or_else(|| c.strip_suffix(" are in your graveyard"))
+    {
+        let mut conds = Vec::new();
+        for part in body.split(" and ") {
+            let r = part
+                .strip_prefix("a ")
+                .or_else(|| part.strip_prefix("an "))?;
+            conds.push(Condition::Exists(graveyard_cards(&format!(
+                "{r} in your graveyard"
+            ))?));
+        }
+        return Some(if conds.len() == 1 {
+            conds.pop()?
+        } else {
+            Condition::And(conds)
+        });
     }
     // "there are N or more X in your graveyard" / "N or more X are in your graveyard"
     let (cmp, n, rest) = if let Some(r) = c.strip_prefix("there are ") {
@@ -448,6 +470,34 @@ fn control_condition(c: &str) -> Option<Condition> {
             ])));
         }
     }
+    // "no opponent controls a white or blue creature"
+    if let Some(r) = c.strip_prefix("no opponent controls ") {
+        let f = phrase(&article(r)?)?;
+        return Some(Condition::Not(Box::new(Condition::Exists(f.opp_controls()))));
+    }
+    // "you control another Merfolk or an Island"
+    if let Some(r) = c.strip_prefix("you control another ") {
+        let mut alts = Vec::new();
+        for (i, part) in r.split(" or ").enumerate() {
+            let part = if i == 0 {
+                part.to_string()
+            } else {
+                article(part)?
+            };
+            let f = phrase(&part)?;
+            alts.push(if i == 0 {
+                Filter::and(vec![f, Filter::Other])
+            } else {
+                f
+            });
+        }
+        let f = if alts.len() == 1 {
+            alts.pop()?
+        } else {
+            Filter::Or(alts)
+        };
+        return Some(Condition::Exists(f.you_control()));
+    }
     if let Some(r) = c.strip_prefix("your opponents control no ") {
         let f = phrase(r)?;
         return Some(Condition::Not(Box::new(Condition::Exists(f.opp_controls()))));
@@ -506,6 +556,12 @@ fn comparison_condition(c: &str) -> Option<Condition> {
                 ),
             )
         }
+        // CR 122.1f: a poisoned player has one or more poison counters.
+        "an opponent is poisoned" => Condition::Compare(
+            Value::Custom("max_opponent_counters:poison".into()),
+            Cmp::Ge,
+            Value::c(1),
+        ),
         "you have more cards in hand than each opponent" => Condition::Not(Box::new(
             Condition::PlayerMatches(
                 PlayerRef::EachOpponent,
@@ -514,6 +570,16 @@ fn comparison_condition(c: &str) -> Option<Condition> {
         )),
         _ => return None,
     })
+}
+
+/// "white is the most common color among all permanents or is tied for most common".
+fn most_common_color_condition(c: &str) -> Option<Condition> {
+    let color = end(c)
+        .strip_suffix(" is the most common color among all permanents or is tied for most common")?;
+    let color = Color::from_word(color)?;
+    Some(Condition::Custom(
+        format!("most_common_color:{}", color.letter()).into(),
+    ))
 }
 
 /// Turn history: "you gained life this turn", "you've drawn two or more cards this
@@ -618,8 +684,19 @@ fn stat_condition_sel(c: &str, it: Option<&Sel>) -> Option<(Condition, Sel)> {
         .then_some((Condition::Compare(v, cmp, n), sel))
 }
 
-/// Hand size: "you have no cards in hand" (hellbent).
+/// Hand size: "you have no cards in hand" (hellbent), "an opponent has no cards in
+/// hand".
 fn hand_condition(c: &str) -> Option<Condition> {
+    if let Some(r) = end(c).strip_prefix("an opponent has ") {
+        let (cmp, n, tail) = amount_cmp(r)?;
+        if end(tail) != "cards in hand" && end(tail) != "card in hand" {
+            return None;
+        }
+        return Some(Condition::PlayerMatches(
+            PlayerRef::EachOpponent,
+            PlayerFilter::HandSize(cmp, Box::new(n)),
+        ));
+    }
     let r = end(c).strip_prefix("you have ")?;
     let (cmp, n, tail) = amount_cmp(r)?;
     if end(tail) != "cards in hand" && end(tail) != "card in hand" {
@@ -640,6 +717,7 @@ fn referent_free_condition(c: &str) -> Option<Condition> {
         .or_else(|| hand_condition(c))
         .or_else(|| control_condition(c))
         .or_else(|| comparison_condition(c))
+        .or_else(|| most_common_color_condition(c))
         .or_else(|| history_condition(c))
         .or_else(|| stat_condition(c, None))
         .or_else(|| {

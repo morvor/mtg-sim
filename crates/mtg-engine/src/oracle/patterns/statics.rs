@@ -187,6 +187,12 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((f, ""));
         }
     }
+    // "named ~": the same name as this object (CR 201.2).
+    if let Some(r) = t.strip_prefix("named ~") {
+        if r.is_empty() || r.starts_with([' ', ',']) {
+            return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
+        }
+    }
     // "with toughness greater than its power" (each object compared with itself).
     if let Some(r) = t.strip_prefix("with toughness greater than its power") {
         if r.is_empty() || r.starts_with([' ', ',']) {
@@ -612,8 +618,19 @@ pub(crate) fn parse_amount(s: &str, it: Option<&Sel>) -> Option<Value> {
             return Some(n);
         }
     }
+    // "your devotion to green", "your devotion to black and red" (CR 700.5)
+    if let Some(r) = s.strip_prefix("your devotion to ") {
+        let mut set = ColorSet::NONE;
+        for w in r.split(" and ") {
+            set.insert(Color::from_word(w.trim())?);
+        }
+        return Some(Value::Devotion(set));
+    }
     match s {
         "your life total" => return Some(Value::LifeTotal(PlayerRef::You)),
+        "the number of cards you've drawn this turn" => {
+            return Some(Value::CardsDrawnThisTurn(PlayerRef::You))
+        }
         "the number of creatures that died this turn" => return Some(Value::CreaturesDiedThisTurn),
         _ => {}
     }
@@ -691,6 +708,12 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         }
         _ => {}
     }
+    // "creature you control and each creature card in your graveyard": a sum.
+    if let Some((a, b)) = s.split_once(" and each ") {
+        if let (Some(va), Some(vb)) = (parse_for_each(a, it), parse_for_each(b, it)) {
+            return Some(Value::Sum(vec![va, vb]));
+        }
+    }
     // "+1/+1 counter on it", "charge counters on ~", "counter on it".
     for (tail, sel) in [
         (" on ~", Some(Sel::This)),
@@ -699,9 +722,46 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         (" on equipped creature", Some(Sel::AttachedTo)),
     ] {
         if let Some(body) = s.strip_suffix(tail) {
-            let sel = sel?;
-            return Some(Value::CountersOn(Box::new(sel), counter_words(body)?));
+            // Not "creature with a +1/+1 counter on it" (a filter, below).
+            if let Some(kind) = counter_words(body) {
+                return Some(Value::CountersOn(Box::new(sel?), kind));
+            }
         }
+    }
+    // "poison counter your opponents have"
+    for tail in [" counter your opponents have", " counters your opponents have"] {
+        if let Some(kind) = s.strip_suffix(tail) {
+            if kind.is_empty() || kind.contains(' ') {
+                return None;
+            }
+            return Some(Value::Custom(format!("opponents_counters:{kind}").into()));
+        }
+    }
+    // "creature card in your opponents' graveyards"
+    for (tail, zone) in [
+        (" in your opponents' graveyards", ZoneKind::Graveyard),
+        (" your opponents own in exile", ZoneKind::Exile),
+    ] {
+        if let Some(body) = s.strip_suffix(tail) {
+            let (f, _) = whole_object_phrase(&union_nouns(body))?;
+            // Only kinds of cards ("creature card"), no other zone.
+            if filter_mentions(&f, &|x| {
+                matches!(x, Filter::InZone(_) | Filter::Spell | Filter::Permanent)
+            }) {
+                return None;
+            }
+            return Some(Value::Count(Filter::and(vec![
+                f,
+                Filter::InZone(zone),
+                Filter::OwnedBy(PlayerRel::Opponent),
+            ])));
+        }
+    }
+    if matches!(s, "card in your opponents' hands" | "cards in your opponents' hands") {
+        return Some(Value::Count(Filter::and(vec![
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::Opponent),
+        ])));
     }
     // "+1/+1 counters on creatures you control" (summed over the group).
     if let Some((body, group)) = s.split_once(" on ") {
@@ -1754,7 +1814,7 @@ fn parse_line(
 }
 
 /// Builds the abilities for a parsed line.
-fn build(body: Body, cond: Option<Condition>, text: &str) -> Vec<Ability> {
+fn build(body: Body, cond: Option<Condition>, zone: FunctionZone, text: &str) -> Vec<Ability> {
     let mut mods = Vec::new();
     let mut out = Vec::new();
     let mut restrictions = Vec::new();
@@ -1771,6 +1831,7 @@ fn build(body: Body, cond: Option<Condition>, text: &str) -> Vec<Ability> {
     let mk = |effect: StaticEffect| {
         let mut s = StaticAbility::new(effect);
         s.condition = cond.clone();
+        s.zone = zone;
         AbilityDef::new(AbilityKind::Static(s), text)
     };
     if !mods.is_empty() {
@@ -1791,6 +1852,18 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
         return None;
     }
     let (mut masked, quotes) = mask_quotes(end(l))?;
+    // "As long as ~ is in your graveyard [and C], ...": the ability functions only in
+    // the graveyard (CR 113.6).
+    let mut zone = FunctionZone::Battlefield;
+    if let Some(r) = masked.strip_prefix("as long as ~ is in your graveyard") {
+        let rest = if let Some(x) = r.strip_prefix(" and ") {
+            format!("as long as {x}")
+        } else {
+            r.strip_prefix(", ")?.to_string()
+        };
+        zone = FunctionZone::Graveyard;
+        masked = rest;
+    }
     // "... creature. It's still a land." (CR 205.1b)
     for (tail, repl) in [
         (". it's still a land", " that's still a land"),
@@ -1813,7 +1886,7 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
             if c2.is_some() || !same_subject(&body, &b2) {
                 return None;
             }
-            otherwise.extend(build(b2, Some(Condition::Not(Box::new(c))), text));
+            otherwise.extend(build(b2, Some(Condition::Not(Box::new(c))), zone, text));
             continue;
         }
         // More about the same object: "Enchanted creature is a Turtle with base power and
@@ -1827,9 +1900,44 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
         }
         body.outs.extend(b2.outs);
     }
-    let mut v = build(body, cond, text);
+    if zone != FunctionZone::Battlefield && body.subject.it.is_some() {
+        // Only abilities about other objects work from the graveyard.
+        return None;
+    }
+    let mut v = build(body, cond, zone, text);
     v.extend(otherwise);
     (!v.is_empty()).then_some(v)
+}
+
+/// "~ has flash as long as you control a Desert": the ability functions in every zone,
+/// so the card can be cast as though it had flash while the condition holds (CR 601.3d).
+fn conditional_flash(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("~ has flash as long as ")?;
+    let (cond, _) = parse_static_condition(r, Some(&Sel::This), ctx)?;
+    let mut st = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::AddKeyword(crate::keywords::Keyword::new(
+            KeywordKind::Flash,
+        ))],
+    });
+    st.condition = Some(cond);
+    st.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+/// [`conditional_flash`] for any card, instants and sorceries included.
+fn conditional_flash_block(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    conditional_flash(end(&lower), t, ctx)
+}
+
+inventory::submit! {
+    crate::oracle::patterns::AbilityPattern {
+        name: "statics: has flash as long as",
+        priority: 50,
+        parse: conditional_flash_block,
+    }
 }
 
 inventory::submit! {
