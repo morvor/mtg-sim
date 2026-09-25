@@ -134,6 +134,9 @@ pub trait KeywordRules: Sync + Send {
     ) {
     }
     fn day_night_changed(&self, g: &mut Game) {}
+    /// A player drew `card` (the `nth` card they drew this turn), as it's drawn: e.g.
+    /// "you may reveal this card as you draw it" (CR 121.9, 702.94a).
+    fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {}
     fn is_mutating(&self, g: &Game, spell: ObjectId) -> bool {
         false
     }
@@ -345,6 +348,15 @@ pub fn after_damage(g: &mut Game, source: ObjectId, target: Entity, amount: u32,
 pub fn day_night_changed(g: &mut Game) {
     for r in registry() {
         r.day_night_changed(g);
+    }
+}
+
+pub fn after_draw(g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
+    for r in registry() {
+        if !g.is_live(card) {
+            return;
+        }
+        r.after_draw(g, p, card, nth);
     }
 }
 

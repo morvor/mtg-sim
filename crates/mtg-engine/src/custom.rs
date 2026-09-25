@@ -214,6 +214,7 @@ pub fn custom_trigger(
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     match name {
         crate::kw::suspend::CAST_SUSPENDED => crate::kw::suspend::cast_suspended(g, ctx),
+        crate::kw::miracle::CAST_MIRACLE => crate::kw::miracle::cast_miracle(g, ctx),
         _ => {}
     }
 }

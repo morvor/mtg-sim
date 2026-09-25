@@ -596,3 +596,53 @@ fn excess_damage_triggers_check_damage_from_all_sources_together() {
     assert!(!t.on_battlefield(bears));
     assert_eq!(t.hand_size(P0), 1);
 }
+
+#[test]
+fn a_source_of_damage_may_be_chosen_among_permanents_spells_and_referred_objects() {
+    cr!("120.7");
+    let mut t = TestGame::new(2);
+    let cop = t.battlefield(P0, "Circle of Protection: Red");
+    // A red permanent that can't deal damage is still a legal choice.
+    let fervor = t.battlefield(P1, "Fervor");
+    let fanatic = t.battlefield(P1, "Mogg Fanatic");
+    let in_hand = t.hand(P1, "Shock");
+    let in_command = t.command(P1, "Goblin Guide");
+    // P1 sacrifices Mogg Fanatic: "It deals 1 damage to any target."
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P1, fanatic, 0, &[Entity::Player(P0)]).unwrap();
+    assert!(!t.on_battlefield(fanatic));
+    // P0 chooses the Fanatic, which is referred to by the ability on the stack even
+    // though it left the battlefield.
+    t.lands(P0, "Plains", 1);
+    t.answer_choose(P0, &[Entity::Object(fanatic)]);
+    t.activate(P0, cop, 0, &[]).unwrap();
+    t.resolve();
+    let cands = t
+        .asked()
+        .into_iter()
+        .rev()
+        .find_map(|(p, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } if p == P0 => {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .unwrap();
+    for e in [fanatic, fervor, in_command] {
+        assert!(
+            cands.contains(&Entity::Object(e)),
+            "{e:?} should be a choice"
+        );
+    }
+    assert!(!cands.contains(&Entity::Object(in_hand)));
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // A spell on the stack can be chosen: the Shock P1 casts.
+    t.lands(P1, "Mountain", 1);
+    let shock = t.cast(P1, in_hand).target(P0).go();
+    t.lands(P0, "Plains", 1);
+    t.answer_choose(P0, &[Entity::Object(shock)]);
+    t.activate(P0, cop, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+}

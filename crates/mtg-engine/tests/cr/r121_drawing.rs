@@ -473,3 +473,53 @@ fn draws_from_replacement_effects_happen_after_the_unreplaced_parts_of_the_event
     .collect();
     assert_eq!(order, vec!["damage", "draw", "draw"]);
 }
+
+#[test]
+fn a_player_looks_at_a_card_as_they_draw_it_before_choosing_to_reveal_it() {
+    cr!("121.9", "702.94a");
+    let mut t = TestGame::new(2);
+    // Thunderous Wrath: "~ deals 5 damage to any target. Miracle {R}".
+    t.library_top(P0, "Thunderous Wrath");
+    t.library_top(P0, "Island");
+    // The first card P0 draws this turn is the Island: no miracle. Then Thunderous Wrath
+    // is the second card drawn: no reveal either.
+    let log = spy(&mut t, P0, move |g, _p, d| match d {
+        mtg_engine::decision::Decision::YesNo { source, prompt } if prompt.contains("Reveal") => {
+            Some(format!(
+                "{:?} {:?}",
+                g.obj(source.unwrap()).zone,
+                g.obj(source.unwrap()).chars.name
+            ))
+        }
+        _ => None,
+    });
+    t.g.draw_cards(P0, 2);
+    assert!(probe_lines(&log).is_empty());
+    // Next turn it's the first card drawn: P0 is asked whether to reveal it while it's
+    // already in their hand, so they know what it is.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Thunderous Wrath");
+    let log = spy(&mut t, P0, move |g, _p, d| match d {
+        mtg_engine::decision::Decision::YesNo { source, prompt } if prompt.contains("Reveal") => {
+            Some(format!(
+                "{:?} {}",
+                g.obj(source.unwrap()).zone,
+                g.obj(source.unwrap()).chars.name
+            ))
+        }
+        _ => None,
+    });
+    t.answer_yes(P0, true); // reveal
+    t.answer_yes(P0, true); // cast it for its miracle cost
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.lands(P0, "Mountain", 1);
+    t.g.draw_cards(P0, 1);
+    assert_eq!(
+        probe_lines(&log),
+        vec![format!("{:?} Thunderous Wrath", Zone::Hand(P0))]
+    );
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+    assert!(t.in_graveyard(P0, "Thunderous Wrath"));
+}
