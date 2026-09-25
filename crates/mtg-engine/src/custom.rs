@@ -22,6 +22,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::attach::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "a battle you protect", "if an opponent protects it" (CR 310.9e).
+    if let Some(b) = crate::battle::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),

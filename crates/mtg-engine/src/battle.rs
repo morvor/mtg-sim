@@ -11,9 +11,28 @@ use crate::types::*;
 /// transformed without paying its mana cost" (CR 310.12b).
 pub const SIEGE_DEFEATED: &str = "siege defeated";
 
+/// `Filter::Custom` name: a battle the ability's controller protects ("a battle you
+/// protect", CR 310.9e).
+pub const PROTECTED_BY_YOU: &str = "protected_by_you";
+/// `Filter::Custom` name: a battle an opponent of the ability's controller protects ("if
+/// an opponent protects it", CR 310.9e).
+pub const PROTECTED_BY_OPPONENT: &str = "protected_by_opponent";
+
 /// The protector of a battle (stored as the battle's chosen player).
 pub fn protector(g: &Game, battle: ObjectId) -> Option<PlayerId> {
     g.obj(battle).choices.player
+}
+
+/// Filters about who protects a battle: the player who protects it is its protector
+/// (CR 310.9e). Returns `None` if `name` isn't one of them.
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    let wanted: fn(&Game, PlayerId, PlayerId) -> bool = match name {
+        PROTECTED_BY_YOU => |_, p, you| p == you,
+        PROTECTED_BY_OPPONENT => |g, p, you| g.are_opponents(p, you),
+        _ => return None,
+    };
+    let o = g.obj(id);
+    Some(o.is(CardType::Battle) && protector(g, id).is_some_and(|p| wanted(g, p, ctx.controller)))
 }
 
 /// The players who can be a battle's protector, determined by its battle type (CR 310.9a):
