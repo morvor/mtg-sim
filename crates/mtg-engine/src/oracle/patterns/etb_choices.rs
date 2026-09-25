@@ -168,7 +168,10 @@ fn entry(s: &str, ctx: &CompileContext) -> Option<Effect> {
     if s == "prepared" {
         return Some(Effect::EnterPrepared);
     }
-    if let Some(r) = s.strip_prefix("tapped with ") {
+    if let Some(r) = s
+        .strip_prefix("tapped with ")
+        .or_else(|| s.strip_prefix("tapped and with "))
+    {
         let c = counters(r, ctx)?;
         return Some(Effect::seq(vec![Effect::EnterTapped, c]));
     }
@@ -275,7 +278,16 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
             return Some(Value::CountersOn(Box::new(Sel::All(f)), Some(k.into())));
         }
     }
+    // "each other Zombie you control and each Zombie card in your graveyard"
+    if let Some((a, b)) = s.split_once(" and each ") {
+        let va = for_each_value(a, ctx)?;
+        let vb = for_each_value(b, ctx)?;
+        return Some(Value::Sum(vec![va, vb]));
+    }
     let fixed = [
+        ("mana spent to cast it", Value::ManaSpent),
+        ("mana spent to cast ~", Value::ManaSpent),
+        ("other spell cast this turn", Value::StormCount),
         (
             "creature that died under your control this turn",
             Value::Custom("creatures_you_controlled_died_this_turn".into()),
@@ -334,6 +346,17 @@ fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
             return None;
         }
         return Some(Value::GreatestPower(f));
+    }
+    // "the number of creature cards in all graveyards"
+    if let Some(r) = s
+        .strip_prefix("the number of ")
+        .and_then(|r| r.strip_suffix(" in all graveyards"))
+    {
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Value::Count(f.in_zone(ZoneKind::Graveyard)));
     }
     // "the number of other creatures on the battlefield"
     let s2 = s
@@ -723,6 +746,17 @@ fn more_conditions(c: &str) -> Option<Condition> {
             PlayerRef::EachPlayer,
             PlayerFilter::HandSize(cmp, Box::new(n)),
         ));
+    }
+    // "two or more colors of mana were spent to cast it"
+    if let Some(rest) = c
+        .strip_suffix(" or more colors of mana were spent to cast it")
+        .or_else(|| c.strip_suffix(" or more colors of mana were spent to cast ~"))
+    {
+        let (n, tail) = parse_number(rest)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some(Condition::Compare(Value::ColorsSpent, Cmp::Ge, n));
     }
     // "you've cast two or more spells this turn"
     if let Some(r) = c.strip_prefix("you've cast ") {

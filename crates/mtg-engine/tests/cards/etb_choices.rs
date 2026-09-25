@@ -672,3 +672,67 @@ fn anchor_word_abilities() {
     assert_eq!(t.life(P1), 20);
     assert!(t.in_hand(P0, "Grizzly Bears"));
 }
+
+// ---------------------------------------------------------------------------
+// More "enters with" amounts
+// ---------------------------------------------------------------------------
+
+#[test]
+fn counters_for_each_other_spell_cast_this_turn() {
+    cr!("614.1c", "601.2i");
+    assert_supported("Storm Entity");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 4);
+    let b1 = t.hand(P0, "Lightning Bolt");
+    let b2 = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b1).target(P1).go();
+    t.resolve();
+    t.cast(P0, b2).target(P1).go();
+    t.resolve();
+    let e = t.hand(P0, "Storm Entity");
+    t.cast(P0, e).go();
+    t.resolve();
+    // Two other spells were cast this turn (not counting itself).
+    assert_eq!(t.counters(e, "+1/+1"), 2);
+}
+
+#[test]
+fn enters_tapped_and_with_counters() {
+    cr!("614.1c");
+    assert_supported("Sphere of the Suns");
+    let mut t = TestGame::new(2);
+    let s = t.enter(P0, "Sphere of the Suns");
+    assert!(t.obj_now(s).tapped);
+    assert_eq!(t.counters(s, "charge"), 3);
+}
+
+#[test]
+fn counters_unless_two_colors_were_spent() {
+    cr!("614.1c", "601.2h");
+    assert_supported("Steel Exemplar");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 5);
+    let a = t.hand(P0, "Steel Exemplar");
+    t.cast(P0, a).go();
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 2);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Island", 2);
+    let a = t.hand(P0, "Steel Exemplar");
+    t.cast(P0, a).go();
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 0);
+}
+
+#[test]
+fn counters_equal_to_creature_cards_in_all_graveyards() {
+    cr!("614.1c");
+    assert_supported("Undergrowth Scavenger");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P1, "Llanowar Elves");
+    t.graveyard(P1, "Lightning Bolt");
+    let s = t.enter(P0, "Undergrowth Scavenger");
+    assert_eq!(t.counters(s, "+1/+1"), 2);
+}
