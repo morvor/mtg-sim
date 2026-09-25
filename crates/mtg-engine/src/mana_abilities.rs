@@ -721,6 +721,10 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if o.controller != p && !act.any_player {
                 continue;
             }
+            // "Its activated abilities can't be activated" covers mana abilities.
+            if g.activation_prohibited(p, o.id, true) {
+                continue;
+            }
             // Only plan with abilities whose costs are simple to pay automatically.
             let mut rank = 0u8;
             let mut ok = true;

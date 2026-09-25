@@ -639,6 +639,10 @@ pub mod vars {
     pub const REVEALED: Var = 2;
     /// First user-defined variable.
     pub const USER: Var = 10;
+    /// The object a static ability's continuous effect is being applied to, while its
+    /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
+    /// on it").
+    pub const AFFECTED: Var = 9;
 }
 
 /// Selects players and/or objects.
@@ -753,8 +757,17 @@ pub enum PlayerFilter {
     Life(Cmp, Box<Value>),
     /// Hand size comparisons.
     HandSize(Cmp, Box<Value>),
+    /// Graveyard size comparisons ("an opponent has eight or more cards in their
+    /// graveyard"), counting cards only (CR 108.2b).
+    GraveyardSize(Cmp, Box<Value>),
     /// The monarch.
     Monarch,
+    /// Controls a number of permanents matching the filter ("controls an Island",
+    /// "controls fewer creatures than you").
+    Controls(Box<Filter>, Cmp, Box<Value>),
+    /// Has a number of counters of a kind ("is poisoned": one or more poison counters,
+    /// CR 122.1f).
+    Counters(SmolStr, Cmp, Box<Value>),
     /// The defending player.
     Defending,
     /// The active player.
@@ -1382,6 +1395,17 @@ pub enum Modification {
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
+    /// Adds a keyword whose variable is defined by the effect ("~ has bushido X, where X
+    /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
+    /// becomes the keyword's N, and the value of {X} in its cost.
+    AddKeywordX(Keyword, Value),
+    /// Adds each keyword of these kinds, with all its variants and variables, that an
+    /// object matching the filter has ("... has flying. The same is true for first strike,
+    /// landwalk, protection, ...", CR 702.1c).
+    AddKeywordsOf {
+        kinds: Vec<KeywordKind>,
+        from: Filter,
+    },
     RemoveKeyword(KeywordKind),
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
@@ -1424,7 +1448,12 @@ impl Modification {
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor => Layer::L5Color,
-            AddAbility(_) | AddKeyword(_) | RemoveKeyword(_) | RemoveAllAbilities
+            AddAbility(_)
+            | AddKeyword(_)
+            | AddKeywordX(..)
+            | AddKeywordsOf { .. }
+            | RemoveKeyword(_)
+            | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
             SetPT(..) => Layer::L7bSet,
@@ -1662,11 +1691,21 @@ pub enum Restriction {
     CantBlock(Filter),
     /// "can't attack or block".
     CantAttackOrBlock(Filter),
-    /// "can't attack you or planeswalkers you control".
+    /// "can't attack you" (`planeswalkers`: "or planeswalkers you control"; `battles`:
+    /// battles the player protects), and "can't attack unless defending player ..."
+    /// (the player it would attack, CR 508.5).
     CantAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
+        planeswalkers: bool,
+        battles: bool,
     },
+    /// "is goaded" as a static ability: goaded by the source's controller for as long as
+    /// the effect applies (CR 701.15b).
+    Goaded(Filter),
+    /// "assigns combat damage equal to its toughness rather than its power" (modifies
+    /// CR 510.1a).
+    DamageByToughness(Filter),
     /// "attacks each combat if able".
     MustAttack(Filter),
     /// "blocks each combat if able".
@@ -1684,6 +1723,11 @@ pub enum Restriction {
         attacker: Filter,
         n: u32,
     },
+    /// "can't be blocked by more than one creature".
+    MaxBlockedBy {
+        attacker: Filter,
+        n: u32,
+    },
     /// "can block an additional creature each combat" / "any number".
     ExtraBlocks {
         blocker: Filter,
@@ -1694,6 +1738,8 @@ pub enum Restriction {
         blocker: Filter,
         attackers: Filter,
     },
+    /// "can attack as though it didn't have defender" (overrides CR 702.3b).
+    AttackDespiteDefender(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
@@ -1743,6 +1789,13 @@ pub enum Restriction {
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
+    /// "[Players] can't untap more than [n] [objects] during their untap steps"
+    /// (modifies CR 502.3).
+    MaxUntaps {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
     /// "can't gain life".
     CantGainLife(PlayerFilter),
     /// "can't lose life".
@@ -2555,6 +2608,12 @@ pub enum Effect {
     },
     /// Attach the source (or selection) to a target (CR 701.3).
     Attach {
+        what: Sel,
+        to: Sel,
+    },
+    /// Attach as though the permanent it's attached to were a creature ("equip
+    /// planeswalker", CR 702.6e).
+    AttachAsCreature {
         what: Sel,
         to: Sel,
     },

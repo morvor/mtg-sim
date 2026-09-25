@@ -810,6 +810,14 @@ impl Game {
                     }
                 }
             }
+            Effect::AttachAsCreature { what, to } => {
+                let objs = self.resolve_objects(what, ctx);
+                if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
+                    for o in objs {
+                        self.attach_as_creature(o, t);
+                    }
+                }
+            }
             Effect::Unattach { what } => {
                 for o in self.resolve_objects(what, ctx) {
                     self.unattach(o);
@@ -1515,6 +1523,20 @@ impl Game {
 
     /// Evaluates dynamic values in modifications once, at resolution (CR 608.2h, 611.2c).
     pub fn fix_mods(&self, mods: &[Modification], ctx: &Ctx) -> Vec<Modification> {
+        // "gain [keywords] until end of turn if [objects] have them" (CR 702.1c): which
+        // keywords is determined as the effect is created.
+        let mods: Vec<Modification> = mods
+            .iter()
+            .flat_map(|m| match m {
+                Modification::AddKeywordsOf { kinds, from } => {
+                    crate::layers::keywords_of(self, kinds, from, ctx)
+                        .into_iter()
+                        .map(Modification::AddKeyword)
+                        .collect()
+                }
+                other => vec![other.clone()],
+            })
+            .collect();
         mods.iter()
             .map(|m| match m {
                 Modification::ModifyPT(p, t) => Modification::ModifyPT(
@@ -1937,7 +1959,10 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeBlocked(f)
         | Restriction::DoesntUntap(f)
         | Restriction::CantBeCountered(f)
-        | Restriction::CantBeSacrificed(f) => Some(f),
+        | Restriction::CantBeSacrificed(f)
+        | Restriction::AttackDespiteDefender(f)
+        | Restriction::Goaded(f)
+        | Restriction::DamageByToughness(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         _ => None,
     }
