@@ -544,6 +544,21 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the sacrificed ") {
         return sacrificed_value(r);
     }
+    // "your devotion to black", "your devotion to black and red" (CR 700.5).
+    if let Some(r) = s.strip_prefix("your devotion to ") {
+        let color = |w: &str| Color::from_word(w.trim_end_matches(['.', ',']));
+        let (w, mut rest) = split_word(r);
+        let mut set = ColorSet::NONE;
+        set.insert(color(w)?);
+        if let Some((c2, r2)) = rest.strip_prefix("and ").and_then(|r2| {
+            let (w2, r3) = split_word(r2);
+            color(w2).map(|c| (c, r3))
+        }) {
+            set.insert(c2);
+            rest = r2;
+        }
+        return Some((Value::Devotion(set), rest.to_string()));
+    }
     if let Some(r) = s.strip_prefix("the greatest power among ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::GreatestPower(f), rest.to_string()));

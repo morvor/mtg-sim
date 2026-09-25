@@ -340,6 +340,10 @@ fn energy_or_ticket_cost(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
         let (count, rest) = match text.strip_prefix("x ") {
             // "Pay X {E}": X is announced as the ability is activated (CR 107.3a).
             Some(r) if r.trim() == sym => (Value::X, String::new()),
+            // "Pay six {E}": a number word and one symbol.
+            _ if parse_number(&text).is_some_and(|(_, r)| r.trim() == sym) => {
+                (parse_number(&text)?.0, String::new())
+            }
             _ => {
                 let (n, rest) = count_symbols(&text, sym)?;
                 (Value::c(n), rest)
