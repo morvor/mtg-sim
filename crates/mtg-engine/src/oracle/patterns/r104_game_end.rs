@@ -14,6 +14,96 @@ inventory::submit! { EffectPattern { name: "the game is a draw", priority: 100, 
 inventory::submit! { EffectPattern { name: "players can't win/lose the game this turn", priority: 100, parse: cant_win_lose_this_turn } }
 inventory::submit! { StaticPattern { name: "players can't win/lose the game", priority: 100, parse: cant_win_lose_static } }
 inventory::submit! { AbilityPattern { name: "when you remove the last counter", priority: 100, parse: last_counter_removed } }
+inventory::submit! { EffectPattern { name: "restart the game", priority: 100, parse: restart_game } }
+inventory::submit! { EffectPattern { name: "put those cards onto the battlefield", priority: 200, parse: put_those_onto_battlefield } }
+inventory::submit! { EffectPattern { name: "target player exiles a card from their hand", priority: 200, parse: player_exiles_from_hand } }
+
+/// "target player exiles a card from their hand": that player chooses the card (it's
+/// exiled by this ability's source, so linked to it, CR 607.2a).
+fn player_exiles_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = format!("{} ", end(l));
+    let (who, spec, rest) = parse_player(&l)?;
+    if rest.trim() != "exiles a card from their hand" {
+        return None;
+    }
+    let (chooser, owner) = match spec {
+        Some(spec) => {
+            let text = spec.text.clone();
+            let slot = b.add_target(spec, &text);
+            (PlayerRef::Target(slot), PlayerRel::Target(slot))
+        }
+        None if matches!(who, PlayerRef::You) => (PlayerRef::You, PlayerRel::You),
+        None => return None,
+    };
+    Some(Effect::Exile {
+        what: Sel::Choose {
+            chooser,
+            filter: Filter::and(vec![
+                Filter::Card,
+                Filter::InZone(ZoneKind::Hand),
+                Filter::OwnedBy(owner),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        face_down: false,
+        link: false,
+    })
+}
+
+/// "put those cards onto the battlefield under your control" (and "them", "that card",
+/// "it"): the objects the previous instruction referred to.
+fn put_those_onto_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ")?;
+    let r = ["those cards ", "them ", "that card ", "it "]
+        .into_iter()
+        .find_map(|p| r.strip_prefix(p))?;
+    let to = match r {
+        "onto the battlefield under your control" => Destination::battlefield().under_your_control(),
+        "onto the battlefield" => Destination::battlefield(),
+        _ => return None,
+    };
+    Some(Effect::Move {
+        what: b.it.clone(),
+        to,
+    })
+}
+
+/// "restart the game" and "restart the game, leaving in exile all [cards] exiled with ~"
+/// (CR 104.6, 727.5); "those cards" afterwards are the cards left in exile.
+fn restart_game(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("restart the game")?;
+    if r.is_empty() {
+        return Some(Effect::RestartGame { keep: None });
+    }
+    let r = r.strip_prefix(", leaving in exile all ")?;
+    // "exiled with ~", or with the card's first name (a planeswalker's name is also its
+    // subtype, so it isn't normalized to "~").
+    let first = b
+        .ctx
+        .card_name
+        .split(' ')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
+    let what = r
+        .strip_suffix(" exiled with ~")
+        .or_else(|| r.strip_suffix(format!(" exiled with {first}").as_str()))?;
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(what)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::RestartGame {
+        keep: Some(Sel::All(Filter::And(vec![
+            Filter::In(Box::new(Sel::Linked)),
+            Filter::InZone(ZoneKind::Exile),
+            f,
+        ]))),
+    })
+}
 
 /// "target player loses the game", "each player wins the game", "you win the game"
 /// (CR 104.2b, 104.3e).

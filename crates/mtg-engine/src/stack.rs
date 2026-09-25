@@ -757,6 +757,8 @@ impl Game {
             self.resolve_ability(top);
         }
         self.flush_events();
+        // CR 104.6, 727: the resolved effect restarted the game.
+        crate::restart::restart_if_requested(self);
     }
 
     /// Builds the resolution context for a stack object.

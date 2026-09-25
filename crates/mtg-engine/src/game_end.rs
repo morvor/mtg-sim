@@ -40,6 +40,9 @@ pub struct EndState {
     /// Forced priority passes in the current stretch of mandatory actions.
     #[serde(skip)]
     pub loop_len: u32,
+    /// A restart of the game requested by a resolving effect (CR 104.6, 727).
+    #[serde(skip)]
+    pub restart: Option<crate::restart::RestartRequest>,
 }
 
 impl Game {

@@ -18,7 +18,7 @@ pub type SavedCtx = Ctx;
 impl Game {
     /// Executes an effect.
     pub fn exec(&mut self, e: &Effect, ctx: &mut Ctx) {
-        if self.result.is_some() {
+        if self.result.is_some() || self.end.restart.is_some() {
             return;
         }
         if self.dirty {
@@ -33,8 +33,14 @@ impl Game {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
-                for x in v {
+                for (i, x) in v.iter().enumerate() {
                     self.exec(x, ctx);
+                    // CR 727.4: the rest of an effect that restarted the game happens as the
+                    // new game begins.
+                    if let Some(r) = self.end.restart.as_mut() {
+                        r.then.extend(v[i + 1..].iter().cloned());
+                        break;
+                    }
                     // CR 603.8: state triggers trigger as soon as the game state matches,
                     // even momentarily during a resolution.
                     self.check_state_triggers();
@@ -1076,6 +1082,9 @@ impl Game {
             }
             Effect::CreateEmblem { abilities } => {
                 crate::tokens::create_emblem(self, ctx.controller, abilities.clone(), ctx.source);
+            }
+            Effect::RestartGame { keep } => {
+                crate::restart::request_restart(self, keep.as_ref(), ctx);
             }
             Effect::KeepAndSacrificeRest { who, among, keep } => {
                 crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, ctx);

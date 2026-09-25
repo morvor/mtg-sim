@@ -167,6 +167,13 @@ impl Game {
     /// Shuffles libraries, determines the starting player, draws opening hands, runs
     /// mulligans, and begins the first turn.
     pub fn start(&mut self) {
+        let starting = self.pregame();
+        // CR 103.8: the starting player takes their first turn.
+        self.begin_turn(starting, false);
+    }
+
+    /// The procedure before the first turn (CR 103.1–103.7). Returns the starting player.
+    pub fn pregame(&mut self) -> PlayerId {
         // CR 103.1: determine the starting player. While starting the game, the starting
         // player is considered the active player (CR 101.4e).
         let starting = crate::start::choose_starting_player(self);
@@ -202,8 +209,7 @@ impl Game {
         // CR 103.7, 901.5: the starting plane.
         crate::planechase::set_starting_plane(self);
         self.events.clear();
-        // CR 103.8: the starting player takes their first turn.
-        self.begin_turn(starting, false);
+        starting
     }
 
     /// Runs the game until it ends. Returns the result.

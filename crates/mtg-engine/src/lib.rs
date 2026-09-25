@@ -62,6 +62,7 @@ pub mod planechase;
 pub mod prevention;
 pub mod replacement;
 pub mod resolve;
+pub mod restart;
 pub mod saga;
 pub mod sba;
 pub mod skip;

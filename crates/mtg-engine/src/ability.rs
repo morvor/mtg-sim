@@ -2669,6 +2669,14 @@ pub enum Effect {
         among: Filter,
         keep: Vec<Filter>,
     },
+    /// "Restart the game[, leaving in exile all ... exiled with ~]" (CR 104.6, 727): the
+    /// game ends and a new one begins with the resolving ability's controller as the
+    /// starting player. Cards selected by `keep` stay in exile, out of their owners' decks
+    /// (CR 727.5); they're "it" for the rest of the effect, which happens just before the
+    /// new game's first untap step (CR 727.4).
+    RestartGame {
+        keep: Option<Sel>,
+    },
     /// Win or lose the game.
     WinGame {
         who: PlayerRef,
