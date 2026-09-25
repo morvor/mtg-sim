@@ -390,7 +390,9 @@ impl Game {
                 let mut total = 0;
                 for t in self.resolve_sel(what, ctx) {
                     match kind {
-                        Some(kind) => total += self.remove_counters(t, kind, k),
+                        Some(kind) => {
+                            total += self.remove_counters_by(t, kind, k, Some(ctx.controller))
+                        }
                         None => {
                             let kinds: Vec<CounterKind> = match t {
                                 Entity::Object(o) => self.obj(o).counters.keys().cloned().collect(),
@@ -399,7 +401,7 @@ impl Game {
                                 }
                             };
                             for kk in kinds {
-                                total += self.remove_counters(t, &kk, k);
+                                total += self.remove_counters_by(t, &kk, k, Some(ctx.controller));
                             }
                         }
                     }

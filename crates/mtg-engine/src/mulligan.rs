@@ -36,14 +36,13 @@ pub fn run_mulligans(g: &mut Game) {
             if kept[p.idx()] {
                 continue;
             }
-            // CR 103.5b: actions a player may take any time they could mulligan.
-            could_mulligan_actions(g, p);
             // A player can take mulligans until their opening hand would be zero cards.
-            let hand_size = g.starting_hand_size(p);
-            if counted(g, taken[p.idx()]) >= hand_size {
+            if counted(g, taken[p.idx()]) >= g.starting_hand_size(p) {
                 kept[p.idx()] = true;
                 continue;
             }
+            // CR 103.5b: actions a player may take any time they could mulligan.
+            could_mulligan_actions(g, p);
             let ans = g.ask(
                 p,
                 Decision::Mulligan {

@@ -40,6 +40,9 @@ pub enum DeckProblem {
     OutsideColorIdentity { name: String },
     /// Commander: a Commander game doesn't use sideboards (CR 903.5e).
     SideboardNotAllowed,
+    /// Tournament rules bar the card from the format (CR 100.6): it's banned, or from a
+    /// set the format doesn't use.
+    NotLegalInFormat { name: String, format: String },
 }
 
 /// Pairs of card names treated as the same English name for deck construction
@@ -303,6 +306,38 @@ pub fn check_commander(
     }
     if !sideboard.is_empty() {
         problems.push(DeckProblem::SideboardNotAllowed);
+    }
+    problems
+}
+
+/// Checks a deck and sideboard against a tournament format's card restrictions
+/// (CR 100.6), which may bar some cards, including all cards from some older sets: every
+/// card must be legal in the format, and a card restricted in it may appear only once in
+/// the deck and sideboard combined. Nontraditional cards aren't part of the deck
+/// (CR 100.2d).
+pub fn check_format_legality(
+    deck: &[Arc<CardDef>],
+    sideboard: &[Arc<CardDef>],
+    format: &str,
+) -> Vec<DeckProblem> {
+    let names = NameEquivalence::default();
+    let mut problems = Vec::new();
+    for (name, (n, c)) in counts(
+        traditional(deck).into_iter().chain(traditional(sideboard)),
+        &names,
+    ) {
+        if !c.is_legal_in(format) {
+            problems.push(DeckProblem::NotLegalInFormat {
+                name: name.to_string(),
+                format: format.to_string(),
+            });
+        } else if c.is_restricted_in(format) && n > 1 {
+            problems.push(DeckProblem::TooManyCopies {
+                name: name.to_string(),
+                have: n,
+                max: 1,
+            });
+        }
     }
     problems
 }

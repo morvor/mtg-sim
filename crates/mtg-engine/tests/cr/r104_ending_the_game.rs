@@ -2,7 +2,8 @@
 //! limited range of influence option, and loops of mandatory actions.
 
 use crate::r100_common::*;
-use crate::r105_util::card_from_text;
+use crate::r105_util::{card_from_text, card_with, spell_ab};
+use mtg_engine::ability::*;
 use mtg_engine::game::{GameConfig, GameResult, Variant};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -210,9 +211,9 @@ fn an_effect_can_say_a_player_loses() {
 
 #[test]
 fn all_players_losing_simultaneously_is_a_draw() {
-    // Each player would win because their opponent left (CR 104.2a) at the same time as
-    // they lose, so they lose (CR 104.3f); everyone lost at once: a draw (CR 104.4a).
-    cr!("104.3f", "104.4", "104.4a");
+    // Both players lose at the same time: nobody is left to win (CR 104.2a), so the game
+    // is a draw.
+    cr!("104.4", "104.4a");
     ruling!(
         "Incite Rebellion",
         "If this causes all players to have 0 or less life, the game is a draw."
@@ -287,6 +288,63 @@ fn divine_intervention_needs_its_last_counter_removed() {
     t.resolve_all();
     assert_eq!(t.counters(di, "intervention"), 1);
     assert_eq!(t.g.result, None);
+}
+
+/// An instant controlled by `p`: "Remove an intervention counter from target permanent."
+fn counter_remover(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    let c = card_with(
+        "Counter Spin",
+        "{0}",
+        "Instant",
+        None,
+        vec![spell_ab(
+            vec![TargetSpec::object(Filter::Permanent, "target permanent")],
+            Effect::RemoveCounters {
+                what: Sel::Target(0),
+                kind: Some("intervention".into()),
+                n: Value::c(1),
+            },
+        )],
+    );
+    t.custom(p, c, Zone::Hand(p))
+}
+
+#[test]
+fn divine_intervention_triggers_only_when_its_controller_removes_the_last_counter() {
+    cr!("104.4c");
+    ruling!(
+        "Divine Intervention",
+        "Divine Intervention’s third ability triggers only if its controller removes the last intervention counter from it. It doesn’t matter how that happens."
+    );
+    // Another player's spell removes the last counter: it doesn't trigger (and never
+    // will).
+    let mut t = TestGame::new(2);
+    let di = t.battlefield(P0, "Divine Intervention");
+    t.g.objects[di.0 as usize]
+        .counters
+        .insert("intervention".into(), 1);
+    let spin = counter_remover(&mut t, P1);
+    t.cast(P1, spin).target(di).go();
+    t.resolve();
+    assert_eq!(t.counters(di, "intervention"), 0);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.g.result, None);
+    // Its controller's spell does: the game is a draw.
+    let mut t = TestGame::new(2);
+    let di = t.battlefield(P0, "Divine Intervention");
+    t.g.objects[di.0 as usize]
+        .counters
+        .insert("intervention".into(), 1);
+    let spin = counter_remover(&mut t, P0);
+    t.cast(P0, spin).target(di).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    // It isn't an intervening "if" clause: a counter put back doesn't stop it.
+    t.g.add_counters(Entity::Object(di), "intervention", 1, None);
+    t.resolve_all();
+    assert_eq!(t.g.result, Some(GameResult::Draw));
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +475,7 @@ fn emperor_game() -> TestGame {
 
 #[test]
 fn emperors_sit_in_the_middle_of_their_teams() {
-    cr!("104.3i");
+    cr!("809.2", "809.3a");
     let t = emperor_game();
     assert_eq!(t.g.emperor_of(P0), Some(P1));
     assert_eq!(t.g.emperor_of(P3), Some(P4()));
@@ -509,6 +567,26 @@ fn twenty_one_combat_damage_from_one_commander_loses() {
     assert_eq!(t.life(P1), 7);
     assert!(t.has_lost(P1));
     assert_eq!(t.g.result, win(&[P0]));
+}
+
+#[test]
+fn brawl_games_dont_use_the_commander_damage_rule() {
+    cr!("104.3j", "903.12h");
+    for brawl in [false, true] {
+        let mut t = TestGame::with_config(
+            2,
+            GameConfig {
+                variant: Variant::Commander,
+                brawl,
+                ..Default::default()
+            },
+        );
+        t.g.players[1]
+            .commander_damage
+            .insert("Isamaru, Hound of Konda".into(), 21);
+        t.settle();
+        assert_eq!(t.has_lost(P1), !brawl, "brawl: {brawl}");
+    }
 }
 
 // ---------------------------------------------------------------------------

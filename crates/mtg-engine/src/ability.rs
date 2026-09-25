@@ -2858,8 +2858,9 @@ pub enum Effect {
     /// "Each player chooses from among the permanents they control an artifact, a creature,
     /// an enchantment, and a land, then sacrifices the rest" (CR 101.4): each player, in
     /// APNAP order, chooses one permanent they control among `among` for each of `keep`
-    /// in the order given (CR 101.4c; a permanent is chosen only once), then all their
-    /// other permanents among `among` are sacrificed at the same time.
+    /// in the order given (CR 101.4c; a permanent with several of those types may be
+    /// chosen for each of them), then all their other permanents among `among` are
+    /// sacrificed at the same time.
     KeepAndSacrificeRest {
         who: PlayerRef,
         among: Filter,

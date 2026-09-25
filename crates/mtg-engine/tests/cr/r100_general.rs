@@ -183,9 +183,9 @@ fn casual_variants_use_specialized_dice() {
 fn constructed_sideboards_have_at_most_fifteen_cards_and_share_the_four_card_limit() {
     cr!("100.4a");
     let main = deck(&[("Grizzly Bears", 3), ("Forest", 57)]);
-    assert!(check_constructed_with(&main, &deck(&[("Hill Giant", 15)]), &Default::default())
-        .iter()
-        .all(|p| matches!(p, DeckProblem::TooManyCopies { .. })));
+    // Fifteen sideboard cards are fine.
+    let fifteen = deck(&[("Hill Giant", 4), ("Lightning Bolt", 4), ("Plains", 7)]);
+    assert!(check_constructed_with(&main, &fifteen, &Default::default()).is_empty());
     assert_eq!(
         check_constructed_with(&main, &deck(&[("Forest", 16)]), &Default::default()),
         vec![DeckProblem::SideboardTooLarge { have: 16, max: 15 }]
@@ -255,6 +255,41 @@ fn there_is_no_maximum_size_for_non_commander_decks() {
         &deck(&[("Grizzly Bears", 1)])
     )
     .is_empty());
+}
+
+#[test]
+fn tournament_rules_may_limit_the_use_of_some_cards() {
+    cr!("100.6");
+    let barred = |name: &str, format: &str| DeckProblem::NotLegalInFormat {
+        name: name.into(),
+        format: format.into(),
+    };
+    let d = deck(&[
+        ("Lightning Bolt", 4),
+        ("Ponder", 1),
+        ("Black Lotus", 1),
+        ("Mountain", 54),
+    ]);
+    // Modern bars Ponder (banned) and Black Lotus (from a set Modern doesn't use).
+    assert_eq!(
+        check_format_legality(&d, &[], "modern"),
+        vec![barred("Black Lotus", "modern"), barred("Ponder", "modern")]
+    );
+    // Legacy allows Ponder but bans Black Lotus.
+    assert_eq!(
+        check_format_legality(&d, &[], "legacy"),
+        vec![barred("Black Lotus", "legacy")]
+    );
+    // Vintage restricts Black Lotus to one copy, counting the sideboard.
+    assert!(check_format_legality(&d, &[], "vintage").is_empty());
+    assert_eq!(
+        check_format_legality(&d, &deck(&[("Black Lotus", 1)]), "vintage"),
+        vec![DeckProblem::TooManyCopies {
+            name: "Black Lotus".into(),
+            have: 2,
+            max: 1
+        }]
+    );
 }
 
 // ---------------------------------------------------------------------------

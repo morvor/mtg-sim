@@ -1108,11 +1108,14 @@ impl Game {
                     target: Entity::Object(o),
                     kind: k,
                     n,
+                    by,
                 },
             ) => {
                 if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
                     one(EventInfo {
                         object: Some(*o),
+                        // The player who removed them.
+                        player: *by,
                         amount: *n as i32,
                         ..Default::default()
                     })

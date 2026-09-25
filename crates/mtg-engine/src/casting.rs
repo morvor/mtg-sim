@@ -1912,8 +1912,12 @@ impl Game {
                 if *n > 0 {
                     self.add_counters(Entity::Object(s), counters::LOYALTY, *n as u32, Some(s));
                 } else if *n < 0
-                    && self.remove_counters(Entity::Object(s), counters::LOYALTY, (-*n) as u32)
-                        < (-*n) as u32
+                    && self.remove_counters_by(
+                        Entity::Object(s),
+                        counters::LOYALTY,
+                        (-*n) as u32,
+                        Some(p),
+                    ) < (-*n) as u32
                 {
                     return bad("not enough loyalty");
                 }
@@ -2038,7 +2042,7 @@ impl Game {
             CostPart::RemoveCounters { kind, count } => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                if self.remove_counters(Entity::Object(s), kind, n) < n {
+                if self.remove_counters_by(Entity::Object(s), kind, n, Some(p)) < n {
                     return bad("not enough counters");
                 }
             }
@@ -2057,7 +2061,7 @@ impl Game {
                         None => self.obj(o).counters.keys().cloned().collect(),
                     };
                     for k in kinds {
-                        let r = self.remove_counters(Entity::Object(o), &k, n);
+                        let r = self.remove_counters_by(Entity::Object(o), &k, n, Some(p));
                         n -= r;
                     }
                 }
@@ -2101,13 +2105,13 @@ impl Game {
             }
             CostPart::PayEnergy(v) => {
                 let n = self.eval_value(v, ctx).max(0) as u32;
-                if self.remove_counters(Entity::Player(p), counters::ENERGY, n) < n {
+                if self.remove_counters_by(Entity::Player(p), counters::ENERGY, n, Some(p)) < n {
                     return bad("not enough energy");
                 }
             }
             CostPart::PayPlayerCounters { kind, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                if self.remove_counters(Entity::Player(p), kind, n) < n {
+                if self.remove_counters_by(Entity::Player(p), kind, n, Some(p)) < n {
                     return bad("not enough counters");
                 }
             }

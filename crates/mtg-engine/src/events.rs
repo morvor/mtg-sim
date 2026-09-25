@@ -141,6 +141,9 @@ pub enum Event {
         target: Entity,
         kind: CounterKind,
         n: u32,
+        /// The player who removed them — the controller of the effect or the player paying
+        /// the cost — if a player did ("when you remove the last ... counter").
+        by: Option<PlayerId>,
     },
     Tapped {
         obj: ObjectId,

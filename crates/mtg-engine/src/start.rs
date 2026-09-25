@@ -400,4 +400,7 @@ fn apply_starting_player_effects(g: &mut Game) {
     g.log(|_| format!("{starting} is the starting player"));
     g.turn.starting_player = starting;
     g.turn.active = starting;
+    if g.uses_shared_team_turns() {
+        g.start.starting_team = Some(g.player(starting).team);
+    }
 }

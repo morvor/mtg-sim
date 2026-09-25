@@ -164,16 +164,21 @@ pub fn keep_and_sacrifice_rest(
             .into_iter()
             .filter(|o| g.obj(*o).controller == p && g.matches(*o, among, &pctx))
             .collect();
-        // CR 101.4c: the choices are made in the order specified.
+        // CR 101.4c: the choices are made in the order specified. A permanent with more
+        // than one of the listed types may be chosen for each of them.
         let mut kept: Vec<ObjectId> = Vec::new();
         for f in keep {
             let cands: Vec<ObjectId> = mine
                 .iter()
                 .copied()
-                .filter(|o| !kept.contains(o) && g.matches(*o, f, &pctx))
+                .filter(|o| g.matches(*o, f, &pctx))
                 .collect();
             let pick = g.ask_objects(p, ctx.source, "Choose a permanent to keep", cands, 1, 1);
-            kept.extend(pick);
+            for o in pick {
+                if !kept.contains(&o) {
+                    kept.push(o);
+                }
+            }
         }
         g.record_apnap_choice(p, kept.clone());
         sacrifice.extend(

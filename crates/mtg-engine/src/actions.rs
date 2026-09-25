@@ -1118,6 +1118,18 @@ impl Game {
 
     /// Removes up to `n` counters of a kind. Returns the number removed.
     pub fn remove_counters(&mut self, target: Entity, kind: &str, n: u32) -> u32 {
+        self.remove_counters_by(target, kind, n, None)
+    }
+
+    /// Removes up to `n` counters of a kind; `by` is the player removing them (the
+    /// controller of the effect, or the player paying a cost). Returns the number removed.
+    pub fn remove_counters_by(
+        &mut self,
+        target: Entity,
+        kind: &str,
+        n: u32,
+        by: Option<PlayerId>,
+    ) -> u32 {
         let have = match target {
             Entity::Object(o) => self.obj(o).counter(kind),
             Entity::Player(p) => self.player(p).counter(kind),
@@ -1147,6 +1159,7 @@ impl Game {
             target,
             kind: kind.into(),
             n: k,
+            by,
         });
         k
     }

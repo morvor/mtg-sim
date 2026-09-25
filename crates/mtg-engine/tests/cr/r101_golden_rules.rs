@@ -279,10 +279,13 @@ fn cards_chosen_in_a_hidden_zone_stay_face_down_as_theyre_chosen() {
 #[test]
 fn several_choices_at_once_are_made_in_the_order_specified() {
     // Cataclysm: "Each player chooses from among the permanents they control an artifact,
-    // a creature, an enchantment, and a land, then sacrifices the rest." The artifact is
-    // chosen first; an artifact creature chosen as the artifact can't also be the
-    // creature.
+    // a creature, an enchantment, and a land, then sacrifices the rest." Each player makes
+    // their four choices in that order, the active player first.
     cr!("101.4c", "101.4");
+    ruling!(
+        "Cataclysm",
+        "The current player makes their choices before the other player."
+    );
     let mut t = TestGame::new(2);
     let thopter = t.battlefield(P0, "Ornithopter");
     let bear = t.battlefield(P0, "Grizzly Bears");
@@ -293,10 +296,11 @@ fn several_choices_at_once_are_made_in_the_order_specified() {
     let island = t.battlefield(P1, "Island");
     t.answer_choose(P0, &[Entity::Object(thopter)]);
     t.answer_choose(P0, &[Entity::Object(bear)]);
+    t.answer_choose(P0, &[Entity::Object(anthem)]);
+    t.answer_choose(P0, &[Entity::Object(plains[2])]);
     let cata = t.hand(P0, "Cataclysm");
     t.cast(P0, cata).go();
     t.resolve();
-    // P0's choices: artifact among {Ornithopter}; creature among the others.
     let asked: Vec<(PlayerId, Vec<Entity>)> = t
         .asked()
         .into_iter()
@@ -305,18 +309,86 @@ fn several_choices_at_once_are_made_in_the_order_specified() {
             _ => None,
         })
         .collect();
-    assert_eq!(asked[0], (P0, vec![Entity::Object(thopter)]));
+    let objs = |v: &[ObjectId]| v.iter().map(|o| Entity::Object(*o)).collect::<Vec<_>>();
+    // P0's choices, in the order specified: an artifact, a creature, an enchantment, a
+    // land; then P1's (P1 has no artifact or enchantment to choose).
     assert_eq!(
-        asked[1],
-        (P0, vec![Entity::Object(bear), Entity::Object(elves)])
+        asked,
+        vec![
+            (P0, objs(&[thopter])),
+            (P0, objs(&[thopter, bear, elves])),
+            (P0, objs(&[anthem])),
+            (P0, objs(&plains)),
+            (P1, objs(&[drake])),
+            (P1, objs(&[island])),
+        ]
     );
-    assert!(asked[2..].iter().any(|(p, _)| *p == P1));
-    for kept in [thopter, bear, anthem, plains[0]] {
+    for kept in [thopter, bear, anthem, plains[2]] {
         assert!(t.on_battlefield(kept));
     }
     assert!(!t.on_battlefield(elves));
     assert_eq!(t.named_on_battlefield("Plains").len(), 1);
     assert!(t.on_battlefield(drake) && t.on_battlefield(island));
+}
+
+#[test]
+fn cataclysms_sacrifices_happen_at_the_same_time() {
+    cr!("101.4");
+    ruling!(
+        "Cataclysm",
+        "After both players make choices, all the sacrifices are done simultaneously."
+    );
+    // The active player's Blood Artist ("Whenever this creature or another creature
+    // dies, ...") is sacrificed with the nonactive player's Llanowar Elves: it sees both
+    // die. If the active player's sacrifices happened first, it would see only itself.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Blood Artist");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 4);
+    let drake = t.battlefield(P1, "Wind Drake");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.answer_choose(P0, &[Entity::Object(bear)]);
+    t.answer_choose(P1, &[Entity::Object(drake)]);
+    let cata = t.hand(P0, "Cataclysm");
+    t.cast(P0, cata).go();
+    t.g.resolve_top();
+    assert!(!t.on_battlefield(elves));
+    assert!(t.in_graveyard(P0, "Blood Artist"));
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+}
+
+#[test]
+fn a_permanent_with_several_listed_types_may_be_chosen_for_each() {
+    cr!("101.4c");
+    ruling!(
+        "Cataclysm",
+        "you can choose that same permanent for more than one of the choices if you want to"
+    );
+    ruling!(
+        "Cataclysm",
+        "If a permanent has none of the listed types (for example, a Planeswalker with no other types), it can’t be chosen."
+    );
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let jace = t.battlefield(P0, "Jace Beleren");
+    let plains: Vec<ObjectId> = t.lands(P0, "Plains", 4);
+    // Ornithopter as both the artifact and the creature.
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    let cata = t.hand(P0, "Cataclysm");
+    t.cast(P0, cata).go();
+    t.resolve();
+    // Only two permanents are kept; the planeswalker was never a candidate.
+    assert!(t.on_battlefield(thopter) && t.on_battlefield(plains[0]));
+    assert!(!t.on_battlefield(bear) && !t.on_battlefield(jace));
+    assert_eq!(t.g.permanents().filter(|o| o.controller == P0).count(), 2);
+    assert!(t.asked().iter().all(|(_, d)| match d {
+        Decision::ChooseEntities { candidates, .. } =>
+            !candidates.contains(&Entity::Object(jace)),
+        _ => true,
+    }));
 }
 
 #[test]

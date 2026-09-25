@@ -818,8 +818,6 @@ fn the_starting_player_takes_the_first_turn() {
 #[test]
 fn in_a_two_player_game_the_starting_player_skips_their_first_draw_step() {
     cr!("103.8a", "100.1", "100.1a");
-    let mut deck = fillers(40);
-    deck.push(card("Howling Mine"));
     let mut t = pregame(
         GameConfig {
             starting_player: Some(P0),

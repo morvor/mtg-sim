@@ -207,8 +207,12 @@ fn cant_win_lose_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
     ))
 }
 
-/// "When you remove the last [kind] counter from ~, [effect]." — triggers when counters of
-/// that kind are removed from it and none are left.
+/// "When you remove the last [kind] counter from ~, [effect]." and "When the last [kind]
+/// counter is removed from ~, [effect]." — triggers when counters of that kind are removed
+/// from it and none are left. "You remove" triggers only if the ability's controller
+/// removed it (as the controller of the effect or while paying a cost). Both are checked as
+/// the counters are removed, not again on resolution: they aren't intervening "if" clauses
+/// (CR 603.4).
 fn last_counter_removed(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
     let lower = t.to_lowercase();
@@ -227,27 +231,36 @@ fn last_counter_removed(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
                 format!("from {this}, ")
             };
             if let Some(r) = r.strip_prefix(&tail) {
-                rest = Some((kind.to_string(), r.to_string()));
+                rest = Some((kind.to_string(), r.to_string(), verb == "when you remove the last "));
             }
         }
     }
-    let (kind, effect) = rest?;
+    let (kind, effect, by_you) = rest?;
     if kind.contains(' ') {
         return None;
     }
     let body = parse_body(&effect, ctx)?;
     let kind: CounterKind = kind.as_str().into();
-    let mut ta = TriggeredAbility::new(
-        TriggerCond::CountersRemoved {
-            filter: Filter::Source,
-            kind: Some(kind.clone()),
+    let mut cond = vec![Condition::Compare(
+        Value::CountersOn(Box::new(Sel::This), Some(kind.clone())),
+        Cmp::Eq,
+        Value::Const(0),
+    )];
+    if by_you {
+        cond.push(Condition::PlayerMatches(
+            PlayerRef::TriggerPlayer,
+            PlayerFilter::You,
+        ));
+    }
+    let ta = TriggeredAbility::new(
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::CountersRemoved {
+                filter: Filter::Source,
+                kind: Some(kind),
+            }),
+            cond: Condition::And(cond),
         },
         body,
     );
-    ta.intervening_if = Some(Condition::Compare(
-        Value::CountersOn(Box::new(Sel::This), Some(kind)),
-        Cmp::Eq,
-        Value::Const(0),
-    ));
     Some(vec![AbilityDef::new(AbilityKind::Triggered(ta), t)])
 }

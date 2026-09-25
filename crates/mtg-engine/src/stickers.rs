@@ -446,7 +446,12 @@ pub fn put_from_sheets(
     let pick = g.ask_option(p, Some(obj), "Choose a sticker", labels);
     let (id, def) = options[pick.min(options.len() - 1)].clone();
     if !free && def.ticket_cost > 0 {
-        let paid = g.remove_counters(Entity::Player(owner), counters::TICKET, def.ticket_cost);
+        let paid = g.remove_counters_by(
+            Entity::Player(owner),
+            counters::TICKET,
+            def.ticket_cost,
+            Some(owner),
+        );
         if paid < def.ticket_cost {
             return false;
         }

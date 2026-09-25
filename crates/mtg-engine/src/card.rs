@@ -109,7 +109,10 @@ pub struct CardDef {
     pub produced_mana: Vec<ManaType>,
     /// Names of related cards (meld partner, tokens it makes).
     pub related: Vec<(String, String)>,
+    /// Formats in which the card is legal or restricted.
     pub legal_formats: Vec<String>,
+    /// Formats in which the card is restricted to one copy (tournament rules, CR 100.6).
+    pub restricted_formats: Vec<String>,
     /// Attraction lights, for attraction cards (CR 717).
     pub attraction_lights: Vec<u32>,
 }
@@ -159,6 +162,11 @@ impl CardDef {
 
     pub fn is_legal_in(&self, format: &str) -> bool {
         self.legal_formats.iter().any(|f| f == format)
+    }
+
+    /// Whether the card is restricted to one copy in a format (CR 100.6).
+    pub fn is_restricted_in(&self, format: &str) -> bool {
+        self.restricted_formats.iter().any(|f| f == format)
     }
 
     /// Builds a card definition from a Scryfall card, compiling its oracle text.
@@ -268,6 +276,12 @@ impl CardDef {
                 .filter(|(_, v)| *v == "legal" || *v == "restricted")
                 .map(|(k, _)| k.clone())
                 .collect(),
+            restricted_formats: c
+                .legalities
+                .iter()
+                .filter(|(_, v)| *v == "restricted")
+                .map(|(k, _)| k.clone())
+                .collect(),
             attraction_lights: c.attraction_lights.clone().unwrap_or_default(),
         }
     }
@@ -288,6 +302,7 @@ impl CardDef {
             produced_mana: vec![],
             related: vec![],
             legal_formats: vec![],
+            restricted_formats: vec![],
             attraction_lights: vec![],
         }
     }
