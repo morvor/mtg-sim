@@ -276,3 +276,50 @@ fn enchanted_creatures_controller_cant_cast_creature_spells() {
     t.set_step(P0, Step::PrecombatMain);
     assert!(t.cast(P0, mine).try_go().is_ok());
 }
+
+#[test]
+fn opponents_can_cast_spells_only_at_sorcery_speed() {
+    cr!("307.1", "101.2");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Teferi, Time Raveler");
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let shock = t.hand(P1, "Shock");
+    // During P0's turn P1 can't cast the instant.
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.turn.priority = Some(P1);
+    assert!(t.cast(P1, bolt).target(P0).try_go().is_err());
+    t.clear_answers();
+    // In P1's own main phase with an empty stack it can.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(t.cast(P1, shock).target(P0).try_go().is_ok());
+}
+
+#[test]
+fn players_cant_draw_cards() {
+    cr!("121.1", "101.2");
+    ruling!(
+        "Maralen of the Mornsong",
+        "no player can lose the game due to being instructed to draw a card with an empty library"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Maralen of the Mornsong");
+    t.library_top(P1, "Island");
+    let before = t.hand_size(P1);
+    t.g.draw_cards(P1, 2);
+    t.settle();
+    assert_eq!(t.hand_size(P1), before);
+    // Drawing from an empty library doesn't happen either.
+    let lib: Vec<_> = t.g.player(P0).library.clone();
+    for c in lib {
+        t.g.move_object(
+            c,
+            mtg_engine::object::Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        );
+    }
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(!t.has_lost(P0));
+}

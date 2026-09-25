@@ -2564,6 +2564,12 @@ fn parse_player_body(s: &str) -> Option<Body> {
         "can't draw more than one card each turn" => {
             outs.push(Out::Restr(Restriction::MaxDrawsPerTurn(who.clone(), 1)))
         }
+        "can't draw cards" => outs.push(Out::Restr(Restriction::MaxDrawsPerTurn(who.clone(), 0))),
+        // CR 307.1 timing for all their spells.
+        "can cast spells only any time they could cast a sorcery"
+        | "can cast spells only any time you could cast a sorcery" => {
+            outs.push(Out::Restr(Restriction::SorcerySpeedOnly(who.clone())))
+        }
         // "can't untap more than one land during their untap steps" (CR 502.3)
         _ if rest.starts_with("can't untap more than ") => {
             let r = rest.strip_prefix("can't untap more than ")?;
