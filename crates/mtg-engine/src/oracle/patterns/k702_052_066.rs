@@ -2,8 +2,33 @@
 //! doesn't handle, and phrases that go with them.
 
 use crate::ability::*;
-use crate::oracle::patterns::ConditionPattern;
+use crate::oracle::effects::parse_trigger_body;
+use crate::oracle::patterns::{AbilityPattern, ConditionPattern};
+use crate::oracle::CompileContext;
 use crate::types::counters;
+
+/// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
+/// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
+/// looks back in time (CR 603.10a). It triggers however the card gets there.
+fn put_into_hand_from_graveyard(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let rest = lower.strip_prefix("when ~ is put into your hand from your graveyard, ")?;
+    let eff = &t[t.len() - rest.len()..];
+    let body = parse_trigger_body(eff, ctx, Sel::TriggerObject, PlayerRef::You)?;
+    let mut tr = TriggeredAbility::new(
+        TriggerCond::ZoneChange {
+            filter: Filter::Source,
+            from: Some(ZoneKind::Graveyard),
+            to: Some(ZoneKind::Hand),
+        },
+        body,
+    );
+    tr.zone = FunctionZone::Graveyard;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "when ~ is put into your hand from your graveyard", priority: 100, parse: put_into_hand_from_graveyard } }
 
 /// "it had no time counters on it" (vanishing creatures' "When ~ dies, if it had no time
 /// counters on it, ..."): the permanent as it last existed on the battlefield (the dies
