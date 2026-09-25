@@ -331,6 +331,14 @@ fn planeswalker_no_longer_controlled_by_a_defending_player_cant_be_attacked_by_e
     t.g.recompute();
     let a = enter_with(&mut t, P0, vanilla("A", 1, 1), Some(Entity::Object(jace)), None);
     assert!(t.on_battlefield(a) && !t.g.is_attacking(a));
+    // A battle that's no longer protected by a defending player.
+    let battle = t.battlefield(P0, "Invasion of Azgol");
+    set_protector(&mut t, battle, P1);
+    let b = enter_with(&mut t, P0, vanilla("B", 1, 1), Some(Entity::Object(battle)), None);
+    assert!(t.g.is_attacking(b));
+    set_protector(&mut t, battle, P0);
+    let c = enter_with(&mut t, P0, vanilla("C", 1, 1), Some(Entity::Object(battle)), None);
+    assert!(t.on_battlefield(c) && !t.g.is_attacking(c));
 }
 
 #[test]
@@ -444,6 +452,19 @@ fn effect_cant_make_a_battle_a_blocking_creature() {
     // ...but works for an ordinary creature.
     assert!(mtg_engine::combat::block_by_effect(&mut t.g, normal, bears));
     assert!(t.g.is_blocking(normal));
+
+    // "It's attacking" does nothing for a battle either.
+    let mut t = TestGame::new(2);
+    let odd = bf(
+        &mut t,
+        P0,
+        custom_with("Odd Siege", "Battle Creature — Siege", Some((3, 3)), vec![]),
+    );
+    let normal = t.battlefield(P0, "Hill Giant");
+    to_combat(&mut t, P0);
+    assert!(!mtg_engine::combat::make_attacking(&mut t.g, odd, Entity::Player(P1)));
+    assert!(!t.g.is_attacking(odd));
+    assert!(mtg_engine::combat::make_attacking(&mut t.g, normal, Entity::Player(P1)));
 }
 
 #[test]

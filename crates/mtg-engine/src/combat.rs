@@ -1390,10 +1390,28 @@ pub fn best_blocks(
         })
         .collect();
     let mut best = (obeyed_block_requirements(reqs, &[]), Vec::new());
+    if reqs.is_empty() {
+        // Nothing to maximize: not blocking is always legal.
+        return best;
+    }
     let space: f64 = choices.iter().map(|(_, s)| (s.len() + 1) as f64).product();
     if space <= 100_000.0 {
+        // Requirements specific to blockers from index i on (for pruning).
+        let mut suffix = vec![0u32; choices.len() + 1];
+        for i in (0..choices.len()).rev() {
+            let b = choices[i].0;
+            let n = reqs
+                .iter()
+                .filter(|r| {
+                    matches!(r, BlockRequirement::Blocks(x) | BlockRequirement::BlocksAttacker(x, _) if *x == b)
+                })
+                .count() as u32;
+            suffix[i] = suffix[i + 1] + n;
+        }
         let mut cur = Vec::new();
-        block_dfs(g, &rules, options, &choices, reqs, 0, &mut cur, &mut best);
+        block_dfs(
+            g, &rules, options, &choices, reqs, &suffix, 0, &mut cur, &mut best,
+        );
     } else {
         // Too many combinations: each creature with a requirement blocks a single attacker.
         let mut decl = Vec::new();
@@ -1432,26 +1450,33 @@ fn block_dfs(
     options: &[(ObjectId, Vec<ObjectId>)],
     choices: &[(ObjectId, Vec<Vec<ObjectId>>)],
     reqs: &[BlockRequirement],
+    suffix: &[u32],
     i: usize,
     cur: &mut Vec<(ObjectId, ObjectId)>,
     best: &mut (u32, Vec<(ObjectId, ObjectId)>),
 ) {
+    let now = obeyed_block_requirements(reqs, cur);
     if i == choices.len() {
-        let n = obeyed_block_requirements(reqs, cur);
-        if n > best.0 && block_restrictions_ok(g, rules, options, cur) {
-            *best = (n, cur.clone());
+        if now > best.0 && block_restrictions_ok(g, rules, options, cur) {
+            *best = (now, cur.clone());
         }
         return;
     }
-    if best.0 as usize == reqs.len() && !reqs.is_empty() {
+    // Upper bound: blocker-specific requirements of the remaining blockers, plus
+    // "must be blocked" requirements not yet obeyed.
+    let open_attacker_reqs = reqs
+        .iter()
+        .filter(|r| matches!(r, BlockRequirement::AttackerBlocked(_)) && !r.obeyed(cur))
+        .count() as u32;
+    if now + suffix[i] + open_attacker_reqs <= best.0 {
         return;
     }
-    block_dfs(g, rules, options, choices, reqs, i + 1, cur, best);
+    block_dfs(g, rules, options, choices, reqs, suffix, i + 1, cur, best);
     let b = choices[i].0;
     for set in &choices[i].1 {
         let len = cur.len();
         cur.extend(set.iter().map(|a| (b, *a)));
-        block_dfs(g, rules, options, choices, reqs, i + 1, cur, best);
+        block_dfs(g, rules, options, choices, reqs, suffix, i + 1, cur, best);
         cur.truncate(len);
     }
 }
@@ -2057,6 +2082,37 @@ pub fn put_onto_battlefield_blocking(g: &mut Game, id: ObjectId, attacker: Objec
         return;
     }
     add_block(g, id, attacker, true);
+}
+
+/// Chooses which attacking creature a creature entering the battlefield blocking will block
+/// when the effect doesn't say (CR 509.4): its controller chooses among creatures attacking
+/// them, a planeswalker they control, or a battle they protect.
+pub fn choose_attacker_to_block(g: &mut Game, controller: PlayerId) -> Option<ObjectId> {
+    let cands: Vec<ObjectId> = g
+        .attackers()
+        .into_iter()
+        .filter(|a| {
+            g.combat
+                .as_ref()
+                .and_then(|c| c.defending_player_of(g, *a))
+                .is_some_and(|dp| {
+                    dp == controller || (shared_team_turns(g) && !g.are_opponents(dp, controller))
+                })
+        })
+        .collect();
+    if cands.len() <= 1 {
+        return cands.first().copied();
+    }
+    g.ask_objects(
+        controller,
+        None,
+        "Choose the attacking creature it blocks",
+        cands,
+        1,
+        1,
+    )
+    .first()
+    .copied()
 }
 
 /// Makes an existing creature block `attacker` because an effect says so (CR 509.3a–b,

@@ -287,3 +287,39 @@ fn creature_entering_blocking_isnt_subject_to_block_restrictions_or_requirements
     assert_eq!(t.life(P1), 20);
     assert!(!t.on_battlefield(g));
 }
+
+#[test]
+fn controller_chooses_what_a_creature_entering_blocking_blocks() {
+    cr!("509.4");
+    let mut t = TestGame::new(3);
+    let a1 = t.battlefield(P0, "Grizzly Bears");
+    let a2 = t.battlefield(P0, "Hill Giant");
+    let a3 = t.battlefield(P0, "Craw Wurm");
+    declare(
+        &mut t,
+        &[
+            (a1, Entity::Player(P1)),
+            (a2, Entity::Player(P1)),
+            (a3, Entity::Player(P2)),
+        ],
+    );
+    go_to(&mut t, Step::DeclareBlockers);
+    // P1 chooses among the creatures attacking P1 (not the one attacking P2).
+    t.answer_choose(P1, &[Entity::Object(a2)]);
+    let chosen = mtg_engine::combat::choose_attacker_to_block(&mut t.g, P1).unwrap();
+    assert_eq!(chosen, a2);
+    let asked = t.asked();
+    let cands = asked
+        .iter()
+        .rev()
+        .find_map(|(p, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } if *p == P1 => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(cands, vec![Entity::Object(a1), Entity::Object(a2)]);
+    let late = enter_with(&mut t, P1, vanilla("Late Guard", 1, 4), None, Some(chosen));
+    assert_eq!(t.g.combat.as_ref().unwrap().blocking(late), vec![a2]);
+}
