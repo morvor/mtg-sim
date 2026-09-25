@@ -327,6 +327,47 @@ fn enters_tapped_with_charge_counters() {
     assert_eq!(t.counters(v, "charge"), 2);
 }
 
+#[test]
+fn counters_for_each_card_counted_as_it_enters() {
+    cr!("614.1c", "614.12");
+    ruling!(
+        "Golgari Grave-Troll",
+        "If you return Golgari Grave-Troll from your graveyard directly to the battlefield, its first ability counts itself"
+    );
+    assert_supported("Golgari Grave-Troll");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Llanowar Elves");
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P1, "Grizzly Bears");
+    let troll = t.graveyard(P0, "Golgari Grave-Troll");
+    let new =
+        t.g.move_object(
+            troll,
+            object::Zone::Battlefield,
+            events::MoveCause::Effect,
+            Some(P0),
+        )
+        .unwrap();
+    // Two creature cards plus itself; not the sorcery, not the opponent's card.
+    assert_eq!(t.g.obj(new).counter("+1/+1"), 3);
+}
+
+#[test]
+fn x_counters_computed_as_it_enters() {
+    cr!("614.1c", "608.2h");
+    ruling!("Stag Beetle", "The value of X is calculated once");
+    assert_supported("Stag Beetle");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Llanowar Elves");
+    let b = t.enter(P0, "Stag Beetle");
+    assert_eq!(t.counters(b, "+1/+1"), 2);
+    // Later creatures don't change it.
+    t.battlefield(P1, "Grizzly Bears");
+    assert_eq!(t.counters(b, "+1/+1"), 2);
+}
+
 // ---------------------------------------------------------------------------
 // "As this enters, choose a color" and "the chosen color"
 // ---------------------------------------------------------------------------
