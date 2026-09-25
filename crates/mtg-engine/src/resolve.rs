@@ -691,6 +691,19 @@ impl Game {
                     }
                 }
             }
+            Effect::OfferSpecialAction {
+                def,
+                duration,
+                repeatable,
+            } => {
+                crate::special_actions::offer(
+                    self,
+                    (**def).clone(),
+                    ctx,
+                    duration.clone(),
+                    *repeatable,
+                );
+            }
             Effect::ChangeTargets { what, who, how, to } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let forced = match to {

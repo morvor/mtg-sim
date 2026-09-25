@@ -940,6 +940,7 @@ impl Game {
                 }
             }
         }
+        crate::special_actions::apply_ignoring(self, &mut st.restrictions);
         self.statics = st;
     }
 

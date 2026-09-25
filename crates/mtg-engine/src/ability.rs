@@ -806,6 +806,28 @@ pub enum TargetsFilter {
     },
 }
 
+/// A special action granted by a static ability (CR 116.2d, 116.2e) or by an effect
+/// (CR 116.2c).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpecialActionDef {
+    /// Who may take it (relative to the source's controller).
+    pub who: PlayerFilter,
+    /// What taking it costs.
+    pub cost: Cost,
+    pub action: SpecialActionEffect,
+}
+
+/// What a special action does.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SpecialActionEffect {
+    /// An effect, carried out immediately without using the stack.
+    Effect(Effect),
+    /// "For that player to ignore this effect until end of turn" (CR 116.2d): the source's
+    /// other static abilities don't apply to that player (or to objects they control)
+    /// until end of turn.
+    IgnoreSourceEffects,
+}
+
 /// How an effect changes the targets of a spell or ability (CR 115.7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TargetChange {
@@ -1817,6 +1839,10 @@ pub enum StaticEffect {
         trigger: TriggerCond,
         body: Body,
     },
+    /// A special action players may take any time they have priority (CR 116.2d, 116.2e):
+    /// "You may discard this card any time you could cast an instant", "Any player may pay
+    /// {2} for that player to ignore this effect until end of turn".
+    SpecialAction(SpecialActionDef),
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."
@@ -2412,6 +2438,14 @@ pub enum Effect {
         what: Sel,
         count: Value,
         new_targets: bool,
+    },
+    /// "Until end of turn, you may pay {1} any time you could cast an instant. If you do,
+    /// ..." (CR 116.2c): lets the players take a special action later, while `duration`
+    /// lasts. `repeatable`: whether it can be taken more than once.
+    OfferSpecialAction {
+        def: Box<SpecialActionDef>,
+        duration: Duration,
+        repeatable: bool,
     },
     /// "[Player] may change the target(s) of / choose new targets for [spell or ability]"
     /// (CR 115.7). With `to`, the new target must be that object or player ("change the

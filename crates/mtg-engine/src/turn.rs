@@ -705,6 +705,7 @@ impl Game {
             }
         }
         // CR 514.2: remove damage; end "until end of turn" effects.
+        crate::special_actions::end_of_turn(self);
         for id in self.battlefield.clone() {
             let o = &mut self.objects[id.0 as usize];
             o.damage = 0;

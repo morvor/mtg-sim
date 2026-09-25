@@ -459,6 +459,8 @@ pub struct Game {
     pub carried_effects: Vec<u32>,
     /// The continuous effects that are stickers on objects (CR 123).
     pub stickers: Vec<u32>,
+    /// Special actions allowed by effects and effects being ignored (CR 116.2c, 116.2d).
+    pub special: crate::special_actions::SpecialState,
 }
 
 impl Game {
@@ -541,6 +543,7 @@ impl Game {
             entering: vec![],
             carried_effects: vec![],
             stickers: vec![],
+            special: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
