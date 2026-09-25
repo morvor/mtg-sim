@@ -527,9 +527,90 @@ pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
     g.zones.may_look = live;
 }
 
+// ---------------------------------------------------------------------------
+// The stack (CR 405.3)
+// ---------------------------------------------------------------------------
+
+/// `Effect::Custom`: each player other than the controller of the spell that triggered
+/// the ability copies that spell ("each other player copies that spell").
+pub const EACH_OTHER_PLAYER_COPIES: &str = "zones:each other player copies that spell";
+/// As [`EACH_OTHER_PLAYER_COPIES`], and "each of those players may choose new targets for
+/// their copy".
+pub const EACH_OTHER_PLAYER_COPIES_NEW_TARGETS: &str =
+    "zones:each other player copies that spell with new targets";
+
+/// CR 405.3: objects an effect puts onto the stack at the same time — the ids of the last
+/// objects put on top of the stack — are ordered with the active player's lowest, then
+/// each other player's in APNAP order; a player with more than one of them chooses their
+/// relative order.
+pub fn order_simultaneous_stack_objects(g: &mut Game, ids: &[ObjectId]) {
+    if ids.len() < 2 {
+        return;
+    }
+    let n = g.stack.len();
+    let k = ids.len();
+    if n < k || g.stack[n - k..].iter().any(|x| !ids.contains(x)) {
+        return;
+    }
+    let mut ordered: Vec<ObjectId> = Vec::with_capacity(k);
+    for p in g.apnap() {
+        let mine: Vec<ObjectId> = g.stack[n - k..]
+            .iter()
+            .copied()
+            .filter(|id| g.obj(*id).controller == p)
+            .collect();
+        let names = mine.iter().map(|id| g.describe(*id)).collect();
+        let order = g.ask_order(
+            p,
+            "Order your objects put onto the stack at the same time (lowest first)",
+            names,
+        );
+        ordered.extend(order.into_iter().map(|i| mine[i]));
+    }
+    if ordered.len() == k {
+        g.stack.truncate(n - k);
+        g.stack.extend(ordered);
+    }
+}
+
+/// "Each other player copies that spell. [Each of those players may choose new targets for
+/// their copy.]" The copies are put onto the stack at the same time (CR 405.3).
+fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
+    let spells: Vec<ObjectId> = g
+        .eval_sel(&Sel::TriggerSpell, ctx)
+        .into_iter()
+        .filter_map(|e| e.object())
+        .collect();
+    for spell in spells {
+        let caster = g.obj(spell).controller;
+        let players: Vec<PlayerId> = g
+            .apnap()
+            .into_iter()
+            .filter(|p| *p != caster && g.player(*p).in_game())
+            .collect();
+        let copies: Vec<ObjectId> = players
+            .into_iter()
+            .filter_map(|p| crate::copy::copy_spell(g, spell, p, false))
+            .collect();
+        order_simultaneous_stack_objects(g, &copies);
+        if new_targets {
+            for c in &copies {
+                let p = g.obj(*c).controller;
+                if g.ask_yes_no(p, Some(*c), "Choose new targets for the copy?", false) {
+                    crate::target_rules::change_targets(g, p, *c, TargetChange::ChooseNew, None);
+                }
+            }
+        }
+    }
+}
+
 /// Performs a zone-related `Effect::Custom`, if `name` is one.
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
     if crate::ante::custom_effect(g, name, ctx) {
+        return true;
+    }
+    if name == EACH_OTHER_PLAYER_COPIES || name == EACH_OTHER_PLAYER_COPIES_NEW_TARGETS {
+        each_other_player_copies(g, ctx, name == EACH_OTHER_PLAYER_COPIES_NEW_TARGETS);
         return true;
     }
     if name != MAY_LOOK_AT_EXILED {

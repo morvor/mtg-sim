@@ -2,7 +2,7 @@
 //! revealed (CR 401.5), putting objects into their owners' libraries at a position
 //! (CR 400.3, 401.4, 401.7), and shuffling a whole zone into a library (CR 400.12).
 
-use super::{EffectPattern, StaticPattern};
+use super::{EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::{object_ref, Builder};
 use crate::oracle::phrases::end;
@@ -291,3 +291,28 @@ fn that_spell_exiled_instead(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r400 that spell is exiled instead", priority: 100, parse: that_spell_exiled_instead } }
+
+/// Hive Mind: "each other player copies that spell" (the spell that triggered the
+/// ability); the copies are put onto the stack at the same time (CR 405.3).
+fn each_other_player_copies(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "each other player copies that spell")
+        .then(|| Effect::Custom(crate::zones::EACH_OTHER_PLAYER_COPIES.into()))
+}
+
+inventory::submit! { EffectPattern { name: "r405 each other player copies that spell", priority: 100, parse: each_other_player_copies } }
+
+/// "Each of those players may choose new targets for their copy."
+fn those_players_choose_new_targets(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "each of those players may choose new targets for their copy" {
+        return false;
+    }
+    match prev {
+        Effect::Custom(n) if n.as_str() == crate::zones::EACH_OTHER_PLAYER_COPIES => {
+            *prev = Effect::Custom(crate::zones::EACH_OTHER_PLAYER_COPIES_NEW_TARGETS.into());
+            true
+        }
+        _ => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "r405 each of those players may choose new targets", priority: 100, apply: those_players_choose_new_targets } }
