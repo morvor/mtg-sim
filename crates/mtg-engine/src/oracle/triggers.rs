@@ -32,6 +32,15 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     let el = eff.to_lowercase();
     if let Some(r) = el.strip_prefix("if ") {
         if let Some((c, _)) = r.split_once(", ") {
+            // Conditions are parsed without a referent: "it" in them means the source
+            // ("When ~ enters, if you cast it"), so it can't refer to another object
+            // ("Whenever a creature enters, if you cast it" is about that creature).
+            let mentions_it = c
+                .split(|ch: char| !ch.is_alphanumeric() && ch != '\'')
+                .any(|w| matches!(w, "it" | "its" | "it's"));
+            if mentions_it && !matches!(it, Sel::This) {
+                return None;
+            }
             if let Some(cond) = super::statics::parse_condition(c, ctx) {
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];

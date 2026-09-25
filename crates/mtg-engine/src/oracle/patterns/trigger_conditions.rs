@@ -53,6 +53,14 @@ fn parse_condition(c: &str) -> Option<Condition> {
             custom("a_player_cast_two_spells_last_turn")
         }
         "you lost life last turn" => custom("you_lost_life_last_turn"),
+        // CR 400.7d: the spell that became this permanent.
+        "you cast it from your hand" | "you cast ~ from your hand" => {
+            Condition::CastFrom(ZoneKind::Hand)
+        }
+        "you cast it from exile" | "you cast ~ from exile" => Condition::CastFrom(ZoneKind::Exile),
+        "you cast it from your graveyard" | "you cast ~ from your graveyard" => {
+            Condition::CastFrom(ZoneKind::Graveyard)
+        }
         "no creatures are on the battlefield" => {
             Condition::Not(Box::new(Condition::Exists(Filter::creature())))
         }

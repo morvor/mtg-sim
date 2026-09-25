@@ -100,6 +100,44 @@ fn morbid_if_a_creature_died_this_turn() {
 }
 
 #[test]
+fn if_it_was_kicked_checks_the_spell_that_became_the_permanent() {
+    cr!("400.7d", "603.4", "702.33d");
+    assert_supported(&["Tempest Owl"]);
+    for kicked in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Island", 7);
+        let owl = t.hand(P0, "Tempest Owl");
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.cast(P0, owl).kicked(kicked).go();
+        t.resolve_all();
+        // "When this creature enters, if it was kicked, tap up to three target permanents."
+        assert_eq!(t.obj_now(bears).tapped, kicked, "kicked: {kicked}");
+    }
+}
+
+#[test]
+fn if_you_cast_it_from_your_hand() {
+    cr!("400.7d", "603.4");
+    assert_supported(&["Furnace Dragon", "Ornithopter"]);
+    // Cast from hand: the ETB trigger exiles all artifacts.
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    t.lands(P0, "Mountain", 9);
+    let dragon = t.hand(P0, "Furnace Dragon");
+    t.cast(P0, dragon).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Furnace Dragon").len(), 1);
+    assert!(!t.on_battlefield(thopter));
+    // Put onto the battlefield without casting it: no trigger.
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    enter(&mut t, P0, "Furnace Dragon");
+    t.resolve_all();
+    assert!(t.on_battlefield(thopter));
+}
+
+#[test]
 fn creature_dealt_damage_by_this_turn_dies() {
     cr!("603.10a", "510.2");
     assert_supported(&["Sengir Vampire"]);
