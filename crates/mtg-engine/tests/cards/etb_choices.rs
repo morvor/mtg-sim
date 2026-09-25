@@ -90,6 +90,26 @@ fn shock_land_cant_pay_more_life_than_you_have() {
 }
 
 #[test]
+fn modal_dfc_land_face_has_its_own_etb_replacement() {
+    cr!("614.12", "712.12");
+    assert_supported("Emeria's Call // Emeria, Shattered Skyclave");
+    // Played as its back face, the land "As this land enters, you may pay 3 life. If you
+    // don't, it enters tapped."
+    let mut t = TestGame::new(2);
+    let c = t.hand(P0, "Emeria's Call // Emeria, Shattered Skyclave");
+    t.answer_yes(P0, false);
+    t.play_land(P0, c).unwrap();
+    assert!(t.obj_now(c).tapped);
+    assert_eq!(t.life(P0), 20);
+    let mut t = TestGame::new(2);
+    let c = t.hand(P0, "Emeria's Call // Emeria, Shattered Skyclave");
+    t.answer_yes(P0, true);
+    t.play_land(P0, c).unwrap();
+    assert!(!t.obj_now(c).tapped);
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
 fn shock_land_put_onto_battlefield_tapped_stays_tapped() {
     cr!("614.1c");
     ruling!(

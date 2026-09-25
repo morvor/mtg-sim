@@ -218,9 +218,21 @@ impl Game {
                 let o = self.obj(m.obj);
                 // CR 614.12, 707.9: once it's entering as a copy, the copied object's
                 // "as this enters" / "enters with" abilities apply instead of its own.
-                let abilities = match m.etb.copy_of {
-                    Some(c) => &self.obj(c).copiable.abilities,
-                    None => &o.chars.abilities,
+                // A card entering with another face up (a modal DFC's back face played
+                // as a land, or entering transformed) has that face's abilities.
+                let face = if m.etb.transformed {
+                    Some(FaceState::Back)
+                } else {
+                    m.etb.face
+                };
+                let face_chars = match (face, &o.card) {
+                    (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
+                    _ => None,
+                };
+                let abilities = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => &self.obj(c).copiable.abilities,
+                    (None, Some(fc)) => &fc.abilities,
+                    (None, None) => &o.chars.abilities,
                 };
                 for a in abilities {
                     if let AbilityKind::Static(s) = &a.kind {
