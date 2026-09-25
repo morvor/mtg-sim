@@ -722,11 +722,14 @@ impl Game {
             Some(StackKind::Spell)
         );
         self.log(|g| format!("Resolving {}", g.describe(top)));
+        // CR 117.2e: no player has priority while a spell or ability is resolving.
+        let priority = self.turn.priority.take();
         if is_spell {
             self.resolve_spell(top);
         } else {
             self.resolve_ability(top);
         }
+        self.turn.priority = priority;
         self.flush_events();
     }
 
