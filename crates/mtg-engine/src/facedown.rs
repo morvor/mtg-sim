@@ -1,0 +1,56 @@
+//! Face-down spells and permanents (CR 708) and turning them face up.
+
+use crate::ability::*;
+use crate::events::Event;
+use crate::game::Game;
+use crate::keywords::{Keyword, KeywordKind};
+use crate::mana::ManaCost;
+use crate::object::*;
+use crate::types::*;
+use smol_str::SmolStr;
+
+/// Characteristics of a face-down object (CR 708.2a): a 2/2 creature with no text, no
+/// name, no subtypes, and no mana cost. Disguise and cloak also give it ward {2}
+/// (CR 702.168a, 701.58a).
+pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
+    let o = g.obj(id);
+    let mut c = Characteristics {
+        name: SmolStr::default(),
+        power: Some(2),
+        toughness: Some(2),
+        card_types: CardTypeSet::single(CardType::Creature),
+        rules_text: std::sync::Arc::from(""),
+        ..Default::default()
+    };
+    let kind = o.choices.text.as_deref().unwrap_or("");
+    if kind == KeywordKind::Disguise.name() || kind == "Cloak" {
+        c.abilities.push(AbilityDef::new(
+            AbilityKind::Keyword(Keyword::with_cost(
+                KeywordKind::Ward,
+                Cost::mana(ManaCost::parse("{2}").unwrap()),
+            )),
+            "Ward {2}",
+        ));
+    }
+    c
+}
+
+/// Turns a face-down permanent face up (CR 708.8). Returns true if it did.
+pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
+    let o = g.obj(id);
+    if !o.face_down || o.zone != Zone::Battlefield {
+        return false;
+    }
+    // CR 708.8: a face-down permanent that's not a card (e.g. a manifested token) can't be
+    // turned face up unless it represents a card.
+    if o.card.is_none() {
+        return false;
+    }
+    let ts = g.new_timestamp();
+    let ob = &mut g.objects[id.0 as usize];
+    ob.face_down = false;
+    ob.timestamp = ts; // CR 613.7f
+    g.dirty = true;
+    g.emit(Event::TurnedFaceUp { obj: id });
+    true
+}

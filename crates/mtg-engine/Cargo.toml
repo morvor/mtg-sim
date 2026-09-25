@@ -1,0 +1,17 @@
+[package]
+name = "mtg-engine"
+version.workspace = true
+edition.workspace = true
+description = "Magic: The Gathering rules engine"
+
+[dependencies]
+mtg-data = { path = "../mtg-data" }
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+smallvec.workspace = true
+indexmap.workspace = true
+smol_str = { version = "0.3.6", features = ["serde"] }
+bitflags = "2.13.2"
+inventory = "0.3.24"
