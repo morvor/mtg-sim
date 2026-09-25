@@ -224,6 +224,28 @@ fn haunted_creature_dies(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
 
 inventory::submit! { AbilityPattern { name: "when the creature ~ haunts dies", priority: 100, parse: haunted_creature_dies } }
 
+/// "Forecast — [cost], Reveal ~ from your hand: [effect]" (CR 702.57a): an activated
+/// ability of the card in its owner's hand, activated only during their upkeep and only
+/// once each turn, revealing the card (CR 702.57b; see `kw/forecast.rs`).
+fn forecast(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let rest = t.strip_prefix("Forecast — ")?;
+    let (cost_s, eff_s) = crate::oracle::split_cost(rest)?;
+    let i = cost_s.to_lowercase().find("reveal ~ from your hand")?;
+    let cost_s = cost_s[..i].trim().trim_end_matches(',').trim();
+    let cost = if cost_s.is_empty() {
+        Cost::free()
+    } else {
+        crate::oracle::costs::parse_cost(cost_s)?.0
+    };
+    let (eff_text, _, _, _) = crate::oracle::costs::split_activation_restrictions(eff_s);
+    let body = crate::oracle::effects::parse_body(eff_text, ctx)?;
+    let act = crate::kw::forecast::forecast_ability(cost, body);
+    Some(vec![AbilityDef::new(AbilityKind::Activated(act), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "forecast", priority: 100, parse: forecast } }
+
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
 /// looks back in time (CR 603.10a). It triggers however the card gets there.
