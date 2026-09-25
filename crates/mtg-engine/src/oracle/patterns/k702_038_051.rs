@@ -5,7 +5,7 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::keywords::compile_keyword;
 use crate::oracle::effects::Builder;
-use crate::oracle::patterns::{AbilityPattern, EffectPattern, StaticPattern};
+use crate::oracle::patterns::{AbilityPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::types::CardType;
 use crate::oracle::CompileContext;
 use smol_str::SmolStr;
@@ -217,6 +217,39 @@ fn spell_quality(subject: &str) -> Option<Vec<Filter>> {
     }
     Some(parts)
 }
+
+/// "Whenever you cast a spell that has convoke", "Whenever you cast another spell that
+/// has convoke".
+fn cast_spell_with_keyword(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let rest = r.strip_prefix("you cast ")?;
+    let (other, rest) = match rest.strip_prefix("another ") {
+        Some(x) => (true, x),
+        None => (false, rest.strip_prefix("a ")?),
+    };
+    let kw = rest.strip_prefix("spell that has ")?;
+    let kind = match kw {
+        "convoke" => KeywordKind::Convoke,
+        "storm" => KeywordKind::Storm,
+        "affinity" => KeywordKind::Affinity,
+        "splice" => KeywordKind::Splice,
+        "entwine" => KeywordKind::Entwine,
+        _ => return None,
+    };
+    let mut parts = vec![Filter::HasKeyword(kind)];
+    if other {
+        parts.push(Filter::Other);
+    }
+    Some((
+        TriggerCond::CastSpell {
+            who: PlayerRel::You,
+            filter: Filter::And(parts),
+        },
+        Sel::TriggerObject,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "you cast a spell that has [keyword]", priority: 100, parse: cast_spell_with_keyword } }
 
 /// "each creature that convoked it" (CR 702.51c).
 fn convoked_it() -> Filter {

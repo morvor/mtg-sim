@@ -355,6 +355,33 @@ fn multiple_instances_of_convoke_are_redundant() {
 }
 
 #[test]
+fn a_spell_has_convoke_whether_or_not_creatures_are_tapped() {
+    cr!("702.51a");
+    ruling!(
+        "Kasla, the Broken Halo",
+        "Kasla's last ability will trigger whether you tapped any creatures to pay for the spell or not, as long as it has convoke."
+    );
+    assert_supported("Kasla, the Broken Halo");
+    let mut t = TestGame::new(2);
+    // Kasla: "Whenever you cast another spell that has convoke, scry 2, then draw a
+    // card."
+    t.battlefield(P0, "Kasla, the Broken Halo");
+    t.lands(P0, "Mountain", 4);
+    let stoke = t.hand(P0, "Stoke the Flames");
+    convoke_with(&mut t, P0, &[]);
+    t.cast(P0, stoke).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.hand_size(P0), 1);
+    // A spell without convoke doesn't trigger it.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 1);
+}
+
+#[test]
 fn the_next_spell_can_be_given_convoke() {
     cr!("702.51a", "702.51d");
     ruling!(
