@@ -42,12 +42,29 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
             ManaProduction::ChosenColor(n) => {
-                let c = ctx
-                    .source
-                    .and_then(|s| g.obj(s).choices.color)
+                // CR 607.2d: the color chosen by the linked ability; CR 607.5a: no mana if
+                // no color was chosen.
+                match g
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
                     .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![vec![c]; g.eval_value(n, ctx).max(0) as usize]
+                {
+                    Some(c) => vec![vec![c]; g.eval_value(n, ctx).max(0) as usize],
+                    None => vec![],
+                }
+            }
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = g
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
+                    .map(ManaType::from_color)
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![u]
             }
             ManaProduction::CouldProduce(f) => {
                 let t = types_could_produce(g, f, ctx);
@@ -62,14 +79,6 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     .into_iter()
                     .filter(|t| *t != ManaType::C)
                     .collect();
-                if t.is_empty() {
-                    vec![]
-                } else {
-                    vec![t]
-                }
-            }
-            ManaProduction::AnyTypeProduced => {
-                let t = types_from_mask(ctx.event.as_ref().map_or(0, |e| e.amount));
                 if t.is_empty() {
                     vec![]
                 } else {
@@ -100,6 +109,15 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     cs = cs.union(g.obj(o).chars.colors);
                 }
                 let t: Vec<ManaType> = cs.iter().map(ManaType::from_color).collect();
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
+            // CR 106.12a: the types of mana the triggering mana ability produced.
+            ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                let t = crate::resolve::produced_types(ctx);
                 if t.is_empty() {
                     vec![]
                 } else {
@@ -440,6 +458,14 @@ pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
 /// each such permanent with a mana ability that can be activated, the player chooses one
 /// and activates it.
 pub fn activate_mana_abilities_of_each(g: &mut Game, who: &PlayerRef, filter: &Filter, ctx: &Ctx) {
+    // The effect instructs the player to activate them, so they may do so without
+    // priority (CR 605.3a), as during a mana payment; no particular type is needed.
+    let prev_hint = g.mana_hint.replace(vec![]);
+    activate_each(g, who, filter, ctx);
+    g.mana_hint = prev_hint;
+}
+
+fn activate_each(g: &mut Game, who: &PlayerRef, filter: &Filter, ctx: &Ctx) {
     for p in g.eval_players(who, ctx) {
         let perms: Vec<ObjectId> = g
             .permanents()
@@ -576,6 +602,16 @@ fn add_mana_with(
             produced = apply_mana_replacement(&d, &produced);
         }
     }
+    // "of the chosen type": the type chosen for the source (CR 607.2d).
+    let restriction = match restriction {
+        Some(ManaRestriction::SpellOfChosenType) => Some(
+            ctx.source
+                .and_then(|s| g.obj(s).choices.creature_type.clone())
+                .map(ManaRestriction::SpellWithSubtype)
+                .unwrap_or(ManaRestriction::SpellOfChosenType),
+        ),
+        other => other.clone(),
+    };
     let snow = ctx
         .source
         .is_some_and(|s| g.obj(s).chars.has_supertype(Supertype::Snow));
@@ -602,6 +638,66 @@ fn add_mana_with(
     }
     // CR 106.12a: `add_mana` reports the permanent as tapped for mana.
     g.add_mana(p, units, ctx.source);
+}
+
+/// Extra mana units that triggered mana abilities would add to `p`'s pool when `obj`
+/// (producing `units`) is tapped for mana (CR 605.1b, 605.4a).
+fn triggered_mana_units(
+    g: &Game,
+    p: PlayerId,
+    obj: ObjectId,
+    units: &[Vec<ManaType>],
+) -> Vec<Vec<ManaType>> {
+    let mut produced: Vec<ManaType> = Vec::new();
+    for u in units {
+        for t in u {
+            if !produced.contains(t) {
+                produced.push(*t);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for s in g.permanents() {
+        for a in &s.chars.abilities {
+            let AbilityKind::Triggered(t) = &a.kind else {
+                continue;
+            };
+            if !t.is_mana_ability {
+                continue;
+            }
+            let TriggerCond::TappedForMana {
+                who: tapper,
+                filter: f,
+            } = &t.trigger
+            else {
+                continue;
+            };
+            let mut ctx = Ctx::new(Some(s.id), s.controller);
+            ctx.link = a.link;
+            ctx.event = Some(crate::object::EventInfo {
+                object: Some(obj),
+                player: Some(p),
+                amount: produced.len() as i32,
+                mana: produced.clone(),
+                ..Default::default()
+            });
+            if !g.player_rel_matches(*tapper, p, &ctx) || !g.matches(obj, f, &ctx) {
+                continue;
+            }
+            // Only mana that goes to the paying player helps.
+            let who = match &t.body.effect {
+                Effect::AddMana { who, .. } => g.eval_player(who, &ctx),
+                _ => None,
+            };
+            if who != Some(p) {
+                continue;
+            }
+            if let Some(extra) = production_units(g, &t.body.effect, &ctx) {
+                out.extend(extra);
+            }
+        }
+    }
+    out
 }
 
 /// Mana abilities the player could activate right now to pay a cost.
@@ -664,8 +760,15 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if !ok {
                 continue;
             }
-            let ctx = Ctx::new(Some(o.id), p);
-            if let Some(units) = production_units(g, &act.body.effect, &ctx) {
+            let mut ctx = Ctx::new(Some(o.id), p);
+            ctx.link = a.link;
+            if let Some(mut units) = production_units(g, &act.body.effect, &ctx) {
+                // CR 605.4a: triggered mana abilities that trigger on tapping it for mana
+                // add their mana right away, so they help pay too.
+                if act.cost.has_tap() && !units.is_empty() {
+                    let extra = triggered_mana_units(g, p, o.id, &units);
+                    units.extend(extra);
+                }
                 if !units.is_empty() {
                     if o.is_creature() {
                         rank = rank.max(1);
@@ -785,10 +888,22 @@ pub fn plan_payment(
 ) -> Option<Vec<(ManaSource, Vec<ManaType>)>> {
     let reqs = expand(cost)?;
     let sources = mana_sources(g, p, reserve);
+    // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
+    // any colored requirement.
+    let widen = |mut types: Vec<ManaType>| {
+        if types.iter().any(|t| spend.any_color.contains(t)) {
+            for c in ALL_COLORS {
+                if !types.contains(&c) {
+                    types.push(c);
+                }
+            }
+        }
+        types
+    };
     let mut units: Vec<Unit> = Vec::new();
     for (i, m) in g.player(p).mana_pool.mana.iter().enumerate() {
         units.push(Unit {
-            types: vec![m.ty],
+            types: widen(vec![m.ty]),
             snow: m.snow,
             source: None,
             pool_index: Some(i),
@@ -799,7 +914,7 @@ pub fn plan_payment(
         let snow = g.obj(s.obj).chars.has_supertype(Supertype::Snow);
         for u in &s.units {
             units.push(Unit {
-                types: u.clone(),
+                types: widen(u.clone()),
                 snow,
                 source: Some(si),
                 pool_index: None,
@@ -1092,6 +1207,11 @@ pub fn pay_mana(
     if plan_now.is_none() {
         let plan = plan_payment(g, p, cost, spend, reserve)?;
         for (src, types) in plan {
+            // Triggered mana abilities (CR 605.4a, "whenever enchanted land is tapped for
+            // mana, ... adds an additional {G}") may already have added enough.
+            if try_pool(g, 0).is_some() {
+                break;
+            }
             if !g.is_live(src.obj) || g.obj(src.obj).zone != Zone::Battlefield {
                 continue;
             }

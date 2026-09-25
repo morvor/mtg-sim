@@ -350,19 +350,15 @@ fn for_mana(s: &str) -> Option<Option<ManaType>> {
     end(rest).is_empty().then_some(Some(t))
 }
 
-/// The trigger for "[filter] tapped for mana [of a type]".
-fn tapped_cond(filter: Filter, mana: Option<ManaType>) -> TriggerCond {
-    match mana {
-        None => TriggerCond::TappedForMana(filter),
-        Some(t) => TriggerCond::TappedForManaOfType { filter, mana: t },
-    }
+/// The trigger for "[filter] tapped for [a type of mana]". Plain "for mana" triggers are
+/// parsed by the general tapped-for-mana pattern (`triggers_mana.rs`).
+fn tapped_cond(filter: Filter, mana: Option<ManaType>) -> Option<TriggerCond> {
+    mana.map(|t| TriggerCond::TappedForManaOfType { filter, mana: t })
 }
 
-/// Tapped-for-mana trigger conditions (CR 106.12a): "a player taps a land for mana",
-/// "you tap a creature for mana", "you tap a permanent for {c}", "enchanted land is
-/// tapped for mana", "a forest is tapped for mana", "you tap ~ for mana". The player
-/// who taps a permanent for mana is its controller, so "you tap" / "an opponent taps"
-/// restrict the permanent's controller.
+/// Tapped-for-mana-of-a-type trigger conditions (CR 106.12a): "you tap a permanent for
+/// {c}", "a land is tapped for {g}". The player who taps a permanent for mana is its
+/// controller, so "you tap" / "an opponent taps" restrict the permanent's controller.
 fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = end(l);
     // "[player] taps [object] for mana"
@@ -388,7 +384,7 @@ fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
                 rel => Filter::and(vec![filter, Filter::ControlledBy(rel)]),
             };
             return Some((
-                tapped_cond(filter, mana),
+                tapped_cond(filter, mana)?,
                 Sel::TriggerObject,
                 PlayerRef::TriggerPlayer,
             ));
@@ -417,41 +413,13 @@ fn tapped_for_mana_trigger(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         f
     };
     Some((
-        tapped_cond(filter, mana),
+        tapped_cond(filter, mana)?,
         Sel::TriggerObject,
         PlayerRef::TriggerPlayer,
     ))
 }
 
 inventory::submit! { TriggerPattern { name: "r106 tapped for mana", priority: 60, parse: tapped_for_mana_trigger } }
-
-/// Tapped-for-mana triggered abilities that could add mana and don't target are mana
-/// abilities (CR 605.1b) and resolve immediately.
-fn tapped_for_mana_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let lower = block.to_lowercase();
-    if !(lower.starts_with("whenever ") && lower.contains(" for mana")
-        || lower.starts_with("whenever ") && lower.contains(" for {"))
-    {
-        return None;
-    }
-    let a = crate::oracle::triggers::parse_triggered(block, ctx)?;
-    let AbilityKind::Triggered(t) = &a.kind else {
-        return None;
-    };
-    if !matches!(
-        t.trigger,
-        TriggerCond::TappedForMana(_) | TriggerCond::TappedForManaOfType { .. }
-    ) {
-        return None;
-    }
-    let mut t = t.clone();
-    t.is_mana_ability = crate::oracle::effects::is_mana_effect(&t.body.effect)
-        && t.body.targets.is_empty()
-        && t.body.modal.is_none();
-    Some(vec![AbilityDef::new(AbilityKind::Triggered(t), block)])
-}
-
-inventory::submit! { AbilityPattern { name: "r106 tapped for mana ability", priority: 60, parse: tapped_for_mana_ability } }
 
 /// Mana-production replacement effects (CR 106.12b): "If you tap a permanent for mana,
 /// it produces twice as much of that mana instead." / "If a land is tapped for mana, it

@@ -230,6 +230,15 @@ pub fn protection_filter(s: &str) -> Option<Filter> {
     if s == "colorless" {
         return Some(Filter::Colorless);
     }
+    // CR 607.2d: "protection from the chosen color" (linked to "choose a color").
+    if s == "the chosen color" {
+        return Some(Filter::ChosenColor);
+    }
+    // CR 702.16k: protection from a player is protection from each object that player
+    // controls (or owns, outside the battlefield and stack).
+    if s == "the chosen player" {
+        return Some(Filter::ControlledBy(PlayerRel::Chosen));
+    }
     // "red and from white" / "red and white" / "white and from blue"
     let parts: Vec<&str> = s
         .split(" and from ")

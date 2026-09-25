@@ -24,11 +24,20 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c).
+        self.end_event_batch();
+        if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
+            return;
+        }
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
                 for x in v {
                     self.exec(x, ctx);
+                    // CR 603.8: state triggers trigger as soon as the game state matches,
+                    // even momentarily during a resolution.
+                    self.check_state_triggers();
                 }
             }
             Effect::If {
@@ -53,8 +62,9 @@ impl Game {
                 );
                 ctx.prev_happened = yes;
                 if yes {
+                    // Effects that can fail to do what they say (sacrificing, paying,
+                    // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
-                    ctx.prev_happened = true;
                 }
             }
             Effect::PayOptional {
@@ -134,6 +144,19 @@ impl Game {
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
+            Effect::Note { value } => {
+                let n = self.eval_value(value, ctx) as i32;
+                if let Some(src) = ctx.source {
+                    self.objects[src.0 as usize]
+                        .linked_choices
+                        .entry(ctx.link)
+                        .or_default()
+                        .number = Some(n);
+                }
+            }
+            Effect::SetX { value } => {
+                ctx.x = self.eval_value(value, ctx) as i32;
+            }
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
@@ -167,9 +190,12 @@ impl Game {
                             },
                             ..Default::default()
                         },
-                        source: if *link { ctx.source } else { None },
+                        // CR 607.2a: cards an ability exiles are exiled with its source,
+                        // for the abilities linked to it.
+                        source: ctx.source,
                     })
                     .collect();
+                let _ = link;
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
@@ -209,6 +235,7 @@ impl Game {
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
+                ctx.prev_happened = !all.is_empty();
                 ctx.set_var(vars::IT, all);
             }
             Effect::SacrificeObjects { what } => {
@@ -229,6 +256,9 @@ impl Game {
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 let res = self.move_to_destination(objs, to, ctx);
+                if to.zone == ZoneKind::Battlefield {
+                    self.link_to_creator(ctx, &res);
+                }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -321,6 +351,11 @@ impl Game {
                 mods,
                 duration,
             } => {
+                // CR 611.2b: a "for as long as" duration that already ended means the
+                // effect does nothing.
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
@@ -330,19 +365,30 @@ impl Game {
                     return;
                 }
                 let fixed = self.fix_mods(mods, ctx);
-                let id = self.new_effect_id();
                 let ts = self.new_timestamp();
-                self.effects.push(ContinuousEffect {
-                    id,
-                    source: ctx.source,
-                    controller: ctx.controller,
-                    timestamp: ts,
-                    duration: duration.clone(),
-                    affected: Affected::Objects(objs),
-                    mods: fixed,
-                    layer1: None,
-                    created_turn: self.turn.number,
-                });
+                // CR 612.5: an exchange of text boxes gives each object the other's text.
+                let parts: Vec<(Option<ObjectId>, Vec<Modification>)> =
+                    match crate::text_change::exchange_mods(self, &objs, &fixed) {
+                        Some(v) => v.into_iter().map(|(o, m)| (Some(o), m)).collect(),
+                        None => vec![(None, fixed)],
+                    };
+                for (o, part) in parts {
+                    let id = self.new_effect_id();
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: ctx.source,
+                        controller: ctx.controller,
+                        timestamp: ts,
+                        duration: duration.clone(),
+                        affected: Affected::Objects(match o {
+                            Some(o) => vec![o],
+                            None => objs.clone(),
+                        }),
+                        mods: part,
+                        layer1: None,
+                        created_turn: self.turn.number,
+                    });
+                }
                 self.dirty = true;
             }
             Effect::AddRestriction {
@@ -391,11 +437,14 @@ impl Game {
                 let ts = self.new_timestamp();
                 let objects = self.lock_replacement_objects(def, ctx);
                 let remaining = match &def.action {
-                    ReplacementAction::PreventAmount(v) => {
+                    ReplacementAction::PreventAmount(v)
+                    | ReplacementAction::PreventAndThen(Some(v), _) => {
                         Some(self.eval_value(v, ctx).max(0) as u32)
                     }
                     _ => None,
                 };
+                // Chosen objects the effect refers to are locked in (CR 609.7b, 611.2c).
+                let def = &crate::prevention::lock_def(self, def, ctx);
                 self.replacements.push(ReplacementInstance {
                     id,
                     source: ctx.source,
@@ -413,6 +462,10 @@ impl Game {
                 who,
                 duration,
             } => {
+                // CR 611.2b (Master Thief).
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
@@ -499,6 +552,7 @@ impl Game {
                     };
                     created.extend(self.create_tokens(p, tc, n, ctx.source));
                 }
+                self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
                 ctx.set_var(
                     vars::CREATED,
@@ -643,6 +697,51 @@ impl Game {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 crate::choices::make_choice(self, p, kind, ctx);
             }
+            // CR 614.1c: modify how the permanent enters (only while applying an "as this
+            // enters" replacement effect).
+            Effect::EnterTapped => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.tapped = true;
+                }
+            }
+            Effect::EnterPrepared => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.prepared = true;
+                }
+            }
+            Effect::EnterCopyExceptions(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copy_exceptions.extend(mods.iter().cloned());
+                }
+            }
+            Effect::OnEntry(effect) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.on_entry.push((**effect).clone());
+                }
+            }
+            Effect::EnterAs(mods) => {
+                if let Some(e) = ctx.entering.as_mut() {
+                    e.copiable.extend(mods.iter().cloned());
+                }
+            }
+            Effect::SetDayNight { day } => self.set_day(*day),
+            Effect::SetPrepared { what, prepared } => {
+                for o in self.resolve_objects(what, ctx) {
+                    if *prepared {
+                        crate::designations::become_prepared(self, o);
+                    } else {
+                        crate::designations::become_unprepared(self, o);
+                    }
+                }
+            }
+            Effect::EnterWithCounters { kind, n } => {
+                let k = self.eval_value(n, ctx).max(0) as u32;
+                if let Some(e) = ctx.entering.as_mut() {
+                    if k > 0 {
+                        e.counters.push((kind.clone(), k));
+                    }
+                }
+            }
 
             // --- Players -----------------------------------------------------------
             Effect::Draw { who, n } => {
@@ -689,6 +788,7 @@ impl Game {
                     }
                 }
                 ctx.prev_value = discarded.len() as i64;
+                ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
                 ctx.set_var(vars::IT, discarded);
             }
@@ -891,6 +991,8 @@ impl Game {
                 body,
                 once,
             } => {
+                // CR 603.7a: it won't trigger on events that happened before it was created.
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
@@ -904,7 +1006,36 @@ impl Game {
                     created_step: Some(self.turn.step),
                 });
             }
+            Effect::Reflexive { body } => {
+                // CR 603.12: a reflexive triggered ability is checked immediately after it's
+                // created; it triggers now and waits to be put on the stack (with its own
+                // targets) until a player would receive priority. It's controlled by the
+                // controller of the resolving spell or ability (CR 603.7d–e).
+                self.trigger_order += 1;
+                let ability = AbilityDef::new(
+                    AbilityKind::Triggered(TriggeredAbility::new(
+                        TriggerCond::Custom("reflexive".into()),
+                        (**body).clone(),
+                    )),
+                    "reflexive trigger",
+                );
+                let src = ctx
+                    .stack_obj
+                    .filter(|s| self.obj(*s).is_spell())
+                    .or(ctx.source);
+                self.pending_triggers.push(PendingTrigger {
+                    source: src.unwrap_or(ObjectId(0)),
+                    controller: ctx.controller,
+                    ability,
+                    event: ctx.event.clone().unwrap_or_default(),
+                    source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
+                    saved: Some(ctx.clone()),
+                    body: Some((**body).clone()),
+                    order: self.trigger_order,
+                });
+            }
             Effect::AtNext { step, effect } => {
+                self.flush_events();
                 let id = self.new_effect_id();
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
@@ -1037,6 +1168,57 @@ impl Game {
             } => {
                 crate::keyword_actions::perform(self, *action, who, what, n, ctx);
             }
+            Effect::ChangeText {
+                what,
+                words,
+                exclude,
+                duration,
+            } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::text_change::exec_change_text(self, objs, *words, exclude, duration, ctx);
+            }
+            Effect::ExileUntil { what, until } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::until::exec_exile_until(self, objs, until, ctx);
+            }
+            Effect::PhaseOutUntil { what, until } => {
+                let objs = self.resolve_objects(what, ctx);
+                crate::until::exec_phase_out_until(self, objs, until, ctx);
+            }
+            Effect::SelfReplace {
+                replacement,
+                effect,
+            } => {
+                // CR 614.15: a self-replacement effect applies to this effect's own events,
+                // before other replacement effects (CR 616.1a).
+                let mut def = crate::prevention::lock_def(self, replacement, ctx);
+                def.self_replacement = true;
+                let id = self.new_effect_id();
+                let ts = self.new_timestamp();
+                self.replacements.push(ReplacementInstance {
+                    id,
+                    source: ctx.source,
+                    controller: ctx.controller,
+                    timestamp: ts,
+                    duration: Duration::Permanent,
+                    def,
+                    uses: None,
+                    objects: None,
+                    remaining: None,
+                });
+                self.exec(effect, ctx);
+                self.replacements.retain(|r| r.id != id);
+            }
+            Effect::ChooseSource { who, filter, var } => {
+                crate::prevention::exec_choose_source(self, who, filter, *var, ctx);
+            }
+            Effect::NextSpell {
+                filter,
+                mods,
+                expires,
+            } => {
+                crate::next_spell::exec_next_spell(self, filter, mods, expires, ctx);
+            }
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }
     }
@@ -1053,7 +1235,12 @@ impl Game {
             } => {
                 let p = self.eval_player(chooser, ctx).unwrap_or(ctx.controller);
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                let cands = self.objects_matching(filter, ctx);
+                // CR 614.13a: objects entering the battlefield right now can't be chosen.
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(filter, ctx)
+                    .into_iter()
+                    .filter(|o| !self.entering.contains(o))
+                    .collect();
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 let picked: Vec<Entity> = self
                     .ask_objects(p, ctx.source, "Choose", cands, min, n)
@@ -1076,7 +1263,81 @@ impl Game {
                 }
                 out
             }
+            Sel::This | Sel::TriggerLki => {
+                let v = self.eval_sel(sel, ctx);
+                v.into_iter()
+                    .map(|e| self.follow_zone_change_trigger_object(e, ctx))
+                    .collect()
+            }
             other => self.eval_sel(other, ctx),
+        }
+    }
+
+    /// While an "as this enters" replacement effect is being applied (CR 614.12a), the
+    /// entering object isn't on the battlefield yet. Tapping it or putting counters on it
+    /// modifies how it enters (CR 614.1c, 122.6); other effects on it happen as it's put
+    /// onto the battlefield. Returns true if `e` was handled that way.
+    fn effect_on_entering_object(&mut self, e: &Effect, ctx: &mut Ctx) -> bool {
+        match e {
+            Effect::Tap { what: Sel::This } => {
+                if let Some(em) = ctx.entering.as_mut() {
+                    em.tapped = true;
+                }
+                true
+            }
+            Effect::AddCounters {
+                what: Sel::This,
+                kind,
+                n,
+            } => {
+                let k = self.eval_value(n, ctx).max(0) as u32;
+                if let Some(em) = ctx.entering.as_mut() {
+                    if k > 0 {
+                        em.counters.push((kind.clone(), k));
+                    }
+                }
+                true
+            }
+            Effect::Untap { what: Sel::This }
+            | Effect::Modify {
+                what: Sel::This, ..
+            } => {
+                if let Some(em) = ctx.entering.as_mut() {
+                    em.on_entry.push(e.clone());
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// CR 400.7e: an ability that triggers when an object moves from one zone to another
+    /// can find the new object it became in the zone it moved to, if that zone is public
+    /// ("When ~ dies, return it to its owner's hand"). Information about the object (its
+    /// power, etc.) still uses last known information, via `eval_sel`.
+    fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
+        let Entity::Object(id) = e else {
+            return e;
+        };
+        if self.is_live(id) {
+            return e;
+        }
+        let Some(ev) = ctx.event.as_ref() else {
+            return e;
+        };
+        match (ev.lki, ev.object) {
+            (Some(old), Some(new)) if old == id && new != id => {
+                let public = !matches!(
+                    self.obj(new).zone,
+                    Zone::Hand(_) | Zone::Library(_) | Zone::Outside(_) | Zone::Nowhere
+                );
+                if public {
+                    Entity::Object(new)
+                } else {
+                    e
+                }
+            }
+            _ => e,
         }
     }
 
@@ -1117,39 +1378,76 @@ impl Game {
                     Some(p) => Modification::SetController(player_const(p)),
                     None => m.clone(),
                 },
+                // Values chosen for the source are locked in as the effect is created
+                // (CR 608.2h, 607.2d).
+                Modification::AddKeyword(k)
+                    if k.filter
+                        .as_ref()
+                        .is_some_and(crate::choices::filter_mentions_choice) =>
+                {
+                    let mut k = k.clone();
+                    if let (Some(f), Some(src)) = (k.filter.as_ref(), ctx.source) {
+                        k.filter = Some(crate::choices::bind_choices(f, &self.obj(src).choices));
+                    }
+                    Modification::AddKeyword(k)
+                }
+                Modification::SetChosenColor => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.color) {
+                        Some(c) => Modification::SetColors(ColorSet::single(c)),
+                        None => m.clone(),
+                    }
+                }
+                Modification::AddChosenType => {
+                    match ctx.source.and_then(|s| {
+                        let ch = &self.obj(s).choices;
+                        ch.creature_type.clone().or(ch.basic_land_type.clone())
+                    }) {
+                        Some(t) => Modification::AddSubtypes(vec![t]),
+                        None => m.clone(),
+                    }
+                }
+                Modification::SetChosenBasicLandType => {
+                    match ctx
+                        .source
+                        .and_then(|s| self.obj(s).choices.basic_land_type.clone())
+                    {
+                        Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
                 other => other.clone(),
             })
             .collect()
     }
 
+    /// A restriction locked onto specific objects (see [`Self::lock_restriction_objects`])
+    /// applies to exactly those objects: its filter named them through this resolution's
+    /// targets or event ("target creature", "that creature"), which aren't available when
+    /// the restriction is checked later, so it becomes "any object" (of the locked ones).
     fn fix_restriction(&self, r: &Restriction, _ctx: &Ctx) -> Restriction {
-        r.clone()
+        let mut r = r.clone();
+        if let Some(f) = restriction_object_filter(&mut r) {
+            if filter_references_specific(f) {
+                *f = Filter::Any;
+            }
+        }
+        r
     }
 
     /// Restrictions naming specific objects ("target creature can't block this turn")
     /// lock onto those objects.
     fn lock_restriction_objects(&self, r: &Restriction, ctx: &Ctx) -> Option<Vec<ObjectId>> {
-        let f = match r {
-            Restriction::CantAttack(f)
-            | Restriction::CantBlock(f)
-            | Restriction::CantAttackOrBlock(f)
-            | Restriction::MustAttack(f)
-            | Restriction::MustBlock(f)
-            | Restriction::MustBeBlocked(f)
-            | Restriction::CantBeBlocked(f)
-            | Restriction::DoesntUntap(f)
-            | Restriction::CantBeCountered(f)
-            | Restriction::CantBeSacrificed(f) => f,
-            Restriction::CantBeTargeted { what, .. } => what,
-            _ => return None,
-        };
+        let mut r = r.clone();
+        let f = restriction_object_filter(&mut r)?;
         if filter_references_specific(f) {
-            Some(
-                self.objects_matching(f, ctx)
-                    .into_iter()
-                    .chain(ctx.targets.iter().flatten().filter_map(|e| e.object()))
-                    .collect(),
-            )
+            let mut v = self.objects_matching(f, ctx);
+            // Targets outside the battlefield ("target spell can't be countered").
+            for o in ctx.targets.iter().flatten().filter_map(|e| e.object()) {
+                if !v.contains(&o) && self.matches(o, f, ctx) {
+                    v.push(o);
+                }
+            }
+            Some(v)
         } else {
             None
         }
@@ -1202,6 +1500,15 @@ impl Game {
         } else {
             None
         };
+        let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
+            Some((
+                ctx.source,
+                ctx.controller,
+                self.fix_mods(&to.with_mods, ctx),
+            ))
+        } else {
+            None
+        };
         let moves: Vec<MoveEv> = objs
             .iter()
             .filter(|o| self.is_live(**o))
@@ -1228,6 +1535,7 @@ impl Game {
                         },
                         transformed: to.transformed,
                         attacking: attack,
+                        with_mods: with_mods.clone(),
                         ..Default::default()
                     },
                     source: ctx.source,
@@ -1246,7 +1554,8 @@ impl Game {
                 return Some(t);
             }
         }
-        combat.defending_players.first().map(|p| Entity::Player(*p))
+        // CR 508.4: otherwise its controller chooses what it's attacking.
+        crate::combat::choose_attack_target_for_new_attacker(self, ctx.controller)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).
@@ -1288,26 +1597,29 @@ impl Game {
                     .collect()
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
-            ManaProduction::ChosenColor(n) => {
-                let k = self.eval_value(n, ctx).max(0) as usize;
-                let c = ctx
-                    .source
-                    .and_then(|s| self.obj(s).choices.color)
+            ManaProduction::OneOfOrChosenColor(opts) => {
+                let mut u = opts.clone();
+                if let Some(c) = self
+                    .source_choices(ctx)
+                    .and_then(|c| c.color)
                     .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![c; k]
+                {
+                    if !u.contains(&c) {
+                        u.push(c);
+                    }
+                }
+                vec![self.choose_mana_color(p, ctx, &u)]
+            }
+            ManaProduction::ChosenColor(n) => {
+                // CR 607.5a: an undefined choice produces nothing.
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                match self.source_choices(ctx).and_then(|c| c.color) {
+                    Some(c) => vec![ManaType::from_color(c); k],
+                    None => vec![],
+                }
             }
             ManaProduction::CouldProduce(f) => {
                 let types = crate::mana_abilities::types_could_produce(self, f, ctx);
-                if types.is_empty() {
-                    vec![]
-                } else {
-                    vec![self.choose_mana_color(p, ctx, &types)]
-                }
-            }
-            ManaProduction::AnyTypeProduced => {
-                let mask = ctx.event.as_ref().map_or(0, |e| e.amount);
-                let types = crate::mana::types_from_mask(mask);
                 if types.is_empty() {
                     vec![]
                 } else {
@@ -1378,6 +1690,36 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            // CR 106.12a: one mana of any type the triggering mana ability produced.
+            ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                let types = produced_types(ctx);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
+        }
+    }
+
+    /// CR 607.2c, 607.1d: objects an ability created or put onto the battlefield are
+    /// linked to that ability of its source ("created with ~", "put onto the battlefield
+    /// with ~").
+    pub(crate) fn link_to_creator(&mut self, ctx: &Ctx, objs: &[ObjectId]) {
+        let Some(src) = ctx.source else { return };
+        if !self.is_live(src) {
+            return;
+        }
+        for o in objs {
+            if *o == src || !self.is_live(*o) {
+                continue;
+            }
+            self.objects[src.0 as usize]
+                .linked
+                .entry(ctx.link)
+                .or_default()
+                .push(*o);
+            self.objects[o.0 as usize].created_by = Some((src, ctx.link));
         }
     }
 
@@ -1409,6 +1751,17 @@ impl Game {
     }
 }
 
+/// The distinct types of mana the triggering mana ability produced (CR 106.12a).
+pub fn produced_types(ctx: &Ctx) -> Vec<ManaType> {
+    let mut types: Vec<ManaType> = Vec::new();
+    for t in ctx.event.iter().flat_map(|e| e.mana.iter()) {
+        if !types.contains(t) {
+            types.push(*t);
+        }
+    }
+    types
+}
+
 /// A [`PlayerRef`] that always refers to a specific player (locked in at resolution).
 pub fn player_const(p: PlayerId) -> PlayerRef {
     PlayerRef::Player(p)
@@ -1417,6 +1770,24 @@ pub fn player_const(p: PlayerId) -> PlayerRef {
 /// A player filter matching exactly one player.
 pub fn player_filter_const(p: PlayerId) -> PlayerFilter {
     PlayerFilter::Is(p)
+}
+
+/// The filter selecting the objects a restriction applies to.
+fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
+    match r {
+        Restriction::CantAttack(f)
+        | Restriction::CantBlock(f)
+        | Restriction::CantAttackOrBlock(f)
+        | Restriction::MustAttack(f)
+        | Restriction::MustBlock(f)
+        | Restriction::MustBeBlocked(f)
+        | Restriction::CantBeBlocked(f)
+        | Restriction::DoesntUntap(f)
+        | Restriction::CantBeCountered(f)
+        | Restriction::CantBeSacrificed(f) => Some(f),
+        Restriction::CantBeTargeted { what, .. } => Some(what),
+        _ => None,
+    }
 }
 
 fn filter_references_specific(f: &Filter) -> bool {
