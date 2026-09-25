@@ -50,6 +50,24 @@ fn reach_is_a_static_ability_not_flying() {
     attack_with(&mut t, &[(rangers, Entity::Player(P1))]);
     assert!(!t.g.can_block(spider, rangers));
     assert!(t.g.can_block(bird, rangers));
+    // Elven Riders: "This creature can't be blocked except by Walls and/or creatures with
+    // flying."
+    ruling!(
+        "Elven Riders",
+        "Creatures with reach (such as Giant Spider) don't actually have flying, so they can't block this."
+    );
+    assert_supported("Elven Riders");
+    let mut t = TestGame::new(2);
+    let riders = t.battlefield(P0, "Elven Riders");
+    let spider = t.battlefield(P1, "Giant Spider");
+    let bird = t.battlefield(P1, "Ornithopter");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    attack_with(&mut t, &[(riders, Entity::Player(P1))]);
+    assert!(!t.g.can_block(spider, riders));
+    assert!(t.g.can_block(bird, riders));
+    assert!(t.g.can_block(wall, riders));
+    assert!(!t.g.can_block(bears, riders));
     // "This creature can't be blocked by creatures with flying."
     let mut t = TestGame::new(2);
     let spirit = t.battlefield(P0, "Stone Spirit");

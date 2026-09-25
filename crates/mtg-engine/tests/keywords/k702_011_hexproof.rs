@@ -171,6 +171,40 @@ fn targeting_as_though_no_hexproof_ignores_hexproof_from() {
 }
 
 #[test]
+fn targeting_players_and_permanents_as_though_no_hexproof() {
+    cr!("702.11b", "702.11c", "702.11e");
+    ruling!(
+        "Kaya, Bane of the Dead",
+        "and Kaya leaves the battlefield while that spell or ability is on the stack, that player or permanent becomes an illegal target"
+    );
+    assert_supported("Kaya, Bane of the Dead");
+    let mut t = TestGame::new(3);
+    t.battlefield(P1, "Leyline of Sanctity");
+    let bogle = t.battlefield(P1, "Slippery Bogle");
+    let knight = t.battlefield(P1, "Knight of Grace");
+    // "Your opponents and permanents your opponents control with hexproof can be the
+    // targets of spells and abilities you control as though they didn't have hexproof."
+    let kaya = t.battlefield(P0, "Kaya, Bane of the Dead");
+    assert!(spell_can_target(&mut t, P0, "Lightning Bolt", P1));
+    assert!(spell_can_target(&mut t, P0, "Lightning Bolt", bogle));
+    assert!(spell_can_target(&mut t, P0, "Disfigure", knight));
+    // Other opponents of the hexproof player still can't.
+    assert!(!spell_can_target(&mut t, P2, "Lightning Bolt", P1));
+    assert!(!spell_can_target(&mut t, P2, "Lightning Bolt", bogle));
+    // If Kaya leaves while the spell is on the stack, the target becomes illegal.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.lands(P1, "Swamp", 3);
+    let downfall = t.hand(P1, "Hero's Downfall");
+    t.cast(P1, downfall).target(kaya).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(kaya));
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+}
+
+#[test]
 fn looking_for_hexproof_finds_hexproof_from() {
     cr!("702.11e");
     let mut t = TestGame::new(2);

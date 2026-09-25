@@ -146,6 +146,28 @@ fn protection_from_a_card_name_only_when_it_says_name() {
     let bolt = t.hand(P1, "Lightning Bolt");
     t.g.deal_damage(bolt, Entity::Player(P0), 3, false);
     assert_eq!(t.life(P0), 20);
+    // Naming a card doesn't cover the tokens it makes: Raise the Alarm's tokens are named
+    // "Soldier Token", so their damage isn't prevented.
+    let mut t = TestGame::new(2);
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        Answer::Text("Raise the Alarm".to_string()),
+    );
+    t.enter(P0, "Runed Halo");
+    let raise = t.hand(P1, "Raise the Alarm");
+    t.lands(P1, "Plains", 2);
+    t.set_step(P1, Step::PrecombatMain);
+    t.cast(P1, raise).go();
+    t.resolve_all();
+    let soldiers = t.named_on_battlefield("Soldier Token");
+    assert_eq!(soldiers.len(), 2);
+    t.g.deal_damage(soldiers[0], Entity::Player(P0), 1, false);
+    assert_eq!(t.life(P0), 19);
+    // The named card itself is covered wherever it is.
+    let other = t.hand(P1, "Raise the Alarm");
+    t.g.deal_damage(other, Entity::Player(P0), 1, false);
+    assert_eq!(t.life(P0), 19);
 }
 
 #[test]

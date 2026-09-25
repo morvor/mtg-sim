@@ -160,16 +160,37 @@ fn loses_keywords(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (rest.to_string(), None),
     };
     let lost = lost_keywords(&lost)?;
-    // Parse "[subject] gains [something] [duration]" to resolve the subject (targets,
-    // "creatures your opponents control", pronouns) the way granting effects do.
-    let probe_keywords = gained.clone().unwrap_or_else(|| "flying".to_string());
+    // "[subject] get(s) -2/-2 and lose(s) flying": the P/T change is part of the same
+    // effect, with the same subject and duration.
+    let (subject, pt_change) = match subject.strip_suffix(" and") {
+        Some(s) => {
+            let (subj, verb, pt) = [" gets ", " get "]
+                .into_iter()
+                .find_map(|v| s.rsplit_once(v).map(|(a, b)| (a, v.trim(), b)))?;
+            (subj.to_string(), Some(format!("{verb} {pt}")))
+        }
+        None => (subject, None),
+    };
+    // One probe parses the subject; both a P/T change and gained keywords would need two.
+    if pt_change.is_some() && gained.is_some() {
+        return None;
+    }
+    // Parse "[subject] gains [something] [duration]" (or "[subject] gets +X/+Y
+    // [duration]") to resolve the subject (targets, "creatures your opponents control",
+    // pronouns) the way granting effects do.
     let dur = match duration {
         Duration::EndOfTurn => " until end of turn",
         Duration::UntilYourNextTurn => " until your next turn",
         Duration::UntilEndOfYourNextTurn => " until the end of your next turn",
         _ => "",
     };
-    let probe = format!("{subject} {verb_gain} {probe_keywords}{dur}");
+    let predicate = match (&pt_change, &gained) {
+        (Some(pt), _) => pt.clone(),
+        (None, Some(g)) => format!("{verb_gain} {g}"),
+        (None, None) => format!("{verb_gain} flying"),
+    };
+    let probe = format!("{subject} {predicate}{dur}");
+    let targets_before = b.targets.len();
     let Effect::Modify {
         what,
         mods,
@@ -178,7 +199,18 @@ fn loses_keywords(l: &str, b: &mut Builder) -> Option<Effect> {
     else {
         return None;
     };
-    let mut out: Vec<Modification> = lost.into_iter().map(Modification::RemoveKeyword).collect();
+    // A subject naming a target ("creatures target opponent controls") must have added
+    // that target; the object-phrase parser alone refers to target 0 without choosing it.
+    if subject.contains("target ") && b.targets.len() == targets_before {
+        return None;
+    }
+    // The probe's mods are kept only when they're part of the text (the P/T change or
+    // the gained keywords), not the placeholder "gains flying".
+    let mut out: Vec<Modification> = Vec::new();
+    if pt_change.is_some() {
+        out.extend(mods.iter().cloned());
+    }
+    out.extend(lost.into_iter().map(Modification::RemoveKeyword));
     if gained.is_some() {
         out.extend(mods);
     }
@@ -215,10 +247,19 @@ fn spells_you_control_have(l: &str, text: &str, _ctx: &CompileContext) -> Option
             }
         }
     }
-    let mods: Vec<Modification> = keyword_list(kws)?
-        .into_iter()
-        .map(Modification::AddKeyword)
-        .collect();
+    // Only keywords whose rules the engine applies to a spell on the stack (a damage
+    // source's lifelink and deathtouch, split second while it's on the stack). Others,
+    // such as rebound (not implemented), would compile to a grant that does nothing.
+    let kws = keyword_list(kws)?;
+    if !kws.iter().all(|k| {
+        matches!(
+            k.kind,
+            KeywordKind::Lifelink | KeywordKind::Deathtouch | KeywordKind::SplitSecond
+        )
+    }) {
+        return None;
+    }
+    let mods: Vec<Modification> = kws.into_iter().map(Modification::AddKeyword).collect();
     let mut parts = adjectives;
     match types.len() {
         0 => {}
@@ -282,11 +323,28 @@ fn as_though_no_landwalk(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
 /// block it.
 fn cant_be_blocked_except_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = l.strip_prefix("~ can't be blocked except by ")?;
-    let (f, _, tail) = parse_object_phrase(r)?;
-    if !end(tail).is_empty() || !matches!(&f, Filter::And(_) | Filter::Type(_) | Filter::Subtype(_))
-    {
-        return None;
+    // "Walls and/or creatures with flying": each kind of blocker is parsed on its own
+    // (as one phrase it would read "Walls or creatures, with flying").
+    let mut kinds = Vec::new();
+    for part in end(r).split(" and/or ") {
+        if part.contains(" and ") || part.contains(" or ") {
+            return None;
+        }
+        let (f, _, tail) = parse_object_phrase(part)?;
+        let simple = match &f {
+            Filter::Type(_) | Filter::Subtype(_) => true,
+            Filter::And(v) => !v.iter().any(|x| matches!(x, Filter::Or(_))),
+            _ => false,
+        };
+        if !end(tail).is_empty() || !simple {
+            return None;
+        }
+        kinds.push(f);
     }
+    let f = match kinds.len() {
+        1 => kinds.pop()?,
+        _ => Filter::Or(kinds),
+    };
     Some(vec![static_ability(
         StaticEffect::Restriction(Restriction::CantBeBlockedBy {
             attacker: Filter::Source,
