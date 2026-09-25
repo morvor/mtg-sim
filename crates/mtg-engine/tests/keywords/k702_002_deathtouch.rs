@@ -220,6 +220,19 @@ fn a_spell_with_deathtouch_that_deals_no_damage_destroys_nothing() {
 }
 
 #[test]
+fn deathtouch_damage_to_a_planeswalker_only_removes_loyalty() {
+    cr!("702.2b", "120.3c");
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Typhoid Rats");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(rats, Entity::Object(jace))]);
+    go_to(&mut t, Step::EndOfCombat);
+    assert!(t.on_battlefield(jace));
+    assert_eq!(t.counters(jace, "loyalty"), 2);
+}
+
+#[test]
 fn deathtouch_uses_last_known_information_of_a_source_that_left() {
     cr!("702.2e");
     let mut t = TestGame::new(2);

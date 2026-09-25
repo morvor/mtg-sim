@@ -199,3 +199,32 @@ fn metalcraft_double_strike_is_checked_as_each_damage_step_begins() {
     go_to(&mut t, Step::EndOfCombat);
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn double_strike_and_trample_after_the_blocker_dies_in_the_first_step() {
+    cr!("702.4b", "702.19e");
+    ruling!(
+        "Temur Battle Rage",
+        "If an attacking creature with double strike and trample destroys all of its blocking creatures with first-strike combat damage, all of its normal combat damage is assigned to the player, planeswalker, or battle that creature's attacking."
+    );
+    let mut t = TestGame::new(2);
+    // Grizzly Bears with Rancor: a 4/2 with trample.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let rancor = t.battlefield(P0, "Rancor");
+    assert!(t.g.attach(rancor, Entity::Object(bears)));
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 2);
+    let rage = t.hand(P0, "Temur Battle Rage");
+    t.cast(P0, rage).target(bears).go();
+    t.resolve();
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(bears, Entity::Player(P1))]);
+    block(&mut t, P1, &[(giant, bears)]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    // 3 to the Giant (lethal), 1 tramples over.
+    assert_eq!(t.life(P1), 19);
+    go_to(&mut t, Step::EndOfCombat);
+    assert!(!t.on_battlefield(giant));
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.life(P1), 15);
+}
