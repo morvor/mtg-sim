@@ -217,6 +217,9 @@ pub struct CastInfo {
     pub was_cast: bool,
     /// Turn number on which it was cast.
     pub turn: u32,
+    /// Creatures tapped to pay for it with convoke: they "convoked" it (CR 702.51c).
+    #[serde(default)]
+    pub convoked: Vec<ObjectId>,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that

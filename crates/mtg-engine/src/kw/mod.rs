@@ -174,6 +174,17 @@ pub trait KeywordRules: Sync + Send {
     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
         None
     }
+    /// A named object filter (`Filter::Custom(name)`) evaluated by this implementation,
+    /// e.g. "creature that convoked it" (CR 702.51c).
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: ObjectId,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        None
+    }
     /// A named effect (`Effect::Custom(name)`) performed by this implementation. Returns
     /// true if it handled `name`.
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {
@@ -482,6 +493,12 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
 
 pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
     registry().iter().find_map(|r| r.custom_value(g, name, ctx))
+}
+
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &crate::eval::Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_filter(g, name, id, ctx))
 }
 
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {

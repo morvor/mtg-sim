@@ -10,6 +10,10 @@ use crate::types::*;
 
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
+    // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
+    if let Some(b) = crate::kw::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
