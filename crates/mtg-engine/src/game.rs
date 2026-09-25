@@ -1065,6 +1065,8 @@ impl Game {
         let mut lib = std::mem::take(&mut self.players[p.idx()].library);
         lib.shuffle(&mut self.rng);
         self.players[p.idx()].library = lib;
+        // CR 401.6: a revealed top card stops being revealed.
+        crate::zones::library_shuffled(self, p);
         self.emit(Event::Shuffled { player: p });
     }
 
@@ -1146,6 +1148,8 @@ impl Game {
         if !over && self.result.is_some() {
             // CR 708.9: at the end of the game, face-down objects are revealed.
             crate::facedown::reveal_all(self, None);
+            // CR 407.2: the winner becomes the owner of the cards in the ante.
+            crate::ante::game_ended(self);
         }
     }
 

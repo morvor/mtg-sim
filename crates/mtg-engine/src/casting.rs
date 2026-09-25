@@ -641,12 +641,18 @@ impl Game {
                 self.player_loses(p);
                 Ok(())
             }
-            Action::PlayLand { card } => self.play_land(p, card),
+            // CR 401.5: special actions (CR 116.2a) finish before a new top card of a
+            // library is revealed.
+            Action::PlayLand { card } => {
+                crate::zones::during_special_action(self, |g| g.play_land(p, card))
+            }
             Action::Cast { card, method } => self.cast_spell(p, card, method).map(|_| ()),
             Action::Activate { source, ability } => {
                 self.activate_ability(p, source, ability).map(|_| ())
             }
-            Action::Special(sa) => crate::keyword_impls::perform_special_action(self, p, sa),
+            Action::Special(sa) => crate::zones::during_special_action(self, |g| {
+                crate::keyword_impls::perform_special_action(g, p, sa)
+            }),
         };
         self.flush_events();
         r

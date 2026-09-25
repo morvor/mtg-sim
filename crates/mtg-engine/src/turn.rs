@@ -215,6 +215,9 @@ impl Game {
         // CR 103.4, 119.1: each player's life total becomes their starting life total
         // (vanguard life modifiers are known now, CR 902.4).
         crate::life_totals::set_starting_life_totals(self);
+        // CR 407.2: when playing for ante, each player antes a random card before any
+        // cards are drawn.
+        crate::ante::ante_at_start(self);
         // CR 103.5: draw opening hands, then mulligans.
         for p in self.apnap() {
             for _ in 0..self.starting_hand_size(p) {

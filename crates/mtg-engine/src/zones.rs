@@ -33,6 +33,12 @@ pub struct ZoneState {
     /// Library cards that were revealed as the top card and then stopped being revealed
     /// (CR 401.6).
     pub unrevealed: Vec<ObjectId>,
+    /// The top card of each library its owner may currently look at because of an effect
+    /// ("you may look at the top card of your library any time", CR 401.5).
+    pub looked_top: Vec<(PlayerId, ObjectId)>,
+    /// How many special actions are being taken right now (CR 401.5).
+    #[serde(default)]
+    pub special_actions: u32,
 }
 
 /// `Event::Custom` name: the top card of a player's library became revealed (CR 401.5).
@@ -248,6 +254,16 @@ fn reveals_top(g: &Game, p: PlayerId) -> bool {
     })
 }
 
+/// Whether an effect lets `p` look at the top card of their library any time.
+fn looks_at_top(g: &Game, p: PlayerId) -> bool {
+    g.statics.other.iter().any(|(src, ctl, e)| match e {
+        StaticEffect::LookAtTopCard(rel) => {
+            g.player_rel_matches(*rel, p, &Ctx::new(Some(*src), *ctl))
+        }
+        _ => false,
+    })
+}
+
 /// The card on top of `p`'s library that's revealed because of an effect, if any.
 pub fn revealed_top(g: &Game, p: PlayerId) -> Option<ObjectId> {
     g.zones
@@ -257,20 +273,52 @@ pub fn revealed_top(g: &Game, p: PlayerId) -> Option<ObjectId> {
         .map(|(_, id)| *id)
 }
 
-/// Brings the revealed top cards of libraries up to date. While a spell is being cast or
-/// an ability activated, a new top card isn't revealed until that's finished
-/// (CR 401.5). A card that stopped being revealed for any length of time and is revealed
-/// again becomes a new object (CR 401.6).
+/// Whether `viewer` may look at the card `id` in a library: it's the revealed top card
+/// (anyone), or its owner may look at the top card of their library (CR 401.5). Other
+/// cards in libraries can't be looked at (CR 401.2).
+pub fn can_see_in_library(g: &Game, viewer: PlayerId, id: ObjectId) -> bool {
+    let Zone::Library(owner) = g.obj(id).zone else {
+        return false;
+    };
+    if !g.is_live(id) {
+        return false;
+    }
+    revealed_top(g, owner) == Some(id)
+        || (viewer == owner && g.zones.looked_top.contains(&(owner, id)))
+}
+
+/// Runs a special action (CR 116): while it's being taken, a new top card of a library
+/// isn't revealed and can't be looked at (CR 401.5).
+pub fn during_special_action<T>(g: &mut Game, f: impl FnOnce(&mut Game) -> T) -> T {
+    g.zones.special_actions += 1;
+    let r = f(g);
+    g.zones.special_actions = g.zones.special_actions.saturating_sub(1);
+    if g.zones.special_actions == 0 {
+        if g.dirty {
+            g.recompute();
+        }
+        update_revealed_tops(g);
+    }
+    r
+}
+
+/// Brings the revealed (and looked-at) top cards of libraries up to date. While a spell
+/// is being cast, an ability activated, or a special action taken, a new top card isn't
+/// revealed and can't be looked at until that's finished (CR 401.5). A card that stopped
+/// being revealed for any length of time and is revealed again becomes a new object
+/// (CR 401.6).
 pub fn update_revealed_tops(g: &mut Game) {
-    if g.special.casting > 0 {
+    if g.special.casting > 0 || g.zones.special_actions > 0 {
         return;
     }
     for p in g.player_ids() {
-        let top = if reveals_top(g, p) {
-            g.library_top(p)
-        } else {
-            None
-        };
+        let lib_top = g.library_top(p);
+        let looked = if looks_at_top(g, p) { lib_top } else { None };
+        g.zones.looked_top.retain(|(q, _)| *q != p);
+        if let Some(t) = looked {
+            g.zones.looked_top.push((p, t));
+        }
+        let top = if reveals_top(g, p) { lib_top } else { None };
         let prev = revealed_top(g, p);
         if prev == top {
             continue;
@@ -290,6 +338,10 @@ pub fn update_revealed_tops(g: &mut Game) {
             if let Some(slot) = g.players[p.idx()].library.iter_mut().find(|x| **x == top) {
                 *slot = new;
             }
+            for (_, t) in g.zones.looked_top.iter_mut().filter(|(_, t)| *t == top) {
+                *t = new;
+            }
+            g.dirty = true;
             top = new;
         }
         g.zones.revealed_top.push((p, top));
@@ -351,6 +403,9 @@ pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
 
 /// Performs a zone-related `Effect::Custom`, if `name` is one.
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    if crate::ante::custom_effect(g, name, ctx) {
+        return true;
+    }
     if name != MAY_LOOK_AT_EXILED {
         return false;
     }

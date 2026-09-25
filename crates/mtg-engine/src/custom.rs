@@ -369,6 +369,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::tokens::create_named_tokens(g, spec, ctx);
         return;
     }
+    // Zone rules and ante (CR 400-407).
+    if crate::zones::custom_effect(g, name, ctx) {
+        return;
+    }
     // "The game is a draw" (CR 104.4c, 104.4e).
     if crate::game_end::custom_effect(g, name, ctx) {
         return;

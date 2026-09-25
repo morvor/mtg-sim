@@ -89,7 +89,15 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
 pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     let o = g.obj(id);
     if !o.face_down {
-        return o.zone.is_public() || o.zone == Zone::Hand(p);
+        // CR 400.2, 402.3: public zones and your own hand; in a library, only a revealed
+        // top card or one you may look at (CR 401.2, 401.5).
+        return o.zone.is_public()
+            || o.zone == Zone::Hand(p)
+            || crate::zones::can_see_in_library(g, p, id);
+    }
+    // CR 406.3: face-down cards in exile, once a player is allowed to look at them.
+    if o.zone == Zone::Exile {
+        return crate::zones::may_look(g, p, id);
     }
     matches!(o.zone, Zone::Stack | Zone::Battlefield) && o.controller == p
 }
