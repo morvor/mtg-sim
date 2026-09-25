@@ -769,6 +769,14 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
+            Sel::TopOfLibrary(r, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                self.eval_players(r, ctx)
+                    .into_iter()
+                    .flat_map(|p| crate::library::top_cards(self, p, k as u32))
+                    .map(Entity::Object)
+                    .collect()
+            }
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {

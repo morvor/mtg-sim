@@ -712,6 +712,9 @@ pub enum Sel {
     Union(Vec<Sel>),
     /// The top card of a player's graveyard.
     TopOfGraveyard(PlayerRef),
+    /// The top N cards of each of the players' libraries ("the top two cards of your
+    /// library"), top first.
+    TopOfLibrary(PlayerRef, Value),
 }
 
 /// Refers to one or more players.
