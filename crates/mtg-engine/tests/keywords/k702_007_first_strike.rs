@@ -186,3 +186,32 @@ fn first_strike_and_double_strike_together_deal_damage_twice_not_three_times() {
     go_to(&mut t, Step::EndOfCombat);
     assert_eq!(t.life(P1), 16);
 }
+
+#[test]
+fn first_strike_only_while_attacking() {
+    cr!("702.7a", "702.7b");
+    assert_supported("Kor Scythemaster");
+    // Kor Scythemaster: 3/1, "This creature has first strike as long as it's attacking."
+    let mut t = TestGame::new(2);
+    let kor = t.battlefield(P0, "Kor Scythemaster");
+    assert!(!t.obj_now(kor).has_keyword(KeywordKind::FirstStrike));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(kor, Entity::Player(P1))]);
+    block(&mut t, P1, &[(bears, kor)]);
+    go_to(&mut t, Step::EndOfCombat);
+    assert!(t.on_battlefield(kor));
+    assert!(!t.on_battlefield(bears));
+
+    // Blocking, it doesn't have first strike: the two trade.
+    let mut t = TestGame::new(2);
+    let kor = t.battlefield(P1, "Kor Scythemaster");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(bears, Entity::Player(P1))]);
+    block(&mut t, P1, &[(kor, bears)]);
+    go_to(&mut t, Step::EndOfCombat);
+    assert!(!step_happened(&t, Step::FirstStrikeDamage));
+    assert!(!t.on_battlefield(kor));
+    assert!(!t.on_battlefield(bears));
+}

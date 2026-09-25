@@ -149,3 +149,53 @@ fn multiple_instances_of_double_strike_are_redundant() {
     go_to(&mut t, Step::EndOfCombat);
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn hellbent_double_strike_is_lost_when_a_card_enters_the_hand_between_the_steps() {
+    cr!("702.4c");
+    ruling!(
+        "Rakdos Pit Dragon",
+        "If Rakdos Pit Dragon loses double strike after first strike combat damage has been dealt, it won't deal damage during the normal combat damage step."
+    );
+    assert_supported("Rakdos Pit Dragon");
+    let mut t = TestGame::new(2);
+    // Rakdos Pit Dragon: 3/3, "Hellbent — has double strike as long as you have no cards
+    // in hand."
+    let dragon = t.battlefield(P0, "Rakdos Pit Dragon");
+    assert_eq!(t.hand_size(P0), 0);
+    assert!(t.obj_now(dragon).has_keyword(KeywordKind::DoubleStrike));
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(dragon, Entity::Player(P1))]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    assert_eq!(t.life(P1), 17);
+    t.g.draw_cards(P0, 1);
+    t.g.recompute();
+    assert!(!t.obj_now(dragon).has_keyword(KeywordKind::DoubleStrike));
+    go_to(&mut t, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn metalcraft_double_strike_is_checked_as_each_damage_step_begins() {
+    cr!("702.4b", "702.4c");
+    ruling!(
+        "Auriok Edgewright",
+        "As that second combat damage step begins, if Auriok Edgewright no longer has double strike (perhaps because an artifact creature you controlled was destroyed), Auriok Edgewright will not assign combat damage a second time."
+    );
+    assert_supported("Auriok Edgewright");
+    let mut t = TestGame::new(2);
+    let edgewright = t.battlefield(P0, "Auriok Edgewright");
+    t.battlefield(P0, "Ornithopter");
+    t.battlefield(P0, "Ornithopter");
+    let myr = t.battlefield(P0, "Memnite");
+    assert!(t.obj_now(edgewright).has_keyword(KeywordKind::DoubleStrike));
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(edgewright, Entity::Player(P1))]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    assert_eq!(t.life(P1), 18);
+    t.g.destroy(myr, None);
+    t.settle();
+    assert!(!t.obj_now(edgewright).has_keyword(KeywordKind::DoubleStrike));
+    go_to(&mut t, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 18);
+}
