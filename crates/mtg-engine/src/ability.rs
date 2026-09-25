@@ -136,6 +136,9 @@ pub enum ModeChooser {
     Controller,
     Opponent,
     Random,
+    /// The controller chooses modes whose total number of pawprint symbols is at most this
+    /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
+    Pawprints(u32),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -145,6 +148,15 @@ pub struct Mode {
     pub effect: Effect,
     /// Spree / tiered additional cost for choosing this mode.
     pub cost: Option<Cost>,
+}
+
+impl Mode {
+    /// The number of pawprint symbols ({P}) listed for this mode (CR 107.18, 700.2i):
+    /// they indicate the mode and aren't a cost.
+    pub fn pawprints(&self) -> u32 {
+        let head = self.text.split('—').next().unwrap_or("");
+        head.matches("{P}").count() as u32
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -814,6 +826,9 @@ pub enum Filter {
     FaceDown,
     /// Has a mana cost with {X}.
     HasX,
+    /// Has a Phyrexian mana symbol in its mana cost ("a spell with {H} in its mana cost",
+    /// CR 107.4g: {H} means any of the fifteen Phyrexian mana symbols).
+    HasPhyrexianMana,
     /// Is a commander (CR 903.3).
     Commander,
     /// Modified: has counters, or is equipped/enchanted by a permanent its controller controls (CR 700.9).
@@ -930,6 +945,9 @@ pub enum Value {
     /// Number of different color pairs (CR 105.5) among matching objects that are
     /// exactly two colors.
     ColorPairsAmong(Filter),
+    /// The source permanent's class level (CR 716.2d: a permanent without a level is
+    /// treated as level 1).
+    ClassLevel,
     /// The value of X of another object ("put X +1/+1 counters on it" for "a spell with
     /// {X} in its mana cost"): the value used by that object (CR 107.3e).
     XOf(Box<Sel>),
@@ -1969,6 +1987,11 @@ pub enum Effect {
         add: Box<Effect>,
         spell_filter: Filter,
         body: Box<Body>,
+    },
+    /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
+    /// 716.2a).
+    SetClassLevel {
+        level: u32,
     },
     /// "[Player] activates a mana ability of each [filter] they control" (Drain Power).
     ActivateManaAbilities {

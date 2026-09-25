@@ -258,7 +258,19 @@ impl Game {
                         } = e
                         {
                             if t == new_id {
-                                *self.objects[t.0 as usize].counters.entry(kind).or_insert(0) += n;
+                                *self.objects[t.0 as usize]
+                                    .counters
+                                    .entry(kind.clone())
+                                    .or_insert(0) += n;
+                                // Counters it's given as it enters are "put" on it (CR 122.6),
+                                // e.g. a Saga's first lore counter triggers chapter I (714.3a).
+                                if n > 0 {
+                                    self.emit(Event::CountersAdded {
+                                        target: Entity::Object(t),
+                                        kind,
+                                        n,
+                                    });
+                                }
                             }
                         }
                     }

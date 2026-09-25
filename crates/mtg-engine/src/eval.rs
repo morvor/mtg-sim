@@ -376,6 +376,10 @@ impl Game {
             }
             Filter::FaceDown => o.face_down,
             Filter::HasX => c.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+            Filter::HasPhyrexianMana => c
+                .mana_cost
+                .as_ref()
+                .is_some_and(|m| m.symbols.iter().any(|s| s.is_phyrexian())),
             Filter::Commander => o.is_commander,
             Filter::Modified => {
                 o.counters.values().any(|n| *n > 0)
@@ -698,6 +702,9 @@ impl Game {
                 }
                 set.count() as i64
             }
+            Value::ClassLevel => ctx
+                .source
+                .map_or(1, |s| self.obj(s).class_level.max(1) as i64),
             Value::XOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .first()

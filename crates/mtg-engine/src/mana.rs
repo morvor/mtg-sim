@@ -134,6 +134,14 @@ impl ManaSymbol {
         }
     }
 
+    /// One of the fifteen Phyrexian mana symbols (CR 107.4f, 107.4g).
+    pub fn is_phyrexian(self) -> bool {
+        matches!(
+            self,
+            ManaSymbol::Phyrexian(_) | ManaSymbol::PhyrexianHybrid(..)
+        )
+    }
+
     pub fn is_variable(self) -> bool {
         matches!(self, ManaSymbol::X | ManaSymbol::Y | ManaSymbol::Z)
     }

@@ -57,7 +57,7 @@ pub struct Compiled {
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
-    for block in split_abilities(&norm) {
+    for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
         match parse_ability(&block, ctx) {
             Some(mut abilities) => out.abilities.append(&mut abilities),
             None => {

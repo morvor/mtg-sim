@@ -157,6 +157,13 @@ impl Game {
                         && v.len() as u32 <= max
                         && distinct
                         && v.iter().all(|i| available.contains(i))
+                        && match modal.chooser {
+                            // CR 700.2i: at most that many pawprints' worth of modes.
+                            ModeChooser::Pawprints(budget) => {
+                                v.iter().map(|i| modal.modes[*i].pawprints()).sum::<u32>() <= budget
+                            }
+                            _ => true,
+                        }
                 };
                 match ans {
                     Answer::Indices(v) if valid(&v) => v,

@@ -758,6 +758,11 @@ impl Game {
                     ctx,
                 );
             }
+            Effect::SetClassLevel { level } => {
+                if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
+                    self.obj_mut(s).class_level = *level;
+                }
+            }
             Effect::ActivateManaAbilities { who, filter } => {
                 crate::mana_abilities::activate_mana_abilities_of_each(self, who, filter, ctx);
             }
