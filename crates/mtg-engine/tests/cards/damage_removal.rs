@@ -709,3 +709,65 @@ fn bonfire_of_the_damned_on_a_planeswalker_hits_its_controllers_creatures() {
     assert!(!t.on_battlefield(theirs));
     assert!(t.on_battlefield(mine));
 }
+
+// ---------------------------------------------------------------------------
+// Exile "edicts": a player exiles cards or permanents of their choice
+// ---------------------------------------------------------------------------
+
+#[test]
+fn exile_edict_cards_compile() {
+    assert_compiles(&[
+        "Unscrupulous Agent",
+        "Vessel of Malignity",
+        "Yarok's Fenlurker",
+        "Scrabbling Claws",
+        "Debt to the Kami",
+    ]);
+}
+
+#[test]
+fn unscrupulous_agent_makes_the_opponent_exile_a_card_of_their_choice() {
+    cr!("608.2d", "406.1");
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.enter(P0, "Unscrupulous Agent");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_eq!(t.zone(bolt), Zone::Hand(P1));
+}
+
+#[test]
+fn yaroks_fenlurker_makes_each_opponent_exile_a_card() {
+    cr!("608.2d", "101.4");
+    let mut t = TestGame::new(3);
+    t.hand(P1, "Lightning Bolt");
+    t.hand(P2, "Grizzly Bears");
+    let mine = t.hand(P0, "Shock");
+    let h1 = t.hand_size(P1);
+    let h2 = t.hand_size(P2);
+    t.enter(P0, "Yarok's Fenlurker");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), h1 - 1);
+    assert_eq!(t.hand_size(P2), h2 - 1);
+    assert_eq!(t.zone(mine), Zone::Hand(P0));
+}
+
+#[test]
+fn debt_to_the_kami_exiles_a_creature_the_opponent_chooses() {
+    cr!("608.2d", "700.2");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 3);
+    t.answer_choose(P1, &[Entity::Object(elves)]);
+    let d = t.hand(P0, "Debt to the Kami");
+    t.cast(P0, d).modes(&[0]).target(P1).go();
+    t.resolve();
+    assert!(t.on_battlefield(bears));
+    assert!(!t.on_battlefield(elves));
+    assert!(t.in_exile("Llanowar Elves"));
+}
