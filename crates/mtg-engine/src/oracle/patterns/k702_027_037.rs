@@ -7,7 +7,7 @@
 //! * "if it was kicked with its {1}{B} kicker" — a condition linked to one specific kicker
 //!   cost (CR 702.33f, 607.2i).
 
-use super::{ConditionPattern, FollowupPattern, StaticPattern};
+use super::{ConditionPattern, EffectPattern, FollowupPattern, StaticPattern};
 use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
@@ -168,8 +168,40 @@ fn flashback_cost_is_mana_cost(s: &str, prev: &mut Effect, _b: &mut Builder) -> 
     ) && grants_costless_flashback(prev)
 }
 
+/// In an ability that triggers on a discard: "return the discarded card from your
+/// graveyard to your hand", "exile that card from your graveyard" — only if the card is in
+/// the graveyard (a card with madness is exiled instead; after its madness ability put it
+/// into the graveyard, the ability can find it there, CR 702.35c, 400.7k).
+fn discarded_card_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.in_trigger {
+        return None;
+    }
+    let effect = match end(l) {
+        "return the discarded card from your graveyard to your hand" => Effect::Move {
+            what: Sel::TriggerObject,
+            to: Destination::zone(ZoneKind::Hand),
+        },
+        "exile that card from your graveyard" | "exile the discarded card from your graveyard" => {
+            Effect::Exile {
+                what: Sel::TriggerObject,
+                face_down: false,
+                link: false,
+            }
+        }
+        _ => return None,
+    };
+    Some(Effect::If {
+        cond: Condition::SelMatches(Sel::TriggerObject, Filter::InZone(ZoneKind::Graveyard)),
+        then: Box::new(effect),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
 inventory::submit! {
     FollowupPattern { name: "k702.34: flashback cost equal to mana cost", priority: 50, apply: flashback_cost_is_mana_cost }
+}
+inventory::submit! {
+    EffectPattern { name: "k702.35c: the discarded card from your graveyard", priority: 50, parse: discarded_card_from_graveyard }
 }
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
