@@ -525,6 +525,11 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
 pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
     if let Some(r) = s.strip_prefix("the number of ") {
+        // "the number of +1/+1 counters on it", "the number of charge counters on ~",
+        // "the number of counters on target permanent".
+        if let Some(v) = counters_on_value(r, b) {
+            return Some(v);
+        }
         // "the number of cards in your hand"
         if let Some(rest) = r.strip_prefix("cards in your hand") {
             return Some((Value::HandSize(PlayerRef::You), rest.to_string()));
@@ -543,6 +548,21 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {
         return sacrificed_value(r);
+    }
+    // "your devotion to black", "your devotion to black and red" (CR 700.5).
+    if let Some(r) = s.strip_prefix("your devotion to ") {
+        let color = |w: &str| Color::from_word(w.trim_end_matches(['.', ',']));
+        let (w, mut rest) = split_word(r);
+        let mut set = ColorSet::NONE;
+        set.insert(color(w)?);
+        if let Some((c2, r2)) = rest.strip_prefix("and ").and_then(|r2| {
+            let (w2, r3) = split_word(r2);
+            color(w2).map(|c| (c, r3))
+        }) {
+            set.insert(c2);
+            rest = r2;
+        }
+        return Some((Value::Devotion(set), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the greatest power among ") {
         let (f, _, rest) = parse_object_phrase(r)?;
@@ -569,6 +589,21 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     let (n, rest) = parse_number(s)?;
     Some((n, rest.to_string()))
+}
+
+/// "[kind] counter(s) on [object]" / "counters on [object]": how many of those counters
+/// the object has (all kinds when no kind is named).
+fn counters_on_value(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let (kind, rest) = match strip(r, "counters on ").or_else(|| strip(r, "counter on ")) {
+        Some(rest) => (None, rest),
+        None => {
+            let (k, rest) = super::costs::counter_kind(r)?;
+            let rest = strip(rest, "counters on ").or_else(|| strip(rest, "counter on "))?;
+            (Some(k), rest)
+        }
+    };
+    let (sel, tail) = super::effects::object_ref(rest, b)?;
+    Some((Value::CountersOn(Box::new(sel), kind), tail))
 }
 
 /// "[the sacrificed] creature's power", "artifact's mana value": a characteristic of the

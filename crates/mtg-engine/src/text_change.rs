@@ -115,8 +115,8 @@ pub fn change_ability_text(a: &Ability, from: &str, to: &str) -> Ability {
         return x.clone();
     }
     let result = rewrite_ability(a, from, to).unwrap_or_else(|| a.clone());
-    cache.lock().unwrap().insert(key, result.clone());
-    result
+    // Keep the first result if another thread computed it meanwhile (a stable identity).
+    cache.lock().unwrap().entry(key).or_insert(result).clone()
 }
 
 fn rewrite_ability(a: &Ability, from: &str, to: &str) -> Option<Ability> {

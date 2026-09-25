@@ -49,8 +49,9 @@ fn derived_abilities_keyed(kw: &Keyword, key: String) -> Vec<Ability> {
         return v.clone();
     }
     let v = build_derived(kw);
-    cache().lock().unwrap().insert(key, v.clone());
-    v
+    // Another thread may have built the same instance meanwhile: keep the first one, so
+    // every object gets the same abilities (and uids) for it.
+    cache().lock().unwrap().entry(key).or_insert(v).clone()
 }
 
 fn build_derived(kw: &Keyword) -> Vec<Ability> {

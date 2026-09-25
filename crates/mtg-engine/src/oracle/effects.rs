@@ -44,12 +44,26 @@ impl<'c> Builder<'c> {
         // A target player doesn't become "it" ("target opponent loses life equal to its
         // power" — "its" is still the object from before).
         let is_player = matches!(spec.what, TargetKind::Player(_));
+        // "Destroy target creature an opponent controls. That player loses 3 life.": the
+        // opponent mentioned is that object's controller.
+        let opponents = matches!(&spec.what, TargetKind::Object(f) if controlled_by_opponent(f));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
             self.it = Sel::Target(slot);
         }
+        if opponents {
+            self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        }
         slot
+    }
+}
+
+fn controlled_by_opponent(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(PlayerRel::Opponent) => true,
+        Filter::And(v) => v.iter().any(controlled_by_opponent),
+        _ => false,
     }
 }
 
@@ -207,6 +221,12 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             then: Box::new(e),
             otherwise: Box::new(Effect::Noop),
         });
+    }
+    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay".
+    if l.starts_with("you may pay ") {
+        if let Some(e) = parse_simple(l, b) {
+            return Some(e);
+        }
     }
     if let Some(r) = l.strip_prefix("you may ") {
         let e = parse_clause(r, b)?;
@@ -1100,7 +1120,14 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let (what, rest) = object_ref(l, b)?;
     let rest = end(&rest);
-    let f = Filter::In(Box::new(what));
+    // CR 611.2c: these effects modify the rules, not characteristics, so one naming a
+    // class of objects ("creatures can't be blocked this turn") also applies to objects
+    // that join the class later (Veiling Oddity ruling). Specific objects (targets, "those
+    // creatures") are locked in as the effect begins.
+    let f = match &what {
+        Sel::All(f) if is_class_filter(f) => f.clone(),
+        _ => Filter::In(Box::new(what)),
+    };
     let r = match rest {
         "can't block" => Restriction::CantBlock(f),
         "can't attack" => Restriction::CantAttack(f),
@@ -1113,6 +1140,39 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         restriction: r,
         duration: dur,
     })
+}
+
+/// Whether a filter describes a class of objects by their current qualities only, without
+/// referring to the resolving ability's targets, choices, source, or referenced objects,
+/// so it can be evaluated again later in the effect's duration.
+fn is_class_filter(f: &Filter) -> bool {
+    match f {
+        Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
+        Filter::Not(x) => is_class_filter(x),
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
+            matches!(**v, Value::Const(_))
+        }
+        // Relative to the effect's controller, which doesn't change.
+        Filter::ControlledBy(r) | Filter::OwnedBy(r) => matches!(
+            r,
+            PlayerRel::You | PlayerRel::Opponent | PlayerRel::Any | PlayerRel::NotYou
+        ),
+        Filter::Any
+        | Filter::Type(_)
+        | Filter::Supertype(_)
+        | Filter::Subtype(_)
+        | Filter::Color(_)
+        | Filter::ExactColors(_)
+        | Filter::Colorless
+        | Filter::Multicolored
+        | Filter::Monocolored
+        | Filter::Permanent
+        | Filter::Token
+        | Filter::Tapped
+        | Filter::Untapped
+        | Filter::HasKeyword(_) => true,
+        _ => false,
+    }
 }
 
 /// "each player sacrifices a creature", "target player sacrifices an artifact",

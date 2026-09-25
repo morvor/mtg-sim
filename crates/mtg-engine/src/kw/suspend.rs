@@ -6,11 +6,14 @@
 //! may play it without paying its mana cost if able. If you don't, it remains exiled. If
 //! you cast a creature spell this way, it gains haste until you lose control of the spell
 //! or the permanent it becomes."
+//!
+//! "Suspend X—[cost]. X can't be 0." (Roiling Horror) is suspend whose number of time
+//! counters is the X (at least 1) paid in its cost; its keyword has `n` = -1.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::casting::{CastOption, Illegal};
-use crate::decision::{Action, SpecialAction};
+use crate::decision::{Action, Answer, Decision, SpecialAction};
 use crate::eval::Ctx;
 use crate::events::MoveCause;
 use crate::game::{Affected, ContinuousEffect, Game};
@@ -24,6 +27,14 @@ pub struct Suspend;
 /// The custom effect name of the last ability ("you may play it without paying its mana
 /// cost").
 pub const CAST_SUSPENDED: &str = "suspend_cast";
+
+/// `TriggerCond::Custom`: "Whenever a time counter is removed from this card" (Roiling
+/// Horror, a card with suspend X): triggers once for each time counter removed.
+pub const TIME_COUNTER_REMOVED: &str = "suspend:a time counter is removed from this card";
+
+/// `Condition::Custom`: the controller of the haste effect still controls the creature
+/// spell cast with suspend (the effect's source), or the permanent it became.
+const STILL_CONTROLLED: &str = "suspend:you control the spell or the permanent it became";
 
 fn suspend_keyword(g: &Game, card: ObjectId) -> Option<Keyword> {
     g.obj(card)
@@ -40,6 +51,21 @@ fn could_begin_to_cast(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     g.obj(card).zone == Zone::Hand(p)
         && g.timing_allows_cast(p, card, &chars, &CastOption::normal(FaceState::Front))
         && !g.cast_prohibited(p, card, &chars)
+}
+
+/// "Suspend X—[cost]. X can't be 0." (Roiling Horror): the number of time counters is the
+/// X paid in the cost (`n` is -1).
+fn is_suspend_x(kw: &Keyword) -> bool {
+    kw.n.is_some_and(|n| n < 0)
+}
+
+/// The suspend cost with X (if any) bound to `x`.
+fn cost_with_x(kw: &Keyword, x: u32) -> Cost {
+    let mut cost = kw.cost.clone().unwrap_or_default();
+    if let Some(m) = cost.mana.as_mut() {
+        *m = m.with_x(x);
+    }
+    cost
 }
 
 fn time_counters(sel: Sel) -> Value {
@@ -91,6 +117,48 @@ impl KeywordRules for Suspend {
         ])
     }
 
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        (name == STILL_CONTROLLED).then(|| {
+            ctx.source.is_some_and(|s| {
+                let now = g.current(s);
+                g.is_live(now)
+                    && matches!(g.obj(now).zone, Zone::Stack | Zone::Battlefield)
+                    && g.obj(now).controller == ctx.controller
+            })
+        })
+    }
+
+    fn custom_trigger(
+        &self,
+        _g: &Game,
+        name: &str,
+        src: ObjectId,
+        _ctl: PlayerId,
+        ev: &crate::events::Event,
+    ) -> Option<Vec<EventInfo>> {
+        if name != TIME_COUNTER_REMOVED {
+            return None;
+        }
+        // Once for each time counter removed from the card.
+        Some(match ev {
+            crate::events::Event::CountersRemoved {
+                target: Entity::Object(o),
+                kind,
+                n,
+                by,
+            } if *o == src && kind.as_str() == counters::TIME => {
+                let info = EventInfo {
+                    object: Some(*o),
+                    player: *by,
+                    amount: 1,
+                    ..Default::default()
+                };
+                vec![info; *n as usize]
+            }
+            _ => vec![],
+        })
+    }
+
     fn special_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
         g.player(p)
             .hand
@@ -99,7 +167,8 @@ impl KeywordRules for Suspend {
             .filter(|c| g.has_priority(p) && could_begin_to_cast(g, p, *c))
             .filter(|c| {
                 suspend_keyword(g, *c).is_some_and(|k| {
-                    let cost = k.cost.unwrap_or_default();
+                    // "Suspend X": X can't be 0, so at least X = 1 must be payable.
+                    let cost = cost_with_x(&k, 1);
                     g.can_pay_cost(p, &cost, Some(*c), &Ctx::new(Some(*c), p))
                 })
             })
@@ -124,7 +193,25 @@ impl KeywordRules for Suspend {
         let Some(kw) = suspend_keyword(g, card) else {
             return bad("no suspend");
         };
-        let cost = kw.cost.clone().unwrap_or_default();
+        // "Suspend X—[cost with {X}]. X can't be 0.": the player chooses X, pays the cost
+        // with that X, and exiles the card with X time counters.
+        let x = if is_suspend_x(&kw) {
+            let max = g.max_mana_available(p) as i64;
+            let payable = |g: &Game, x: u32| {
+                g.can_pay_cost(p, &cost_with_x(&kw, x), Some(card), &Ctx::new(Some(card), p))
+            };
+            match g.ask(p, Decision::ChooseX { source: card, max }) {
+                // X can't be 0, and the cost with the chosen X must be payable.
+                Answer::Number(n) if n >= 1 && n <= max && payable(g, n as u32) => n as u32,
+                _ => (1..=max.max(1) as u32)
+                    .rev()
+                    .find(|x| payable(g, *x))
+                    .unwrap_or(1),
+            }
+        } else {
+            0
+        };
+        let cost = cost_with_x(&kw, x);
         if !crate::special_actions::pay(g, p, &cost, Some(card), &Ctx::new(Some(card), p)) {
             return bad("can't pay the suspend cost");
         }
@@ -138,7 +225,11 @@ impl KeywordRules for Suspend {
             source: None,
         });
         if let Some(new) = new {
-            let n = kw.n.unwrap_or(0).max(0) as u32;
+            let n = if is_suspend_x(&kw) {
+                x
+            } else {
+                kw.n.unwrap_or(0).max(0) as u32
+            };
             if n > 0 {
                 g.add_counters(Entity::Object(new), counters::TIME, n, None);
             }
@@ -164,7 +255,8 @@ pub fn cast_suspended(g: &mut Game, ctx: &mut Ctx) {
         return;
     };
     if g.obj(spell).chars.is(CardType::Creature) {
-        // The effect follows the spell to the permanent it becomes (CR 611.3d).
+        // The effect follows the spell to the permanent it becomes (CR 611.3d), until its
+        // caster loses control of the spell or that permanent.
         let id = g.new_effect_id();
         let ts = g.new_timestamp();
         let turn = g.turn.number;
@@ -173,7 +265,7 @@ pub fn cast_suspended(g: &mut Game, ctx: &mut Ctx) {
             source: Some(spell),
             controller: p,
             timestamp: ts,
-            duration: Duration::Permanent,
+            duration: Duration::WhileCondition(Condition::Custom(STILL_CONTROLLED.into())),
             affected: Affected::Objects(vec![spell]),
             mods: vec![Modification::AddKeyword(Keyword::new(KeywordKind::Haste))],
             layer1: None,

@@ -225,6 +225,10 @@ pub struct CastInfo {
     /// (CR 307.5a).
     #[serde(default)]
     pub instant_timing: bool,
+    /// Cards exiled from a graveyard to pay for it with delve (CR 702.66a), as they are in
+    /// exile: the cards "exiled with it".
+    #[serde(default)]
+    pub delved: Vec<ObjectId>,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that
