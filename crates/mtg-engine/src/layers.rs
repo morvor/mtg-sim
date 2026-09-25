@@ -267,6 +267,11 @@ impl Game {
                 self.apply_pt_counters(&live);
             }
             self.apply_layer(layer, &live, &mut st);
+            if layer == Layer::L2Control {
+                // CR 313.5, 314.5, 315.6: vanguards, schemes and conspiracies are
+                // controlled by their owners.
+                crate::variants::command_cards_controlled_by_owners(self, &live);
+            }
             if layer == Layer::L4Type {
                 // CR 305.6: basic land types have intrinsic mana abilities. They're
                 // determined by the object's types after layer 4 (CR 305.7) and can be
@@ -1063,7 +1068,13 @@ impl Game {
             mods[p.idx()].push((m, ctx));
         }
         for (i, m) in mods.into_iter().enumerate() {
-            let mut max_hand: Option<i32> = Some(7);
+            // CR 313.6, 902.5b: the hand modifier of the player's vanguard applies to their
+            // maximum hand size.
+            let vanguard = self
+                .vanguard_of(PlayerId(i as u8))
+                .and_then(|v| self.obj(v).base.hand_modifier)
+                .unwrap_or(0);
+            let mut max_hand: Option<i32> = Some(7 + vanguard);
             let mut land_plays = 1u32;
             for (x, ctx) in &m {
                 match x {

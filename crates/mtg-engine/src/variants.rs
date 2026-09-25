@@ -320,6 +320,28 @@ pub fn is_nontraditional(card: &crate::card::CardDef) -> bool {
     })
 }
 
+/// The controller of a vanguard, scheme, or conspiracy card in the command zone is its
+/// owner (CR 313.5, 314.5, 315.6): control-changing effects don't change that.
+pub fn command_cards_controlled_by_owners(g: &mut Game, live: &[ObjectId]) {
+    for id in live {
+        let o = &g.objects[id.0 as usize];
+        if o.zone != Zone::Command || o.kind != crate::object::ObjKind::Card {
+            continue;
+        }
+        let types = o
+            .card
+            .as_ref()
+            .map_or(o.base.card_types, |c| c.front().chars.card_types);
+        if [CardType::Vanguard, CardType::Scheme, CardType::Conspiracy]
+            .iter()
+            .any(|t| types.contains(*t))
+        {
+            let owner = o.owner;
+            g.objects[id.0 as usize].controller = owner;
+        }
+    }
+}
+
 /// Moves of cards that stay where they are: plane, phenomenon, vanguard, scheme, and
 /// conspiracy cards remain in the command zone if they would leave it (CR 311.2, 312.2,
 /// 313.2, 314.2, 315.3); a dungeon card leaves it only as it leaves the game (CR 309.2c);
