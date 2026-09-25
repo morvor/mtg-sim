@@ -337,3 +337,52 @@ fn targets_for_a_kicked_only_part_are_chosen_only_if_kicked() {
     });
     assert_eq!(damage_source, Some(spell));
 }
+
+#[test]
+fn abilities_can_check_that_a_permanent_wasnt_kicked() {
+    cr!("702.33d");
+    assert_supported("Skizzik");
+    for kicked in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 5);
+        let skizzik = t.hand(P0, "Skizzik");
+        t.cast(P0, skizzik).kicked(kicked).go();
+        t.resolve();
+        assert!(t.on_battlefield(skizzik));
+        // "At the beginning of the end step, if ~ wasn't kicked, sacrifice it."
+        t.advance_to(P0, mtg_engine::turn::Step::End);
+        t.resolve_all();
+        assert_eq!(t.on_battlefield(skizzik), kicked, "kicked: {kicked}");
+    }
+}
+
+#[test]
+fn a_multikicker_ability_is_a_kicker_ability() {
+    cr!("702.33c");
+    assert_supported("Murasa Sproutling");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let burst = t.graveyard(P0, "Burst Lightning");
+    let pack = t.graveyard(P0, "Gnarlid Pack");
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    let sprout = t.hand(P0, "Murasa Sproutling");
+    t.answer_targets(P0, &[Entity::Object(pack)]);
+    t.cast(P0, sprout).kicked(true).go();
+    t.resolve();
+    // "Return target card with a kicker ability from your graveyard to your hand": cards
+    // with kicker or multikicker, not others.
+    let candidates: Vec<Entity> = t
+        .asked()
+        .into_iter()
+        .rev()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .unwrap();
+    assert!(candidates.contains(&Entity::Object(burst)));
+    assert!(candidates.contains(&Entity::Object(pack)));
+    assert!(!candidates.contains(&Entity::Object(bolt)));
+    t.resolve();
+    assert!(t.in_hand(P0, "Gnarlid Pack"));
+}

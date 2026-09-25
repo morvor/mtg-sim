@@ -20,6 +20,8 @@ use crate::types::*;
 
 /// The custom effect of the madness triggered ability.
 pub const CAST_MADNESS: &str = "madness_cast";
+/// The name recorded in `CastInfo::paid` when a spell is cast for its madness cost.
+pub const MADNESS: &str = "madness";
 
 pub struct Madness;
 
@@ -96,7 +98,7 @@ pub fn cast_madness(g: &mut Game, ctx: &mut Ctx) {
             opt.alt_cost = Some(cost);
             // Timing permissions based on card type don't apply (CR 702.35 rulings).
             opt.any_time = true;
-            opt.tag = Some("madness");
+            opt.tag = Some(MADNESS);
             if g.cast_with_option(owner, card, opt).is_ok() {
                 return;
             }

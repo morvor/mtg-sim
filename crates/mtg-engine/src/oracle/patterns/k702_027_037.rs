@@ -69,14 +69,33 @@ fn kicked_with(c: &str) -> Option<Condition> {
     let r = ["it ", "~ ", "this spell ", "this creature ", "this permanent "]
         .iter()
         .find_map(|p| c.strip_prefix(p))?;
-    if r == "was kicked twice" {
-        return Some(Condition::Compare(Value::TimesKicked, Cmp::Ge, Value::c(2)));
+    match r {
+        "was kicked twice" => {
+            return Some(Condition::Compare(Value::TimesKicked, Cmp::Ge, Value::c(2)))
+        }
+        "wasn't kicked" | "was not kicked" => {
+            return Some(Condition::Not(Box::new(Condition::CostPaid(
+                crate::kw::kicker::KICKER.into(),
+            ))))
+        }
+        _ => {}
     }
     let sym = r
         .strip_prefix("was kicked with its ")?
         .strip_suffix(" kicker")?;
     let cost = ManaCost::parse(&sym.to_uppercase())?;
     Some(Condition::CostPaid(kicker_cost_name(&cost).into()))
+}
+
+/// "if its madness cost was paid" / "if ~'s madness cost was paid" (CR 702.35a: the spell
+/// was cast with its madness ability; a permanent's abilities see how its spell was cast,
+/// CR 400.7d).
+fn madness_cost_paid(c: &str) -> Option<Condition> {
+    matches!(
+        end(c),
+        "its madness cost was paid" | "~'s madness cost was paid"
+    )
+    .then(|| Condition::CostPaid(crate::kw::madness::MADNESS.into()))
 }
 
 /// "~ can block creatures with shadow as though it had shadow" / "... as though they
@@ -314,4 +333,7 @@ inventory::submit! {
 }
 inventory::submit! {
     ConditionPattern { name: "k702.33f: kicked with a specific kicker", priority: 50, parse: kicked_with }
+}
+inventory::submit! {
+    ConditionPattern { name: "k702.35: madness cost was paid", priority: 50, parse: madness_cost_paid }
 }

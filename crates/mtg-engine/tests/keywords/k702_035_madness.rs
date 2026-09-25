@@ -353,3 +353,30 @@ fn a_granted_madness_ability_can_cost_the_cards_mana_cost() {
     t.resolve();
     assert!(t.on_battlefield(hawk));
 }
+
+#[test]
+fn abilities_can_check_whether_the_madness_cost_was_paid() {
+    cr!("702.35b");
+    assert_supported("Grave Scrabbler");
+    for madness in [false, true] {
+        let mut t = TestGame::new(2);
+        empty_hand(&mut t, P0);
+        t.lands(P0, "Swamp", 4);
+        let bears = t.graveyard(P1, "Grizzly Bears");
+        let scrabbler = t.hand(P0, "Grave Scrabbler");
+        if madness {
+            mind_rot_p0(&mut t);
+            t.answer_yes(P0, true);
+            t.resolve();
+        } else {
+            t.cast(P0, scrabbler).go();
+        }
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.answer_yes(P0, true);
+        t.resolve_all();
+        assert!(t.on_battlefield(scrabbler));
+        // "When ~ enters, if its madness cost was paid, you may return target creature
+        // card from a graveyard to its owner's hand."
+        assert_eq!(t.in_hand(P1, "Grizzly Bears"), madness, "madness: {madness}");
+    }
+}
