@@ -151,16 +151,47 @@ fn sets_pt(a: &Ability) -> bool {
     }
 }
 
-/// The original-case text of a lowercase phrase in the face's oracle text (for token
-/// names: "named Ballistic Boulder").
-fn original_case(lower: &str) -> Option<String> {
+/// The original-case token name after "named " in the face's oracle text whose
+/// normalized, lowercased form is `n` ("named Ballistic Boulder"). The card's own name
+/// in a token's name normalizes to `~` ("Kobolds of Kher Keep" on Kher Keep, "Koma's
+/// Coil" on Koma), so candidates are compared after normalizing them the same way; the
+/// longest match wins ("Kobolds of Kher" also normalizes to "Kobolds of ~" on the
+/// legendary Kher Keep, whose first word stands for it).
+fn original_name(n: &str, ctx: &CompileContext) -> Option<String> {
     let raw = crate::oracle::raw_text();
     let rl = raw.to_lowercase();
     if rl.len() != raw.len() {
         return None;
     }
-    let i = rl.find(lower)?;
-    raw.get(i..i + lower.len()).map(str::to_string)
+    let max_words = n.split(' ').count() + 4;
+    let mut from = 0;
+    while let Some(i) = rl[from..].find("named ") {
+        let start = from + i + "named ".len();
+        from = start;
+        let after = &raw[start..];
+        let mut end_at = 0;
+        let mut best = None;
+        for _ in 0..max_words {
+            let word_end = after[end_at..]
+                .find(char::is_whitespace)
+                .map_or(after.len(), |k| end_at + k);
+            let cand = after[..word_end].trim_end_matches(['.', ',', ';', '"', '\u{201D}']);
+            if crate::oracle::normalize(cand, ctx).to_lowercase() == n {
+                best = Some(cand.to_string());
+            }
+            let Some(ws) = after[word_end..].chars().next() else {
+                break;
+            };
+            if matches!(ws, '\n' | '\r') {
+                break;
+            }
+            end_at = word_end + ws.len_utf8();
+        }
+        if best.is_some() {
+            return best;
+        }
+    }
+    None
 }
 
 /// Parses "1/1 white Soldier creature token with flying named Wasp that's tapped and
@@ -265,10 +296,10 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             seen_name = true;
             let i = next_bound(r);
             let n = r[..i].trim();
-            if n.is_empty() || n.contains('"') || n.split(' ').count() > 4 {
+            if n.is_empty() || n.contains(['"', ',']) || n.split(' ').count() > 4 {
                 return None;
             }
-            name = SmolStr::new(original_case(&format!("named {n}"))?.split_at(6).1);
+            name = SmolStr::new(original_name(n, ctx)?);
             rest = r[i..].trim().to_string();
         } else if let Some(r) = ["that's all colors", "that are all colors"]
             .iter()
@@ -435,6 +466,21 @@ fn is_create(e: &Effect) -> bool {
     )
 }
 
+/// Whether the last instruction of `e` created several kinds of tokens ("a 1/1 ... token
+/// and a Food token"): `vars::CREATED` then holds only the last kind, so a follow-up
+/// about "them" can't be expressed with it.
+fn several_kinds(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => {
+            v.iter().rev().take_while(|x| is_create(x)).count() > 1
+                || v.last().is_some_and(several_kinds)
+        }
+        Effect::If { then, .. } | Effect::PayOptional { then, .. } => several_kinds(then),
+        Effect::May { effect, .. } => several_kinds(effect),
+        _ => false,
+    }
+}
+
 /// Whether `e` creates tokens anywhere.
 fn has_create(e: &Effect) -> bool {
     match e {
@@ -495,6 +541,9 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     .find_map(|p| l.strip_prefix(p)) else {
         return false;
     };
+    if several_kinds(prev) {
+        return false;
+    }
     let Some(Effect::CreateToken { spec, .. }) = last_create(prev) else {
         return false;
     };
@@ -522,7 +571,7 @@ fn mentions_created(e: &Effect) -> bool {
 /// haste until end of turn", "attach ~ to it", "put a +1/+1 counter on it": an
 /// instruction right after creating tokens whose pronoun names those tokens.
 fn f_created_pronoun(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if last_create(prev).is_none() {
+    if last_create(prev).is_none() || several_kinds(prev) {
         return false;
     }
     let l = end(l);

@@ -49,6 +49,11 @@ fn a_nonlegendary_copy_of_a_legendary_creature() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 5);
     let dog = t.battlefield(P0, "Isamaru, Hound of Konda");
+    // Counters and tapped status aren't copied.
+    t.g.add_counters(Entity::Object(dog), "+1/+1", 2, None);
+    t.g.tap(dog);
+    t.g.recompute();
+    assert_eq!(t.pt(dog), (4, 4));
     let qm = t.hand(P0, "Quantum Misalignment");
     t.cast(P0, qm).target(dog).go();
     t.resolve();
@@ -56,7 +61,8 @@ fn a_nonlegendary_copy_of_a_legendary_creature() {
     assert_eq!(copies.len(), 1);
     let copy = copies[0];
     assert!(!t.g.obj(copy).chars.supertypes.contains(Supertype::Legendary));
-    assert_eq!(t.pt(copy), (2, 2));
+    assert_eq!(t.pt(copy), (2, 2), "the printed 2/2, not the 4/4 with counters");
+    assert!(!t.g.obj(copy).tapped);
     // Both survive the legend rule: only one of them is legendary.
     t.settle();
     assert!(t.on_battlefield(dog) && t.on_battlefield(copy));
@@ -64,7 +70,7 @@ fn a_nonlegendary_copy_of_a_legendary_creature() {
 
 #[test]
 fn copy_that_is_a_one_one_green_frog() {
-    cr!("707.9b", "707.9d");
+    cr!("707.9b");
     ruling!(
         "Croaking Counterpart",
         "Except for power, toughness, creature type, and color"
@@ -162,4 +168,79 @@ fn copy_that_becomes_a_creature_in_addition_to_its_types() {
     assert!(o.chars.has_subtype("Fractal"));
     assert_eq!(t.pt(copy), (6, 6), "0/0 with six +1/+1 counters");
     assert!(!t.g.obj(rock).chars.is(CardType::Creature));
+}
+
+#[test]
+fn a_copy_that_is_one_one_doesnt_copy_a_pt_defining_ability() {
+    cr!("707.9d", "707.9b");
+    ruling!(
+        "Nightmare Shepherd",
+        "the token doesn't copy the ability that defines its power and toughness"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nightmare Shepherd");
+    t.graveyard(P1, "Lightning Bolt");
+    let goyf = t.battlefield(P0, "Tarmogoyf");
+    t.answer_yes(P0, true);
+    t.g.destroy(goyf, None);
+    t.resolve_all();
+    assert!(t.in_exile("Tarmogoyf"), "the dead Tarmogoyf was exiled");
+    let copy = token_copies(&t, "Tarmogoyf")[0];
+    // Creature and instant cards are in graveyards: a Tarmogoyf would be 2/3.
+    assert_eq!(t.pt(copy), (1, 1), "it remains a 1/1 creature");
+    let o = t.g.obj(copy);
+    assert!(o.chars.has_subtype("Nightmare") && o.chars.has_subtype("Lhurgoyf"));
+}
+
+#[test]
+fn a_copy_with_new_creature_types_doesnt_copy_changeling() {
+    cr!("707.9d", "702.73a");
+    use mtg_engine::ability::Filter;
+    use mtg_engine::eval::Ctx;
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    t.battlefield(P0, "Hashaton, Scarab's Fist");
+    let outcast = t.hand(P0, "Changeling Outcast");
+    t.answer_yes(P0, true);
+    t.g.discard(P0, outcast, None);
+    t.resolve_all();
+    let copy = token_copies(&t, "Changeling Outcast")[0];
+    let o = t.g.obj(copy);
+    assert!(o.tapped);
+    assert_eq!(t.pt(copy), (4, 4));
+    assert!(o.chars.colors.contains(Color::Black) && o.chars.colors.count() == 1);
+    assert!(o.chars.has_subtype("Zombie"));
+    assert!(!o.chars.has_keyword(KeywordKind::Changeling));
+    let elf = Filter::Subtype("Elf".into());
+    let ctx = Ctx::new(None, P0);
+    assert!(!t.g.matches(copy, &elf, &ctx), "a Zombie, not every creature type");
+    // The card in the graveyard is still every creature type.
+    let card = t
+        .g
+        .players[0]
+        .graveyard
+        .iter()
+        .copied()
+        .find(|id| t.g.obj(*id).chars.name == "Changeling Outcast")
+        .unwrap();
+    assert!(t.g.matches(card, &elf, &ctx));
+}
+
+#[test]
+fn a_copy_with_a_new_color_doesnt_copy_devoid() {
+    cr!("707.9d", "702.114a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 1);
+    let spawner = t.battlefield(P1, "Eldrazi Skyspawner");
+    assert!(t.g.obj(spawner).chars.colors.is_colorless());
+    let cc = t.hand(P0, "Croaking Counterpart");
+    t.cast(P0, cc).target(spawner).go();
+    t.resolve_all();
+    let copy = token_copies(&t, "Eldrazi Skyspawner")[0];
+    let o = t.g.obj(copy);
+    assert_eq!(o.chars.colors.count(), 1);
+    assert!(o.chars.colors.contains(Color::Green), "green, not colorless");
+    assert!(!o.chars.has_keyword(KeywordKind::Devoid));
+    assert!(o.chars.has_keyword(KeywordKind::Flying), "other abilities are copied");
 }

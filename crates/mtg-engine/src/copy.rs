@@ -113,8 +113,13 @@ pub fn drop_overridden_cdas(
             }),
             _ => true,
         },
-        // Changeling is a characteristic-defining ability (CR 702.73a).
-        AbilityKind::Keyword(k) => !(sets_creature_types && k.kind == KeywordKind::Changeling),
+        // Changeling and devoid are characteristic-defining abilities (CR 702.73a,
+        // 702.114a).
+        AbilityKind::Keyword(k) => match k.kind {
+            KeywordKind::Changeling => !sets_creature_types,
+            KeywordKind::Devoid => !sets_color,
+            _ => true,
+        },
         _ => true,
     });
 }

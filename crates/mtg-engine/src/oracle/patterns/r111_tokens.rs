@@ -8,11 +8,14 @@ use crate::ability::*;
 use crate::oracle::effects::{parse_token_description, Builder};
 use crate::oracle::patterns::EffectPattern;
 use crate::oracle::phrases::*;
+use crate::oracle::CompileContext;
 use crate::types::*;
 use smol_str::SmolStr;
 
-/// "[count] [tapped] <token description>" → (spec, count, tapped).
-fn token_phrase(r: &str) -> Option<(TokenSpec, Value, bool)> {
+/// "[count] [tapped] <token description>" → (spec, count, tapped). Descriptions the core
+/// parser doesn't take (named tokens, quoted abilities) go to the full description parser
+/// of `tokens_copies_create`; tokens created attacking aren't handled here.
+fn token_phrase(r: &str, ctx: &CompileContext) -> Option<(TokenSpec, Value, bool)> {
     let (count, r) = parse_number(r)?;
     let r = r.trim();
     let (r, tapped) = match r.strip_prefix("tapped ") {
@@ -26,7 +29,17 @@ fn token_phrase(r: &str) -> Option<(TokenSpec, Value, bool)> {
             return Some((spec, count, tapped));
         }
     }
-    Some((parse_token_description(r)?, count, tapped))
+    let spec = match parse_token_description(r) {
+        Some(spec) => spec,
+        None => {
+            let d = super::tokens_copies_create::token_desc(r, ctx)?;
+            if d.attacking {
+                return None;
+            }
+            d.spec
+        }
+    };
+    Some((spec, count, tapped))
 }
 
 /// "its controller creates a 3/3 green Beast creature token", "target opponent creates
@@ -54,7 +67,7 @@ fn another_player_creates(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         _ => return None,
     };
-    let (spec, count, tapped) = token_phrase(rest)?;
+    let (spec, count, tapped) = token_phrase(rest, b.ctx)?;
     Some(Effect::CreateToken {
         spec,
         count,
