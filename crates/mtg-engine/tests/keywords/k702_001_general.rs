@@ -237,3 +237,52 @@ fn with_a_keyword_means_with_that_keyword_ability() {
     t.resolve();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn the_same_is_true_for_on_a_resolving_ability_locks_in_what_is_granted() {
+    cr!("702.1c", "611.2c");
+    ruling!(
+        "Concerted Effort",
+        "All three creatures will have flying, islandwalk, vigilance, protection from red, and protection from green until the end of the turn."
+    );
+    ruling!(
+        "Concerted Effort",
+        "Creatures keep all abilities granted this way until the end of the turn, even if Concerted Effort or the original creature with that ability leaves the battlefield."
+    );
+    assert_supported("Concerted Effort");
+    let mut t = TestGame::new(2);
+    // "At the beginning of each upkeep, creatures you control gain flying until end of
+    // turn if a creature you control has flying. The same is true for fear, first strike,
+    // double strike, landwalk, protection, trample, and vigilance."
+    let effort = t.battlefield(P0, "Concerted Effort");
+    let knight = t.battlefield(P0, "Silver Knight"); // first strike, protection from red
+    let wraith = t.battlefield(P0, "Bog Wraith"); // swampwalk
+    let angel = t.battlefield(P0, "Serra Angel"); // flying, vigilance
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    for c in [wraith, angel, bears] {
+        let o = t.obj_now(c);
+        assert!(o.has_keyword(KeywordKind::FirstStrike), "first strike");
+        assert!(o.has_keyword(KeywordKind::Flying), "flying");
+        assert!(o.has_keyword(KeywordKind::Vigilance), "vigilance");
+        assert!(o.has_keyword(KeywordKind::Landwalk), "swampwalk");
+        assert!(o
+            .chars
+            .keywords()
+            .any(|k| k.kind == KeywordKind::Protection
+                && matches!(k.filter, Some(Filter::Color(Color::Red)))));
+    }
+    // The original creatures and Concerted Effort leave: the granted abilities stay.
+    t.g.destroy(knight, None);
+    t.g.destroy(angel, None);
+    t.g.destroy(effort, None);
+    t.settle();
+    let o = t.obj_now(bears);
+    assert!(o.has_keyword(KeywordKind::FirstStrike));
+    assert!(o.has_keyword(KeywordKind::Flying));
+    assert!(o.has_keyword(KeywordKind::Protection));
+    // Until end of turn.
+    t.advance_to(P0, Step::Upkeep);
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::Flying));
+}

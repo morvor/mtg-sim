@@ -556,6 +556,89 @@ inventory::submit! {
     AbilityPattern { name: "k702: the same is true for", priority: 50, parse: same_is_true_for }
 }
 
+/// The objects "if [objects] has [keyword]" / "if you control [objects] with [keyword]"
+/// looks at: "a creature you control has flying", "you control a creature with flying",
+/// "a creature card in your graveyard has flying", "a creature you control or a card in
+/// your hand has flying".
+fn keyword_holders(cond: &str, kw: &str) -> Option<Filter> {
+    let article = |s: &str| -> String {
+        s.strip_prefix("a ")
+            .or_else(|| s.strip_prefix("an "))
+            .unwrap_or(s)
+            .to_string()
+    };
+    let phrase = |s: &str| -> Option<Filter> {
+        let s = article(s);
+        let (f, _, tail) = parse_object_phrase(&s)?;
+        end(tail).is_empty().then_some(f)
+    };
+    if let Some(r) = cond.strip_prefix("you control ") {
+        let r = r.strip_suffix(&format!(" with {kw}"))?;
+        return Some(phrase(r)?.you_control());
+    }
+    let r = cond.strip_suffix(&format!(" has {kw}"))?;
+    let mut fs = Vec::new();
+    for p in r.split(" or ") {
+        fs.push(phrase(p)?);
+    }
+    Some(if fs.len() == 1 {
+        fs.pop()?
+    } else {
+        Filter::Or(fs)
+    })
+}
+
+/// "At the beginning of each combat, creatures you control gain first strike until end of
+/// turn if a creature you control has first strike. The same is true for flying,
+/// deathtouch, ..." (Odric, Lunarch Marshal; Concerted Effort; Majestic Myriarch): each
+/// listed keyword, in every variant such an object has as the ability resolves
+/// (CR 702.1c).
+fn same_is_true_for_triggered(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') || block.contains(':') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let (first, list) = l.split_once(". the same is true for ")?;
+    let (pre, cond) = first.split_once(" until end of turn if ")?;
+    let (head, kw0) = pre
+        .rsplit_once(" gains ")
+        .or_else(|| pre.rsplit_once(" gain "))?;
+    let verb = if pre.ends_with(&format!(" gains {kw0}")) {
+        "gains"
+    } else {
+        "gain"
+    };
+    let mut kinds = vec![KeywordKind::from_name(kw0)?];
+    for item in list
+        .split(", and ")
+        .flat_map(|p| p.split(", "))
+        .flat_map(|p| p.split(" and "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
+        kinds.push(KeywordKind::from_name(item)?);
+    }
+    let from = keyword_holders(cond, kw0)?;
+    let text = format!("{head} {verb} {kw0} until end of turn.");
+    let a = crate::oracle::triggers::parse_triggered(&text, ctx)?;
+    let AbilityKind::Triggered(mut t) = a.kind.clone() else {
+        return None;
+    };
+    let Effect::Modify { mods, .. } = &mut t.body.effect else {
+        return None;
+    };
+    if !matches!(mods.as_slice(), [Modification::AddKeyword(k)] if k.kind == kinds[0]) {
+        return None;
+    }
+    *mods = vec![Modification::AddKeywordsOf { kinds, from }];
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(t), block)])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: the same is true for (triggered)", priority: 50, parse: same_is_true_for_triggered }
+}
+
 /// The spells of "you may cast [spells] as though they had flash": "spells", "creature
 /// spells", "creature and enchantment spells", "Sliver spells".
 fn spells_phrase(s: &str) -> Option<Filter> {

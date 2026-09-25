@@ -1095,6 +1095,37 @@ fn keyword_counter_ability(kw: &Keyword) -> Ability {
         .clone()
 }
 
+/// The keywords of the given kinds that objects matching `from` have, with every variant
+/// and variable, each distinct instance once (CR 702.1c, "the same is true for").
+pub fn keywords_of(g: &Game, kinds: &[KeywordKind], from: &Filter, ctx: &Ctx) -> Vec<Keyword> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    // Alternatives may be in different zones ("a creature you control or a card in your
+    // hand").
+    let objects: Vec<ObjectId> = match from {
+        Filter::Or(v) => v.iter().flat_map(|f| g.objects_matching(f, ctx)).collect(),
+        f => g.objects_matching(f, ctx),
+    };
+    for o in objects {
+        for k in g
+            .obj(o)
+            .chars
+            .keywords()
+            .filter(|k| kinds.contains(&k.kind))
+        {
+            let key = format!(
+                "{:?}{:?}{:?}{:?}{:?}",
+                k.kind, k.n, k.cost, k.costs, k.filter
+            );
+            if !seen.contains(&key) {
+                seen.push(key);
+                out.push(k.clone());
+            }
+        }
+    }
+    out
+}
+
 /// Applies a single layer modification to a set of characteristics.
 pub fn apply_mod(
     c: &mut Characteristics,
@@ -1270,26 +1301,8 @@ pub fn apply_mod(
             apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
         }
         Modification::AddKeywordsOf { kinds, from } => {
-            // CR 702.1c: each variant and variable of each listed keyword that such an
-            // object has; identical instances are granted once.
-            let mut seen: Vec<String> = Vec::new();
-            for o in g.objects_matching(from, ctx) {
-                for k in g
-                    .obj(o)
-                    .chars
-                    .keywords()
-                    .filter(|k| kinds.contains(&k.kind))
-                {
-                    let key = format!(
-                        "{:?}{:?}{:?}{:?}{:?}",
-                        k.kind, k.n, k.cost, k.costs, k.filter
-                    );
-                    if seen.contains(&key) {
-                        continue;
-                    }
-                    seen.push(key);
-                    apply_mod(c, &Modification::AddKeyword(k.clone()), g, ctx, _target);
-                }
+            for k in keywords_of(g, kinds, from, ctx) {
+                apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
             }
         }
         Modification::RemoveKeyword(k) => c
