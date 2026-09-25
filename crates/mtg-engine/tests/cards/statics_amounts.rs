@@ -264,3 +264,51 @@ fn has_flash_as_long_as_you_control_a_kind() {
     t.g.turn.priority = Some(P0);
     assert!(t.cast(P0, tide).target(target).try_go().is_ok());
 }
+
+#[test]
+fn opponents_below_half_their_starting_life() {
+    cr!("611.3a", "613.4c");
+    compiles("Anya, Merciless Angel");
+    let mut t = TestGame::new(3);
+    let anya = t.battlefield(P0, "Anya, Merciless Angel");
+    assert_eq!(t.pt(anya), (4, 4));
+    assert!(!has(&t, anya, KeywordKind::Indestructible));
+    // Exactly half isn't less than half.
+    t.g.lose_life(P1, 10);
+    t.settle();
+    assert_eq!(t.pt(anya), (4, 4));
+    assert!(!has(&t, anya, KeywordKind::Indestructible));
+    t.g.lose_life(P1, 1);
+    t.settle();
+    assert_eq!(t.pt(anya), (7, 7));
+    assert!(has(&t, anya, KeywordKind::Indestructible));
+    // Your own life total doesn't count.
+    t.g.lose_life(P0, 15);
+    t.settle();
+    assert_eq!(t.pt(anya), (7, 7));
+    t.g.lose_life(P2, 11);
+    t.settle();
+    assert_eq!(t.pt(anya), (10, 10));
+}
+
+#[test]
+fn half_an_odd_starting_life_total_is_a_fraction() {
+    ruling!("Anya, Merciless Angel", "half that number is 20");
+    cr!("611.3a", "103.4");
+    let config = mtg_engine::game::GameConfig {
+        starting_life: 41,
+        ..Default::default()
+    };
+    let mut t = TestGame::with_config(2, config);
+    let anya = t.battlefield(P0, "Anya, Merciless Angel");
+    // 41 → 21: not below 20½.
+    t.g.lose_life(P1, 20);
+    t.settle();
+    assert!(!has(&t, anya, KeywordKind::Indestructible));
+    assert_eq!(t.pt(anya), (4, 4));
+    // 20 is below 20½.
+    t.g.lose_life(P1, 1);
+    t.settle();
+    assert!(has(&t, anya, KeywordKind::Indestructible));
+    assert_eq!(t.pt(anya), (7, 7));
+}

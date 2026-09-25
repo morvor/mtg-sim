@@ -889,6 +889,16 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             }
         }
     }
+    // "opponent whose life total is less than half their starting life total"
+    if s == "opponent whose life total is less than half their starting life total" {
+        return Some(Value::CountPlayers(PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::Life(
+                Cmp::Lt,
+                Box::new(Value::Div(Box::new(Value::StartingLife), 2, true)),
+            ),
+        ])));
+    }
     // "poison counter your opponents have"
     for tail in [" counter your opponents have", " counters your opponents have"] {
         if let Some(kind) = s.strip_suffix(tail) {
