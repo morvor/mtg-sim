@@ -53,6 +53,19 @@ fn damage(source: &Sel, amount: Value, to: Sel) -> Effect {
     }
 }
 
+/// Whether "it"/"that creature" currently names an object other than the source (a
+/// target object, the trigger object, a variable), i.e. a tracked antecedent.
+fn it_is_object(b: &Builder) -> bool {
+    match &b.it {
+        Sel::This => false,
+        Sel::Target(n) => !matches!(
+            b.targets.get(*n as usize).map(|t| &t.what),
+            Some(TargetKind::Player(_)) | None
+        ),
+        _ => true,
+    }
+}
+
 /// The relation a filter uses for "that player controls"/"they control".
 fn player_rel_of(p: &PlayerRef) -> Option<PlayerRel> {
     Some(match p {
@@ -126,9 +139,9 @@ fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
     let it = b.it.clone();
-    // "that card"/"that creature" never names the source itself; if the referent is
-    // still the source, the antecedent wasn't tracked (e.g. a discarded card).
-    if matches!(it, Sel::This) && s.starts_with("that ") {
+    // "that card"/"that creature" never names the source itself or a player; if the
+    // referent is one of those, the antecedent wasn't tracked (e.g. a discarded card).
+    if s.starts_with("that ") && !it_is_object(b) {
         return None;
     }
     let pairs: [(&str, Value); 12] = [
@@ -245,7 +258,7 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
             if p == "that player" && matches!(r, PlayerRef::You) {
                 return None;
             }
-            if p.starts_with("that ") && p != "that player" && matches!(b.it, Sel::This) {
+            if p.starts_with("that ") && p != "that player" && !it_is_object(b) {
                 return None;
             }
             return Some((Sel::Players(r), rest));
