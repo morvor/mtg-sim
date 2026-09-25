@@ -753,7 +753,10 @@ impl Game {
                 cast: Some(si.cast.clone()),
                 ..Default::default()
             };
-            etb.controller = Some(controller);
+            // The permanent's controller by default is the player who put the spell on the
+            // stack; an effect that gave another player control of the spell keeps
+            // applying to the permanent (CR 110.2b, 112.4).
+            etb.controller = Some(o.base_controller);
             if o.face_down {
                 etb.face_down = Some(match &si.cast.method {
                     CastMethod::FaceDown(k) => *k,

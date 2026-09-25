@@ -79,3 +79,38 @@ pub fn create_emblem(
 pub fn predefined(name: &str) -> Option<TokenSpec> {
     crate::tokens_predefined::predefined(name)
 }
+
+/// Creates tokens by name ("create a Tarmogoyf token", CR 111.11): the characteristics
+/// come from the card with that name in the Oracle card reference. `spec` is "N:Name".
+pub fn create_named_tokens(g: &mut Game, spec: &str, ctx: &mut crate::eval::Ctx) {
+    let Some((n, name)) = spec.split_once(':') else {
+        return;
+    };
+    let n: u32 = n.parse().unwrap_or(1);
+    let Some(card) = crate::card::CardDb::global().get(name) else {
+        return;
+    };
+    let tc = crate::replacement::TokenCreate {
+        chars: card.characteristics(FaceState::Front),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let created = g.create_tokens(ctx.controller, tc, n, ctx.source);
+    ctx.set_var(
+        vars::CREATED,
+        created.into_iter().map(Entity::Object).collect(),
+    );
+}
+
+/// The card definition behind a token created from `spec`, for predefined double-faced
+/// tokens (an Incubator token, CR 111.10i) that need both faces to transform.
+pub fn predefined_card(spec: &TokenSpec) -> Option<std::sync::Arc<crate::card::CardDef>> {
+    let incubator = spec.name.is_empty()
+        && spec.power.is_none()
+        && spec.subtypes.len() == 1
+        && spec.subtypes[0].as_str() == "Incubator";
+    incubator.then(crate::tokens_predefined::incubator_card)
+}

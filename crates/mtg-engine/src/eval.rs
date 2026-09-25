@@ -273,8 +273,9 @@ impl Game {
             }
             Filter::OwnedBy(rel) => self.player_rel_matches(*rel, o.owner, ctx),
             Filter::InZone(z) => o.zone.kind() == Some(*z),
-            Filter::Tapped => o.tapped,
-            Filter::Untapped => !o.tapped,
+            // Only permanents have status (CR 110.5d).
+            Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
+            Filter::Untapped => o.zone == Zone::Battlefield && !o.tapped,
             Filter::Attacking => self.is_attacking(id),
             Filter::Blocking => self.is_blocking(id),
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),

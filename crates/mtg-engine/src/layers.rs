@@ -681,8 +681,65 @@ impl Game {
         }
     }
 
-    /// "can't have [ability]" effects remove the ability after all layer 6 effects.
-    fn apply_cant_have(&mut self, _live: &[ObjectId]) {}
+    /// "can't have [ability]" effects remove the ability after all layer 6 effects
+    /// (CR 113.11): an affected object loses it however it was added — by an effect with
+    /// a later timestamp or by a keyword counter.
+    fn apply_cant_have(&mut self, live: &[ObjectId]) {
+        let kinds_of = |mods: &[Modification]| -> Vec<KeywordKind> {
+            mods.iter()
+                .filter_map(|m| match m {
+                    Modification::CantHaveKeyword(k) => Some(*k),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mut lost: Vec<(ObjectId, KeywordKind)> = Vec::new();
+        for e in &self.effects {
+            let kinds = kinds_of(&e.mods);
+            if kinds.is_empty() {
+                continue;
+            }
+            let ctx = Ctx::new(e.source, e.controller);
+            let objs = match &e.affected {
+                Affected::Objects(v) => v.clone(),
+                Affected::Filter(f) => self.static_affected(ObjectId(0), f, live, &ctx),
+            };
+            for o in objs {
+                lost.extend(kinds.iter().map(|k| (o, *k)));
+            }
+        }
+        for (src, a) in self.static_sources(live) {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            let kinds = kinds_of(mods);
+            if kinds.is_empty() {
+                continue;
+            }
+            let ctx = Ctx::for_object(self, src);
+            if s.condition
+                .as_ref()
+                .is_some_and(|c| !self.eval_cond(c, &ctx))
+            {
+                continue;
+            }
+            for o in self.static_affected(src, affected, live, &ctx) {
+                lost.extend(kinds.iter().map(|k| (o, *k)));
+            }
+        }
+        for (o, k) in lost {
+            if !self.is_live(o) {
+                continue;
+            }
+            self.objects[o.0 as usize]
+                .chars
+                .abilities
+                .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == k));
+        }
+    }
 
     /// Collects functioning non-characteristic static abilities for rule queries.
     fn collect_statics(&mut self) {

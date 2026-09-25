@@ -107,7 +107,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
             s = s.replace(n.as_str(), "~");
         }
     }
-    const SELF_REFS: [&str; 22] = [
+    const SELF_REFS: [&str; 23] = [
         "this creature",
         "this artifact",
         "this enchantment",
@@ -130,6 +130,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         "this Siege",
         "this Mount",
         "this object",
+        "this scheme",
     ];
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");

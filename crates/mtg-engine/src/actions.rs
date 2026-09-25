@@ -61,6 +61,9 @@ impl Game {
                     if mv.to == Zone::Battlefield && self.cant_enter_battlefield(mv.obj) {
                         continue;
                     }
+                    if self.move_forbidden(mv) {
+                        continue;
+                    }
                 }
                 finals.push((i, e));
             }
@@ -102,10 +105,47 @@ impl Game {
         })
     }
 
+    /// Zone changes the rules forbid outright; the object stays where it is. Instant and
+    /// sorcery cards (and token copies of them) can't enter the battlefield unless they
+    /// enter face down (CR 110.4, 111.5, 708.2), and nontraditional cards other than
+    /// dungeons can't be brought into the game from outside it (CR 108.5).
+    pub fn move_forbidden(&self, mv: &MoveEv) -> bool {
+        let o = self.obj(mv.obj);
+        if mv.to == Zone::Battlefield && mv.etb.face_down.is_none() {
+            let face = if mv.etb.transformed {
+                Some(FaceState::Back)
+            } else {
+                mv.etb.face
+            };
+            let types = match (face, &o.card) {
+                (Some(f), Some(card)) if o.kind == ObjKind::Card => {
+                    card.characteristics(f).card_types
+                }
+                _ => o.chars.card_types,
+            };
+            if types.contains(CardType::Instant) || types.contains(CardType::Sorcery) {
+                return true;
+            }
+        }
+        if matches!(o.zone, Zone::Outside(_)) && !matches!(mv.to, Zone::Outside(_)) {
+            if let Some(card) = &o.card {
+                let dungeon = card.front().chars.card_types.contains(CardType::Dungeon);
+                if crate::variants::is_nontraditional(card) && !dungeon {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
     /// newly created object (a token or card) that hasn't been put anywhere yet.
     pub fn can_move(&self, id: ObjectId) -> bool {
         let o = self.obj(id);
+        // A token that has left the battlefield stays where it is (CR 111.8).
+        if o.kind == ObjKind::Token && !matches!(o.zone, Zone::Battlefield | Zone::Nowhere) {
+            return false;
+        }
         self.is_live(id)
             || (o.zone == Zone::Nowhere
                 && o.next.is_none()
@@ -158,6 +198,17 @@ impl Game {
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
         let new_id = self.create_incarnation(old_id, m.to);
+        if from == Zone::Stack && m.to == Zone::Battlefield {
+            // Effects of resolved spells and abilities that changed a permanent spell
+            // continue to apply to the permanent it becomes (CR 112.4, 110.2b).
+            for e in self.effects.iter_mut() {
+                if let Affected::Objects(v) = &mut e.affected {
+                    for x in v.iter_mut().filter(|x| **x == old_id) {
+                        *x = new_id;
+                    }
+                }
+            }
+        }
         {
             let face = m.etb.face;
             let n = &mut self.objects[new_id.0 as usize];

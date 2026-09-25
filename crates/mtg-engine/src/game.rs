@@ -510,6 +510,16 @@ impl Game {
         for (i, deck) in decks.into_iter().enumerate() {
             let pid = PlayerId(i as u8);
             for card in deck {
+                // Nontraditional cards aren't part of the deck (CR 108.2a, 108.5).
+                if crate::variants::is_nontraditional(&card) {
+                    let (zone, face_down) = crate::variants::nontraditional_start(&card, pid);
+                    let id = g.create_card_object(card, pid, zone);
+                    g.objects[id.0 as usize].face_down = face_down;
+                    if let Some(list) = g.zone_list_mut(zone) {
+                        list.push(id);
+                    }
+                    continue;
+                }
                 let id = g.create_card_object(card, pid, Zone::Library(pid));
                 g.players[i].library.push(id);
             }

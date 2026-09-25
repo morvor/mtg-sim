@@ -491,7 +491,7 @@ impl Game {
                     };
                     let tc = TokenCreate {
                         chars,
-                        card: None,
+                        card: crate::tokens::predefined_card(spec),
                         tapped: *tapped,
                         attacking: attack,
                         copy_of: None,

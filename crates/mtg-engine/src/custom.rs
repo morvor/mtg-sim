@@ -71,6 +71,11 @@ pub fn custom_trigger(
 }
 
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
+    // "named-token:N:Name": create N tokens by name (CR 111.11).
+    if let Some(spec) = name.strip_prefix("named-token:") {
+        crate::tokens::create_named_tokens(g, spec, ctx);
+        return;
+    }
     let _ = (g, ctx);
     match name {
         _ => {}

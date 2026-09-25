@@ -127,7 +127,8 @@ fn head_noun(w: &str) -> Option<Filter> {
     match sg.as_str() {
         "permanent" => return Some(Filter::Permanent),
         "spell" => return Some(Filter::Spell),
-        "card" => return Some(Filter::Any),
+        // Tokens and copies aren't cards (CR 108.2, 108.2b).
+        "card" => return Some(Filter::Card),
         "token" => return Some(Filter::Token),
         _ => {}
     }
@@ -243,7 +244,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         let (nw, nrest) = split_word(s);
         let nw2 = nw.trim_end_matches(',');
         if let Some(nf) = head_noun(nw2) {
-            let last = heads.pop().unwrap();
+            let last = match (heads.pop().unwrap(), &nf) {
+                // "permanent card" / "permanent spell" (CR 110.4a-b): not on the
+                // battlefield, but with a permanent card type.
+                (Filter::Permanent, Filter::Card | Filter::Spell) => Filter::PermanentCard,
+                (last, _) => last,
+            };
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
