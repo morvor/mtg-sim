@@ -23,8 +23,9 @@ pub struct Keyword {
     pub filter: Option<Filter>,
     /// Raw parameter text (e.g. "Islandwalk", "Partner with Brallin", "Swampcycling").
     pub text: Option<SmolStr>,
-    /// What X in the cost is equal to ("ward {X}, where X is ...", CR 702.21b), determined
-    /// each time the cost is paid.
+    /// What X in the cost is equal to ("ward {X}, where X is ...", CR 702.21b), for a
+    /// keyword whose ability determines X as it resolves; `costs` then holds the cost
+    /// with X, while `cost` shows its current value (CR 702.1b).
     #[serde(default)]
     pub x: Option<Value>,
 }

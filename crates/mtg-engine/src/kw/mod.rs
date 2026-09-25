@@ -32,6 +32,12 @@ pub trait KeywordRules: Sync + Send {
     fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
         None
     }
+    /// Whether a variable X the granting effect defines ("has ward {X}, where X is ...")
+    /// is determined as the keyword's ability resolves (kept in [`Keyword::x`]) rather than
+    /// whenever characteristics are computed (CR 702.21b).
+    fn x_determined_on_resolution(&self) -> bool {
+        false
+    }
     /// Additional ways to cast `card` because it has `kw`.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
@@ -200,6 +206,10 @@ fn impls_for(kind: KeywordKind) -> impl Iterator<Item = &'static &'static dyn Ke
 // ---------------------------------------------------------------------------
 // Dispatchers used by keyword_impls.rs
 // ---------------------------------------------------------------------------
+
+pub fn x_determined_on_resolution(kind: KeywordKind) -> bool {
+    impls_for(kind).any(|r| r.x_determined_on_resolution())
+}
 
 pub fn derived(kw: &Keyword) -> Vec<Ability> {
     for r in impls_for(kw.kind) {

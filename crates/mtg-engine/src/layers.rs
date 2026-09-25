@@ -251,6 +251,16 @@ impl Game {
             Layer::L7dSwitch,
         ] {
             if layer == Layer::L7cModify {
+                // CR 208.5: a creature with no value for its power or toughness has 0, so
+                // counters and modifications apply to 0 (e.g. an equipped planeswalker
+                // that became a creature, CR 702.6e).
+                for id in &live {
+                    let c = &mut self.objects[id.0 as usize].chars;
+                    if c.is(CardType::Creature) {
+                        c.power.get_or_insert(0);
+                        c.toughness.get_or_insert(0);
+                    }
+                }
                 self.apply_pt_counters(&live);
             }
             self.apply_layer(layer, &live, &mut st);
@@ -815,8 +825,26 @@ impl Game {
             return;
         }
         // Values are evaluated against the current interim characteristics, including the
-        // object's own (e.g. a CDA counting the creatures its controller controls).
+        // object's own (e.g. a CDA counting the creatures its controller controls). P/T
+        // values may refer to the affected object itself.
         let mut chars = self.objects[target.0 as usize].chars.clone();
+        let computed = |v: &Value| !matches!(v, Value::Const(_));
+        let needs_target = match m {
+            Modification::ModifyPT(p, t) => computed(p) || computed(t),
+            Modification::SetPT(p, t) | Modification::CdaPT(p, t) => {
+                p.as_ref().is_some_and(computed) || t.as_ref().is_some_and(computed)
+            }
+            _ => false,
+        };
+        let with_target;
+        let ctx = if needs_target {
+            let mut c = ctx.clone();
+            c.set_var(vars::AFFECTED, vec![Entity::Object(target)]);
+            with_target = c;
+            &with_target
+        } else {
+            ctx
+        };
         apply_mod(&mut chars, m, self, ctx, target);
         self.objects[target.0 as usize].chars = chars;
     }
@@ -1113,6 +1141,37 @@ fn keyword_counter_ability(kw: &Keyword) -> Ability {
         .clone()
 }
 
+/// The keywords of the given kinds that objects matching `from` have, with every variant
+/// and variable, each distinct instance once (CR 702.1c, "the same is true for").
+pub fn keywords_of(g: &Game, kinds: &[KeywordKind], from: &Filter, ctx: &Ctx) -> Vec<Keyword> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    // Alternatives may be in different zones ("a creature you control or a card in your
+    // hand").
+    let objects: Vec<ObjectId> = match from {
+        Filter::Or(v) => v.iter().flat_map(|f| g.objects_matching(f, ctx)).collect(),
+        f => g.objects_matching(f, ctx),
+    };
+    for o in objects {
+        for k in g
+            .obj(o)
+            .chars
+            .keywords()
+            .filter(|k| kinds.contains(&k.kind))
+        {
+            let key = format!(
+                "{:?}{:?}{:?}{:?}{:?}",
+                k.kind, k.n, k.cost, k.costs, k.filter
+            );
+            if !seen.contains(&key) {
+                seen.push(key);
+                out.push(k.clone());
+            }
+        }
+    }
+    out
+}
+
 /// Applies a single layer modification to a set of characteristics.
 pub fn apply_mod(
     c: &mut Characteristics,
@@ -1272,6 +1331,31 @@ pub fn apply_mod(
             let name = k.kind.name();
             c.abilities
                 .push(AbilityDef::new(AbilityKind::Keyword(k), name))
+        }
+        Modification::AddKeywordX(k, x) => {
+            // CR 702.1b: the variable is reevaluated whenever this is applied.
+            let n = g.eval_value(x, ctx).max(0);
+            let mut k = k.clone();
+            if crate::kw::x_determined_on_resolution(k.kind) {
+                // CR 702.21b: the keyword's ability also determines X as it resolves,
+                // paying the cost with X kept in `costs`.
+                k.x = Some(x.clone());
+                k.costs = k.cost.iter().cloned().collect();
+            }
+            k.n = Some(n as i32);
+            if let Some(m) = k.cost.as_mut().and_then(|c| c.mana.as_mut()) {
+                for s in m.symbols.iter_mut() {
+                    if *s == crate::mana::ManaSymbol::X {
+                        *s = crate::mana::ManaSymbol::Generic(n as u32);
+                    }
+                }
+            }
+            apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
+        }
+        Modification::AddKeywordsOf { kinds, from } => {
+            for k in keywords_of(g, kinds, from, ctx) {
+                apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
+            }
         }
         Modification::RemoveKeyword(k) => c
             .abilities

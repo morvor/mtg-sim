@@ -607,12 +607,13 @@ impl Game {
         }
         // CR 502.3: untap.
         self.recompute();
-        let to_untap: Vec<ObjectId> = self
+        let mut to_untap: Vec<ObjectId> = self
             .permanents()
             .filter(|o| o.controller == active && o.tapped)
             .map(|o| o.id)
             .filter(|id| !self.doesnt_untap(*id))
             .collect();
+        self.limit_untaps(active, &mut to_untap);
         for id in to_untap {
             self.untap(id);
         }

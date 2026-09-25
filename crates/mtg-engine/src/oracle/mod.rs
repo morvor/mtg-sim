@@ -53,8 +53,21 @@ pub struct Compiled {
     pub unsupported: Vec<String>,
 }
 
+thread_local! {
+    static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// The raw (un-normalized) oracle text of the face being compiled on this thread.
+/// Normalization merges the card's name and "this creature" into `~`; patterns that must
+/// tell them apart (a quoted ability granted to another object, where "this creature" is
+/// the object that gets it but the card's name is still the card) can look here.
+pub fn raw_text() -> String {
+    RAW_TEXT.with(|r| r.borrow().clone())
+}
+
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
+    RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {

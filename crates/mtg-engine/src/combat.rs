@@ -259,7 +259,13 @@ impl Game {
         if o.summoning_sick && !o.has_keyword(KeywordKind::Haste) {
             return false;
         }
-        if o.has_keyword(KeywordKind::Defender) {
+        // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
+        if o.has_keyword(KeywordKind::Defender)
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::AttackDespiteDefender(f) => Some(f),
+                _ => None,
+            })
+        {
             return false;
         }
         !self.restricted_obj(id, |r| match r {
@@ -270,18 +276,54 @@ impl Game {
 
     /// Whether a creature can attack a specific player/planeswalker/battle.
     pub fn can_attack_target(&self, id: ObjectId, target: Entity) -> bool {
-        let defender = entity_defender(self, target);
-        // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
-        !self.all_restrictions().iter().any(|(s, c, r, _)| match r {
-            Restriction::CantAttackPlayer {
-                attackers,
-                defender: pf,
-            } => {
-                let ctx = Ctx::new(*s, *c);
-                self.matches(id, attackers, &ctx) && self.player_filter_matches(pf, defender, &ctx)
+        // "can't attack you (or planeswalkers you control)": the player, a planeswalker
+        // they control, or a battle they protect: (player, planeswalker?, battle?).
+        let defender = match target {
+            Entity::Player(p) => Some((p, false, false)),
+            Entity::Object(o) if self.obj(o).is(CardType::Battle) => {
+                Some((entity_defender(self, target), false, true))
             }
-            _ => false,
-        })
+            Entity::Object(o) if self.obj(o).is(CardType::Planeswalker) => {
+                Some((self.obj(o).controller, true, false))
+            }
+            Entity::Object(_) => None,
+        };
+        // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
+        !self
+            .all_restrictions()
+            .iter()
+            .any(|(s, c, r, locked)| match r {
+                Restriction::CantAttackPlayer {
+                    attackers,
+                    defender: pf,
+                    planeswalkers,
+                    battles,
+                } => {
+                    let ctx = Ctx::new(*s, *c);
+                    defender.is_some_and(|(p, is_pw, is_battle)| {
+                        (!is_pw || *planeswalkers)
+                            && (!is_battle || *battles)
+                            && self.restriction_applies(id, attackers, &ctx, locked)
+                            && self.player_filter_matches(pf, p, &ctx)
+                    })
+                }
+                _ => false,
+            })
+    }
+
+    /// The players a creature is goaded by: goad actions (CR 701.15a) and static "is
+    /// goaded" effects, which goad it for their source's controller.
+    pub fn goaders(&self, id: ObjectId) -> Vec<PlayerId> {
+        let mut out = self.obj(id).goaded_by.clone();
+        for (s, c, r, locked) in self.all_restrictions() {
+            if let Restriction::Goaded(f) = &r {
+                // CR 701.15d: the same player goading it again has no effect.
+                if !out.contains(&c) && self.restriction_applies(id, f, &Ctx::new(s, c), &locked) {
+                    out.push(c);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a creature can block at all (CR 509.1a).
@@ -427,6 +469,22 @@ impl Game {
             }
         }
         Some(n)
+    }
+
+    /// Maximum number of creatures that can block an attacker ("can't be blocked by more
+    /// than one creature"), if limited (CR 509.1b).
+    pub fn max_blocked_by(&self, attacker: ObjectId) -> Option<u32> {
+        let mut max: Option<u32> = None;
+        for (s, c, r, locked) in self.all_restrictions() {
+            if let Restriction::MaxBlockedBy { attacker: af, n } = &r {
+                if locked.as_ref().is_none_or(|v| v.contains(&attacker))
+                    && self.matches(attacker, af, &Ctx::new(s, c))
+                {
+                    max = Some(max.map_or(*n, |m| m.min(*n)));
+                }
+            }
+        }
+        max
     }
 
     /// Minimum number of blockers an attacker requires (menace etc.).
@@ -649,7 +707,7 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
         }
         // CR 701.15b: a goaded creature attacks each combat if able and attacks a player
         // other than the goading player if able.
-        let goaders = g.obj(id).goaded_by.clone();
+        let goaders = g.goaders(id);
         if !goaders.is_empty() {
             out.push(AttackRequirement::Attacks(id));
             out.push(AttackRequirement::AttacksPlayerOtherThan(id, goaders));
@@ -1208,12 +1266,15 @@ struct BlockRules {
     max: Option<usize>,
     max_blocks: BTreeMap<ObjectId, Option<u32>>,
     min_blockers: BTreeMap<ObjectId, u32>,
+    /// "can't be blocked by more than N creatures" limits per attacker.
+    max_blocked_by: BTreeMap<ObjectId, Option<u32>>,
 }
 
 fn block_rules(g: &Game, options: &[(ObjectId, Vec<ObjectId>)]) -> BlockRules {
     let mut cant_alone = BTreeSet::new();
     let mut max_blocks = BTreeMap::new();
     let mut min_blockers = BTreeMap::new();
+    let mut max_blocked_by = BTreeMap::new();
     for (b, atts) in options {
         if g.restricted_obj(*b, |r| match r {
             Restriction::CantBlockAlone(f) => Some(f),
@@ -1224,6 +1285,9 @@ fn block_rules(g: &Game, options: &[(ObjectId, Vec<ObjectId>)]) -> BlockRules {
         max_blocks.insert(*b, g.max_blocks(*b));
         for a in atts {
             min_blockers.entry(*a).or_insert_with(|| g.min_blockers(*a));
+            max_blocked_by
+                .entry(*a)
+                .or_insert_with(|| g.max_blocked_by(*a));
         }
     }
     let max = g
@@ -1239,6 +1303,7 @@ fn block_rules(g: &Game, options: &[(ObjectId, Vec<ObjectId>)]) -> BlockRules {
         max,
         max_blocks,
         min_blockers,
+        max_blocked_by,
     }
 }
 
@@ -1273,6 +1338,12 @@ fn block_restrictions_ok(
     for (a, n) in &per_attacker {
         if *n < rules.min_blockers.get(a).copied().unwrap_or(1) {
             return false;
+        }
+        // "can't be blocked by more than one creature" (CR 509.1b).
+        if let Some(Some(max)) = rules.max_blocked_by.get(a) {
+            if n > max {
+                return false;
+            }
         }
     }
     if per_blocker.len() == 1
@@ -1625,13 +1696,16 @@ pub fn any_first_strike(g: &Game) -> bool {
 }
 
 /// Lethal damage for assignment purposes (CR 702.19b, 702.2c): toughness minus damage
-/// already marked, or 1 if the source has deathtouch.
+/// already marked, or at most 1 if the source has deathtouch.
 pub fn lethal_damage(g: &Game, source: ObjectId, creature: ObjectId) -> u32 {
-    if g.obj(source).has_keyword(KeywordKind::Deathtouch) {
-        return 1;
-    }
     let o = g.obj(creature);
-    (o.toughness() - o.damage as i32).max(0) as u32
+    let lethal = (o.toughness() - o.damage as i32).max(0) as u32;
+    if g.obj(source).has_keyword(KeywordKind::Deathtouch) {
+        // Any nonzero amount is lethal (and none is needed if it already has lethal
+        // damage marked, CR 702.19b).
+        return lethal.min(1);
+    }
+    lethal
 }
 
 /// Combat damage step (CR 510).
@@ -1699,6 +1773,13 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
 }
 
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
+    // "assigns combat damage equal to its toughness rather than its power".
+    if g.restricted_obj(id, |r| match r {
+        Restriction::DamageByToughness(f) => Some(f),
+        _ => None,
+    }) {
+        return g.obj(id).toughness().max(0) as u32;
+    }
     crate::keyword_impls::combat_damage_amount(g, id)
 }
 

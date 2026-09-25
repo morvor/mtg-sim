@@ -215,15 +215,10 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
             kw.filter = Some(Filter::ChosenType);
         }
         KeywordKind::Enchant => {
-            let r = rest;
-            if r == "player" || r == "opponent" || r == "player or planeswalker" {
-                kw.filter = Some(Filter::Any);
-            } else {
-                let (f, _, tail) = parse_object_phrase(r)?;
-                if !end(tail).is_empty() {
-                    return None;
-                }
-                kw.filter = Some(f);
+            // CR 702.5d: "Enchant player" / "Enchant opponent" Auras enchant players only;
+            // they have no object filter (see `attach::enchant_player`).
+            if rest != "player" && rest != "opponent" {
+                kw.filter = Some(quality_phrase(rest)?);
             }
         }
         KeywordKind::Equip => {
@@ -231,11 +226,12 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
             if let Some(i) = rest.find('{') {
                 let pre = rest[..i].trim();
                 if !pre.is_empty() {
-                    let (f, _, tail) = parse_object_phrase(pre)?;
-                    if !end(tail).is_empty() {
-                        return None;
-                    }
-                    kw.filter = Some(f);
+                    // CR 702.6c: "Equip [quality]" / "Equip [quality] creature".
+                    kw.filter = Some(if pre == "commander" {
+                        Filter::Commander
+                    } else {
+                        quality_phrase(pre)?
+                    });
                 }
                 kw.cost = Some(parse_keyword_cost(&rest_raw[rest_raw.find('{')?..])?);
             } else {
@@ -275,6 +271,33 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         }
     }
     Some(vec![kw])
+}
+
+/// The object phrase of "Enchant [quality]" / "Equip [quality]": "creature you control",
+/// "artifact, creature, or planeswalker", "red or green creature" (adjectives joined by
+/// "or" before a shared noun).
+pub fn quality_phrase(s: &str) -> Option<Filter> {
+    if let Some((f, _, tail)) = parse_object_phrase(s) {
+        if end(tail).is_empty() {
+            return Some(f);
+        }
+    }
+    // "red or green creature" = "red creature or green creature".
+    let (first, rest) = s.split_once(" or ")?;
+    let (second, noun) = rest.split_once(' ')?;
+    if first.contains(' ') {
+        return None;
+    }
+    let mut fs = Vec::new();
+    for adj in [first, second] {
+        let phrase = format!("{adj} {noun}");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        fs.push(f);
+    }
+    Some(Filter::Or(fs))
 }
 
 fn cost_then_number(s: &str) -> Option<(Cost, i32)> {

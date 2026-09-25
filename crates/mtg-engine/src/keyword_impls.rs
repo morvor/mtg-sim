@@ -65,30 +65,7 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
             )),
             text,
         )],
-        // CR 702.6a: "[Cost]: Attach to target creature you control. Equip only as a sorcery."
-        K::Equip => {
-            let cost = kw.cost.clone().unwrap_or_default();
-            let filter = kw.filter.clone().unwrap_or(Filter::creature());
-            let mut act = ActivatedAbility::new(
-                cost,
-                Body::simple(
-                    vec![TargetSpec::object(
-                        Filter::and(vec![
-                            filter,
-                            Filter::ControlledBy(PlayerRel::You),
-                            Filter::Other,
-                        ]),
-                        "target creature you control",
-                    )],
-                    Effect::Attach {
-                        what: Sel::This,
-                        to: Sel::Target(0),
-                    },
-                ),
-            );
-            act.timing = ActivationTiming::Sorcery;
-            vec![AbilityDef::new(AbilityKind::Activated(act), "Equip")]
-        }
+        // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
         // CR 702.29a: "[Cost], Discard this card: Draw a card."
         K::Cycling => {
             let mut cost = kw.cost.clone().unwrap_or_default();
