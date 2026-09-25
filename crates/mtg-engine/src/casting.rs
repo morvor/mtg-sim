@@ -725,6 +725,21 @@ impl Game {
             }
         }
         self.stack.push(id);
+        // CR 400.7g: an effect that granted the card the ability it's being cast with
+        // (e.g. "gains flashback") continues to apply to the spell it becomes.
+        if let CastMethod::Keyword(k) = opt.method {
+            for e in self.effects.iter_mut() {
+                let grants = e
+                    .mods
+                    .iter()
+                    .any(|m| matches!(m, Modification::AddKeyword(kw) if kw.kind == k));
+                if let Affected::Objects(v) = &mut e.affected {
+                    if grants && v.contains(&card) {
+                        v.push(id);
+                    }
+                }
+            }
+        }
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),

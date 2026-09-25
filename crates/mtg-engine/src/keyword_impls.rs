@@ -96,23 +96,8 @@ pub fn ability_from_keyword(a: &AbilityDef) -> Option<KeywordKind> {
 
 /// Keyword-granted ways to cast a card (flashback, escape, foretell, dash, evoke, ...).
 pub fn keyword_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
-    let o = g.obj(card);
-    let mut out = Vec::new();
-    for kw in o.chars.keywords() {
-        match kw.kind {
-            // CR 702.34a: cast from graveyard by paying the flashback cost; exiled after.
-            KeywordKind::Flashback if crate::as_though::in_graveyard_for(g, p, card) => {
-                let mut opt = CastOption::normal(FaceState::Front);
-                opt.method = CastMethod::Keyword(KeywordKind::Flashback);
-                opt.alt_cost = kw.cost.clone();
-                opt.tag = Some("flashback");
-                out.push(opt);
-            }
-            _ => {}
-        }
-    }
-    out.extend(crate::kw::cast_options(g, p, card));
-    out
+    // Flashback (CR 702.34): see `kw/flashback.rs`.
+    crate::kw::cast_options(g, p, card)
 }
 
 /// Optional additional costs announced while casting (CR 601.2b): (name, cost, repeatable).
@@ -157,14 +142,7 @@ pub fn cost_reductions_from_keywords(
 /// effects tied to how it was cast.
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
-    let si = o.stack.as_deref();
-    if matches!(
-        si.map(|s| &s.cast.method),
-        Some(CastMethod::Keyword(KeywordKind::Flashback))
-    ) {
-        return (Zone::Exile, LibraryPosition::Top); // CR 702.34a
-    }
-    // Buyback (CR 702.27a) and other keywords: see `kw/`.
+    // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }
@@ -172,13 +150,7 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
 /// Where a countered spell (or one that fails to resolve) goes.
 pub fn countered_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
-    let si = o.stack.as_deref();
-    if matches!(
-        si.map(|s| &s.cast.method),
-        Some(CastMethod::Keyword(KeywordKind::Flashback))
-    ) {
-        return (Zone::Exile, LibraryPosition::Top); // CR 702.34a: exiled instead of anywhere else
-    }
+    // Flashback (CR 702.34a: exiled instead of anywhere else): see `kw/flashback.rs`.
     crate::kw::countered_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }

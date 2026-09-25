@@ -7,7 +7,8 @@
 //! * "if it was kicked with its {1}{B} kicker" — a condition linked to one specific kicker
 //!   cost (CR 702.33f, 607.2i).
 
-use super::{ConditionPattern, StaticPattern};
+use super::{ConditionPattern, FollowupPattern, StaticPattern};
+use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
 use crate::mana::ManaCost;
@@ -140,6 +141,36 @@ fn spells_you_cast_have_sticker_kicker(
     )])
 }
 
+/// Whether the effect grants flashback without a cost of its own.
+fn grants_costless_flashback(e: &Effect) -> bool {
+    match e {
+        Effect::Modify { mods, .. } => mods.iter().any(|m| {
+            matches!(m, Modification::AddKeyword(k)
+                if k.kind == KeywordKind::Flashback && k.cost.is_none())
+        }),
+        Effect::Seq(v) => v.iter().any(grants_costless_flashback),
+        Effect::If { then, .. } => grants_costless_flashback(then),
+        Effect::May { effect, .. } => grants_costless_flashback(effect),
+        Effect::ForEach { effect, .. } => grants_costless_flashback(effect),
+        _ => false,
+    }
+}
+
+/// "[card] gains flashback until end of turn. The flashback cost is equal to its mana
+/// cost.": a granted flashback ability without a cost of its own is cast for the card's
+/// mana cost (see `kw/flashback.rs`, CR 702.34a).
+fn flashback_cost_is_mana_cost(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    matches!(
+        end(s),
+        "the flashback cost is equal to its mana cost"
+            | "the flashback cost is equal to that card's mana cost"
+            | "its flashback cost is equal to its mana cost"
+    ) && grants_costless_flashback(prev)
+}
+
+inventory::submit! {
+    FollowupPattern { name: "k702.34: flashback cost equal to mana cost", priority: 50, apply: flashback_cost_is_mana_cost }
+}
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
 }
