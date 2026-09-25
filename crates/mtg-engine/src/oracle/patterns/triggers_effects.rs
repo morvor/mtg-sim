@@ -56,6 +56,47 @@ fn that_much_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
+inventory::submit! {
+    EffectPattern { name: "you draw N cards", priority: 100, parse: you_draw }
+}
+inventory::submit! {
+    EffectPattern { name: "remove N counters from ~/it", priority: 100, parse: remove_counters }
+}
+
+/// "you draw a card" (with an explicit subject, as in "you draw a card and you lose 1
+/// life").
+fn you_draw(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you draw ")?;
+    let (n, tail) = parse_card_count(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::Draw {
+        who: PlayerRef::You,
+        n,
+    })
+}
+
+/// "remove a -1/-1 counter from ~", "remove a +1/+1 counter from it".
+fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("remove ")?;
+    let (n, r) = parse_number(r)?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = strip(r, "counters")
+        .or_else(|| strip(r, "counter"))?
+        .strip_prefix("from ")?;
+    let what = match r {
+        "~" => Sel::This,
+        "it" if matches!(b.it, Sel::This | Sel::TriggerObject) => b.it.clone(),
+        _ => return None,
+    };
+    Some(Effect::RemoveCounters {
+        what,
+        kind: Some(kind),
+        n,
+    })
+}
+
 /// "sacrifice it" where "it" is the ability's source.
 fn sacrifice_it(l: &str, b: &mut Builder) -> Option<Effect> {
     if end(l) != "sacrifice it" || !b.in_trigger || !matches!(b.it, Sel::This) {

@@ -204,6 +204,50 @@ fn counters_put_on_another_creature_you_control() {
 }
 
 #[test]
+fn colored_spell_removes_a_counter() {
+    cr!("603.2", "122.1");
+    assert_supported(&["Belligerent Hatchling"]);
+    let mut t = TestGame::new(2);
+    let hatchling = enter_from_hand(&mut t, P0, "Belligerent Hatchling");
+    assert_eq!(t.counters(hatchling, "-1/-1"), 4);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.counters(hatchling, "-1/-1"), 3);
+}
+
+#[test]
+fn creature_with_deathtouch_deals_combat_damage() {
+    cr!("510.2", "702.2a");
+    assert_supported(&["Black Widow, Deadly Hunter", "Typhoid Rats"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Black Widow, Deadly Hunter");
+    let rats = t.battlefield(P0, "Typhoid Rats");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    // Only the creature with deathtouch counts.
+    t.attack(
+        &[(rats, Entity::Player(P1)), (bears, Entity::Player(P1))],
+        &[],
+    );
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.life(P0), 19);
+}
+
+fn enter_from_hand(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    let id = t.hand(p, name);
+    t.g.move_object(
+        id,
+        mtg_engine::object::Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        Some(p),
+    )
+    .expect("failed to enter the battlefield")
+}
+
+#[test]
 fn sacrificing_a_food_to_its_own_ability() {
     cr!("603.10a", "701.21a");
     assert_supported(&["Rapacious Guest"]);
