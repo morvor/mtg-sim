@@ -257,6 +257,7 @@ impl KeywordRules for Convoke {
         p: PlayerId,
         _card: ObjectId,
         _kw: &Keyword,
+        _method: &crate::object::CastMethod,
         cost: &mut Cost,
     ) {
         let Some(m) = cost.mana.clone() else {

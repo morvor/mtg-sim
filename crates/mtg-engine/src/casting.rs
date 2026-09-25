@@ -478,7 +478,7 @@ impl Game {
         // Optimistic cost check.
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
-        crate::kw::payable_otherwise(self, p, card, &chars, &mut cost);
+        crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
 

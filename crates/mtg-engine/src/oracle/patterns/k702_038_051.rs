@@ -20,6 +20,14 @@ fn keyword_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
         ));
         return Some(compile_keyword(kw, t));
     }
+    // CR 702.48a: "[Quality] offering" ("Fox offering", "Artifact offering").
+    if let Some(q) = lower.strip_suffix(" offering") {
+        if !q.contains(' ') {
+            let f = crate::oracle::keywords::quality_phrase(q)?;
+            let kw = Keyword::with_filter(KeywordKind::Offering, f).text(t);
+            return Some(compile_keyword(kw, t));
+        }
+    }
     // CR 702.41a, 700.12: "Affinity for outlaws" — Assassins, Mercenaries, Pirates,
     // Rogues, and/or Warlocks.
     if lower == "affinity for outlaws" {

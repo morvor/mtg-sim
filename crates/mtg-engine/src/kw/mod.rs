@@ -191,9 +191,10 @@ pub trait KeywordRules: Sync + Send {
         false
     }
     /// Once the total cost of `spell` is locked in (CR 601.2f), ways this keyword lets its
-    /// controller pay part of it other than with mana (e.g. tapping creatures for convoke,
-    /// CR 702.51a–b). Takes the chosen payment out of `cost`; performed as the total cost
-    /// is paid (CR 601.2h).
+    /// controller pay part of it other than with mana, performed as the total cost is paid
+    /// (CR 601.2h): e.g. tapping creatures for convoke (CR 702.51a–b), or sacrificing the
+    /// permanent offered for offering, which reduces the mana to pay by its mana cost
+    /// (CR 702.48a–c). Takes what was paid out of `cost`.
     fn pay_mana_otherwise(
         &self,
         g: &mut Game,
@@ -204,14 +205,16 @@ pub trait KeywordRules: Sync + Send {
     ) -> Result<(), Illegal> {
         Ok(())
     }
-    /// For the check whether a spell could be cast: takes out of `cost` what this keyword
-    /// could pay other than with mana (see [`KeywordRules::pay_mana_otherwise`]).
+    /// For the check whether `card` could be cast with `method`: takes out of `cost` what
+    /// this keyword could pay other than with mana (see
+    /// [`KeywordRules::pay_mana_otherwise`]).
     fn payable_otherwise(
         &self,
         g: &Game,
         p: PlayerId,
         card: ObjectId,
         kw: &Keyword,
+        method: &CastMethod,
         cost: &mut Cost,
     ) {
     }
@@ -539,11 +542,12 @@ pub fn payable_otherwise(
     p: PlayerId,
     card: ObjectId,
     chars: &Characteristics,
+    method: &CastMethod,
     cost: &mut Cost,
 ) {
     for kw in &distinct_kinds(chars) {
         for r in impls_for(kw.kind) {
-            r.payable_otherwise(g, p, card, kw, cost);
+            r.payable_otherwise(g, p, card, kw, method, cost);
         }
     }
 }
