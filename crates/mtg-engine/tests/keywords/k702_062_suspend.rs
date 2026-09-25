@@ -41,15 +41,22 @@ fn a_suspended_creature_counts_down_is_cast_and_has_haste() {
         "Greater Gargadon",
         "It will have haste until another player gains control of it."
     );
+    ruling!(
+        "Lotus Bloom",
+        "Exiling a card with suspend isn't casting that card. This action doesn't use the stack and can't be responded to."
+    );
+    ruling!("Lotus Bloom", "Cards exiled with suspend are exiled face up.");
     assert_supported("Keldon Halberdier");
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 1);
     let halberdier = t.hand(P0, "Keldon Halberdier");
-    // "Suspend 4—{R}": pay {R} and exile it with four time counters, without using the
-    // stack.
+    // "Suspend 4—{R}": pay {R} and exile it face up with four time counters, without
+    // using the stack or casting it.
     let exiled = suspend(&mut t, P0, halberdier);
     assert_eq!(untapped_lands(&t, P0), 0);
     assert_eq!(t.stack_len(), 0);
+    assert!(t.g.history.spells_cast.is_empty());
+    assert!(!t.obj_now(exiled).face_down);
     assert_eq!(t.counters(exiled, TIME), 4);
     // Each of its owner's upkeeps removes one.
     t.advance_to(P1, Step::Upkeep);
@@ -202,6 +209,81 @@ fn a_split_second_spell_prevents_suspending_an_instant() {
     t.lands(P0, "Island", 1);
     let vision = t.hand(P0, "Ancestral Vision");
     assert!(can_suspend(&mut t, P0, vision));
+    assert!(!crate::common_k702_027_037::can_cast(
+        &mut t,
+        P0,
+        vision,
+        mtg_engine::object::CastMethod::Normal
+    ));
+}
+
+#[test]
+fn a_card_without_a_mana_cost_is_cast_by_suspending_it() {
+    cr!("702.62a", "702.62d");
+    ruling!(
+        "Lotus Bloom",
+        "A card with no mana cost can't be cast normally; you'll need a way to cast it for an alternative cost or without paying its mana cost, such as by suspending it."
+    );
+    let mut t = TestGame::new(2);
+    let bloom = t.hand(P0, "Lotus Bloom");
+    assert!(t.cast(P0, bloom).try_go().is_err());
+    let exiled = suspend(&mut t, P0, bloom);
+    remove_counters(&mut t, exiled, TIME, 3);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(bloom));
+}
+
+#[test]
+fn targets_are_chosen_when_the_suspended_card_is_cast() {
+    cr!("702.62a");
+    ruling!(
+        "Lotus Bloom",
+        "If the spell requires any targets, those targets are chosen when the spell is finally cast, not when it's exiled."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Rift Bolt");
+    let asked = t.asked().len();
+    let exiled = suspend(&mut t, P0, bolt);
+    assert!(!t.asked()[asked..]
+        .iter()
+        .any(|(_, d)| matches!(d, decision::Decision::ChooseTargets { .. })));
+    // A creature that wasn't there when it was suspended can be targeted.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    remove_counters(&mut t, exiled, TIME, 1);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+}
+
+#[test]
+fn countering_the_upkeep_trigger_removes_no_counter() {
+    cr!("702.62a");
+    ruling!(
+        "Lotus Bloom",
+        "If the first triggered ability of suspend (the one that removes time counters) is countered, no time counter is removed."
+    );
+    let mut t = TestGame::new(2);
+    let bloom = t.hand(P0, "Lotus Bloom");
+    let exiled = suspend(&mut t, P0, bloom);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    let (trigger, _) = stack_triggers(&t, SUSPEND)[0];
+    t.lands(P1, "Island", 1);
+    let stifle = t.hand(P1, "Stifle");
+    t.cast(P1, stifle).target(trigger).go();
+    t.resolve_all();
+    assert_eq!(t.counters(exiled, TIME), 3);
+    // It triggers again at the next upkeep.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(stack_triggers(&t, SUSPEND).len(), 1);
+    t.resolve();
+    assert_eq!(t.counters(exiled, TIME), 2);
 }
 
 #[test]
@@ -350,6 +432,10 @@ fn suspend_x_needs_x_of_at_least_one() {
 #[test]
 fn abilities_that_work_only_while_the_card_is_suspended() {
     cr!("702.62b");
+    ruling!(
+        "Lotus Bloom",
+        "If an effect refers to a \"suspended card,\" that means a card that (1) has suspend, (2) is in exile, and (3) has one or more time counters on it."
+    );
     assert_supported("Greater Gargadon");
     let mut t = TestGame::new(2);
     let lands = t.lands(P0, "Mountain", 3);
