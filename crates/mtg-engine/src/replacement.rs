@@ -36,6 +36,9 @@ pub struct EtbInfo {
     pub cast: Option<CastInfo>,
     /// Face to put onto the battlefield (for MDFCs played/cast as back face).
     pub face: Option<FaceState>,
+    /// The link of the ability whose replacement effect exiles the object, so the object
+    /// is "exiled with" that ability's source (CR 607.2b).
+    pub link: Option<u16>,
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +119,8 @@ pub enum ReplKey {
 struct Candidate {
     key: ReplKey,
     source: Option<ObjectId>,
+    /// The link of the ability generating the effect (CR 607).
+    link: u16,
     controller: PlayerId,
     def: ReplacementDef,
     class: u8,
@@ -238,11 +243,13 @@ impl Game {
             if applied.contains(&key) {
                 continue;
             }
-            let ctx = Ctx::new(Some(src), ctl);
+            let mut ctx = Ctx::new(Some(src), ctl);
+            ctx.link = a.link;
             if self.repl_event_matches(&d.event, &ctx, ev, None) {
                 out.push(Candidate {
                     key,
                     source: Some(src),
+                    link: a.link,
                     controller: ctl,
                     class: repl_class(&d, ev),
                     text: format!("{}: {}", self.obj(src).chars.name, a.text),
@@ -264,6 +271,7 @@ impl Game {
                 out.push(Candidate {
                     key,
                     source: inst.source,
+                    link: 0,
                     controller: inst.controller,
                     class: repl_class(&inst.def, ev),
                     text: format!("effect #{}", inst.id),
@@ -284,6 +292,7 @@ impl Game {
                 out.push(Candidate {
                     key,
                     source: None,
+                    link: 0,
                     controller: o.owner,
                     class: 4,
                     text: "Commander: put into command zone instead".into(),
@@ -429,7 +438,8 @@ impl Game {
         ev: ReplEvent,
         applied: &[ReplKey],
     ) -> Vec<ReplEvent> {
-        let ctx = Ctx::new(cand.source, cand.controller);
+        let mut ctx = Ctx::new(cand.source, cand.controller);
+        ctx.link = cand.link;
         // Use up one application of limited-use effects.
         if let Some(id) = cand.instance {
             if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {
@@ -495,6 +505,12 @@ impl Game {
                 let owner = self.obj(m.obj).owner;
                 m.to = Zone::of_kind(dest.zone, owner);
                 m.pos = dest.position;
+                // CR 607.2b: a card exiled by a replacement effect is exiled with the
+                // effect's source.
+                if dest.zone == ZoneKind::Exile && cand.source.is_some() {
+                    m.source = cand.source;
+                    m.etb.link = Some(cand.link);
+                }
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {

@@ -746,7 +746,14 @@ impl Game {
         ctx.stack_obj = Some(id);
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);
-        ctx.cast = Some(si.cast.clone());
+        // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
+        // its source was cast.
+        ctx.cast = match &si.kind {
+            StackKind::Spell => Some(si.cast.clone()),
+            _ => ctx
+                .cast
+                .or_else(|| source.and_then(|s| self.obj(s).cast.as_deref().cloned())),
+        };
         ctx.ability_uid = ability_uid;
         ctx.link = link;
         ctx.source_lki = si.source_lki.clone();
@@ -1031,6 +1038,17 @@ impl Game {
                 );
             }
             if let Some(new) = res {
+                // CR 607.2q: cards exiled to pay its cost are exiled with the permanent.
+                for c in &si.cast.cost_objects {
+                    let now = self.current(*c);
+                    if self.is_live(now) && self.obj(now).zone == Zone::Exile {
+                        self.objects[new.0 as usize]
+                            .linked
+                            .entry(0)
+                            .or_default()
+                            .push(now);
+                    }
+                }
                 self.delayed_triggers_as_enters(&o, new);
                 crate::keyword_impls::after_permanent_spell_resolves(self, id, new);
             }

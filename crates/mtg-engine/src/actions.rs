@@ -310,7 +310,7 @@ impl Game {
         // Linked exile (CR 607): remember cards exiled by a source.
         if let (Some(src), Zone::Exile) = (m.source, m.to) {
             if self.is_live(src) {
-                let link = self.current_link;
+                let link = m.etb.link.unwrap_or(self.current_link);
                 self.objects[src.0 as usize]
                     .linked
                     .entry(link)

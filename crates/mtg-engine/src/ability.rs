@@ -622,6 +622,9 @@ pub enum Sel {
     },
     /// Cards linked to this object by CR 607 ("the exiled cards", "cards exiled with this").
     Linked,
+    /// Objects linked to the ability of the object that created this token or put this
+    /// permanent onto the battlefield (CR 607.1d): "the card exiled with [that object]".
+    CreatorLinked,
     /// The spell this ability resolves for (for "copy that spell").
     TriggerSpell,
     /// Union of selections.
@@ -837,6 +840,14 @@ pub enum Filter {
     /// Attacked this turn.
     AttackedThisTurn,
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
+    /// Of the color chosen by the source's linked ability ("the chosen color",
+    /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
+    ChosenColor,
+    /// Of the creature type chosen by the source's linked ability.
+    ChosenCreatureType,
+    /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
+    /// ability (CR 607.2f).
+    ManaValueOfChosenQuality,
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1022,6 +1033,8 @@ pub enum Condition {
     /// Whether all of these trigger conditions have occurred this turn, regardless of
     /// whether any ability triggered on them (CR 603.1b).
     AllTriggerConditionsThisTurn(Vec<TriggerCond>),
+    /// The word chosen by the linked ability is this one (anchor words, CR 607.2m).
+    ChosenWord(String),
     /// Game-state predicates about the current turn.
     Phase(PhaseCond),
     /// You have the city's blessing (CR 702.131).
@@ -1831,6 +1844,11 @@ pub enum Effect {
         var: Var,
         value: Value,
     },
+    /// "Note [a number]": records information for the abilities linked to this one to refer
+    /// to ("the noted number", CR 607.2e). Read with `Value::Chosen`.
+    Note {
+        value: Value,
+    },
     /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
     /// creates ("that many" after paying a cost any number of times, CR 603.12a).
     SetX {
@@ -2193,6 +2211,9 @@ pub enum ChoiceKind {
     BasicLandType,
     CardType,
     OddOrEven,
+    /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
+    /// Dragons", CR 607.2f, 607.2m, 614.12b).
+    Word(Vec<String>),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

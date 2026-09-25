@@ -137,6 +137,16 @@ impl Game {
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
+            Effect::Note { value } => {
+                let n = self.eval_value(value, ctx) as i32;
+                if let Some(src) = ctx.source {
+                    self.objects[src.0 as usize]
+                        .linked_choices
+                        .entry(ctx.link)
+                        .or_default()
+                        .number = Some(n);
+                }
+            }
             Effect::SetX { value } => {
                 ctx.x = self.eval_value(value, ctx) as i32;
             }
@@ -173,9 +183,12 @@ impl Game {
                             },
                             ..Default::default()
                         },
-                        source: if *link { ctx.source } else { None },
+                        // CR 607.2a: cards an ability exiles are exiled with its source,
+                        // for the abilities linked to it.
+                        source: ctx.source,
                     })
                     .collect();
+                let _ = link;
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
@@ -236,6 +249,9 @@ impl Game {
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 let res = self.move_to_destination(objs, to, ctx);
+                if to.zone == ZoneKind::Battlefield {
+                    self.link_to_creator(ctx, &res);
+                }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -506,6 +522,7 @@ impl Game {
                     };
                     created.extend(self.create_tokens(p, tc, n, ctx.source));
                 }
+                self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
                 ctx.set_var(
                     vars::CREATED,
@@ -1319,13 +1336,12 @@ impl Game {
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
             ManaProduction::ChosenColor(n) => {
+                // CR 607.5a: an undefined choice produces nothing.
                 let k = self.eval_value(n, ctx).max(0) as usize;
-                let c = ctx
-                    .source
-                    .and_then(|s| self.obj(s).choices.color)
-                    .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![c; k]
+                match self.linked_choice(ctx).and_then(|c| c.color) {
+                    Some(c) => vec![ManaType::from_color(c); k],
+                    None => vec![],
+                }
             }
             ManaProduction::CouldProduce(f) => {
                 let types = crate::mana_abilities::types_could_produce(self, f, ctx);
@@ -1356,6 +1372,27 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+        }
+    }
+
+    /// CR 607.2c, 607.1d: objects an ability created or put onto the battlefield are
+    /// linked to that ability of its source ("created with ~", "put onto the battlefield
+    /// with ~").
+    pub(crate) fn link_to_creator(&mut self, ctx: &Ctx, objs: &[ObjectId]) {
+        let Some(src) = ctx.source else { return };
+        if !self.is_live(src) {
+            return;
+        }
+        for o in objs {
+            if *o == src || !self.is_live(*o) {
+                continue;
+            }
+            self.objects[src.0 as usize]
+                .linked
+                .entry(ctx.link)
+                .or_default()
+                .push(*o);
+            self.objects[o.0 as usize].created_by = Some((src, ctx.link));
         }
     }
 

@@ -399,8 +399,35 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            Filter::ChosenColor => self
+                .linked_choice(ctx)
+                .and_then(|ch| ch.color)
+                .is_some_and(|col| c.colors.contains(col)),
+            Filter::ManaValueOfChosenQuality => {
+                let mv = c.mana_cost.as_ref().map_or(0, |m| m.mana_value());
+                match self
+                    .linked_choice(ctx)
+                    .and_then(|ch| ch.text.clone())
+                    .as_deref()
+                {
+                    Some("odd") => mv % 2 == 1,
+                    Some("even") => mv % 2 == 0,
+                    _ => false,
+                }
+            }
+            Filter::ChosenCreatureType => self
+                .linked_choice(ctx)
+                .and_then(|ch| ch.creature_type.clone())
+                .is_some_and(|t| c.has_subtype(&t)),
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
+    }
+
+    /// The choices made by the abilities linked to the ability being evaluated (its
+    /// source's choices for `ctx.link`), if any (CR 607.2d, 607.5a).
+    pub fn linked_choice(&self, ctx: &Ctx) -> Option<&crate::object::Choices> {
+        let s = ctx.source?;
+        self.obj(s).linked_choices.get(&ctx.link)
     }
 
     /// Mana value of an object (CR 202.3), accounting for X on the stack (CR 107.3f) and
@@ -550,6 +577,17 @@ impl Game {
             Sel::Choose { store, .. } => store
                 .and_then(|v| ctx.vars.get(&v).cloned())
                 .unwrap_or_default(),
+            Sel::CreatorLinked => ctx
+                .source
+                .and_then(|s| self.obj(s).created_by)
+                .map(|(c, link)| {
+                    self.obj(c)
+                        .linked
+                        .get(&link)
+                        .map(|v| v.iter().map(|o| Entity::Object(self.current(*o))).collect())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default(),
             Sel::Linked => ctx
                 .source
                 .map(|s| {
@@ -598,16 +636,19 @@ impl Game {
                 .count() as i64,
             Value::PowerOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.obj(*o).power() as i64),
+                .iter()
+                .map(|o| self.obj(*o).power() as i64)
+                .sum(),
             Value::ToughnessOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .first()
                 .map_or(0, |o| self.obj(*o).toughness() as i64),
+            // CR 607.3: several objects give several answers, which are summed.
             Value::ManaValueOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.mana_value_of(*o) as i64),
+                .iter()
+                .map(|o| self.mana_value_of(*o) as i64)
+                .sum(),
             Value::LoyaltyOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .first()
@@ -737,9 +778,12 @@ impl Game {
                 s.count() as i64
             }),
             Value::ManaSpent => ctx.cast.as_ref().map_or(0, |c| c.mana_spent.len() as i64),
-            Value::Chosen => ctx
-                .source
-                .and_then(|s| self.obj(s).choices.number)
+            // The number chosen, paid or noted by the linked ability (CR 607.2e, 607.2g),
+            // or else by any of the source's abilities.
+            Value::Chosen => self
+                .linked_choice(ctx)
+                .and_then(|c| c.number)
+                .or_else(|| ctx.source.and_then(|s| self.obj(s).choices.number))
                 .unwrap_or(0) as i64,
             Value::TimesKicked => ctx.cast.as_ref().map_or(0, |c| c.times_kicked as i64),
             Value::Speed(r) => self
@@ -790,9 +834,11 @@ impl Game {
                 .any(|p| self.player_filter_matches(f, p, ctx)),
             Condition::YourTurn => self.turn.active == ctx.controller,
             Condition::NotYourTurn => self.turn.active != ctx.controller,
+            // For a permanent's abilities, how the permanent was cast (CR 607.2i).
             Condition::CostPaid(name) => ctx
                 .cast
                 .as_ref()
+                .or_else(|| ctx.source.and_then(|s| self.obj(s).cast.as_deref()))
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
             Condition::WasCast => ctx.cast.as_ref().is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
@@ -807,6 +853,10 @@ impl Game {
                 }
                 PhaseCond::EndStep => self.turn.step == crate::turn::Step::End,
             },
+            Condition::ChosenWord(w) => self
+                .linked_choice(ctx)
+                .and_then(|c| c.text.as_deref())
+                .is_some_and(|t| t == w.as_str()),
             Condition::AllTriggerConditionsThisTurn(conds) => conds.iter().all(|c| {
                 self.turn_events
                     .iter()

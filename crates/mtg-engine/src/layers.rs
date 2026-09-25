@@ -49,9 +49,11 @@ impl Game {
             // CR 604.3: characteristic-defining abilities function in all zones, so cards
             // in libraries that have one are recomputed too.
             v.extend(p.library.iter().copied().filter(|id| {
-                self.obj(*id).base.abilities.iter().any(
-                    |a| matches!(&a.kind, AbilityKind::Static(s) if s.is_cda),
-                )
+                self.obj(*id)
+                    .base
+                    .abilities
+                    .iter()
+                    .any(|a| matches!(&a.kind, AbilityKind::Static(s) if s.is_cda))
             }));
         }
         v
@@ -134,6 +136,11 @@ impl Game {
                     continue;
                 }
                 let mut v = (**values).clone();
+                v.abilities = v
+                    .abilities
+                    .iter()
+                    .map(|a| copied_ability(a, eff.id))
+                    .collect();
                 let ctx = Ctx::new(eff.source, eff.controller);
                 for m in exceptions {
                     apply_mod(&mut v, m, self, &ctx, *t);
@@ -594,7 +601,8 @@ impl Game {
                 let StaticEffect::Continuous { affected, mods } = &s.effect else {
                     return;
                 };
-                let ctx = Ctx::for_object(self, *src);
+                let mut ctx = Ctx::for_object(self, *src);
+                ctx.link = a.link;
                 let affected_now = match started.get(key) {
                     Some(v) => v.clone(),
                     None => {
@@ -928,10 +936,21 @@ pub fn apply_mod(
         Modification::SetColors(cs) => c.colors = *cs,
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
-        Modification::AddKeyword(k) => c.abilities.push(AbilityDef::new(
-            AbilityKind::Keyword(k.clone()),
-            k.kind.name(),
-        )),
+        Modification::AddKeyword(k) => {
+            // "Protection from the chosen color": the choice is the granting ability's
+            // (CR 607.2d); an undefined choice grants nothing (CR 607.5a).
+            let mut k = k.clone();
+            if let Some(f) = &k.filter {
+                match resolve_chosen(f, g, ctx) {
+                    Some(f) => k.filter = Some(f),
+                    None => return,
+                }
+            }
+            c.abilities.push(AbilityDef::new(
+                AbilityKind::Keyword(k.clone()),
+                k.kind.name(),
+            ))
+        }
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
@@ -981,12 +1000,46 @@ pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -
     let mut g = m.lock().unwrap();
     g.entry((a.uid, src.0))
         .or_insert_with(|| {
-            let link = if a.link == 0 {
-                0
-            } else {
-                // A link id distinct from those of printed abilities (small numbers).
-                0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x7fff) as u16
-            };
+            // A link id distinct from those of printed abilities and of abilities acquired
+            // from other objects (CR 607.5).
+            let link = 0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x7fff) as u16;
+            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+        })
+        .clone()
+}
+
+/// Replaces "the chosen [value]" in a filter with the value chosen by the linked ability
+/// of `ctx.source`. None if the choice is undefined (CR 607.5a).
+fn resolve_chosen(f: &Filter, g: &Game, ctx: &Ctx) -> Option<Filter> {
+    Some(match f {
+        Filter::ChosenColor => Filter::Color(g.linked_choice(ctx)?.color?),
+        Filter::ChosenCreatureType => Filter::Subtype(g.linked_choice(ctx)?.creature_type.clone()?),
+        Filter::And(v) => Filter::And(
+            v.iter()
+                .map(|x| resolve_chosen(x, g, ctx))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Filter::Or(v) => Filter::Or(
+            v.iter()
+                .map(|x| resolve_chosen(x, g, ctx))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Filter::Not(x) => Filter::Not(Box::new(resolve_chosen(x, g, ctx)?)),
+        other => other.clone(),
+    })
+}
+
+/// Abilities an object has because of a copy effect are linked to each other, not to
+/// abilities the object had from another copy effect (CR 607.5, 607.5a). Cached so their
+/// identity is stable across recomputation.
+fn copied_ability(a: &Ability, effect: u32) -> Ability {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
+    let m = CACHE.get_or_init(Default::default);
+    let mut g = m.lock().unwrap();
+    g.entry((a.uid, effect))
+        .or_insert_with(|| {
+            let link = 0x4000 | ((a.link as u32 * 131 + effect * 37) % 0x3fff) as u16;
             AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
         })
         .clone()

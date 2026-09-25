@@ -79,6 +79,27 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.text =
                 Some(if i == 0 { "odd".into() } else { "even".into() });
         }
+        ChoiceKind::Word(words) => {
+            let i = g.ask_option(p, Some(src), "Choose one", words.clone());
+            g.objects[src.0 as usize].choices.text =
+                words.get(i).or(words.first()).map(SmolStr::new);
+        }
+    }
+    // CR 607.2d: the choice belongs to the abilities linked to the one that made it.
+    let made = g.obj(src).choices.clone();
+    let entry = g.objects[src.0 as usize]
+        .linked_choices
+        .entry(ctx.link)
+        .or_default();
+    match kind {
+        ChoiceKind::Color => entry.color = made.color,
+        ChoiceKind::CreatureType => entry.creature_type = made.creature_type,
+        ChoiceKind::BasicLandType => entry.basic_land_type = made.basic_land_type,
+        ChoiceKind::CardType => entry.card_type = made.card_type,
+        ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => entry.card_name = made.card_name,
+        ChoiceKind::Number { .. } => entry.number = made.number,
+        ChoiceKind::Opponent | ChoiceKind::Player => entry.player = made.player,
+        ChoiceKind::OddOrEven | ChoiceKind::Word(_) => entry.text = made.text,
     }
     g.dirty = true;
 }

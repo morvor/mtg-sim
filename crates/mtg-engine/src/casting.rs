@@ -750,6 +750,10 @@ impl Game {
                 cast_info.paid.push(name.clone());
                 if name.as_str() == "kicker" || name.as_str() == "multikicker" {
                     cast_info.times_kicked += 1;
+                    // CR 607.2i: abilities linked to a specific kicker cost refer to it.
+                    if let Some(m) = &cost.mana {
+                        cast_info.paid.push(format!("kicker {m}").into());
+                    }
                 }
             }
         }
@@ -759,6 +763,22 @@ impl Game {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
         } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+            // A variable additional cost ("As an additional cost to cast this spell, pay X
+            // life", CR 601.2b, 607.2j).
+            || chars.abilities.iter().any(|a| match &a.kind {
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::CostModifier(CostModifier {
+                        applies_to: CostTarget::ThisSpell,
+                        change: CostChange::AdditionalCost(c),
+                        ..
+                    }) => {
+                        c.mana.as_ref().is_some_and(|m| m.has_x())
+                            || c.parts.iter().any(cost_part_has_x)
+                    }
+                    _ => false,
+                },
+                _ => false,
+            })
             || opt
                 .extra_cost
                 .as_ref()
@@ -1157,7 +1177,8 @@ impl Game {
             .collect();
         if loyalty.len() > 1 {
             cost.parts.retain(|c| !matches!(c, CostPart::Loyalty(_)));
-            cost.parts.insert(0, CostPart::Loyalty(loyalty.iter().sum()));
+            cost.parts
+                .insert(0, CostPart::Loyalty(loyalty.iter().sum()));
         }
         cost
     }

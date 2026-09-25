@@ -233,8 +233,12 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
-            for info in self.trigger_matches(&t.trigger, src, ctl, ev) {
+            // Filters like "the chosen color" refer to the ability's linked choices.
+            let mut base = Ctx::new(Some(src), ctl);
+            base.link = a.link;
+            for info in self.trigger_matches_ctx(&t.trigger, &base, ev) {
                 let mut ctx = Ctx::new(Some(src), ctl);
+                ctx.link = a.link;
                 ctx.event = Some(info.clone());
                 // CR 603.4: intervening "if" must be true when the event occurs.
                 if let Some(c) = &t.intervening_if {

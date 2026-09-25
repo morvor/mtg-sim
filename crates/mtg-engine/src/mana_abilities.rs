@@ -41,14 +41,12 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 vec![ALL_COLORS.to_vec(); g.eval_value(n, ctx).max(0) as usize]
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
-            ManaProduction::ChosenColor(n) => {
-                let c = ctx
-                    .source
-                    .and_then(|s| g.obj(s).choices.color)
-                    .map(ManaType::from_color)
-                    .unwrap_or(ManaType::C);
-                vec![vec![c]; g.eval_value(n, ctx).max(0) as usize]
-            }
+            ManaProduction::ChosenColor(n) => match g.linked_choice(ctx).and_then(|c| c.color) {
+                Some(c) => {
+                    vec![vec![ManaType::from_color(c)]; g.eval_value(n, ctx).max(0) as usize]
+                }
+                None => vec![],
+            },
             ManaProduction::CouldProduce(f) => {
                 let t = types_could_produce(g, f, ctx);
                 if t.is_empty() {
@@ -264,7 +262,8 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if !ok {
                 continue;
             }
-            let ctx = Ctx::new(Some(o.id), p);
+            let mut ctx = Ctx::new(Some(o.id), p);
+            ctx.link = a.link;
             if let Some(mut units) = production_units(g, &act.body.effect, &ctx) {
                 // CR 605.4a: triggered mana abilities that trigger on tapping it for mana
                 // add their mana right away, so they help pay too.
