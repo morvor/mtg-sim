@@ -1460,6 +1460,8 @@ pub enum CostTarget {
     ThisSpell,
     /// Specific: "Equip abilities", "ninjutsu abilities".
     Keyword(KeywordKind),
+    /// Loyalty abilities of sources matching (CR 606.4).
+    LoyaltyAbilities(Filter),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

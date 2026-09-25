@@ -1119,6 +1119,12 @@ impl Game {
                     self.player_rel_matches(cm.who, p, &ctx)
                         && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
                 }
+                // CR 606.4: the cost of a loyalty ability may be modified by other effects.
+                CostTarget::LoyaltyAbilities(f) => {
+                    act.is_loyalty
+                        && self.player_rel_matches(cm.who, p, &ctx)
+                        && self.matches(src, f, &ctx)
+                }
                 _ => false,
             };
             if !applies {
@@ -1139,6 +1145,19 @@ impl Game {
                 CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
                 _ => {}
             }
+        }
+        // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
+        let loyalty: Vec<i32> = cost
+            .parts
+            .iter()
+            .filter_map(|c| match c {
+                CostPart::Loyalty(n) => Some(*n),
+                _ => None,
+            })
+            .collect();
+        if loyalty.len() > 1 {
+            cost.parts.retain(|c| !matches!(c, CostPart::Loyalty(_)));
+            cost.parts.insert(0, CostPart::Loyalty(loyalty.iter().sum()));
         }
         cost
     }
@@ -1319,7 +1338,7 @@ impl Game {
                 CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
                 CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
                 CostTarget::ThisSpell => !ability && src == *s,
-                CostTarget::Keyword(_) => false,
+                CostTarget::Keyword(_) | CostTarget::LoyaltyAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {
