@@ -1657,7 +1657,7 @@ pub fn any_first_strike(g: &Game) -> bool {
 }
 
 /// Lethal damage for assignment purposes (CR 702.19b, 702.2c): toughness minus damage
-/// already marked, or 1 if the source has deathtouch.
+/// already marked, or at most 1 if the source has deathtouch.
 pub fn lethal_damage(g: &Game, source: ObjectId, creature: ObjectId) -> u32 {
     let o = g.obj(creature);
     let lethal = (o.toughness() - o.damage as i32).max(0) as u32;
