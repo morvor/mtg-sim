@@ -414,6 +414,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::planechase::planeswalk(g, ctx.controller);
         return;
     }
+    if name == crate::planechase::CHAOS_ENSUES_EFFECT {
+        crate::planechase::chaos_ensues(g, ctx.controller);
+        return;
+    }
     if name == crate::planechase::ROLL_PLANAR_DIE_EFFECT {
         // Outside a Planechase game there's no planar die: nothing happens.
         if crate::planechase::is_planechase(g) {
