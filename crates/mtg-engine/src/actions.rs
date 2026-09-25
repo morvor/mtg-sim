@@ -292,6 +292,7 @@ impl Game {
             if old_was_creature && matches!(m.to, Zone::Graveyard(_)) {
                 self.history.creatures_died.push(old_id);
             }
+            self.queue_until_returns(old_id, old_controller);
         }
         if matches!(from, Zone::Graveyard(_)) {
             *self
@@ -320,6 +321,41 @@ impl Game {
             lookback,
         });
         Some(new_id)
+    }
+
+    /// CR 610.3: objects exiled "until" a permanent leaves the battlefield return right
+    /// after it leaves, under their owners' control (CR 610.3c). The return runs once the
+    /// current event has finished (as a post-event effect), so simultaneous zone
+    /// changes complete first.
+    fn queue_until_returns(&mut self, left: ObjectId, controller: PlayerId) {
+        let Some(exiled) = self.objects[left.0 as usize]
+            .linked
+            .remove(&UntilEvent::LEAVES_LINK)
+        else {
+            return;
+        };
+        // Only objects still in exile return (a card that changed zones is a new
+        // object, CR 400.7).
+        let back: Vec<Entity> = exiled
+            .into_iter()
+            .filter(|o| self.is_live(*o) && self.obj(*o).zone == Zone::Exile)
+            .map(Entity::Object)
+            .collect();
+        if back.is_empty() {
+            return;
+        }
+        const RETURNING: Var = vars::USER - 1;
+        let mut ctx = Ctx::new(Some(left), controller);
+        ctx.set_var(RETURNING, back);
+        let mut to = Destination::battlefield();
+        to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(RETURNING))));
+        self.post_replacement_effects.push((
+            ctx,
+            Effect::Move {
+                what: Sel::Var(RETURNING),
+                to,
+            },
+        ));
     }
 
     /// Executes a final (post-replacement) event of any kind.
@@ -617,7 +653,14 @@ impl Game {
                 continue;
             }
             let evs = if no_regen {
-                vec![ReplEvent::Destroy { obj, source }]
+                // CR 701.19c: "can't be regenerated" makes regeneration shields not
+                // apply; other replacement effects still do.
+                let mut skip = self.repl_context.last().cloned().unwrap_or_default();
+                skip.extend(self.regeneration_keys());
+                self.repl_context.push(skip);
+                let r = self.replace(ReplEvent::Destroy { obj, source });
+                self.repl_context.pop();
+                r
             } else {
                 self.replace(ReplEvent::Destroy { obj, source })
             };
@@ -647,6 +690,25 @@ impl Game {
             }
         }
         res.into_iter().flatten().collect()
+    }
+
+    /// Keys of all regeneration replacement effects (shields and static regeneration).
+    fn regeneration_keys(&self) -> Vec<ReplKey> {
+        let regen = |d: &ReplacementDef| matches!(d.action, ReplacementAction::Regenerate);
+        let mut keys: Vec<ReplKey> = self
+            .replacements
+            .iter()
+            .filter(|r| regen(&r.def))
+            .map(|r| ReplKey::Instance(r.id))
+            .collect();
+        keys.extend(
+            self.statics
+                .replacements
+                .iter()
+                .filter(|(_, _, _, _, d)| regen(d))
+                .map(|(s, _, _, a, _)| ReplKey::Static(*s, a.uid)),
+        );
+        keys
     }
 
     /// Sacrifices a permanent (CR 701.21). Only the controller can sacrifice.
@@ -959,7 +1021,7 @@ impl Game {
         self.recompute();
     }
 
-    fn damage_cant_be_prevented(&self) -> bool {
+    pub(crate) fn damage_cant_be_prevented(&self) -> bool {
         self.statics
             .restrictions
             .iter()

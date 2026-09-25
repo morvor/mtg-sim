@@ -192,24 +192,55 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         parts.push(Filter::Other);
         s = r;
     }
-    // Adjectives.
+    // Adjectives. Space- and comma-separated adjectives are conjunctive ("nonartifact,
+    // nonblack creature"); a list joined by "or" is disjunctive ("attacking or blocking
+    // creature", "red, white, or black creature").
+    let is_adj = |w: &str| {
+        let w2 = w.trim_end_matches(',');
+        !w2.is_empty()
+            && (head_noun(w2).is_none() || matches!(w2, "token" | "tokens"))
+            && adjective(w2).is_some()
+    };
+    let mut items: Vec<Vec<Filter>> = vec![vec![]];
+    let mut disjunctive = false;
     loop {
         let (w, rest) = split_word(s);
         let w2 = w.trim_end_matches(',');
         if w2.is_empty() {
             break;
         }
+        if matches!(w2, "or" | "and/or") && items.iter().any(|v| !v.is_empty()) {
+            // Only an adjective list continues after "or".
+            if !is_adj(split_word(rest).0) {
+                break;
+            }
+            disjunctive = true;
+            if !items.last().unwrap().is_empty() {
+                items.push(vec![]);
+            }
+            s = rest;
+            continue;
+        }
         // Stop if this word is a head noun (but "token" can be either).
-        if head_noun(w2).is_some() && !matches!(w2, "token" | "tokens") {
+        if !is_adj(w) {
             break;
         }
-        match adjective(w2) {
-            Some(f) => {
-                parts.push(f);
-                s = rest;
+        items.last_mut().unwrap().push(adjective(w2).unwrap());
+        s = rest;
+        if w.ends_with(',') {
+            let next = split_word(rest).0;
+            if is_adj(next) || matches!(next, "or" | "and/or") {
+                items.push(vec![]);
             }
-            None => break,
         }
+    }
+    items.retain(|v| !v.is_empty());
+    if disjunctive && items.len() > 1 {
+        parts.push(Filter::Or(
+            items.into_iter().map(Filter::and).collect::<Vec<_>>(),
+        ));
+    } else {
+        parts.extend(items.into_iter().flatten());
     }
     // Head nouns joined by "or", "and/or", commas.
     let mut heads: Vec<Filter> = Vec::new();
@@ -236,8 +267,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         if w.ends_with(',') {
             if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
                 s = r;
+            } else if let Some(r) = t.strip_prefix("and ") {
+                // "artifacts, creatures, and lands" (a plural list names a union).
+                if plural && head_noun(split_word(r).0.trim_end_matches(',')).is_some() {
+                    s = r;
+                }
             }
             continue;
+        }
+        // "artifacts and enchantments": plural nouns joined by "and" name a union.
+        if plural {
+            if let Some(r) = t.strip_prefix("and ") {
+                let nw = split_word(r).0.trim_end_matches(',');
+                if nw.ends_with('s') && head_noun(nw).is_some() {
+                    s = r;
+                    continue;
+                }
+            }
         }
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
         let (nw, nrest) = split_word(s);
@@ -280,11 +326,6 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("your opponents control"))
         {
             (Filter::ControlledBy(PlayerRel::Opponent), r)
-        } else if let Some(r) = t
-            .strip_prefix("target player controls")
-            .or_else(|| t.strip_prefix("target opponent controls"))
-        {
-            (Filter::ControlledBy(PlayerRel::Target(0)), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t
@@ -303,7 +344,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("from a graveyard"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
-        } else if let Some(r) = t.strip_prefix("in an opponent's graveyard") {
+        } else if let Some(r) = t
+            .strip_prefix("in an opponent's graveyard")
+            .or_else(|| t.strip_prefix("from an opponent's graveyard"))
+        {
             (
                 Filter::and(vec![
                     Filter::InZone(ZoneKind::Graveyard),
@@ -346,6 +390,22 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {
             (Filter::Blocking, r)
+        } else if let Some(r) = t
+            .strip_prefix("that was dealt damage this turn")
+            .or_else(|| t.strip_prefix("that were dealt damage this turn"))
+        {
+            (Filter::DealtDamageThisTurn, r)
+        } else if let Some(r) = t.strip_prefix("defending player controls") {
+            (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {
+            (
+                Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("blocking ~") {
+            (Filter::BlockingSource, r)
+        } else if let Some(r) = t.strip_prefix("blocked by ~") {
+            (Filter::BlockedBySource, r)
         } else {
             break;
         };
@@ -353,6 +413,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = rest;
     }
     Some((Filter::and(parts), plural, s))
+}
+
+/// "target player controls" / "target opponent controls" after an object phrase. The
+/// phrase parser leaves this suffix unparsed because it introduces a target of its own;
+/// callers that can add targets bind it (see `effects::bind_target_player`).
+pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &str)> {
+    let t = s.trim_start();
+    if let Some(r) = t.strip_prefix("target player controls") {
+        return Some((PlayerFilter::Any, "target player", r));
+    }
+    if let Some(r) = t.strip_prefix("target opponent controls") {
+        return Some((PlayerFilter::Opponent, "target opponent", r));
+    }
+    None
 }
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".

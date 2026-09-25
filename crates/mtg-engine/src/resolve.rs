@@ -174,6 +174,42 @@ impl Game {
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
+            Effect::ExileUntil { what, until } => {
+                let UntilEvent::SourceLeavesBattlefield = until;
+                // CR 610.3a–b: if the source already left the battlefield (after the
+                // spell/ability was put on the stack or triggered), nothing moves.
+                let src = ctx
+                    .source
+                    .filter(|s| self.is_live(*s) && self.obj(*s).zone == Zone::Battlefield);
+                let objs = self.resolve_objects(what, ctx);
+                let res: Vec<ObjectId> = match src {
+                    Some(src) => {
+                        let prev_link = self.current_link;
+                        // The source records what it exiled; `perform_move` returns
+                        // those objects when it leaves the battlefield.
+                        self.current_link = UntilEvent::LEAVES_LINK;
+                        let moves: Vec<MoveEv> = objs
+                            .iter()
+                            .filter(|o| self.is_live(**o))
+                            .map(|o| MoveEv {
+                                obj: *o,
+                                to: Zone::Exile,
+                                pos: LibraryPosition::Top,
+                                cause: MoveCause::Exile,
+                                by: Some(ctx.controller),
+                                etb: EtbInfo::default(),
+                                source: Some(src),
+                            })
+                            .collect();
+                        let r = self.move_objects(moves).into_iter().flatten().collect();
+                        self.current_link = prev_link;
+                        r
+                    }
+                    None => vec![],
+                };
+                ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
+            }
             Effect::Sacrifice { who, filter, count } => {
                 let players = self.eval_players(who, ctx);
                 let n = self.eval_value(count, ctx).max(0) as u32;
@@ -247,7 +283,9 @@ impl Game {
                 let recipients = self.resolve_sel(to, ctx);
                 if let Some(src) = src {
                     let evs = recipients.into_iter().map(|r| (src, r, n)).collect();
+                    let before = self.events.len();
                     self.deal_damage_batch(evs, false);
+                    self.record_damaged(src, before, ctx);
                     ctx.prev_value = n as i64;
                 }
             }
@@ -255,14 +293,16 @@ impl Game {
                 if let Some(src) = self.damage_source(source, ctx) {
                     let targets = ctx.targets.get(*slot as usize).cloned().unwrap_or_default();
                     let div = ctx.divided.get(*slot as usize).cloned().unwrap_or_default();
-                    // Divided among original targets; illegal targets were filtered, so
-                    // match by position in the original choice where possible.
+                    // Divisions are kept aligned with the targets that are still legal
+                    // (CR 608.2b; see `recheck_targets`).
                     let evs: Vec<(ObjectId, Entity, u32)> = targets
                         .iter()
                         .enumerate()
                         .map(|(i, t)| (src, *t, div.get(i).copied().unwrap_or(0)))
                         .collect();
+                    let before = self.events.len();
                     self.deal_damage_batch(evs, false);
+                    self.record_damaged(src, before, ctx);
                 }
             }
             Effect::Fight { a, b } => {
@@ -389,6 +429,13 @@ impl Game {
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let objects = self.lock_replacement_objects(def, ctx);
+                // Once locked onto specific objects, references to the resolving
+                // ability's targets/variables can't be evaluated later (the instance is
+                // matched without them), so they're dropped from the stored filter.
+                let def = &match objects {
+                    Some(_) => unlock_replacement_def(def),
+                    None => def.clone(),
+                };
                 let remaining = match &def.action {
                     ReplacementAction::PreventAmount(v) => {
                         Some(self.eval_value(v, ctx).max(0) as u32)
@@ -1077,6 +1124,28 @@ impl Game {
             .collect()
     }
 
+    /// Records the objects that were actually dealt damage by `src` since event index
+    /// `before` (after replacement and prevention) as "dealt damage this way"
+    /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
+    fn record_damaged(&mut self, src: ObjectId, before: usize, ctx: &mut Ctx) {
+        let mut damaged: Vec<Entity> = Vec::new();
+        for ev in &self.events[before.min(self.events.len())..] {
+            if let Event::Damage {
+                source,
+                target: Entity::Object(o),
+                amount,
+                ..
+            } = ev
+            {
+                if *source == src && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
+                    damaged.push(Entity::Object(*o));
+                }
+            }
+        }
+        ctx.prev_affected = damaged.clone();
+        ctx.set_var(vars::DAMAGED, damaged);
+    }
+
     /// The source of damage for an effect: the named object, or the resolving object's
     /// source (CR 120.2, 609.7). Uses last known information if it has left.
     fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
@@ -1183,6 +1252,9 @@ impl Game {
             .controller
             .as_ref()
             .and_then(|r| self.eval_player(r, ctx));
+        // "under its owner's control" / "under their owners' control": each object
+        // enters under its own owner's control.
+        let owners_control = matches!(to.controller, Some(PlayerRef::OwnerOf(_)));
         let mut counters: Vec<(CounterKind, u32)> = Vec::new();
         for (k, v) in &to.with_counters {
             counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
@@ -1206,7 +1278,9 @@ impl Game {
                     etb: EtbInfo {
                         tapped: to.tapped,
                         counters: counters.clone(),
-                        controller: if to.zone == ZoneKind::Battlefield {
+                        controller: if to.zone == ZoneKind::Battlefield && owners_control {
+                            Some(owner)
+                        } else if to.zone == ZoneKind::Battlefield {
                             Some(controller.unwrap_or(ctx.controller))
                         } else {
                             None
@@ -1346,6 +1420,27 @@ pub fn player_const(p: PlayerId) -> PlayerRef {
 /// A player filter matching exactly one player.
 pub fn player_filter_const(p: PlayerId) -> PlayerFilter {
     PlayerFilter::Is(p)
+}
+
+/// Replaces `Filter::In(..)` parts of a locked replacement's event filter with `Any`
+/// (the lock already restricts the effect to those objects).
+fn unlock_replacement_def(d: &ReplacementDef) -> ReplacementDef {
+    fn unlock(f: &Filter) -> Filter {
+        match f {
+            Filter::In(_) => Filter::Any,
+            Filter::And(v) => Filter::and(v.iter().map(unlock).collect()),
+            other => other.clone(),
+        }
+    }
+    let mut d = d.clone();
+    match &mut d.event {
+        ReplacementEvent::Destroy(f)
+        | ReplacementEvent::Dies(f)
+        | ReplacementEvent::EntersBattlefield(f) => *f = unlock(f),
+        ReplacementEvent::ZoneChange { filter, .. } => *filter = unlock(filter),
+        _ => {}
+    }
+    d
 }
 
 fn filter_references_specific(f: &Filter) -> bool {

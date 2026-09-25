@@ -631,16 +631,28 @@ impl Game {
                 _ => &body.targets,
             };
             let mut new_targets = Vec::new();
+            let mut new_divided = cm.divided.clone();
             let mut c2 = ctx.clone();
             c2.targets = cm.targets.clone();
             for (i, slot) in cm.targets.iter().enumerate() {
                 let spec = &specs[i.min(specs.len().saturating_sub(1))];
                 let mut legal = Vec::new();
-                for t in slot {
+                let mut legal_div = Vec::new();
+                for (j, t) in slot.iter().enumerate() {
                     any_target = true;
                     if self.is_legal_target(spec, *t, &c2, id) {
                         legal.push(*t);
                         any_legal = true;
+                        if let Some(d) = cm.divided.get(i).and_then(|d| d.get(j)) {
+                            legal_div.push(*d);
+                        }
+                    }
+                }
+                // CR 608.2b: damage divided onto an illegal target isn't dealt; keep the
+                // remaining divisions aligned with the remaining targets.
+                if let Some(d) = new_divided.get_mut(i) {
+                    if !d.is_empty() {
+                        *d = legal_div;
                     }
                 }
                 new_targets.push(legal);
@@ -648,7 +660,7 @@ impl Game {
             out.push(ChosenMode {
                 mode: cm.mode,
                 targets: new_targets,
-                divided: cm.divided.clone(),
+                divided: new_divided,
             });
         }
         (out, any_target && !any_legal)

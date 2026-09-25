@@ -272,6 +272,16 @@ impl Game {
                 });
             }
         }
+        // CR 615.12: prevention effects applied to damage that can't be prevented don't
+        // prevent any of it, and shields aren't reduced; other replacements still apply.
+        if matches!(ev, ReplEvent::Damage { .. }) && self.damage_cant_be_prevented() {
+            out.retain(|c| {
+                !matches!(
+                    c.def.action,
+                    ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
+                )
+            });
+        }
         // Built-in rules replacement: commander to hand/library (CR 903.9b).
         if let ReplEvent::Move(m) = ev {
             let o = self.obj(m.obj);

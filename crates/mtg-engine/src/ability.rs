@@ -563,6 +563,9 @@ pub mod vars {
     pub const CREATED: Var = 1;
     /// Cards drawn/revealed/looked at.
     pub const REVEALED: Var = 2;
+    /// Objects dealt damage by the most recent damage effect ("a creature dealt damage
+    /// this way").
+    pub const DAMAGED: Var = 3;
     /// First user-defined variable.
     pub const USER: Var = 10;
 }
@@ -1751,6 +1754,14 @@ pub enum Effect {
         /// Link exiled cards to the source (CR 607, "exiled with this").
         link: bool,
     },
+    /// "Exile [objects] until [event]" (CR 610.3). The objects are exiled now; a second
+    /// one-shot effect returns them to the battlefield under their owners' control
+    /// immediately after the event (CR 610.3c). If the event has already happened by
+    /// the time this resolves, nothing is exiled (CR 610.3a–b).
+    ExileUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
     /// "[Player] sacrifices [count] [filter]" — the player chooses.
     Sacrifice {
         who: PlayerRef,
@@ -2070,6 +2081,19 @@ impl Effect {
             _ => Effect::Seq(out),
         }
     }
+}
+
+/// The event ending an "until" effect (CR 610.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UntilEvent {
+    /// "until [this permanent] leaves the battlefield".
+    SourceLeavesBattlefield,
+}
+
+impl UntilEvent {
+    /// Link id (CR 607) under which the source records objects exiled "until" it leaves
+    /// the battlefield. Distinct from ids used by linked abilities.
+    pub const LEAVES_LINK: u16 = u16::MAX;
 }
 
 /// Choices stored on the source ("the chosen color", "the chosen creature type").
