@@ -218,6 +218,71 @@ fn spell_quality(subject: &str) -> Option<Vec<Filter>> {
     Some(parts)
 }
 
+/// "That creature gains bushido 1 and becomes a Samurai in addition to its other creature
+/// types" (Sensei Golden-Tail): an effect with no duration lasts indefinitely (CR 611.2a).
+fn gains_keyword_and_becomes_type(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l
+        .strip_prefix("that creature gains ")
+        .or_else(|| l.strip_prefix("it gains "))?;
+    let (kw_text, rest) = r.split_once(" and becomes a ")?;
+    let subtype = rest.strip_suffix(" in addition to its other creature types")?;
+    if subtype.contains(' ') {
+        return None;
+    }
+    let mut mods = Vec::new();
+    for a in crate::oracle::keywords::parse_keyword_line(kw_text, b.ctx)? {
+        match &a.kind {
+            AbilityKind::Keyword(k) if k.kind == KeywordKind::Bushido => {
+                mods.push(Modification::AddKeyword(k.clone()))
+            }
+            _ => return None,
+        }
+    }
+    let mut word = subtype.chars();
+    let first = word.next()?.to_uppercase().collect::<String>();
+    mods.push(Modification::AddSubtypes(vec![SmolStr::new(format!(
+        "{first}{}",
+        word.as_str()
+    ))]));
+    Some(Effect::Modify {
+        what: b.it.clone(),
+        mods,
+        duration: Duration::Permanent,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "gains bushido and becomes a creature type", priority: 100, parse: gains_keyword_and_becomes_type } }
+
+/// "Each other Samurai creature you control gets +1/+1 for each point of bushido it has."
+fn per_point_of_bushido(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_prefix("each other ")?;
+    let (subject, rest) = r.split_once(" creature you control gets +")?;
+    let (a, b) = rest
+        .strip_suffix(" for each point of bushido it has")?
+        .split_once("/+")?;
+    let (a, b): (i32, i32) = (a.parse().ok()?, b.parse().ok()?);
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(subject)?;
+    if !crate::oracle::phrases::end(tail).is_empty() {
+        return None;
+    }
+    let points = || Value::Custom(SmolStr::new(crate::kw::bushido::BUSHIDO_POINTS));
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(vec![
+            f,
+            Filter::Type(CardType::Creature),
+            Filter::ControlledBy(PlayerRel::You),
+            Filter::Other,
+        ]),
+        mods: vec![Modification::ModifyPT(
+            Value::Mul(Box::new(Value::c(a)), Box::new(points())),
+            Value::Mul(Box::new(Value::c(b)), Box::new(points())),
+        )],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "gets +1/+1 for each point of bushido it has", priority: 100, parse: per_point_of_bushido } }
+
 /// "Whenever you cast a spell that has convoke", "Whenever you cast another spell that
 /// has convoke".
 fn cast_spell_with_keyword(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
