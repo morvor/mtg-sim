@@ -35,6 +35,21 @@ pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
     c
 }
 
+/// Turns a face-up permanent face down (e.g. "turn target creature face down"). It gets
+/// a new timestamp (CR 613.7f). Returns true if it did.
+pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
+        return false;
+    }
+    let ts = g.new_timestamp();
+    let ob = &mut g.objects[id.0 as usize];
+    ob.face_down = true;
+    ob.timestamp = ts;
+    g.dirty = true;
+    true
+}
+
 /// Turns a face-down permanent face up (CR 708.8). Returns true if it did.
 pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     let o = g.obj(id);

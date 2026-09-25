@@ -297,6 +297,10 @@ pub struct GameObject {
     /// Phased out indirectly (attached to something that phased out, CR 702.26g).
     pub phased_out_indirectly: bool,
     pub counters: BTreeMap<CounterKind, u32>,
+    /// Timestamp of each kind of counter (CR 613.7c): all counters of a kind share the
+    /// timestamp of the most recently placed one.
+    #[serde(default)]
+    pub counter_timestamps: BTreeMap<CounterKind, Timestamp>,
     /// Damage marked (CR 120.6).
     pub damage: u32,
     /// Dealt damage by a deathtouch source since the last SBA check (CR 704.5h).
@@ -371,6 +375,7 @@ impl GameObject {
             phased_out: false,
             phased_out_indirectly: false,
             counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
             damage: 0,
             deathtouch_damage: false,
             attached_to: None,

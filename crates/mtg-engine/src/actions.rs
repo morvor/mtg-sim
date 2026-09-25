@@ -59,6 +59,9 @@ impl Game {
                 finals.push((i, e));
             }
         }
+        // CR 613.7m: objects entering the battlefield simultaneously get timestamps in
+        // APNAP order.
+        self.order_simultaneous_entries(&mut finals);
         // Look back in time for leaves-the-battlefield triggers (CR 603.10a).
         let leaving = finals.iter().any(|(_, e)| match e {
             ReplEvent::Move(m) => {
@@ -86,6 +89,75 @@ impl Game {
         self.run_post_replacement_effects();
         self.recompute();
         out
+    }
+
+    /// The player who will control a permanent entering the battlefield with this move.
+    pub fn entry_controller(&self, m: &MoveEv) -> PlayerId {
+        let o = self.obj(m.obj);
+        m.etb
+            .controller
+            .or(if o.zone == Zone::Stack {
+                Some(o.controller)
+            } else {
+                None
+            })
+            .or(m.by)
+            .unwrap_or(o.owner)
+    }
+
+    /// Reorders simultaneous moves onto the battlefield so they receive timestamps in
+    /// APNAP order (CR 613.7m): each player's objects in the order that player chooses,
+    /// the active player's first. Other moves keep their places.
+    fn order_simultaneous_entries(&mut self, finals: &mut [(usize, ReplEvent)]) {
+        let slots: Vec<usize> = finals
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, e))| matches!(e, ReplEvent::Move(m) if m.to == Zone::Battlefield))
+            .map(|(i, _)| i)
+            .collect();
+        if slots.len() < 2 {
+            return;
+        }
+        let mut entries: Vec<Option<(usize, ReplEvent)>> =
+            slots.iter().map(|i| Some(finals[*i].clone())).collect();
+        let controller = |g: &Game, e: &ReplEvent| match e {
+            ReplEvent::Move(m) => g.entry_controller(m),
+            _ => g.turn.active,
+        };
+        let mut ordered: Vec<(usize, ReplEvent)> = Vec::new();
+        for p in self.apnap() {
+            let mine: Vec<usize> = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| e.as_ref().is_some_and(|(_, ev)| controller(self, ev) == p))
+                .map(|(k, _)| k)
+                .collect();
+            let order: Vec<usize> = if mine.len() >= 2 {
+                let names = mine
+                    .iter()
+                    .map(|k| match &entries[*k] {
+                        Some((_, ReplEvent::Move(m))) => self.describe(m.obj),
+                        _ => String::new(),
+                    })
+                    .collect();
+                self.ask_order(
+                    p,
+                    "Order objects entering the battlefield (first = oldest)",
+                    names,
+                )
+            } else {
+                (0..mine.len()).collect()
+            };
+            for i in order {
+                if let Some(e) = entries[mine[i]].take() {
+                    ordered.push(e);
+                }
+            }
+        }
+        ordered.extend(entries.into_iter().flatten());
+        for (k, i) in slots.iter().enumerate() {
+            finals[*i] = ordered[k].clone();
+        }
     }
 
     /// Snapshot of triggered abilities of permanents on the battlefield right now.
@@ -233,7 +305,10 @@ impl Game {
                         } = e
                         {
                             if t == new_id {
-                                *self.objects[t.0 as usize].counters.entry(kind).or_insert(0) += n;
+                                let ts = self.new_timestamp();
+                                let ob = &mut self.objects[t.0 as usize];
+                                *ob.counters.entry(kind.clone()).or_insert(0) += n;
+                                ob.counter_timestamps.insert(kind, ts);
                             }
                         }
                     }
@@ -739,10 +814,11 @@ impl Game {
                 if !self.is_live(o) {
                     return;
                 }
-                *self.objects[o.0 as usize]
-                    .counters
-                    .entry(kind.clone())
-                    .or_insert(0) += n;
+                // CR 613.7c: every counter of this kind gets the new counter's timestamp.
+                let ts = self.new_timestamp();
+                let ob = &mut self.objects[o.0 as usize];
+                *ob.counters.entry(kind.clone()).or_insert(0) += n;
+                ob.counter_timestamps.insert(kind.clone(), ts);
             }
             Entity::Player(p) => {
                 *self.players[p.idx()]
