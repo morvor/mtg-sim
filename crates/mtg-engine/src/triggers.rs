@@ -206,10 +206,6 @@ impl Game {
         ev: &Event,
     ) -> Vec<EventInfo> {
         let ctx = Ctx::new(Some(src), ctl);
-        // Combat trigger conditions (CR 506.5–6, 508.3, 509.3) live in combat.rs.
-        if let Some(v) = crate::combat::combat_trigger_matches(self, cond, &ctx, ev) {
-            return v;
-        }
         let one = |info: EventInfo| vec![info];
         let none = Vec::new;
         match (cond, ev) {
@@ -844,7 +840,11 @@ impl Game {
             (TriggerCond::Custom(name), ev) => {
                 crate::custom::custom_trigger(self, name, src, ctl, ev)
             }
-            _ => none(),
+            // Combat trigger conditions (CR 506.5–6, 508.3, 509.3) and blocks added by
+            // effects (CR 509.3, 509.4) live in combat.rs.
+            (cond, ev) => {
+                crate::combat::combat_trigger_matches(self, cond, &ctx, ev).unwrap_or_default()
+            }
         }
     }
 

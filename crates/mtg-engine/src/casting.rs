@@ -364,11 +364,11 @@ impl Game {
         chars: &Characteristics,
         opt: &CastOption,
     ) -> bool {
-        if self.turn.priority != Some(p) {
-            return false;
-        }
         // "Cast this spell only ..." (e.g. combat timing windows, CR 506.8).
         if !crate::combat::spell_cast_restrictions_ok(self, p, card, chars) {
+            return false;
+        }
+        if self.turn.priority != Some(p) {
             return false;
         }
         let instant_speed = chars.is(CardType::Instant)
