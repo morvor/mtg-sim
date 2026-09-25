@@ -213,6 +213,8 @@ impl Game {
             }
         }
         let _ = turn;
+        // CR 506.4: type changes can remove permanents from combat.
+        crate::combat::update_combat_membership(self);
         for id in &live {
             let o = &mut self.objects[id.0 as usize];
             if o.chars.has_supertype(Supertype::World) {

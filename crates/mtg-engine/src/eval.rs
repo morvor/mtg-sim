@@ -278,8 +278,13 @@ impl Game {
             Filter::Attacking => self.is_attacking(id),
             Filter::Blocking => self.is_blocking(id),
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
-            Filter::Unblocked => {
-                self.is_attacking(id) && !self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id))
+            // CR 509.1h: attackers are neither blocked nor unblocked until blockers are declared.
+            Filter::Unblocked => self.combat.as_ref().is_some_and(|cb| cb.is_unblocked(id)),
+            Filter::AttackingAlone
+            | Filter::BlockingAlone
+            | Filter::AttackingPlayerAlone
+            | Filter::HadToAttack => {
+                crate::combat::combat_filter(self, f, id)
             }
             Filter::AttackingPlayer(rel) => self
                 .combat
@@ -796,6 +801,7 @@ impl Game {
             Condition::IsDay => self.day == Some(true),
             Condition::IsNight => self.day == Some(false),
             Condition::MaxSpeed => self.player(ctx.controller).speed.unwrap_or(0) >= 4,
+            Condition::CombatTiming(t) => crate::combat::combat_timing_ok(self, *t),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
     }

@@ -52,7 +52,7 @@ impl Game {
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         for (i, m) in moves.iter().enumerate() {
-            if !self.is_live(m.obj) {
+            if !self.can_move(m.obj) {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
@@ -88,6 +88,17 @@ impl Game {
         out
     }
 
+    /// Whether an object can be moved to a zone: it's a current object in some zone, or a
+    /// newly created object (a token or card) that hasn't been put anywhere yet.
+    pub fn can_move(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        self.is_live(id)
+            || (o.zone == Zone::Nowhere
+                && o.next.is_none()
+                && o.prev.is_none()
+                && o.kind != ObjKind::StackAbility)
+    }
+
     /// Snapshot of triggered abilities of permanents on the battlefield right now.
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         let mut snap = LookbackSnapshot::default();
@@ -110,7 +121,7 @@ impl Game {
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
         let old_id = m.obj;
-        if !self.is_live(old_id) {
+        if !self.can_move(old_id) {
             return None;
         }
         let from = self.obj(old_id).zone;
@@ -246,6 +257,9 @@ impl Game {
                 }
                 if let Some(target) = m.etb.attacking {
                     crate::combat::put_onto_battlefield_attacking(self, new_id, target);
+                }
+                if let Some(attacker) = m.etb.blocking {
+                    crate::combat::put_onto_battlefield_blocking(self, new_id, attacker);
                 }
             }
             Zone::Library(p) => {

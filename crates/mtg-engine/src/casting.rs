@@ -364,6 +364,10 @@ impl Game {
         chars: &Characteristics,
         opt: &CastOption,
     ) -> bool {
+        // "Cast this spell only ..." (e.g. combat timing windows, CR 506.8).
+        if !crate::combat::spell_cast_restrictions_ok(self, p, card, chars) {
+            return false;
+        }
         if self.turn.priority != Some(p) {
             return false;
         }
@@ -877,12 +881,20 @@ impl Game {
             ActivationTiming::Combat if !self.turn.step.is_combat() => return false,
             ActivationTiming::YourTurn if self.turn.active != p => return false,
             ActivationTiming::OpponentsTurn if self.turn.active == p => return false,
+            // CR 506.8, 506.8g: combat timing windows.
+            ActivationTiming::CombatWindow(t) if !crate::combat::combat_timing_ok(self, t) => {
+                return false
+            }
+            // CR 506.8b, 506.8d–e, 506.8g: "only before blockers are declared".
             ActivationTiming::BeforeBlockers
-                if !(self.turn.step.is_combat()
-                    && matches!(
-                        self.turn.step,
-                        crate::turn::Step::BeginningOfCombat | crate::turn::Step::DeclareAttackers
-                    )) =>
+                if !crate::combat::combat_timing_ok(
+                    self,
+                    CombatTiming {
+                        point: CombatPoint::BlockersDeclared,
+                        after: false,
+                        during_combat: false,
+                    },
+                ) =>
             {
                 return false
             }
