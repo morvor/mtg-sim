@@ -1632,6 +1632,9 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
+    /// don't apply when they're destroyed (CR 701.19c).
+    CantBeRegenerated(Filter),
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),

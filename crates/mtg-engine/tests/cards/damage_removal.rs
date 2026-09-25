@@ -53,6 +53,14 @@ fn removal_cards_compile() {
         "Diabolic Edict",
         "Spiteful Blow",
         "Cinder Wall",
+        // Delayed sacrifice.
+        "Slave of Bolas",
+        "Spinal Embrace",
+        // "Can't be regenerated this turn."
+        "Engulfing Flames",
+        "Gravebind",
+        "Jaya Ballard, Task Mage",
+        "Lim-Dûl's Cohort",
     ]);
 }
 
@@ -602,4 +610,62 @@ fn spinal_embrace_gains_nothing_if_the_creature_is_gone() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
+}
+
+// ---------------------------------------------------------------------------
+// "Can't be regenerated this turn" (CR 701.19c)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn engulfing_flames_stops_regeneration_from_lethal_damage() {
+    cr!("701.19c", "704.5g");
+    let mut t = TestGame::new(2);
+    let boa = t.battlefield(P1, "River Boa");
+    t.lands(P1, "Forest", 1);
+    t.activate(P1, boa, 0, &[]).unwrap();
+    t.resolve();
+    t.lands(P0, "Mountain", 1);
+    let f = t.hand(P0, "Engulfing Flames");
+    t.cast(P0, f).target(boa).go();
+    t.resolve();
+    assert!(!t.on_battlefield(boa), "the shield doesn't apply");
+    assert!(t.in_graveyard(P1, "River Boa"));
+}
+
+#[test]
+fn gravebind_stops_regeneration_for_later_destruction_this_turn() {
+    cr!("701.19c", "701.19a");
+    let mut t = TestGame::new(2);
+    let boa = t.battlefield(P1, "River Boa");
+    t.lands(P1, "Forest", 1);
+    t.activate(P1, boa, 0, &[]).unwrap();
+    t.resolve();
+    t.lands(P0, "Swamp", 5);
+    let g = t.hand(P0, "Gravebind");
+    t.cast(P0, g).target(boa).go();
+    t.resolve();
+    let murder = t.hand(P0, "Murder");
+    t.cast(P0, murder).target(boa).go();
+    t.resolve();
+    assert!(!t.on_battlefield(boa));
+}
+
+#[test]
+fn regeneration_still_works_without_the_restriction() {
+    cr!("701.19a");
+    let mut t = TestGame::new(2);
+    let boa = t.battlefield(P1, "River Boa");
+    let other = t.battlefield(P1, "River Boa");
+    t.lands(P1, "Forest", 1);
+    t.activate(P1, boa, 0, &[]).unwrap();
+    t.resolve();
+    t.lands(P0, "Swamp", 5);
+    // Gravebind on the other Boa doesn't affect this one.
+    let g = t.hand(P0, "Gravebind");
+    t.cast(P0, g).target(other).go();
+    t.resolve();
+    let murder = t.hand(P0, "Murder");
+    t.cast(P0, murder).target(boa).go();
+    t.resolve();
+    assert!(t.on_battlefield(boa), "regenerated");
 }

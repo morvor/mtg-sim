@@ -363,6 +363,16 @@ impl Game {
                 });
             }
         }
+        // CR 701.19c: a permanent that "can't be regenerated" isn't affected by
+        // regeneration shields or effects; other replacement effects still apply.
+        if let ReplEvent::Destroy { obj, .. } = ev {
+            if self.restricted_obj(*obj, |r| match r {
+                Restriction::CantBeRegenerated(f) => Some(f),
+                _ => None,
+            }) {
+                out.retain(|c| !matches!(c.def.action, ReplacementAction::Regenerate));
+            }
+        }
         // Built-in rules replacement: commander to hand/library (CR 903.9b).
         if let ReplEvent::Move(m) = ev {
             let o = self.obj(m.obj);
