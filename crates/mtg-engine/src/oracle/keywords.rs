@@ -253,8 +253,9 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         KeywordKind::Partner if name.as_str() == "partner with" => {
             kw.text = Some(SmolStr::new(rest_raw));
         }
+        // CR 702.22b: "bands with other [quality]" is banding with a quality.
         KeywordKind::Banding if name.as_str() == "bands with other" => {
-            kw.text = Some(SmolStr::new(rest_raw));
+            kw.filter = Some(crate::kw::banding::quality_filter(rest, rest_raw)?);
         }
         _ => {
             if rest.is_empty() {

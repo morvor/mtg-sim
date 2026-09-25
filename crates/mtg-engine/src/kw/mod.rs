@@ -124,6 +124,12 @@ pub trait KeywordRules: Sync + Send {
     fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
         None
     }
+    /// Other attacking creatures that become blocked by the same blocking creature when
+    /// `attacker` becomes blocked by it (or become blocked when an effect blocks it), e.g.
+    /// the rest of its band (CR 702.22h–i).
+    fn also_blocked(&self, g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+        vec![]
+    }
     fn after_damage(
         &self,
         g: &mut Game,
@@ -343,6 +349,18 @@ pub fn combat_damage_amount(g: &Game, id: ObjectId) -> Option<u32> {
     registry()
         .iter()
         .find_map(|r| r.combat_damage_amount(g, id))
+}
+
+pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+    let mut out: Vec<ObjectId> = Vec::new();
+    for r in registry() {
+        for x in r.also_blocked(g, attacker) {
+            if x != attacker && !out.contains(&x) {
+                out.push(x);
+            }
+        }
+    }
+    out
 }
 
 pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {

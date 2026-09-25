@@ -1066,51 +1066,13 @@ fn perform_attack_declaration(
 }
 
 /// CR 508.1e, 702.22c–d: the active player announces which attacking creatures are banded
-/// together. A band has creatures with banding and at most one without, all attacking the
-/// same player, planeswalker, or battle. Returns (creature, band id) pairs.
+/// together. Returns (creature, band id) pairs.
 fn announce_bands(
     g: &mut Game,
     ap: PlayerId,
     declared: &[(ObjectId, Entity)],
 ) -> Vec<(ObjectId, u32)> {
-    let has_banding = |g: &Game, id: ObjectId| g.obj(id).has_keyword(KeywordKind::Banding);
-    let mut out: Vec<(ObjectId, u32)> = Vec::new();
-    let mut next = 1u32;
-    for (a, t) in declared {
-        if !has_banding(g, *a) || out.iter().any(|(x, _)| x == a) {
-            continue;
-        }
-        let cands: Vec<ObjectId> = declared
-            .iter()
-            .filter(|(x, u)| x != a && u == t && !out.iter().any(|(y, _)| y == x))
-            .map(|(x, _)| *x)
-            .collect();
-        if cands.is_empty() {
-            continue;
-        }
-        let name = g.obj(*a).chars.name.clone();
-        let chosen = g.ask_objects(
-            ap,
-            Some(*a),
-            &format!("Choose attacking creatures to band with {name}"),
-            cands.clone(),
-            0,
-            cands.len() as u32,
-        );
-        if chosen.is_empty() {
-            continue;
-        }
-        let without = chosen.iter().filter(|x| !has_banding(g, **x)).count();
-        if without > 1 {
-            continue; // Not a legal band (CR 702.22c).
-        }
-        out.push((*a, next));
-        for x in chosen {
-            out.push((x, next));
-        }
-        next += 1;
-    }
-    out
+    crate::kw::banding::announce_bands(g, ap, declared)
 }
 
 /// An effect states that a creature is attacking (CR 508.4): it becomes an attacking
@@ -1596,6 +1558,15 @@ fn perform_block_declaration(g: &mut Game, blocks: Vec<(ObjectId, ObjectId)>) {
                 && g.is_attacking(*a)
         })
         .collect();
+    // Creatures that become blocked along with a blocked one (bands, CR 702.22h).
+    let mut blocks = blocks;
+    for (b, a) in blocks.clone() {
+        for m in crate::kw::also_blocked(g, a) {
+            if !blocks.contains(&(b, m)) {
+                blocks.push((b, m));
+            }
+        }
+    }
     let Some(c) = g.combat.as_mut() else { return };
     c.blockers_declared = true;
     for (b, a) in &blocks {
@@ -2298,6 +2269,16 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
         });
     }
     g.dirty = true;
+    // Creatures that become blocked along with it (bands, CR 702.22h).
+    for m in crate::kw::also_blocked(g, attacker) {
+        let already = g
+            .combat
+            .as_ref()
+            .is_some_and(|c| c.blockers_of(m).contains(&blocker));
+        if !already && g.is_attacking(m) {
+            add_block(g, blocker, m, entered);
+        }
+    }
 }
 
 /// "[attacking creature] becomes unblocked" (CR 509.1h): an effect makes a blocked
@@ -2335,6 +2316,10 @@ pub fn become_blocked(g: &mut Game, attacker: ObjectId) -> bool {
         blockers: vec![],
     });
     g.dirty = true;
+    // CR 702.22i: if one member of a band becomes blocked, the entire band does.
+    for m in crate::kw::also_blocked(g, attacker) {
+        become_blocked(g, m);
+    }
     true
 }
 

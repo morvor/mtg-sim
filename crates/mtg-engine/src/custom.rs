@@ -217,6 +217,18 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::tokens::create_named_tokens(g, spec, ctx);
         return;
     }
+    // "Target unblocked attacking creature becomes blocked" (CR 509.1h, 702.22i).
+    if name == crate::oracle::patterns::k702_banding::TARGET_BECOMES_BLOCKED {
+        let targets: Vec<ObjectId> = ctx
+            .targets
+            .first()
+            .map(|v| v.iter().filter_map(|e| e.object()).collect())
+            .unwrap_or_default();
+        for t in targets {
+            crate::combat::become_blocked(g, t);
+        }
+        return;
+    }
     // The planeswalking ability (CR 901.8, 701.31).
     if name == crate::planechase::PLANESWALK_EFFECT {
         crate::planechase::planeswalk(g, ctx.controller);
