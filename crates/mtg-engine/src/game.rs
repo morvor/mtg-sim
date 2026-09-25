@@ -420,6 +420,9 @@ pub struct Game {
     pub play_grants: Vec<crate::casting::PlayGrant>,
     /// The permanent whose mana ability is resolving (for "tapped for mana" triggers).
     pub mana_ability_resolving: Option<ObjectId>,
+    /// Set while several players lose the game simultaneously, so the game's result is
+    /// determined only once all of them have lost (CR 104.4a).
+    pub losing_simultaneously: bool,
     /// Hint of which mana types an automatic payment needs (for "any color" choices).
     pub mana_hint: Option<Vec<crate::mana::ManaType>>,
     /// Commanders that moved to graveyard/exile since the last SBA check (CR 704.6d).
@@ -496,6 +499,7 @@ impl Game {
             saved_ctx: BTreeMap::new(),
             play_grants: vec![],
             mana_ability_resolving: None,
+            losing_simultaneously: false,
             mana_hint: None,
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
@@ -1002,7 +1006,9 @@ impl Game {
         // time, before the player's objects leave the game (CR 800.4a).
         self.flush_events();
         self.after_player_leaves(p);
-        self.check_game_over();
+        if !self.losing_simultaneously {
+            self.check_game_over();
+        }
     }
 
     pub fn player_wins(&mut self, p: PlayerId) {

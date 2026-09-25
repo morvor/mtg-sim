@@ -863,6 +863,13 @@ impl Game {
         // CR 608.2n: the ability ceases to exist.
         self.remove_from_stack(id);
         self.state_triggers_active.remove(&(src, uid));
+        // CR 608.2p: then abilities that trigger when it resolves trigger.
+        let controller = self.obj(id).controller;
+        self.emit(Event::AbilityResolved {
+            ability: id,
+            source: src,
+            controller,
+        });
     }
 
     /// Executes a body's effect(s) for the chosen modes.
@@ -875,6 +882,47 @@ impl Game {
                 _ => body.effect.clone(),
             };
             self.exec(&effect, ctx);
+        }
+    }
+
+    /// CR 608.3g: static abilities of a resolving permanent spell that function on the
+    /// stack and create delayed triggered abilities create them as it enters. "It" is the
+    /// new permanent.
+    fn delayed_triggers_as_enters(&mut self, spell: &GameObject, new: ObjectId) {
+        for a in &spell.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::DelayedTriggerAsEnters {
+                condition,
+                trigger,
+                body,
+            } = &s.effect
+            else {
+                continue;
+            };
+            let mut ctx = Ctx::new(Some(new), spell.controller);
+            ctx.cast = spell.stack.as_deref().map(|si| si.cast.clone());
+            if let Some(c) = condition {
+                let mut sctx = ctx.clone();
+                sctx.source = Some(spell.id);
+                if !self.eval_cond(c, &sctx) {
+                    continue;
+                }
+            }
+            ctx.set_var(vars::IT, vec![Entity::Object(new)]);
+            let id = self.new_effect_id();
+            self.delayed_triggers.push(crate::game::DelayedTrigger {
+                id,
+                source: Some(new),
+                controller: spell.controller,
+                trigger: trigger.clone(),
+                body: body.clone(),
+                once: true,
+                ctx,
+                created_turn: self.turn.number,
+                created_step: Some(self.turn.step),
+            });
         }
     }
 
@@ -900,7 +948,14 @@ impl Game {
         let o = self.obj(id).clone();
         let controller = o.controller;
         let is_permanent = o.chars.is_permanent_type();
-        let body = self.spell_body(id);
+        let mut body = self.spell_body(id);
+        // CR 303.4a / 608.3b: an Aura spell's target is what it will enchant, as when it
+        // was cast.
+        if o.chars.has_subtype("Aura") && body.targets.is_empty() && !o.face_down {
+            if let Some(spec) = crate::attach::aura_target_spec(&o.chars) {
+                body.targets.push(spec);
+            }
+        }
         let mut ctx = self.stack_ctx(id);
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
         let si = o.stack.as_deref().unwrap().clone();
@@ -976,6 +1031,7 @@ impl Game {
                 );
             }
             if let Some(new) = res {
+                self.delayed_triggers_as_enters(&o, new);
                 crate::keyword_impls::after_permanent_spell_resolves(self, id, new);
             }
             self.emit(Event::SpellResolved { spell: id });

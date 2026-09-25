@@ -56,6 +56,12 @@ impl Game {
                 continue;
             }
             for e in self.replace(ReplEvent::Move(m.clone())) {
+                // An object that can't enter the battlefield stays where it is.
+                if let ReplEvent::Move(mv) = &e {
+                    if mv.to == Zone::Battlefield && self.cant_enter_battlefield(mv.obj) {
+                        continue;
+                    }
+                }
                 finals.push((i, e));
             }
         }
@@ -93,6 +99,14 @@ impl Game {
         self.run_post_replacement_effects();
         self.recompute();
         out
+    }
+
+    /// Whether a "can't enter the battlefield" effect applies to an object.
+    pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
+        self.statics.restrictions.iter().any(|(s, c, r)| match r {
+            Restriction::CantEnterBattlefield(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
+            _ => false,
+        })
     }
 
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a

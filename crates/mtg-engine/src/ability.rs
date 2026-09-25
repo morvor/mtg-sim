@@ -1395,6 +1395,8 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[objects] can't enter the battlefield" (CR 608.3e).
+    CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
     /// "can't gain life".
@@ -1526,6 +1528,15 @@ pub enum StaticEffect {
     /// triggered ability]", whose source is this card (CR 603.7g).
     OpeningHand {
         delayed: Option<Box<(TriggerCond, Body)>>,
+    },
+    /// A static ability that functions on the stack and creates a delayed triggered ability
+    /// as the permanent spell resolves and the permanent enters (CR 608.3g), e.g. dash's
+    /// "return it to its owner's hand at the beginning of the next end step". The
+    /// condition is checked against the spell ("if it was cast for its dash cost").
+    DelayedTriggerAsEnters {
+        condition: Option<Condition>,
+        trigger: TriggerCond,
+        body: Body,
     },
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
@@ -1716,6 +1727,13 @@ pub enum TriggerCond {
     LoseControl(Filter),
     /// "When/Whenever [filter spell] is countered" (looks back in time, CR 603.10e).
     SpellCountered(Filter),
+    /// "Whenever an ability of [source] resolves" / "Whenever the final chapter ability of
+    /// a Saga you control resolves" (CR 608.2p): triggers once the ability has finished
+    /// resolving. "That Saga" is the trigger object.
+    AbilityResolved {
+        source: Filter,
+        final_chapter: bool,
+    },
     /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
     /// (CR 106.12a). The event's amount is a bit mask of the types produced.
     TappedForMana(Filter),

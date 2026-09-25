@@ -73,6 +73,12 @@ pub enum Event {
         ability: ObjectId,
         source: ObjectId,
     },
+    /// An activated or triggered ability finished resolving (CR 608.2p).
+    AbilityResolved {
+        ability: ObjectId,
+        source: ObjectId,
+        controller: PlayerId,
+    },
     SpellResolved {
         spell: ObjectId,
     },

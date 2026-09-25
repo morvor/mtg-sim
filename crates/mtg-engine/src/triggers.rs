@@ -1097,6 +1097,45 @@ impl Game {
                 }
             }
             (
+                TriggerCond::AbilityResolved {
+                    source: f,
+                    final_chapter,
+                },
+                Event::AbilityResolved {
+                    ability, source, ..
+                },
+            ) => {
+                let chapter_ok = !*final_chapter || {
+                    let final_n = crate::saga::final_chapter(self.obj(*source));
+                    match self.obj(*ability).stack.as_deref().map(|s| &s.kind) {
+                        Some(StackKind::Triggered { ability: a, .. }) => match &a.kind {
+                            AbilityKind::Triggered(t) => match &t.trigger {
+                                TriggerCond::Custom(n) => {
+                                    n.strip_prefix("chapter:").is_some_and(|ns| {
+                                        ns.split(',')
+                                            .any(|x| x.trim().parse::<u32>().ok() == final_n)
+                                    })
+                                }
+                                _ => false,
+                            },
+                            _ => false,
+                        },
+                        _ => false,
+                    }
+                };
+                if chapter_ok && self.matches(*source, f, &ctx) {
+                    one(EventInfo {
+                        object: Some(self.current(*source)),
+                        lki: Some(*source),
+                        other: Some(*ability),
+                        player: Some(self.obj(*ability).controller),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
                 TriggerCond::TappedForMana(f),
                 Event::TappedForMana {
                     obj,
