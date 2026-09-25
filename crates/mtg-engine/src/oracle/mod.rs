@@ -280,7 +280,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
     let body = effects::parse_body(eff_text, ctx)?;
-    let is_mana = effects::is_mana_effect(&body.effect) && body.targets.is_empty() && !loyalty;
+    // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
+    // nor its effect moves a card to or from a library.
+    let is_mana = effects::is_mana_effect(&body.effect)
+        && body.targets.is_empty()
+        && !loyalty
+        && !touches_library(&cost, &body.effect);
     let mut act = ActivatedAbility::new(cost, body);
     act.timing = timing;
     act.max_per_turn = max_per_turn;
@@ -288,6 +293,19 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
+}
+
+/// Whether a cost or effect moves cards to or from a library (drawing, milling, searching,
+/// surveilling, putting cards into a library, ...).
+fn touches_library(cost: &Cost, effect: &Effect) -> bool {
+    let text = format!(
+        "{} {}",
+        serde_json::to_string(cost).unwrap_or_default(),
+        serde_json::to_string(effect).unwrap_or_default()
+    );
+    ["Library", "Draw", "Mill", "Search", "Surveil", "Explore"]
+        .iter()
+        .any(|w| text.contains(w))
 }
 
 /// Shifts `Sel::Target(i)` references by `offset` (used when combining spell bodies).

@@ -1096,6 +1096,25 @@ impl Game {
                     none()
                 }
             }
+            (
+                TriggerCond::TappedForMana(f),
+                Event::TappedForMana {
+                    obj,
+                    player,
+                    produced,
+                },
+            ) => {
+                if self.matches(*obj, f, &ctx) {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(*player),
+                        amount: crate::mana::mask_of_types(produced),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::SpellCountered(f), Event::Countered { what }) => {
                 if self.obj(*what).kind != ObjKind::StackAbility && self.matches(*what, f, &ctx) {
                     one(EventInfo {

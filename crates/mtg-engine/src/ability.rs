@@ -1220,6 +1220,9 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of any type the permanent tapped for mana produced (from the triggering
+    /// event, "one mana of any type that land produced").
+    AnyTypeProduced,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1711,6 +1714,9 @@ pub enum TriggerCond {
     LoseControl(Filter),
     /// "When/Whenever [filter spell] is countered" (looks back in time, CR 603.10e).
     SpellCountered(Filter),
+    /// "Whenever [filter] is tapped for mana" / "Whenever a player taps [filter] for mana"
+    /// (CR 106.12a). The event's amount is a bit mask of the types produced.
+    TappedForMana(Filter),
     /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
     /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
     /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is

@@ -1335,6 +1335,15 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::AnyTypeProduced => {
+                let mask = ctx.event.as_ref().map_or(0, |e| e.amount);
+                let types = crate::mana::types_from_mask(mask);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
             ManaProduction::AnyColorAmong(f) => {
                 let mut cs = ColorSet::NONE;
                 for o in self.objects_matching(f, ctx) {

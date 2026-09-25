@@ -16,6 +16,23 @@ pub enum ManaType {
     C,
 }
 
+/// A bit mask of mana types (bit i = `ManaType::ALL[i]`).
+pub fn mask_of_types(types: &[ManaType]) -> i32 {
+    types.iter().fold(0, |m, t| {
+        m | (1 << ManaType::ALL.iter().position(|x| x == t).unwrap_or(0))
+    })
+}
+
+/// The mana types in a mask made by [`mask_of_types`].
+pub fn types_from_mask(mask: i32) -> Vec<ManaType> {
+    ManaType::ALL
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| mask & (1 << i) != 0)
+        .map(|(_, t)| *t)
+        .collect()
+}
+
 impl ManaType {
     pub const ALL: [ManaType; 6] = [
         ManaType::W,
