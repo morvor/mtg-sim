@@ -1083,9 +1083,31 @@ impl Game {
             });
             let tapped_for_mana = act.cost.has_tap();
             self.mana_ability_resolving = tapped_for_mana.then_some(src);
+            let pools_before: Vec<usize> = self
+                .players
+                .iter()
+                .map(|pl| pl.mana_pool.mana.len())
+                .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
             self.mana_ability_resolving = None;
+            // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
+            // produces mana.
+            if tapped_for_mana {
+                let mana: Vec<crate::mana::ManaType> = self
+                    .players
+                    .iter()
+                    .zip(pools_before)
+                    .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                    .collect();
+                if !mana.is_empty() {
+                    self.emit(Event::TappedForMana {
+                        obj: src,
+                        player: p,
+                        mana,
+                    });
+                }
+            }
             self.flush_events();
             return Ok(None);
         }

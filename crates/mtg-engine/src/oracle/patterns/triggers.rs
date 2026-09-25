@@ -363,7 +363,7 @@ fn parse_state(r: &str) -> Option<Parsed> {
 // Player triggers: "[player] [verb]"
 // ---------------------------------------------------------------------------
 
-fn player_subject(r: &str) -> Option<(PlayerRel, &str)> {
+pub(crate) fn player_subject(r: &str) -> Option<(PlayerRel, &str)> {
     for (p, rel) in [
         ("you ", PlayerRel::You),
         ("an opponent ", PlayerRel::Opponent),
@@ -379,7 +379,7 @@ fn player_subject(r: &str) -> Option<(PlayerRel, &str)> {
 }
 
 /// Strips a verb in either person ("gain"/"gains").
-fn verb<'a>(s: &'a str, base: &str) -> Option<&'a str> {
+pub(crate) fn verb<'a>(s: &'a str, base: &str) -> Option<&'a str> {
     let s = s.trim_start();
     for form in [
         format!("{base}s "),
@@ -858,15 +858,15 @@ fn mentions_spell(f: &Filter) -> bool {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-struct Subject {
-    filter: Filter,
+pub(crate) struct Subject {
+    pub(crate) filter: Filter,
     /// The subject is exactly this object ("~").
-    self_only: bool,
+    pub(crate) self_only: bool,
     /// "one or more [objects]": batch trigger.
-    one_or_more: bool,
+    pub(crate) one_or_more: bool,
 }
 
-fn parse_subject(s: &str) -> Option<Subject> {
+pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
     let s = s.trim();
     let mk = |filter, self_only, one_or_more| {
         Some(Subject {

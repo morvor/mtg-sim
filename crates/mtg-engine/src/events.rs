@@ -243,6 +243,13 @@ pub enum Event {
         spell: ObjectId,
         player: PlayerId,
     },
+    /// `player` tapped `obj` for mana (CR 106.12): a mana ability of it with {T} in its
+    /// cost resolved and produced `mana` (CR 106.12a).
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        mana: Vec<crate::mana::ManaType>,
+    },
     /// Marks the end of a group of simultaneous events (one action of a resolving spell or
     /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
     /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.

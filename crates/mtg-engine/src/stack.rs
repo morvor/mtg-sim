@@ -722,7 +722,14 @@ impl Game {
         let o = self.obj(id).clone();
         let controller = o.controller;
         let is_permanent = o.chars.is_permanent_type();
-        let body = self.spell_body(id);
+        let mut body = self.spell_body(id);
+        // CR 303.4a / 608.3b: an Aura spell's target is what it will enchant, as when it
+        // was cast.
+        if o.chars.has_subtype("Aura") && body.targets.is_empty() && !o.face_down {
+            if let Some(spec) = crate::attach::aura_target_spec(&o.chars) {
+                body.targets.push(spec);
+            }
+        }
         let mut ctx = self.stack_ctx(id);
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
         let si = o.stack.as_deref().unwrap().clone();

@@ -919,6 +919,23 @@ impl Game {
                     none()
                 }
             }
+            (
+                TriggerCond::TappedForMana { who, filter },
+                Event::TappedForMana { obj, player, mana },
+            ) => {
+                if self.player_rel_matches(*who, *player, &ctx) && self.matches(*obj, filter, &ctx)
+                {
+                    one(EventInfo {
+                        object: Some(*obj),
+                        player: Some(*player),
+                        amount: mana.len() as i32,
+                        mana: mana.clone(),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Cycled { who, filter }, Event::Cycled { player, card }) => {
                 if self.player_rel_matches(*who, *player, &ctx) && self.matches(*card, filter, &ctx)
                 {

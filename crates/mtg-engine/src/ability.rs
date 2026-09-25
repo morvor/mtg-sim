@@ -1213,6 +1213,9 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of any type the triggering mana ability produced ("add one mana of any
+    /// type that land produced", CR 106.12a).
+    TypeProduced,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1713,6 +1716,13 @@ pub enum TriggerCond {
     BlockedByCreature {
         attacker: Filter,
         blocker: Filter,
+    },
+    /// "Whenever [filter] is tapped for mana", "whenever [player] taps [filter] for mana"
+    /// (CR 106.12a): a mana ability with {T} in its cost resolved and produced mana. `who`
+    /// is the player who activated it. Event object = the permanent, player = `who`.
+    TappedForMana {
+        who: PlayerRel,
+        filter: Filter,
     },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),

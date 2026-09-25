@@ -1346,6 +1346,14 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::TypeProduced => {
+                let types = produced_types(ctx);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
         }
     }
 
@@ -1375,6 +1383,17 @@ impl Game {
         };
         opts[i]
     }
+}
+
+/// The distinct types of mana the triggering mana ability produced (CR 106.12a).
+pub fn produced_types(ctx: &Ctx) -> Vec<ManaType> {
+    let mut types: Vec<ManaType> = Vec::new();
+    for t in ctx.event.iter().flat_map(|e| e.mana.iter()) {
+        if !types.contains(t) {
+            types.push(*t);
+        }
+    }
+    types
 }
 
 /// A [`PlayerRef`] that always refers to a specific player (locked in at resolution).
