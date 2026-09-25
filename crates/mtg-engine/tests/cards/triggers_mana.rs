@@ -1,7 +1,8 @@
 //! "Tapped for mana" triggers (CR 106.12a) and triggered mana abilities (CR 605.1b,
 //! 605.4a): "Whenever enchanted land is tapped for mana, its controller adds an additional
 //! {G}" resolves immediately, without using the stack; other abilities with the same
-//! trigger ("it deals 1 damage to each opponent") use the stack.
+//! trigger ("it deals 1 damage to each opponent") use the stack. Also "whenever you
+//! expend N" (CR 700.14).
 
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
@@ -179,4 +180,36 @@ fn whenever_you_tap_a_land_remove_a_counter() {
     t.activate(P0, mountain, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.counters(cat, "+1/+1"), 6);
+}
+
+#[test]
+fn expend_four_triggers_once_when_the_fourth_mana_is_spent() {
+    cr!("700.14");
+    assert_supported(&["Bark-Knuckle Boxer"]);
+    let mut t = TestGame::new(2);
+    let boxer = t.battlefield(P0, "Bark-Knuckle Boxer");
+    let indestructible = |t: &TestGame| {
+        t.obj_now(boxer)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Indestructible)
+    };
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 5);
+    // Two mana: not yet.
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(!indestructible(&t));
+    // Four more (six in total): the fourth mana was spent.
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, giant).go();
+    t.settle();
+    // The trigger goes on the stack above the spell.
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert!(indestructible(&t));
+    // Only one trigger: the seventh mana doesn't expend 4 again.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
 }

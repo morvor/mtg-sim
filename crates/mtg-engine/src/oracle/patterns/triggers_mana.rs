@@ -6,6 +6,8 @@
 //!
 //! Referents: "it"/"that land" is the tapped permanent (`~` for "you tap ~ for mana"),
 //! "that player" is the player who tapped it, "its controller" the permanent's controller.
+//!
+//! Also "whenever you expend N" (CR 700.14), a trigger on mana spent to cast spells.
 
 use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
@@ -19,6 +21,21 @@ inventory::submit! {
 
 inventory::submit! {
     EffectPattern { name: "[player] adds an additional [mana] / mana of any type that land produced", priority: 100, parse: add_additional_mana }
+}
+
+inventory::submit! {
+    TriggerPattern { name: "you expend N", priority: 100, parse: expend }
+}
+
+/// "you expend 4" (CR 700.14): the mana spent this turn to cast spells reached N.
+fn expend(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let (who, rest) = player_subject(r.trim())?;
+    let n: u32 = verb(rest, "expend")?.trim().parse().ok()?;
+    Some((
+        TriggerCond::Expend { who, n },
+        Sel::None,
+        PlayerRef::TriggerPlayer,
+    ))
 }
 
 /// "[subject] is tapped for mana", "[player] taps [subject] for mana".

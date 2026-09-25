@@ -677,6 +677,8 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// One of the players a reference resolves to ("enchanted player").
+    Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),
@@ -1717,6 +1719,20 @@ pub enum TriggerCond {
         attacker: Filter,
         blocker: Filter,
     },
+    /// "Whenever [attacker] attacks [defender] [with N or more [filter]]", "whenever
+    /// [defender] is attacked" (CR 508.3b, 508.3e): once for each player attacked by
+    /// creatures the attacking player controls, when attackers are declared. Needs at least
+    /// `min` attackers matching `with` attacking that player. Event player = the attacked
+    /// player, objects = the creatures attacking them, amount = their number.
+    PlayerAttacked {
+        attacker: PlayerRel,
+        defender: PlayerFilter,
+        with: Filter,
+        min: u32,
+    },
+    /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
+    /// only: "whenever a source you control deals noncombat damage to an opponent".
+    Noncombat(Box<TriggerCond>),
     /// "Whenever [filter] is tapped for mana", "whenever [player] taps [filter] for mana"
     /// (CR 106.12a): a mana ability with {T} in its cost resolved and produced mana. `who`
     /// is the player who activated it. Event object = the permanent, player = `who`.

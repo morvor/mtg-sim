@@ -137,6 +137,7 @@ impl Game {
             PlayerFilter::Monarch => self.monarch == Some(p),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Not(x) => !self.player_filter_matches(x, p, ctx),

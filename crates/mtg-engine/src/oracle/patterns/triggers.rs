@@ -66,10 +66,46 @@ fn parse_single(r: &str) -> Option<Parsed> {
             PlayerRef::ActivePlayer,
         ));
     }
+    // "deals noncombat damage", "is dealt noncombat damage": the damage trigger, restricted
+    // to damage that isn't combat damage (CR 510.2 vs 120.2).
+    if r.contains(" noncombat damage") {
+        let (c, it, p) = parse_single(&r.replacen(" noncombat damage", " damage", 1))?;
+        return Some((noncombat(c)?, it, p));
+    }
     parse_state(r)
         .or_else(|| parse_counters_put(r))
         .or_else(|| parse_player_trigger(r))
         .or_else(|| parse_object_trigger(r))
+}
+
+/// Restricts the damage events of a trigger condition to noncombat damage.
+fn noncombat(c: TriggerCond) -> Option<TriggerCond> {
+    Some(match c {
+        TriggerCond::Batched { trigger, per } => TriggerCond::Batched {
+            trigger: Box::new(noncombat(*trigger)?),
+            per,
+        },
+        TriggerCond::Where { trigger, cond } => TriggerCond::Where {
+            trigger: Box::new(noncombat(*trigger)?),
+            cond,
+        },
+        TriggerCond::FirstTimeEachTurn(t) => {
+            TriggerCond::FirstTimeEachTurn(Box::new(noncombat(*t)?))
+        }
+        TriggerCond::AnyOf(v) => {
+            TriggerCond::AnyOf(v.into_iter().map(noncombat).collect::<Option<Vec<_>>>()?)
+        }
+        c @ (TriggerCond::DealsDamage {
+            combat_only: false, ..
+        }
+        | TriggerCond::IsDealtDamage {
+            combat_only: false, ..
+        }
+        | TriggerCond::PlayerDealtDamage {
+            combat_only: false, ..
+        }) => TriggerCond::Noncombat(Box::new(c)),
+        _ => return None,
+    })
 }
 
 /// "one or more +1/+1 counters are put on [object]", "a +1/+1 counter is put on [object]".
@@ -1277,11 +1313,25 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                     };
                     r = x;
                 }
-            } else if let Some(x) = t.strip_prefix("one of your opponents") {
+            } else if let Some((x, who)) = [
+                ("one of your opponents", PlayerFilter::Opponent),
+                ("an opponent", PlayerFilter::Opponent),
+                ("a player", PlayerFilter::Any),
+                (
+                    "enchanted player",
+                    PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
+                ),
+            ]
+            .into_iter()
+            .find_map(|(p, who)| {
+                let x = t.strip_prefix(p)?;
+                (x.is_empty() || x.starts_with(' ')).then_some((x, who))
+            }) {
+                // CR 508.3a: attacking that player (not a planeswalker or battle).
                 cond = TriggerCond::Where {
                     trigger: Box::new(cond),
                     cond: Condition::And(vec![
-                        Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Opponent),
+                        Condition::PlayerMatches(PlayerRef::TriggerPlayer, who),
                         Condition::Not(Box::new(Condition::SelNonEmpty(Sel::TriggerOtherObject))),
                     ]),
                 };

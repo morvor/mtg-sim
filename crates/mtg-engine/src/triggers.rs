@@ -515,6 +515,48 @@ impl Game {
                     none()
                 }
             }
+            (
+                TriggerCond::PlayerAttacked {
+                    attacker,
+                    defender,
+                    with,
+                    min,
+                },
+                Event::AttackersDeclared { attackers, player },
+            ) => {
+                if !self.player_rel_matches(*attacker, *player, &ctx) {
+                    return none();
+                }
+                // CR 508.3e: once for each player attacked.
+                let mut out = Vec::new();
+                let mut seen = BTreeSet::new();
+                for (_, t) in attackers {
+                    let Entity::Player(d) = *t else {
+                        continue;
+                    };
+                    if !seen.insert(d) || !self.player_filter_matches(defender, d, &ctx) {
+                        continue;
+                    }
+                    let objects: Vec<ObjectId> = attackers
+                        .iter()
+                        .filter(|(_, t2)| *t2 == Entity::Player(d))
+                        .map(|x| x.0)
+                        .collect();
+                    let n = objects
+                        .iter()
+                        .filter(|o| self.matches(**o, with, &ctx))
+                        .count() as u32;
+                    if n >= (*min).max(1) {
+                        out.push(EventInfo {
+                            player: Some(d),
+                            amount: objects.len() as i32,
+                            objects,
+                            ..Default::default()
+                        });
+                    }
+                }
+                out
+            }
             (TriggerCond::AttacksUnblocked(f), Event::AttackerUnblocked { attacker }) => {
                 if self.matches(*attacker, f, &ctx) {
                     one(EventInfo {
@@ -896,6 +938,29 @@ impl Game {
                     none()
                 }
             }
+            // CR 700.14: one "expend" event per total reached by a spell's mana payment.
+            (
+                TriggerCond::Expend { who, n },
+                Event::Custom {
+                    name,
+                    player: Some(player),
+                    amount,
+                    ..
+                },
+            ) => {
+                if name == "expend"
+                    && *amount == *n as i32
+                    && self.player_rel_matches(*who, *player, &ctx)
+                {
+                    one(EventInfo {
+                        player: Some(*player),
+                        amount: *amount,
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::TokenCreated(f), Event::TokenCreated { obj, controller }) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
@@ -1097,6 +1162,10 @@ impl Game {
             }
             // Detected per batch of simultaneous events (see `check_batch_triggers`).
             (TriggerCond::Batched { .. }, _) => none(),
+            (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
+                self.trigger_matches(inner, src, ctl, ev)
+            }
+            (TriggerCond::Noncombat(_), _) => none(),
             (
                 TriggerCond::BlocksCreature { blocker, attacker },
                 Event::BlockersDeclared { blocks },

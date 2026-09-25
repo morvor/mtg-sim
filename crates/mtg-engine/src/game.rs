@@ -317,6 +317,8 @@ pub struct TurnHistory {
     pub crimes: BTreeMap<PlayerId, u32>,
     pub counters_put: u32,
     pub descended: BTreeMap<PlayerId, u32>,
+    /// Mana each player spent this turn to cast spells (CR 700.14, "expend").
+    pub spell_mana_spent: BTreeMap<PlayerId, u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

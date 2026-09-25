@@ -699,6 +699,21 @@ impl Game {
             si.cast.mana_spent = paid.mana_spent.clone();
             si.cast.cost_objects = paid.objects.clone();
         }
+        // CR 700.14: the player expends N for each N reached by this payment.
+        let spent = paid.mana_spent.len() as u32;
+        if spent > 0 {
+            let total = self.history.spell_mana_spent.entry(p).or_insert(0);
+            let before = *total;
+            *total += spent;
+            for n in before + 1..=before + spent {
+                self.emit(Event::Custom {
+                    name: "expend".into(),
+                    player: Some(p),
+                    obj: None,
+                    amount: n as i32,
+                });
+            }
+        }
         if matches!(from, Zone::Command) && self.obj(id).is_commander {
             *self.players[p.idx()]
                 .commander_casts
