@@ -211,6 +211,37 @@ fn role_token(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
+/// "create two Food tokens named Hot Dog": the effect that creates a predefined token may
+/// modify its predefined characteristics (CR 111.10), here its name.
+fn named_predefined_tokens(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = l.strip_prefix("create ")?;
+    let (count, r) = parse_number(r)?;
+    let r = r.trim();
+    let (r, tapped) = match r.strip_prefix("tapped ") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    let (kind, rest) = split_word(r);
+    let mut spec = crate::tokens::predefined(kind)?;
+    let name = rest
+        .trim()
+        .strip_prefix("tokens named ")
+        .or_else(|| rest.trim().strip_prefix("token named "))?;
+    let name = end(name);
+    if name.is_empty() || name.contains(' ') && name.split(' ').count() > 4 {
+        return None;
+    }
+    spec.name = SmolStr::new(title_case(name));
+    Some(Effect::CreateToken {
+        spec,
+        count,
+        controller: PlayerRef::You,
+        tapped,
+        attacking: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "r111 named predefined tokens", priority: 100, parse: named_predefined_tokens } }
 inventory::submit! { EffectPattern { name: "r111 another player creates tokens", priority: 100, parse: another_player_creates } }
 inventory::submit! { EffectPattern { name: "r111 legendary named token", priority: 100, parse: legendary_named_token } }
 inventory::submit! { EffectPattern { name: "r111 token copy", priority: 100, parse: token_copy } }
