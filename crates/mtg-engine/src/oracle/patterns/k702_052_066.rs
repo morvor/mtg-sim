@@ -2,10 +2,41 @@
 //! doesn't handle, and phrases that go with them.
 
 use crate::ability::*;
+use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::parse_trigger_body;
+use crate::oracle::keywords::compile_keyword;
 use crate::oracle::patterns::{AbilityPattern, ConditionPattern};
 use crate::oracle::CompileContext;
 use crate::types::counters;
+
+/// Keyword lines with a cost the generic keyword parser doesn't understand.
+fn keyword_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let lower = t.to_lowercase();
+    // CR 702.59a: "Recover—Pay half your life, rounded up." (Garza's Assassin).
+    if let Some(r) = lower.strip_prefix("recover—") {
+        let cost = half_life_cost(r)?;
+        let kw = Keyword::with_cost(KeywordKind::Recover, cost).text(t);
+        return Some(compile_keyword(kw, t));
+    }
+    None
+}
+
+/// "pay half your life, rounded up/down" as a cost (CR 107.1a, 119.4).
+fn half_life_cost(s: &str) -> Option<Cost> {
+    let up = match s.trim() {
+        "pay half your life, rounded up" => true,
+        "pay half your life, rounded down" => false,
+        _ => return None,
+    };
+    Some(Cost::free().with(CostPart::PayLife(Value::Div(
+        Box::new(Value::LifeTotal(PlayerRef::You)),
+        2,
+        up,
+    ))))
+}
+
+inventory::submit! { AbilityPattern { name: "k702_052_066 keywords", priority: 100, parse: keyword_line } }
 
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
