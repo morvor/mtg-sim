@@ -208,9 +208,16 @@ pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
         .and_then(|f| f.type_line.clone())
         .or_else(|| c.type_line.clone())
         .unwrap_or_default();
-    match filter {
-        Some("nonland") => !type_line.contains("Land"),
-        Some("creature") => type_line.contains("Creature"),
-        _ => true,
-    }
+    // "nonland", "creature", "noncreature, nonland", "nonbasic land": each word is a
+    // (super)type the card must have, or with "non", must not have.
+    let type_line = type_line.to_lowercase();
+    let has = |w: &str| type_line.split_whitespace().any(|t| t == w);
+    filter.is_none_or(|f| {
+        f.split([',', ' '])
+            .filter(|w| !w.is_empty())
+            .all(|w| match w.strip_prefix("non") {
+                Some(t) => !has(t),
+                None => has(w),
+            })
+    })
 }

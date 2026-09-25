@@ -56,6 +56,12 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
             .iter()
             .filter(|o| g.obj(**o).controller == ctx.controller)
             .count() as i64,
+        // "the total number of cards in all players' hands"
+        "cards_in_all_hands" => g
+            .players_in_game()
+            .into_iter()
+            .map(|p| g.player(p).hand.len() as i64)
+            .sum(),
         // "the total life lost by your opponents this turn"
         "life_lost_by_opponents_this_turn" => g
             .history

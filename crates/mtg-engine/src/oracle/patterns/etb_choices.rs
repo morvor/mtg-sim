@@ -104,6 +104,22 @@ fn parse_etb(l: &str, ctx: &CompileContext) -> Option<Vec<StaticEffect>> {
         }
         return Some(v);
     }
+    // "If ~ would enter, instead sacrifice each other permanent named ~ you control, then
+    // put ~ onto the battlefield." (a replacement effect that still puts it onto the
+    // battlefield: the sacrifice happens as it enters)
+    if l == "if ~ would enter, instead sacrifice each other permanent named ~ you control, then put ~ onto the battlefield"
+    {
+        return Some(vec![etb_replacement(ReplacementAction::AsEnters(
+            Box::new(Effect::SacrificeObjects {
+                what: Sel::All(Filter::and(vec![
+                    Filter::Other,
+                    Filter::Permanent,
+                    Filter::SameNameAs(Box::new(Sel::This)),
+                    Filter::ControlledBy(PlayerRel::You),
+                ])),
+            }),
+        ))]);
+    }
     // "If [condition], ~ enters [tapped / with counters]."
     if let Some(r) = l.strip_prefix("if ") {
         for p in SELF_PRONOUNS {
@@ -200,6 +216,17 @@ fn with_parts(s: &str, ctx: &CompileContext) -> Option<Effect> {
     if let Some(e) = counters(s, ctx).or_else(|| entry_abilities(s, ctx)) {
         return Some(e);
     }
+    // "a +1/+1 counter, a flying counter, a deathtouch counter, and a shield counter on it"
+    if let Some(body) = on_self_suffix(s).filter(|b| b.contains(", ")) {
+        let items: Option<Vec<Effect>> = body
+            .split(", and ")
+            .flat_map(|p| p.split(", "))
+            .map(|item| counters(&format!("{} on it", item.trim()), ctx))
+            .collect();
+        if let Some(items) = items {
+            return Some(Effect::seq(items));
+        }
+    }
     for (i, _) in s.match_indices(" and ") {
         let (a, b) = (&s[..i], &s[i + " and ".len()..]);
         let b = b.strip_prefix("with ").unwrap_or(b);
@@ -253,13 +280,40 @@ fn keyword_list(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
 
 /// "a 3/3 creature", "a 2/2 creature with flying": the characteristics an "as enters"
 /// ability gives the permanent (CR 707.2).
-fn creature_form(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
+fn creature_form(s: &str, in_addition: bool, ctx: &CompileContext) -> Option<Vec<Modification>> {
     let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
-    let (pt, r) = r.split_once(' ')?;
+    let (pt, mut r) = r.split_once(' ')?;
     let (p, t) = pt.split_once('/')?;
     let p: i32 = p.parse().ok()?;
     let t: i32 = t.parse().ok()?;
     let mut mods = vec![Modification::SetPT(Some(Value::c(p)), Some(Value::c(t)))];
+    // "a 1/6 Wall artifact creature with defender in addition to its other types": types
+    // it already has, plus added creature types.
+    let mut added = Vec::new();
+    loop {
+        let (w, rest) = r.split_once(' ').unwrap_or((r, ""));
+        if w == "creature" || w.is_empty() {
+            break;
+        }
+        if let Some(ct) = CardType::from_word(w) {
+            if !ctx.type_line.card_types.contains(ct) {
+                return None;
+            }
+        } else {
+            let st = subtype_word(w)?;
+            if !is_creature_type(&st) {
+                return None;
+            }
+            added.push(st);
+        }
+        r = rest;
+    }
+    if !added.is_empty() {
+        if !in_addition {
+            return None;
+        }
+        mods.push(Modification::AddSubtypes(added));
+    }
     let r = r.strip_prefix("creature")?.trim();
     if !r.is_empty() {
         mods.extend(keyword_list(r.strip_prefix("with ")?, ctx)?);
@@ -424,6 +478,24 @@ fn on_self(s: &str) -> Option<&str> {
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
+    // "{G}{G} spent to cast it": each two green mana spent
+    if let Some(v) = s
+        .strip_suffix(" spent to cast it")
+        .or_else(|| s.strip_suffix(" spent to cast ~"))
+        .and_then(mana_symbols_spent)
+    {
+        return Some(v);
+    }
+    // "+1/+1 counter among other creatures you control"
+    if let Some((k, r)) = s.split_once(" counter among ") {
+        if !k.contains(' ') {
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            return Some(Value::CountersOn(Box::new(Sel::All(f)), Some(k.into())));
+        }
+    }
     // "loyalty counter on planeswalkers you control"
     if let Some((k, r)) = s.split_once(" counter on ") {
         if !k.contains(' ') {
@@ -484,6 +556,28 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
     Some(Value::Count(f))
 }
 
+/// "{G}{G}" (as in "for each {G}{G} spent to cast it"): the number of complete groups of
+/// that many mana of one color spent to cast it.
+fn mana_symbols_spent(sym: &str) -> Option<Value> {
+    let letters: Vec<&str> = sym
+        .strip_prefix('{')?
+        .strip_suffix('}')?
+        .split("}{")
+        .collect();
+    let l0 = letters[0].to_uppercase();
+    if l0.len() != 1
+        || !"WUBRG".contains(l0.as_str())
+        || letters.iter().any(|x| x.to_uppercase() != l0)
+    {
+        return None;
+    }
+    let spent = Value::Custom(format!("mana_spent_of:{l0}").into());
+    Some(match letters.len() {
+        1 => spent,
+        n => Value::Div(Box::new(spent), n as i32, false),
+    })
+}
+
 /// Values in "equal to [value]" / "where X is [value]".
 fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
@@ -508,13 +602,33 @@ fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
             return Some(v);
         }
     }
-    // "the greatest power among other creatures you control"
+    // "the greatest power among other creatures you control", "... among creatures you
+    // control and creature cards in your graveyard"
     if let Some(r) = s.strip_prefix("the greatest power among ") {
         let (f, _, tail) = parse_object_phrase(r)?;
-        if !end(tail).is_empty() {
+        let tail = end(tail);
+        if tail.is_empty() {
+            return Some(Value::GreatestPower(f));
+        }
+        let (g, _, tail2) = parse_object_phrase(tail.strip_prefix("and ")?)?;
+        if !end(tail2).is_empty() {
             return None;
         }
-        return Some(Value::GreatestPower(f));
+        return Some(Value::Max(
+            Box::new(Value::GreatestPower(f)),
+            Box::new(Value::GreatestPower(g)),
+        ));
+    }
+    if s == "the total number of cards in all players' hands" {
+        return Some(Value::Custom("cards_in_all_hands".into()));
+    }
+    // "one plus the number of other creatures you control"
+    if let Some((a, b)) = s.split_once(" plus ") {
+        let (va, ta) = parse_number(a)?;
+        if !ta.trim().is_empty() {
+            return None;
+        }
+        return Some(Value::Sum(vec![va, etb_value(b, ctx)?]));
     }
     // "the number of creature cards in all graveyards", "the number of instant and
     // sorcery cards in all graveyards" (cards of either type)
@@ -587,6 +701,18 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
     }
     if let Some(e) = choose_clause(l) {
         return Some(e);
+    }
+    // "look at an opponent's hand" (hidden information for that player only)
+    if l == "look at an opponent's hand" {
+        return Some(Effect::seq(vec![
+            Effect::Choose {
+                who: PlayerRef::You,
+                kind: ChoiceKind::Opponent,
+            },
+            Effect::RevealHand {
+                who: PlayerRef::ChosenOpponent,
+            },
+        ]));
     }
     // "you may pay N life" — an optional cost; "if you don't" refers to it.
     if let Some(r) = l.strip_prefix("you may pay ") {
@@ -683,6 +809,10 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
         if !ctx.type_line.card_types.contains(CardType::Creature) {
             return None;
         }
+        let (r, in_addition) = match r.strip_suffix(" in addition to its other types") {
+            Some(x) => (x, true),
+            None => (r, false),
+        };
         let mut options = Vec::new();
         for part in r
             .split(", or ")
@@ -690,7 +820,10 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
             .flat_map(|p| p.split(" or "))
         {
             let part = part.trim();
-            options.push((part.to_string(), Effect::EnterAs(creature_form(part, ctx)?)));
+            options.push((
+                part.to_string(),
+                Effect::EnterAs(creature_form(part, in_addition, ctx)?),
+            ));
         }
         return (options.len() >= 2).then_some(Effect::ChooseOne {
             who: PlayerRef::You,
@@ -759,6 +892,41 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "odd or even" => ChoiceKind::OddOrEven,
         "a number" => ChoiceKind::Number { min: 0, max: 1000 },
         _ => {
+            // "a noncreature, nonland card name", "a nonbasic land card name"
+            if let Some(words) = s
+                .strip_prefix("a ")
+                .or_else(|| s.strip_prefix("an "))
+                .and_then(|r| r.strip_suffix(" card name"))
+            {
+                let ok = words.split([',', ' ']).filter(|w| !w.is_empty()).all(|w| {
+                    let t = w.strip_prefix("non").unwrap_or(w);
+                    CardType::from_word(t).is_some() || matches!(t, "basic" | "legendary")
+                });
+                return ok.then(|| ChoiceKind::CardNameFiltered(words.into()));
+            }
+            // "a card type other than creature", "... other than creature or land"
+            if let Some(r) = s.strip_prefix("a card type other than ") {
+                let mut excluded = Vec::new();
+                for w in r.split(" or ") {
+                    excluded.push(CardType::from_word(w.trim())?);
+                }
+                let words = [
+                    CardType::Artifact,
+                    CardType::Battle,
+                    CardType::Creature,
+                    CardType::Enchantment,
+                    CardType::Instant,
+                    CardType::Kindred,
+                    CardType::Land,
+                    CardType::Planeswalker,
+                    CardType::Sorcery,
+                ]
+                .into_iter()
+                .filter(|t| !excluded.contains(t))
+                .map(|t| t.word().to_string())
+                .collect();
+                return Some(ChoiceKind::OneOf(words));
+            }
             if let Some(c) = s.strip_prefix("a color other than ") {
                 return Some(ChoiceKind::ColorOtherThan(Color::from_word(c)?));
             }
@@ -1074,6 +1242,12 @@ fn more_conditions(c: &str) -> Option<Condition> {
                 Condition::WasCast,
                 Condition::CastFrom(ZoneKind::Hand),
             ]))
+        }
+        "you didn't cast it from your hand" | "you didn't cast ~ from your hand" => {
+            return Some(Condition::Not(Box::new(Condition::And(vec![
+                Condition::WasCast,
+                Condition::CastFrom(ZoneKind::Hand),
+            ]))))
         }
         _ => {}
     }
