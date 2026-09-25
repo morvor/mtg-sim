@@ -260,12 +260,21 @@ impl Game {
         } else {
             None
         };
+        // For day/night (CR 502.2): the most spells a single player of the ending turn's
+        // active team cast (with shared team turns, "no player on the team cast a spell"
+        // and "any player on the team cast two or more", CR 502.2a).
         let last_spells = self
-            .history
-            .spells_cast
-            .iter()
-            .filter(|(p, _)| *p == self.turn.active)
-            .count() as u32;
+            .active_players()
+            .into_iter()
+            .map(|q| {
+                self.history
+                    .spells_cast
+                    .iter()
+                    .filter(|(p, _)| *p == q)
+                    .count() as u32
+            })
+            .max()
+            .unwrap_or(0);
         self.spells_cast_last_turn_by_active = last_spells;
         self.turn.number += 1;
         self.turn.active = active;

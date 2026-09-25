@@ -425,7 +425,8 @@ pub struct Game {
     pub initiative: Option<PlayerId>,
     /// Day/night (CR 731): None = neither.
     pub day: Option<bool>,
-    /// Number of spells the active player cast last turn, for day/night.
+    /// Number of spells the active player cast last turn, for day/night (with shared
+    /// team turns, the most any player of the active team cast, CR 502.2a).
     pub spells_cast_last_turn_by_active: u32,
     /// Extra turns queued (CR 500.7): taken after the current turn, most recent first.
     pub extra_turns: Vec<PlayerId>,
