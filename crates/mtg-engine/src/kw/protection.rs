@@ -88,3 +88,69 @@ impl KeywordRules for Protection {
 }
 
 inventory::submit! { KeywordRegistration(&Protection) }
+
+// ---------------------------------------------------------------------------
+// "This effect doesn't remove ..." (CR 702.16n, 702.16p)
+// ---------------------------------------------------------------------------
+
+/// Marker text on a granted protection keyword: "This effect doesn't remove Auras"
+/// (CR 702.16n) — no Aura falls off because of this instance.
+pub const DOESNT_REMOVE_AURAS: &str = "doesn't remove auras";
+
+/// Marker text on a granted protection keyword: "This effect doesn't remove Auras and
+/// Equipment you control that are already attached to it" (CR 702.16p). Bound to the
+/// granting object when applied (see [`bind_marker`]).
+pub const DOESNT_REMOVE_ATTACHED: &str = "doesn't remove attached";
+
+/// The bound form of a marker for the object `src` granting the protection, if the text
+/// is a marker that needs binding.
+pub fn bind_marker(text: &str, src: ObjectId) -> Option<smol_str::SmolStr> {
+    match text {
+        crate::choices::DOESNT_REMOVE_SOURCE => Some(crate::choices::doesnt_remove_marker(src)),
+        DOESNT_REMOVE_ATTACHED => Some(format!("{DOESNT_REMOVE_ATTACHED} #{}", src.0).into()),
+        _ => None,
+    }
+}
+
+/// Whether this protection instance of `t` leaves `obj` attached to it (or lets it stay
+/// attached) because the effect granting it doesn't remove it.
+fn exempts(g: &Game, kw: &crate::keywords::Keyword, t: ObjectId, obj: ObjectId) -> bool {
+    let Some(text) = kw.text.as_deref() else {
+        return false;
+    };
+    let o = g.obj(obj);
+    // CR 702.16n: "doesn't remove [this Aura]" / "doesn't remove Auras".
+    if text == crate::choices::doesnt_remove_marker(obj) {
+        return true;
+    }
+    if text == DOESNT_REMOVE_AURAS {
+        return o.chars.has_subtype("Aura");
+    }
+    // CR 702.16p: objects the granting object's controller controls that were already
+    // attached when the effect started to apply — those attached no later than the
+    // granting object got its timestamp by entering or becoming attached (CR 613.7e).
+    // An object becoming attached now isn't already attached.
+    if let Some(src) = text
+        .strip_prefix(DOESNT_REMOVE_ATTACHED)
+        .and_then(|r| r.trim().strip_prefix('#'))
+        .and_then(|n| n.parse::<u32>().ok())
+    {
+        let src = g.obj(ObjectId(src));
+        return o.attached_to == Some(Entity::Object(t))
+            && o.controller == src.controller
+            && o.timestamp <= src.timestamp;
+    }
+    false
+}
+
+/// Whether permanent `t`'s protection keeps `obj` (an Aura, Equipment, or Fortification)
+/// from being attached to it (CR 702.16c–d), apart from effects that don't remove it.
+pub fn prevents_attachment(g: &Game, t: ObjectId, obj: ObjectId) -> bool {
+    let ob = g.obj(t);
+    let ctx = Ctx::new(Some(t), ob.controller);
+    ob.chars
+        .keywords()
+        .filter(|k| k.kind == KeywordKind::Protection)
+        .filter(|k| k.filter.as_ref().is_none_or(|f| g.matches(obj, f, &ctx)))
+        .any(|k| !exempts(g, k, t, obj))
+}

@@ -1250,11 +1250,11 @@ pub fn apply_mod(
                     k.filter = Some(crate::choices::bind_choices(f, ch));
                 }
             }
-            // CR 702.16n: "This effect doesn't remove [this Aura]" — remember which
-            // object the protection doesn't remove.
+            // CR 702.16n, 702.16p: "This effect doesn't remove [this Aura / what's
+            // already attached]" — remember which object granted the protection.
             if let (Some(t), Some(src)) = (k.text.as_deref(), ctx.source) {
-                if t == crate::choices::DOESNT_REMOVE_SOURCE {
-                    k.text = Some(crate::choices::doesnt_remove_marker(src));
+                if let Some(m) = crate::kw::protection::bind_marker(t, src) {
+                    k.text = Some(m);
                 }
             }
             let name = k.kind.name();

@@ -10,7 +10,7 @@
 //! * "Creatures with islandwalk can be blocked as though they didn't have islandwalk";
 //! * "Instant and sorcery spells you control have lifelink" (CR 702.15d).
 
-use super::{EffectPattern, StaticPattern};
+use super::{AbilityPattern, EffectPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_simple, Builder};
 use crate::oracle::keywords::{parse_keyword_line, protection_qualities, split_keyword_phrases};
@@ -285,6 +285,54 @@ fn cant_be_blocked_except_by(l: &str, text: &str, _ctx: &CompileContext) -> Opti
     )])
 }
 
+/// "Enchanted creature gets +2/+2 and has protection from each color. This effect doesn't
+/// remove Auras." (CR 702.16n) and "... This effect doesn't remove Auras and Equipment you
+/// control that are already attached to it." (CR 702.16p): the granted protection is
+/// marked so it doesn't make those permanents fall off.
+fn doesnt_remove_attached(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let (suffix, marker) = [
+        (
+            ". this effect doesn't remove auras",
+            crate::kw::protection::DOESNT_REMOVE_AURAS,
+        ),
+        (
+            ". this effect doesn't remove auras and equipment you control that are already attached to it",
+            crate::kw::protection::DOESNT_REMOVE_ATTACHED,
+        ),
+    ]
+    .into_iter()
+    .find(|(s, _)| l.ends_with(s))?;
+    let head = &block[..l.len() - suffix.len()];
+    let mut marked = false;
+    let mut out = Vec::new();
+    for a in crate::oracle::statics::parse_static(head, ctx)? {
+        let AbilityKind::Static(st) = &a.kind else {
+            return None;
+        };
+        let mut st = st.clone();
+        if let StaticEffect::Continuous { mods, .. } = &mut st.effect {
+            for m in mods.iter_mut() {
+                if let Modification::AddKeyword(k) = m {
+                    if k.kind == crate::keywords::KeywordKind::Protection {
+                        k.text = Some(marker.into());
+                        marked = true;
+                    }
+                }
+            }
+        }
+        out.push(AbilityDef::new(AbilityKind::Static(st), block));
+    }
+    marked.then_some(out)
+}
+
+inventory::submit! {
+    AbilityPattern { name: "this effect doesn't remove auras/equipment", priority: 50, parse: doesnt_remove_attached }
+}
 inventory::submit! {
     StaticPattern { name: "you have protection from", priority: 100, parse: you_have_protection }
 }
