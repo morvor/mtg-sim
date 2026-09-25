@@ -59,9 +59,53 @@ fn parse_single(r: &str) -> Option<Parsed> {
     if r.starts_with("at ") {
         return parse_at(r);
     }
+    if r == "day becomes night or night becomes day" {
+        return Some((
+            TriggerCond::DayNightChanges,
+            Sel::None,
+            PlayerRef::ActivePlayer,
+        ));
+    }
     parse_state(r)
+        .or_else(|| parse_counters_put(r))
         .or_else(|| parse_player_trigger(r))
         .or_else(|| parse_object_trigger(r))
+}
+
+/// "one or more +1/+1 counters are put on [object]", "a +1/+1 counter is put on [object]".
+/// Each such event is one put action on one object.
+fn parse_counters_put(r: &str) -> Option<Parsed> {
+    let (x, plural) = if let Some(x) = r.strip_prefix("one or more ") {
+        (x, true)
+    } else {
+        (
+            r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?,
+            false,
+        )
+    };
+    let (kind, rest) = crate::oracle::costs::counter_kind(x)?;
+    let rest = if plural {
+        rest.strip_prefix("counters are put on ")?
+    } else {
+        rest.strip_prefix("counter is put on ")?
+    };
+    let subj = parse_subject(rest)?;
+    if subj.one_or_more {
+        return None;
+    }
+    let it = if subj.self_only {
+        Sel::This
+    } else {
+        Sel::TriggerObject
+    };
+    Some((
+        TriggerCond::CountersPut {
+            filter: subj.filter,
+            kind: Some(kind),
+        },
+        it,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
 }
 
 /// Merges the referents of several alternative trigger conditions.
@@ -417,13 +461,72 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         };
         return Some((c, Sel::None, tp()));
     }
+    // "cast or copy an instant or sorcery spell" (CR 707.10: a copy isn't cast).
+    if let Some(t) = rest
+        .strip_prefix("cast or copy ")
+        .or_else(|| rest.strip_prefix("casts or copies "))
+    {
+        let x = end(t);
+        let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
+        let (filter, cond) = parse_spell_phrase(x)?;
+        if cond.is_some() {
+            return None;
+        }
+        let c = TriggerCond::AnyOf(vec![
+            TriggerCond::CastSpell {
+                who,
+                filter: filter.clone(),
+            },
+            TriggerCond::SpellCopied { who, filter },
+        ]);
+        return Some((c, Sel::TriggerSpell, tp()));
+    }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
         return parse_cast(who, t);
     }
+    // Cycling (CR 702.29c-d): "cycle or discard" triggers once for a cycled card.
+    if let Some(t) = rest
+        .strip_prefix("cycle or discard ")
+        .or_else(|| rest.strip_prefix("cycles or discards "))
+    {
+        let filter = match end(t) {
+            "a card" => Filter::Any,
+            "another card" => Filter::Other,
+            _ => return None,
+        };
+        return Some((
+            TriggerCond::Discards { who, filter },
+            Sel::TriggerObject,
+            tp(),
+        ));
+    }
+    if let Some(t) = verb(rest, "cycle") {
+        let (filter, it) = match end(t) {
+            "~" => (Filter::Source, Sel::This),
+            "a card" => (Filter::Any, Sel::TriggerObject),
+            "another card" => (Filter::Other, Sel::TriggerObject),
+            _ => return None,
+        };
+        return Some((TriggerCond::Cycled { who, filter }, it, tp()));
+    }
     // Discarding.
     if let Some(t) = verb(rest, "discard") {
         let t = end(t);
+        if let Some(x) = t.strip_prefix("one or more ") {
+            let (f, plural, tail) = parse_object_phrase(x)?;
+            if !plural || !end(tail).is_empty() {
+                return None;
+            }
+            return Some((
+                TriggerCond::Batched {
+                    trigger: Box::new(TriggerCond::Discards { who, filter: f }),
+                    per: BatchPer::Player,
+                },
+                Sel::None,
+                tp(),
+            ));
+        }
         let t = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
         let (f, _, tail) = parse_object_phrase(t)?;
         if !end(tail).is_empty() {
@@ -438,6 +541,10 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
     // Sacrificing.
     if let Some(t) = verb(rest, "sacrifice") {
         let t = end(t);
+        if t == "~" && who == PlayerRel::You {
+            // Looks back in time (CR 603.10a); actions find the card (CR 400.7e).
+            return Some((TriggerCond::YouSacrifice(Filter::Source), Sel::This, tp()));
+        }
         let (one_or_more, t) = match t.strip_prefix("one or more ") {
             Some(x) => (true, x),
             None => (
@@ -497,6 +604,10 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
     }
     // Misc player events.
     let t = end(rest);
+    let action = |name: &str| TriggerCond::PlayerAction {
+        name: name.into(),
+        who,
+    };
     let simple = match t {
         "commit a crime" | "commits a crime" => TriggerCond::CommitCrime(who),
         "search your library" | "searches their library" => TriggerCond::Searched(who),
@@ -511,7 +622,27 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             filter: Filter::Any,
         },
         "loses the game" if who == PlayerRel::Any => TriggerCond::PlayerLoses,
-        _ => return None,
+        "scry" | "scries" => action("scry"),
+        "surveil" | "surveils" => action("surveil"),
+        "scry or surveil" | "scries or surveils" => {
+            TriggerCond::AnyOf(vec![action("scry"), action("surveil")])
+        }
+        "proliferate" | "proliferates" => action("proliferate"),
+        "roll one or more dice" | "rolls one or more dice" => TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::RollDie(who)),
+            per: BatchPer::Batch,
+        },
+        _ => {
+            // "roll a 1": the result of a die roll.
+            let x = t
+                .strip_prefix("roll a ")
+                .or_else(|| t.strip_prefix("rolls a "))?;
+            let n: i32 = x.parse().ok()?;
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::RollDie(who)),
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::c(n)),
+            }
+        }
     };
     Some((simple, Sel::None, tp()))
 }
@@ -535,6 +666,20 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         // "your second spell each turn", "your first spell during each opponent's turn"
         let (w, x) = split_word(x);
         let n = ordinal(w)?;
+        // "your first noncreature spell each turn": the first such spell this turn.
+        if let Some(phrase) = x.strip_suffix(" each turn") {
+            if phrase != "spell" && n == 1 {
+                let (filter, cond) = parse_spell_phrase(phrase)?;
+                if cond.is_some() {
+                    return None;
+                }
+                let c = TriggerCond::FirstTimeEachTurn(Box::new(TriggerCond::CastSpell {
+                    who,
+                    filter,
+                }));
+                return Some((c, spell(), tp()));
+            }
+        }
         let base = TriggerCond::NthSpellCast { who, n };
         let c = match x {
             "spell each turn" => base,
@@ -578,11 +723,19 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
 /// "[adjectives] spell [with …] [that targets …] [from …] [during …]" → (filter on the
 /// spell, condition on the moment of casting).
 pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
+    let mut parts = vec![];
+    let x = match x.strip_prefix("kicked ") {
+        Some(r) => {
+            parts.push(Filter::CastWithCost("kicker".into()));
+            r
+        }
+        None => x,
+    };
     let (f, _, mut rest) = parse_object_phrase(x)?;
     if !mentions_spell(&f) {
         return None;
     }
-    let mut parts = vec![f];
+    parts.push(f);
     let mut cond = None;
     loop {
         let t = rest.trim_start();
@@ -684,6 +837,20 @@ fn parse_subject(s: &str) -> Option<Subject> {
     };
     if s == "~" {
         return mk(Filter::Source, true, false);
+    }
+    if s == "~ or enchanted creature" || s == "~ or equipped creature" {
+        return mk(
+            Filter::Or(vec![Filter::Source, Filter::AttachedToSource]),
+            false,
+            false,
+        );
+    }
+    if s == "your commander" {
+        return mk(
+            Filter::and(vec![Filter::Commander, Filter::OwnedBy(PlayerRel::You)]),
+            false,
+            false,
+        );
     }
     if let Some(r) = s.strip_prefix("~ or another ") {
         let (f, plural, tail) = parse_object_phrase(r)?;
@@ -876,6 +1043,13 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             return zone_change(TriggerCond::Dies(f), r);
         }
     }
+    // "When enchanted artifact is put into a graveyard": it's a permanent, so from the
+    // battlefield.
+    if let Some(r) = starts("is put into a graveyard") {
+        if matches!(f, Filter::AttachedToSource) {
+            return zone_change(TriggerCond::Dies(f.clone()), r);
+        }
+    }
     for p in [
         "is put into exile from the battlefield",
         "are put into exile from the battlefield",
@@ -954,6 +1128,23 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         }
     }
     // --- combat ---------------------------------------------------------------------
+    // "~ and at least two other creatures attack"
+    if let Some(r) = starts("and at least ") {
+        if !so {
+            return None;
+        }
+        let (n, r) = parse_number(r)?;
+        let n = n.as_const()?;
+        let r = r
+            .trim_start()
+            .strip_prefix("other creatures attack")
+            .or_else(|| r.trim_start().strip_prefix("other creature attack"))?;
+        let cond = TriggerCond::Where {
+            trigger: Box::new(TriggerCond::Attacks(f)),
+            cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::c(n + 1)),
+        };
+        return Some(((cond, Sel::This, PlayerRef::TriggerPlayer), r));
+    }
     if let Some(r) = starts("attacks and isn't blocked") {
         if subj.one_or_more {
             return None;
@@ -1157,12 +1348,13 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         }
     }
     // --- status changes ---------------------------------------------------------------
-    let simple: [(&str, fn(Filter) -> TriggerCond); 6] = [
+    let simple: [(&str, fn(Filter) -> TriggerCond); 7] = [
         ("becomes tapped", TriggerCond::BecomesTapped),
         ("become tapped", TriggerCond::BecomesTapped),
         ("becomes untapped", TriggerCond::BecomesUntapped),
         ("become untapped", TriggerCond::BecomesUntapped),
         ("is turned face up", TriggerCond::TurnedFaceUp),
+        ("transforms into ~", TriggerCond::Transforms),
         ("transforms", TriggerCond::Transforms),
     ];
     for (p, mk) in simple {
@@ -1287,6 +1479,26 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
             false,
         ),
     ];
+    if let Some(rest) = t.strip_prefix("to a player or battle") {
+        if subj.one_or_more {
+            return None;
+        }
+        let mk = |to| TriggerCond::DealsDamage {
+            source: subj.filter.clone(),
+            to,
+            combat_only: combat,
+        };
+        let c = TriggerCond::AnyOf(vec![
+            mk(DamageRecipient::Player(PlayerRel::Any)),
+            mk(DamageRecipient::Object(Filter::Type(CardType::Battle))),
+        ]);
+        let it = if subj.self_only {
+            Sel::This
+        } else {
+            Sel::TriggerOtherObject
+        };
+        return Some(((c, it, PlayerRef::TriggerPlayer), rest));
+    }
     let (to, to_player, rest) = if t.is_empty() || !t.starts_with("to ") {
         (DamageRecipient::Any, false, r)
     } else {

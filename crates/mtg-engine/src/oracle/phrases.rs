@@ -193,6 +193,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         s = r;
     }
     // Adjectives.
+    let mut last_adjective = "";
     loop {
         let (w, rest) = split_word(s);
         let w2 = w.trim_end_matches(',');
@@ -206,6 +207,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         match adjective(w2) {
             Some(f) => {
                 parts.push(f);
+                last_adjective = w2;
                 s = rest;
             }
             None => break,
@@ -257,6 +259,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             }
         }
         break;
+    }
+    // "a token", "tokens you control": "token" was the head noun after all.
+    if heads.is_empty() && matches!(last_adjective, "token" | "tokens") {
+        parts.pop();
+        heads.push(Filter::Token);
+        plural = last_adjective == "tokens";
     }
     if heads.is_empty() {
         return None;

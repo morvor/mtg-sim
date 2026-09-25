@@ -1133,6 +1133,17 @@ impl Game {
             .activations_this_turn
             .entry(a.uid)
             .or_insert(0) += 1;
+        // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
+        if a.text == "Cycling"
+            && act
+                .cost
+                .parts
+                .iter()
+                .any(|c| matches!(c, CostPart::DiscardSelf))
+        {
+            let card = self.current(src);
+            self.emit(Event::Cycled { player: p, card });
+        }
         // 602.2i: becomes activated.
         self.log(|g| format!("{p} activates {}", g.describe(src)));
         self.emit(Event::AbilityActivated {

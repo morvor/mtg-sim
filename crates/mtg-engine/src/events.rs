@@ -238,6 +238,11 @@ pub enum Event {
     Exploited {
         obj: ObjectId,
     },
+    /// A copy of a spell was put onto the stack (CR 707.10); `player` controls the copy.
+    SpellCopied {
+        spell: ObjectId,
+        player: PlayerId,
+    },
     /// Marks the end of a group of simultaneous events (one action of a resolving spell or
     /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
     /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.

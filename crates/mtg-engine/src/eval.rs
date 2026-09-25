@@ -406,6 +406,12 @@ impl Game {
                         .as_ref()
                         .is_some_and(|si| si.cast.was_cast && si.cast.from == Some(*z))
             }
+            Filter::CastWithCost(name) => {
+                o.zone == Zone::Stack
+                    && o.stack
+                        .as_ref()
+                        .is_some_and(|si| si.cast.paid.iter().any(|p| p == name))
+            }
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }

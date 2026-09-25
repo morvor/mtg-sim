@@ -810,11 +810,24 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Sacrificed(f), Event::Sacrificed { obj, player }) => {
-                if self.matches(*obj, f, &ctx) {
+            // CR 603.10a: abilities that trigger when a player sacrifices a permanent look
+            // back in time, so they're detected on the zone change itself (whose look-back
+            // snapshot includes the sacrificed permanent's own abilities).
+            (
+                TriggerCond::Sacrificed(f),
+                Event::ZoneChange {
+                    old,
+                    new,
+                    from: Zone::Battlefield,
+                    cause: crate::events::MoveCause::Sacrifice,
+                    by: Some(player),
+                    ..
+                },
+            ) => {
+                if self.matches(*old, f, &ctx) {
                     one(EventInfo {
-                        object: Some(*obj),
-                        lki: Some(*obj),
+                        object: Some(*new),
+                        lki: Some(*old),
                         player: Some(*player),
                         ..Default::default()
                     })
@@ -822,12 +835,56 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::YouSacrifice(f), Event::Sacrificed { obj, player }) => {
-                if *player == ctl && self.matches(*obj, f, &ctx) {
+            (
+                TriggerCond::YouSacrifice(f),
+                Event::ZoneChange {
+                    old,
+                    new,
+                    from: Zone::Battlefield,
+                    cause: crate::events::MoveCause::Sacrifice,
+                    by: Some(player),
+                    ..
+                },
+            ) => {
+                if *player == ctl && self.matches(*old, f, &ctx) {
                     one(EventInfo {
-                        object: Some(*obj),
-                        lki: Some(*obj),
+                        object: Some(*new),
+                        lki: Some(*old),
                         player: Some(*player),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (TriggerCond::SpellCopied { who, filter }, Event::SpellCopied { spell, player }) => {
+                if self.player_rel_matches(*who, *player, &ctx)
+                    && self.matches(*spell, filter, &ctx)
+                {
+                    one(EventInfo {
+                        object: Some(*spell),
+                        spell: Some(*spell),
+                        player: Some(*player),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            (
+                TriggerCond::PlayerAction { name, who },
+                Event::Custom {
+                    name: n,
+                    player: Some(player),
+                    obj,
+                    amount,
+                },
+            ) => {
+                if n == name && self.player_rel_matches(*who, *player, &ctx) {
+                    one(EventInfo {
+                        object: *obj,
+                        player: Some(*player),
+                        amount: *amount,
                         ..Default::default()
                     })
                 } else {
@@ -985,12 +1042,16 @@ impl Game {
                 if v.is_empty() {
                     return v;
                 }
-                // The current event is the last one recorded in `turn_events`; any earlier
-                // matching event this turn means this isn't the first time.
+                // The current event is the last one recorded in `turn_events`; an earlier
+                // matching event this turn involving the same player ("their first spell
+                // each turn") means this isn't the first time.
+                let who = v[0].player;
                 let n = self.turn_events.len().saturating_sub(1);
-                let earlier = self.turn_events[..n]
-                    .iter()
-                    .any(|e| !self.trigger_matches(inner, src, ctl, e).is_empty());
+                let earlier = self.turn_events[..n].iter().any(|e| {
+                    self.trigger_matches(inner, src, ctl, e)
+                        .iter()
+                        .any(|i| i.player == who)
+                });
                 if earlier {
                     none()
                 } else {

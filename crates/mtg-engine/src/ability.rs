@@ -826,6 +826,9 @@ pub enum Filter {
     Targets(Box<Filter>),
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
+    /// A spell for which the named optional additional cost was paid ("a kicked spell":
+    /// `"kicker"`).
+    CastWithCost(SmolStr),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -1683,6 +1686,18 @@ pub enum TriggerCond {
     Batched {
         trigger: Box<TriggerCond>,
         per: BatchPer,
+    },
+    /// "Whenever [player] copies a [filter] spell" ("whenever you cast or copy an instant or
+    /// sorcery spell"): a copy of a spell was put onto the stack (CR 707.10).
+    SpellCopied {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// A player performed a named keyword action reported as [`crate::events::Event::Custom`]
+    /// ("scry", "surveil", "proliferate"): "whenever you scry".
+    PlayerAction {
+        name: SmolStr,
+        who: PlayerRel,
     },
     /// "Whenever [blocker] blocks a creature [attacker]": once for each attacking creature
     /// it blocks (CR 509.3b). Event object = blocker, other = the blocked attacker.

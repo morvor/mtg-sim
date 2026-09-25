@@ -71,6 +71,11 @@ fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
             to: Some(ZoneKind::Graveyard),
             ..
         } => return FunctionZone::Graveyard,
+        // CR 702.29c: "when you cycle ~" triggers from whatever zone the card winds up in.
+        TriggerCond::Cycled {
+            filter: Filter::Source,
+            ..
+        } => return FunctionZone::Anywhere,
         TriggerCond::Dies(f)
         | TriggerCond::LeavesBattlefield(f)
         | TriggerCond::ZoneChange { filter: f, .. }
