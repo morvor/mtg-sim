@@ -5,6 +5,9 @@
 //! * "You have protection from [quality]" / "you gain protection from everything until
 //!   your next turn", "you gain hexproof until end of turn" (CR 702.11c, 702.16b–e, j–k);
 //! * "[objects] lose hexproof and indestructible until end of turn" (CR 702.11e);
+//! * "... can be the targets of spells and abilities you control as though they didn't
+//!   have hexproof" (CR 702.11e);
+//! * "Creatures with islandwalk can be blocked as though they didn't have islandwalk";
 //! * "Instant and sorcery spells you control have lifelink" (CR 702.15d).
 
 use super::{EffectPattern, StaticPattern};
@@ -241,8 +244,55 @@ fn as_though_no_hexproof(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
     Some(vec![static_ability(StaticEffect::Custom(name.into()), text)])
 }
 
+/// "Creatures with islandwalk can be blocked as though they didn't have islandwalk"
+/// (Undertow), "Creatures with landwalk abilities can be blocked as though they didn't
+/// have those abilities" (Staff of the Ages).
+fn as_though_no_landwalk(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_prefix("creatures with ")?;
+    let which = if r == "landwalk abilities can be blocked as though they didn't have those abilities"
+    {
+        String::new()
+    } else {
+        let (a, b) = r.split_once(" can be blocked as though they didn't have ")?;
+        if a != b || !a.ends_with("walk") || a.contains(' ') {
+            return None;
+        }
+        a.to_string()
+    };
+    let name = format!(
+        "{}{which}",
+        crate::kw::landwalk::BLOCKABLE_AS_THOUGH_NO_LANDWALK
+    );
+    Some(vec![static_ability(StaticEffect::Custom(name.into()), text)])
+}
+
+/// "~ can't be blocked except by creatures with flying" (Treetop Rangers; a creature
+/// with reach doesn't have flying, CR 702.17b): blockers not matching the phrase can't
+/// block it.
+fn cant_be_blocked_except_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_prefix("~ can't be blocked except by ")?;
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() || !matches!(&f, Filter::And(_) | Filter::Type(_) | Filter::Subtype(_))
+    {
+        return None;
+    }
+    Some(vec![static_ability(
+        StaticEffect::Restriction(Restriction::CantBeBlockedBy {
+            attacker: Filter::Source,
+            blocker: Filter::not(f),
+        }),
+        text,
+    )])
+}
+
 inventory::submit! {
     StaticPattern { name: "you have protection from", priority: 100, parse: you_have_protection }
+}
+inventory::submit! {
+    StaticPattern { name: "~ can't be blocked except by [creatures]", priority: 100, parse: cant_be_blocked_except_by }
+}
+inventory::submit! {
+    StaticPattern { name: "as though they didn't have [landwalk]", priority: 100, parse: as_though_no_landwalk }
 }
 inventory::submit! {
     StaticPattern { name: "as though they didn't have hexproof", priority: 100, parse: as_though_no_hexproof }
