@@ -97,6 +97,36 @@ fn inquisition_of_kozilek_mana_value_three_or_less() {
 }
 
 #[test]
+fn nightsnare_if_you_dont_choose_they_discard_two() {
+    cr!("701.9b");
+    assert_supported("Nightsnare");
+    // You choose: that card is discarded.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Forest");
+    t.hand(P1, "Mountain");
+    let snare = t.hand(P0, "Nightsnare");
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.cast(P0, snare).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert_eq!(t.hand_size(P1), 2);
+    // You don't: they discard two cards of their choice.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Forest");
+    t.hand(P1, "Mountain");
+    let snare = t.hand(P0, "Nightsnare");
+    t.answer_choose(P0, &[]);
+    t.cast(P0, snare).target(P1).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P1), 1);
+    assert_eq!(t.graveyard_size(P1), 2);
+}
+
+#[test]
 fn castigate_exiles_the_chosen_card() {
     cr!("701.9b");
     let mut t = TestGame::new(2);

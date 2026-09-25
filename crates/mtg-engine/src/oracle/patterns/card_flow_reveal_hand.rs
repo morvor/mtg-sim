@@ -113,6 +113,52 @@ fn choose_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
+fn chose_from_hand(e: &Effect) -> bool {
+    match e {
+        Effect::Store { var, .. } => *var == CHOSEN,
+        Effect::Seq(v) => v.iter().any(chose_from_hand),
+        _ => false,
+    }
+}
+
+/// "If you do, that player discards that card. If you don't, that player discards two
+/// cards." after "you may choose a card from it": whether a card was chosen.
+fn if_you_chose(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let (chose, r) = if let Some(r) = l.strip_prefix("if you do, ") {
+        (true, r)
+    } else if let Some(r) = l.strip_prefix("if you don't, ") {
+        (false, r)
+    } else {
+        return false;
+    };
+    if !chose_from_hand(prev) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_clause(r, b) else {
+        return false;
+    };
+    let cond = Condition::SelNonEmpty(Sel::Var(CHOSEN));
+    let cond = if chose {
+        cond
+    } else {
+        Condition::Not(Box::new(cond))
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "card_flow: if you do / don't (chose from hand)", priority: 40, apply: if_you_chose }
+}
+
 /// "that player discards that card" / "... those cards" after a card was chosen from
 /// their revealed hand: the chosen cards are discarded (CR 701.9b).
 fn discards_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
