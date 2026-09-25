@@ -328,6 +328,10 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        // CR 704.6d: a commander put into a graveyard or exile since the last check.
+        if self.obj(new_id).is_commander && matches!(m.to, Zone::Graveyard(_) | Zone::Exile) {
+            self.commander_moved_since_last_sba.insert(new_id);
+        }
         if from == Zone::Stack && m.to == Zone::Battlefield {
             // Effects of resolved spells and abilities that changed a permanent spell
             // continue to apply to the permanent it becomes (CR 112.4, 110.2b).

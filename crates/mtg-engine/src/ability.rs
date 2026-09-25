@@ -1991,6 +1991,8 @@ pub enum StaticEffect {
     RevealTopCard(PlayerRel),
     /// Additional land plays per turn.
     AdditionalLandPlays(PlayerRel, u32),
+    /// How coins are flipped and dice are rolled, and die-roll modifiers (CR 705, 706).
+    Dice(crate::dice::DiceStatic),
     /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
     /// declared" (CR 506.8). Checked from the card itself while it's being cast.
     CastOnlyIf(Condition),
@@ -2961,6 +2963,10 @@ pub enum Effect {
         mods: Vec<Modification>,
         expires: Duration,
     },
+    /// "Roll a d20. 1—9 | ..." (CR 706).
+    RollDice(Box<crate::dice::DieRoll>),
+    /// "Flip a coin. If you win the flip, ..." (CR 705).
+    FlipCoins(Box<crate::dice::CoinFlip>),
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
 }

@@ -32,14 +32,13 @@ fn karn_restart(t: &mut TestGame, k: ObjectId) {
 }
 
 fn cards_owned(t: &TestGame, p: PlayerId) -> Vec<String> {
-    let mut v: Vec<String> = t
-        .g
-        .objects
-        .iter()
-        .filter(|o| o.owner == p && o.next.is_none() && o.zone != Zone::Nowhere)
-        .filter(|o| !matches!(o.zone, Zone::Outside(_)))
-        .map(|o| o.card.as_ref().map_or("?".into(), |c| c.name.to_string()))
-        .collect();
+    let mut v: Vec<String> =
+        t.g.objects
+            .iter()
+            .filter(|o| o.owner == p && o.next.is_none() && o.zone != Zone::Nowhere)
+            .filter(|o| !matches!(o.zone, Zone::Outside(_)))
+            .map(|o| o.card.as_ref().map_or("?".into(), |c| c.name.to_string()))
+            .collect();
     v.sort();
     v
 }
@@ -168,10 +167,14 @@ fn an_exempted_commander_stays_in_exile_and_remains_the_commander() {
     let k = karn(&mut t);
     let cmdr = t.battlefield(P1, "Isamaru, Hound of Konda");
     t.g.objects[cmdr.0 as usize].is_commander = true;
-    t.g.players[1].commander_names.push("Isamaru, Hound of Konda".into());
+    t.g.players[1]
+        .commander_names
+        .push("Isamaru, Hound of Konda".into());
     t.g.players[0]
         .commander_damage
         .insert("Isamaru, Hound of Konda".into(), 12);
+    // Its owner may move it to the command zone (CR 704.6d); they leave it in exile.
+    t.answer_yes(P1, false);
     karn_exile(&mut t, k, cmdr);
     let exiled = t.g.find_in_zone(Zone::Exile, "Isamaru, Hound of Konda");
     assert_eq!(exiled.len(), 1);
@@ -180,7 +183,10 @@ fn an_exempted_commander_stays_in_exile_and_remains_the_commander() {
     assert_eq!(isamaru.len(), 1);
     assert!(t.g.obj(isamaru[0]).is_commander);
     assert_eq!(t.g.obj(isamaru[0]).controller, P0);
-    assert!(t.g.find_in_zone(Zone::Command, "Isamaru, Hound of Konda").is_empty());
+    assert!(t
+        .g
+        .find_in_zone(Zone::Command, "Isamaru, Hound of Konda")
+        .is_empty());
     assert!(t.g.player(P0).commander_damage.is_empty());
     assert_eq!(t.life(P0), 40);
 }

@@ -37,6 +37,7 @@ pub mod custom;
 pub mod decision;
 pub mod deck;
 pub mod designations;
+pub mod dice;
 pub mod dfc;
 pub mod draw_rules;
 pub mod eval;

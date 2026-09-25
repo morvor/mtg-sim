@@ -88,11 +88,17 @@ impl Game {
                     .filter(|p| self.player(*p).team == t)
                     .collect();
                 let life = members.first().map(|p| self.player(*p).life).unwrap_or(1);
-                let poison = members
-                    .first()
-                    .map(|p| self.player(*p).poison())
-                    .unwrap_or(0);
-                if life <= 0 || poison >= 15 {
+                // CR 810.10: each player gets poison counters individually; they're shared
+                // by the team. CR 810.11: five more are needed for each player a team has
+                // beyond the second.
+                let poison: u32 = members.iter().map(|p| self.player(*p).poison()).sum();
+                let team_size = self
+                    .player_ids()
+                    .into_iter()
+                    .filter(|p| self.player(*p).team == t)
+                    .count() as u32;
+                let lethal_poison = 15 + 5 * team_size.saturating_sub(2);
+                if life <= 0 || poison >= lethal_poison {
                     losers.extend(members);
                 }
             }

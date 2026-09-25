@@ -480,6 +480,8 @@ pub struct Game {
     pub start: crate::start::StartState,
     /// Special actions allowed by effects and effects being ignored (CR 116.2c, 116.2d).
     pub special: crate::special_actions::SpecialState,
+    /// Coins and dice (CR 705, 706).
+    pub dice: crate::dice::DiceState,
 }
 
 impl Game {
@@ -566,6 +568,7 @@ impl Game {
             apnap_choices: vec![],
             start: Default::default(),
             special: Default::default(),
+            dice: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
