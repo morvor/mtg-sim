@@ -1214,6 +1214,7 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    for_rest_of_game: false,
                 });
             }
             Effect::Reflexive { body } => {
@@ -1260,6 +1261,7 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    for_rest_of_game: false,
                 });
             }
             Effect::CreateEmblem { who, abilities } => {

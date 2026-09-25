@@ -473,7 +473,7 @@ impl Game {
         // CR 603.7b: a delayed trigger that can trigger more than once has a stated
         // duration ("this turn"); it ends with the turn.
         self.delayed_triggers
-            .retain(|d| d.once || d.created_turn == turn);
+            .retain(|d| d.once || d.for_rest_of_game || d.created_turn == turn);
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
         for d in self.delayed_triggers.clone() {
             if let TriggerCond::BeginningOf { .. } = d.trigger {
