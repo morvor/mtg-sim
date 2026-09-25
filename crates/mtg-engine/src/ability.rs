@@ -495,6 +495,10 @@ pub struct TargetSpec {
     pub chosen_by_opponent: bool,
     /// Human-readable description ("target creature you control").
     pub text: String,
+    /// The target is required only if this condition holds as targets are chosen, e.g.
+    /// only if a kicker cost was paid (CR 601.2c).
+    #[serde(default)]
+    pub condition: Option<Condition>,
 }
 
 impl TargetSpec {
@@ -507,6 +511,7 @@ impl TargetSpec {
             divide: None,
             chosen_by_opponent: false,
             text: text.into(),
+            condition: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
@@ -1400,6 +1405,12 @@ pub enum Restriction {
     SorcerySpeedOnly(PlayerFilter),
     /// "can't play lands".
     CantPlayLands(PlayerFilter),
+    /// "While [a player] is choosing targets as part of casting a spell or activating an
+    /// ability, that player must choose at least one [object] if able" (CR 601.2c).
+    MustTarget {
+        chooser: PlayerFilter,
+        what: Filter,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
 }
@@ -1449,6 +1460,9 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
+    /// (CR 601.3c).
+    FlashForAdditionalCost(Cost),
 }
 
 /// Static abilities (CR 604) and what they do.

@@ -308,7 +308,17 @@ impl Game {
                 .toughness
                 .is_some_and(|t| cmp.eval(t as i64, self.eval_value(v, ctx))),
             Filter::ManaValue(cmp, v) => {
-                cmp.eval(self.mana_value_of(id) as i64, self.eval_value(v, ctx))
+                // Uses the viewed characteristics' mana cost (CR 601.3e), with X on the
+                // stack (CR 107.3f) as in `mana_value_of`.
+                let mv = match &c.mana_cost {
+                    None => 0,
+                    Some(mc) if o.zone == Zone::Stack => {
+                        let x = o.stack.as_ref().and_then(|s| s.x).unwrap_or(0).max(0);
+                        mc.mana_value_with_x(x as u32)
+                    }
+                    Some(mc) => mc.mana_value(),
+                };
+                cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
             Filter::Named(n) => c.name.eq_ignore_ascii_case(n),

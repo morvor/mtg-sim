@@ -254,7 +254,10 @@ fn the_same_object_can_be_chosen_once_for_each_instance_of_target() {
         .spell(Body::simple(
             vec![
                 TargetSpec::object(
-                    Filter::and(vec![Filter::creature(), Filter::not(Filter::Color(Color::Black))]),
+                    Filter::and(vec![
+                        Filter::creature(),
+                        Filter::not(Filter::Color(Color::Black)),
+                    ]),
                     "target nonblack creature",
                 ),
                 TargetSpec::object(Filter::Type(CardType::Land), "target land"),
@@ -273,13 +276,12 @@ fn the_same_object_can_be_chosen_once_for_each_instance_of_target() {
         .build();
     let arbor = t.battlefield(P1, "Dryad Arbor");
     let c = t.custom(P0, spores, Zone::Hand(P0));
-    let s = t
-        .cast(P0, c)
-        .target(arbor)
-        .target(arbor)
-        .go();
+    let s = t.cast(P0, c).target(arbor).target(arbor).go();
     let chosen = &t.obj(s).stack.as_ref().unwrap().chosen[0].targets;
-    assert_eq!(chosen, &vec![vec![Entity::Object(arbor)], vec![Entity::Object(arbor)]]);
+    assert_eq!(
+        chosen,
+        &vec![vec![Entity::Object(arbor)], vec![Entity::Object(arbor)]]
+    );
     t.resolve();
     assert!(!t.on_battlefield(arbor));
 }
@@ -399,7 +401,11 @@ fn the_number_of_targets_is_announced_for_a_variable_number_of_targets() {
         .instant()
         .cost("{0}")
         .spell(Body::simple(
-            vec![TargetSpec::up_to(2, TargetKind::Object(Filter::creature()), "up to two")],
+            vec![TargetSpec::up_to(
+                2,
+                TargetKind::Object(Filter::creature()),
+                "up to two",
+            )],
             Effect::Tap {
                 what: Sel::Target(0),
             },
@@ -407,7 +413,10 @@ fn the_number_of_targets_is_announced_for_a_variable_number_of_targets() {
         .build();
     let c = t.custom(P0, up_to_two, Zone::Hand(P0));
     let s = t.cast(P0, c).targets(&[Entity::Object(a)]).go();
-    assert_eq!(t.obj(s).stack.as_ref().unwrap().chosen[0].targets[0].len(), 1);
+    assert_eq!(
+        t.obj(s).stack.as_ref().unwrap().chosen[0].targets[0].len(),
+        1
+    );
     t.resolve();
     assert!(t.obj_now(a).tapped);
     assert_eq!(t.permanents().filter(|o| o.tapped).count(), 1);
@@ -565,7 +574,12 @@ fn a_spell_can_be_cast_only_if_allowed_and_not_prohibited() {
         .any(|a| matches!(a, Action::Cast { card, .. } if *card == bolt)));
     // Once the prohibition is gone the spell can be cast.
     let owner = t.obj(sil).owner;
-    t.g.move_object(sil, Zone::Graveyard(owner), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        sil,
+        Zone::Graveyard(owner),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.cast(P0, bolt).target(P1).go();
 }
 

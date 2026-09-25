@@ -506,15 +506,18 @@ impl Game {
         live: &[ObjectId],
         ctx: &Ctx,
     ) -> Vec<ObjectId> {
-        let _ = src;
         let zone = affected.zone();
+        // A static ability that affects only its own object applies wherever that object
+        // is when the ability functions there (e.g. characteristic-defining abilities,
+        // CR 604.3; "this spell has flash as long as ...", CR 601.3d).
+        let self_only = filter_is_self(affected);
         live.iter()
             .copied()
             .filter(|o| {
                 let obj = self.obj(*o);
                 let in_zone = match zone {
                     Some(z) => obj.zone.kind() == Some(z),
-                    None => obj.zone == Zone::Battlefield,
+                    None => obj.zone == Zone::Battlefield || (self_only && *o == src),
                 };
                 in_zone && !obj.phased_out && self.matches(*o, affected, ctx)
             })
@@ -767,6 +770,15 @@ impl Game {
             p.land_plays = land_plays;
             p.mods = m;
         }
+    }
+}
+
+/// Whether a filter can only match the ability's own source object.
+fn filter_is_self(f: &Filter) -> bool {
+    match f {
+        Filter::Source => true,
+        Filter::And(v) => v.iter().any(filter_is_self),
+        _ => false,
     }
 }
 

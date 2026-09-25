@@ -93,10 +93,7 @@ impl CB {
 }
 
 pub fn kw(k: KeywordKind) -> Ability {
-    AbilityDef::new(
-        AbilityKind::Keyword(keywords::Keyword::new(k)),
-        k.name(),
-    )
+    AbilityDef::new(AbilityKind::Keyword(keywords::Keyword::new(k)), k.name())
 }
 
 pub fn spell(body: Body) -> Ability {
@@ -126,10 +123,7 @@ pub fn act_from(a: ActivatedAbility) -> Ability {
 }
 
 pub fn stat(effect: StaticEffect) -> Ability {
-    AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(effect)),
-        "static",
-    )
+    AbilityDef::new(AbilityKind::Static(StaticAbility::new(effect)), "static")
 }
 
 pub fn stat_from(s: StaticAbility) -> Ability {

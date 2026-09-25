@@ -13,6 +13,10 @@ use crate::replacement::*;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// Key in [`StackInfo::chosen_values`] recording the opponent who made a choice for the
+/// stack object (CR 601.7, 602.3); "that player" in its text refers to them.
+pub const CHOOSER_KEY: u16 = u16::MAX;
+
 /// Creates an ability object on top of the stack (CR 113.1b, 602.2a, 603.3a).
 pub fn create_stack_ability(
     g: &mut Game,
@@ -23,10 +27,12 @@ pub fn create_stack_ability(
     event: Option<EventInfo>,
     source_lki: Option<Box<Characteristics>>,
 ) -> ObjectId {
+    // CR 602.2a, 603.3: the ability on the stack has the text of the ability that created
+    // it and no other characteristics (its name here is only a label for logs).
     let src_name = g.obj(source).chars.name.clone();
     let chars = Characteristics {
         name: SmolStr::new(format!("{} ability", src_name)),
-        colors: g.obj(source).chars.colors,
+        rules_text: std::sync::Arc::from(ability.text.as_str()),
         ..Default::default()
     };
     let mut obj = GameObject::new(
@@ -128,10 +134,13 @@ impl Game {
                 vec![i]
             } else {
                 let chooser = if modal.chooser == ModeChooser::Opponent {
-                    self.opponents(controller)
-                        .first()
-                        .copied()
-                        .unwrap_or(controller)
+                    // CR 601.7, 602.3: an opponent chooses the mode when the controller
+                    // normally would; the controller decides which opponent (601.7a).
+                    let o = self.deciding_opponent(controller, id, ctx);
+                    if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                        si.chosen_values.insert(CHOOSER_KEY, o.0 as i64);
+                    }
+                    o
                 } else {
                     controller
                 };
@@ -222,11 +231,49 @@ impl Game {
         true
     }
 
-    /// Whether every required target slot has enough legal choices.
+    /// Whether every required target slot has enough legal choices. Slots required only
+    /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
-            s.min == 0 || self.legal_target_candidates(s, ctx, stack_obj).len() as u32 >= s.min
+            s.min == 0
+                || s.condition.is_some()
+                || self.legal_target_candidates(s, ctx, stack_obj).len() as u32 >= s.min
         })
+    }
+
+    /// The opponent who makes a choice that "an opponent" makes while a spell or ability
+    /// is put on the stack: the controller decides which one (CR 601.7a, 602.3a).
+    /// Remembered for the stack object, so every such choice is made by the same player.
+    pub fn deciding_opponent(
+        &mut self,
+        controller: PlayerId,
+        id: ObjectId,
+        ctx: &mut Ctx,
+    ) -> PlayerId {
+        if let Some(p) = ctx.chosen_player {
+            if self.are_opponents(controller, p) {
+                return p;
+            }
+        }
+        let opps = self.opponents(controller);
+        let p = match opps.len() {
+            0 => controller,
+            1 => opps[0],
+            _ => self
+                .ask_entities(
+                    controller,
+                    Some(id),
+                    "Choose the opponent who makes the choice",
+                    opps.iter().map(|p| Entity::Player(*p)).collect(),
+                    1,
+                    1,
+                )
+                .first()
+                .and_then(|e| e.player())
+                .unwrap_or(opps[0]),
+        };
+        ctx.chosen_player = Some(p);
+        p
     }
 
     /// All legal choices for a target slot (CR 115).
@@ -348,13 +395,15 @@ impl Game {
             if c.has_keyword(KeywordKind::Shroud) {
                 return true;
             }
-            // CR 702.11b hexproof (and "hexproof from", 702.11d)
+            // CR 702.11b hexproof (and "hexproof from", 702.11d). An ability's qualities
+            // are those of its source (CR 113.7).
+            let quality_source = source.map(|s| self.ability_source_of(s));
             for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
                 if self.are_opponents(by, ob.controller) {
                     match &kw.filter {
                         None => return true,
                         Some(f) => {
-                            if let Some(s) = source {
+                            if let Some(s) = quality_source {
                                 if self.matches(s, f, &Ctx::new(Some(o), ob.controller)) {
                                     return true;
                                 }
@@ -379,9 +428,9 @@ impl Game {
                 match tr {
                     TargetRestriction::Any => true,
                     TargetRestriction::Opponents => self.are_opponents(by, rc),
-                    TargetRestriction::Sources(f) => {
-                        source.is_some_and(|s| self.matches(s, f, &Ctx::new(rs, rc)))
-                    }
+                    TargetRestriction::Sources(f) => source.is_some_and(|s| {
+                        self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
+                    }),
                 }
             } else {
                 false
@@ -405,7 +454,7 @@ impl Game {
                 PlayerModification::Hexproof if self.are_opponents(by, p) => return true,
                 PlayerModification::ProtectionFrom(f) => {
                     if let Some(s) = source {
-                        if self.matches(s, f, &Ctx::new(None, p)) {
+                        if self.matches(self.ability_source_of(s), f, &Ctx::new(None, p)) {
                             return true;
                         }
                     }
@@ -421,9 +470,9 @@ impl Game {
                 match tr {
                     TargetRestriction::Any => true,
                     TargetRestriction::Opponents => self.are_opponents(by, p),
-                    TargetRestriction::Sources(f) => {
-                        source.is_some_and(|s| self.matches(s, f, &Ctx::new(rs, rc)))
-                    }
+                    TargetRestriction::Sources(f) => source.is_some_and(|s| {
+                        self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
+                    }),
                 }
             } else {
                 false
@@ -439,16 +488,22 @@ impl Game {
                 .any(|e| check(&e.restriction, e.source, e.controller))
     }
 
+    /// For an activated or triggered ability on the stack, the object that is its source
+    /// (its last known information if it has left its zone); otherwise the object itself.
+    pub fn ability_source_of(&self, id: ObjectId) -> ObjectId {
+        match self.obj(id).stack.as_deref().map(|s| &s.kind) {
+            Some(StackKind::Activated { source: s, .. })
+            | Some(StackKind::Triggered { source: s, .. }) => *s,
+            _ => id,
+        }
+    }
+
     /// Whether permanent/object `o` has protection from `source` (CR 702.16).
     pub fn protected_from(&self, o: ObjectId, source: ObjectId) -> bool {
         let ob = self.obj(o);
         let src_ctx = Ctx::new(Some(o), ob.controller);
         // For abilities on the stack, the source of the ability is its source object.
-        let src = match self.obj(source).stack.as_deref().map(|s| &s.kind) {
-            Some(StackKind::Activated { source: s, .. })
-            | Some(StackKind::Triggered { source: s, .. }) => *s,
-            _ => source,
-        };
+        let src = self.ability_source_of(source);
         ob.chars
             .keywords()
             .filter(|k| k.kind == KeywordKind::Protection)
@@ -465,9 +520,26 @@ impl Game {
         ctx: &mut Ctx,
         stack_obj: ObjectId,
     ) -> Option<Vec<Vec<Entity>>> {
-        let mut out: Vec<Vec<Entity>> = Vec::new();
-        for (i, spec) in specs.iter().enumerate() {
+        let mut out: Vec<Vec<Entity>> = vec![vec![]; specs.len()];
+        // Candidates and maximum per slot, for the "must target" check below.
+        let mut slot_cands: Vec<Vec<Entity>> = vec![vec![]; specs.len()];
+        let mut slot_max: Vec<u32> = vec![0; specs.len()];
+        // CR 601.7b: when the controller and an opponent both choose targets, the
+        // controller chooses first.
+        let order: Vec<usize> = (0..specs.len())
+            .filter(|i| !specs[*i].chosen_by_opponent)
+            .chain((0..specs.len()).filter(|i| specs[*i].chosen_by_opponent))
+            .collect();
+        for i in order {
+            let spec = &specs[i];
             ctx.targets = out.clone();
+            // CR 601.2c: a target required only if some choice was made (e.g. a kicker
+            // cost was paid) isn't required otherwise.
+            if let Some(c) = &spec.condition {
+                if !self.eval_cond(c, ctx) {
+                    continue;
+                }
+            }
             let mut cands = self.legal_target_candidates(spec, ctx, stack_obj);
             // "another target": exclude entities chosen in the listed slots.
             for d in &spec.distinct_from {
@@ -479,11 +551,10 @@ impl Game {
             if (cands.len() as u32) < spec.min {
                 return None;
             }
+            slot_cands[i] = cands.clone();
+            slot_max[i] = max;
             let chooser = if spec.chosen_by_opponent {
-                self.opponents(ctx.controller)
-                    .first()
-                    .copied()
-                    .unwrap_or(ctx.controller)
+                self.deciding_opponent(ctx.controller, stack_obj, ctx)
             } else {
                 ctx.controller
             };
@@ -515,11 +586,73 @@ impl Game {
                         .collect(),
                 }
             };
-            let _ = i;
-            out.push(picked);
+            out[i] = picked;
         }
+        self.enforce_must_target(specs, &mut out, &slot_cands, &slot_max, ctx, stack_obj);
         ctx.targets = out.clone();
         Some(out)
+    }
+
+    /// CR 601.2c: "If any effects say that an object or player must be chosen as a
+    /// target, the player chooses targets so that they obey the maximum possible number of
+    /// such effects". Applies while casting a spell or activating an ability.
+    fn enforce_must_target(
+        &mut self,
+        specs: &[TargetSpec],
+        out: &mut [Vec<Entity>],
+        cands: &[Vec<Entity>],
+        maxes: &[u32],
+        ctx: &Ctx,
+        stack_obj: ObjectId,
+    ) {
+        let cast_or_activated = matches!(
+            self.obj(stack_obj).stack.as_deref().map(|s| &s.kind),
+            Some(StackKind::Spell) | Some(StackKind::Activated { .. })
+        );
+        if !cast_or_activated {
+            return;
+        }
+        let chooser = ctx.controller;
+        let mut reqs: Vec<(Filter, Ctx)> = Vec::new();
+        let mut collect = |r: &Restriction, s: Option<ObjectId>, c: PlayerId, g: &Game| {
+            if let Restriction::MustTarget { chooser: who, what } = r {
+                let rctx = Ctx::new(s, c);
+                if g.player_filter_matches(who, chooser, &rctx) {
+                    reqs.push((what.clone(), rctx));
+                }
+            }
+        };
+        for (s, c, r) in self.statics.restrictions.clone() {
+            collect(&r, Some(s), c, self);
+        }
+        for e in self.rule_effects.clone() {
+            collect(&e.restriction, e.source, e.controller, self);
+        }
+        for (what, rctx) in reqs {
+            let fits =
+                |g: &Game, e: &Entity| e.object().is_some_and(|o| g.matches(o, &what, &rctx));
+            if out.iter().flatten().any(|e| fits(self, e)) {
+                continue;
+            }
+            // Find a slot that can take a required object ("if able").
+            for i in 0..specs.len() {
+                let Some(e) = cands[i]
+                    .iter()
+                    .find(|e| fits(self, e) && !out[i].contains(e))
+                    .copied()
+                else {
+                    continue;
+                };
+                if (out[i].len() as u32) < maxes[i] {
+                    out[i].push(e);
+                } else if let Some(j) = out[i].iter().position(|x| !fits(self, x)) {
+                    out[i][j] = e;
+                } else {
+                    continue;
+                }
+                break;
+            }
+        }
     }
 
     fn choose_divisions(
@@ -615,6 +748,9 @@ impl Game {
         ctx.ability_uid = ability_uid;
         ctx.link = link;
         ctx.source_lki = si.source_lki.clone();
+        if let Some(p) = si.chosen_values.get(&CHOOSER_KEY) {
+            ctx.chosen_player = Some(PlayerId(*p as u8));
+        }
         ctx
     }
 
