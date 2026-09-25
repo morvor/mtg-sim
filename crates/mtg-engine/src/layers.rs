@@ -129,6 +129,11 @@ impl Game {
     /// Emblems, planes, phenomena, schemes, vanguards, face-up conspiracies and dungeons
     /// have abilities that function in the command zone (CR 114.4, 311, 312, 313, 314, 315, 309).
     fn command_object_functions(&self, obj: &GameObject) -> bool {
+        // A face-down card in the command zone (a card in a planar or scheme deck, a
+        // hidden agenda) has no functioning abilities.
+        if obj.face_down {
+            return false;
+        }
         obj.kind == ObjKind::Emblem
             || [
                 CardType::Plane,

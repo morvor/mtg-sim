@@ -230,6 +230,7 @@ impl TestGame {
             }
             Zone::Exile => self.g.exile.push(id),
             Zone::Command => self.g.command.push(id),
+            Zone::Outside(q) => self.g.players[q.idx()].sideboard.push(id),
             _ => {}
         }
         self.g.recompute();
