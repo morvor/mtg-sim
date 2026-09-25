@@ -355,6 +355,45 @@ fn multiple_instances_of_convoke_are_redundant() {
 }
 
 #[test]
+fn the_next_spell_can_be_given_convoke() {
+    cr!("702.51a", "702.51d");
+    ruling!(
+        "Wand of the Worldsoul",
+        "If the next spell you cast after Wand of the Worldsoul's ability resolves already has convoke, giving it convoke again doesn't have any real benefit."
+    );
+    assert_supported("Wand of the Worldsoul");
+    let mut t = TestGame::new(2);
+    let wand = t.battlefield(P0, "Wand of the Worldsoul");
+    let c: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let giant = t.hand(P0, "Hill Giant");
+    // "{T}: The next spell you cast this turn has convoke."
+    t.activate(P0, wand, 1, &[]).unwrap();
+    t.resolve_all();
+    // Hill Giant {3}{R} is castable: two creatures and... not enough.
+    let castable = |t: &mut TestGame, x: ObjectId| {
+        t.g.legal_actions(P0)
+            .iter()
+            .any(|a| matches!(a, Action::Cast { card, .. } if *card == x))
+    };
+    assert!(!castable(&mut t, giant));
+    t.lands(P0, "Mountain", 2);
+    assert!(castable(&mut t, giant));
+    convoke_with(&mut t, P0, &c);
+    t.cast(P0, giant).go();
+    assert!(c.iter().all(|x| tapped(&t, *x)));
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // Only the next spell had it; Stoke the Flames has its own convoke (once).
+    t.clear_answers();
+    let stoke = t.hand(P0, "Stoke the Flames");
+    let more: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Hill Giant")).collect();
+    convoke_with(&mut t, P0, &more);
+    t.cast(P0, stoke).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
 fn convoke_from_two_sources_is_redundant() {
     cr!("702.51d");
     ruling!(

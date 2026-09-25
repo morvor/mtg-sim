@@ -108,20 +108,71 @@ fn spells_you_cast_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec
     } else {
         l.split_once(" spells you cast have ")?
     };
+    let kws = spell_keywords(kw_text, ctx, false)?;
+    let mut parts = spell_quality(subject)?;
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(parts),
+        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spells you cast have [convoke/storm/affinity]", priority: 100, parse: spells_you_cast_have } }
+
+/// Keywords of CR 702.38–51 that can be given to spells: convoke, storm, affinity (and
+/// sunburst for the next spell, CR 702.44a, which works as the spell's permanent enters).
+fn spell_keywords(s: &str, ctx: &CompileContext, sunburst: bool) -> Option<Vec<Keyword>> {
     let mut kws = Vec::new();
-    for a in crate::oracle::keywords::parse_keyword_line(kw_text, ctx)? {
+    for a in crate::oracle::keywords::parse_keyword_line(s, ctx)? {
         match &a.kind {
             AbilityKind::Keyword(k)
                 if matches!(
                     k.kind,
                     KeywordKind::Convoke | KeywordKind::Storm | KeywordKind::Affinity
-                ) =>
+                ) || (sunburst && k.kind == KeywordKind::Sunburst) =>
             {
                 kws.push(k.clone())
             }
             _ => return None,
         }
     }
+    (!kws.is_empty()).then_some(kws)
+}
+
+/// "The next [quality] spell you cast this turn has [keyword]", "When you next cast [a
+/// quality] spell this turn, that spell gains [keyword]" (CR 611.2f).
+fn next_spell_has(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (subject, kw_text) = if let Some(r) = l.strip_prefix("the next ") {
+        match r.strip_prefix("spell you cast this turn has ") {
+            Some(k) => ("", k),
+            None => r.split_once(" spell you cast this turn has ")?,
+        }
+    } else {
+        let r = l.strip_prefix("when you next cast ")?;
+        let r = r
+            .strip_prefix("an ")
+            .or_else(|| r.strip_prefix("a "))
+            .unwrap_or(r);
+        r.split_once(" spell this turn, that spell gains ")?
+    };
+    let subject = if subject == "spell" { "" } else { subject };
+    let kws = spell_keywords(kw_text, b.ctx, true)?;
+    let mut parts = spell_quality(subject)?;
+    parts.push(Filter::Spell);
+    Some(Effect::NextSpell {
+        filter: Filter::And(parts),
+        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+        expires: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "the next spell you cast this turn has [keyword]", priority: 100, parse: next_spell_has } }
+
+/// The qualities of "[quality] spells": "instant and sorcery" (either type), "artifact
+/// creature" (both), "noncreature", "legendary creature", "multicolored", "red".
+fn spell_quality(subject: &str) -> Option<Vec<Filter>> {
     // "Instant and sorcery" is either type; "artifact creature" is both.
     let words: Vec<&str> = subject.split_whitespace().collect();
     let either = words.iter().any(|w| *w == "and" || *w == "or");
@@ -164,16 +215,8 @@ fn spells_you_cast_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec
     } else {
         parts.extend(types);
     }
-    parts.push(Filter::Spell);
-    parts.push(Filter::ControlledBy(PlayerRel::You));
-    let s = StaticAbility::new(StaticEffect::Continuous {
-        affected: Filter::And(parts),
-        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
-    });
-    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+    Some(parts)
 }
-
-inventory::submit! { StaticPattern { name: "spells you cast have [convoke/storm/affinity]", priority: 100, parse: spells_you_cast_have } }
 
 /// "each creature that convoked it" (CR 702.51c).
 fn convoked_it() -> Filter {

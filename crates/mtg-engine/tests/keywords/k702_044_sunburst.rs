@@ -208,6 +208,45 @@ fn modular_sunburst_gives_plus_one_counters_even_to_a_noncreature() {
 }
 
 #[test]
+fn two_solar_arrays_give_the_next_artifact_spell_two_instances() {
+    cr!("702.44d");
+    ruling!(
+        "Solar Array",
+        "If a spell has multiple instances of sunburst, each one applies. For example, if you activate the abilities of two Solar Arrays and then cast Selfcraft Mechan (an artifact creature), it will have two instances of sunburst and will thus enter with two +1/+1 counters on it for each color of mana spent to cast it."
+    );
+    assert_supported("Solar Array");
+    let mut t = TestGame::new(2);
+    let a1 = t.battlefield(P0, "Solar Array");
+    let a2 = t.battlefield(P0, "Solar Array");
+    // "{T}: Add one mana of any color. When you next cast an artifact spell this turn,
+    // that spell gains sunburst."
+    t.activate(P0, a1, 0, &[]).unwrap();
+    t.activate(P0, a2, 0, &[]).unwrap();
+    let mut colors: Vec<mana::ManaType> = t
+        .g
+        .player(P0)
+        .mana_pool
+        .mana
+        .iter()
+        .map(|m| m.ty)
+        .collect();
+    assert_eq!(colors.len(), 2);
+    colors.push(mana::ManaType::U);
+    colors.sort();
+    colors.dedup();
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 1);
+    // Selfcraft Mechan {3}{U}.
+    let mechan = t.hand(P0, "Selfcraft Mechan");
+    t.cast(P0, mechan).go();
+    // (Its own enters ability: don't sacrifice an artifact.)
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    let m = t.named_on_battlefield("Selfcraft Mechan")[0];
+    assert_eq!(p1p1(&t, m), 2 * colors.len() as u32);
+}
+
+#[test]
 fn each_instance_of_sunburst_works_separately() {
     cr!("702.44d");
     let def = with_cost(

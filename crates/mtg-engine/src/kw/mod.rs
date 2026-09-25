@@ -627,6 +627,36 @@ pub fn with_granted_spell_keywords(
             }
         }
     }
+    // "The next [quality] spell you cast this turn has [keyword]" (CR 611.2f).
+    let view = AsSpell {
+        id: card,
+        chars,
+        caster: p,
+    };
+    for e in &g.next_spell_effects {
+        let expired = matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+            && e.created_turn != g.turn.number;
+        let ctx = crate::eval::Ctx::new(e.source, e.player);
+        if e.player != p
+            || expired
+            || !g.matches_view(
+                &view,
+                card,
+                &crate::casting::as_spell_filter(&e.filter),
+                &ctx,
+            )
+        {
+            continue;
+        }
+        for m in &e.mods {
+            if let Modification::AddKeyword(k) = m {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
     out
 }
 

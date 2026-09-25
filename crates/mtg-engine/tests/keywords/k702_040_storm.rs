@@ -207,6 +207,36 @@ fn spells_given_storm_have_it_as_they_are_cast() {
 }
 
 #[test]
+fn the_next_spell_can_be_given_storm() {
+    cr!("702.40a");
+    ruling!(
+        "Crackling Spellslinger",
+        "The copies of a spell with storm created by its storm ability are put directly onto the stack. They aren’t cast and won’t be counted by other spells with storm cast later in the turn."
+    );
+    assert_supported("Crackling Spellslinger");
+    let mut t = TestGame::new(2);
+    // Crackling Spellslinger: "When this creature enters, if you cast it, the next
+    // instant or sorcery spell you cast this turn has storm."
+    t.lands(P0, "Mountain", 6);
+    let ss = t.hand(P0, "Crackling Spellslinger");
+    t.cast(P0, ss).go();
+    t.resolve_all();
+    let b = t.hand(P0, "Lightning Bolt");
+    cast_at(&mut t, P0, b, &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Storm").len(), 1);
+    t.resolve_all();
+    // The Spellslinger was cast before it: one copy.
+    assert_eq!(t.life(P1), 14);
+    // Only that spell had storm.
+    let b2 = t.hand(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    cast_at(&mut t, P0, b2, &[Entity::Player(P1)]);
+    t.settle();
+    assert!(triggers_named(&t, "Storm").is_empty());
+}
+
+#[test]
 fn each_instance_of_storm_triggers_separately() {
     cr!("702.40b");
     let def = with_cost(
