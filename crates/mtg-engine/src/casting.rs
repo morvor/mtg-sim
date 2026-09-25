@@ -660,6 +660,40 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.perform_land_play(p, card);
+        Ok(())
+    }
+
+    /// Plays a land during the resolution of a spell or ability that instructs `p` to
+    /// play it ("you may play that card"). Normal timing doesn't apply, but a player can
+    /// play a land only during their own turn and only if they have a land play left; the
+    /// instruction is ignored otherwise (CR 305.2a, 305.2b, 305.3).
+    pub fn play_land_during_resolution(
+        &mut self,
+        p: PlayerId,
+        card: ObjectId,
+    ) -> Result<(), Illegal> {
+        if !self.is_active_player(p) {
+            return Err(Illegal(
+                "a player can play a land only during their turn".into(),
+            ));
+        }
+        if self.player(p).lands_played_this_turn >= self.player(p).land_plays {
+            return Err(Illegal("no land play left this turn".into()));
+        }
+        if self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_))) {
+            return Err(Illegal("can't play lands".into()));
+        }
+        if !self.is_live(card) || !self.card_has_land_face(card) {
+            return Err(Illegal("not a land card".into()));
+        }
+        self.perform_land_play(p, card);
+        Ok(())
+    }
+
+    /// Puts a land being played onto the battlefield; it counts as a land played this turn
+    /// (CR 305.1, 305.2a).
+    fn perform_land_play(&mut self, p: PlayerId, card: ObjectId) {
         let o = self.obj(card);
         let face = if o.chars.is_land() {
             FaceState::Front
@@ -685,7 +719,6 @@ impl Game {
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
-        Ok(())
     }
 
     /// Casts a spell with the given method (CR 601.2).

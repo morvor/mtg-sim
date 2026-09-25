@@ -1397,6 +1397,30 @@ impl Game {
                     let _ = crate::casting::cast_during_resolution(self, p, o, method);
                 }
             }
+            Effect::PlayCard {
+                who,
+                what,
+                free,
+                optional,
+            } => {
+                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                for o in self.resolve_objects(what, ctx) {
+                    if *optional && !self.ask_yes_no(p, Some(o), "Play this card?", true) {
+                        continue;
+                    }
+                    if self.obj(o).chars.is_land() {
+                        // CR 305.2b, 305.3: ignored if the player can't play a land now.
+                        let _ = self.play_land_during_resolution(p, o);
+                        continue;
+                    }
+                    let method = if *free {
+                        CastMethod::Free
+                    } else {
+                        CastMethod::Normal
+                    };
+                    let _ = crate::casting::cast_during_resolution(self, p, o, method);
+                }
+            }
             Effect::GrantPlayPermission {
                 who,
                 what,

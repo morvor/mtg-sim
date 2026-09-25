@@ -2934,6 +2934,15 @@ pub enum Effect {
         free: bool,
         optional: bool,
     },
+    /// "[You] may play that card [without paying its mana cost]" during resolution: a land
+    /// card is played (only during the player's turn with a land play left, CR 305.2b,
+    /// 305.3); any other card is cast (CR 608.2g).
+    PlayCard {
+        who: PlayerRef,
+        what: Sel,
+        free: bool,
+        optional: bool,
+    },
     /// Play a land / cast a spell from exile etc. later: grant a play permission to the
     /// selected cards for a duration.
     GrantPlayPermission {
