@@ -481,10 +481,17 @@ impl Game {
             Sel::Target(slot) => ctx.targets.get(*slot as usize).cloned().unwrap_or_default(),
             Sel::AllTargets => ctx.targets.iter().flatten().copied().collect(),
             Sel::Var(v) => ctx.vars.get(v).cloned().unwrap_or_default(),
+            // CR 603.6: an ability can't find an object that went to a zone hidden from its
+            // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
                 .event
                 .as_ref()
                 .and_then(|e| e.object)
+                .filter(|o| match self.obj(*o).zone {
+                    Zone::Library(_) => false,
+                    Zone::Hand(p) => p == ctx.controller,
+                    _ => true,
+                })
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),

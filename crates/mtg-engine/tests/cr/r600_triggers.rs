@@ -14,9 +14,8 @@ use mtg_engine::types::*;
 use mtg_engine::*;
 
 fn put_onto_battlefield(t: &mut TestGame, p: PlayerId, def: CardDef) -> ObjectId {
-    let id = t
-        .g
-        .create_card_object(std::sync::Arc::new(def), p, Zone::Nowhere);
+    let id =
+        t.g.create_card_object(std::sync::Arc::new(def), p, Zone::Nowhere);
     t.g.move_object_ev(MoveEv {
         obj: id,
         to: Zone::Battlefield,
@@ -55,7 +54,10 @@ fn a_triggered_ability_is_a_trigger_condition_and_an_effect() {
     let AbilityKind::Triggered(tr) = &abilities(&def)[0].kind else {
         panic!("not a triggered ability");
     };
-    assert!(matches!(tr.trigger, TriggerCond::EntersBattlefield(Filter::Source)));
+    assert!(matches!(
+        tr.trigger,
+        TriggerCond::EntersBattlefield(Filter::Source)
+    ));
     assert!(matches!(tr.body.effect, Effect::Draw { .. }));
     let mut t = TestGame::new(2);
     let hand = t.hand_size(P0);
@@ -73,10 +75,17 @@ fn instructions_after_the_effect_function_while_the_ability_is_on_the_stack() {
     tr.cant_be_countered = true;
     t.custom(
         P0,
-        CB::new("Stubborn Watcher").enchantment().ability(trig_from(tr)).build(),
+        CB::new("Stubborn Watcher")
+            .enchantment()
+            .ability(trig_from(tr))
+            .build(),
         Zone::Battlefield,
     );
-    t.custom(P0, watcher("Plain Watcher", creature_enters(), gain(2)), Zone::Battlefield);
+    t.custom(
+        P0,
+        watcher("Plain Watcher", creature_enters(), gain(2)),
+        Zone::Battlefield,
+    );
     t.enter(P1, "Grizzly Bears");
     t.settle();
     assert_eq!(t.stack.len(), 2);
@@ -85,7 +94,10 @@ fn instructions_after_the_effect_function_while_the_ability_is_on_the_stack() {
         .instant()
         .cost("{0}")
         .spell(Body::simple(
-            vec![TargetSpec::one(TargetKind::Ability(Filter::Any), "target ability")],
+            vec![TargetSpec::one(
+                TargetKind::Ability(Filter::Any),
+                "target ability",
+            )],
             Effect::CounterSpell {
                 what: Sel::Target(0),
             },
@@ -153,7 +165,11 @@ fn a_trigger_with_several_conditions_can_ask_whether_all_of_them_happened() {
 fn triggering_does_nothing_until_the_ability_resolves() {
     cr!("603.2", "603.3");
     let mut t = TestGame::new(2);
-    t.custom(P0, watcher("Enter Watcher", creature_enters(), gain(3)), Zone::Battlefield);
+    t.custom(
+        P0,
+        watcher("Enter Watcher", creature_enters(), gain(3)),
+        Zone::Battlefield,
+    );
     t.enter(P1, "Grizzly Bears");
     t.g.flush_events();
     // It has triggered, but it isn't on the stack yet and nothing has happened.
@@ -271,7 +287,10 @@ fn panharmonicon() -> CardDef {
     CB::new("Panharmonicon Test")
         .artifact()
         .ability(stat(StaticEffect::AdditionalTrigger {
-            sources: Filter::and(vec![Filter::Permanent, Filter::ControlledBy(PlayerRel::You)]),
+            sources: Filter::and(vec![
+                Filter::Permanent,
+                Filter::ControlledBy(PlayerRel::You),
+            ]),
             cause: Some(Box::new(TriggerCond::EntersBattlefield(Filter::Or(vec![
                 Filter::Type(CardType::Artifact),
                 Filter::creature(),
@@ -284,7 +303,11 @@ fn panharmonicon() -> CardDef {
 fn an_ability_can_trigger_additional_times() {
     cr!("603.2d");
     let mut t = TestGame::new(2);
-    t.custom(P0, watcher("Enter Watcher", creature_enters(), gain(1)), Zone::Battlefield);
+    t.custom(
+        P0,
+        watcher("Enter Watcher", creature_enters(), gain(1)),
+        Zone::Battlefield,
+    );
     t.custom(P0, panharmonicon(), Zone::Battlefield);
     t.enter(P1, "Grizzly Bears");
     t.resolve_all();
@@ -372,7 +395,10 @@ fn objects_never_visible_to_all_players_dont_trigger() {
             Body::effect(gain(1)),
         );
         tr.zone = zone;
-        CB::new("Hidden Watcher").creature(1, 1).ability(trig_from(tr)).build()
+        CB::new("Hidden Watcher")
+            .creature(1, 1)
+            .ability(trig_from(tr))
+            .build()
     };
     t.custom(P0, cast_watch(FunctionZone::Hand), Zone::Hand(P0));
     t.custom(P0, cast_watch(FunctionZone::Graveyard), Zone::Graveyard(P0));
@@ -403,27 +429,28 @@ fn prevented_or_replaced_events_dont_trigger_anything() {
         .build();
     let d = t.custom(P0, dealer, Zone::Battlefield);
     // "Prevent all damage that would be dealt to players."
-    t.g.replacements.push(mtg_engine::game::ReplacementInstance {
-        id: 900,
-        source: None,
-        controller: P1,
-        timestamp: 1,
-        duration: Duration::EndOfTurn,
-        def: ReplacementDef {
-            event: ReplacementEvent::Damage {
-                source: Filter::Any,
-                to_players: Some(PlayerFilter::Any),
-                to_objects: None,
-                combat_only: false,
+    t.g.replacements
+        .push(mtg_engine::game::ReplacementInstance {
+            id: 900,
+            source: None,
+            controller: P1,
+            timestamp: 1,
+            duration: Duration::EndOfTurn,
+            def: ReplacementDef {
+                event: ReplacementEvent::Damage {
+                    source: Filter::Any,
+                    to_players: Some(PlayerFilter::Any),
+                    to_objects: None,
+                    combat_only: false,
+                },
+                action: ReplacementAction::Prevent,
+                self_replacement: false,
+                optional: false,
             },
-            action: ReplacementAction::Prevent,
-            self_replacement: false,
-            optional: false,
-        },
-        uses: None,
-        objects: None,
-        remaining: None,
-    });
+            uses: None,
+            objects: None,
+            remaining: None,
+        });
     t.activate(P0, d, 0, &[Entity::Player(P1)]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
@@ -440,22 +467,23 @@ fn prevented_or_replaced_events_dont_trigger_anything() {
         ),
         Zone::Battlefield,
     );
-    t.g.replacements.push(mtg_engine::game::ReplacementInstance {
-        id: 901,
-        source: None,
-        controller: P0,
-        timestamp: 2,
-        duration: Duration::EndOfTurn,
-        def: ReplacementDef {
-            event: ReplacementEvent::Draw(PlayerFilter::Any),
-            action: ReplacementAction::Instead(Box::new(Effect::Noop)),
-            self_replacement: false,
-            optional: false,
-        },
-        uses: Some(1),
-        objects: None,
-        remaining: None,
-    });
+    t.g.replacements
+        .push(mtg_engine::game::ReplacementInstance {
+            id: 901,
+            source: None,
+            controller: P0,
+            timestamp: 2,
+            duration: Duration::EndOfTurn,
+            def: ReplacementDef {
+                event: ReplacementEvent::Draw(PlayerFilter::Any),
+                action: ReplacementAction::Instead(Box::new(Effect::Noop)),
+                self_replacement: false,
+                optional: false,
+            },
+            uses: Some(1),
+            objects: None,
+            remaining: None,
+        });
     t.g.draw_cards(P0, 1);
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
@@ -483,7 +511,10 @@ fn do_this_only_once_each_turn_triggers_only_until_the_action_is_taken() {
     tr.do_once_per_turn = true;
     let p = t.custom(
         P0,
-        CB::new("Paragon Test").creature(4, 6).ability(trig_from(tr)).build(),
+        CB::new("Paragon Test")
+            .creature(4, 6)
+            .ability(trig_from(tr))
+            .build(),
         Zone::Battlefield,
     );
     // Declined: the action wasn't taken, so it can trigger again.
@@ -510,7 +541,11 @@ fn do_this_only_once_each_turn_triggers_only_until_the_action_is_taken() {
 fn a_triggered_ability_is_controlled_by_its_sources_controller() {
     cr!("603.3a");
     let mut t = TestGame::new(2);
-    t.custom(P1, watcher("Enter Watcher", creature_enters(), gain(1)), Zone::Battlefield);
+    t.custom(
+        P1,
+        watcher("Enter Watcher", creature_enters(), gain(1)),
+        Zone::Battlefield,
+    );
     // P0's creature entering triggers P1's ability; P1 controls it.
     t.enter(P0, "Grizzly Bears");
     t.settle();
@@ -523,9 +558,21 @@ fn a_triggered_ability_is_controlled_by_its_sources_controller() {
 fn triggers_are_put_on_the_stack_in_apnap_order_each_player_choosing_their_order() {
     cr!("603.3b");
     let mut t = TestGame::new(2);
-    let p0a = t.custom(P0, watcher("P0 First", creature_enters(), gain(1)), Zone::Battlefield);
-    let p0b = t.custom(P0, watcher("P0 Second", creature_enters(), gain(2)), Zone::Battlefield);
-    let p1 = t.custom(P1, watcher("P1 Watcher", creature_enters(), gain(3)), Zone::Battlefield);
+    let p0a = t.custom(
+        P0,
+        watcher("P0 First", creature_enters(), gain(1)),
+        Zone::Battlefield,
+    );
+    let p0b = t.custom(
+        P0,
+        watcher("P0 Second", creature_enters(), gain(2)),
+        Zone::Battlefield,
+    );
+    let p1 = t.custom(
+        P1,
+        watcher("P1 Watcher", creature_enters(), gain(3)),
+        Zone::Battlefield,
+    );
     // P0 (the active player) puts theirs on the stack first, in the chosen order
     // (first = bottom): Second, then First.
     t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
@@ -566,7 +613,11 @@ fn abilities_triggering_on_other_abilities_triggering_go_on_the_stack_after_them
         ))
         .build();
     t.custom(P1, proctor, Zone::Battlefield);
-    t.custom(P0, watcher("Enter Watcher", creature_enters(), gain(4)), Zone::Battlefield);
+    t.custom(
+        P0,
+        watcher("Enter Watcher", creature_enters(), gain(4)),
+        Zone::Battlefield,
+    );
     // A non-entering trigger isn't affected.
     t.enter(P0, "Grizzly Bears");
     t.settle();
@@ -702,7 +753,10 @@ fn a_triggered_ability_without_legal_targets_is_removed_from_the_stack() {
     put_onto_battlefield(&mut t, P0, divider);
     t.settle();
     let top = *t.stack.last().unwrap();
-    assert_eq!(t.obj(top).stack.as_ref().unwrap().chosen[0].divided, vec![vec![1, 2]]);
+    assert_eq!(
+        t.obj(top).stack.as_ref().unwrap().chosen[0].divided,
+        vec![vec![1, 2]]
+    );
 }
 
 fn sovereign() -> CardDef {
@@ -722,7 +776,10 @@ fn sovereign() -> CardDef {
         Cmp::Ge,
         Value::c(40),
     ));
-    CB::new("Sovereign Test").creature(4, 6).ability(trig_from(tr)).build()
+    CB::new("Sovereign Test")
+        .creature(4, 6)
+        .ability(trig_from(tr))
+        .build()
 }
 
 #[test]

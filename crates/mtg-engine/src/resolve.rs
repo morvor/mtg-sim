@@ -56,8 +56,9 @@ impl Game {
                 );
                 ctx.prev_happened = yes;
                 if yes {
+                    // Effects that can fail to do what they say (sacrificing, paying,
+                    // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
-                    ctx.prev_happened = true;
                 }
             }
             Effect::PayOptional {
@@ -211,6 +212,7 @@ impl Game {
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
+                ctx.prev_happened = !all.is_empty();
                 ctx.set_var(vars::IT, all);
             }
             Effect::SacrificeObjects { what } => {
@@ -691,6 +693,7 @@ impl Game {
                     }
                 }
                 ctx.prev_value = discarded.len() as i64;
+                ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
                 ctx.set_var(vars::IT, discarded);
             }
