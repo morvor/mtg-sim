@@ -188,3 +188,91 @@ fn maximum_hand_size_changes_apply_in_timestamp_order() {
     t.settle();
     assert_eq!(t.g.player(P0).max_hand_size, Some(4));
 }
+
+// ---------------------------------------------------------------------------
+// The enchanted creature's controller
+// ---------------------------------------------------------------------------
+
+#[test]
+fn amounts_of_the_enchanted_creatures_controller() {
+    cr!("613.4c", "611.3a");
+    ruling!(
+        "Death's Approach",
+        "The value of X will change as the number of creature cards in the enchanted creature"
+    );
+    compiles("Death's Approach");
+    compiles("Righteous Authority");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let aura = t.battlefield(P0, "Death's Approach");
+    t.attach(aura, Entity::Object(giant));
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Island");
+    t.graveyard(P0, "Grizzly Bears");
+    t.settle();
+    // One creature card in its controller's graveyard.
+    assert_eq!(t.pt(giant), (2, 2));
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Grizzly Bears");
+    t.settle();
+    assert!(!t.on_battlefield(giant));
+    // "for each card in its controller's hand"
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let ra = t.battlefield(P0, "Righteous Authority");
+    t.attach(ra, Entity::Object(bears));
+    t.hand(P1, "Island");
+    t.hand(P1, "Island");
+    t.hand(P0, "Island");
+    t.settle();
+    assert_eq!(t.pt(bears), (4, 4));
+}
+
+#[test]
+fn as_long_as_its_controller_controls_another_creature() {
+    cr!("611.3a");
+    compiles("Favorable Destiny");
+    compiles("Predator's Gambit");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let fd = t.battlefield(P0, "Favorable Destiny");
+    t.attach(fd, Entity::Object(bears));
+    let pg = t.battlefield(P0, "Predator's Gambit");
+    t.attach(pg, Entity::Object(bears));
+    // P0's own creatures don't count: only its controller's.
+    t.battlefield(P0, "Hill Giant");
+    t.settle();
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::Shroud));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Intimidate));
+    t.battlefield(P1, "Llanowar Elves");
+    t.settle();
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Shroud));
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::Intimidate));
+}
+
+#[test]
+fn enchanted_creatures_controller_cant_cast_creature_spells() {
+    cr!("101.2", "601.2");
+    ruling!(
+        "Brand of Ill Omen",
+        "is any spell with the type Creature, even if it has other types"
+    );
+    compiles("Brand of Ill Omen");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let brand = t.battlefield(P0, "Brand of Ill Omen");
+    t.attach(brand, Entity::Object(bears));
+    t.settle();
+    t.lands(P1, "Forest", 1);
+    t.lands(P1, "Mountain", 1);
+    let elves = t.hand(P1, "Llanowar Elves");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let mine = t.hand(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 1);
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(t.cast(P1, elves).try_go().is_err());
+    t.clear_answers();
+    assert!(t.cast(P1, bolt).target(P0).try_go().is_ok());
+    t.resolve_all();
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(t.cast(P0, mine).try_go().is_ok());
+}

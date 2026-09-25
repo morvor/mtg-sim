@@ -929,6 +929,23 @@ pub(crate) fn parse_static_condition(
     if let Some((cond, sel)) = stat_condition_sel(c, it) {
         return Some((cond, Some(sel)));
     }
+    // "its controller controls another creature", "... controls no other creatures"
+    if let (Some(sel), Some(r)) = (it, c.strip_prefix("its controller controls ")) {
+        let (cmp, n, noun) = if let Some(x) = r.strip_prefix("another ") {
+            (Cmp::Ge, 1, x)
+        } else if let Some(x) = r.strip_prefix("no other ") {
+            (Cmp::Eq, 0, x)
+        } else {
+            return None;
+        };
+        let f = color_or_phrase(noun)?;
+        let others = Filter::and(vec![f, Filter::not(Filter::In(Box::new(sel.clone())))]);
+        let cond = Condition::PlayerMatches(
+            PlayerRef::ControllerOf(Box::new(sel.clone())),
+            PlayerFilter::Controls(Box::new(others), cmp, Box::new(Value::c(n))),
+        );
+        return Some((cond, Some(sel.clone())));
+    }
     if let Some(cond) = referent_free_condition(c) {
         return Some((cond, None));
     }

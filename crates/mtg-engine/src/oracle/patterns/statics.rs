@@ -838,6 +838,31 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             }
         }
     }
+    // "card in its controller's hand", "creature card in its controller's graveyard":
+    // the controller of the object "it" refers to.
+    if let Some(sel) = it {
+        let who = || PlayerRef::ControllerOf(Box::new(sel.clone()));
+        match s {
+            "card in its controller's hand" | "cards in its controller's hand" => {
+                return Some(Value::HandSize(who()))
+            }
+            "card in its controller's graveyard" | "cards in its controller's graveyard" => {
+                return Some(Value::GraveyardSize(who()))
+            }
+            _ => {}
+        }
+        for tail in [" in its controller's graveyard"] {
+            if let Some(body) = s.strip_suffix(tail) {
+                let (f, _) = whole_object_phrase(&union_nouns(body))?;
+                if filter_mentions(&f, &|x| {
+                    matches!(x, Filter::InZone(_) | Filter::Spell | Filter::Permanent)
+                }) {
+                    return None;
+                }
+                return Some(Value::CardsInGraveyard(who(), f));
+            }
+        }
+    }
     // "poison counter your opponents have"
     for tail in [" counter your opponents have", " counters your opponents have"] {
         if let Some(kind) = s.strip_suffix(tail) {
@@ -2471,6 +2496,10 @@ fn parse_player_body(s: &str) -> Option<Body> {
         }
     }
     let (who, rest) = [
+        (
+            "enchanted creature's controller ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
+        ),
         ("you ", PlayerFilter::You),
         ("your opponents ", PlayerFilter::Opponent),
         ("each opponent ", PlayerFilter::Opponent),
