@@ -142,12 +142,7 @@ pub fn optional_additional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cos
                     out.push(("kicker".into(), c.clone(), false));
                 }
             }
-            // CR 702.27a buyback
-            KeywordKind::Buyback => {
-                if let Some(c) = &kw.cost {
-                    out.push(("buyback".into(), c.clone(), false));
-                }
-            }
+            // CR 702.27a buyback: see `kw/buyback.rs`.
             _ => {}
         }
     }
@@ -192,16 +187,13 @@ pub fn cost_reductions_from_keywords(
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
     let si = o.stack.as_deref();
-    let paid = |name: &str| si.is_some_and(|s| s.cast.paid.iter().any(|p| p == name));
     if matches!(
         si.map(|s| &s.cast.method),
         Some(CastMethod::Keyword(KeywordKind::Flashback))
     ) {
         return (Zone::Exile, LibraryPosition::Top); // CR 702.34a
     }
-    if paid("buyback") {
-        return (Zone::Hand(o.owner), LibraryPosition::Top); // CR 702.27a
-    }
+    // Buyback (CR 702.27a) and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }

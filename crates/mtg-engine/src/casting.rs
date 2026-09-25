@@ -782,6 +782,11 @@ impl Game {
                 }
                 if n > 0 {
                     cast_info.times_kicked += n;
+                    // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks
+                    // the spell.
+                    if name.as_str() == "multikicker" {
+                        cast_info.paid.push("kicker".into());
+                    }
                 }
             } else if self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
                 && matches!(
