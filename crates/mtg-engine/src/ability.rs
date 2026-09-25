@@ -1515,6 +1515,13 @@ pub enum StaticEffect {
         applies_to: CostTarget,
         types: Vec<ManaType>,
     },
+    /// An action a player may take with this card from their opening hand (CR 103.6):
+    /// with no delayed ability, "you may begin the game with it on the battlefield";
+    /// otherwise "you may reveal this card from your opening hand. If you do, [delayed
+    /// triggered ability]", whose source is this card (CR 603.7g).
+    OpeningHand {
+        delayed: Option<Box<(TriggerCond, Body)>>,
+    },
     /// "You may look at the top card of your library any time."
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."

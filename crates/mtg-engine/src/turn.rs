@@ -183,6 +183,7 @@ impl Game {
         if !self.config.skip_mulligans {
             crate::mulligan::run_mulligans(self);
         }
+        crate::opening_hand::opening_hand_actions(self);
         self.events.clear();
         self.begin_turn(starting, false);
     }
