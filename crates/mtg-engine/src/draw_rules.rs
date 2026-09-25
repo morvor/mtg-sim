@@ -5,6 +5,7 @@
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;
+use crate::object::Characteristics;
 use crate::object::EventInfo;
 use crate::replacement::ReplKey;
 use crate::types::*;
@@ -163,4 +164,63 @@ pub fn replace_multiple_draws(g: &mut Game, p: PlayerId, n: u32) -> Option<Vec<O
         }
         _ => None,
     }
+}
+
+/// A card was drawn (CR 121.1). While a spell is being cast or an ability activated, the
+/// card is kept face down until that's done: it has no characteristics, and effects that
+/// let the player reveal it as it's drawn wait until then (CR 121.8).
+pub fn card_drawn(g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
+    if g.special.casting > 0 {
+        g.special.drawn_while_casting.push(card);
+        g.special.deferred_draws.push((p, card, nth));
+        return;
+    }
+    crate::kw::after_draw(g, p, card, nth);
+}
+
+/// A spell became cast or an ability became activated (CR 601.2i, 602.2e): cards drawn
+/// meanwhile are no longer hidden, and deferred "as you draw it" reveals happen now
+/// (CR 121.8).
+pub fn finish_casting(g: &mut Game) {
+    g.special.casting = g.special.casting.saturating_sub(1);
+    if g.special.casting > 0 {
+        return;
+    }
+    g.special.drawn_while_casting.clear();
+    for (p, card, nth) in std::mem::take(&mut g.special.deferred_draws) {
+        if g.is_live(card) {
+            crate::kw::after_draw(g, p, card, nth);
+        }
+    }
+}
+
+/// A view in which one object has no characteristics.
+struct NoCharacteristics(ObjectId);
+
+fn empty_characteristics() -> &'static Characteristics {
+    static EMPTY: std::sync::OnceLock<Characteristics> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(Characteristics::default)
+}
+
+impl crate::eval::View for NoCharacteristics {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.0 {
+            empty_characteristics()
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        g.obj(id).controller
+    }
+}
+
+/// Whether `card` may be used to pay a cost that needs a card matching `filter`: a card
+/// drawn while the spell is being cast is considered to have no characteristics, so it
+/// can't pay a cost that requires specific characteristics (CR 121.8).
+pub fn usable_for_cost(g: &Game, card: ObjectId, filter: &Filter, ctx: &Ctx) -> bool {
+    if !g.special.drawn_while_casting.contains(&card) {
+        return g.matches(card, filter, ctx);
+    }
+    g.matches_view(&NoCharacteristics(card), card, filter, ctx)
 }

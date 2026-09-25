@@ -255,10 +255,20 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             _ => false,
         }
     }
+    // CR 605.1b: unlike an activated mana ability (CR 605.1a), a triggered mana ability
+    // may also move cards to or from a library ("add {G} and draw a card").
+    fn could_add_mana(e: &Effect) -> bool {
+        match e {
+            Effect::AddMana { .. } => true,
+            Effect::Seq(v) => v.iter().any(could_add_mana),
+            Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
+            _ => false,
+        }
+    }
     from_mana_ability(trigger)
         && body.targets.is_empty()
         && body.modal.is_none()
-        && crate::oracle::effects::is_mana_effect(&body.effect)
+        && could_add_mana(&body.effect)
 }
 
 impl TriggeredAbility {

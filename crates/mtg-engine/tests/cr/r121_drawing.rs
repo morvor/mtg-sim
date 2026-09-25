@@ -523,3 +523,95 @@ fn a_player_looks_at_a_card_as_they_draw_it_before_choosing_to_reveal_it() {
     assert_eq!(t.life(P1), 15);
     assert!(t.in_graveyard(P0, "Thunderous Wrath"));
 }
+
+/// "Whenever you tap a land for mana, add {G} and draw a card." — a triggered mana
+/// ability (CR 605.1b), so it draws while a spell is being cast.
+fn drawing_well() -> CardDef {
+    compile_def(
+        "Drawing Well",
+        "Enchantment",
+        "{2}{G}",
+        "Whenever you tap a land for mana, add {G} and draw a card.",
+    )
+}
+
+/// A {G}{G} instant with an additional cost of discarding a card matching `filter`.
+fn offering(name: &str, filter: Filter) -> CardDef {
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ThisSpell,
+        who: PlayerRel::You,
+        change: CostChange::AdditionalCost(Cost::free().with(CostPart::Discard {
+            filter,
+            count: Value::c(1),
+            random: false,
+        })),
+    }));
+    s.zone = FunctionZone::Anywhere;
+    CB::new(name)
+        .instant()
+        .cost("{G}{G}")
+        .ability(AbilityDef::new(AbilityKind::Static(s), "additional cost"))
+        .spell(Body::effect(gain(3)))
+        .build()
+}
+
+#[test]
+fn a_card_drawn_while_a_spell_is_cast_stays_face_down_until_it_becomes_cast() {
+    cr!("121.8");
+    // The card drawn by the mana ability has no characteristics while the spell is being
+    // cast: it can't be discarded as "a creature card", so the spell can't be cast.
+    let setup = |filter: Filter, bears_in_hand: bool| {
+        let mut t = TestGame::new(2);
+        t.custom(P0, drawing_well(), Zone::Battlefield);
+        t.lands(P0, "Forest", 1);
+        t.library_top(P0, "Island");
+        if bears_in_hand {
+            t.hand(P0, "Grizzly Bears");
+        } else {
+            t.library_top(P0, "Grizzly Bears");
+        }
+        let s = t.custom(P0, offering("Offering", filter), Zone::Hand(P0));
+        (t, s)
+    };
+    let (mut t, s) = setup(Filter::creature(), false);
+    assert!(t.cast(P0, s).try_go().is_err());
+    assert!(t.in_hand(P0, "Offering"));
+    assert_eq!(t.hand_size(P0), 1);
+    // With the creature card already in hand, the same spell can be cast.
+    let (mut t, s) = setup(Filter::creature(), true);
+    t.cast(P0, s).go();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // A cost that doesn't need specific characteristics ("discard a card") can use the
+    // card drawn while casting.
+    let (mut t, s) = setup(Filter::Any, false);
+    t.cast(P0, s).go();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    // Revealing a card as it's drawn waits until the spell has become cast: a miracle
+    // card drawn while casting is revealed afterward.
+    let mut t = TestGame::new(2);
+    t.custom(P0, drawing_well(), Zone::Battlefield);
+    t.lands(P0, "Forest", 1);
+    t.library_top(P0, "Thunderous Wrath");
+    let gift = t.custom(
+        P0,
+        CB::new("Green Gift")
+            .instant()
+            .cost("{G}{G}")
+            .spell(Body::effect(gain(1)))
+            .build(),
+        Zone::Hand(P0),
+    );
+    let log = spy(&mut t, P0, |g, _p, d| match d {
+        Decision::YesNo { prompt, .. } if prompt.contains("Reveal") => Some(format!(
+            "stack={} spell_cast={}",
+            g.stack.len(),
+            g.history.spells_cast.len()
+        )),
+        _ => None,
+    });
+    t.answer_yes(P0, false);
+    t.cast(P0, gift).go();
+    assert_eq!(probe_lines(&log), vec!["stack=1 spell_cast=1".to_string()]);
+}

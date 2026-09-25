@@ -711,8 +711,8 @@ impl Game {
             card: new,
             nth,
         });
-        // "As you draw it" abilities (CR 121.9).
-        crate::kw::after_draw(self, p, new, nth);
+        // "As you draw it" abilities (CR 121.8, 121.9).
+        crate::draw_rules::card_drawn(self, p, new, nth);
         Some(new)
     }
 

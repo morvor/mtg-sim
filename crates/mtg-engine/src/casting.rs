@@ -668,8 +668,13 @@ impl Game {
         opt: CastOption,
     ) -> Result<ObjectId, Illegal> {
         let snapshot = self.clone();
+        self.special.casting += 1;
         match self.cast_inner(p, card, &opt) {
-            Ok(id) => Ok(id),
+            Ok(id) => {
+                // CR 601.2i: the spell became cast.
+                crate::draw_rules::finish_casting(self);
+                Ok(id)
+            }
             Err(e) => {
                 // CR 733: return to the moment before casting was proposed.
                 let agents = self.agents.clone();
@@ -1320,8 +1325,13 @@ impl Game {
             return Err(Illegal("can't activate".into()));
         }
         let snapshot = self.clone();
+        self.special.casting += 1;
         match self.activate_inner(p, src, &a, &act) {
-            Ok(r) => Ok(r),
+            Ok(r) => {
+                // CR 602.2e: the ability became activated.
+                crate::draw_rules::finish_casting(self);
+                Ok(r)
+            }
             Err(e) => {
                 let agents = self.agents.clone();
                 *self = snapshot;
@@ -1637,7 +1647,10 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1651,7 +1664,9 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.cost_zone_cards(p, *zone)
                     .into_iter()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1721,7 +1736,10 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1746,7 +1764,10 @@ impl Game {
                 self.player(p)
                     .hand
                     .iter()
-                    .filter(|c| Some(**c) != src && self.matches(**c, filter, ctx))
+                    .filter(|c| {
+                        Some(**c) != src
+                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                    })
                     .count()
                     >= n
             }
@@ -1783,12 +1804,6 @@ impl Game {
         ctx: &Ctx,
     ) -> Result<PaidCost, Illegal> {
         let mut paid = PaidCost::default();
-        // Check all parts are payable before paying anything.
-        for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, ctx) {
-                return Err(Illegal(format!("can't pay {part:?}")));
-            }
-        }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
@@ -1804,6 +1819,14 @@ impl Game {
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;
             paid.mana_spent = spent;
+        }
+        // Check all other parts are payable before paying any of them. (Mana abilities
+        // activated above may have changed what's available, CR 121.8; callers roll back
+        // a failed payment.)
+        for part in &cost.parts {
+            if !self.cost_part_payable(p, part, src, ctx) {
+                return Err(Illegal(format!("can't pay {part:?}")));
+            }
         }
         // CR 601.2h: costs that involve random elements or moving objects from a library
         // to a public zone are paid after all other costs.
@@ -1896,7 +1919,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough cards");
@@ -1934,7 +1959,9 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .cost_zone_cards(p, *zone)
                     .into_iter()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough cards to exile");
@@ -2052,7 +2079,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 let pick = self.ask_objects(p, src, "Choose cards to reveal (cost)", cands, n, n);
                 paid.objects.extend(pick);
@@ -2079,7 +2108,9 @@ impl Game {
                     .hand
                     .iter()
                     .copied()
-                    .filter(|c| Some(*c) != src && self.matches(*c, filter, ctx))
+                    .filter(|c| {
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                    })
                     .collect();
                 let pick = self.ask_objects(
                     p,

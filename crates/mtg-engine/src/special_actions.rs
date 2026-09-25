@@ -48,6 +48,12 @@ pub struct SpecialState {
     /// Each player's chosen companion (CR 103.2b), and whether they've put it into their
     /// hand (CR 702.139a).
     pub companions: Vec<(PlayerId, ObjectId, bool)>,
+    /// How many spells are being cast / abilities activated right now, the cards drawn
+    /// meanwhile (kept face down until then, CR 121.8), and the "as you draw it" choices
+    /// waiting until then: (player, card, nth card drawn this turn).
+    pub casting: u32,
+    pub drawn_while_casting: Vec<ObjectId>,
+    pub deferred_draws: Vec<(PlayerId, ObjectId, u32)>,
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
