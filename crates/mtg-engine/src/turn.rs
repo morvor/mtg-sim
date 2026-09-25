@@ -625,7 +625,6 @@ impl Game {
     }
 
     fn untap_step_actions(&mut self) {
-        let active = self.turn.active;
         // CR 502.1: phasing.
         for p in self.active_players() {
             crate::keyword_impls::phasing_untap_step(self, p);
@@ -642,7 +641,6 @@ impl Game {
             }
         }
         // CR 502.3: untap (each player on the active team, CR 805.4a).
-        let _ = active;
         for active in self.active_players() {
             self.recompute();
             let mut to_untap: Vec<ObjectId> = self
