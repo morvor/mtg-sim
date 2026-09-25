@@ -384,6 +384,12 @@ impl Game {
         for id in unattach {
             self.unattach(id);
         }
+        // All these actions happen at once (CR 704.3): a permanent put into a graveyard
+        // now leaves with the counters it has (its last known information), e.g. for
+        // modular (CR 702.43a). If it stays (regenerated), the next check removes them.
+        counter_removals.retain(|(id, _, _)| {
+            !to_graveyard.contains(id) && !to_destroy.contains(id) && !sacrifice.contains(id)
+        });
         for (id, k, n) in counter_removals {
             self.remove_counters(Entity::Object(id), &k, n);
         }

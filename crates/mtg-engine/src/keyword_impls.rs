@@ -37,7 +37,18 @@ fn cache() -> &'static Mutex<HashMap<String, Vec<Ability>>> {
 /// The abilities a keyword instance stands for. Cached per distinct keyword instance so
 /// ability uids are stable across recomputation.
 pub fn derived_abilities(kw: &Keyword) -> Vec<Ability> {
-    let key = format!("{kw:?}");
+    derived_abilities_nth(kw, 0)
+}
+
+/// The abilities the `nth` of several identical instances of a keyword on one object
+/// stands for: each instance's abilities are distinct abilities that work separately
+/// (e.g. CR 702.43b, 702.44d), so they get their own uids.
+fn derived_abilities_nth(kw: &Keyword, nth: usize) -> Vec<Ability> {
+    let key = if nth == 0 {
+        format!("{kw:?}")
+    } else {
+        format!("{kw:?}#{nth}")
+    };
     if let Some(v) = cache().lock().unwrap().get(&key) {
         return v.clone();
     }
@@ -87,9 +98,13 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
 /// Appends derived abilities for every keyword on the object (called after layer 6).
 pub fn expand_keywords(chars: &mut Characteristics) {
     let mut extra: Vec<Ability> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
     for a in &chars.abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
-            extra.extend(derived_abilities(k));
+            let key = format!("{k:?}");
+            let nth = seen.iter().filter(|s| **s == key).count();
+            seen.push(key);
+            extra.extend(derived_abilities_nth(k, nth));
         }
     }
     chars.abilities.extend(extra);
