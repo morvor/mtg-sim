@@ -289,3 +289,26 @@ fn effects_can_modify_morph_costs_but_not_the_face_down_casting_cost() {
     assert_eq!(untapped_lands(&t, P0), 0);
     assert!(!t.obj_now(egotist).face_down);
 }
+
+#[test]
+fn the_face_down_characteristics_are_its_copiable_values() {
+    cr!("702.37c");
+    assert_supported("Clone");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let egotist = t.hand(P0, "Scornful Egotist");
+    let egotist = cast_face_down(&mut t, P0, egotist);
+    // A Clone copying the face-down creature is a nameless 2/2 with no abilities (and
+    // isn't face down itself: it can't be turned face up).
+    let clone = t.hand(P0, "Clone");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(egotist)]);
+    t.cast(P0, clone).go();
+    t.resolve();
+    let c = t.obj_now(clone);
+    assert!(!c.face_down);
+    assert_eq!(c.chars.name.as_str(), "");
+    assert_eq!(t.pt(clone), (2, 2));
+    assert!(c.chars.abilities.is_empty());
+    assert!(!can_turn_up(&mut t, P0, clone));
+}
