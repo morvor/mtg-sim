@@ -12,16 +12,9 @@ fn static_ability(effect: StaticEffect, text: &str) -> Ability {
 }
 
 fn keyword_list_mods(s: &str) -> Option<Vec<Modification>> {
-    let s = end(s);
-    let parts: Vec<&str> = s
-        .split(", and ")
-        .flat_map(|p| p.split(" and "))
-        .flat_map(|p| p.split(", "))
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect();
+    let parts = super::keywords::split_keyword_phrases(end(s));
     let mut out = Vec::new();
-    for p in parts {
+    for p in &parts {
         let tl = TypeLine::default();
         let ctx = CompileContext {
             card_name: "",

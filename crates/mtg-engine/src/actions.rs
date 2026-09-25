@@ -1281,7 +1281,9 @@ impl Game {
             }));
         }
         crate::prevention::merge_prevention_events(self, first_event);
-        let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
+        // CR 702.15e: each source with lifelink causes one life gain event, even if it
+        // dealt damage to several recipients at once.
+        let mut lifelink_gains: Vec<(ObjectId, PlayerId, u32)> = Vec::new();
         for e in finals {
             match e {
                 ReplEvent::Damage {
@@ -1292,16 +1294,23 @@ impl Game {
                 } => {
                     if self.valid_damage_recipient(target) && amount > 0 {
                         self.perform_damage(source, target, amount, combat);
-                        // CR 120.3f: lifelink — damage causes the source's controller to gain life.
+                        // CR 120.3f, 702.15b: lifelink — damage causes the source's
+                        // controller (its owner if it has none) to gain that much life.
+                        // The source's last known information is used if it has left its
+                        // zone (702.15c), whatever zone it deals damage from (702.15d).
                         if self.obj(source).has_keyword(KeywordKind::Lifelink) {
-                            lifelink_gains.push((self.obj(source).controller, amount));
+                            let who = self.obj(source).controller;
+                            match lifelink_gains.iter_mut().find(|(s, _, _)| *s == source) {
+                                Some(g) => g.2 += amount,
+                                None => lifelink_gains.push((source, who, amount)),
+                            }
                         }
                     }
                 }
                 other => self.execute_repl_event(other),
             }
         }
-        for (p, n) in lifelink_gains {
+        for (_, p, n) in lifelink_gains {
             self.gain_life(p, n);
         }
         self.run_post_replacement_effects();

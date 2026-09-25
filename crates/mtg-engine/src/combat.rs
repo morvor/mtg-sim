@@ -347,6 +347,9 @@ impl Game {
         }
         // Landwalk (702.14c)
         for kw in ak.keywords().filter(|k| k.kind == KeywordKind::Landwalk) {
+            if crate::kw::landwalk::landwalk_ignored(self, kw) {
+                continue;
+            }
             if let Some(f) = &kw.filter {
                 let ctx = Ctx::new(Some(attacker), a.controller);
                 if self.permanents().any(|o| {
