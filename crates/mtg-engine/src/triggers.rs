@@ -194,6 +194,7 @@ impl Game {
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
+            base.ability_uid = a.uid;
             let mut infos: Vec<EventInfo> = Vec::new();
             for ev in batch {
                 infos.extend(self.trigger_matches_ctx(trigger, &base, ev));
