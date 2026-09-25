@@ -380,7 +380,11 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
-    let body = effects::parse_body(eff_text, ctx)?;
+    // CR 400.7j: "the exiled card" is the card the cost exiled.
+    let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
+        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_MOVED))?,
+        None => effects::parse_body(eff_text, ctx)?,
+    };
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
     // nor its effect moves a card to or from a library.
     let is_mana = effects::is_mana_effect(&body.effect)

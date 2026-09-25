@@ -194,6 +194,126 @@ fn an_ability_can_find_an_aura_that_went_to_the_graveyard_with_its_permanent() {
 }
 
 // ---------------------------------------------------------------------------
+// 400.7h, 400.7i: cards cast or played because of an effect
+// ---------------------------------------------------------------------------
+
+#[test]
+fn other_parts_of_an_effect_find_the_spell_a_card_it_let_you_cast_became() {
+    cr!("400.7h");
+    ruling!(
+        "Goblin Dark-Dwellers",
+        "If an instant or sorcery card you cast this way is countered, it will be exiled."
+    );
+    supported("Goblin Dark-Dwellers");
+    supported("Torrential Gearhulk");
+    // "You may cast target instant card from your graveyard without paying its mana cost.
+    // If that spell would be put into your graveyard, exile it instead."
+    let mut t = TestGame::new(2);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.lands(P0, "Island", 6);
+    let gearhulk = t.hand(P0, "Torrential Gearhulk");
+    t.cast(P0, gearhulk).go();
+    // The enters trigger targets the Bolt; P0 casts it, targeting P1.
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.resolve();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 1, "the Bolt was cast");
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lightning Bolt"));
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+    // Countered, it's exiled too.
+    let mut t = TestGame::new(2);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 5);
+    let dwellers = t.hand(P0, "Goblin Dark-Dwellers");
+    t.cast(P0, dwellers).go();
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.resolve();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    let spell = t.g.stack[0];
+    run_effect(
+        &mut t,
+        P1,
+        None,
+        Effect::CounterSpell {
+            what: in_zone(ZoneKind::Stack, vec![spell]),
+        },
+        &[],
+    );
+    assert!(t.in_exile("Lightning Bolt"));
+    assert_eq!(t.life(P1), 20);
+    // A later Bolt cast normally isn't affected.
+    t.lands(P0, "Mountain", 1);
+    let bolt2 = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt2).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+}
+
+/// "You may play lands from your graveyard. Lands you play this way gain 'When this
+/// permanent is put into a graveyard from the battlefield, exile it and you gain 2
+/// life.'"
+fn graveyard_warden() -> CardDef {
+    let granted = compile_def(
+        "Granted",
+        "Land",
+        "",
+        "When this permanent is put into a graveyard from the battlefield, exile it and you gain 2 life.",
+    );
+    CB::new("Graveyard Warden")
+        .creature(2, 2)
+        .ability(stat(StaticEffect::PlayPermission(PlayPermission {
+            who: PlayerRel::You,
+            zone: ZoneKind::Graveyard,
+            top_only: false,
+            what: Filter::Type(CardType::Land),
+            lands: true,
+            spells: false,
+            cost: None,
+        })))
+        .ability(stat(StaticEffect::CastGrant {
+            zone: ZoneKind::Graveyard,
+            what: Filter::Type(CardType::Land),
+            mods: abilities(&granted)
+                .into_iter()
+                .map(Modification::AddAbility)
+                .collect(),
+        }))
+        .build()
+}
+
+#[test]
+fn other_parts_of_an_effect_find_the_permanent_a_land_played_with_it_became() {
+    cr!("400.7i");
+    let mut t = TestGame::new(2);
+    t.custom(P0, graveyard_warden(), Zone::Battlefield);
+    let forest = t.graveyard(P0, "Forest");
+    t.g.turn.priority = Some(P0);
+    t.g.perform_action(P0, mtg_engine::decision::Action::PlayLand { card: forest })
+        .unwrap();
+    let land = t.named_on_battlefield("Forest")[0];
+    assert_ne!(land, forest);
+    assert!(t.obj(land).chars.abilities.len() > 1, "it gained the ability");
+    // A land played from the hand doesn't.
+    let island = t.hand(P0, "Island");
+    t.g.players[P0.idx()].lands_played_this_turn = 0;
+    t.g.perform_action(P0, mtg_engine::decision::Action::PlayLand { card: island })
+        .unwrap();
+    let island = t.named_on_battlefield("Island")[0];
+    assert_eq!(t.obj(island).chars.abilities.len(), 1);
+    // The granted ability works.
+    t.g.sacrifice(land, P0);
+    t.resolve_all();
+    assert!(t.in_exile("Forest"));
+    assert_eq!(t.life(P0), 22);
+}
+
+// ---------------------------------------------------------------------------
 // 400.7j: other parts of an effect find what it moved to a public zone
 // ---------------------------------------------------------------------------
 
@@ -218,6 +338,19 @@ fn an_effect_finds_the_object_it_moved_to_a_public_zone() {
     assert_eq!(t.obj(back[0]).damage, 0);
     assert_eq!(t.counters(back[0], counters::PLUS1), 0);
     assert_eq!(t.pt(back[0]), (2, 2));
+    // A cost that moves an object to a public zone: the effect finds it. Osgir, the
+    // Reconstructor: "{X}, {T}, Exile an artifact card with mana value X from your
+    // graveyard: Create two tokens that are copies of the exiled card."
+    supported("Osgir, the Reconstructor");
+    let mut t = TestGame::new(2);
+    let osgir = t.battlefield(P0, "Osgir, the Reconstructor");
+    t.graveyard(P0, "Ornithopter");
+    t.answer(P0, DecisionKind::X, Answer::Number(0));
+    t.activate(P0, osgir, 1, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_exile("Ornithopter"));
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 2);
+    assert_eq!(t.named_on_battlefield("Osgir, the Reconstructor").len(), 1);
 }
 
 // ---------------------------------------------------------------------------

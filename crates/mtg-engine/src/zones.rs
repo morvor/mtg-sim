@@ -109,6 +109,57 @@ pub fn own_move_replacements(
         .collect()
 }
 
+/// The objects that paying the cost of the spell or ability being resolved moved to a
+/// public zone, as the new objects they became there ("the exiled card", CR 400.7j).
+pub const COST_MOVED: Var = vars::USER + 130;
+
+/// CR 400.7j: if the cost of a spell or ability causes an object to move to a public zone,
+/// the spell or ability's effects can find that object. Records, for the objects `paid`
+/// used to pay the cost, the new objects they became in public zones.
+pub fn record_cost_moved(
+    g: &Game,
+    paid: &[ObjectId],
+    vars: &mut std::collections::BTreeMap<Var, Vec<Entity>>,
+) {
+    let moved: Vec<Entity> = paid
+        .iter()
+        .filter_map(|o| {
+            let now = g.current(*o);
+            (now != *o && g.is_live(now) && g.obj(now).zone.is_public())
+                .then_some(Entity::Object(now))
+        })
+        .collect();
+    if !moved.is_empty() {
+        vars.insert(COST_MOVED, moved);
+    }
+}
+
+/// For an activated ability whose cost exiles cards from a zone, its effect text with "the
+/// exiled card" turned into "that card", which then refers to [`COST_MOVED`] (CR 400.7j).
+/// `None` if the cost exiles no such card or the text doesn't refer to it.
+pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
+    if !cost
+        .parts
+        .iter()
+        .any(|p| matches!(p, CostPart::Exile { .. }))
+    {
+        return None;
+    }
+    let mut text = effect.to_string();
+    let mut changed = false;
+    for (from, to) in [
+        ("the exiled card", "that card"),
+        ("The exiled card", "That card"),
+        ("the exiled creature", "that creature"),
+    ] {
+        if text.contains(from) {
+            text = text.replace(from, to);
+            changed = true;
+        }
+    }
+    changed.then_some(text)
+}
+
 /// The card types of cards that can't leave the command zone (CR 400.4b).
 const COMMAND_ONLY: [CardType; 5] = [
     CardType::Conspiracy,
@@ -220,6 +271,59 @@ pub fn turn_face_down_in_command(g: &mut Game, id: ObjectId) -> ObjectId {
     g.command.push(new);
     g.dirty = true;
     new
+}
+
+/// CR 400.7i, 611.3d: a land played with a permission from a static ability that also
+/// grants abilities to what's played that way ("you may play lands from your graveyard ...
+/// it gains ...") — the grant applies to the new object the land card became on the
+/// battlefield. `card` is the land card before it was played, `land` the permanent.
+pub fn land_played(g: &mut Game, p: PlayerId, card: ObjectId, land: ObjectId) {
+    let Some(from) = g.obj(card).zone.kind() else {
+        return;
+    };
+    if !g.is_live(land) {
+        return;
+    }
+    let mut grants: Vec<(ObjectId, PlayerId, Vec<Modification>)> = Vec::new();
+    for id in g.live_objects() {
+        let o = g.obj(id);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::CastGrant { zone, what, mods } = &s.effect else {
+                continue;
+            };
+            if *zone != from || o.controller != p || !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let ctx = Ctx::new(Some(id), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            if g.matches(land, what, &ctx) {
+                grants.push((id, o.controller, mods.clone()));
+            }
+        }
+    }
+    let turn = g.turn.number;
+    for (source, controller, mods) in grants {
+        let id = g.new_effect_id();
+        let timestamp = g.new_timestamp();
+        g.effects.push(crate::game::ContinuousEffect {
+            id,
+            source: Some(source),
+            controller,
+            timestamp,
+            // With no duration stated, it lasts for the game (CR 611.3d).
+            duration: Duration::Permanent,
+            affected: crate::game::Affected::Objects(vec![land]),
+            mods,
+            layer1: None,
+            created_turn: turn,
+        });
+    }
+    g.dirty = true;
 }
 
 // ---------------------------------------------------------------------------

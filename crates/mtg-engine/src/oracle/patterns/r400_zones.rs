@@ -225,3 +225,69 @@ fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option
 }
 
 inventory::submit! { StaticPattern { name: "r400 put into a graveyard from anywhere instead", priority: 100, parse: graveyard_from_anywhere } }
+
+/// "you may cast target instant card from your graveyard without paying its mana cost",
+/// "cast it without paying its mana cost": the card is cast while the effect resolves
+/// (CR 608.2g), and the rest of the effect can find the spell it became (CR 400.7h).
+fn cast_without_paying(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (optional, r) = match l.strip_prefix("you may ") {
+        Some(r) => (true, r),
+        None => (false, l),
+    };
+    let r = r.strip_prefix("cast ")?;
+    let saved_targets = b.targets.len();
+    let saved_it = b.it.clone();
+    if let Some((what, rest)) = object_ref(r, b) {
+        let rest = rest.trim();
+        let rest = rest
+            .strip_prefix("from your graveyard")
+            .map(str::trim)
+            .unwrap_or(rest);
+        if rest == "without paying its mana cost" {
+            return Some(Effect::CastCard {
+                who: PlayerRef::You,
+                what,
+                free: true,
+                optional,
+            });
+        }
+    }
+    b.targets.truncate(saved_targets);
+    b.it = saved_it;
+    None
+}
+
+inventory::submit! { EffectPattern { name: "r400 cast without paying its mana cost", priority: 100, parse: cast_without_paying } }
+
+/// "If that spell would be put into your graveyard, exile it instead." after an effect
+/// that cast a card: the replacement effect applies to the spell it became (CR 400.7h).
+fn that_spell_exiled_instead(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !matches!(
+        l,
+        "if that spell would be put into your graveyard, exile it instead"
+            | "if that spell would be put into a graveyard, exile it instead"
+            | "if that spell would be put into your graveyard, exile that card instead"
+    ) {
+        return None;
+    }
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::ZoneChange {
+                filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                from: None,
+                to: Some(ZoneKind::Graveyard),
+            },
+            action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+            self_replacement: false,
+            optional: false,
+        },
+        // Locked onto the spell: once it has left the stack, it's a new object the
+        // effect can't apply to.
+        duration: Duration::Permanent,
+        uses: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "r400 that spell is exiled instead", priority: 100, parse: that_spell_exiled_instead } }

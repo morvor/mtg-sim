@@ -1366,6 +1366,7 @@ impl Game {
                 optional,
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let mut cast: Vec<Entity> = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
@@ -1380,8 +1381,12 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    let _ = crate::casting::cast_during_resolution(self, p, o, method);
+                    if let Ok(spell) = crate::casting::cast_during_resolution(self, p, o, method) {
+                        cast.push(Entity::Object(spell));
+                    }
                 }
+                // CR 400.7h: other parts of the effect can find the spells cast this way.
+                ctx.set_var(vars::IT, cast);
             }
             Effect::GrantPlayPermission {
                 who,

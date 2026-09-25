@@ -688,6 +688,8 @@ impl Game {
             source: None,
         });
         if let Some(n) = new {
+            // CR 400.7i: grants to lands played this way apply to the new permanent.
+            crate::zones::land_played(self, p, card, n);
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
@@ -996,6 +998,12 @@ impl Game {
                 vars::SACRIFICED,
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
+        }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        let mut moved = std::collections::BTreeMap::new();
+        crate::zones::record_cost_moved(self, &paid.objects, &mut moved);
+        if !moved.is_empty() {
+            self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
@@ -1563,6 +1571,8 @@ impl Game {
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
         }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        crate::zones::record_cost_moved(self, &paid.objects, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
         *self.objects[src.0 as usize]
             .activations_this_turn
