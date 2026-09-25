@@ -9,6 +9,7 @@ use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
+use mtg_engine::variants;
 use mtg_engine::*;
 
 fn two_headed() -> TestGame {
@@ -116,4 +117,103 @@ fn a_commander_put_into_a_graveyard_or_exile_may_go_to_the_command_zone() {
     assert!(t.asked()[asked..]
         .iter()
         .all(|(_, d)| !matches!(d, Decision::YesNo { .. })));
+}
+
+// --- 704.6e: schemes ------------------------------------------------------------------
+
+#[test]
+fn a_non_ongoing_scheme_returns_to_the_bottom_once_its_ability_has_left_the_stack() {
+    cr!("704.6e");
+    supported("Roots of All Evil");
+    let mut t = archenemy_game();
+    let deck = add_scheme_deck(
+        &mut t,
+        P0,
+        vec![
+            (*mtg_engine::card::card("Roots of All Evil")).clone(),
+            oracle_card("Idle Scheme", "Scheme", "", None, ""),
+        ],
+    );
+    keyword_action(&mut t, P0, KeywordAction::SetInMotion, 1);
+    // Its "when you set this scheme in motion" ability is waiting to be put on the stack,
+    // then is on the stack: the scheme stays face up.
+    assert!(!t.g.pending_triggers.is_empty());
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    assert!(!t.obj(deck[0]).face_down);
+    assert_eq!(variants::face_up_schemes(&t.g), vec![deck[0]]);
+    // Once it has resolved, the scheme is turned face down and put on the bottom of its
+    // owner's scheme deck.
+    t.resolve();
+    assert!(t.obj(deck[0]).face_down);
+    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], deck[0]]);
+    assert!(variants::face_up_schemes(&t.g).is_empty());
+}
+
+#[test]
+fn a_scheme_waits_for_the_triggered_abilities_of_any_scheme() {
+    cr!("704.6e");
+    let mut t = archenemy_game();
+    let ongoing = oracle_card(
+        "Endless Plot",
+        "Ongoing Scheme",
+        "",
+        None,
+        "When you set this scheme in motion, you gain 2 life.\nAt the beginning of your end step, abandon this scheme.",
+    );
+    let idle = oracle_card("Idle Scheme", "Scheme", "", None, "");
+    let deck = add_scheme_deck(&mut t, P0, vec![ongoing, idle]);
+    // Set two schemes in motion, one at a time (CR 701.32c): the idle scheme has no
+    // abilities of its own, but the ongoing scheme's ability hasn't left the stack yet.
+    keyword_action(&mut t, P0, KeywordAction::SetInMotion, 2);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    assert!(!t.obj(deck[1]).face_down, "idle scheme waits");
+    t.resolve();
+    assert_eq!(t.life(P0), 42);
+    assert!(t.obj(deck[1]).face_down);
+    // An ongoing scheme stays face up...
+    assert_eq!(variants::face_up_schemes(&t.g), vec![deck[0]]);
+    t.settle();
+    assert!(!t.obj(deck[0]).face_down);
+    // ...until it's abandoned (CR 701.33b).
+    to_step_start(&mut t, P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert!(t.obj(deck[0]).face_down);
+    assert_eq!(variants::scheme_deck(&t.g, P0), vec![deck[1], deck[0]]);
+}
+
+// --- 704.6f: phenomena ----------------------------------------------------------------
+
+#[test]
+fn the_planar_controller_planeswalks_away_from_a_phenomenon_after_its_ability() {
+    cr!("704.6f");
+    use crate::r107_planechase::{add_planar_deck, face_up_names, planechase_game, roll};
+    use mtg_engine::planechase::{self, PlanarFace};
+    supported("Mutual Epiphany");
+    let mut t = planechase_game(2, false);
+    add_planar_deck(
+        &mut t,
+        P0,
+        &["Goldmeadow", "Mutual Epiphany", "The Fourth Sphere"],
+    );
+    planechase::set_starting_plane(&mut t.g);
+    roll(&mut t, P0, PlanarFace::Planeswalker);
+    let hands = (t.hand_size(P0), t.hand_size(P1));
+    t.resolve();
+    // P0 planeswalked to the phenomenon: "When you encounter Mutual Epiphany, each player
+    // draws four cards." While that ability is on the stack, the phenomenon stays.
+    assert_eq!(face_up_names(&t), vec!["Mutual Epiphany"]);
+    assert_eq!(t.stack_len(), 1);
+    t.settle();
+    assert_eq!(face_up_names(&t), vec!["Mutual Epiphany"]);
+    // Once it has left the stack, the planar controller planeswalks.
+    t.resolve();
+    assert_eq!(
+        (t.hand_size(P0), t.hand_size(P1)),
+        (hands.0 + 4, hands.1 + 4)
+    );
+    assert_eq!(face_up_names(&t), vec!["The Fourth Sphere"]);
+    assert_eq!(t.stack_len(), 0);
 }

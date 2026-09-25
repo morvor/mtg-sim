@@ -249,6 +249,8 @@ pub fn custom_trigger(
     if let Some(v) = crate::rooms::custom_trigger(name, src, ev)
         .or_else(|| crate::merge::custom_trigger(name, src, ev))
         .or_else(|| crate::dice::custom_trigger(g, name, ctl, ev))
+        .or_else(|| crate::variants::custom_trigger(g, name, src, ctl, ev))
+        .or_else(|| crate::dungeons::custom_trigger(g, name, src, ev))
     {
         return v;
     }

@@ -294,6 +294,9 @@ impl Game {
         let dungeon_done = crate::variants::dungeon_sba(self);
         performed |= dungeon_done;
 
+        // 704.5u (space sculptor) and other keyword-defined SBAs.
+        performed |= crate::kw::state_based_actions(self);
+
         // 704.5v/w: battles with defense 0.
         for &id in &perms {
             let o = self.obj(id);

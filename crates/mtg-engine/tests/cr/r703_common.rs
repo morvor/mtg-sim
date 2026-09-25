@@ -142,3 +142,45 @@ pub fn cast_and_resolve(
     t.resolve_all();
     spell
 }
+
+/// A three-player Archenemy game: P0 is the archenemy, facing P1 and P2 (CR 904.2).
+pub fn archenemy_game() -> TestGame {
+    TestGame::with_config(
+        3,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::Archenemy,
+            teams: Some(vec![0, 1, 1]),
+            ..Default::default()
+        },
+    )
+}
+
+/// Puts scheme cards into `p`'s scheme deck (face down in the command zone), top first.
+pub fn add_scheme_deck(t: &mut TestGame, p: PlayerId, schemes: Vec<CardDef>) -> Vec<ObjectId> {
+    let ids: Vec<ObjectId> = schemes
+        .into_iter()
+        .map(|def| {
+            let id = t.custom(p, def, Zone::Command);
+            t.g.objects[id.0 as usize].face_down = true;
+            id
+        })
+        .collect();
+    t.g.recompute();
+    ids
+}
+
+/// Performs a keyword action (CR 701) for `p`, as a resolving effect would.
+pub fn keyword_action(t: &mut TestGame, p: PlayerId, action: KeywordAction, n: i32) {
+    run_effect(
+        t,
+        p,
+        None,
+        Effect::KeywordAction {
+            action,
+            who: PlayerRef::You,
+            what: Sel::None,
+            n: Value::c(n),
+        },
+        &[],
+    );
+}
