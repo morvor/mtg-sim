@@ -413,7 +413,7 @@ impl Game {
             // permitted by a rule or effect given the characteristics it would have.
             if !in_hand {
                 out.retain(|opt| {
-                    let chars = self.face_characteristics(card, opt.face);
+                    let chars = self.option_characteristics(card, opt);
                     self.permission_allows(p, card, &chars, false)
                 });
             }
@@ -421,10 +421,57 @@ impl Game {
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
         // Lands can't be cast (CR 305.9).
         out.retain(|opt| {
-            let chars = self.face_characteristics(card, opt.face);
+            let chars = self.option_characteristics(card, opt);
             !chars.is_land()
         });
         out
+    }
+
+    /// CR 400.7g: if an effect granted `card` the keyword ability it's being cast with
+    /// ("target card gains flashback", "each instant and sorcery card in your graveyard has
+    /// flashback"), that ability continues to apply to the spell `spell` it became, even
+    /// though the effect no longer applies to that new object.
+    fn keep_granted_casting_keyword(&mut self, card: ObjectId, spell: ObjectId, m: &CastMethod) {
+        let CastMethod::Keyword(k) = *m else {
+            return;
+        };
+        let o = self.obj(spell);
+        if o.chars.has_keyword(k) || o.base.keywords().any(|x| x.kind == k) {
+            return;
+        }
+        let controller = o.controller;
+        let Some(kw) = self
+            .obj(card)
+            .chars
+            .keywords()
+            .find(|x| x.kind == k)
+            .cloned()
+        else {
+            return;
+        };
+        let eid = self.new_effect_id();
+        let timestamp = self.new_timestamp();
+        self.effects.push(ContinuousEffect {
+            id: eid,
+            source: Some(spell),
+            controller,
+            timestamp,
+            duration: Duration::Permanent,
+            affected: Affected::Objects(vec![spell]),
+            mods: vec![Modification::AddKeyword(kw)],
+            layer1: None,
+            created_turn: self.turn.number,
+        });
+        self.recompute();
+    }
+
+    /// Characteristics a card would have as a spell cast this way (CR 601.3e): those of
+    /// the chosen face, or a face-down spell's (CR 702.37c, 708.2a).
+    pub fn option_characteristics(&self, card: ObjectId, opt: &CastOption) -> Characteristics {
+        if let CastMethod::FaceDown(_) = opt.method {
+            return crate::facedown::face_down_characteristics(self, card);
+        }
+        self.face_characteristics(card, opt.face)
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
@@ -445,7 +492,7 @@ impl Game {
     /// Whether the player could begin casting the card this way right now (timing,
     /// permissions, targets, and an optimistic cost check).
     pub fn can_begin_cast(&self, p: PlayerId, card: ObjectId, opt: &CastOption) -> bool {
-        let chars = self.face_characteristics(card, opt.face);
+        let chars = self.option_characteristics(card, opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
@@ -649,7 +696,7 @@ impl Game {
             .into_iter()
             .find(|o| o.method == method)
             .ok_or_else(|| Illegal(format!("no such casting method {method:?}")))?;
-        let chars = self.face_characteristics(card, opt.face);
+        let chars = self.option_characteristics(card, &opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
             return Err(Illegal("timing".into()));
         }
@@ -749,6 +796,7 @@ impl Game {
         // 611.2f).
         crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
+        self.keep_granted_casting_keyword(card, id, &opt.method);
         let chars = self.obj(id).chars.clone();
 
         // 601.2b: optional additional costs (kicker etc.) and X.
@@ -773,6 +821,11 @@ impl Game {
                 }
                 if n > 0 {
                     cast_info.times_kicked += n;
+                    // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks
+                    // the spell.
+                    if name.as_str() == "multikicker" {
+                        cast_info.paid.push("kicker".into());
+                    }
                 }
             } else if self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
                 && matches!(
@@ -798,6 +851,9 @@ impl Game {
                 }
             }
         }
+        // CR 702.33d: a spell whose controller declared the intention to pay any of its
+        // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
+        crate::kw::kicker::record_kicked(&mut cast_info.paid);
         // (Additional costs required by the casting method itself are part of
         // `base_total_cost`.)
         // CR 702.47a: splice (the spell gains text, CR 612.10). Splice affordability
@@ -1195,7 +1251,9 @@ impl Game {
                 return false;
             }
         }
-        if self.activation_prohibited(p, src, act.is_mana_ability) {
+        if self.activation_prohibited(p, src, act.is_mana_ability)
+            || !crate::kw::activation_allowed(self, p, src, a)
+        {
             return false;
         }
         // Split second (CR 702.61b): only mana abilities.

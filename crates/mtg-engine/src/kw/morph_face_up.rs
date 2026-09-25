@@ -14,26 +14,71 @@ use crate::types::*;
 
 pub struct MorphFaceUp;
 
-/// Whether it has megamorph, and the cost to turn `id` face up, if it's a face-down permanent whose
-/// face-up characteristics have morph, megamorph, or disguise.
-fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
-    let o = g.obj(id);
-    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
-        return None;
-    }
-    // The morph cost of what it would be face up: its copiable values as modified by
-    // copy effects (CR 707.3, 708.10), not necessarily the card's.
-    let up = o.face_up_values.as_deref()?;
-    up.abilities.iter().find_map(|a| match &a.kind {
+/// The morph, megamorph, or disguise ability among `abilities`: (kind, is megamorph,
+/// cost).
+fn face_up_keyword(abilities: &[Ability]) -> Option<(KeywordKind, bool, Cost)> {
+    abilities.iter().find_map(|a| match &a.kind {
         AbilityKind::Keyword(k) if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) => {
             let megamorph = k
                 .text
                 .as_deref()
                 .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
-            k.cost.clone().map(|c| (megamorph, c))
+            k.cost.clone().map(|c| (k.kind, megamorph, c))
         }
         _ => None,
     })
+}
+
+/// Whether any continuous effect or static ability in the game could change an object's
+/// abilities (copy, text-, type-, or ability-changing effects, CR 613.1). Without one, a
+/// face-down permanent would have its printed abilities face up.
+fn effects_could_change_abilities(g: &Game) -> bool {
+    let risky = |m: &Modification| {
+        matches!(
+            m.layer(),
+            Layer::L1aCopy | Layer::L3Text | Layer::L4Type | Layer::L6Ability
+        )
+    };
+    g.effects
+        .iter()
+        .any(|e| e.layer1.is_some() || e.mods.iter().any(risky))
+        || g.live_objects().into_iter().any(|id| {
+            g.obj(id).chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Static(s)
+                    if matches!(&s.effect, StaticEffect::Continuous { mods, .. } if mods.iter().any(risky)))
+            })
+        })
+}
+
+/// Whether it has megamorph, and the cost to turn `id` face up, if it's a face-down
+/// permanent that would have morph, megamorph, or disguise if it were face up (CR 702.37e:
+/// if it wouldn't have a morph cost face up, e.g. because of an effect that would apply to
+/// it, it can't be turned face up this way).
+fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
+    let o = g.obj(id);
+    if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
+        return None;
+    }
+    let card = o.card.as_ref()?;
+    let (kind, megamorph, cost) = if effects_could_change_abilities(g) {
+        // The characteristics it would have face up, with the effects that would apply
+        // (including copy effects: a face-down permanent that became a copy of another
+        // has that permanent's copiable values face up, CR 707.3, 708.10).
+        let mut h = g.clone();
+        h.objects[id.0 as usize].face_down = false;
+        h.recompute();
+        face_up_keyword(&h.obj(id).chars.abilities)?
+    } else {
+        // Its printed abilities.
+        face_up_keyword(&card.front().chars.abilities)?
+    };
+    // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
+    let cost = if kind == KeywordKind::Morph {
+        super::modified_keyword_cost(g, o.controller, KeywordKind::Morph, &cost)
+    } else {
+        cost
+    };
+    Some((megamorph, cost))
 }
 
 impl KeywordRules for MorphFaceUp {
@@ -79,6 +124,7 @@ impl KeywordRules for MorphFaceUp {
             return Some(Err(Illegal("not your permanent".into())));
         }
         // CR 107.3d: X is chosen immediately before the cost is paid.
+        let mut chosen_x = None;
         if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
             let max = g.max_mana_available(p) as i64;
             let x = match g.ask(p, Decision::ChooseX { source: obj, max }) {
@@ -86,10 +132,19 @@ impl KeywordRules for MorphFaceUp {
                 _ => 0,
             };
             cost.mana = Some(m.with_x(x as u32));
+            chosen_x = Some(x as i32);
         }
         let ctx = Ctx::new(Some(obj), p);
         if !g.pay_cost(p, &cost, Some(obj), &ctx) {
             return Some(Err(Illegal("can't pay the cost to turn it face up".into())));
+        }
+        // CR 702.37f: other abilities of the permanent that refer to X use the value
+        // chosen as the special action was taken (see `etb_trigger_cast_info`).
+        if let Some(x) = chosen_x {
+            g.objects[obj.0 as usize]
+                .cast
+                .get_or_insert_with(Default::default)
+                .x = Some(x);
         }
         crate::facedown::turn_face_up(g, obj, true);
         // CR 702.37b: megamorph puts a +1/+1 counter on it as it's turned face up.

@@ -228,15 +228,11 @@ impl Game {
             }
         }
 
-        // Layer 1b: face-down (CR 708.2). What it would be face up is kept (CR 708.10).
+        // Layer 1b: face-down (CR 708.2).
         for id in &live {
             if self.obj(*id).face_down {
                 let fd = crate::facedown::face_down_characteristics(self, *id);
-                let o = &mut self.objects[id.0 as usize];
-                let up = std::mem::replace(&mut o.chars, fd);
-                o.face_up_values = Some(Box::new(up));
-            } else {
-                self.objects[id.0 as usize].face_up_values = None;
+                self.objects[id.0 as usize].chars = fd;
             }
         }
         for id in &live {
@@ -315,6 +311,8 @@ impl Game {
             if now != prev {
                 // CR 302.6: a control change resets summoning sickness; CR 506.4: removed from combat.
                 self.objects[id.0 as usize].summoning_sick = true;
+                let ts = self.new_timestamp();
+                self.objects[id.0 as usize].control_since = ts;
                 crate::combat::remove_from_combat(self, id);
                 self.events.push(crate::events::Event::ControlChanged {
                     obj: id,

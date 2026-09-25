@@ -216,7 +216,24 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     if let Some((cond, rest)) = parse_leading_if(l, b) {
+        // "If ~ was kicked, it deals 2 damage ...": the subject "it" is the condition's.
+        let subject_is_source;
+        let rest = match rest.strip_prefix("it ") {
+            Some(r) if l.starts_with("if ~ ") => {
+                subject_is_source = format!("~ {r}");
+                subject_is_source.as_str()
+            }
+            _ => rest,
+        };
+        let first_new_target = b.targets.len();
         let e = parse_clause(rest, b)?;
+        // CR 601.2c, 702.33g: targets of a part that has its effect only if an optional
+        // cost was paid as the spell was cast are chosen only if it was paid.
+        if matches!(cond, Condition::CostPaid(_)) {
+            for spec in &mut b.targets[first_new_target..] {
+                spec.condition = Some(cond.clone());
+            }
+        }
         return Some(Effect::If {
             cond,
             then: Box::new(e),

@@ -675,6 +675,12 @@ impl Game {
                 .event
                 .as_ref()
                 .and_then(|e| e.object)
+                // CR 400.7k: a discarded card that madness exiled and then put into a
+                // public zone can be found there.
+                .map(|o| match self.is_live(o) {
+                    true => o,
+                    false => crate::kw::madness::found_after_madness(self, o).unwrap_or(o),
+                })
                 .filter(|o| match self.obj(*o).zone {
                     Zone::Library(_) => false,
                     Zone::Hand(p) => p == ctx.controller,

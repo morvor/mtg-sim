@@ -629,6 +629,16 @@ impl Game {
                     && locked_ok(m.obj)
                     && self.matches(m.obj, filter, ctx)
             }
+            // "If [a player] would discard [a card]" (CR 701.9): a move from a hand caused
+            // by discarding, e.g. madness (CR 702.35a).
+            (ReplacementEvent::Discard(pf, f), ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                m.cause == MoveCause::Discard
+                    && matches!(o.zone, Zone::Hand(_))
+                    && locked_ok(m.obj)
+                    && self.player_filter_matches(pf, m.by.unwrap_or(o.owner), ctx)
+                    && self.matches(m.obj, f, ctx)
+            }
             (ReplacementEvent::Dies(f), ReplEvent::Move(m)) => {
                 let o = self.obj(m.obj);
                 o.zone == Zone::Battlefield
