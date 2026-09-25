@@ -277,6 +277,7 @@ fn players_of(prev: Option<&Sel>, b: &Builder) -> Option<PlayerRel> {
         Sel::Players(p) => player_rel_of(p),
         Sel::Target(n) => match b.targets.get(*n as usize)?.what {
             TargetKind::Player(_) => Some(PlayerRel::Target(*n)),
+            TargetKind::ObjectOrPlayer(..) => Some(PlayerRel::TargetOrController(*n)),
             _ => None,
         },
         _ => None,
@@ -309,9 +310,11 @@ fn recipient_item(
         let t = rest.trim_start();
         // "each opponent and each creature they control", "target player and each
         // creature that player controls".
-        let (f, rest) =
-            if let Some(r2) = word(t, "they control").or_else(|| word(t, "that player controls")) {
-                let rel = players_of(prev, b)?;
+        let (f, rest) = if let Some(r2) = word(t, "they control")
+            .or_else(|| word(t, "that player controls"))
+            .or_else(|| word(t, "that player or that planeswalker's controller controls"))
+        {
+            let rel = players_of(prev, b)?;
                 (
                     Filter::and(vec![f, Filter::ControlledBy(rel)]),
                     r2.to_string(),

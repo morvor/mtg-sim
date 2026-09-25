@@ -777,6 +777,9 @@ pub enum PlayerRel {
     NotYou,
     /// The player chosen as target in slot N (for "creature target player controls").
     Target(u8),
+    /// The player chosen as target in slot N, or the controller of the permanent chosen
+    /// there ("each creature that player or that planeswalker's controller controls").
+    TargetOrController(u8),
     /// The triggering player.
     TriggerPlayer,
     /// The defending player.

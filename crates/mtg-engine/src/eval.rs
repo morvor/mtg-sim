@@ -121,6 +121,14 @@ impl Game {
                 .targets
                 .get(slot as usize)
                 .is_some_and(|v| v.contains(&Entity::Player(p))),
+            PlayerRel::TargetOrController(slot) => {
+                ctx.targets.get(slot as usize).is_some_and(|v| {
+                    v.iter().any(|e| match e {
+                        Entity::Player(q) => *q == p,
+                        Entity::Object(o) => self.obj(*o).controller == p,
+                    })
+                })
+            }
             PlayerRel::TriggerPlayer => ctx.event.as_ref().and_then(|e| e.player) == Some(p),
             PlayerRel::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerRel::Active => self.turn.active == p,

@@ -669,3 +669,43 @@ fn regeneration_still_works_without_the_restriction() {
     t.resolve();
     assert!(t.on_battlefield(boa), "regenerated");
 }
+
+// ---------------------------------------------------------------------------
+// "Target player or planeswalker and each creature that player or that
+// planeswalker's controller controls"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bonfire_of_the_damned_hits_the_player_and_their_creatures() {
+    cr!("115.1", "120.3");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let big = t.battlefield(P1, "Siege Mastodon");
+    t.lands(P0, "Mountain", 5);
+    let b = t.hand(P0, "Bonfire of the Damned");
+    t.cast(P0, b).target(P1).x(2).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert!(!t.on_battlefield(theirs));
+    assert_eq!(t.obj_now(big).damage, 2);
+    assert!(t.on_battlefield(mine));
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn bonfire_of_the_damned_on_a_planeswalker_hits_its_controllers_creatures() {
+    cr!("115.1", "120.3c");
+    let mut t = TestGame::new(2);
+    let jace = t.enter(P1, "Jace Beleren");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 5);
+    let b = t.hand(P0, "Bonfire of the Damned");
+    t.cast(P0, b).target(jace).x(2).go();
+    t.resolve();
+    assert_eq!(t.counters(jace, "loyalty"), 1);
+    assert_eq!(t.life(P1), 20, "the player isn't dealt damage");
+    assert!(!t.on_battlefield(theirs));
+    assert!(t.on_battlefield(mine));
+}
