@@ -400,8 +400,11 @@ impl Game {
             // CR 702.11b hexproof (and "hexproof from", 702.11d). An ability's qualities
             // are those of its source (CR 113.7).
             let quality_source = source.map(|s| self.ability_source_of(s));
+            // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
+            let ignore_hexproof =
+                crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
             for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
-                if self.are_opponents(by, ob.controller) {
+                if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {
                         None => return true,
                         Some(f) => {
@@ -453,7 +456,12 @@ impl Game {
         for m in &pl.mods {
             match m {
                 PlayerModification::Shroud => return true,
-                PlayerModification::Hexproof if self.are_opponents(by, p) => return true,
+                PlayerModification::Hexproof
+                    if self.are_opponents(by, p)
+                        && !crate::kw::hexproof::hexproof_ignored(self, Entity::Player(p), by) =>
+                {
+                    return true
+                }
                 PlayerModification::ProtectionFrom(f) => {
                     if let Some(s) = source {
                         if self.matches(self.ability_source_of(s), f, &Ctx::new(None, p)) {

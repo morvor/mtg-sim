@@ -222,8 +222,30 @@ fn spells_you_control_have(l: &str, text: &str, _ctx: &CompileContext) -> Option
     )])
 }
 
+/// "Creatures your opponents control with hexproof can be the targets of spells and
+/// abilities you control as though they didn't have hexproof" (Glaring Spotlight), "Your
+/// opponents and permanents your opponents control with hexproof can ..." (CR 702.11e).
+fn as_though_no_hexproof(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let subject = l.strip_suffix(
+        " with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof",
+    )?;
+    let name = match subject {
+        "creatures your opponents control" => {
+            crate::kw::hexproof::OPPONENT_CREATURES_AS_THOUGH_NO_HEXPROOF
+        }
+        "your opponents and permanents your opponents control" => {
+            crate::kw::hexproof::OPPONENTS_AND_PERMANENTS_AS_THOUGH_NO_HEXPROOF
+        }
+        _ => return None,
+    };
+    Some(vec![static_ability(StaticEffect::Custom(name.into()), text)])
+}
+
 inventory::submit! {
     StaticPattern { name: "you have protection from", priority: 100, parse: you_have_protection }
+}
+inventory::submit! {
+    StaticPattern { name: "as though they didn't have hexproof", priority: 100, parse: as_though_no_hexproof }
 }
 inventory::submit! {
     StaticPattern { name: "spells you control have [keywords]", priority: 100, parse: spells_you_control_have }
