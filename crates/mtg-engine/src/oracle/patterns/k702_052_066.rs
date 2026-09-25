@@ -19,6 +19,21 @@ fn keyword_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
         let kw = Keyword::with_cost(KeywordKind::Recover, cost).text(t);
         return Some(compile_keyword(kw, t));
     }
+    // "Suspend X—{X}{B}{B}{B}. X can't be 0." (Roiling Horror): suspend with X time
+    // counters, X being paid in the suspend cost (see `kw/suspend.rs`).
+    if let Some(r) = lower
+        .strip_prefix("suspend x—")
+        .and_then(|r| r.strip_suffix(". x can't be 0"))
+    {
+        let start = "suspend x—".len();
+        let cost = crate::oracle::keywords::parse_keyword_cost(&t[start..start + r.len()])?;
+        if !cost.mana.as_ref().is_some_and(|m| m.has_x()) {
+            return None;
+        }
+        let mut kw = Keyword::with_cost(KeywordKind::Suspend, cost).text(t);
+        kw.n = Some(-1);
+        return Some(compile_keyword(kw, t));
+    }
     // CR 702.56a: "Replicate—Pay {E}{E}{E}." (Reiterating Bolt).
     if let Some(r) = lower.strip_prefix("replicate—pay ") {
         let symbols = &t[t.len() - r.len()..];
@@ -111,6 +126,26 @@ fn spells_have_ripple(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<
 }
 
 inventory::submit! { StaticPattern { name: "spells you cast have ripple N", priority: 100, parse: spells_have_ripple } }
+
+/// "Whenever a time counter is removed from ~ while it's exiled, [effect]" (suspend X
+/// cards such as Roiling Horror): a triggered ability that functions in exile and
+/// triggers once for each time counter removed.
+fn time_counter_removed_while_exiled(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let rest =
+        lower.strip_prefix("whenever a time counter is removed from ~ while it's exiled, ")?;
+    let eff = &t[t.len() - rest.len()..];
+    let body = parse_trigger_body(eff, ctx, Sel::This, PlayerRef::You)?;
+    let mut tr = TriggeredAbility::new(
+        TriggerCond::Custom(crate::kw::suspend::TIME_COUNTER_REMOVED.into()),
+        body,
+    );
+    tr.zone = FunctionZone::Exile;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "whenever a time counter is removed from ~ while it's exiled", priority: 100, parse: time_counter_removed_while_exiled } }
 
 /// "When ~ is put into your hand from your graveyard, [effect]" (Golgari Brownscale, a
 /// dredge card): a leaves-the-graveyard ability, which functions in the graveyard and
