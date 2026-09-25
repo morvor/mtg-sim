@@ -329,7 +329,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         return;
     }
     if name == crate::planechase::ROLL_PLANAR_DIE_EFFECT {
-        crate::planechase::roll_planar_die(g, ctx.controller);
+        // Outside a Planechase game there's no planar die: nothing happens.
+        if crate::planechase::is_planechase(g) {
+            crate::planechase::roll_planar_die(g, ctx.controller);
+        }
         return;
     }
     // "exile them, then meld them into [result]" (CR 701.42a).

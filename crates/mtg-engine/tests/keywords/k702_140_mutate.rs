@@ -41,23 +41,36 @@ fn a_mutating_spell_merges_with_its_target() {
     t.set_step(P0, Step::PrecombatMain);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let ring = t.battlefield(P1, "Sol Ring");
+    // Soul Warden: "Whenever another creature enters, you gain 1 life."
+    t.battlefield(P0, "Soul Warden");
+    // Giant Growth on the Bears before they mutate: +3/+3 until end of turn.
+    let growth = t.hand(P0, "Giant Growth");
+    add_mana(&mut t, P0, ManaType::G, 1);
+    t.cast(P0, growth).target(bears).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (5, 5));
     let spell = mutate_gemrazer(&mut t, bears, true);
-    // The Bears are still the same object: it merged, it didn't enter the battlefield.
+    // The Bears are still the same object: it merged, it didn't enter the battlefield
+    // (Soul Warden didn't trigger) and it isn't summoning sick.
     assert!(t.g.is_live(bears));
     assert_eq!(t.g.current(spell), bears);
     assert_eq!(t.named_on_battlefield("Gemrazer"), vec![bears]);
     assert!(!t.obj(bears).summoning_sick);
     assert_eq!(merge::physical_components(&t.g, bears).len(), 2);
-    // On top: Gemrazer's characteristics, and every component's abilities.
+    // On top: Gemrazer's characteristics, and every component's abilities. The effect
+    // that affected the Bears still applies to the merged permanent (CR 730.2c).
     assert_eq!(t.obj(bears).chars.name, "Gemrazer");
-    assert_eq!(t.pt(bears), (4, 4));
+    assert_eq!(t.pt(bears), (7, 7));
     assert!(t.obj(bears).has_keyword(KeywordKind::Reach));
     assert!(t.obj(bears).has_keyword(KeywordKind::Trample));
-    // "Whenever this creature mutates": the trigger destroys the Sol Ring.
+    // "Whenever this creature mutates": the trigger destroys the Sol Ring. It's the only
+    // trigger: Soul Warden didn't trigger.
     t.answer_targets(P0, &[Entity::Object(ring)]);
     t.settle();
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert!(!t.on_battlefield(ring));
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]

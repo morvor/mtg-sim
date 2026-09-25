@@ -348,7 +348,7 @@ fn a_player_who_cant_lose_life_cant_lower_it_or_pay_life() {
 
 #[test]
 fn exchanging_life_totals() {
-    cr!("119.5");
+    cr!("701.12c");
     let mut t = TestGame::new(2);
     let conduit = t.battlefield(P0, "Soul Conduit");
     t.lands(P0, "Island", 6);

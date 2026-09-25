@@ -98,6 +98,10 @@ fn only_the_active_player_in_a_main_phase_with_an_empty_stack_may_roll() {
 #[test]
 fn rolls_caused_by_effects_dont_count_toward_the_cost() {
     cr!("116.2i", "901.9");
+    ruling!(
+        "Fractured Powerstone",
+        "Rolling the planar die this way doesn't count when determining the cost of the special action"
+    );
     let mut t = planechase_game(2, false);
     // Stairs to Infinity: "Whenever you roll the planar die, draw a card."
     add_planar_deck(&mut t, P0, &["Stairs to Infinity", "Goldmeadow"]);
