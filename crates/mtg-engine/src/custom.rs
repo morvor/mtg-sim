@@ -217,6 +217,11 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
         crate::tokens::create_named_tokens(g, spec, ctx);
         return;
     }
+    // The planeswalking ability (CR 901.8, 701.31).
+    if name == crate::planechase::PLANESWALK_EFFECT {
+        crate::planechase::planeswalk(g, ctx.controller);
+        return;
+    }
     let _ = (g, ctx);
     match name {
         _ => {}

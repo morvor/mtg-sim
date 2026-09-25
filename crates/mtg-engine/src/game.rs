@@ -60,6 +60,9 @@ pub struct GameConfig {
     /// Max decisions per game (safety valve for infinite loops).
     pub max_actions: u64,
     pub seed: u64,
+    /// Planechase: play with a single communal planar deck (CR 901.15).
+    #[serde(default)]
+    pub single_planar_deck: bool,
 }
 
 impl Default for GameConfig {
@@ -78,6 +81,7 @@ impl Default for GameConfig {
             max_turns: 200,
             max_actions: 200_000,
             seed: 0,
+            single_planar_deck: false,
         }
     }
 }

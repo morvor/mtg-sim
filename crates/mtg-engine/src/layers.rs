@@ -174,6 +174,8 @@ impl Game {
             o.chars = o.base.clone();
             o.controller = o.base_controller;
         }
+        // Face-up planes and phenomena are controlled by the planar controller (CR 901.6).
+        crate::planechase::apply_planar_control(self);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self

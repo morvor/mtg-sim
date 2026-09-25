@@ -291,7 +291,8 @@ impl Game {
         }
         let o = self.obj(id);
         match o.zone {
-            Zone::Battlefield | Zone::Stack => view.controller(self, id),
+            // Objects in the command zone have controllers too (CR 109.4c–g).
+            Zone::Battlefield | Zone::Stack | Zone::Command => view.controller(self, id),
             _ => o.owner,
         }
     }

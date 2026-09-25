@@ -55,6 +55,7 @@ pub mod object;
 pub mod opening_hand;
 pub mod oracle;
 pub mod oracle_ext;
+pub mod planechase;
 pub mod prevention;
 pub mod replacement;
 pub mod resolve;
