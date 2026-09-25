@@ -656,6 +656,9 @@ impl Game {
     ) -> Result<ObjectId, Illegal> {
         let from = self.obj(card).zone;
         let from_kind = from.kind();
+        // Abilities that trigger when a card leaves a graveyard look back (CR 603.10a).
+        let lookback = matches!(from, Zone::Graveyard(_))
+            .then(|| std::sync::Arc::new(self.lookback_snapshot()));
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -702,7 +705,7 @@ impl Game {
             to: Zone::Stack,
             cause: MoveCause::Cast,
             by: Some(p),
-            lookback: None,
+            lookback,
         });
         self.recompute();
         let chars = self.obj(id).chars.clone();

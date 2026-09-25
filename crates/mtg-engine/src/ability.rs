@@ -229,6 +229,14 @@ pub struct TriggeredAbility {
     /// Triggered mana abilities (CR 605.1b) resolve immediately.
     pub is_mana_ability: bool,
     pub zone: FunctionZone,
+    /// "This ability can't be countered." — an instruction that functions while the
+    /// ability is on the stack (CR 603.1a).
+    #[serde(default)]
+    pub cant_be_countered: bool,
+    /// "[...] Do this only once each turn.": the ability triggers only if its source's
+    /// controller hasn't taken the optional action this turn (CR 603.2h).
+    #[serde(default)]
+    pub do_once_per_turn: bool,
 }
 
 impl TriggeredAbility {
@@ -240,6 +248,8 @@ impl TriggeredAbility {
             once_per_turn: false,
             is_mana_ability: false,
             zone: FunctionZone::Battlefield,
+            cant_be_countered: false,
+            do_once_per_turn: false,
         }
     }
 }
@@ -1490,6 +1500,12 @@ pub enum StaticEffect {
         who: PlayerRel,
         what: Filter,
     },
+    /// "If [cause] causes a triggered ability of [sources] to trigger, that ability triggers
+    /// an additional time" (CR 603.2d). `cause: None` means any trigger event.
+    AdditionalTrigger {
+        sources: Filter,
+        cause: Option<Box<TriggerCond>>,
+    },
     /// "You may spend [types] mana as though it were mana of any color to pay [costs]"
     /// (CR 602.1e). An empty list means mana of any type.
     SpendAsAnyColor {
@@ -1672,6 +1688,23 @@ pub enum TriggerCond {
     Expend {
         who: PlayerRel,
         n: u32,
+    },
+    /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
+    PhasesOut(Filter),
+    /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).
+    /// "That permanent" is the trigger object.
+    BecomesUnattached(Filter),
+    /// "When you lose control of [filter]" (looks back in time, CR 603.10d).
+    LoseControl(Filter),
+    /// "When/Whenever [filter spell] is countered" (looks back in time, CR 603.10e).
+    SpellCountered(Filter),
+    /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
+    /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
+    /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is
+    /// the trigger spell.
+    AbilityTriggered {
+        cause: Box<TriggerCond>,
+        source: Filter,
     },
     /// Keyword-provided and card-specific triggers implemented in code, by name.
     Custom(SmolStr),
@@ -2018,6 +2051,13 @@ pub enum Effect {
         body: Box<Body>,
         /// Fires once and is then removed.
         once: bool,
+    },
+    /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
+    /// triggers immediately and is put on the stack the next time a player would receive
+    /// priority, with its own targets (CR 603.12). Wrap it in a condition to make it
+    /// trigger only if the action was taken.
+    Reflexive {
+        body: Box<Body>,
     },
     /// "At the beginning of the next end step" / "at end of combat" (common delayed triggers).
     AtNext {

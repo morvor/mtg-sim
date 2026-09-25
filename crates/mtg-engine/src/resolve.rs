@@ -29,6 +29,9 @@ impl Game {
             Effect::Seq(v) => {
                 for x in v {
                     self.exec(x, ctx);
+                    // CR 603.8: state triggers trigger as soon as the game state matches,
+                    // even momentarily during a resolution.
+                    self.check_state_triggers();
                 }
             }
             Effect::If {
@@ -892,6 +895,34 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                });
+            }
+            Effect::Reflexive { body } => {
+                // CR 603.12: a reflexive triggered ability is checked immediately after it's
+                // created; it triggers now and waits to be put on the stack (with its own
+                // targets) until a player would receive priority. It's controlled by the
+                // controller of the resolving spell or ability (CR 603.7d–e).
+                self.trigger_order += 1;
+                let ability = AbilityDef::new(
+                    AbilityKind::Triggered(TriggeredAbility::new(
+                        TriggerCond::Custom("reflexive".into()),
+                        (**body).clone(),
+                    )),
+                    "reflexive trigger",
+                );
+                let src = ctx
+                    .stack_obj
+                    .filter(|s| self.obj(*s).is_spell())
+                    .or(ctx.source);
+                self.pending_triggers.push(PendingTrigger {
+                    source: src.unwrap_or(ObjectId(0)),
+                    controller: ctx.controller,
+                    ability,
+                    event: ctx.event.clone().unwrap_or_default(),
+                    source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
+                    saved: Some(ctx.clone()),
+                    body: Some((**body).clone()),
+                    order: self.trigger_order,
                 });
             }
             Effect::AtNext { step, effect } => {

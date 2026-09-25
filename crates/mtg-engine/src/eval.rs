@@ -696,7 +696,7 @@ impl Game {
                 .map(|s| {
                     self.obj(s)
                         .triggers_this_turn
-                        .get(&ctx.ability_uid)
+                        .get(&(ctx.ability_uid | crate::triggers::turn_keys::RESOLVED))
                         .copied()
                         .unwrap_or(0) as i64
                 })

@@ -998,6 +998,9 @@ impl Game {
         self.log(|_g| format!("{p} loses the game"));
         self.players[p.idx()].has_lost = true;
         self.emit(Event::PlayerLost { player: p });
+        // CR 603.10f: abilities that trigger when a player loses the game look back in
+        // time, before the player's objects leave the game (CR 800.4a).
+        self.flush_events();
         self.after_player_leaves(p);
         self.check_game_over();
     }

@@ -59,10 +59,17 @@ impl Game {
                 finals.push((i, e));
             }
         }
-        // Look back in time for leaves-the-battlefield triggers (CR 603.10a).
+        // Look back in time for leaves-the-battlefield triggers and other zone-change
+        // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
+        // the stack, or a public object being put into a hand or library.
         let leaving = finals.iter().any(|(_, e)| match e {
             ReplEvent::Move(m) => {
-                self.obj(m.obj).zone == Zone::Battlefield && m.to != Zone::Battlefield
+                let from = self.obj(m.obj).zone;
+                from != m.to
+                    && (matches!(from, Zone::Battlefield | Zone::Graveyard(_) | Zone::Stack)
+                        || (from.is_public()
+                            && from != Zone::Nowhere
+                            && matches!(m.to, Zone::Hand(_) | Zone::Library(_))))
             }
             _ => false,
         });
@@ -99,19 +106,12 @@ impl Game {
                 && o.kind != ObjKind::StackAbility)
     }
 
-    /// Snapshot of triggered abilities of permanents on the battlefield right now.
+    /// Snapshot of the triggered abilities that function right now, with their sources and
+    /// controllers, for abilities that look back in time (CR 603.10).
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
-        let mut snap = LookbackSnapshot::default();
-        for o in self.permanents() {
-            for a in &o.chars.abilities {
-                if matches!(a.kind, AbilityKind::Triggered(_))
-                    || crate::triggers::keyword_has_trigger(a)
-                {
-                    snap.sources.push((o.id, o.controller, a.clone()));
-                }
-            }
+        LookbackSnapshot {
+            sources: self.current_trigger_sources(),
         }
-        snap
     }
 
     /// Performs a (final, already-replaced) zone change.
@@ -143,6 +143,12 @@ impl Game {
         }
         let old_controller = self.obj(old_id).controller;
         let old_was_creature = self.obj(old_id).is_creature();
+        // An Aura, Equipment, or Fortification leaving the battlefield becomes unattached.
+        let was_attached_to = if from == Zone::Battlefield {
+            self.obj(old_id).attached_to
+        } else {
+            None
+        };
         let new_id = self.create_incarnation(old_id, m.to);
         {
             let face = m.etb.face;
@@ -330,6 +336,13 @@ impl Game {
             by: m.by,
             lookback,
         });
+        if let Some(host) = was_attached_to {
+            // CR 603.10c: looks back in time (to the snapshot taken for this move).
+            self.emit(Event::Unattached {
+                obj: old_id,
+                from: host,
+            });
+        }
         Some(new_id)
     }
 

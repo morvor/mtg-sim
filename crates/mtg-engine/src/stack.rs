@@ -819,13 +819,45 @@ impl Game {
             self.state_triggers_active.remove(&(src, uid));
             return;
         }
-        if let StackKind::Triggered { .. } = &si.kind {
-            *self.objects[src.0 as usize]
-                .triggers_this_turn
-                .entry(uid)
-                .or_insert(0) += 0;
+        // CR 603.7h: count the resolutions of this ability this turn (this one included).
+        *self.objects[src.0 as usize]
+            .triggers_this_turn
+            .entry(uid | crate::triggers::turn_keys::RESOLVED)
+            .or_insert(0) += 1;
+        let trig = match &si.kind {
+            StackKind::Triggered { ability, .. } => match &ability.kind {
+                AbilityKind::Triggered(t) => Some(t.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        // CR 603.6e: an Aura's ability that triggers on the enchanted permanent leaving the
+        // battlefield can find the new object the Aura card became in its owner's
+        // graveyard.
+        if let Some(t) = &trig {
+            let about_enchanted = match &t.trigger {
+                TriggerCond::LeavesBattlefield(f) | TriggerCond::Dies(f) => {
+                    filter_mentions_attached(f)
+                }
+                _ => false,
+            };
+            let now = self.current(src);
+            if about_enchanted
+                && now != src
+                && self.obj(src).chars.has_subtype("Aura")
+                && matches!(self.obj(now).zone, Zone::Graveyard(_))
+            {
+                ctx.source = Some(now);
+            }
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        // CR 603.2h: remember that a "do this only once each turn" action was taken.
+        if trig.as_ref().is_some_and(|t| t.do_once_per_turn) && ctx.prev_happened {
+            *self.objects[src.0 as usize]
+                .triggers_this_turn
+                .entry(uid | crate::triggers::turn_keys::DONE_ONCE)
+                .or_insert(0) += 1;
+        }
         // CR 608.2n: the ability ceases to exist.
         self.remove_from_stack(id);
         self.state_triggers_active.remove(&(src, uid));
@@ -849,6 +881,14 @@ impl Game {
         let o = &mut self.objects[id.0 as usize];
         if o.kind == ObjKind::StackAbility {
             o.zone = Zone::Nowhere;
+            // CR 603.8: a state trigger can trigger again once it has left the stack
+            // (resolved, been countered, or otherwise removed).
+            if let Some(StackKind::Triggered { source, ability }) =
+                o.stack.as_deref().map(|s| &s.kind)
+            {
+                let key = (*source, ability.uid);
+                self.state_triggers_active.remove(&key);
+            }
         }
         self.saved_ctx.remove(&id);
         self.dirty = true;
@@ -998,6 +1038,14 @@ impl Game {
     }
 
     pub fn cant_be_countered(&self, id: ObjectId) -> bool {
+        // CR 603.1a: "This ability can't be countered."
+        if let Some(StackKind::Triggered { ability, .. }) =
+            self.obj(id).stack.as_deref().map(|s| &s.kind)
+        {
+            if matches!(&ability.kind, AbilityKind::Triggered(t) if t.cant_be_countered) {
+                return true;
+            }
+        }
         self.statics.restrictions.iter().any(|(s, c, r)| match r {
             Restriction::CantBeCountered(f) => self.matches(id, f, &Ctx::new(Some(*s), *c)),
             _ => false,
@@ -1008,6 +1056,15 @@ impl Game {
             }
             _ => false,
         })
+    }
+}
+
+/// Whether a filter refers to the object the source is attached to ("enchanted creature").
+fn filter_mentions_attached(f: &Filter) -> bool {
+    match f {
+        Filter::AttachedToSource => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_attached),
+        _ => false,
     }
 }
 
