@@ -184,7 +184,7 @@ fn spiteful_blow_destroys_a_creature_and_a_land() {
 
 #[test]
 fn psionic_blast_deals_damage_to_any_target_and_to_you() {
-    cr!("120.3a", "120.3e");
+    cr!("120.3a");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 3);
     let b = t.hand(P0, "Psionic Blast");
@@ -481,7 +481,7 @@ fn momentary_blink_returns_a_new_object_that_triggers_again() {
 
 #[test]
 fn turn_to_mist_returns_the_creature_at_the_next_end_step() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Island", 2);
@@ -517,7 +517,7 @@ fn bojuka_bog_exiles_target_players_graveyard() {
 
 #[test]
 fn selesnya_sanctuary_returns_a_land_you_control() {
-    cr!("603.3d");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     let forest = t.battlefield(P0, "Forest");
     t.answer_choose(P0, &[Entity::Object(forest)]);
@@ -595,7 +595,7 @@ fn spinal_embrace_gains_life_equal_to_the_sacrificed_creatures_toughness() {
 
 #[test]
 fn spinal_embrace_gains_nothing_if_the_creature_is_gone() {
-    cr!("603.7a", "701.21a");
+    cr!("603.7c", "701.21a");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Island", 5);
@@ -741,7 +741,7 @@ fn unscrupulous_agent_makes_the_opponent_exile_a_card_of_their_choice() {
 
 #[test]
 fn yaroks_fenlurker_makes_each_opponent_exile_a_card() {
-    cr!("608.2d", "101.4");
+    cr!("608.2d");
     let mut t = TestGame::new(3);
     t.hand(P1, "Lightning Bolt");
     t.hand(P2, "Grizzly Bears");
@@ -818,7 +818,7 @@ fn ratchet_bomb_destroys_permanents_with_mana_value_equal_to_its_counters() {
 
 #[test]
 fn pernicious_deed_destroys_artifacts_creatures_and_enchantments() {
-    cr!("608.2h");
+    cr!("107.3a", "701.8a");
     let mut t = TestGame::new(2);
     let deed = t.battlefield(P0, "Pernicious Deed");
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -835,4 +835,110 @@ fn pernicious_deed_destroys_artifacts_creatures_and_enchantments() {
     }
     assert!(t.on_battlefield(mastodon), "mana value 5");
     assert!(t.on_battlefield(forest));
+}
+
+// ---------------------------------------------------------------------------
+// "Other target" after an earlier target, and replacement effects that aren't
+// regeneration
+// ---------------------------------------------------------------------------
+
+/// The candidates offered by `p`'s ChooseTargets decisions, in order.
+fn target_candidates(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
+    t.asked()
+        .into_iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseTargets { candidates, .. } if q == p => Some(candidates),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn trick_shots_other_target_must_be_a_different_token() {
+    cr!("115.3", "601.2c");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let token_of = |t: &mut TestGame| {
+        let spec = mtg_engine::replacement::TokenCreate {
+            chars: t.g.obj(bears).copiable.clone(),
+            card: t.g.obj(bears).card.clone(),
+            tapped: false,
+            attacking: None,
+            copy_of: Some(bears),
+            copy_exceptions: vec![],
+        };
+        t.g.create_tokens(P1, spec, 1, None)[0]
+    };
+    let a = token_of(&mut t);
+    let b = token_of(&mut t);
+    t.lands(P0, "Mountain", 5);
+    let s = t.hand(P0, "Trick Shot");
+    // Choosing the same token for "up to one other target creature token" isn't allowed.
+    t.cast(P0, s).target(a).target(a).go();
+    let cands = target_candidates(&t, P0);
+    assert_eq!(cands.len(), 2);
+    assert!(cands[0].contains(&Entity::Object(a)));
+    assert_eq!(cands[1], vec![Entity::Object(b)]);
+    t.resolve();
+    assert!(!t.on_battlefield(a));
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
+fn relic_crushs_second_target_is_another_permanent() {
+    cr!("115.3", "701.8a");
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let memnite = t.battlefield(P1, "Memnite");
+    t.lands(P0, "Forest", 5);
+    let r = t.hand(P0, "Relic Crush");
+    t.cast(P0, r).target(thopter).target(memnite).go();
+    let cands = target_candidates(&t, P0);
+    assert_eq!(cands.len(), 2);
+    assert!(!cands[1].contains(&Entity::Object(thopter)));
+    t.resolve();
+    assert!(!t.on_battlefield(thopter));
+    assert!(!t.on_battlefield(memnite));
+}
+
+#[test]
+fn cant_be_regenerated_leaves_other_destruction_replacements_alone() {
+    cr!("701.19c", "614.1a");
+    use mtg_engine::ability::*;
+    use mtg_engine::card::CardDef;
+    use mtg_engine::object::Characteristics;
+    use mtg_engine::types::CardType;
+    let mut t = TestGame::new(2);
+    // A 2/2 with "If this creature would be destroyed, exile it instead." — a
+    // replacement effect that isn't regeneration.
+    let mut chars = Characteristics {
+        name: "Exile Instead".into(),
+        power: Some(2),
+        toughness: Some(2),
+        ..Default::default()
+    };
+    chars.card_types.insert(CardType::Creature);
+    chars.abilities.push(AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::Destroy(Filter::Source),
+                action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        "If this creature would be destroyed, exile it instead.",
+    ));
+    let odd = t.custom(P1, CardDef::custom(chars), Zone::Battlefield);
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Plains", 4);
+    let wrath = t.hand(P0, "Wrath of God");
+    t.cast(P0, wrath).go();
+    t.resolve();
+    // "They can't be regenerated" stops only regeneration shields and effects.
+    assert!(!t.on_battlefield(odd));
+    assert!(t.in_exile("Exile Instead"));
+    assert!(!t.in_graveyard(P1, "Exile Instead"));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    let _ = elves;
 }

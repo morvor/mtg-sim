@@ -44,15 +44,10 @@ fn for_each_value(s: &str, b: &mut Builder) -> Option<Value> {
 
 fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    // ", where x is [value]"
-    let (main, where_x) = match l.split_once(", where x is ") {
-        Some((m, v)) => {
-            let (val, rest) = parse_value_phrase(v, b)?;
-            if !end(&rest).trim().is_empty() {
-                return None;
-            }
-            (m, Some(val))
-        }
+    // ", where x is [value]" (parsed after the subject: "its power" and "that creature's
+    // power" name the creature that gets +X/+X)
+    let (main, where_text) = match l.split_once(", where x is ") {
+        Some((m, v)) => (m, Some(v)),
         None => (l, None),
     };
     // "... [until end of turn] for each [thing] [until end of turn]"
@@ -78,6 +73,16 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_prefix("gets ")
         .or_else(|| rest.strip_prefix("get "))?;
     let (p, t, tail) = parse_pt_mod(r)?;
+    let where_x = match where_text {
+        Some(v) => {
+            let (val, rest) = parse_value_phrase(v, b)?;
+            if !end(&rest).trim().is_empty() {
+                return None;
+            }
+            Some(val)
+        }
+        None => None,
+    };
     if where_x.is_none() && for_each.is_none() && !each {
         // The plain form is handled by the core pump pattern.
         return None;

@@ -46,7 +46,7 @@ fn bolt(t: &mut TestGame, target: impl Into<Entity>) {
 
 #[test]
 fn dawn_elemental_prevents_all_damage_to_itself() {
-    cr!("615.1a", "615.3");
+    cr!("615.1a");
     let mut t = TestGame::new(2);
     let e = t.battlefield(P0, "Dawn Elemental");
     bolt(&mut t, e);
@@ -56,19 +56,26 @@ fn dawn_elemental_prevents_all_damage_to_itself() {
 
 #[test]
 fn fog_bank_prevents_combat_damage_to_and_by_it_but_not_other_damage() {
-    cr!("615.1a", "510.2");
+    cr!("615.1a", "120.2a", "120.2b");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let fog = t.battlefield(P1, "Fog Bank");
     t.set_step(P0, Step::BeginningOfCombat);
+    // Give the 0/2 Fog Bank some power so the damage it would deal is visible.
+    t.lands(P1, "Forest", 1);
+    let growth = t.hand(P1, "Giant Growth");
+    t.cast(P1, growth).target(fog).go();
+    t.resolve();
+    assert_eq!(t.pt(fog), (3, 5));
     t.attack(&[(bears, Entity::Player(P1))], &[(fog, bears)]);
     assert!(t.on_battlefield(fog));
     assert_eq!(t.obj_now(fog).damage, 0);
-    // Fog Bank deals no damage either (it has 0 power anyway, so check the Bears).
+    // The 3 combat damage Fog Bank would deal to the Bears is prevented too.
+    assert!(t.on_battlefield(bears));
     assert_eq!(t.obj_now(bears).damage, 0);
-    // Noncombat damage isn't prevented.
+    // Noncombat damage isn't prevented (the pumped Fog Bank is a 3/5 this turn).
     bolt(&mut t, fog);
-    assert!(!t.on_battlefield(fog));
+    assert_eq!(t.obj_now(fog).damage, 3);
 }
 
 #[test]
@@ -90,6 +97,7 @@ fn sandskin_prevents_combat_damage_to_and_by_the_enchanted_creature() {
 #[test]
 fn maze_of_ith_untaps_and_neutralizes_an_attacker() {
     cr!("615.1a", "506.4");
+    // (Untapping an attacking creature doesn't remove it from combat.)
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let maze = t.battlefield(P1, "Maze of Ith");
@@ -104,6 +112,7 @@ fn maze_of_ith_untaps_and_neutralizes_an_attacker() {
     t.activate(P1, maze, 0, &[Entity::Object(bears)]).unwrap();
     t.resolve();
     assert!(!t.obj_now(bears).tapped);
+    assert!(t.g.is_attacking(bears));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20);
 }
@@ -130,7 +139,7 @@ fn ethereal_haze_prevents_damage_dealt_by_creatures_only() {
 
 #[test]
 fn defend_the_hearth_prevents_combat_damage_to_players() {
-    cr!("615.1a", "510.2");
+    cr!("615.1a", "120.2a");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let blocker = t.battlefield(P1, "Llanowar Elves");
@@ -191,16 +200,19 @@ fn incendiary_oracle_exiles_creatures_it_dealt_damage_this_turn() {
     cr!("614.1a", "700.4");
     let mut t = TestGame::new(2);
     let oracle = t.battlefield(P0, "Incendiary Oracle");
-    let blocker = t.battlefield(P1, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Llanowar Elves");
     let other = t.battlefield(P1, "Grizzly Bears");
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(oracle, Entity::Player(P1))], &[(blocker, oracle)]);
     // The blocker was dealt damage by the Oracle and died: exiled.
     assert!(!t.on_battlefield(blocker));
-    assert!(t.in_exile("Grizzly Bears"));
-    // Another creature that dies normally goes to the graveyard.
+    assert!(t.in_exile("Llanowar Elves"));
+    assert!(t.on_battlefield(oracle), "the 2/2 Oracle survives the Elves' 1 damage");
+    // With the Oracle still around, a creature it didn't deal damage to goes to the
+    // graveyard as usual.
     bolt(&mut t, other);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(!t.in_exile("Grizzly Bears"));
 }
 
 // ---------------------------------------------------------------------------
@@ -263,4 +275,24 @@ fn leyline_of_punishment_stops_all_prevention() {
     t.resolve();
     bolt(&mut t, bears);
     assert!(!t.on_battlefield(bears));
+}
+
+#[test]
+fn excruciators_damage_ignores_prevention_without_using_up_the_shield() {
+    cr!("615.12");
+    let mut t = TestGame::new(2);
+    let ex = t.battlefield(P0, "Excruciator");
+    let healer = t.battlefield(P1, "Master Healer");
+    // Prevent the next 4 damage that would be dealt to P1 this turn.
+    t.activate(P1, healer, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(ex, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 13, "all 7 damage is dealt");
+    // The shield wasn't reduced: it still prevents damage from another source.
+    t.lands(P0, "Mountain", 1);
+    let b = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 13);
 }

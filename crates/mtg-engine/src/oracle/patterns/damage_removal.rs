@@ -324,7 +324,9 @@ fn recipient_item(
             };
         return Some((Sel::All(f), rest));
     }
+    let before = b.targets.len();
     let (sel, rest) = object_ref(s, b)?;
+    distinct_from_earlier(b, before, s, &rest);
     // A targeted player becomes "that player".
     if let Sel::Target(n) = sel {
         match b.targets[n as usize].what {
@@ -646,11 +648,33 @@ inventory::submit! { EffectPattern { name: "damage_removal: exile instead", prio
 // Destroy / exile / bounce
 // ---------------------------------------------------------------------------
 
+/// "[up to one] other target ..." / "another target ..." after earlier targets of the
+/// same ability: the new targets must be different objects from those (CR 115.3 allows
+/// the same object for different instances of "target" unless the text says otherwise).
+/// `text` is the reference that was parsed and `rest` what followed it.
+fn distinct_from_earlier(b: &mut Builder, before: usize, text: &str, rest: &str) {
+    let text = text.trim();
+    let consumed = text
+        .get(..text.len().saturating_sub(rest.len()))
+        .unwrap_or(text);
+    if before == 0
+        || b.targets.len() == before
+        || !(consumed.contains("other target") || consumed.contains("another target"))
+    {
+        return;
+    }
+    for t in &mut b.targets[before..] {
+        t.distinct_from = (0..before as u8).collect();
+    }
+}
+
 /// Two object references joined by "and": "target creature and target land".
 fn pair_refs(s: &str, b: &mut Builder) -> Option<Sel> {
     let (a, rest) = object_ref(s, b)?;
     let r = rest.trim_start().strip_prefix("and ")?;
+    let before = b.targets.len();
     let (c, tail) = object_ref(r, b)?;
+    distinct_from_earlier(b, before, r, &tail);
     if !end(&tail).is_empty() {
         return None;
     }

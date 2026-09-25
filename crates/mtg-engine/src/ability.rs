@@ -630,8 +630,8 @@ pub mod vars {
     /// Objects dealt damage by the most recent damage effect ("a creature dealt damage
     /// this way").
     pub const DAMAGED: Var = 3;
-    /// Permanents sacrificed to pay the cost of the resolving spell or ability ("the
-    /// sacrificed creature", last known information).
+    /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
+    /// earlier instruction of it ("the sacrificed creature", last known information).
     pub const SACRIFICED: Var = 9;
     /// First user-defined variable.
     pub const USER: Var = 10;

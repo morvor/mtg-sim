@@ -228,19 +228,26 @@ impl Game {
                         chosen.push((p, o));
                     }
                 }
+                let mut sacrificed = Vec::new();
                 for (p, o) in chosen {
                     if let Some(new) = self.sacrifice(o, p) {
                         all.push(Entity::Object(new));
+                        sacrificed.push(Entity::Object(o));
                     }
                     ctx.prev_affected.push(Entity::Object(o));
                 }
                 ctx.prev_value = all.len() as i64;
                 ctx.prev_happened = !all.is_empty();
                 ctx.set_var(vars::IT, all);
+                // "The sacrificed creature" (its last known information).
+                if !sacrificed.is_empty() {
+                    ctx.set_var(vars::SACRIFICED, sacrificed);
+                }
             }
             Effect::SacrificeObjects { what } => {
                 let objs = self.resolve_objects(what, ctx);
                 let mut res = Vec::new();
+                let mut sacrificed = Vec::new();
                 for o in objs {
                     if !self.is_live(o) {
                         continue;
@@ -248,10 +255,14 @@ impl Game {
                     let p = self.obj(o).controller;
                     if let Some(n) = self.sacrifice(o, p) {
                         res.push(Entity::Object(n));
+                        sacrificed.push(Entity::Object(o));
                     }
                 }
                 ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res);
+                if !sacrificed.is_empty() {
+                    ctx.set_var(vars::SACRIFICED, sacrificed);
+                }
             }
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);

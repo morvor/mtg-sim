@@ -63,16 +63,68 @@ fn a_copy_of_fling_deals_the_same_damage() {
 
 #[test]
 fn bushmeat_poacher_gains_life_equal_to_the_sacrificed_creatures_toughness() {
-    cr!("118.8", "602.2b");
+    cr!("602.2b", "608.2h");
     let mut t = TestGame::new(2);
     let poacher = t.battlefield(P0, "Bushmeat Poacher");
     let wall = t.battlefield(P0, "Wall of Stone");
+    t.lands(P0, "Forest", 1);
     t.lands(P0, "Swamp", 1);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(wall).go();
+    t.resolve();
+    assert_eq!(t.pt(wall), (3, 11));
     t.answer_choose(P0, &[Entity::Object(wall)]);
     t.activate(P0, poacher, 0, &[]).unwrap();
     t.resolve();
-    // Wall of Stone is a 0/8.
-    assert_eq!(t.life(P0), 28);
+    // The 0/8 Wall of Stone had toughness 11 when it was sacrificed (last known
+    // information), not the 8 it has in the graveyard.
+    assert_eq!(t.life(P0), 31);
+}
+
+#[test]
+fn feed_the_pack_uses_the_toughness_of_the_creature_sacrificed_on_resolution() {
+    cr!("608.2h", "603.5");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Feed the Pack");
+    let mastodon = t.battlefield(P0, "Siege Mastodon");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(mastodon)]);
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Siege Mastodon"));
+    // Siege Mastodon is a 3/5: five 2/2 Wolves.
+    assert_eq!(t.named_on_battlefield("Wolf Token").len(), 5);
+}
+
+#[test]
+fn tip_the_scales_uses_the_toughness_of_the_creature_it_sacrificed() {
+    cr!("603.12", "608.2h");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let mastodon = t.battlefield(P1, "Siege Mastodon");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Swamp", 3);
+    let s = t.hand(P0, "Tip the Scales");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, s).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // The sacrificed Grizzly Bears had toughness 2: all creatures get -2/-2.
+    assert_eq!(t.pt(mastodon), (1, 3));
+    assert!(!t.on_battlefield(elves));
+}
+
+#[test]
+fn nantuko_mentor_uses_the_target_creatures_power() {
+    cr!("107.3c", "608.2h");
+    let mut t = TestGame::new(2);
+    let mentor = t.battlefield(P0, "Nantuko Mentor");
+    let mastodon = t.battlefield(P0, "Siege Mastodon");
+    t.lands(P0, "Forest", 3);
+    t.activate(P0, mentor, 0, &[Entity::Object(mastodon)]).unwrap();
+    t.resolve();
+    // X is the target's power (3), not the Mentor's (1).
+    assert_eq!(t.pt(mastodon), (6, 8));
 }
 
 // ---------------------------------------------------------------------------
