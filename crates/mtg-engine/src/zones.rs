@@ -7,8 +7,13 @@
 //! * a face-up object in the command zone turned face down becomes a new object (CR 400.9);
 //! * cards outside the game are affected only by their own characteristic-defining
 //!   abilities (CR 400.11c);
-//! * playing with the top card of a library revealed (CR 401.5, 401.6);
-//! * who may look at face-down cards in exile (CR 406.3).
+//! * a moving object's own replacement abilities apply to the move (CR 400.6);
+//! * effects find what a cost moved (CR 400.7j) and grants follow a land played with a
+//!   permission (CR 400.7i);
+//! * playing with the top card of a library revealed, or looking at it (CR 401.5, 401.6);
+//! * objects put onto the stack at the same time (CR 405.3);
+//! * who may look at face-down cards in exile, and choosing them by pile (CR 406.3,
+//!   406.4).
 
 use crate::ability::*;
 use crate::eval::Ctx;
