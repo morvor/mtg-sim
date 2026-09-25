@@ -294,10 +294,26 @@ fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
     } else {
         parse_number(s)?
     };
+    // "three additional time counters"
+    let r = strip(r, "additional").unwrap_or(r);
     let (kind, r) = crate::oracle::costs::counter_kind(r)?;
     let r = strip(r, "counters").or_else(|| strip(r, "counter"))?;
     let tail = on_self(r)?;
     let tail = tail.trim();
+    // "a +1/+1 counter on it plus an additional +1/+1 counter on it for each other
+    // creature you control"
+    if let Some(more) = tail.strip_prefix("plus ") {
+        let Effect::EnterWithCounters { kind: k2, n: n2 } = counters(more, ctx)? else {
+            return None;
+        };
+        if k2 != kind || !more.starts_with("an additional ") {
+            return None;
+        }
+        return Some(Effect::EnterWithCounters {
+            kind,
+            n: Value::Sum(vec![n, n2]),
+        });
+    }
     let n = if tail.is_empty() {
         n
     } else if let Some(t) = tail.strip_prefix("for each ") {
@@ -500,16 +516,29 @@ fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
         }
         return Some(Value::GreatestPower(f));
     }
-    // "the number of creature cards in all graveyards"
+    // "the number of creature cards in all graveyards", "the number of instant and
+    // sorcery cards in all graveyards" (cards of either type)
     if let Some(r) = s
         .strip_prefix("the number of ")
         .and_then(|r| r.strip_suffix(" in all graveyards"))
     {
-        let (f, _, tail) = parse_object_phrase(r)?;
+        let r = r.replacen(" and ", " or ", 1);
+        let (f, _, tail) = parse_object_phrase(&r)?;
         if !end(tail).is_empty() {
             return None;
         }
         return Some(Value::Count(f.in_zone(ZoneKind::Graveyard)));
+    }
+    // "three minus X"
+    if let Some((a, b)) = s.split_once(" minus ") {
+        let (va, ta) = parse_number(a)?;
+        if !ta.trim().is_empty() || b != "x" {
+            return None;
+        }
+        return Some(Value::Diff(Box::new(va), Box::new(Value::X)));
+    }
+    if s == "the total life lost by your opponents this turn" {
+        return Some(Value::Custom("life_lost_by_opponents_this_turn".into()));
     }
     // "the number of other creatures on the battlefield"
     let s2 = s
@@ -587,6 +616,33 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
                 filter: f,
                 count: n,
             }),
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
+    // "you may return a nonland permanent you control to its owner's hand", "you may
+    // sacrifice a creature": an optional cost paid as it enters; "if you do" refers to it.
+    if let Some(r) = l.strip_prefix("you may ") {
+        let (cost, false) = crate::oracle::costs::parse_cost(r)? else {
+            return None;
+        };
+        let simple = cost.mana.is_none()
+            && cost.parts.len() == 1
+            && matches!(
+                cost.parts[0],
+                CostPart::Sacrifice { .. }
+                    | CostPart::Discard { .. }
+                    | CostPart::Exile { .. }
+                    | CostPart::ReturnToHand { .. }
+                    | CostPart::TapUntapped { .. }
+                    | CostPart::PayEnergy(_)
+            );
+        if !simple {
+            return None;
+        }
+        return Some(Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
             then: Box::new(Effect::Noop),
             otherwise: Box::new(Effect::Noop),
         });
@@ -781,6 +837,16 @@ fn etb_condition_atom(c: &str, ctx: &CompileContext) -> Option<Condition> {
     let c = end(c);
     if c.starts_with("you revealed ") && c.ends_with(" this way") {
         return Some(Condition::PrevHappened);
+    }
+    // "you've cast another red spell this turn" (other than the entering spell)
+    if let Some(col) = c
+        .strip_prefix("you've cast another ")
+        .and_then(|r| r.strip_suffix(" spell this turn"))
+        .and_then(Color::from_word)
+    {
+        return Some(Condition::Custom(
+            format!("you_cast_another_spell_this_turn:{}", col.letter()).into(),
+        ));
     }
     // "X is 5 or more": the value of X chosen as the permanent spell was cast (CR 107.3m)
     if let Some(r) = c.strip_prefix("x is ") {

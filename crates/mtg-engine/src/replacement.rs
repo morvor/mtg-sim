@@ -494,7 +494,10 @@ impl Game {
             }
             (ReplacementAction::EnterWithCounters(k, v), ReplEvent::Move(mut m)) => {
                 let mut c = ctx.clone();
-                c.source = Some(m.obj);
+                // The amount is computed for the replacement effect's source: the entering
+                // permanent itself, or e.g. "each other creature you control enters with X
+                // additional counters, where X is the number of counters on ~".
+                c.source = cand.source.or(Some(m.obj));
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;

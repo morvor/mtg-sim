@@ -95,21 +95,62 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
         return None;
     }
     let l = end(l);
+    // "As long as ~ is in your graveyard, each Human creature you control enters with an
+    // additional +1/+1 counter on it." (a static ability functioning from the graveyard)
+    let (l, zone) = match l.strip_prefix("as long as ~ is in your graveyard, ") {
+        Some(r) => (r, FunctionZone::Graveyard),
+        None => (l, FunctionZone::Battlefield),
+    };
     let (subj, rest) = if let Some(r) = l.strip_prefix("each ") {
-        let (s, rest) = r.split_once(" enters with an additional ")?;
+        let (s, rest) = r.split_once(" enters with ")?;
+        // "each creature you control that's a Wolf or a Werewolf"
+        let (s, types) = match s.split_once(" that's a ") {
+            Some((a, b)) => {
+                let mut v = Vec::new();
+                for t in b.split(" or a ").flat_map(|x| x.split(" or an ")) {
+                    v.push(Filter::Subtype(subtype_word(t.trim())?));
+                }
+                (a, Some(Filter::Or(v)))
+            }
+            None => (s, None),
+        };
         let (f, plural, tail) = parse_object_phrase(s)?;
         if plural || !end(tail).is_empty() {
             return None;
         }
+        let f = match types {
+            Some(t) => Filter::and(vec![f, t]),
+            None => f,
+        };
         (f, rest)
     } else {
-        let (s, rest) = l.split_once(" enter with an additional ")?;
+        let (s, rest) = l.split_once(" enter with ")?;
         let f = subject_list(s)?;
         (f, rest)
     };
     if matches!(subj, Filter::Source) {
         return None;
     }
+    // "a number of additional +1/+1 counters on it equal to ~'s toughness"
+    if let Some(r) = rest.strip_prefix("a number of additional ") {
+        let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+        let r = strip(r, "counters")?;
+        let r = r
+            .strip_prefix("on it")
+            .or_else(|| r.strip_prefix("on them"))?;
+        let n = match end(r) {
+            "equal to ~'s power" => Value::PowerOf(Box::new(Sel::This)),
+            "equal to ~'s toughness" => Value::ToughnessOf(Box::new(Sel::This)),
+            _ => return None,
+        };
+        return others_counters_ability(subj, kind, n, zone, text);
+    }
+    // "an additional +1/+1 counter", "two additional +1/+1 counters"
+    let rest = match rest.strip_prefix("an additional ") {
+        Some(r) => r,
+        None if rest.contains(" additional ") => rest,
+        None => return None,
+    };
     // "+1/+1 counter on it", "two +1/+1 counters on them for each ..."
     let (n, r) = match parse_number(rest) {
         Some((n, r)) if !rest.starts_with('+') && !rest.starts_with('-') => (n, r),
@@ -127,6 +168,19 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
         .trim();
     let n = if r.is_empty() {
         n
+    } else if let Some(x) = r.strip_prefix(", where x is ") {
+        // "where X is the number of +1/+1 counters on ~" (~ is this effect's source)
+        if !matches!(n, Value::X) {
+            return None;
+        }
+        let x = end(x);
+        let (k, on) = x
+            .strip_prefix("the number of ")?
+            .split_once(" counters on ")?;
+        if on != "~" || k.contains(' ') {
+            return None;
+        }
+        Value::CountersOn(Box::new(Sel::This), Some(k.into()))
     } else {
         let each = r.strip_prefix("for each ")?;
         let v = match each {
@@ -146,16 +200,35 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
             other => Value::Mul(Box::new(other), Box::new(v)),
         }
     };
+    others_counters_ability(subj, kind, n, zone, text)
+}
+
+fn others_counters_ability(
+    subj: Filter,
+    kind: crate::types::CounterKind,
+    n: Value,
+    zone: FunctionZone,
+    text: &str,
+) -> Option<Vec<Ability>> {
     let def = ReplacementDef {
         event: ReplacementEvent::EntersBattlefield(entering_filter(subj)),
         action: ReplacementAction::EnterWithCounters(kind, n),
         self_replacement: false,
         optional: false,
     };
-    Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
-        text,
-    )])
+    let mut st = StaticAbility::new(StaticEffect::Replacement(def));
+    st.zone = zone;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+/// "As long as ~ is in your graveyard, each Human creature you control enters with an
+/// additional +1/+1 counter on it." (The core would read "as long as" as a condition.)
+fn graveyard_others_enter_with_counters(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    if !lower.starts_with("as long as ~ is in your graveyard, ") {
+        return None;
+    }
+    others_enter_with_counters(&lower, block, ctx)
 }
 
 /// "You may have ~ enter as a copy of any creature on the battlefield." (CR 707.9,
@@ -361,6 +434,9 @@ inventory::submit! {
 }
 inventory::submit! {
     StaticPattern { name: "others enter with additional counters", priority: 100, parse: others_enter_with_counters }
+}
+inventory::submit! {
+    AbilityPattern { name: "others enter with counters (from the graveyard)", priority: 50, parse: graveyard_others_enter_with_counters }
 }
 inventory::submit! {
     AbilityPattern { name: "it becomes day as ~ enters", priority: 50, parse: day_as_enters }

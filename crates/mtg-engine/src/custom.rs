@@ -56,6 +56,14 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
             .iter()
             .filter(|o| g.obj(**o).controller == ctx.controller)
             .count() as i64,
+        // "the total life lost by your opponents this turn"
+        "life_lost_by_opponents_this_turn" => g
+            .history
+            .life_lost
+            .iter()
+            .filter(|(p, _)| g.are_opponents(ctx.controller, **p))
+            .map(|(_, n)| *n as i64)
+            .sum(),
         // Number of spells the controller has cast this turn.
         "spells_you_cast_this_turn" => g
             .history
@@ -69,6 +77,16 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     let _ = (g, ctx);
+    // "you've cast another red spell this turn": a spell of that color (as it was on the
+    // stack) other than the source.
+    if let Some(c) = name.strip_prefix("you_cast_another_spell_this_turn:") {
+        let Some(color) = c.chars().next().and_then(Color::from_letter) else {
+            return false;
+        };
+        return g.history.spells_cast.iter().any(|(p, o)| {
+            *p == ctx.controller && Some(*o) != ctx.source && g.obj(*o).chars.colors.contains(color)
+        });
+    }
     match name {
         // "you attacked this turn" (raid): you declared one or more attackers this turn
         // (CR 508.1).

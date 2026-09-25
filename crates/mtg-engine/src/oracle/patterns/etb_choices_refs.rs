@@ -67,6 +67,11 @@ fn chosen_restrictions(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
             who: PlayerFilter::Opponent,
             what: castable_card(chosen_object_phrase(what)?),
         }
+    } else if let Some(what) = l.strip_prefix("players can't cast ") {
+        Restriction::CantCast {
+            who: PlayerFilter::Any,
+            what: castable_card(chosen_object_phrase(what)?),
+        }
     } else if let Some(r) = l.strip_prefix("activated abilities of ") {
         let (srcs, include_mana) =
             if let Some(x) = r.strip_suffix(" can't be activated unless they're mana abilities") {
@@ -348,4 +353,67 @@ inventory::submit! {
 }
 inventory::submit! {
     TriggerPattern { name: "cast a spell of the chosen ...", priority: 100, parse: cast_spell_suffix_trigger }
+}
+
+/// Values measured for the chosen player (CR 607.2d): "the number of cards in the chosen
+/// player's hand", "the number of nonbasic lands the chosen player controls", "1 plus the
+/// number of green creature cards in the chosen player's graveyard".
+fn chosen_player_value(s: &str) -> Option<Value> {
+    let s = end(s);
+    if let Some((a, b)) = s.split_once(" plus ") {
+        let (va, ta) = parse_number(a)?;
+        if !ta.trim().is_empty() {
+            return None;
+        }
+        return Some(Value::Sum(vec![va, chosen_player_value(b)?]));
+    }
+    let r = s.strip_prefix("the number of ")?;
+    if r == "cards in the chosen player's hand" {
+        return Some(Value::HandSize(PlayerRef::ChosenOpponent));
+    }
+    if let Some(x) = r.strip_suffix(" in the chosen player's graveyard") {
+        let (f, _, tail) = parse_object_phrase(x)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Value::CardsInGraveyard(PlayerRef::ChosenOpponent, f));
+    }
+    let x = r.strip_suffix(" the chosen player controls")?;
+    let (f, _, tail) = parse_object_phrase(x)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Value::Count(Filter::and(vec![
+        f,
+        Filter::ControlledBy(PlayerRel::Chosen),
+    ])))
+}
+
+/// Characteristic-defining abilities using the chosen player: "~'s power and toughness
+/// are each equal to the number of cards in the chosen player's hand." (CR 604.3)
+fn chosen_player_cda(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    let mods = if let Some(r) = l.strip_prefix("~'s power and toughness are each equal to ") {
+        let v = chosen_player_value(r)?;
+        vec![Modification::CdaPT(Some(v.clone()), Some(v))]
+    } else if let Some(r) = l.strip_prefix("~'s power is equal to ") {
+        vec![Modification::CdaPT(Some(chosen_player_value(r)?), None)]
+    } else {
+        return None;
+    };
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods,
+    });
+    s.is_cda = true;
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "CDA from the chosen player", priority: 50, parse: chosen_player_cda }
 }
