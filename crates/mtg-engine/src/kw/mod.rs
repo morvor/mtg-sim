@@ -112,6 +112,11 @@ pub trait KeywordRules: Sync + Send {
     fn block_allowed(&self, g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
         true
     }
+    /// Whether `p` may activate the activated ability `a` of `src` as far as this
+    /// implementation is concerned (e.g. "Players can't cycle cards", CR 702.29f).
+    fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+        true
+    }
     fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
         true
     }
@@ -356,6 +361,12 @@ pub fn block_allowed(g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
     registry()
         .iter()
         .all(|r| r.block_allowed(g, blocker, attacker))
+}
+
+pub fn activation_allowed(g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.activation_allowed(g, p, src, a))
 }
 
 pub fn attack_declaration_ok(g: &Game, decl: &[(ObjectId, Entity)]) -> bool {

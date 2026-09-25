@@ -8,9 +8,16 @@ use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
 
+/// "with an activated ability that isn't a mana ability" (e.g. cycling, which exists in
+/// every zone, CR 702.29b).
+pub const HAS_NONMANA_ACTIVATED_ABILITY: &str = "has_nonmana_activated_ability";
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     match name {
+        HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
+            |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
+        ),
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
         // "Equipment attached to it" where "it" is each object an effect applies to.

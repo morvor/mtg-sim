@@ -1209,7 +1209,9 @@ impl Game {
                 return false;
             }
         }
-        if self.activation_prohibited(p, src, act.is_mana_ability) {
+        if self.activation_prohibited(p, src, act.is_mana_ability)
+            || !crate::kw::activation_allowed(self, p, src, a)
+        {
             return false;
         }
         // Split second (CR 702.61b): only mana abilities.

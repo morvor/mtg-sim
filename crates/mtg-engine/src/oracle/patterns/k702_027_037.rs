@@ -91,8 +91,24 @@ fn blocks_shadow(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abili
     )])
 }
 
+/// "Players can't cycle cards." (stops typecycling too, CR 702.29f).
+fn cant_cycle(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if end(l) != "players can't cycle cards" {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
+            Restriction::Custom(crate::kw::cycling::PLAYERS_CANT_CYCLE.into()),
+        ))),
+        text,
+    )])
+}
+
 inventory::submit! {
     StaticPattern { name: "k702.27-37: keyword cost changes", priority: 50, parse: keyword_cost_change }
+}
+inventory::submit! {
+    StaticPattern { name: "k702.29: players can't cycle", priority: 50, parse: cant_cycle }
 }
 inventory::submit! {
     StaticPattern { name: "k702.28: blocks creatures with shadow", priority: 50, parse: blocks_shadow }

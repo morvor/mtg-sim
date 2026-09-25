@@ -66,6 +66,45 @@ pub fn zone_of(t: &TestGame, id: ObjectId) -> Zone {
     t.zone(id)
 }
 
+/// Activates the `nth` activated ability of `source` whose text is `text` (e.g. the
+/// "Cycling" ability a cycling or typecycling keyword stands for).
+pub fn activate_named(
+    t: &mut TestGame,
+    p: PlayerId,
+    source: ObjectId,
+    text: &str,
+    nth: usize,
+) -> Result<Option<ObjectId>, mtg_engine::casting::Illegal> {
+    t.g.recompute();
+    let source = t.g.current(source);
+    let uid = t
+        .g
+        .obj(source)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| {
+            matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)) && a.text == text
+        })
+        .nth(nth)
+        .map(|a| a.uid)
+        .expect("no such activated ability");
+    t.g.turn.priority = Some(p);
+    let r = t.g.activate_ability(p, source, uid);
+    t.g.flush_events();
+    r
+}
+
+/// Activates the `nth` cycling ability of `card`.
+pub fn cycle(
+    t: &mut TestGame,
+    p: PlayerId,
+    card: ObjectId,
+    nth: usize,
+) -> Result<Option<ObjectId>, mtg_engine::casting::Illegal> {
+    activate_named(t, p, card, "Cycling", nth)
+}
+
 /// Number of creature tokens `p` controls.
 pub fn tokens(t: &TestGame, p: PlayerId) -> usize {
     t.g.permanents()

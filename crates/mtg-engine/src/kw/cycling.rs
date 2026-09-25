@@ -8,14 +8,20 @@
 //! (CR 702.29f): the derived ability is named "Cycling" either way, so effects and
 //! triggers that look for cycling (`Event::Cycled`, "cycling abilities you activate",
 //! [`crate::keyword_impls::ability_from_keyword`]) find both. Discarding the card to pay
-//! the cost is cycling it (CR 702.29c; see `Game::activate_inner`).
+//! the cost is cycling it (CR 702.29c; see `Game::activate_inner`). "Players can't cycle
+//! cards" stops typecycling too.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
+use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
+use crate::types::*;
 
 /// The name of every cycling ability (typecycling included), as derived from the keyword.
 pub const CYCLING: &str = "Cycling";
+
+/// "Players can't cycle cards" (a `Restriction::Custom`).
+pub const PLAYERS_CANT_CYCLE: &str = "players can't cycle cards";
 
 pub struct Cycling;
 
@@ -47,6 +53,16 @@ impl KeywordRules for Cycling {
         // CR 702.29a–b: activated only while the card is in a player's hand.
         act.zone = FunctionZone::Hand;
         Some(vec![AbilityDef::new(AbilityKind::Activated(act), CYCLING)])
+    }
+
+    fn activation_allowed(&self, g: &Game, _p: PlayerId, _src: ObjectId, a: &Ability) -> bool {
+        if a.text != CYCLING {
+            return true;
+        }
+        !g.statics
+            .restrictions
+            .iter()
+            .any(|(_, _, r)| matches!(r, Restriction::Custom(n) if n.as_str() == PLAYERS_CANT_CYCLE))
     }
 }
 
