@@ -360,6 +360,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::kw::custom_effect(g, name, ctx) {
         return;
     }
+    // A Siege's intrinsic ability (CR 310.12b).
+    if crate::battle::custom_effect(g, name, ctx) {
+        return;
+    }
     // "named-token:N:Name": create N tokens by name (CR 111.11).
     if let Some(spec) = name.strip_prefix("named-token:") {
         crate::tokens::create_named_tokens(g, spec, ctx);

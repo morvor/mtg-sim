@@ -243,8 +243,13 @@ fn defense_counters_and_a_defeated_battle_waiting_for_its_trigger() {
     let bolt = t.hand(P0, "Lightning Bolt");
     t.cast(P0, bolt).target(battle).go();
     t.resolve();
-    // Defense 0, but its triggered ability is on the stack: it stays for now.
+    // Defense 0, but its triggered abilities are on the stack: it stays for now. (Besides
+    // its own ability, a Siege's intrinsic "last defense counter" ability triggered, CR
+    // 310.12b; it's countered here, so the Siege is put into the graveyard, not exiled.)
     assert_eq!(t.obj(battle).defense(), 0);
+    for s in mtg_engine::battle::defeat_triggers_on_stack(&t.g) {
+        t.g.counter(s, None);
+    }
     assert_eq!(t.stack_len(), 1);
     assert!(t.on_battlefield(battle));
     t.resolve();

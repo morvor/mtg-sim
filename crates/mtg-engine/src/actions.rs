@@ -206,7 +206,7 @@ impl Game {
                 }
             }
         }
-        false
+        crate::variants::stays_in_command_zone(self, mv)
     }
 
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
@@ -557,6 +557,8 @@ impl Game {
                         }
                     }
                 }
+                // CR 310.9a: as a battle enters, its controller chooses its protector.
+                crate::battle::choose_protector_as_it_enters(self, new_id);
                 // "As this enters" effects (CR 614.1c).
                 for (mut c, e) in m.etb.as_enters.clone().into_iter().chain(copy_extras) {
                     c.source = Some(new_id);

@@ -273,6 +273,10 @@ impl Game {
                 // removed by layer 6 effects.
                 for id in &live {
                     let o = &self.objects[id.0 as usize];
+                    // CR 310.12b: likewise a Siege's intrinsic ability.
+                    let siege = crate::battle::intrinsic_abilities(&o.chars);
+                    self.objects[id.0 as usize].chars.abilities.extend(siege);
+                    let o = &self.objects[id.0 as usize];
                     if !o.chars.is_land() {
                         continue;
                     }

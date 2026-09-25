@@ -320,6 +320,40 @@ pub fn is_nontraditional(card: &crate::card::CardDef) -> bool {
     })
 }
 
+/// Moves of cards that stay where they are: plane, phenomenon, vanguard, scheme, and
+/// conspiracy cards remain in the command zone if they would leave it (CR 311.2, 312.2,
+/// 313.2, 314.2, 315.3); a dungeon card leaves it only as it leaves the game (CR 309.2c);
+/// and a conspiracy card that isn't in the game can't be brought into it (CR 315.3).
+pub fn stays_in_command_zone(g: &Game, mv: &crate::replacement::MoveEv) -> bool {
+    let o = g.obj(mv.obj);
+    let Some(card) = o
+        .card
+        .as_ref()
+        .filter(|_| o.kind == crate::object::ObjKind::Card)
+    else {
+        return false;
+    };
+    let types = card.front().chars.card_types;
+    match o.zone {
+        Zone::Command if mv.to != Zone::Command => {
+            [
+                CardType::Plane,
+                CardType::Phenomenon,
+                CardType::Vanguard,
+                CardType::Scheme,
+                CardType::Conspiracy,
+            ]
+            .iter()
+            .any(|t| types.contains(*t))
+                || (types.contains(CardType::Dungeon) && !matches!(mv.to, Zone::Outside(_)))
+        }
+        Zone::Outside(_) => {
+            types.contains(CardType::Conspiracy) && !matches!(mv.to, Zone::Outside(_))
+        }
+        _ => false,
+    }
+}
+
 /// Where a nontraditional card listed with a player's deck starts the game (CR 108.2a,
 /// 108.5): never in the library. Vanguards start face up in the command zone (CR 902.3);
 /// planes, phenomena, schemes and Attractions start face down there as supplementary
