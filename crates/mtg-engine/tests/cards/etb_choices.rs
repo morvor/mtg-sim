@@ -5,6 +5,7 @@ use mtg_engine::ability::{AbilityKind, ReplacementAction, StaticEffect};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::{subtype_lists, Color};
 use mtg_engine::*;
 
@@ -535,4 +536,78 @@ fn spell_chooses_a_creature_type() {
     assert_eq!(t.pt(elf), (2, 1));
     assert!(t.obj_now(elf).has_keyword(KeywordKind::Indestructible));
     assert_eq!(t.pt(bear), (2, 2));
+}
+
+// ---------------------------------------------------------------------------
+// "choose A, B, or C" and anchor words
+// ---------------------------------------------------------------------------
+
+#[test]
+fn choose_among_listed_card_types() {
+    cr!("614.1c", "607.2d", "601.2f");
+    assert_supported("Cloud Key");
+    let mut t = TestGame::new(2);
+    // artifact, creature, enchantment, instant, sorcery: choose creature.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.enter(P0, "Cloud Key");
+    // Grizzly Bears ({1}{G}) costs {G}.
+    t.lands(P0, "Forest", 1);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve();
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
+fn choose_among_listed_creature_types() {
+    cr!("614.1c", "607.2d");
+    assert_supported("Dawn-Blessed Pennant");
+    let mut t = TestGame::new(2);
+    // Elemental, Elf, ...: choose Elf.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let p = t.enter(P0, "Dawn-Blessed Pennant");
+    let asked = t.asked();
+    let opts = asked
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseOption { options, .. } => Some(options.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(opts.len(), 8);
+    assert_eq!(t.obj_now(p).choices.creature_type.as_deref(), Some("Elf"));
+    t.enter(P0, "Llanowar Elves");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+}
+
+#[test]
+fn anchor_word_abilities() {
+    cr!("614.12c", "607.2m");
+    assert_supported("Palace Siege");
+    // Dragons — At the beginning of your upkeep, each opponent loses 2 life and you
+    // gain 2 life.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let s = t.enter(P0, "Palace Siege");
+    assert_eq!(t.obj_now(s).choices.text.as_deref(), Some("Dragons"));
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.life(P1), 18);
+    // Khans — return target creature card from your graveyard to your hand; the Dragons
+    // ability isn't there.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.enter(P0, "Palace Siege");
+    t.graveyard(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
 }

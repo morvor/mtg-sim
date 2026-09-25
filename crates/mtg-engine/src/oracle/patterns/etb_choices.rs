@@ -479,9 +479,43 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
                 }
                 return Some(ChoiceKind::Number { min: a, max: b });
             }
-            return None;
+            return word_list_choice(s);
         }
     })
+}
+
+/// "Elemental, Elf, or Faerie", "Island or Swamp", "artifact, creature, or enchantment":
+/// a choice among listed types or colors (each a known word, so that e.g. "left or
+/// right" isn't mistaken for one).
+fn word_list_choice(s: &str) -> Option<ChoiceKind> {
+    if !s.contains(" or ") {
+        return None;
+    }
+    let mut words = Vec::new();
+    for w in s
+        .split(", or ")
+        .flat_map(|p| p.split(", "))
+        .flat_map(|p| p.split(" or "))
+    {
+        let w = w.trim();
+        if w.is_empty() || w.contains(' ') {
+            return None;
+        }
+        let canon = if let Some(c) = Color::from_word(w) {
+            c.word().to_string()
+        } else if let Some(t) = CardType::from_word(w) {
+            t.word().to_string()
+        } else if let Some(st) = subtype_word(w) {
+            if !is_creature_type(&st) && !is_basic_land_type(&st) {
+                return None;
+            }
+            st.to_string()
+        } else {
+            return None;
+        };
+        words.push(canon);
+    }
+    (words.len() >= 2).then_some(ChoiceKind::OneOf(words))
 }
 
 // ---------------------------------------------------------------------------
@@ -747,6 +781,56 @@ fn prepared_condition(c: &str) -> Option<Condition> {
     Some(Condition::SelMatches(Sel::This, f))
 }
 
+/// Modal permanents with anchor words (CR 614.12c): "As ~ enters, choose Abzan or
+/// Mardu." followed by "• Abzan — [ability]" lines. Each anchored ability is an ability
+/// the permanent has as long as that word was chosen as it entered (CR 607.2m).
+fn anchor_words(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() || !block.contains('\n') {
+        return None;
+    }
+    let mut lines = block.lines();
+    let head = lines.next()?.trim();
+    let hl = head.to_lowercase();
+    let prefix = "as ~ enters, choose ";
+    if !hl.starts_with(prefix) {
+        return None;
+    }
+    let (a, b) = end(&head[prefix.len()..]).split_once(" or ")?;
+    let words: Vec<String> = vec![a.trim().to_string(), b.trim().to_string()];
+    if words
+        .iter()
+        .any(|w| w.is_empty() || !w.chars().all(|c| c.is_alphabetic()))
+    {
+        return None;
+    }
+    let mut out = vec![static_ability(
+        etb_replacement(ReplacementAction::AsEnters(Box::new(Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::OneOf(words.clone()),
+        }))),
+        head,
+    )];
+    let mut seen = 0;
+    for line in lines {
+        let line = line.trim().trim_start_matches('•').trim();
+        let (w, ability_text) = line.split_once(" — ")?;
+        let word = words.iter().find(|x| x.eq_ignore_ascii_case(w.trim()))?;
+        seen += 1;
+        for ab in crate::oracle::parse_ability(ability_text, ctx)? {
+            if matches!(ab.kind, AbilityKind::Unsupported(_)) {
+                return None;
+            }
+            let mut st = StaticAbility::new(StaticEffect::Continuous {
+                affected: Filter::Source,
+                mods: vec![Modification::AddAbility(ab)],
+            });
+            st.condition = Some(Condition::Chose(word.as_str().into()));
+            out.push(AbilityDef::new(AbilityKind::Static(st), line));
+        }
+    }
+    (seen == words.len()).then_some(out)
+}
+
 /// "~ is the chosen type in addition to its other types."
 fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() {
@@ -755,7 +839,7 @@ fn chosen_type_static(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
     let lower = block.to_lowercase();
     let l = end(&lower);
     let (affected, mods) = match l {
-        "~ is the chosen type in addition to its other types" => {
+        "~ is the chosen type in addition to its other types" | "~ is the chosen type" => {
             (Filter::Source, vec![Modification::AddChosenType])
         }
         "enchanted land is the chosen type" => (
@@ -775,6 +859,9 @@ inventory::submit! {
 }
 inventory::submit! {
     AbilityPattern { name: "chosen type statics", priority: 50, parse: chosen_type_static }
+}
+inventory::submit! {
+    AbilityPattern { name: "anchor words", priority: 50, parse: anchor_words }
 }
 inventory::submit! {
     EffectPattern { name: "choose a color/type/name/player", priority: 100, parse: choose_effect }

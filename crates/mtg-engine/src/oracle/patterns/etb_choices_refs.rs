@@ -149,8 +149,46 @@ fn cast_spell_suffix_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     ))
 }
 
+/// "Enchanted creature has protection from the chosen color. This effect doesn't remove
+/// ~." (CR 702.16n): the granted protection doesn't make this Aura fall off.
+fn doesnt_remove_self(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let suffix = ". this effect doesn't remove ~";
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    if !l.ends_with(suffix) {
+        return None;
+    }
+    let head = &block[..l.len() - suffix.len()];
+    let mut marked = false;
+    let mut out = Vec::new();
+    for a in crate::oracle::statics::parse_static(head, ctx)? {
+        let AbilityKind::Static(st) = &a.kind else {
+            return None;
+        };
+        let mut st = st.clone();
+        if let StaticEffect::Continuous { mods, .. } = &mut st.effect {
+            for m in mods.iter_mut() {
+                if let Modification::AddKeyword(k) = m {
+                    if k.kind == crate::keywords::KeywordKind::Protection {
+                        k.text = Some(crate::choices::DOESNT_REMOVE_SOURCE.into());
+                        marked = true;
+                    }
+                }
+            }
+        }
+        out.push(AbilityDef::new(AbilityKind::Static(st), block));
+    }
+    marked.then_some(out)
+}
+
 inventory::submit! {
     AbilityPattern { name: "chosen name restrictions", priority: 50, parse: chosen_restrictions }
+}
+inventory::submit! {
+    AbilityPattern { name: "this effect doesn't remove ~", priority: 50, parse: doesnt_remove_self }
 }
 inventory::submit! {
     AbilityPattern { name: "chosen type cost modifiers", priority: 50, parse: chosen_cost_modifier }

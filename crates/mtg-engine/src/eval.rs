@@ -859,6 +859,10 @@ impl Game {
             Condition::IsDay => self.day == Some(true),
             Condition::IsNight => self.day == Some(false),
             Condition::MaxSpeed => self.player(ctx.controller).speed.unwrap_or(0) >= 4,
+            Condition::Chose(w) => self
+                .source_choices(ctx)
+                .and_then(|ch| ch.text.as_ref())
+                .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
     }

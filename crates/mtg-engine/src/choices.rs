@@ -22,6 +22,23 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.color =
                 cols.get(i).copied().or(cols.first().copied());
         }
+        ChoiceKind::OneOf(words) => {
+            let i = g.ask_option(p, Some(src), "Choose one", words.clone());
+            let Some(w) = words.get(i).or(words.first()) else {
+                return;
+            };
+            let ch = &mut g.objects[src.0 as usize].choices;
+            ch.text = Some(SmolStr::new(w));
+            if let Some(c) = Color::from_word(w) {
+                ch.color = Some(c);
+            } else if let Some(t) = CardType::from_word(w) {
+                ch.card_type = Some(t);
+            } else if is_basic_land_type(w) {
+                ch.basic_land_type = Some(SmolStr::new(w));
+            } else if is_creature_type(w) {
+                ch.creature_type = Some(SmolStr::new(w));
+            }
+        }
         ChoiceKind::CreatureType => {
             let list: Vec<String> = subtype_lists().creature.clone();
             let i = g.ask_option(p, Some(src), "Choose a creature type", list.clone());
@@ -133,4 +150,13 @@ pub fn bind_choices(
         Filter::Not(x) => Filter::Not(Box::new(bind_choices(x, ch))),
         other => other.clone(),
     }
+}
+
+/// Marker text on a granted protection keyword: "This effect doesn't remove [this
+/// object]" (CR 702.16n). Bound to the granting object's id when applied.
+pub const DOESNT_REMOVE_SOURCE: &str = "doesn't remove source";
+
+/// The bound form of [`DOESNT_REMOVE_SOURCE`] for a particular object.
+pub fn doesnt_remove_marker(src: crate::types::ObjectId) -> SmolStr {
+    SmolStr::new(format!("doesn't remove #{}", src.0))
 }

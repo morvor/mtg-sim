@@ -217,3 +217,109 @@ fn counters_if_not_cast() {
     t.resolve();
     assert_eq!(t.counters(b, "+1/+1"), 0);
 }
+
+// ---------------------------------------------------------------------------
+// "This effect doesn't remove this Aura" (CR 702.16n)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn protection_aura_doesnt_remove_itself() {
+    cr!("702.16c", "702.16n", "704.5m");
+    assert_supported("White Ward");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let pacifism = t.battlefield(P1, "Pacifism");
+    assert!(t.g.attach(pacifism, Entity::Object(bears)));
+    t.lands(P0, "Plains", 1);
+    let ward = t.hand(P0, "White Ward");
+    t.cast(P0, ward).target(bears).go();
+    t.resolve();
+    // Protection from white removes Pacifism, but not White Ward itself.
+    assert!(t.on_battlefield(ward));
+    assert_eq!(
+        t.obj_now(ward).attached_to,
+        Some(Entity::Object(t.g.current(bears)))
+    );
+    assert!(!t.on_battlefield(pacifism));
+    assert!(t.in_graveyard(P1, "Pacifism"));
+}
+
+#[test]
+fn chosen_color_protection_aura_and_sacrifice_ability() {
+    cr!("702.16n", "607.2d", "611.2c");
+    assert_supported("Floating Shield");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Plains", 3);
+    let shield = t.hand(P0, "Floating Shield");
+    // Choose white (index 0): the white Aura stays on the creature.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.cast(P0, shield).target(bears).go();
+    t.resolve();
+    assert!(t.on_battlefield(shield));
+    let knight = t.battlefield(P1, "Elite Vanguard");
+    let bears_now = t.g.current(bears);
+    assert!(t.g.protected_from(bears_now, knight));
+    // "Sacrifice this Aura: Target creature gains protection from the chosen color
+    // until end of turn."
+    let shield_now = t.g.current(shield);
+    t.activate(P0, shield_now, 0, &[Entity::Object(elves)])
+        .unwrap();
+    t.resolve();
+    assert!(!t.on_battlefield(shield));
+    assert!(t.g.protected_from(t.g.current(elves), knight));
+    assert!(!t.g.protected_from(t.g.current(bears), knight));
+}
+
+// ---------------------------------------------------------------------------
+// "is the chosen type" (basic land types)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn land_is_the_chosen_basic_land_type() {
+    cr!("305.6", "607.2d", "614.12a");
+    assert_supported("Multiversal Passage");
+    let mut t = TestGame::new(2);
+    // Plains, Island, Swamp, Mountain, Forest: choose Swamp; then pay 2 life.
+    t.answer(P0, DecisionKind::Option, Answer::Index(2));
+    t.answer_yes(P0, true);
+    let p = t.hand(P0, "Multiversal Passage");
+    t.play_land(P0, p).unwrap();
+    let now = t.g.current(p);
+    assert!(!t.obj_now(p).tapped);
+    assert_eq!(t.life(P0), 18);
+    assert!(t.g.obj(now).chars.has_subtype("Swamp"));
+    // The intrinsic "{T}: Add {B}" ability.
+    t.activate(P0, now, 0, &[]).unwrap();
+    assert_eq!(
+        t.g.players[0]
+            .mana_pool
+            .count(mtg_engine::mana::ManaType::B),
+        1
+    );
+}
+
+#[test]
+fn enchanted_land_is_the_chosen_type() {
+    cr!("305.7", "607.2d");
+    assert_supported("Convincing Mirage");
+    let mut t = TestGame::new(2);
+    let land = t.battlefield(P1, "Mountain");
+    t.lands(P0, "Island", 2);
+    let m = t.hand(P0, "Convincing Mirage");
+    // Choose Island (index 1).
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, m).target(land).go();
+    t.resolve();
+    let now = t.g.current(land);
+    assert!(t.g.obj(now).chars.has_subtype("Island"));
+    assert!(!t.g.obj(now).chars.has_subtype("Mountain"));
+    t.activate(P1, now, 0, &[]).unwrap();
+    assert_eq!(
+        t.g.players[1]
+            .mana_pool
+            .count(mtg_engine::mana::ManaType::U),
+        1
+    );
+}

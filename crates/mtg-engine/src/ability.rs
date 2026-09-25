@@ -1031,6 +1031,8 @@ pub enum Condition {
     IsNight,
     /// Source has max speed etc.
     MaxSpeed,
+    /// This word (e.g. an anchor word, CR 614.12c) was chosen for the source.
+    Chose(SmolStr),
     /// This ability's source is tapped/untapped/attacking… via SelMatches(This, …).
     /// Custom conditions implemented in code.
     Custom(SmolStr),
@@ -2130,6 +2132,10 @@ pub enum ChoiceKind {
     Color,
     /// "choose a color other than [color]".
     ColorOtherThan(Color),
+    /// "choose A, B, or C": one of the listed words — creature types, land types, card
+    /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
+    /// (and as the chosen type/color when the word is one).
+    OneOf(Vec<String>),
     CreatureType,
     CardName,
     /// A card name of a nonland card, etc.

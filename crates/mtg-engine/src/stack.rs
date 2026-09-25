@@ -634,7 +634,10 @@ impl Game {
             let mut c2 = ctx.clone();
             c2.targets = cm.targets.clone();
             for (i, slot) in cm.targets.iter().enumerate() {
-                let spec = &specs[i.min(specs.len().saturating_sub(1))];
+                let Some(spec) = specs.get(i.min(specs.len().saturating_sub(1))) else {
+                    new_targets.push(slot.clone());
+                    continue;
+                };
                 let mut legal = Vec::new();
                 for t in slot {
                     any_target = true;
@@ -722,7 +725,14 @@ impl Game {
         let o = self.obj(id).clone();
         let controller = o.controller;
         let is_permanent = o.chars.is_permanent_type();
-        let body = self.spell_body(id);
+        let mut body = self.spell_body(id);
+        // CR 303.4a / 115.1b: an Aura spell targets what it will enchant (the target slot
+        // added when it was cast).
+        if o.chars.has_subtype("Aura") && body.targets.is_empty() && !o.face_down {
+            if let Some(spec) = crate::attach::aura_target_spec(&o.chars) {
+                body.targets.push(spec);
+            }
+        }
         let mut ctx = self.stack_ctx(id);
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
         let si = o.stack.as_deref().unwrap().clone();
