@@ -434,6 +434,9 @@ impl Game {
                 d.characteristics(FaceState::Front)
             }
             (Some(d), f) if f != FaceState::Front => d.characteristics(f),
+            // A face-down card outside the battlefield (e.g. foretold) is cast face up
+            // (CR 702.143a).
+            (Some(d), f) if o.face_down && o.zone != Zone::Battlefield => d.characteristics(f),
             _ => o.chars.clone(),
         }
     }
@@ -476,7 +479,7 @@ impl Game {
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
 
-    fn timing_allows_cast(
+    pub(crate) fn timing_allows_cast(
         &self,
         p: PlayerId,
         card: ObjectId,
@@ -518,7 +521,12 @@ impl Game {
             })
     }
 
-    fn cast_prohibited(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+    pub(crate) fn cast_prohibited(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
         self.cast_prohibited_by_effects(p, card, chars)
             // CR 702.61a split second: no casting while a split-second spell is on the stack.
             || self.split_second_on_stack()

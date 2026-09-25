@@ -30,14 +30,43 @@ pub struct SpecialOffer {
     pub created_turn: u32,
 }
 
+/// A card a keyword special action put somewhere, with the turn it happened: a foretold
+/// card (CR 702.143a), a plotted card (CR 702.170a).
+#[derive(Clone, Debug)]
+pub struct KeywordMark {
+    pub obj: ObjectId,
+    pub kind: KeywordKind,
+    pub turn: u32,
+}
+
 /// Special-action state kept by the game.
 #[derive(Clone, Debug, Default)]
 pub struct SpecialState {
     pub offers: Vec<SpecialOffer>,
     pub next_offer: u32,
+    pub marks: Vec<KeywordMark>,
+    /// Each player's chosen companion (CR 103.2b), and whether they've put it into their
+    /// hand (CR 702.139a).
+    pub companions: Vec<(PlayerId, ObjectId, bool)>,
     /// (source, player, turn): the player ignores the source's static effects until end
     /// of that turn (CR 116.2d).
     pub ignoring: Vec<(ObjectId, PlayerId, u32)>,
+}
+
+/// Marks `obj` as foretold/plotted/... this turn.
+pub fn mark(g: &mut Game, obj: ObjectId, kind: KeywordKind) {
+    let turn = g.turn.number;
+    g.special.marks.push(KeywordMark { obj, kind, turn });
+}
+
+/// The turn `obj` was marked with `kind`, if it was (and is still the same object).
+pub fn marked(g: &Game, obj: ObjectId, kind: KeywordKind) -> Option<u32> {
+    g.special
+        .marks
+        .iter()
+        .rev()
+        .find(|m| m.obj == obj && m.kind == kind && g.is_live(obj))
+        .map(|m| m.turn)
 }
 
 /// Whether `p` is ignoring the effects of `source` this turn (CR 116.2d).
@@ -182,7 +211,7 @@ pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
 /// Pays the cost of a special action (CR 116.1). The choice of how to pay symbols that
 /// can be paid in more than one way is made immediately before paying (CR 118.13c).
 /// Nothing is paid if the whole cost can't be.
-fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
+pub fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
     let snapshot = g.clone();
     let mut cost = cost.clone();
     crate::cost_rules::choose_payment_ways(g, p, src, &mut cost);

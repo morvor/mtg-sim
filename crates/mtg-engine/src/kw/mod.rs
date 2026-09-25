@@ -36,6 +36,12 @@ pub trait KeywordRules: Sync + Send {
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
     }
+    /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
+    /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
+    /// Called for every registered implementation.
+    fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        vec![]
+    }
     /// Optional additional costs announced while casting (name, cost, repeatable).
     fn optional_costs(
         &self,
@@ -181,7 +187,10 @@ pub fn derived(kw: &Keyword) -> Vec<Ability> {
 }
 
 pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
-    let mut out = Vec::new();
+    let mut out: Vec<CastOption> = registry()
+        .iter()
+        .flat_map(|r| r.global_cast_options(g, p, card))
+        .collect();
     let kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
     for kw in &kws {
         for r in impls_for(kw.kind) {

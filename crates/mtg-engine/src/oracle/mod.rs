@@ -331,7 +331,9 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.contains(':')
             && !head.to_lowercase().starts_with("choose")
             && head.chars().next().is_some_and(|c| c.is_uppercase())
-            && !head.contains('{');
+            && !head.contains('{')
+            // "Companion — [condition]" is a keyword, not an ability word (CR 702.139a).
+            && head != "Companion";
         if looks_like_word {
             return rest;
         }
