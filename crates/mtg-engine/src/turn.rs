@@ -562,6 +562,12 @@ impl Game {
         for id in to_untap {
             self.untap(id);
         }
+        // CR 701.43a: exertion lasts until its controller's next untap step.
+        for id in self.battlefield.clone() {
+            if self.obj(id).controller == active {
+                self.objects[id.0 as usize].exerted = false;
+            }
+        }
     }
 
     pub fn set_day(&mut self, is_day: bool) {

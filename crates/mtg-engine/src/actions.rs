@@ -581,8 +581,10 @@ impl Game {
     /// Whether a permanent doesn't untap during its controller's untap step (CR 502.3).
     pub fn doesnt_untap(&self, obj: ObjectId) -> bool {
         let o = self.obj(obj);
+        // CR 701.43a: an exerted permanent doesn't untap during its controller's next
+        // untap step.
         if o.exerted {
-            return false;
+            return true;
         }
         self.statics.restrictions.iter().any(|(s, c, r)| match r {
             Restriction::DoesntUntap(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
