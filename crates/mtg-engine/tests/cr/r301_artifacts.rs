@@ -100,6 +100,96 @@ fn the_equipped_creature_is_the_one_the_equipment_is_attached_to() {
 }
 
 #[test]
+fn an_equipment_that_is_a_creature_cant_equip_unless_it_has_reconfigure() {
+    cr!("301.5c");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    assert!(mtg_engine::attach::can_attach(
+        &t.g,
+        splitter,
+        Entity::Object(bears)
+    ));
+    // Bonesplitter becomes an artifact creature: an Equipment that's also a creature (and
+    // has no reconfigure) can't equip a creature, so an effect attaching it does nothing.
+    run_effect(
+        &mut t,
+        P0,
+        None,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![
+                Modification::AddTypes(vec![CardType::Creature]),
+                Modification::SetPT(Some(Value::c(1)), Some(Value::c(1))),
+            ],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(splitter)],
+    );
+    assert!(t.obj(splitter).is_creature());
+    assert!(!mtg_engine::attach::can_attach(
+        &t.g,
+        splitter,
+        Entity::Object(bears)
+    ));
+    run_effect(
+        &mut t,
+        P0,
+        Some(splitter),
+        Effect::Attach {
+            what: Sel::This,
+            to: Sel::Target(0),
+        },
+        &[Entity::Object(bears)],
+    );
+    assert_eq!(t.obj(splitter).attached_to, None);
+    assert_eq!(t.pt(bears), (2, 2));
+    // An Equipment creature with reconfigure can equip a creature, but not itself.
+    let cat = t.custom(
+        P0,
+        CB::new("Reconfiguring Cat")
+            .artifact()
+            .creature(2, 2)
+            .subtypes(&["Equipment", "Cat"])
+            .keyword(KeywordKind::Reconfigure)
+            .build(),
+        Zone::Battlefield,
+    );
+    assert!(mtg_engine::attach::can_attach(
+        &t.g,
+        cat,
+        Entity::Object(bears)
+    ));
+    assert!(!mtg_engine::attach::can_attach(
+        &t.g,
+        cat,
+        Entity::Object(cat)
+    ));
+    // An Equipment that loses the subtype Equipment can't equip a creature.
+    let other = t.battlefield(P0, "Bonesplitter");
+    run_effect(
+        &mut t,
+        P0,
+        None,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::SetTypes {
+                types: vec![CardType::Artifact],
+                subtypes: vec![],
+            }],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(other)],
+    );
+    assert!(!t.obj(other).chars.has_subtype("Equipment"));
+    assert!(!mtg_engine::attach::can_attach(
+        &t.g,
+        other,
+        Entity::Object(bears)
+    ));
+}
+
+#[test]
 fn an_equipment_put_onto_the_battlefield_attached_to_something_it_cant_equip_is_unattached() {
     cr!("301.5e");
     let mut t = TestGame::new(2);
@@ -183,6 +273,17 @@ fn a_fortification_is_attached_to_a_land_by_fortify() {
     let lands = t.lands(P0, "Wastes", 3);
     let forest = t.battlefield(P0, "Forest");
     let their_land = t.battlefield(P1, "Forest");
+    // Activate only as a sorcery: not during the opponent's turn, nor in combat.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(t
+        .activate(P0, garrison, 0, &[Entity::Object(forest)])
+        .is_err());
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(t
+        .activate(P0, garrison, 0, &[Entity::Object(forest)])
+        .is_err());
+    assert_eq!(t.obj(garrison).attached_to, None);
+    t.set_step(P0, Step::PrecombatMain);
     t.activate(P0, garrison, 0, &[Entity::Object(forest)])
         .unwrap();
     // Fortify targets a land its controller controls: not a creature.

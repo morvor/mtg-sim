@@ -3,6 +3,7 @@
 
 use crate::r300_common::*;
 use mtg_engine::ability::*;
+use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -164,12 +165,35 @@ fn land_subtypes_are_single_words_and_a_land_may_have_several() {
     let mut t = TestGame::new(2);
     let sea = t.battlefield(P0, "Underground Sea");
     assert!(t.obj(sea).chars.has_subtype("Island") && t.obj(sea).chars.has_subtype("Swamp"));
+    let mut made = produced_mana(&t, sea);
+    made.sort();
+    assert_eq!(made, vec![ManaType::U, ManaType::B]);
+}
+
+/// The mana produced by the fixed mana abilities of a permanent.
+fn produced_mana(t: &TestGame, id: ObjectId) -> Vec<ManaType> {
+    let mut out = Vec::new();
+    for a in &t.obj(id).chars.abilities {
+        if let AbilityKind::Activated(act) = &a.kind {
+            if let Effect::AddMana {
+                mana: ManaProduction::Fixed(v),
+                ..
+            } = &act.body.effect
+            {
+                out.extend(v.iter().copied());
+            }
+        }
+    }
+    out
 }
 
 #[test]
 fn a_land_is_basic_only_if_it_has_the_basic_supertype() {
     cr!("305.8");
-    ruling!("Underground Sea", "Things that affect basic land types do");
+    ruling!(
+        "Underground Sea",
+        "This has basic land types, but it isn't a basic land. Things that affect basic lands don't affect it"
+    );
     // Blood Moon: "Nonbasic lands are Mountains." Underground Sea has basic land types
     // but not the basic supertype: it's nonbasic.
     let mut t = TestGame::new(2);
