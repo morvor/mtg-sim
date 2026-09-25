@@ -216,6 +216,11 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if !(lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at ")) {
         return None;
     }
+    // Triggered abilities of instants and sorceries need zone handling (see
+    // `oracle::triggers::parse_triggered`); these forms are for permanents.
+    if ctx.is_spell() {
+        return None;
+    }
     let (cond_s, eff_s) = split_trigger(text)?;
     let eff = eff_s.trim();
     if split_sentences(eff).len() != 1 {
