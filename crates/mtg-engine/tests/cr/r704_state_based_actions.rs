@@ -430,6 +430,11 @@ fn battles_with_zero_defense_are_put_into_the_graveyard() {
     damage(&mut t, siege, 3);
     damage(&mut t, plain, 3);
     t.settle();
+    // The Siege's intrinsic "last defense counter" ability (CR 310.12b) would exile it:
+    // counter it, so only its own damage trigger remains.
+    for s in mtg_engine::battle::defeat_triggers_on_stack(&t.g) {
+        t.g.counter(s, None);
+    }
     // Both have defense 0 and each is the source of a trigger on the stack: the Siege
     // waits for it; the other battle doesn't.
     assert!(t.on_battlefield(siege));

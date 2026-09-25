@@ -36,6 +36,10 @@ pub struct EtbInfo {
     pub attacking: Option<Entity>,
     pub blocking: Option<ObjectId>,
     pub attach_to: Option<Entity>,
+    /// The effect putting it onto the battlefield says what it enters attached to, even
+    /// if that object or player is undefined (`attach_to` is then `None`, CR 301.5e,
+    /// 303.4i). Unset with no `attach_to`, an Aura's controller chooses (CR 303.4f).
+    pub attach_specified: bool,
     /// Effects to perform right after it is put onto the battlefield, before its
     /// zone-change event is emitted: (source ability ctx, effect). ("As this enters"
     /// replacement effects run earlier, while the replacement applies; see
@@ -323,6 +327,18 @@ impl Game {
                             }
                         }
                     }
+                }
+            }
+        }
+        // CR 400.6: the moving object's own abilities that would affect the move apply,
+        // even from a hidden zone.
+        if let ReplEvent::Move(m) = ev {
+            for own in crate::zones::own_move_replacements(self, m) {
+                if !sources
+                    .iter()
+                    .any(|(src, _, ab, _)| *src == own.0 && ab.uid == own.2.uid)
+                {
+                    sources.push(own);
                 }
             }
         }

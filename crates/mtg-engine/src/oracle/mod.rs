@@ -346,8 +346,10 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.to_lowercase().starts_with("choose")
             && head.chars().next().is_some_and(|c| c.is_uppercase())
             && !head.contains('{')
-            // "Companion — [condition]" is a keyword, not an ability word (CR 702.139a).
-            && head != "Companion";
+            // "Companion — [condition]" is a keyword, not an ability word (CR 702.139a);
+            // so is "Forecast — [activated ability]" (CR 702.57a).
+            && head != "Companion"
+            && head != "Forecast";
         if looks_like_word {
             return rest;
         }
@@ -380,7 +382,11 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
-    let body = effects::parse_body(eff_text, ctx)?;
+    // CR 400.7j: "the exiled card" is the card the cost exiled.
+    let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
+        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))?,
+        None => effects::parse_body(eff_text, ctx)?,
+    };
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
     // nor its effect moves a card to or from a library.
     let is_mana = effects::is_mana_effect(&body.effect)

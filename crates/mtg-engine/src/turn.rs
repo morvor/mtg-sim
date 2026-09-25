@@ -75,6 +75,25 @@ impl Step {
     }
 }
 
+/// The step a [`TriggerStep`] names, for adding steps to a turn. An added main phase is
+/// a postcombat main phase (CR 505.1a).
+fn step_of(ts: TriggerStep) -> Option<Step> {
+    Some(match ts {
+        TriggerStep::Untap => Step::Untap,
+        TriggerStep::Upkeep => Step::Upkeep,
+        TriggerStep::Draw => Step::Draw,
+        TriggerStep::PrecombatMain | TriggerStep::PostcombatMain => Step::PostcombatMain,
+        TriggerStep::BeginningOfCombat => Step::BeginningOfCombat,
+        TriggerStep::DeclareAttackers => Step::DeclareAttackers,
+        TriggerStep::DeclareBlockers => Step::DeclareBlockers,
+        TriggerStep::CombatDamage => Step::CombatDamage,
+        TriggerStep::EndOfCombat => Step::EndOfCombat,
+        TriggerStep::End => Step::End,
+        TriggerStep::Cleanup => Step::Cleanup,
+        TriggerStep::Turn => return None,
+    })
+}
+
 /// Where we are within the current step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stage {
@@ -196,6 +215,9 @@ impl Game {
         // CR 103.4, 119.1: each player's life total becomes their starting life total
         // (vanguard life modifiers are known now, CR 902.4).
         crate::life_totals::set_starting_life_totals(self);
+        // CR 407.2: when playing for ante, each player antes a random card before any
+        // cards are drawn.
+        crate::ante::ante_at_start(self);
         // CR 103.5: draw opening hands, then mulligans.
         for p in self.apnap() {
             for _ in 0..self.starting_hand_size(p) {
@@ -241,12 +263,21 @@ impl Game {
         } else {
             None
         };
+        // For day/night (CR 502.2): the most spells a single player of the ending turn's
+        // active team cast (with shared team turns, "no player on the team cast a spell"
+        // and "any player on the team cast two or more", CR 502.2a).
         let last_spells = self
-            .history
-            .spells_cast
-            .iter()
-            .filter(|(p, _)| *p == self.turn.active)
-            .count() as u32;
+            .active_players()
+            .into_iter()
+            .map(|q| {
+                self.history
+                    .spells_cast
+                    .iter()
+                    .filter(|(p, _)| *p == q)
+                    .count() as u32
+            })
+            .max()
+            .unwrap_or(0);
         self.spells_cast_last_turn_by_active = last_spells;
         self.turn.number += 1;
         self.turn.active = active;
@@ -555,27 +586,63 @@ impl Game {
 
     /// Adds an additional combat phase (and main phase) after the current phase (CR 500.8).
     pub fn add_extra_combat(&mut self, with_main: bool) {
-        let mut extra = vec![
-            Step::BeginningOfCombat,
-            Step::DeclareAttackers,
-            Step::DeclareBlockers,
-            Step::CombatDamage,
-            Step::EndOfCombat,
-        ];
+        let mut parts = vec![TurnPart::CombatPhase];
         if with_main {
-            extra.push(Step::PostcombatMain);
+            parts.push(TurnPart::MainPhase);
         }
-        // Insert after the current phase.
-        let cur_phase = self.turn.step.phase();
-        let pos = self
-            .turn
-            .schedule
-            .iter()
-            .position(|s| s.phase() != cur_phase)
-            .unwrap_or(self.turn.schedule.len());
-        for (i, s) in extra.into_iter().enumerate() {
+        self.add_turn_parts(&parts, true);
+    }
+
+    /// Adds phases or steps to this turn directly after the current step, or after the
+    /// current phase (CR 500.8, 500.9). The most recently added ones come first. A single
+    /// step added after a phase makes up a new phase of its own; that phase's other steps
+    /// are skipped (CR 500.10).
+    pub fn add_turn_parts(&mut self, parts: &[TurnPart], after_phase: bool) {
+        let mut steps: Vec<Step> = Vec::new();
+        for part in parts {
+            match part {
+                TurnPart::BeginningPhase => {
+                    steps.extend([Step::Untap, Step::Upkeep, Step::Draw]);
+                }
+                TurnPart::CombatPhase => steps.extend([
+                    Step::BeginningOfCombat,
+                    Step::DeclareAttackers,
+                    Step::DeclareBlockers,
+                    Step::CombatDamage,
+                    Step::EndOfCombat,
+                ]),
+                // CR 505.1a: only the first main phase of a turn is a precombat main phase.
+                TurnPart::MainPhase => steps.push(Step::PostcombatMain),
+                TurnPart::Step(ts) => steps.extend(step_of(*ts)),
+            }
+        }
+        let pos = if after_phase {
+            self.current_phase_end()
+        } else {
+            0
+        };
+        for (i, s) in steps.into_iter().enumerate() {
             self.turn.schedule.insert(pos + i, s);
         }
+    }
+
+    /// Index in the schedule of the first step after the current phase. A step begins a
+    /// new phase if it's of another phase, if it's the first step of its phase (untap,
+    /// beginning of combat, a main phase), or if it comes earlier in the phase's normal
+    /// order than the step before it.
+    fn current_phase_end(&self) -> usize {
+        let mut prev = self.turn.step;
+        for (i, s) in self.turn.schedule.iter().enumerate() {
+            let starts = s.phase() != prev.phase()
+                || s.is_main()
+                || matches!(s, Step::Untap | Step::BeginningOfCombat)
+                || *s < prev;
+            if starts {
+                return i;
+            }
+            prev = *s;
+        }
+        self.turn.schedule.len()
     }
 
     fn should_skip_step(&mut self, step: Step) -> bool {
@@ -826,7 +893,25 @@ impl Game {
         self.dirty = true;
     }
 
-    fn expire_effects_at_step_begin(&mut self, _step: Step) {}
+    /// CR 500.4: as a step begins, effects that last until that step of a player's turn
+    /// ("until your next upkeep") expire. Every such effect was created before this step
+    /// began, so the step is the "next" one for it.
+    fn expire_effects_at_step_begin(&mut self, step: Step) {
+        let ts = step.trigger_step();
+        let actives = self.active_players();
+        let until = |d: &Duration, c: PlayerId| {
+            matches!(d, Duration::UntilYourNextStep(s) if *s == ts) && actives.contains(&c)
+        };
+        self.effects.retain(|e| !until(&e.duration, e.controller));
+        self.rule_effects
+            .retain(|e| !until(&e.duration, e.controller));
+        self.player_effects
+            .retain(|e| !until(&e.duration, e.controller));
+        self.replacements
+            .retain(|e| !until(&e.duration, e.controller));
+        self.play_grants.retain(|g| !until(&g.duration, g.player));
+        self.dirty = true;
+    }
 
     // ------------------------------------------------------------------
     // Test/simulation conveniences

@@ -204,9 +204,9 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             "your precombat main phase" | "your first main phase" => {
                 (TriggerStep::PrecombatMain, PlayerRel::You)
             }
-            "your postcombat main phase" | "your second main phase" => {
-                (TriggerStep::PostcombatMain, PlayerRel::You)
-            }
+            // "your second main phase" counts main phases (CR 505.1b): see
+            // patterns/r500_turn_structure.rs.
+            "your postcombat main phase" => (TriggerStep::PostcombatMain, PlayerRel::You),
             "the end of combat" | "end of combat" => (TriggerStep::EndOfCombat, PlayerRel::Any),
             "each player's draw step" => (TriggerStep::Draw, PlayerRel::Any),
             _ => return None,

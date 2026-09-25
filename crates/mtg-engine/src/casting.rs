@@ -88,6 +88,11 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    // CR 702.61a: while a spell with split second is on the stack, no other spell can be
+    // cast, even as part of a resolving ability's effect.
+    if g.split_second_on_stack() {
+        return Err(Illegal("a spell with split second is on the stack".into()));
+    }
     let face = FaceState::Front;
     let mut opt = CastOption::normal(face);
     opt.any_time = true;
@@ -209,9 +214,10 @@ impl Game {
         if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
             return true;
         }
-        // CR 601.3f: a face-down card in exile can be cast only by a player who may look
-        // at it; permissions to cast spells "with certain qualities" don't reveal it.
-        if o.zone == Zone::Exile && o.face_down {
+        // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
+        // to cast spells "with certain qualities" only by a player who may look at it
+        // (and then only if the resulting spell has those qualities).
+        if o.zone == Zone::Exile && o.face_down && !crate::zones::may_look(self, p, card) {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
@@ -641,12 +647,18 @@ impl Game {
                 self.player_loses(p);
                 Ok(())
             }
-            Action::PlayLand { card } => self.play_land(p, card),
+            // CR 401.5: special actions (CR 116.2a) finish before a new top card of a
+            // library is revealed.
+            Action::PlayLand { card } => {
+                crate::zones::during_special_action(self, |g| g.play_land(p, card))
+            }
             Action::Cast { card, method } => self.cast_spell(p, card, method).map(|_| ()),
             Action::Activate { source, ability } => {
                 self.activate_ability(p, source, ability).map(|_| ())
             }
-            Action::Special(sa) => crate::keyword_impls::perform_special_action(self, p, sa),
+            Action::Special(sa) => crate::zones::during_special_action(self, |g| {
+                crate::keyword_impls::perform_special_action(g, p, sa)
+            }),
         };
         self.flush_events();
         r
@@ -660,6 +672,40 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.perform_land_play(p, card);
+        Ok(())
+    }
+
+    /// Plays a land during the resolution of a spell or ability that instructs `p` to
+    /// play it ("you may play that card"). Normal timing doesn't apply, but a player can
+    /// play a land only during their own turn and only if they have a land play left; the
+    /// instruction is ignored otherwise (CR 305.2a, 305.2b, 305.3).
+    pub fn play_land_during_resolution(
+        &mut self,
+        p: PlayerId,
+        card: ObjectId,
+    ) -> Result<(), Illegal> {
+        if !self.is_active_player(p) {
+            return Err(Illegal(
+                "a player can play a land only during their turn".into(),
+            ));
+        }
+        if self.player(p).lands_played_this_turn >= self.player(p).land_plays {
+            return Err(Illegal("no land play left this turn".into()));
+        }
+        if self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_))) {
+            return Err(Illegal("can't play lands".into()));
+        }
+        if !self.is_live(card) || !self.card_has_land_face(card) {
+            return Err(Illegal("not a land card".into()));
+        }
+        self.perform_land_play(p, card);
+        Ok(())
+    }
+
+    /// Puts a land being played onto the battlefield; it counts as a land played this turn
+    /// (CR 305.1, 305.2a).
+    fn perform_land_play(&mut self, p: PlayerId, card: ObjectId) {
         let o = self.obj(card);
         let face = if o.chars.is_land() {
             FaceState::Front
@@ -682,10 +728,11 @@ impl Game {
             source: None,
         });
         if let Some(n) = new {
+            // CR 400.7i: grants to lands played this way apply to the new permanent.
+            crate::zones::land_played(self, p, card, n);
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
-        Ok(())
     }
 
     /// Casts a spell with the given method (CR 601.2).
@@ -748,6 +795,9 @@ impl Game {
         // Abilities that trigger when a card leaves a graveyard look back (CR 603.10a).
         let lookback = matches!(from, Zone::Graveyard(_))
             .then(|| std::sync::Arc::new(self.lookback_snapshot()));
+        // CR 307.5a: whether a sorcery could have been cast now (checked before the spell
+        // is on the stack).
+        let sorcery_time = !opt.any_time && self.has_priority(p) && self.is_sorcery_timing(p);
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -773,6 +823,7 @@ impl Game {
             from: from_kind,
             was_cast: true,
             turn: self.turn.number,
+            instant_timing: !sorcery_time,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
@@ -823,13 +874,11 @@ impl Game {
                     add_cost(&mut extra, &cost);
                     cast_info.paid.push(name.clone());
                 }
-                if n > 0 {
+                // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks the
+                // spell. (Other repeatable costs, such as replicate, don't.)
+                if n > 0 && name.as_str() == "multikicker" {
                     cast_info.times_kicked += n;
-                    // CR 702.33c–d: a multikicker cost is a kicker cost; paying it kicks
-                    // the spell.
-                    if name.as_str() == "multikicker" {
-                        cast_info.paid.push("kicker".into());
-                    }
+                    cast_info.paid.push("kicker".into());
                 }
             } else if self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
                 && matches!(
@@ -990,6 +1039,12 @@ impl Game {
                 vars::SACRIFICED,
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
+        }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        let mut moved = std::collections::BTreeMap::new();
+        crate::zones::record_cost_moved(self, &paid, &mut moved);
+        if !moved.is_empty() {
+            self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
@@ -1572,6 +1627,8 @@ impl Game {
                 paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
             );
         }
+        // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
+        crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
         *self.objects[src.0 as usize]
             .activations_this_turn
@@ -2096,6 +2153,7 @@ impl Game {
                 let pick = self.ask_objects(p, src, "Choose cards to exile (cost)", cands, n, n);
                 for c in pick {
                     paid.objects.push(c);
+                    paid.exiled.push(c);
                     self.exile_object(c, src);
                 }
             }
@@ -2349,6 +2407,9 @@ pub struct PaidCost {
     pub objects: Vec<ObjectId>,
     /// The permanents among `objects` that were sacrificed.
     pub sacrificed: Vec<ObjectId>,
+    /// The cards among `objects` that an exile cost exiled ("the exiled card",
+    /// CR 400.7j).
+    pub exiled: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

@@ -2,10 +2,24 @@
 
 use crate::ability::*;
 use crate::eval::Ctx;
+use crate::events::MoveCause;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::object::*;
+use crate::replacement::{MoveEv, ReplEvent};
 use crate::types::*;
+
+/// `Filter::Custom` name: an object the source could legally be attached to right now
+/// (CR 301.5c, 303.4k, 701.3).
+pub const SOURCE_CAN_ATTACH: &str = "source_can_attach";
+
+/// Custom filters about attaching. Returns `None` if `name` isn't one.
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    (name == SOURCE_CAN_ATTACH).then(|| {
+        ctx.source
+            .is_some_and(|s| can_attach(g, s, Entity::Object(id)))
+    })
+}
 
 /// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
 /// ignoring protection from effects that say they don't remove it (CR 702.16n, 702.16p).
@@ -95,12 +109,17 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
     if Entity::Object(obj) == to {
         return false;
     }
+    // CR 310.10: a battle can't be attached to players or permanents, even if it's also an
+    // Aura, Equipment, or Fortification.
+    if chars.is(CardType::Battle) {
+        return false;
+    }
     match to {
         Entity::Player(p) => {
             if !g.player(p).in_game() {
                 return false;
             }
-            if chars.has_subtype("Aura") {
+            if chars.has_subtype("Aura") && !o.is_creature() {
                 let ok = enchant_player(chars).is_some_and(|pf| {
                     g.player_filter_matches(&pf, p, &Ctx::new(Some(obj), o.controller))
                 });
@@ -119,6 +138,10 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 return false;
             }
             if chars.has_subtype("Aura") {
+                // CR 303.4d: an Aura that's also a creature can't enchant anything.
+                if o.is_creature() {
+                    return false;
+                }
                 let Some(f) = enchant_filter(chars) else {
                     return false;
                 };
@@ -128,16 +151,149 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 // CR 702.16c: can't be enchanted by Auras with the protected quality.
                 !aura_protection_applies(g, t, obj)
             } else if chars.has_subtype("Equipment") {
-                // CR 301.5c: Equipment can be attached only to creatures; 702.16d protection.
+                // CR 301.5c: Equipment can be attached only to creatures, and an Equipment
+                // that's also a creature can't equip one unless it has reconfigure;
+                // 702.16d protection.
                 (target.is_creature() || as_creature)
+                    && (!o.is_creature() || o.has_keyword(KeywordKind::Reconfigure))
                     && !crate::kw::protection::prevents_attachment(g, t, obj)
                     && crate::keyword_impls::equip_restriction_ok(g, obj, t)
             } else if chars.has_subtype("Fortification") {
-                // CR 301.6: Fortifications attach to lands.
-                target.chars.is_land() && !crate::kw::protection::prevents_attachment(g, t, obj)
+                // CR 301.6: Fortifications attach to lands; one that's also a creature can't
+                // fortify a land.
+                target.chars.is_land()
+                    && !o.is_creature()
+                    && !crate::kw::protection::prevents_attachment(g, t, obj)
             } else {
                 false
             }
         }
     }
+}
+
+/// What kind of attachment a permanent entering the battlefield can have.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EntryKind {
+    Aura,
+    /// Equipment or Fortification.
+    Equipment,
+    Other,
+}
+
+/// Whether the object could be an Aura as it enters (a cheap check before computing it as
+/// it would exist on the battlefield): any face of its card, what it's entering as a copy
+/// of, or its current characteristics.
+fn might_enter_as_aura(g: &Game, mv: &MoveEv) -> bool {
+    let o = g.obj(mv.obj);
+    o.chars.has_subtype("Aura")
+        || o.card
+            .as_ref()
+            .is_some_and(|c| c.faces.iter().any(|f| f.chars.has_subtype("Aura")))
+        || mv
+            .etb
+            .copy_of
+            .is_some_and(|s| g.obj(s).copiable.has_subtype("Aura"))
+}
+
+/// Decides what a permanent entering the battlefield is attached to, adjusting the move
+/// (CR 301.5e, 303.4f–i, 310.10). Returns false if it can't enter: an Aura with no legal
+/// object or player to enchant, or one put onto the battlefield attached to something it
+/// can't legally enchant or that's undefined, stays in its current zone (CR 303.4g,
+/// 303.4i). An Aura spell resolving is attached to its target (CR 303.4a, 608.3).
+pub(crate) fn entry_attachment(g: &mut Game, mv: &mut MoveEv) -> bool {
+    let specified = mv.etb.attach_specified || mv.etb.attach_to.is_some();
+    if !specified && !might_enter_as_aura(g, mv) {
+        return true;
+    }
+    let o = g.obj(mv.obj);
+    let aura_spell = o.zone == Zone::Stack
+        && mv.cause == MoveCause::Resolve
+        && o.chars.has_subtype("Aura")
+        && !o.face_down;
+    if aura_spell {
+        return true;
+    }
+    let id = mv.obj;
+    let target = mv.etb.attach_to;
+    let (kind, legal, candidates) = g.with_hypothetical_entry(mv, |g| {
+        let o = g.obj(id);
+        let kind = if o.is(CardType::Battle) {
+            EntryKind::Other
+        } else if o.chars.has_subtype("Aura") && o.is(CardType::Enchantment) {
+            EntryKind::Aura
+        } else if o.chars.has_subtype("Equipment") || o.chars.has_subtype("Fortification") {
+            EntryKind::Equipment
+        } else {
+            EntryKind::Other
+        };
+        let legal = target.is_some_and(|t| can_attach(g, id, t));
+        let candidates: Vec<Entity> = if kind == EntryKind::Aura && !specified {
+            g.permanent_ids()
+                .into_iter()
+                .map(Entity::Object)
+                .chain(g.players_in_game().into_iter().map(Entity::Player))
+                .filter(|e| can_attach(g, id, *e))
+                .collect()
+        } else {
+            vec![]
+        };
+        (kind, legal, candidates)
+    });
+    match kind {
+        // CR 303.4i: attached to something it can't enchant, or to something undefined.
+        EntryKind::Aura if specified => legal,
+        EntryKind::Aura => {
+            // CR 303.4f: the player it enters under the control of chooses a legal object
+            // or player to enchant; CR 303.4g: with none, it can't enter.
+            let Some(first) = candidates.first().copied() else {
+                return false;
+            };
+            let controller = g.entry_controller(mv);
+            let chosen = g.ask_entities(
+                controller,
+                Some(id),
+                "Choose what the Aura will enchant",
+                candidates,
+                1,
+                1,
+            );
+            mv.etb.attach_to = Some(chosen.first().copied().unwrap_or(first));
+            mv.etb.attach_specified = true;
+            true
+        }
+        // CR 301.5e: an Equipment or Fortification that can't be attached to it enters
+        // unattached.
+        EntryKind::Equipment => {
+            if !legal {
+                mv.etb.attach_to = None;
+            }
+            true
+        }
+        // CR 303.4h, 310.10: other permanents (and battles) enter unattached.
+        EntryKind::Other => {
+            mv.etb.attach_to = None;
+            true
+        }
+    }
+}
+
+/// CR 303.4g, 303.4i: an Aura that can't enter the battlefield stays in its current zone,
+/// unless that zone is the stack: then it's put into its owner's graveyard instead. (A
+/// resolving spell is put there by its resolution, CR 608.3e.) Returns the replaced events
+/// of that move to the graveyard, if any.
+pub(crate) fn aura_left_on_stack(g: &mut Game, mv: &MoveEv) -> Vec<ReplEvent> {
+    let o = g.obj(mv.obj);
+    if o.zone != Zone::Stack || mv.cause == MoveCause::Resolve {
+        return vec![];
+    }
+    let owner = o.owner;
+    g.replace(ReplEvent::Move(MoveEv {
+        obj: mv.obj,
+        to: Zone::Graveyard(owner),
+        pos: LibraryPosition::Top,
+        cause: mv.cause,
+        by: mv.by,
+        etb: Default::default(),
+        source: mv.source,
+    }))
 }

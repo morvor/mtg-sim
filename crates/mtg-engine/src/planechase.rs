@@ -29,6 +29,19 @@ pub const PLANESWALK_EFFECT: &str = "planeswalk";
 /// `Effect::Custom` name: the controller rolls the planar die because of an effect (not
 /// the special action, CR 116.2i).
 pub const ROLL_PLANAR_DIE_EFFECT: &str = "roll the planar die (effect)";
+/// `Effect::Custom` name: "chaos ensues" as a resolving spell or ability says so
+/// (CR 311.7): chaos abilities trigger.
+pub const CHAOS_ENSUES_EFFECT: &str = "chaos ensues (effect)";
+
+/// Chaos ensues because a resolving spell or ability says so (CR 311.7).
+pub fn chaos_ensues(g: &mut Game, p: PlayerId) {
+    g.emit(Event::Custom {
+        name: SmolStr::new(CHAOS_ENSUES),
+        player: Some(p),
+        obj: None,
+        amount: 0,
+    });
+}
 
 /// A face of the planar die (CR 901.3a): one Planeswalker symbol {PW} (CR 107.11), one
 /// chaos symbol {CHAOS} (CR 107.12), four blank faces.

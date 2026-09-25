@@ -192,6 +192,11 @@ pub fn finish_casting(g: &mut Game) {
             crate::kw::after_draw(g, p, card, nth);
         }
     }
+    // CR 401.5: a new top card of a library is revealed now.
+    if g.dirty {
+        g.recompute();
+    }
+    crate::zones::update_revealed_tops(g);
 }
 
 /// A view in which one object has no characteristics.

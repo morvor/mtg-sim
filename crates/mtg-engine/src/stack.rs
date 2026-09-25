@@ -76,7 +76,17 @@ impl Game {
                 AbilityKind::Triggered(t) => t.body.clone(),
                 _ => Body::default(),
             },
-            Some(StackKind::Spell) => self.spell_body(id),
+            Some(StackKind::Spell) => {
+                let mut body = self.spell_body(id);
+                // CR 303.4a: an Aura spell targets what it will enchant (as when it was
+                // cast), e.g. for choosing new targets for a copy of it.
+                if o.chars.has_subtype("Aura") && body.targets.is_empty() && !o.face_down {
+                    if let Some(spec) = crate::attach::aura_target_spec(&o.chars) {
+                        body.targets.push(spec);
+                    }
+                }
+                body
+            }
             None => Body::default(),
         }
     }

@@ -44,12 +44,26 @@ impl<'c> Builder<'c> {
         // A target player doesn't become "it" ("target opponent loses life equal to its
         // power" — "its" is still the object from before).
         let is_player = matches!(spec.what, TargetKind::Player(_));
+        // "Destroy target creature an opponent controls. That player loses 3 life.": the
+        // opponent mentioned is that object's controller.
+        let opponents = matches!(&spec.what, TargetKind::Object(f) if controlled_by_opponent(f));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
             self.it = Sel::Target(slot);
         }
+        if opponents {
+            self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        }
         slot
+    }
+}
+
+fn controlled_by_opponent(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(PlayerRel::Opponent) => true,
+        Filter::And(v) => v.iter().any(controlled_by_opponent),
+        _ => false,
     }
 }
 
@@ -65,6 +79,19 @@ pub fn parse_body(text: &str, ctx: &CompileContext) -> Option<Body> {
     }
     let mut b = Builder::new(ctx);
     let effect = parse_effect_text(t, &mut b)?;
+    Some(Body {
+        targets: b.targets,
+        effect,
+        modal: None,
+    })
+}
+
+/// Parses a body in which "it"/"that card" initially refers to `it` (e.g. the card an
+/// activated ability's cost exiled, CR 400.7j).
+pub fn parse_body_with_it(text: &str, ctx: &CompileContext, it: Sel) -> Option<Body> {
+    let mut b = Builder::new(ctx);
+    b.it = it;
+    let effect = parse_effect_text(text.trim(), &mut b)?;
     Some(Body {
         targets: b.targets,
         effect,
@@ -396,6 +423,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         (" until end of turn", Duration::EndOfTurn),
         (" this turn", Duration::EndOfTurn),
         (" until your next turn", Duration::UntilYourNextTurn),
+        // CR 500.4: until that step next begins.
+        (
+            " until your next upkeep",
+            Duration::UntilYourNextStep(TriggerStep::Upkeep),
+        ),
+        (
+            " until your next end step",
+            Duration::UntilYourNextStep(TriggerStep::End),
+        ),
         (" until end of combat", Duration::EndOfCombat),
         (
             " for as long as ~ remains on the battlefield",
@@ -1139,7 +1175,14 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let (what, rest) = object_ref(l, b)?;
     let rest = end(&rest);
-    let f = Filter::In(Box::new(what));
+    // CR 611.2c: these effects modify the rules, not characteristics, so one naming a
+    // class of objects ("creatures can't be blocked this turn") also applies to objects
+    // that join the class later (Veiling Oddity ruling). Specific objects (targets, "those
+    // creatures") are locked in as the effect begins.
+    let f = match &what {
+        Sel::All(f) if is_class_filter(f) => f.clone(),
+        _ => Filter::In(Box::new(what)),
+    };
     let r = match rest {
         "can't block" => Restriction::CantBlock(f),
         "can't attack" => Restriction::CantAttack(f),
@@ -1152,6 +1195,39 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         restriction: r,
         duration: dur,
     })
+}
+
+/// Whether a filter describes a class of objects by their current qualities only, without
+/// referring to the resolving ability's targets, choices, source, or referenced objects,
+/// so it can be evaluated again later in the effect's duration.
+fn is_class_filter(f: &Filter) -> bool {
+    match f {
+        Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
+        Filter::Not(x) => is_class_filter(x),
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
+            matches!(**v, Value::Const(_))
+        }
+        // Relative to the effect's controller, which doesn't change.
+        Filter::ControlledBy(r) | Filter::OwnedBy(r) => matches!(
+            r,
+            PlayerRel::You | PlayerRel::Opponent | PlayerRel::Any | PlayerRel::NotYou
+        ),
+        Filter::Any
+        | Filter::Type(_)
+        | Filter::Supertype(_)
+        | Filter::Subtype(_)
+        | Filter::Color(_)
+        | Filter::ExactColors(_)
+        | Filter::Colorless
+        | Filter::Multicolored
+        | Filter::Monocolored
+        | Filter::Permanent
+        | Filter::Token
+        | Filter::Tapped
+        | Filter::Untapped
+        | Filter::HasKeyword(_) => true,
+        _ => false,
+    }
 }
 
 /// "each player sacrifices a creature", "target player sacrifices an artifact",

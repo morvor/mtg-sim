@@ -257,7 +257,7 @@ pub fn dig(
 /// library where `rest_to` says. In the library: `Top` — back on top in the order `p`
 /// chooses; `FromTop(_)` — left where they are; `Bottom` — on the bottom in the order `p`
 /// chooses; `BottomRandom` — on the bottom in a random order; `Shuffled` — shuffled in.
-fn place_rest(
+pub(crate) fn place_rest(
     g: &mut Game,
     p: PlayerId,
     rest: Vec<ObjectId>,

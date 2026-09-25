@@ -502,6 +502,10 @@ pub struct Destination {
     /// resolving spell or ability that applies as it enters (CR 611.2e).
     #[serde(default)]
     pub with_mods: Vec<Modification>,
+    /// Battlefield: "put onto the battlefield attached to [object or player]" (CR 301.5e,
+    /// 303.4f–i).
+    #[serde(default)]
+    pub attached_to: Option<Sel>,
 }
 
 impl Destination {
@@ -516,6 +520,7 @@ impl Destination {
             transformed: false,
             with_counters: vec![],
             with_mods: vec![],
+            attached_to: None,
         }
     }
     pub fn battlefield() -> Destination {
@@ -1340,6 +1345,23 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "until your next upkeep", "until your next end step": until that step of the
+    /// controller's turn next begins (CR 500.4).
+    UntilYourNextStep(TriggerStep),
+}
+
+/// A phase or step an effect adds to a turn (CR 500.8–500.10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnPart {
+    /// An additional beginning phase (untap, upkeep, and draw steps).
+    BeginningPhase,
+    /// An additional combat phase.
+    CombatPhase,
+    /// An additional main phase (always a postcombat main phase, CR 505.1a).
+    MainPhase,
+    /// A single step. Added after a phase, it's the only step of a new phase of its kind:
+    /// the phase's other steps are skipped (CR 500.10).
+    Step(TriggerStep),
 }
 
 /// Layer-specific modifications of characteristics (CR 613).
@@ -2582,6 +2604,15 @@ pub enum Effect {
         tapped: bool,
         attacking: bool,
     },
+    /// "Create a Monster Role token attached to it": tokens that enter the battlefield
+    /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
+    /// can't legally enchant it isn't created.
+    CreateTokenAttached {
+        spec: TokenSpec,
+        count: Value,
+        controller: PlayerRef,
+        to: Sel,
+    },
     /// Create token copies of objects (CR 707.2, 111.10).
     CreateTokenCopy {
         of: Sel,
@@ -2866,6 +2897,17 @@ pub enum Effect {
     ExtraCombat {
         after_this: bool,
     },
+    /// "After this phase, there is an additional combat phase", "you get an additional
+    /// upkeep step after this step" (CR 500.8–500.10): adds `parts` (in this order) to the
+    /// current turn directly after the current step, or after the current phase; `n`
+    /// times. If `who` is set ("you get ..."), nothing is added unless it's that player's
+    /// turn (CR 500.10a).
+    AddTurnParts {
+        parts: Vec<TurnPart>,
+        after_phase: bool,
+        n: Value,
+        who: Option<PlayerRef>,
+    },
     /// Skip a player's next step/phase/turn.
     Skip {
         who: PlayerRef,
@@ -2924,6 +2966,15 @@ pub enum Effect {
     },
     /// Cast a card during resolution (CR 608.2g), optionally without paying its mana cost.
     CastCard {
+        who: PlayerRef,
+        what: Sel,
+        free: bool,
+        optional: bool,
+    },
+    /// "[You] may play that card [without paying its mana cost]" during resolution: a land
+    /// card is played (only during the player's turn with a land play left, CR 305.2b,
+    /// 305.3); any other card is cast (CR 608.2g).
+    PlayCard {
         who: PlayerRef,
         what: Sel,
         free: bool,

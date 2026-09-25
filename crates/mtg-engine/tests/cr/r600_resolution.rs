@@ -553,9 +553,16 @@ fn a_spell_goes_to_its_owners_graveyard_last_and_an_ability_ceases_to_exist() {
     assert!(t.in_graveyard(P0, "Graveyard Count"));
     // Its owner's graveyard, even if another player controlled it.
     let mut t = TestGame::new(2);
-    let c = t.custom(P1, def, Zone::Hand(P1));
-    t.g.move_object(c, Zone::Hand(P0), MoveCause::Effect, None);
-    let c = t.g.current(c);
+    // (A card can't be put into another player's hand, CR 400.3: P0 casts it from exile.)
+    let c = t.custom(P1, def, Zone::Exile);
+    mtg_engine::casting::grant_play_permission(
+        &mut t.g,
+        P0,
+        vec![c],
+        Duration::EndOfTurn,
+        false,
+        None,
+    );
     t.cast(P0, c).go();
     t.resolve();
     assert!(t.in_graveyard(P1, "Graveyard Count"));

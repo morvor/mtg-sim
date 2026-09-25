@@ -14,6 +14,15 @@ use smol_str::SmolStr;
 /// (CR 702.168a, 701.58a).
 pub fn face_down_characteristics(g: &Game, id: ObjectId) -> Characteristics {
     let o = g.obj(id);
+    // Only face-down spells and permanents are 2/2 creatures. A face-down card elsewhere
+    // (exiled face down, a hidden agenda conspiracy or a card of a planar or scheme deck
+    // in the command zone) has no characteristics (CR 406.3a, 315.5b).
+    if !matches!(o.zone, Zone::Battlefield | Zone::Stack) {
+        return Characteristics {
+            rules_text: std::sync::Arc::from(""),
+            ..Default::default()
+        };
+    }
     // A face-down spell has the characteristics the ability it was cast with lists.
     let cast_as = match o.stack.as_deref().map(|s| &s.cast.method) {
         Some(CastMethod::FaceDown(k)) => Some(k.name()),
@@ -89,7 +98,23 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
 pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     let o = g.obj(id);
     if !o.face_down {
-        return o.zone.is_public() || o.zone == Zone::Hand(p);
+        // CR 400.2, 402.3: public zones and your own hand; in a library, only a revealed
+        // top card or one you may look at (CR 401.2, 401.5).
+        return o.zone.is_public()
+            || o.zone == Zone::Hand(p)
+            || crate::zones::can_see_in_library(g, p, id);
+    }
+    // CR 406.3: face-down cards in exile, once a player is allowed to look at them.
+    if o.zone == Zone::Exile {
+        return crate::zones::may_look(g, p, id);
+    }
+    // CR 315.7: a player may look at a face-down conspiracy card they control.
+    if o.zone == Zone::Command
+        && o.card
+            .as_ref()
+            .is_some_and(|c| c.front().chars.is(CardType::Conspiracy))
+    {
+        return o.controller == p;
     }
     matches!(o.zone, Zone::Stack | Zone::Battlefield) && o.controller == p
 }

@@ -229,10 +229,18 @@ impl Game {
             }
         }
 
-        // Layer 1b: face-down (CR 708.2).
+        // Layer 1b: face-down (CR 708.2). A card exiled face down has no characteristics
+        // (CR 406.3a).
         for id in &live {
             if self.obj(*id).face_down {
-                let fd = crate::facedown::face_down_characteristics(self, *id);
+                let fd = if self.obj(*id).zone == Zone::Exile {
+                    Characteristics {
+                        rules_text: std::sync::Arc::from(""),
+                        ..Default::default()
+                    }
+                } else {
+                    crate::facedown::face_down_characteristics(self, *id)
+                };
                 self.objects[id.0 as usize].chars = fd;
             }
         }
@@ -268,11 +276,20 @@ impl Game {
                 self.apply_pt_counters(&live);
             }
             self.apply_layer(layer, &live, &mut st);
+            if layer == Layer::L2Control {
+                // CR 313.5, 314.5, 315.6: vanguards, schemes and conspiracies are
+                // controlled by their owners.
+                crate::variants::command_cards_controlled_by_owners(self, &live);
+            }
             if layer == Layer::L4Type {
                 // CR 305.6: basic land types have intrinsic mana abilities. They're
                 // determined by the object's types after layer 4 (CR 305.7) and can be
                 // removed by layer 6 effects.
                 for id in &live {
+                    let o = &self.objects[id.0 as usize];
+                    // CR 310.12b: likewise a Siege's intrinsic ability.
+                    let siege = crate::battle::intrinsic_abilities(&o.chars);
+                    self.objects[id.0 as usize].chars.abilities.extend(siege);
                     let o = &self.objects[id.0 as usize];
                     if !o.chars.is_land() {
                         continue;
@@ -294,6 +311,26 @@ impl Game {
                     crate::keyword_impls::expand_keywords(&mut c);
                     self.objects[id.0 as usize].chars = c;
                 }
+            }
+        }
+        // CR 208.3, 302.4, 301.7a: power and toughness are characteristics only creatures
+        // have; a noncreature permanent has none, even with a printed power and toughness
+        // (such as a Vehicle). Likewise loyalty is a characteristic only planeswalkers have
+        // (CR 306.5) and defense one only battles have (CR 310.4).
+        for id in &live {
+            let o = &mut self.objects[id.0 as usize];
+            if o.zone != Zone::Battlefield {
+                continue;
+            }
+            if !o.chars.is(CardType::Creature) {
+                o.chars.power = None;
+                o.chars.toughness = None;
+            }
+            if !o.chars.is(CardType::Planeswalker) {
+                o.chars.loyalty = None;
+            }
+            if !o.chars.is(CardType::Battle) {
+                o.chars.defense = None;
             }
         }
 
@@ -338,8 +375,14 @@ impl Game {
                 o.world_since = None;
             }
         }
+        // CR 400.11c: cards outside the game have only their own CDAs applied.
+        crate::zones::outside_game_characteristics(self);
         self.collect_statics();
         self.compute_player_effects();
+        if side_effects {
+            // CR 401.5: the revealed top cards of libraries.
+            crate::zones::update_revealed_tops(self);
+        }
     }
 
     pub fn is_live(&self, id: ObjectId) -> bool {
@@ -1040,7 +1083,13 @@ impl Game {
             mods[p.idx()].push((m, ctx));
         }
         for (i, m) in mods.into_iter().enumerate() {
-            let mut max_hand: Option<i32> = Some(7);
+            // CR 313.6, 902.5b: the hand modifier of the player's vanguard applies to their
+            // maximum hand size.
+            let vanguard = self
+                .vanguard_of(PlayerId(i as u8))
+                .and_then(|v| self.obj(v).base.hand_modifier)
+                .unwrap_or(0);
+            let mut max_hand: Option<i32> = Some(7 + vanguard);
             let mut land_plays = 1u32;
             for (x, ctx) in &m {
                 match x {

@@ -18,6 +18,14 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::kw::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "an object it could be attached to" (CR 303.4k).
+    if let Some(b) = crate::attach::custom_filter(g, name, id, ctx) {
+        return b;
+    }
+    // "a battle you protect", "if an opponent protects it" (CR 310.9e).
+    if let Some(b) = crate::battle::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
@@ -173,6 +181,26 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     }
     // "If it's a creature card" about a revealed face-down permanent (CR 708.12).
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
+        return b;
+    }
+    // CR 307.5a: cast as though it had flash with its own ability, any time a sorcery
+    // couldn't have been cast.
+    if name == crate::oracle::patterns::r307_sorcery_timing::CAST_BY_OWN_FLASH_AT_INSTANT_TIMING {
+        return ctx.source.is_some_and(|s| {
+            let o = g.obj(s);
+            ctx.cast.as_ref().or(o.cast.as_deref()).is_some_and(|c| {
+                c.instant_timing
+                    && matches!(c.method, CastMethod::Alternative(uid) if o.chars.abilities.iter().any(|a| {
+                        a.uid == uid
+                            && matches!(&a.kind, crate::ability::AbilityKind::Static(st)
+                                if matches!(&st.effect, crate::ability::StaticEffect::CostModifier(cm)
+                                    if matches!(cm.change, crate::ability::CostChange::FlashForAdditionalCost(_))))
+                    }))
+            })
+        });
+    }
+    // Main phase counting and "after upkeep" timing (CR 505.1b, 503.2).
+    if let Some(b) = crate::turn_structure::custom_condition(g, name, ctx) {
         return b;
     }
     let you = ctx.controller;
@@ -360,9 +388,17 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::kw::custom_effect(g, name, ctx) {
         return;
     }
+    // A Siege's intrinsic ability (CR 310.12b).
+    if crate::battle::custom_effect(g, name, ctx) {
+        return;
+    }
     // "named-token:N:Name": create N tokens by name (CR 111.11).
     if let Some(spec) = name.strip_prefix("named-token:") {
         crate::tokens::create_named_tokens(g, spec, ctx);
+        return;
+    }
+    // Zone rules and ante (CR 400-407).
+    if crate::zones::custom_effect(g, name, ctx) {
         return;
     }
     // "The game is a draw" (CR 104.4c, 104.4e).
@@ -384,6 +420,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     // The planeswalking ability (CR 901.8, 701.31).
     if name == crate::planechase::PLANESWALK_EFFECT {
         crate::planechase::planeswalk(g, ctx.controller);
+        return;
+    }
+    if name == crate::planechase::CHAOS_ENSUES_EFFECT {
+        crate::planechase::chaos_ensues(g, ctx.controller);
         return;
     }
     if name == crate::planechase::ROLL_PLANAR_DIE_EFFECT {
