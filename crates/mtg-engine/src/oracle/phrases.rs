@@ -327,7 +327,19 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
         let (nw, nrest) = split_word(s);
         let nw2 = nw.trim_end_matches(',');
+        // "Mercenary permanent card": "permanent card" narrows as one noun (CR 110.4a-b).
+        let (nw2, nrest, perm_card) = match (nw2, split_word(nrest)) {
+            ("permanent", (w, r)) if matches!(w.trim_end_matches(','), "card" | "cards") => {
+                (w.trim_end_matches(','), r, true)
+            }
+            _ => (nw2, nrest, false),
+        };
         if let Some(nf) = head_noun(nw2) {
+            let nf = if perm_card {
+                Filter::and(vec![Filter::PermanentCard, nf])
+            } else {
+                nf
+            };
             // The noun narrows every head joined since the last narrowing: "instant or
             // sorcery spell", "artifact and enchantment cards".
             let group: Vec<Filter> = heads
@@ -352,9 +364,43 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             heads.push(Filter::and(vec![joined, nf]));
             group_start = heads.len();
             s = nrest;
+            // "Dragon creature cards": a subtype narrowed by a card type, then by "card".
+            let mut ends_in_card = matches!(nw2, "card" | "cards");
+            let (cw, crest) = split_word(s);
+            let cw2 = cw.trim_end_matches(',');
+            if matches!(cw2, "card" | "cards")
+                && matches!(heads.last(), Some(Filter::And(v)) if v.len() == 2
+                    && matches!(v[0], Filter::Subtype(_))
+                    && matches!(v[1], Filter::Type(_)))
+            {
+                if cw2 == "cards" {
+                    plural = true;
+                }
+                let last = heads.pop().unwrap();
+                heads.push(Filter::and(vec![last, Filter::Card]));
+                group_start = heads.len();
+                s = crest;
+                ends_in_card = true;
+            }
             // allow "creature card or artifact card"
             let t = s.trim_start();
             if let Some(r) = t.strip_prefix("or ") {
+                // "basic land card or Gate card": adjectives before a complete "... card"
+                // phrase describe only that phrase, not the alternative after "or" (but
+                // "nontoken artifact creature or Vehicle" is one description).
+                if ends_in_card && parts.iter().any(|p| !matches!(p, Filter::Other)) {
+                    let adjs: Vec<Filter> = parts
+                        .iter()
+                        .filter(|p| !matches!(p, Filter::Other))
+                        .cloned()
+                        .collect();
+                    parts.retain(|p| matches!(p, Filter::Other));
+                    for h in heads.iter_mut() {
+                        let mut v = adjs.clone();
+                        v.push(h.clone());
+                        *h = Filter::and(v);
+                    }
+                }
                 s = r;
                 continue;
             }

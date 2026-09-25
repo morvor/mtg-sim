@@ -68,6 +68,40 @@ pub fn perform(
     n: u32,
     ctx: &mut Ctx,
 ) {
-    let _ = (g, action, players, objs, n, ctx);
     let _ = Zone::Battlefield;
+    match action {
+        // CR 701.49: venture into the dungeon.
+        KeywordAction::Venture => {
+            for p in players {
+                crate::dungeons::venture(g, *p, ctx.source);
+            }
+        }
+        // CR 701.32c: set schemes in motion one at a time.
+        KeywordAction::SetInMotion => {
+            for p in players {
+                for _ in 0..n.max(1) {
+                    crate::variants::set_in_motion(g, *p);
+                }
+            }
+        }
+        // CR 701.33: abandon a scheme.
+        KeywordAction::Abandon => {
+            for o in objs {
+                crate::variants::abandon(g, *o);
+            }
+        }
+        // CR 701.52: roll to visit your Attractions.
+        KeywordAction::RollAttractions => {
+            for p in players {
+                crate::variants::roll_to_visit(g, *p);
+            }
+        }
+        // CR 701.31: planeswalk (only the planar controller can).
+        KeywordAction::Planeswalk => {
+            for p in players {
+                crate::planechase::planeswalk(g, *p);
+            }
+        }
+        _ => {}
+    }
 }

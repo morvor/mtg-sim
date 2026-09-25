@@ -141,6 +141,8 @@ impl Game {
         self.entering = prev_entering;
         self.run_post_replacement_effects();
         self.recompute();
+        let entered: Vec<ObjectId> = out.iter().flatten().copied().collect();
+        self.entered_simultaneously(&entered);
         out
     }
 
@@ -304,6 +306,8 @@ impl Game {
             self.objects[old_id.0 as usize].zone = Zone::Nowhere;
             return None;
         }
+        // CR 708.9: a face-down permanent or spell is revealed as it leaves.
+        crate::facedown::moving(self, old_id, m.to);
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != old_id);
         }
@@ -326,6 +330,10 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        // CR 704.6d: a commander put into a graveyard or exile since the last check.
+        if self.obj(new_id).is_commander && matches!(m.to, Zone::Graveyard(_) | Zone::Exile) {
+            self.commander_moved_since_last_sba.insert(new_id);
+        }
         if from == Zone::Stack && m.to == Zone::Battlefield {
             // Effects of resolved spells and abilities that changed a permanent spell
             // continue to apply to the permanent it becomes (CR 112.4, 110.2b).
@@ -472,6 +480,15 @@ impl Game {
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
                 // battle defense (CR 310.4), Saga lore (CR 714.3a), plus effects.
                 let mut counters_to_add = m.etb.counters.clone();
+                // Copy exceptions that are additional effects or conditional
+                // (CR 707.9e–707.9g).
+                let copy_extras = crate::copy_rules::apply_copy_extras(
+                    self,
+                    new_id,
+                    copy_effect,
+                    &m.etb.copy_extras,
+                    &mut counters_to_add,
+                );
                 let o = self.obj(new_id);
                 if o.is(CardType::Planeswalker) {
                     if let Some(l) = o.chars.loyalty {
@@ -526,7 +543,7 @@ impl Game {
                     }
                 }
                 // "As this enters" effects (CR 614.1c).
-                for (mut c, e) in m.etb.as_enters.clone() {
+                for (mut c, e) in m.etb.as_enters.clone().into_iter().chain(copy_extras) {
                     c.source = Some(new_id);
                     c.controller = controller;
                     let before = self.effects.len();
@@ -558,7 +575,9 @@ impl Game {
                 let lib = &mut self.players[p.idx()].library;
                 match m.pos {
                     LibraryPosition::Top => lib.push(new_id),
-                    LibraryPosition::Bottom => lib.insert(0, new_id),
+                    LibraryPosition::Bottom | LibraryPosition::BottomRandom => {
+                        lib.insert(0, new_id)
+                    }
                     LibraryPosition::FromTop(n) => {
                         let idx = lib.len().saturating_sub(n as usize);
                         lib.insert(idx, new_id);
@@ -692,7 +711,7 @@ impl Game {
         }
     }
 
-    fn run_post_replacement_effects(&mut self) {
+    pub(crate) fn run_post_replacement_effects(&mut self) {
         while let Some((mut c, e)) = self.post_replacement_effects.pop() {
             self.exec(&e, &mut c);
         }
@@ -1528,8 +1547,18 @@ impl Game {
             ..Default::default()
         };
         if let Some(src) = spec.copy_of {
-            etb.copy_of = Some(src);
-            etb.copy_exceptions = spec.copy_exceptions.clone();
+            match crate::copy_rules::double_faced_copy_face(self, src) {
+                // CR 707.8a: a double-faced token, with the same face up; each face's
+                // characteristics come from the same face of the card.
+                Some(face) if spec.card.is_some() => {
+                    etb.face = Some(face);
+                    etb.copiable_mods = spec.copy_exceptions.clone();
+                }
+                _ => {
+                    etb.copy_of = Some(src);
+                    etb.copy_exceptions = spec.copy_exceptions.clone();
+                }
+            }
         }
         etb.attacking = spec.attacking;
         let new = self.move_object_ev(MoveEv {

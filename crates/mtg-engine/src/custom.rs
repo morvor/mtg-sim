@@ -54,6 +54,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::kw::custom_value(g, name, ctx) {
         return v;
     }
+    // Die roll results (CR 706).
+    if let Some(v) = crate::dice::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.
@@ -163,6 +167,14 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::merge::custom_condition(g, name, ctx) {
         return b;
     }
+    // "If you rolled doubles" (CR 706.5).
+    if let Some(b) = crate::dice::custom_condition(name, ctx) {
+        return b;
+    }
+    // "If it's a creature card" about a revealed face-down permanent (CR 708.12).
+    if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
+        return b;
+    }
     let you = ctx.controller;
     let h = &g.history;
     // "you've cast another red spell this turn": a spell of that color (as it was on the
@@ -259,6 +271,9 @@ pub fn custom_trigger(
     // "When you unlock this door" (CR 709.5h), "Whenever this creature mutates".
     if let Some(v) = crate::rooms::custom_trigger(name, src, ev)
         .or_else(|| crate::merge::custom_trigger(name, src, ev))
+        .or_else(|| crate::dice::custom_trigger(g, name, ctl, ev))
+        .or_else(|| crate::variants::custom_trigger(g, name, src, ctl, ev))
+        .or_else(|| crate::dungeons::custom_trigger(g, name, src, ev))
     {
         return v;
     }
@@ -380,6 +395,14 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "exile them, then meld them into [result]" (CR 701.42a).
     if crate::merge::custom_effect(g, name, ctx) {
+        return;
+    }
+    // "Roll again", rerolling stored results (CR 706.3c, 706.8b).
+    if crate::dice::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Revealing a face-down permanent (CR 708.9, 708.12).
+    if crate::facedown::custom_effect(g, name, ctx) {
         return;
     }
     match name {

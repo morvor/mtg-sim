@@ -219,7 +219,10 @@ impl Game {
                 // "That much"/"that many": the total amount (damage, life, ...), or the
                 // number of events for events without an amount (objects entering, ...).
                 info.amount = g.iter().map(|i| i.amount).sum();
-                if g.iter().all(|i| i.amount == 0) {
+                // Die rolls always have an amount: their result, which a planar die roll
+                // doesn't have (CR 706.7).
+                let die_roll = matches!(**trigger, TriggerCond::RollDie(_));
+                if !die_roll && g.iter().all(|i| i.amount == 0) {
                     info.amount = g.len() as i32;
                 }
                 info.objects = Vec::new();
@@ -1415,11 +1418,25 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::FlipCoin(rel), Event::CoinFlipped { player, won }) => {
+            (
+                TriggerCond::FlipCoin(rel),
+                Event::CoinFlipped {
+                    player, won, lost, ..
+                },
+            ) => {
                 if self.player_rel_matches(*rel, *player, &ctx) {
+                    // 1: won the flip; 0: lost it; -1: a flip with no winner or loser
+                    // (CR 705.2).
+                    let amount = if *won {
+                        1
+                    } else if *lost {
+                        0
+                    } else {
+                        -1
+                    };
                     one(EventInfo {
                         player: Some(*player),
-                        amount: *won as i32,
+                        amount,
                         ..Default::default()
                     })
                 } else {

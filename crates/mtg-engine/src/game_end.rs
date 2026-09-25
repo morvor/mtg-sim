@@ -160,6 +160,9 @@ impl Game {
         for e in self.replace(ReplEvent::LoseGame { player: p }) {
             self.execute_repl_event(e);
         }
+        // A replacement effect's card draws happen once it has been applied (CR 121.7),
+        // e.g. "if you would lose the game, instead ... draw seven cards" (CR 704.7).
+        self.run_post_replacement_effects();
     }
 
     /// Several players lose the game at the same time (CR 104.4a): the result is decided

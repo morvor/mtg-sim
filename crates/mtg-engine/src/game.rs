@@ -489,6 +489,8 @@ pub struct Game {
     pub start: crate::start::StartState,
     /// Special actions allowed by effects and effects being ignored (CR 116.2c, 116.2d).
     pub special: crate::special_actions::SpecialState,
+    /// Coins and dice (CR 705, 706).
+    pub dice: crate::dice::DiceState,
 }
 
 impl Game {
@@ -575,6 +577,7 @@ impl Game {
             apnap_choices: vec![],
             start: Default::default(),
             special: Default::default(),
+            dice: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -1119,6 +1122,8 @@ impl Game {
     /// Handles a player leaving a multiplayer game (CR 800.4a).
     pub(crate) fn after_player_leaves(&mut self, p: PlayerId) {
         self.players[p.idx()].left_game = true;
+        // CR 708.9: their face-down permanents and spells are revealed.
+        crate::facedown::reveal_all(self, Some(p));
         if self.players_in_game().len() <= 1 {
             return;
         }
@@ -1127,7 +1132,12 @@ impl Game {
 
     /// Ends the game if only one team (or no player) is left (CR 104.2a, 104.4a).
     pub fn check_game_over(&mut self) {
+        let over = self.result.is_some();
         self.decide_game_over();
+        if !over && self.result.is_some() {
+            // CR 708.9: at the end of the game, face-down objects are revealed.
+            crate::facedown::reveal_all(self, None);
+        }
     }
 
     /// Forces a draw (CR 104.4).

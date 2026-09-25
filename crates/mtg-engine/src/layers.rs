@@ -324,9 +324,12 @@ impl Game {
         let _ = turn;
         // CR 506.4: type changes can remove permanents from combat.
         crate::combat::update_combat_membership(self);
-        for id in &live {
+        // CR 704.5k: how long each permanent has had the world supertype (a card in another
+        // zone isn't a permanent; a new object starts counting afresh). Hypothetical
+        // computations don't start the clock.
+        for id in live.iter().filter(|_| side_effects) {
             let o = &mut self.objects[id.0 as usize];
-            if o.chars.has_supertype(Supertype::World) {
+            if o.zone == Zone::Battlefield && o.chars.has_supertype(Supertype::World) {
                 if o.world_since.is_none() {
                     o.world_since = Some(self.next_timestamp);
                 }

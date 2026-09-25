@@ -57,6 +57,10 @@ pub struct EntryMods {
     pub prepared: bool,
     /// Exceptions to a copy effect it enters with (CR 707.9b).
     pub copy_exceptions: Vec<Modification>,
+    /// Exceptions to a copy effect that are additional effects, conditional, or linked
+    /// triggered abilities (CR 707.9e–707.9g).
+    #[serde(default)]
+    pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
     /// Effects on the permanent performed as it's put onto the battlefield
     /// ([`Effect::OnEntry`]).
     pub on_entry: Vec<Effect>,
@@ -775,6 +779,14 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
+            Sel::TopOfLibrary(r, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                self.eval_players(r, ctx)
+                    .into_iter()
+                    .flat_map(|p| crate::library::top_cards(self, p, k as u32))
+                    .map(Entity::Object)
+                    .collect()
+            }
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {

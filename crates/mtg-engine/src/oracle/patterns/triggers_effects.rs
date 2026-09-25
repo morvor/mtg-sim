@@ -50,7 +50,9 @@ fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         "it" | "that creature" | "that permanent" | "that land" | "they" | "those creatures"
         | "those permanents" => {
-            if matches!(b.it, Sel::None) {
+            // A plural pronoun never refers to the source by default.
+            let plural = matches!(subject, "they" | "those creatures" | "those permanents");
+            if matches!(b.it, Sel::None) || (plural && matches!(b.it, Sel::This)) {
                 return None;
             }
             b.it.clone()

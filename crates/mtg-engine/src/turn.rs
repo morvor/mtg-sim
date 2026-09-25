@@ -782,12 +782,25 @@ impl Game {
         self.rule_effects.retain(|e| !pred(&e.duration));
         self.player_effects.retain(|e| !pred(&e.duration));
         self.replacements.retain(|e| !pred(&e.duration));
+        // "You may play that card this turn" permissions end with the effect.
+        self.play_grants.retain(|g| !pred(&g.duration));
         self.dirty = true;
     }
 
     fn expire_until_next_turn(&mut self, active: PlayerId) {
         let until =
             |d: &Duration, c: PlayerId| matches!(d, Duration::UntilYourNextTurn) && c == active;
+        self.play_grants.retain(|g| !until(&g.duration, g.player));
+        // "Until the end of your next turn, you may play that card."
+        let turn = self.turn.number;
+        for g in self.play_grants.iter_mut() {
+            if matches!(g.duration, Duration::UntilEndOfYourNextTurn)
+                && g.player == active
+                && g.turn < turn
+            {
+                g.duration = Duration::EndOfTurn;
+            }
+        }
         self.effects.retain(|e| !until(&e.duration, e.controller));
         self.rule_effects
             .retain(|e| !until(&e.duration, e.controller));
