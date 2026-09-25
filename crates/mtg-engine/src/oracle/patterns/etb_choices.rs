@@ -259,11 +259,7 @@ fn entry_abilities(s: &str, ctx: &CompileContext) -> Option<Effect> {
 /// "flying", "flying and haste", "first strike, vigilance, and lifelink".
 fn keyword_list(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
     let mut mods = Vec::new();
-    for p in s
-        .split(", and ")
-        .flat_map(|p| p.split(" and "))
-        .flat_map(|p| p.split(", "))
-    {
+    for p in crate::oracle::keywords::split_keyword_phrases(s) {
         let p = p.trim();
         if p.is_empty() || p.contains("counter") || p.contains('"') {
             return None;
