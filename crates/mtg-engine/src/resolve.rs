@@ -673,6 +673,14 @@ impl Game {
                     }
                 }
             }
+            Effect::AttachAsCreature { what, to } => {
+                let objs = self.resolve_objects(what, ctx);
+                if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
+                    for o in objs {
+                        self.attach_as_creature(o, t);
+                    }
+                }
+            }
             Effect::Unattach { what } => {
                 for o in self.resolve_objects(what, ctx) {
                     self.unattach(o);

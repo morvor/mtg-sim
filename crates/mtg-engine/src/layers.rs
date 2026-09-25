@@ -241,6 +241,16 @@ impl Game {
             Layer::L7dSwitch,
         ] {
             if layer == Layer::L7cModify {
+                // CR 208.5: a creature with no value for its power or toughness has 0, so
+                // counters and modifications apply to 0 (e.g. an equipped planeswalker
+                // that became a creature, CR 702.6e).
+                for id in &live {
+                    let c = &mut self.objects[id.0 as usize].chars;
+                    if c.is(CardType::Creature) {
+                        c.power.get_or_insert(0);
+                        c.toughness.get_or_insert(0);
+                    }
+                }
                 self.apply_pt_counters(&live);
             }
             self.apply_layer(layer, &live, &mut st);

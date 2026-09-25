@@ -35,6 +35,14 @@ pub fn parse_keyword_line(text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     if t.is_empty() {
         return None;
     }
+    // "Enchant creature, planeswalker, or Clue", "Equip Shaman, Warlock, or Wizard {1}":
+    // the parameter is an object phrase that may contain commas.
+    let lower = t.to_lowercase();
+    if lower.starts_with("enchant ") || lower.starts_with("equip ") {
+        if let Some(kw) = parse_one_keyword(t, ctx) {
+            return Some(compile_keyword(kw, t));
+        }
+    }
     let parts = split_keyword_list(t);
     let mut out = Vec::new();
     for part in parts {
@@ -129,15 +137,10 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
             }
         }
         KeywordKind::Enchant => {
-            let r = rest;
-            if r == "player" || r == "opponent" || r == "player or planeswalker" {
-                kw.filter = Some(Filter::Any);
-            } else {
-                let (f, _, tail) = parse_object_phrase(r)?;
-                if !end(tail).is_empty() {
-                    return None;
-                }
-                kw.filter = Some(f);
+            // CR 702.5d: "Enchant player" / "Enchant opponent" Auras enchant players only;
+            // they have no object filter (see `attach::enchant_player`).
+            if rest != "player" && rest != "opponent" {
+                kw.filter = Some(quality_phrase(rest)?);
             }
         }
         KeywordKind::Equip => {
@@ -145,11 +148,12 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
             if let Some(i) = rest.find('{') {
                 let pre = rest[..i].trim();
                 if !pre.is_empty() {
-                    let (f, _, tail) = parse_object_phrase(pre)?;
-                    if !end(tail).is_empty() {
-                        return None;
-                    }
-                    kw.filter = Some(f);
+                    // CR 702.6c: "Equip [quality]" / "Equip [quality] creature".
+                    kw.filter = Some(if pre == "commander" {
+                        Filter::Commander
+                    } else {
+                        quality_phrase(pre)?
+                    });
                 }
                 kw.cost = Some(parse_keyword_cost(&rest_raw[rest_raw.find('{')?..])?);
             } else {
@@ -188,6 +192,33 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Keyword> {
         }
     }
     Some(kw)
+}
+
+/// The object phrase of "Enchant [quality]" / "Equip [quality]": "creature you control",
+/// "artifact, creature, or planeswalker", "red or green creature" (adjectives joined by
+/// "or" before a shared noun).
+fn quality_phrase(s: &str) -> Option<Filter> {
+    if let Some((f, _, tail)) = parse_object_phrase(s) {
+        if end(tail).is_empty() {
+            return Some(f);
+        }
+    }
+    // "red or green creature" = "red creature or green creature".
+    let (first, rest) = s.split_once(" or ")?;
+    let (second, noun) = rest.split_once(' ')?;
+    if first.contains(' ') {
+        return None;
+    }
+    let mut fs = Vec::new();
+    for adj in [first, second] {
+        let phrase = format!("{adj} {noun}");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        fs.push(f);
+    }
+    Some(Filter::Or(fs))
 }
 
 fn cost_then_number(s: &str) -> Option<(Cost, i32)> {

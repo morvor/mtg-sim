@@ -2347,6 +2347,12 @@ pub enum Effect {
         what: Sel,
         to: Sel,
     },
+    /// Attach as though the permanent it's attached to were a creature ("equip
+    /// planeswalker", CR 702.6e).
+    AttachAsCreature {
+        what: Sel,
+        to: Sel,
+    },
     Unattach {
         what: Sel,
     },

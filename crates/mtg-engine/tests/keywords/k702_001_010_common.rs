@@ -186,6 +186,18 @@ pub fn remove_kw(t: &mut TestGame, id: ObjectId, kind: KeywordKind) {
     );
 }
 
+/// The legal choices offered by the most recent target decision.
+pub fn last_target_candidates(t: &TestGame) -> Vec<Entity> {
+    t.asked()
+        .into_iter()
+        .rev()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
 /// Damage marked on an object (following it if it changed zones).
 pub fn damage(t: &TestGame, id: ObjectId) -> u32 {
     t.obj_now(id).damage

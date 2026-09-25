@@ -342,6 +342,77 @@ inventory::submit! {
     EffectPattern { name: "k702: attack despite defender this turn", priority: 50, parse: attack_despite_defender_effect }
 }
 
+/// "Equipped creature gets +1/+1 for each counter on it[, and has trample and lifelink]"
+/// (Luxior). An ability pattern: the static parser commits to "equipped creature ..."
+/// lines before trying pluggable static patterns.
+fn attached_counter_anthem(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || block.contains('\n') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let text = block;
+    let r = l
+        .strip_prefix("equipped creature gets ")
+        .or_else(|| l.strip_prefix("enchanted creature gets "))?;
+    let (pt, rest) = r.split_once(" for each counter on it")?;
+    let (p, t) = pt.split_once('/')?;
+    let per = |s: &str| -> Option<i32> { s.trim_start_matches('+').parse().ok() };
+    let counters = || Value::CountersOn(Box::new(Sel::AttachedTo), None);
+    let times = |n: i32| Value::Mul(Box::new(Value::c(n)), Box::new(counters()));
+    let mut mods = vec![Modification::ModifyPT(times(per(p)?), times(per(t)?))];
+    let rest = end(rest).trim();
+    if !rest.is_empty() {
+        let kws = rest
+            .strip_prefix(", and has ")
+            .or_else(|| rest.strip_prefix(" and has "))
+            .or_else(|| rest.strip_prefix("and has "))?;
+        mods.extend(keyword_mods(kws)?);
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::AttachedToSource,
+            mods,
+        })),
+        text,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "k702: attached gets +1/+1 for each counter", priority: 50, parse: attached_counter_anthem }
+}
+
+/// "Equipped permanent isn't a planeswalker and is a creature in addition to its other
+/// types." (Luxior, used with "equip planeswalker", CR 702.6e).
+fn attached_type_swap(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = ["equipped permanent ", "enchanted permanent ", "equipped creature "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))?;
+    let r = r.strip_suffix(" in addition to its other types")?;
+    let (not, is) = r.strip_prefix("isn't ")?.split_once(" and is ")?;
+    let article = |s: &str| {
+        s.strip_prefix("a ")
+            .or_else(|| s.strip_prefix("an "))
+            .map(str::to_string)
+    };
+    let not = CardType::from_word(&article(not)?)?;
+    let is = CardType::from_word(&article(is)?)?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::AttachedToSource,
+            mods: vec![
+                Modification::RemoveTypes(vec![not]),
+                Modification::AddTypes(vec![is]),
+            ],
+        })),
+        text,
+    )])
+}
+
+inventory::submit! {
+    StaticPattern { name: "k702: attached type swap", priority: 50, parse: attached_type_swap }
+}
+
 /// "You may cast creature spells from the top of your library." / "You may play lands and
 /// cast spells from the top of your library." — permissions to play cards from another
 /// zone; the cards' own timing rules (including flash, CR 702.8a) still apply.
