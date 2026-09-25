@@ -1179,6 +1179,8 @@ impl Game {
         }
         self.players[p.idx()].life += n as i32;
         *self.history.life_gained.entry(p).or_insert(0) += n;
+        // Life totals feed conditional statics and P/T-defining values (CR 611.3a).
+        self.dirty = true;
         self.emit(Event::LifeGained {
             player: p,
             amount: n,
@@ -1206,6 +1208,7 @@ impl Game {
         }
         self.players[p.idx()].life -= n as i32;
         *self.history.life_lost.entry(p).or_insert(0) += n;
+        self.dirty = true;
         self.emit(Event::LifeLost {
             player: p,
             amount: n,
@@ -1503,6 +1506,16 @@ impl Game {
 
     /// Attaches `obj` to `to`. Returns false if it couldn't be attached.
     pub fn attach(&mut self, obj: ObjectId, to: Entity) -> bool {
+        self.attach_checked(obj, to, false)
+    }
+
+    /// Attaches `obj` to `to` as though `to` were a creature ("equip planeswalker",
+    /// CR 702.6e). Returns false if it couldn't be attached.
+    pub fn attach_as_creature(&mut self, obj: ObjectId, to: Entity) -> bool {
+        self.attach_checked(obj, to, true)
+    }
+
+    fn attach_checked(&mut self, obj: ObjectId, to: Entity, as_creature: bool) -> bool {
         if self.dirty {
             self.recompute();
         }
@@ -1513,7 +1526,7 @@ impl Game {
             // CR 701.3b: already attached — nothing happens.
             return false;
         }
-        if !crate::attach::can_attach(self, obj, to) {
+        if !crate::attach::can_attach_as(self, obj, to, as_creature) {
             return false;
         }
         if let Some(prev) = self.obj(obj).attached_to {

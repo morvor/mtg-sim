@@ -199,11 +199,13 @@ impl CardDatabase {
                 }
             }
         }
-        // Prefer real playable cards over tokens/art cards with the same name.
-        for idxs in by_name.values_mut() {
+        // Prefer real playable cards over tokens/art cards with the same name, and a card
+        // with exactly that name over a card with a face of that name ("Jump" vs
+        // "Encouraging Aviator // Jump").
+        for (key, idxs) in by_name.iter_mut() {
             idxs.sort_by_key(|&i| {
                 let c = &cards[i];
-                (!c.is_playable_card(), i)
+                (!c.is_playable_card(), c.name.to_lowercase() != *key, i)
             });
         }
         Self {

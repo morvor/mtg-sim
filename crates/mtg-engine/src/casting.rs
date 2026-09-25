@@ -1171,7 +1171,7 @@ impl Game {
             .any(|a| a.uid == uid && matches!(&a.kind, AbilityKind::Activated(x) if x.is_loyalty))
     }
 
-    fn activation_prohibited(&self, p: PlayerId, src: ObjectId, is_mana: bool) -> bool {
+    pub(crate) fn activation_prohibited(&self, p: PlayerId, src: ObjectId, is_mana: bool) -> bool {
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
             if let Restriction::CantActivate {
                 who,
