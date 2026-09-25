@@ -444,6 +444,10 @@ pub struct Destination {
     pub transformed: bool,
     /// Counters it enters with.
     pub with_counters: Vec<(CounterKind, Value)>,
+    /// Battlefield: "that permanent is [characteristic]" — a continuous effect of the
+    /// resolving spell or ability that applies as it enters (CR 611.2e).
+    #[serde(default)]
+    pub with_mods: Vec<Modification>,
 }
 
 impl Destination {
@@ -457,6 +461,7 @@ impl Destination {
             attacking: false,
             transformed: false,
             with_counters: vec![],
+            with_mods: vec![],
         }
     }
     pub fn battlefield() -> Destination {
@@ -639,6 +644,8 @@ pub enum Sel {
     TriggerSpell,
     /// Union of selections.
     Union(Vec<Sel>),
+    /// The top card of a player's graveyard.
+    TopOfGraveyard(PlayerRef),
 }
 
 /// Refers to one or more players.
@@ -829,6 +836,10 @@ pub enum Filter {
     Other,
     /// A member of the selection.
     In(Box<Sel>),
+    /// One of these specific objects, fixed when an effect was created (e.g. "a source of
+    /// your choice", CR 609.7a). A chosen permanent spell also matches the permanent it
+    /// becomes.
+    Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
     /// Attached to something ("equipped", "enchanted").
@@ -1146,6 +1157,33 @@ pub enum Modification {
         from: SmolStr,
         to: SmolStr,
     },
+    /// Sets the name (CR 612.8): the object loses its other names.
+    SetName(SmolStr),
+    /// "Exchange the text boxes of [two objects]" (CR 612.5). As the effect is created,
+    /// it becomes a [`Modification::SetText`] for each object with the other's rules text.
+    ExchangeText,
+    /// Replaces the object's rules text (CR 612.5).
+    SetText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// Has the full text of the selected card (CR 612.6): its name, mana cost, color
+    /// indicator, type line, rules text, and power and toughness.
+    FullTextOf(Box<Sel>),
+    /// Adds rules text following the object's own, without changing its own text (a
+    /// splice ability, CR 612.10, 702.47c).
+    AddText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// "Has all names of nonlegendary creature cards in addition to its name" (CR 612.7).
+    AllCreatureNames,
+    /// A name sticker: adds `word` to the object's name after `position` words (CR 123.6,
+    /// 612.9).
+    NameSticker {
+        word: SmolStr,
+        position: u32,
+    },
     // Layer 4
     AddTypes(Vec<CardType>),
     RemoveTypes(Vec<CardType>),
@@ -1193,7 +1231,14 @@ impl Modification {
         use Modification::*;
         match self {
             SetController(_) => Layer::L2Control,
-            ChangeText { .. } => Layer::L3Text,
+            ChangeText { .. }
+            | SetName(_)
+            | ExchangeText
+            | SetText { .. }
+            | FullTextOf(_)
+            | AddText { .. }
+            | AllCreatureNames
+            | NameSticker { .. } => Layer::L3Text,
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)
@@ -1349,6 +1394,9 @@ pub enum ReplacementEvent {
     Mill(PlayerFilter),
     /// "If you would search your library".
     Search(PlayerFilter),
+    /// "As [this permanent] is turned face up, ..." (CR 614.1e): performed with
+    /// [`ReplacementAction::AsEnters`] as the permanent turns face up.
+    TurnedFaceUp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1394,6 +1442,13 @@ pub enum ReplacementAction {
     Also(Box<Effect>),
     /// Regeneration shield (CR 701.19).
     Regenerate,
+    /// Prevent N (or all, when `None`) of the damage, then perform an additional effect
+    /// right afterward that can refer to the amount prevented as the event amount
+    /// (CR 615.5): "prevent that damage. You gain life equal to the damage prevented this
+    /// way."
+    PreventAndThen(Option<Value>, Box<Effect>),
+    /// Enters transformed, with its back face up (CR 616.1d, 712.14).
+    EnterTransformed,
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -1479,7 +1534,8 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
-    /// "[objects] can't enter the battlefield" (CR 608.3e).
+    /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
+    /// [`Restriction::CantEnter`] (CR 614.17d).
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
@@ -1496,6 +1552,9 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
+    /// it would exist on the battlefield.
+    CantEnter(Filter),
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
@@ -1655,6 +1714,15 @@ pub enum StaticEffect {
     /// "Prevent all combat damage that would be dealt ..." is a Replacement.
     /// Custom behavior implemented in code, by name.
     Custom(SmolStr),
+    /// "If you cast a spell this way, it gains [ability]": spells matching `what` that a
+    /// player casts from `zone` using a permission from this object gain the
+    /// modifications; they last until the end of the game, even after the spell becomes a
+    /// permanent and even if this object leaves (CR 611.3d).
+    CastGrant {
+        zone: ZoneKind,
+        what: Filter,
+        mods: Vec<Modification>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2303,8 +2371,59 @@ pub enum Effect {
         what: Sel,
         n: Value,
     },
+    /// "Change the text of [objects] by replacing all instances of one [kind of word] with
+    /// another" (CR 612): the words are chosen as it resolves; a layer 3 effect results.
+    ChangeText {
+        what: Sel,
+        words: crate::text_change::TextWords,
+        /// Words the new word can't be ("The new creature type can't be Wall").
+        exclude: Vec<SmolStr>,
+        duration: Duration,
+    },
+    /// "Exile [objects] until [event]" (CR 610.3): when the event happens, the objects
+    /// return to the zones they were in (to the battlefield under their owners' control).
+    ExileUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// "[Permanents] phase out until [event]" (CR 610.4).
+    PhaseOutUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// Performs `effect`, with `replacement` applying to the events it causes as a
+    /// self-replacement effect (CR 614.15): "Counter target spell. If that spell is
+    /// countered this way, put it on top of its owner's library instead of into that
+    /// player's graveyard."
+    SelfReplace {
+        replacement: ReplacementDef,
+        effect: Box<Effect>,
+    },
+    /// "A source of your choice" (CR 609.7a): the player chooses a source of damage —
+    /// a permanent, a spell, or a face-up object in the command zone — matching the
+    /// filter. The choice is stored in `var`.
+    ChooseSource {
+        who: PlayerRef,
+        filter: Filter,
+        var: Var,
+    },
+    /// "The next [filter] spell you cast this turn [has ...]" (CR 611.2f): a continuous
+    /// effect that begins to apply to the next matching spell its controller puts on the
+    /// stack. `expires` is how long the effect waits for that spell.
+    NextSpell {
+        filter: Filter,
+        mods: Vec<Modification>,
+        expires: Duration,
+    },
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
+}
+
+/// The event that ends an "until" effect (CR 610.3, 610.4).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UntilEvent {
+    /// "until [this object] leaves the battlefield".
+    SourceLeavesBattlefield,
 }
 
 impl Effect {

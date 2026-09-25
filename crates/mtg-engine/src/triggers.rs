@@ -71,6 +71,8 @@ impl Game {
         if self.events.is_empty() {
             return;
         }
+        // CR 610.3, 610.4: "until" effects end immediately after their event.
+        crate::until::check_untils(self);
         if self.dirty {
             self.recompute();
         }

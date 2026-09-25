@@ -311,6 +311,12 @@ impl Game {
                 out.push(*c);
             }
         }
+        // CR 609.4: "as though those cards were in your graveyard".
+        for c in crate::as_though::other_graveyard_cards(self, p) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
         for c in self.permitted_cards(p) {
             if !out.contains(&c) {
                 out.push(c);
@@ -711,6 +717,9 @@ impl Game {
             by: Some(p),
             lookback,
         });
+        // CR 601.2a: effects that apply to the spell as it's cast begin now (CR 610.5,
+        // 611.2f).
+        crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
         let chars = self.obj(id).chars.clone();
 
@@ -763,6 +772,16 @@ impl Game {
         }
         // (Additional costs required by the casting method itself are part of
         // `base_total_cost`.)
+        // CR 702.47a: splice (the spell gains text, CR 612.10). Splice affordability
+        // accounts for every additional cost chosen so far, including the casting
+        // method's own.
+        let mut committed = extra.clone();
+        if let Some(c) = &opt.extra_cost {
+            add_cost(&mut committed, c);
+        }
+        for c in crate::splice::offer_splices(self, p, id, &committed) {
+            add_cost(&mut extra, &c);
+        }
         let base_cost_has_x = match &opt.alt_cost {
             Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
@@ -1404,7 +1423,7 @@ impl Game {
             }
         }
         if let Some(m) = &cost.mana {
-            let need = m.with_x(0);
+            let need = crate::as_though::payment_cost(self, p, &m.with_x(0));
             if need.mana_value() == 0
                 && !need
                     .symbols
@@ -1480,14 +1499,15 @@ impl Game {
                 let Some(o) = so else { return false };
                 *n >= 0 || o.loyalty() >= -*n
             }
-            CostPart::SacrificeSelf => {
-                so.is_some_and(|o| o.zone == Zone::Battlefield && o.controller == p)
-            }
+            // CR 614.17b: a cost that includes an event that can't happen can't be paid.
+            CostPart::SacrificeSelf => so.is_some_and(|o| {
+                o.zone == Zone::Battlefield && o.controller == p && !self.cant_be_sacrificed(o.id)
+            }),
             CostPart::Sacrifice { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p)
+                    .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
                     .count()
                     >= n
             }
@@ -1651,6 +1671,8 @@ impl Game {
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
             let reserve = if cost.has_tap() { src } else { None };
+            // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
+            let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;

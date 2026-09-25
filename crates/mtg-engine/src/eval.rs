@@ -326,15 +326,12 @@ impl Game {
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.name.eq_ignore_ascii_case(n),
-            Filter::SameNameAs(sel) => {
-                !c.name.is_empty()
-                    && self
-                        .eval_sel(sel, ctx)
-                        .iter()
-                        .filter_map(|e| e.object())
-                        .any(|x| self.obj(x).chars.name == c.name)
-            }
+            Filter::Named(n) => c.has_name(n),
+            Filter::SameNameAs(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .any(|x| c.shares_name_with(&self.obj(x).chars)),
             Filter::SharesCreatureType(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()
@@ -368,6 +365,13 @@ impl Game {
             Filter::Source => ctx.source == Some(id),
             Filter::Other => ctx.source != Some(id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
+            // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
+            Filter::Objects(v) => v.iter().any(|x| {
+                *x == id
+                    || (self.obj(*x).zone == Zone::Stack
+                        && o.zone == Zone::Battlefield
+                        && self.current(*x) == id)
+            }),
             Filter::AttachedToSource => {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }
@@ -611,6 +615,12 @@ impl Game {
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
+            Sel::TopOfGraveyard(r) => self
+                .eval_player(r, ctx)
+                .and_then(|p| self.player(p).graveyard.last().copied())
+                .map(Entity::Object)
+                .into_iter()
+                .collect(),
             Sel::Union(v) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for s in v {

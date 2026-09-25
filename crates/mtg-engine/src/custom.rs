@@ -67,6 +67,27 @@ pub fn custom_trigger(
         }
         return vec![];
     }
+    // "damage prevented:self": "Whenever damage that would be dealt to this is prevented"
+    // (CR 615.13), once per prevention effect applied to simultaneous damage.
+    if name == "damage prevented:self" {
+        if let Event::DamagePrevented {
+            source,
+            target: Entity::Object(o),
+            amount,
+            ..
+        } = ev
+        {
+            if *o == src {
+                return vec![EventInfo {
+                    object: Some(src),
+                    other: Some(*source),
+                    amount: *amount as i32,
+                    ..Default::default()
+                }];
+            }
+        }
+        return vec![];
+    }
     vec![]
 }
 
