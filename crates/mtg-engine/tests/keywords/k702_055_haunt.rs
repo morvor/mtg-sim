@@ -99,6 +99,26 @@ fn an_instant_or_sorcery_with_haunt_haunts_after_resolving() {
 }
 
 #[test]
+fn a_sorcery_haunts_a_creature_and_repeats_its_effect_when_it_dies() {
+    cr!("702.55a", "702.55c");
+    assert_supported("Benediction of Moons");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.lands(P0, "Plains", 1);
+    let moons = t.hand(P0, "Benediction of Moons");
+    // "You gain 1 life for each player."
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, moons).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    exiled(&t, "Benediction of Moons");
+    // "When the creature this card haunts dies, you gain 1 life for each player."
+    destroy(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 26);
+}
+
+#[test]
 fn a_spell_that_doesnt_resolve_doesnt_haunt() {
     cr!("702.55a");
     let mut t = TestGame::new(2);

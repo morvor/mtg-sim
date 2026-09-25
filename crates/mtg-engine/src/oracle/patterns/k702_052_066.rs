@@ -358,6 +358,24 @@ fn exile_self_with_time_counters(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "exile ~ with N time counters on it", priority: 100, parse: exile_self_with_time_counters } }
 
+/// "You gain N life for each player." (Benediction of Moons, a haunt card): the number of
+/// players in the game.
+fn gain_life_per_player(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = l
+        .strip_prefix("you gain ")?
+        .strip_suffix(" life for each player")?;
+    let (n, tail) = crate::oracle::phrases::parse_number(r)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::GainLife {
+        who: PlayerRef::You,
+        n: Value::Mul(Box::new(n), Box::new(Value::CountPlayers(PlayerFilter::Any))),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "you gain N life for each player", priority: 100, parse: gain_life_per_player } }
+
 /// "When the last time counter is removed from ~ while it's exiled, [effect]" (Riftmarked
 /// Knight): a triggered ability that functions in exile.
 fn last_time_counter_removed_while_exiled(
