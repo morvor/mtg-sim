@@ -614,6 +614,18 @@ impl Game {
             }
             return;
         }
+        // Values are computed before the target's characteristics are taken out below,
+        // so that counts include the target itself ("enchanted creature gets +1/+1 for
+        // each creature you control" counts the enchanted creature).
+        let v = |g: &Game, x: &Value| Value::Const(g.eval_value(x, ctx) as i32);
+        let opt = |g: &Game, x: &Option<Value>| x.as_ref().map(|x| v(g, x));
+        let resolved = match m {
+            Modification::ModifyPT(p, t) => Some(Modification::ModifyPT(v(self, p), v(self, t))),
+            Modification::SetPT(p, t) => Some(Modification::SetPT(opt(self, p), opt(self, t))),
+            Modification::CdaPT(p, t) => Some(Modification::CdaPT(opt(self, p), opt(self, t))),
+            _ => None,
+        };
+        let m = resolved.as_ref().unwrap_or(m);
         let mut chars = std::mem::take(&mut self.objects[target.0 as usize].chars);
         apply_mod(&mut chars, m, self, ctx, target);
         self.objects[target.0 as usize].chars = chars;

@@ -483,6 +483,8 @@ impl Game {
         self.turn.stage = Stage::Begin;
         self.turn.priority = None;
         self.turn.passes = 0;
+        // Conditional statics may depend on the step ("during combat").
+        self.dirty = true;
     }
 
     /// Adds an additional combat phase (and main phase) after the current phase (CR 500.8).

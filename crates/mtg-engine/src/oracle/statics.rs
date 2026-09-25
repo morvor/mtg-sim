@@ -46,19 +46,24 @@ fn keyword_list_mods(s: &str) -> Option<Vec<Modification>> {
 pub fn parse_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = text.to_lowercase();
     let l = end(&lower);
-    // "As long as [condition], [static]"
+    // "As long as [condition], [static]". Lines the built-in forms don't understand fall
+    // through whole to the pluggable static patterns.
     if let Some(r) = l.strip_prefix("as long as ") {
-        let (c, rest) = r.split_once(", ")?;
-        let cond = parse_condition(c, ctx)?;
-        let mut abilities = parse_static_inner(rest, text, ctx)?;
-        for a in abilities.iter_mut() {
-            if let AbilityKind::Static(s) = &a.kind {
-                let mut s2 = s.clone();
-                s2.condition = Some(cond.clone());
-                *a = AbilityDef::new(AbilityKind::Static(s2), text);
+        let parsed = r.split_once(", ").and_then(|(c, rest)| {
+            let cond = parse_condition(c, ctx)?;
+            let mut abilities = parse_static_inner(rest, text, ctx)?;
+            for a in abilities.iter_mut() {
+                if let AbilityKind::Static(s) = &a.kind {
+                    let mut s2 = s.clone();
+                    s2.condition = Some(cond.clone());
+                    *a = AbilityDef::new(AbilityKind::Static(s2), text);
+                }
             }
+            Some(abilities)
+        });
+        if parsed.is_some() {
+            return parsed;
         }
-        return Some(abilities);
     }
     parse_static_inner(l, text, ctx)
 }
@@ -142,11 +147,11 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
             return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
         }
     }
-    if let Some(r) = l.strip_prefix("~ can't be blocked by ") {
-        let (f, _, tail) = parse_object_phrase(r)?;
-        if !end(tail).is_empty() {
-            return None;
-        }
+    if let Some((f, _, _)) = l
+        .strip_prefix("~ can't be blocked by ")
+        .and_then(parse_object_phrase)
+        .filter(|(_, _, tail)| end(tail).is_empty())
+    {
         return Some(vec![static_ability(
             StaticEffect::Restriction(Restriction::CantBeBlockedBy {
                 attacker: Filter::Source,
@@ -191,7 +196,10 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         ("enchanted artifact ", Filter::AttachedToSource),
     ] {
         if let Some(r) = l.strip_prefix(prefix) {
-            return anthem(r, affected, text).or_else(|| attached_restriction(r, text));
+            if let Some(v) = anthem(r, affected, text).or_else(|| attached_restriction(r, text)) {
+                return Some(v);
+            }
+            break;
         }
     }
     // "[filter] get +N/+N [and have ...]" / "[filter] have [keywords]"
@@ -202,7 +210,9 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
             || rest.starts_with("have ")
             || rest.starts_with("has ")
         {
-            return anthem(rest, f, text);
+            if let Some(v) = anthem(rest, f, text) {
+                return Some(v);
+            }
         }
     }
     if let Some(r) = l
@@ -210,7 +220,9 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         .map(|r| format!("gets {r}"))
         .or_else(|| l.strip_prefix("~ has ").map(|r| format!("has {r}")))
     {
-        return anthem(&r, Filter::Source, text);
+        if let Some(v) = anthem(&r, Filter::Source, text) {
+            return Some(v);
+        }
     }
     // Cost modifiers.
     if let Some(a) = parse_cost_modifier(l, text) {

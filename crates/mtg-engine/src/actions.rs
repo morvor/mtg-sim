@@ -816,6 +816,8 @@ impl Game {
         }
         self.players[p.idx()].life += n as i32;
         *self.history.life_gained.entry(p).or_insert(0) += n;
+        // Life totals feed conditional statics and P/T-defining values (CR 611.3a).
+        self.dirty = true;
         self.emit(Event::LifeGained {
             player: p,
             amount: n,
@@ -843,6 +845,7 @@ impl Game {
         }
         self.players[p.idx()].life -= n as i32;
         *self.history.life_lost.entry(p).or_insert(0) += n;
+        self.dirty = true;
         self.emit(Event::LifeLost {
             player: p,
             amount: n,
