@@ -1798,6 +1798,11 @@ pub enum Effect {
         var: Var,
         value: Value,
     },
+    /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
+    /// creates ("that many" after paying a cost any number of times, CR 603.12a).
+    SetX {
+        value: Value,
+    },
 
     // --- Objects -----------------------------------------------------------
     Destroy {

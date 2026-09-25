@@ -137,6 +137,9 @@ impl Game {
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
+            Effect::SetX { value } => {
+                ctx.x = self.eval_value(value, ctx) as i32;
+            }
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {

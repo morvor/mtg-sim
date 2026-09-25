@@ -421,6 +421,8 @@ pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
             if !g.obj(a).phased_out {
                 g.objects[a.0 as usize].phased_out = true;
                 g.objects[a.0 as usize].phased_out_indirectly = true;
+                // They phase out too, so "phases out" abilities see them (CR 603.10b).
+                g.emit(crate::events::Event::PhasedOut { obj: a });
             }
         }
     }
