@@ -172,9 +172,10 @@ pub fn doesnt_remove_marker(src: crate::types::ObjectId) -> SmolStr {
 }
 
 /// Whether `name` is the name of a real card (any face) satisfying the restriction of a
-/// "choose a [nonland/creature] card name" instruction (CR 201.3).
+/// "choose a [nonland/creature] card name" instruction (CR 201.4, 201.4a); a split
+/// card's combined name isn't a name (CR 201.4b).
 pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
-    if name.is_empty() {
+    if name.is_empty() || name.contains("//") {
         return false;
     }
     let Some(c) = mtg_data::cards().by_name(name) else {

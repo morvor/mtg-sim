@@ -81,7 +81,7 @@ fn meddling_mage_stops_casting_the_named_spell() {
 
 #[test]
 fn chosen_name_must_satisfy_the_restriction() {
-    cr!("201.3", "607.5a", "722.5");
+    cr!("201.4", "201.4a", "607.5a", "722.5");
     let mut t = TestGame::new(2);
     // "Choose a nonland card name": a land's name isn't a legal choice, so nothing is
     // named.
