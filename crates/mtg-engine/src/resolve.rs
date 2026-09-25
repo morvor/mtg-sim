@@ -1111,10 +1111,19 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let found = crate::library::search(self, p, owner, filter, n, ctx);
                 let _ = reveal;
-                let res = self.move_to_destination(found, to, ctx);
-                if *shuffle {
+                let res = if *shuffle && to.zone == ZoneKind::Library {
+                    // "Then shuffle and put that card on top": the found cards stay in
+                    // the library while it's shuffled, then go on top (no zone change).
                     self.shuffle_library(owner);
-                }
+                    crate::library::put_on_top(self, owner, &found);
+                    found
+                } else {
+                    let res = self.move_to_destination(found, to, ctx);
+                    if *shuffle {
+                        self.shuffle_library(owner);
+                    }
+                    res
+                };
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }

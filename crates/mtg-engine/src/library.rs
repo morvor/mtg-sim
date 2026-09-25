@@ -30,6 +30,17 @@ fn set_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
     }
 }
 
+/// Puts cards already in `p`'s library on top of it, in the given order (first on top).
+/// Cards not in that library are ignored.
+pub fn put_on_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
+    let cards: Vec<ObjectId> = top_first
+        .iter()
+        .copied()
+        .filter(|c| g.player(p).library.contains(c))
+        .collect();
+    set_top(g, p, &cards);
+}
+
 fn to_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
     let lib = &mut g.players[p.idx()].library;
     lib.retain(|c| !cards.contains(c));
