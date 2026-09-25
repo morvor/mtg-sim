@@ -771,3 +771,68 @@ fn debt_to_the_kami_exiles_a_creature_the_opponent_chooses() {
     assert!(!t.on_battlefield(elves));
     assert!(t.in_exile("Llanowar Elves"));
 }
+
+#[test]
+fn end_the_festivities_hits_opponents_and_their_creatures_and_planeswalkers() {
+    cr!("120.3", "120.3c");
+    assert_compiles(&["End the Festivities", "Fulminous Forte"]);
+    let mut t = TestGame::new(2);
+    let jace = t.enter(P1, "Jace Beleren");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let land = t.battlefield(P1, "Dryad Arbor");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Mountain", 1);
+    let e = t.hand(P0, "End the Festivities");
+    t.cast(P0, e).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.counters(jace, "loyalty"), 2);
+    assert!(!t.on_battlefield(elves));
+    assert!(!t.on_battlefield(land), "a land creature is a creature");
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn ratchet_bomb_destroys_permanents_with_mana_value_equal_to_its_counters() {
+    cr!("608.2h", "113.7a");
+    assert_compiles(&["Ratchet Bomb", "Powder Keg", "Wave of Terror", "Pernicious Deed"]);
+    let mut t = TestGame::new(2);
+    let bomb = t.battlefield(P0, "Ratchet Bomb");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let forest = t.battlefield(P1, "Forest");
+    for _ in 0..2 {
+        t.activate(P0, bomb, 0, &[]).unwrap();
+        t.resolve();
+        t.g.objects[bomb.0 as usize].tapped = false;
+    }
+    assert_eq!(t.counters(bomb, "charge"), 2);
+    // Sacrificed as a cost: the number of counters is its last known information.
+    t.activate(P0, bomb, 1, &[]).unwrap();
+    t.resolve();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(elves));
+    assert!(t.on_battlefield(forest));
+}
+
+#[test]
+fn pernicious_deed_destroys_artifacts_creatures_and_enchantments() {
+    cr!("608.2h");
+    let mut t = TestGame::new(2);
+    let deed = t.battlefield(P0, "Pernicious Deed");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let myr = t.battlefield(P1, "Ornithopter");
+    let cop = t.battlefield(P1, "Circle of Protection: Red");
+    let mastodon = t.battlefield(P1, "Siege Mastodon");
+    let forest = t.battlefield(P1, "Forest");
+    t.lands(P0, "Swamp", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.activate(P0, deed, 0, &[]).unwrap();
+    t.resolve();
+    for o in [bears, myr, cop] {
+        assert!(!t.on_battlefield(o));
+    }
+    assert!(t.on_battlefield(mastodon), "mana value 5");
+    assert!(t.on_battlefield(forest));
+}

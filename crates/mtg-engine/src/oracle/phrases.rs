@@ -270,8 +270,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
                 s = r;
             } else if let Some(r) = t.strip_prefix("and ") {
-                // "artifacts, creatures, and lands" (a plural list names a union).
-                if plural && head_noun(split_word(r).0.trim_end_matches(',')).is_some() {
+                // "artifacts, creatures, and lands" (a plural list names a union), "each
+                // artifact, creature, and enchantment" (card types).
+                let next = head_noun(split_word(r).0.trim_end_matches(','));
+                let types = matches!(heads.last(), Some(Filter::Type(_)))
+                    && matches!(next, Some(Filter::Type(_)));
+                if (plural && next.is_some()) || types {
                     s = r;
                 }
             }
@@ -285,6 +289,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                     s = r;
                     continue;
                 }
+            }
+        }
+        // "each creature and planeswalker", "all artifact and creature cards": card types
+        // joined by "and" name objects with either type.
+        if let Some(r) = t.strip_prefix("and ") {
+            let nw = split_word(r).0.trim_end_matches(',');
+            if matches!(heads.last(), Some(Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Type(_)))
+            {
+                s = r;
+                continue;
             }
         }
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
@@ -559,6 +574,32 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
     ] {
         if let Some(r) = rest.strip_prefix(p) {
             let v = Box::new(Value::Chosen);
+            let f = match stat {
+                "power" => Filter::Power(cmp, v),
+                "toughness" => Filter::Toughness(cmp, v),
+                _ => Filter::ManaValue(cmp, v),
+            };
+            return Some((f, r));
+        }
+    }
+    // "with mana value equal to the number of charge counters on ~" (read as the effect
+    // checks each object; the source's last known information if it's gone).
+    for (p, cmp) in [
+        ("equal to the number of ", Cmp::Eq),
+        ("less than or equal to the number of ", Cmp::Le),
+    ] {
+        if let Some(r) = rest.strip_prefix(p) {
+            let (kind, r) = split_word(r);
+            let r = r
+                .strip_prefix("counters on ~")
+                .or_else(|| r.strip_prefix("counter on ~"))?;
+            if !kind
+                .chars()
+                .all(|c| c.is_alphabetic() || c == '+' || c == '-' || c == '/')
+            {
+                return None;
+            }
+            let v = Box::new(Value::CountersOn(Box::new(Sel::This), Some(kind.into())));
             let f = match stat {
                 "power" => Filter::Power(cmp, v),
                 "toughness" => Filter::Toughness(cmp, v),
