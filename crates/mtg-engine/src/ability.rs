@@ -842,9 +842,9 @@ pub enum Filter {
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
-    ChosenColor,
+    LinkedChosenColor,
     /// Of the creature type chosen by the source's linked ability.
-    ChosenCreatureType,
+    LinkedChosenCreatureType,
     /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
     /// ability (CR 607.2f).
     ManaValueOfChosenQuality,

@@ -750,3 +750,31 @@ fn a_choice_that_wasnt_made_for_an_ability_is_undefined() {
     t.activate(P0, plume, 0, &[]).unwrap();
     assert_eq!(pool(&t, P0), vec![ManaType::G]);
 }
+
+#[test]
+fn the_two_champion_abilities_are_linked() {
+    cr!("607.2k");
+    // Changeling Hero: "Champion a creature".
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let hero = t.enter(P0, "Changeling Hero");
+    t.resolve_all();
+    assert!(t.on_battlefield(hero));
+    assert!(t.in_exile("Grizzly Bears"));
+    // Another card exiled by something else isn't returned by the champion ability.
+    let e = t.custom(P0, exile_spell(), Zone::Hand(P0));
+    t.cast(P0, e).target(wurm).go();
+    t.resolve_all();
+    t.g.destroy(hero, None);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.in_exile("Craw Wurm"));
+    // With nothing to champion, it's sacrificed.
+    let mut t = TestGame::new(2);
+    let hero = t.enter(P0, "Changeling Hero");
+    t.resolve_all();
+    assert!(!t.on_battlefield(hero));
+    assert!(t.in_graveyard(P0, "Changeling Hero"));
+}

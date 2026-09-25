@@ -1012,8 +1012,8 @@ pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -
 /// of `ctx.source`. None if the choice is undefined (CR 607.5a).
 fn resolve_chosen(f: &Filter, g: &Game, ctx: &Ctx) -> Option<Filter> {
     Some(match f {
-        Filter::ChosenColor => Filter::Color(g.linked_choice(ctx)?.color?),
-        Filter::ChosenCreatureType => Filter::Subtype(g.linked_choice(ctx)?.creature_type.clone()?),
+        Filter::LinkedChosenColor => Filter::Color(g.linked_choice(ctx)?.color?),
+        Filter::LinkedChosenCreatureType => Filter::Subtype(g.linked_choice(ctx)?.creature_type.clone()?),
         Filter::And(v) => Filter::And(
             v.iter()
                 .map(|x| resolve_chosen(x, g, ctx))

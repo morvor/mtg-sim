@@ -97,7 +97,7 @@ fn protection_from_chosen(l: &str, text: &str, _ctx: &CompileContext) -> Option<
         affected,
         mods: vec![Modification::AddKeyword(Keyword::with_filter(
             KeywordKind::Protection,
-            Filter::ChosenColor,
+            Filter::LinkedChosenColor,
         ))],
     });
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
@@ -115,10 +115,10 @@ fn casts_chosen_color(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         return None;
     };
     let filter = match rest {
-        "a spell of the chosen color" => Filter::ChosenColor,
+        "a spell of the chosen color" => Filter::LinkedChosenColor,
         "a creature spell of the chosen type" => Filter::And(vec![
             Filter::Type(crate::types::CardType::Creature),
-            Filter::ChosenCreatureType,
+            Filter::LinkedChosenCreatureType,
         ]),
         _ => return None,
     };
@@ -344,3 +344,22 @@ fn anchor_words(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "anchor words", priority: 0, parse: anchor_words } }
+
+/// "Champion a creature", "Champion a Faerie", "Champion an Elf" (CR 702.72a).
+fn champion_keyword(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let lower = t.to_lowercase();
+    let r = lower.strip_prefix("champion ")?;
+    let r = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .unwrap_or(r);
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if !crate::oracle::phrases::end(tail).is_empty() {
+        return None;
+    }
+    let kw = Keyword::with_filter(KeywordKind::Champion, f);
+    Some(crate::oracle::keywords::compile_keyword(kw, t))
+}
+
+inventory::submit! { AbilityPattern { name: "champion", priority: 0, parse: champion_keyword } }

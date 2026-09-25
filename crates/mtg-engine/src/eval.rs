@@ -399,7 +399,7 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
-            Filter::ChosenColor => self
+            Filter::LinkedChosenColor => self
                 .linked_choice(ctx)
                 .and_then(|ch| ch.color)
                 .is_some_and(|col| c.colors.contains(col)),
@@ -415,7 +415,7 @@ impl Game {
                     _ => false,
                 }
             }
-            Filter::ChosenCreatureType => self
+            Filter::LinkedChosenCreatureType => self
                 .linked_choice(ctx)
                 .and_then(|ch| ch.creature_type.clone())
                 .is_some_and(|t| c.has_subtype(&t)),
