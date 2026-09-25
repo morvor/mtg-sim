@@ -286,3 +286,36 @@ fn the_same_is_true_for_on_a_resolving_ability_locks_in_what_is_granted() {
     t.advance_to(P0, Step::Upkeep);
     assert!(!t.obj_now(bears).has_keyword(KeywordKind::Flying));
 }
+
+#[test]
+fn odric_grants_listed_keywords_to_the_creatures_there_as_it_resolves() {
+    cr!("702.1c");
+    ruling!(
+        "Odric, Lunarch Marshal",
+        "The set of creatures affected by Odric's ability and how they are affected is determined as the ability resolves. Creatures you begin to control later in the turn won't gain any abilities"
+    );
+    ruling!(
+        "Odric, Lunarch Marshal",
+        "Multiple instances of any of the abilities Odric can grant your creatures are redundant."
+    );
+    assert_supported("Odric, Lunarch Marshal");
+    let mut t = TestGame::new(2);
+    let odric = t.battlefield(P0, "Odric, Lunarch Marshal");
+    let knight = t.battlefield(P0, "Youthful Knight");
+    let rats = t.battlefield(P0, "Typhoid Rats");
+    let drake = t.battlefield(P0, "Wind Drake");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    for c in [odric, knight, rats, drake] {
+        let o = t.obj_now(c);
+        assert!(o.has_keyword(KeywordKind::FirstStrike));
+        assert!(o.has_keyword(KeywordKind::Deathtouch));
+        assert!(o.has_keyword(KeywordKind::Flying));
+        assert!(!o.has_keyword(KeywordKind::Trample));
+    }
+    // The Knight already had first strike: it now has two instances, which is the same.
+    assert_eq!(instances(&t, knight, KeywordKind::FirstStrike), 2);
+    // A creature that comes under P0's control later doesn't gain them.
+    let late = t.battlefield(P0, "Grizzly Bears");
+    assert!(!t.obj_now(late).has_keyword(KeywordKind::Flying));
+}
