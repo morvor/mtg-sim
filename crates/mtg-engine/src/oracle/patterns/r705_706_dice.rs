@@ -240,6 +240,33 @@ fn p_equal_to_result(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "r706 equal to the result", priority: 0, parse: p_equal_to_result } }
 
+/// "Roll a six-sided die. If the result is 3 or less, you lose that much life." (CR 706.4):
+/// after a roll without a results table, "that much" / "that many" is the roll's result
+/// (not an amount from the event that triggered the ability).
+fn f_that_much_result(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(roll) = last_roll(prev) else {
+        return false;
+    };
+    if !roll.table.is_empty() || !(l.contains("that much") || l.contains("that many")) {
+        return false;
+    }
+    let rewritten = l.replace("that much", "x").replace("that many", "x");
+    let Some(e) = parse_sentence(&rewritten, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::SetX {
+            value: Value::Custom(SmolStr::new(THE_RESULT)),
+        },
+        e,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "r706 that much (the result)", priority: 5, apply: f_that_much_result } }
+
 fn c_doubles(c: &str) -> Option<Condition> {
     if c == "you rolled doubles" {
         return Some(Condition::Custom(SmolStr::new(ROLLED_DOUBLES)));
@@ -314,6 +341,32 @@ fn p_for_each_flip(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r705 for each flip", priority: 0, parse: p_for_each_flip } }
+
+/// "Flip five coins. Take an extra turn after this one for each coin that comes up heads."
+/// A flip that only cares about heads or tails has no call, winner, or loser (CR 705.2);
+/// one that counts flips won or lost has a call.
+fn f_for_each_flip(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if last_flip(prev).is_none() {
+        return false;
+    }
+    let Some(e) = p_for_each_flip(l, b) else {
+        return false;
+    };
+    let heads_or_tails = matches!(
+        &e,
+        Effect::Repeat { times: Value::Var(v), .. } if *v == HEADS || *v == TAILS
+    );
+    let Some(f) = last_flip(prev) else {
+        return false;
+    };
+    let wl = !matches!(f.on_win, Effect::Noop) || !matches!(f.on_lose, Effect::Noop);
+    f.call = wl || !heads_or_tails;
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "r705 for each flip after the flip", priority: 10, apply: f_for_each_flip } }
 
 fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
     match e {

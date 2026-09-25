@@ -248,6 +248,7 @@ fn applies_to(g: &Game, rel: PlayerRel, controller: PlayerId, p: PlayerId) -> bo
 /// Performs a die roll instruction (CR 706).
 pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
     let players = g.eval_players(&spec.who, ctx);
+    let mut rolled = false;
     for p in players {
         let n = g.eval_value(&spec.count, ctx).max(0) as u32;
         let mut guard = 0;
@@ -258,6 +259,7 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
             // the instruction's modifiers.
             let bonus = spec.bonus.as_ref().map_or(0, |b| g.eval_value(b, ctx));
             let dice = roll_dice(g, p, n, spec.sides, spec.ignore, bonus, ctx.source);
+            rolled |= !dice.is_empty();
             let results: Vec<i64> = dice.iter().map(|d| d.result() + bonus).collect();
             let total: i64 = results.iter().sum();
             ctx.nums
@@ -286,6 +288,8 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
         }
     }
     ctx.nums.remove(&AGAIN);
+    // "Roll a six-sided die. When you do, ..." (a reflexive trigger, CR 603.12).
+    ctx.prev_happened = rolled;
 }
 
 /// Rolls `n` N-sided dice for player `p`, applying effects that change the roll (extra

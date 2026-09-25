@@ -605,10 +605,18 @@ fn one_replacement_effect_replaces_several_identical_state_based_actions() {
             },
         ]),
     );
+    let draws = |t: &TestGame| {
+        t.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::Drew { player, .. } if *player == P0))
+            .count()
+    };
+    let before = draws(&t);
     cast_and_resolve(&mut t, P0, spell, &[]);
     // Both 704.5a and 704.5b would make P0 lose; the single game loss was replaced once:
-    // seven cards drawn (not fourteen), life 20.
+    // one card drawn by the spell, then seven by the replacement (not fourteen), life 20.
     assert!(!t.has_lost(P0));
+    assert_eq!(draws(&t) - before, 1 + 7);
     assert_eq!(t.life(P0), 20);
     assert_eq!(t.hand_size(P0), 7);
     assert!(t.g.result.is_none());

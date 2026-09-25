@@ -468,8 +468,10 @@ impl Game {
     /// Characteristics a card would have as a spell cast this way (CR 601.3e): those of
     /// the chosen face, or a face-down spell's (CR 702.37c, 708.2a).
     pub fn option_characteristics(&self, card: ObjectId, opt: &CastOption) -> Characteristics {
-        if let CastMethod::FaceDown(_) = opt.method {
-            return crate::facedown::face_down_characteristics(self, card);
+        if let CastMethod::FaceDown(k) = opt.method {
+            // The characteristics the ability it's cast with lists (e.g. disguise's ward
+            // {2}, CR 708.4).
+            return crate::facedown::face_down_spell_characteristics(k);
         }
         self.face_characteristics(card, opt.face)
     }
