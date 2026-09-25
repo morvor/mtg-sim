@@ -1262,6 +1262,10 @@ pub fn is_mana_effect(e: &Effect) -> bool {
             v.iter().any(is_mana_effect) && v.iter().all(|x| !matches!(x, Effect::Draw { .. }))
         }
         Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| is_mana_effect(e)),
+        // "Add {G}. If you control four or more creatures, add {G}{G} instead."
+        Effect::If {
+            then, otherwise, ..
+        } => is_mana_effect(then) && is_mana_effect(otherwise),
         _ => false,
     }
 }
