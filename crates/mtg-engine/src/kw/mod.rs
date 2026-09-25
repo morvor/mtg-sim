@@ -118,6 +118,12 @@ pub trait KeywordRules: Sync + Send {
     fn assigns_as_though_unblocked(&self, g: &mut Game, creature: ObjectId) -> bool {
         false
     }
+    /// The player who assigns this attacking or blocking creature's combat damage instead
+    /// of its controller, dividing it freely among the creatures it's blocked by or
+    /// blocking (banding, CR 702.22j–k).
+    fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
+        None
+    }
     fn after_damage(
         &self,
         g: &mut Game,
@@ -337,6 +343,12 @@ pub fn combat_damage_amount(g: &Game, id: ObjectId) -> Option<u32> {
     registry()
         .iter()
         .find_map(|r| r.combat_damage_amount(g, id))
+}
+
+pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {
+    registry()
+        .iter()
+        .find_map(|r| r.combat_damage_assigner(g, id))
 }
 
 pub fn assigns_as_though_unblocked(g: &mut Game, id: ObjectId) -> bool {

@@ -23,6 +23,11 @@ fn names() -> &'static [(String, KeywordKind)] {
         v.push(("landcycling".into(), KeywordKind::Cycling));
         v.push(("partner with".into(), KeywordKind::Partner));
         v.push(("bands with other".into(), KeywordKind::Banding));
+        // CR 702.19c: a variant of trample, marked by its text.
+        v.push((
+            crate::kw::trample::OVER_PLANESWALKERS.into(),
+            KeywordKind::Trample,
+        ));
         v.push(("hexproof from".into(), KeywordKind::Hexproof));
         v.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
         v

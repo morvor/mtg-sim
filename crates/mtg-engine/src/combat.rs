@@ -1713,7 +1713,8 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
         if !deals.contains(&ai.id) || !g.is_live(ai.id) || g.obj(ai.id).zone != Zone::Battlefield {
             continue;
         }
-        assignments.extend(assign_attacker_damage(g, ai));
+        let a = assign_attacker_damage(g, ai, &assignments);
+        assignments.extend(a);
     }
     for bi in &combat.blockers {
         if !deals.contains(&bi.id) || !g.is_live(bi.id) || g.obj(bi.id).zone != Zone::Battlefield {
@@ -1730,7 +1731,11 @@ fn damage_amount(g: &Game, id: ObjectId) -> u32 {
     crate::keyword_impls::combat_damage_amount(g, id)
 }
 
-fn assign_attacker_damage(g: &mut Game, ai: &AttackerInfo) -> Vec<(ObjectId, Entity, u32)> {
+fn assign_attacker_damage(
+    g: &mut Game,
+    ai: &AttackerInfo,
+    pending: &[(ObjectId, Entity, u32)],
+) -> Vec<(ObjectId, Entity, u32)> {
     let id = ai.id;
     let power = damage_amount(g, id);
     if power == 0 {
@@ -1738,12 +1743,34 @@ fn assign_attacker_damage(g: &mut Game, ai: &AttackerInfo) -> Vec<(ObjectId, Ent
     }
     let controller = g.obj(id).controller;
     let trample = g.obj(id).has_keyword(KeywordKind::Trample);
-    let target = ai.target.filter(|t| g.valid_damage_recipient(*t));
+    let over_pw = crate::kw::trample::over_planeswalkers(g, id);
+    let mut target = ai.target.filter(|t| g.valid_damage_recipient(*t));
+    // CR 702.19e: with trample over planeswalkers, if the attacked planeswalker was removed
+    // from combat, damage may be assigned to the defending player (who it isn't attacking).
+    // Without it, none of its damage goes to that player (CR 702.19f, 506.4c).
+    if target.is_none() && over_pw && attacked_planeswalker(g, ai) {
+        target = ai
+            .defending_player
+            .map(Entity::Player)
+            .filter(|t| g.valid_damage_recipient(*t));
+    }
+    // CR 702.19c: excess damage beyond the attacked planeswalker's loyalty may be assigned
+    // to that planeswalker's controller.
+    let spill = match target {
+        Some(Entity::Object(pw)) if over_pw && g.obj(pw).is(CardType::Planeswalker) => Some((
+            Entity::Player(g.obj(pw).controller),
+            crate::kw::trample::planeswalker_damage_needed(g, pw, pending),
+        )),
+        _ => None,
+    };
     if !ai.blocked {
         // CR 510.1b
-        return match target {
-            Some(t) => vec![(id, t, power)],
-            None => vec![],
+        return match (target, spill) {
+            (Some(_), Some(_)) => {
+                assign_trample_damage(g, id, controller, power, &[], vec![], target, spill)
+            }
+            (Some(t), None) => vec![(id, t, power)],
+            _ => vec![],
         };
     }
     let blockers: Vec<ObjectId> = ai
@@ -1753,9 +1780,12 @@ fn assign_attacker_damage(g: &mut Game, ai: &AttackerInfo) -> Vec<(ObjectId, Ent
         .filter(|b| g.is_live(*b) && g.obj(*b).zone == Zone::Battlefield && g.is_blocking(*b))
         .collect();
     if blockers.is_empty() {
-        // CR 510.1c: blocked with no blockers assigns no damage, unless trample (702.19e).
+        // CR 510.1c: blocked with no blockers assigns no damage, unless it has trample: then
+        // it's assigned as though all blockers were assigned lethal damage (CR 702.19d).
         return match (trample, target) {
-            (true, Some(t)) => vec![(id, t, power)],
+            (true, Some(_)) => {
+                assign_trample_damage(g, id, controller, power, &[], vec![], target, spill)
+            }
             _ => vec![],
         };
     }
@@ -1764,31 +1794,80 @@ fn assign_attacker_damage(g: &mut Game, ai: &AttackerInfo) -> Vec<(ObjectId, Ent
             return vec![(id, t, power)];
         }
     }
-    let lethal: Vec<u32> = blockers.iter().map(|b| lethal_damage(g, id, *b)).collect();
+    let lethal: Vec<u32> = blockers
+        .iter()
+        .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
+        .collect();
+    // CR 702.22j: another player may divide its damage freely among its blockers.
+    if let Some(p) = crate::kw::combat_damage_assigner(g, id) {
+        return divide_freely(g, id, p, power, &blockers, lethal);
+    }
+    if !trample {
+        if blockers.len() == 1 {
+            return vec![(id, Entity::Object(blockers[0]), power)];
+        }
+        return assign_trample_damage(g, id, controller, power, &blockers, lethal, None, None);
+    }
+    assign_trample_damage(g, id, controller, power, &blockers, lethal, target, spill)
+}
+
+/// Whether the creature was attacking a planeswalker (CR 702.19e).
+fn attacked_planeswalker(g: &Game, ai: &AttackerInfo) -> bool {
+    match ai.target.or(ai.original_target) {
+        Some(Entity::Object(o)) => g.obj(o).is(CardType::Planeswalker),
+        _ => false,
+    }
+}
+
+/// Asks the creature's controller to divide its combat damage among `blockers` (with the
+/// given lethal amounts) and, if `target` is given (trample), the player, planeswalker, or
+/// battle it's attacking, plus the planeswalker's controller if `spill` is given (trample
+/// over planeswalkers: the player and the damage the planeswalker still needs). Damage can
+/// go to the target only once all blockers are assigned lethal damage (CR 702.19b), and to
+/// the planeswalker's controller only once the planeswalker is assigned damage at least
+/// equal to its loyalty (CR 702.19c).
+#[allow(clippy::too_many_arguments)]
+fn assign_trample_damage(
+    g: &mut Game,
+    id: ObjectId,
+    controller: PlayerId,
+    power: u32,
+    blockers: &[ObjectId],
+    mut lethal: Vec<u32>,
+    target: Option<Entity>,
+    spill: Option<(Entity, u32)>,
+) -> Vec<(ObjectId, Entity, u32)> {
     let mut recipients: Vec<Entity> = blockers.iter().map(|b| Entity::Object(*b)).collect();
-    if trample {
-        if let Some(t) = target {
-            recipients.push(t);
+    let nb = recipients.len();
+    if let Some(t) = target {
+        recipients.push(t);
+        if let Some((player, need)) = spill {
+            recipients.push(player);
+            lethal.push(need);
         }
     }
-    if blockers.len() == 1 && !trample {
-        return vec![(id, Entity::Object(blockers[0]), power)];
+    if recipients.len() == 1 {
+        return vec![(id, recipients[0], power)];
     }
-    let default = default_assignment(power, &lethal, trample && target.is_some());
+    let shape = TrampleShape {
+        lethal: lethal.clone(),
+        blockers: nb,
+        target: target.is_some(),
+        spill: target.is_some() && spill.is_some(),
+    };
+    let default = shape.default_assignment(power);
     let ans = g.ask(
         controller,
         Decision::AssignCombatDamage {
             creature: id,
             amount: power,
             recipients: recipients.clone(),
-            lethal: lethal.clone(),
-            trample,
+            lethal,
+            trample: target.is_some(),
         },
     );
     let assignment: Vec<u32> = match ans {
-        Answer::Numbers(v) if valid_assignment(&v, power, &lethal, trample && target.is_some()) => {
-            v.into_iter().map(|x| x as u32).collect()
-        }
+        Answer::Numbers(v) if shape.valid(&v, power) => v.into_iter().map(|x| x as u32).collect(),
         _ => default,
     };
     recipients
@@ -1799,40 +1878,115 @@ fn assign_attacker_damage(g: &mut Game, ai: &AttackerInfo) -> Vec<(ObjectId, Ent
         .collect()
 }
 
-/// Default assignment: lethal to each blocker in order, remainder to the player if
-/// trampling, else to the last blocker.
-fn default_assignment(power: u32, lethal: &[u32], trample_to_player: bool) -> Vec<u32> {
-    let mut left = power;
-    let mut out: Vec<u32> = Vec::new();
-    for l in lethal {
-        let x = (*l).min(left);
-        out.push(x);
-        left -= x;
-    }
-    if trample_to_player {
-        out.push(left);
-    } else if left > 0 {
-        if let Some(last) = out.last_mut() {
-            *last += left;
-        }
-    }
-    out
+/// The recipients of a creature's combat damage: `blockers` creatures (with `lethal`
+/// amounts), then the attacked player/permanent if `target`, then the planeswalker's
+/// controller if `spill` (its `lethal` entry is the damage the planeswalker needs first).
+struct TrampleShape {
+    lethal: Vec<u32>,
+    blockers: usize,
+    target: bool,
+    spill: bool,
 }
 
-fn valid_assignment(v: &[i64], power: u32, lethal: &[u32], trample_to_player: bool) -> bool {
-    let n = lethal.len() + usize::from(trample_to_player);
-    if v.len() != n || v.iter().any(|x| *x < 0) || v.iter().sum::<i64>() != power as i64 {
-        return false;
+impl TrampleShape {
+    fn len(&self) -> usize {
+        self.blockers + usize::from(self.target) + usize::from(self.spill)
     }
-    // CR 702.19b: damage can be assigned to the player only if all blockers are assigned lethal.
-    if trample_to_player && v[n - 1] > 0 {
-        for (i, l) in lethal.iter().enumerate() {
-            if (v[i] as u32) < *l {
-                return false;
+
+    /// Lethal damage to each blocker in order; the rest to the attacked player/permanent
+    /// (up to what a planeswalker needs, then its controller) or else to the last blocker.
+    fn default_assignment(&self, power: u32) -> Vec<u32> {
+        let mut left = power;
+        let mut out: Vec<u32> = Vec::new();
+        for l in &self.lethal[..self.blockers] {
+            let x = (*l).min(left);
+            out.push(x);
+            left -= x;
+        }
+        if self.target {
+            if self.spill {
+                let x = self.lethal[self.blockers].min(left);
+                out.push(x);
+                out.push(left - x);
+            } else {
+                out.push(left);
+            }
+        } else if left > 0 {
+            if let Some(last) = out.last_mut() {
+                *last += left;
             }
         }
+        out
     }
-    true
+
+    fn valid(&self, v: &[i64], power: u32) -> bool {
+        if v.len() != self.len()
+            || v.iter().any(|x| *x < 0)
+            || v.iter().sum::<i64>() != power as i64
+        {
+            return false;
+        }
+        let nb = self.blockers;
+        let beyond: i64 = v[nb..].iter().sum();
+        // CR 702.19b: damage can go past the blockers only once all are assigned lethal.
+        if beyond > 0 && (0..nb).any(|i| (v[i] as u32) < self.lethal[i]) {
+            return false;
+        }
+        // CR 702.19c: the planeswalker's controller only once it's assigned its loyalty.
+        if self.spill && v[nb + 1] > 0 && (v[nb] as u32) < self.lethal[nb] {
+            return false;
+        }
+        true
+    }
+}
+
+/// A player other than the creature's controller divides its combat damage as they choose
+/// among `recipients` (banding, CR 702.22j–k).
+fn divide_freely(
+    g: &mut Game,
+    id: ObjectId,
+    chooser: PlayerId,
+    power: u32,
+    recipients: &[ObjectId],
+    lethal: Vec<u32>,
+) -> Vec<(ObjectId, Entity, u32)> {
+    if recipients.len() == 1 {
+        return vec![(id, Entity::Object(recipients[0]), power)];
+    }
+    let recipients: Vec<Entity> = recipients.iter().map(|b| Entity::Object(*b)).collect();
+    let shape = TrampleShape {
+        lethal: lethal.clone(),
+        blockers: recipients.len(),
+        target: false,
+        spill: false,
+    };
+    let default = shape.default_assignment(power);
+    let ans = g.ask(
+        chooser,
+        Decision::AssignCombatDamage {
+            creature: id,
+            amount: power,
+            recipients: recipients.clone(),
+            lethal,
+            trample: false,
+        },
+    );
+    let assignment: Vec<u32> = match ans {
+        Answer::Numbers(v)
+            if v.len() == recipients.len()
+                && v.iter().all(|x| *x >= 0)
+                && v.iter().sum::<i64>() == power as i64 =>
+        {
+            v.into_iter().map(|x| x as u32).collect()
+        }
+        _ => default,
+    };
+    recipients
+        .into_iter()
+        .zip(assignment)
+        .filter(|(_, n)| *n > 0)
+        .map(|(r, n)| (id, r, n))
+        .collect()
 }
 
 fn assign_blocker_damage(g: &mut Game, bi: &BlockerInfo) -> Vec<(ObjectId, Entity, u32)> {
@@ -1847,42 +2001,13 @@ fn assign_blocker_damage(g: &mut Game, bi: &BlockerInfo) -> Vec<(ObjectId, Entit
         .copied()
         .filter(|a| g.is_live(*a) && g.is_attacking(*a))
         .collect();
-    match attackers.len() {
-        0 => vec![], // CR 510.1d
-        1 => vec![(id, Entity::Object(attackers[0]), power)],
-        _ => {
-            let controller = g.obj(id).controller;
-            let lethal: Vec<u32> = attackers.iter().map(|a| lethal_damage(g, id, *a)).collect();
-            let recipients: Vec<Entity> = attackers.iter().map(|a| Entity::Object(*a)).collect();
-            let default = default_assignment(power, &lethal, false);
-            let ans = g.ask(
-                controller,
-                Decision::AssignCombatDamage {
-                    creature: id,
-                    amount: power,
-                    recipients: recipients.clone(),
-                    lethal,
-                    trample: false,
-                },
-            );
-            let assignment: Vec<u32> = match ans {
-                Answer::Numbers(v)
-                    if v.len() == recipients.len()
-                        && v.iter().all(|x| *x >= 0)
-                        && v.iter().sum::<i64>() == power as i64 =>
-                {
-                    v.into_iter().map(|x| x as u32).collect()
-                }
-                _ => default,
-            };
-            recipients
-                .into_iter()
-                .zip(assignment)
-                .filter(|(_, n)| *n > 0)
-                .map(|(r, n)| (id, r, n))
-                .collect()
-        }
+    if attackers.is_empty() {
+        return vec![]; // CR 510.1d
     }
+    let lethal: Vec<u32> = attackers.iter().map(|a| lethal_damage(g, id, *a)).collect();
+    // CR 702.22k: the active player may divide its damage among the creatures it blocks.
+    let chooser = crate::kw::combat_damage_assigner(g, id).unwrap_or_else(|| g.obj(id).controller);
+    divide_freely(g, id, chooser, power, &attackers, lethal)
 }
 
 // ---------------------------------------------------------------------------
