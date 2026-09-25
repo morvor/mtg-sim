@@ -223,6 +223,11 @@ impl Game {
 
     /// Begins a new turn for `active`.
     pub fn begin_turn(&mut self, active: PlayerId, extra: bool) {
+        // CR 702.26n: the turns of players who left the game seated before this one would
+        // have begun.
+        if self.turn.number > 0 && !extra {
+            crate::kw::phasing::turns_would_have_begun(self, self.turn.active, active);
+        }
         self.turn.previous_active = if self.turn.number > 0 {
             Some(self.turn.active)
         } else {
@@ -494,8 +499,6 @@ impl Game {
                     }
                 }
                 let next = self.next_player(after);
-                // CR 702.26n: turns of players who left the game would have begun.
-                crate::kw::phasing::turns_would_have_begun(self, after, next);
                 if crate::skip::consume_turn_skip(self, next) {
                     after = next;
                     continue;

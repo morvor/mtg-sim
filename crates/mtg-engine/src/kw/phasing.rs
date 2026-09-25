@@ -132,9 +132,9 @@ pub fn phase_in(g: &mut Game, id: ObjectId) {
 
 /// CR 702.26n: a permanent that phased out under the control of a player who has left
 /// the game phases in during the next untap step after that player's next turn would
-/// have begun. Called as the turn of `next` begins after the turn of `after`: the turns of
-/// players who left the game seated between them would have begun, so their phased-out
-/// permanents phase in during `next`'s untap step.
+/// have begun. Called as the (non-extra) turn of `next` begins after the turn of `after`:
+/// the turns of players who left the game seated between them would have begun, so their
+/// phased-out permanents phase in during `next`'s untap step.
 pub fn turns_would_have_begun(g: &mut Game, after: PlayerId, next: PlayerId) {
     let n = g.players.len();
     if n == 0 {

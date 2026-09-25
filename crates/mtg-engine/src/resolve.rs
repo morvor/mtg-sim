@@ -74,6 +74,8 @@ impl Game {
                 otherwise,
             } => {
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
+                // "[cost] for each ...": the total is determined now (CR 702.24a).
+                let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
