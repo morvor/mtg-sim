@@ -31,7 +31,7 @@ fn battlefield_cards_compile() {
 
 #[test]
 fn put_target_creature_card_from_a_graveyard_onto_the_battlefield() {
-    cr!("110.2", "400.7");
+    cr!("110.2", "110.2a");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 1);
     let giant = t.graveyard(P1, "Hill Giant");
@@ -51,6 +51,9 @@ fn that_creature_is_a_black_zombie_in_addition() {
     cr!("611.2e", "205.1b", "105.3");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 5);
+    // "Whenever another Zombie you control enters, each opponent loses 1 life and you gain
+    // 1 life": the creature is a Zombie as it enters, not only afterwards.
+    t.battlefield(P0, "Wayward Servant");
     let bear = t.graveyard(P1, "Grizzly Bears");
     let spell = t.hand(P0, "Rise from the Grave");
     t.cast(P0, spell).target(bear).go();
@@ -62,6 +65,8 @@ fn that_creature_is_a_black_zombie_in_addition() {
     assert!(o.chars.has_subtype("Bear"));
     assert!(o.chars.colors.contains(Color::Black));
     assert!(o.chars.colors.contains(Color::Green));
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P0), 21);
 }
 
 #[test]
@@ -135,6 +140,19 @@ fn then_that_player_mills_is_the_graveyards_owner() {
     // "Then that player mills X cards": the opponent, not you.
     assert_eq!(t.library_size(P1), lib1 - 2);
     assert_eq!(t.library_size(P0), lib0);
+
+    // With X = 3, a card with mana value 2 isn't a legal target: X can't be overpaid to
+    // mill more cards.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    let geth = t.battlefield(P0, "Geth, Lord of the Vault");
+    let bear = t.graveyard(P1, "Grizzly Bears");
+    let lib1 = t.library_size(P1);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(3));
+    let _ = t.activate(P0, geth, 0, &[Entity::Object(bear)]);
+    t.resolve_all();
+    assert_eq!(t.zone(bear), Zone::Graveyard(P1));
+    assert_eq!(t.library_size(P1), lib1);
 }
 
 #[test]

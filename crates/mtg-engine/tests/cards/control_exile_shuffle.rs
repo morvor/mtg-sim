@@ -36,6 +36,9 @@ fn target_player_shuffles_their_graveyard_into_their_library() {
     cr!("701.24a", "701.24d");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 6);
+    // "Whenever an opponent shuffles their library, you may put a +1/+1 counter on this
+    // creature."
+    let trickster = t.battlefield(P0, "Cosi's Trickster");
     for _ in 0..3 {
         t.graveyard(P1, "Grizzly Bears");
     }
@@ -44,20 +47,22 @@ fn target_player_shuffles_their_graveyard_into_their_library() {
     let hand0 = t.hand_size(P0);
     let spell = t.hand(P0, "Clear the Mind");
     t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 0);
     assert_eq!(t.library_size(P1), lib1 + 3);
+    assert_eq!(t.counters(trickster, "+1/+1"), 1);
     // Only that player's graveyard; then "Draw a card."
     assert_eq!(t.zone(mine), Zone::Graveyard(P0));
     assert_eq!(t.hand_size(P0), hand0 + 1);
 
     // CR 701.24d: with an empty graveyard, the library is still shuffled.
-    let trickster = t.battlefield(P0, "Cosi's Trickster");
     let spell = t.hand(P0, "Clear the Mind");
     t.cast(P0, spell).target(Entity::Player(P1)).go();
     t.answer_yes(P0, true);
     t.resolve_all();
-    assert_eq!(t.counters(trickster, "+1/+1"), 1);
+    assert_eq!(t.library_size(P1), lib1 + 3);
+    assert_eq!(t.counters(trickster, "+1/+1"), 2);
 }
 
 #[test]
@@ -101,14 +106,60 @@ fn exile_this_spell_as_it_resolves() {
 fn shuffle_hand_into_library_then_draw_that_many() {
     cr!("701.24a", "608.2c");
     let mut t = TestGame::new(2);
-    for _ in 0..3 {
-        t.hand(P0, "Grizzly Bears");
-    }
+    let hand: Vec<ObjectId> = (0..3).map(|_| t.hand(P0, "Grizzly Bears")).collect();
     let lib = t.library_size(P0);
     t.enter(P0, "Whirlpool Rider");
     t.resolve_all();
+    // Every card that was in the hand went into the library (becoming a new object,
+    // CR 400.7), and three cards were drawn.
+    for c in &hand {
+        assert!(!t.g.is_live(*c));
+    }
     assert_eq!(t.hand_size(P0), 3);
     assert_eq!(t.library_size(P0), lib);
+    assert_eq!(
+        t.g.player(P0)
+            .hand
+            .iter()
+            .filter(|c| hand.contains(c))
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn each_player_shuffles_their_hand_then_draws_that_many() {
+    cr!("701.24a", "701.24d");
+    let mut t = TestGame::new(2);
+    let trickster = t.battlefield(P0, "Cosi's Trickster");
+    let mine: Vec<ObjectId> = (0..2).map(|_| t.hand(P0, "Grizzly Bears")).collect();
+    let theirs: Vec<ObjectId> = (0..3).map(|_| t.hand(P1, "Grizzly Bears")).collect();
+    let libs = [t.library_size(P0), t.library_size(P1)];
+    let warrior = t.battlefield(P0, "Whirlpool Warrior");
+    t.lands(P0, "Mountain", 1);
+    // "{R}, Sacrifice this creature: Each player shuffles the cards from their hand into
+    // their library, then draws that many cards."
+    t.activate(P0, warrior, 0, &[]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    // Each player draws the number of cards they shuffled away.
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.hand_size(P1), 3);
+    assert_eq!(t.library_size(P0), libs[0]);
+    assert_eq!(t.library_size(P1), libs[1]);
+    assert!(mine.iter().chain(&theirs).all(|c| !t.g.is_live(*c)));
+    assert_eq!(t.counters(trickster, "+1/+1"), 1);
+
+    // A player with an empty hand still shuffles (and draws nothing).
+    let warrior = t.battlefield(P0, "Whirlpool Warrior");
+    t.lands(P0, "Mountain", 1);
+    t.g.players[1].hand.clear();
+    t.activate(P0, warrior, 0, &[]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.counters(trickster, "+1/+1"), 2);
 }
 
 #[test]
@@ -152,7 +203,7 @@ fn shuffle_target_cards_from_a_graveyard() {
 
 #[test]
 fn owner_shuffles_it_into_their_library() {
-    cr!("701.24a", "400.3");
+    cr!("701.24a", "115.1a");
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 3);
     let bear = t.battlefield(P1, "Grizzly Bears");
@@ -174,14 +225,60 @@ fn owner_shuffles_it_into_their_library() {
 }
 
 #[test]
+fn chosen_target_stays_that_creature_after_a_reveal() {
+    cr!("115.1a", "608.2c");
+    let mut t = TestGame::new(2);
+    // Every card in the library has mana value 4, however the scry goes.
+    t.g.players[0].library.clear();
+    for _ in 0..4 {
+        t.library_top(P0, "Hill Giant");
+    }
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(giant, Entity::Player(P0))]),
+    );
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.advance_to(P1, Step::DeclareAttackers);
+    t.lands(P0, "Plains", 2);
+    // "Choose target attacking or blocking creature. Scry 3, then reveal the top card of
+    // your library. ~ deals damage equal to that card's mana value to that creature."
+    let judge = t.hand(P0, "Judge Unworthy");
+    t.cast(P0, judge).target(giant).go();
+    t.resolve();
+    assert!(!t.on_battlefield(giant));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.library_size(P0), 4);
+}
+
+#[test]
 fn put_into_a_graveyard_from_anywhere_shuffles_the_graveyard() {
     cr!("603.6c", "701.24a");
+    // Discarded from a hand.
     let mut t = TestGame::new(2);
     t.graveyard(P0, "Grizzly Bears");
     let kozilek = t.hand(P0, "Kozilek, Butcher of Truth");
     let lib = t.library_size(P0);
     t.g.discard(P0, kozilek, None);
     t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 0);
+    assert_eq!(t.library_size(P0), lib + 2);
+
+    // Sacrificed while it has no abilities on the battlefield: a "from anywhere" ability
+    // isn't a leaves-the-battlefield ability, so it doesn't look back in time. The card
+    // in the graveyard has the ability, and it triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Humility");
+    let kozilek = t.battlefield(P0, "Kozilek, Butcher of Truth");
+    assert!(t.obj_now(kozilek).chars.abilities.is_empty());
+    t.graveyard(P0, "Grizzly Bears");
+    let lib = t.library_size(P0);
+    t.lands(P1, "Swamp", 2);
+    let edict = t.hand(P1, "Diabolic Edict");
+    t.cast(P1, edict).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!(t.zone(kozilek), Zone::Library(P0));
     assert_eq!(t.graveyard_size(P0), 0);
     assert_eq!(t.library_size(P0), lib + 2);
 }

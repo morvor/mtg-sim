@@ -46,7 +46,7 @@ fn library_placement_cards_compile() {
 
 #[test]
 fn put_target_creature_on_top_of_its_owners_library() {
-    cr!("400.3", "401.1");
+    cr!("400.3");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 4);
     // P0 controls a creature P1 owns: it goes to its owner's library.
@@ -84,7 +84,7 @@ fn second_from_the_top_or_the_bottom_of_a_short_library() {
 
 #[test]
 fn owner_chooses_top_or_bottom() {
-    cr!("401.1");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 8);
     let bear = t.battlefield(P1, "Grizzly Bears");
@@ -173,17 +173,26 @@ fn activated_bottom_of_library_from_a_graveyard() {
 
 #[test]
 fn put_target_creature_you_control_on_top() {
-    cr!("602.2");
+    cr!("115.1c");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
     let apprentice = t.battlefield(P0, "Nightscape Apprentice");
     let bear = t.battlefield(P0, "Grizzly Bears");
-    let other = t.battlefield(P1, "Grizzly Bears");
     t.activate(P0, apprentice, 0, &[Entity::Object(bear)])
         .unwrap();
     t.resolve_all();
     assert_eq!(from_top(&t, P0, bear), Some(0));
+
+    // A creature an opponent controls can't be the target.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let apprentice = t.battlefield(P0, "Nightscape Apprentice");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    let lib1 = t.library_size(P1);
+    let _ = t.activate(P0, apprentice, 0, &[Entity::Object(other)]);
+    t.resolve_all();
     assert!(t.on_battlefield(other));
+    assert_eq!(t.library_size(P1), lib1);
 }
 
 #[test]

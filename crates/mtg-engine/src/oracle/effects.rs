@@ -25,6 +25,12 @@ pub struct Builder<'c> {
     /// Number of sentences of the current effect text parsed so far (a pronoun in the
     /// first sentence can only refer to the source, trigger object, or a target).
     pub sentences: usize,
+    /// The creature target named by a "Choose target [creature]." sentence (slot and
+    /// target text): "that creature" keeps referring to it after "it" has come to mean
+    /// something else ("Choose target attacking or blocking creature. Scry 3, then reveal
+    /// the top card of your library. ~ deals damage equal to that card's mana value to
+    /// that creature.").
+    pub chosen_creature: Option<(u8, String)>,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -36,6 +42,7 @@ impl<'c> Builder<'c> {
             it_player: PlayerRef::You,
             in_trigger: false,
             sentences: 0,
+            chosen_creature: None,
             ctx,
         }
     }
@@ -326,6 +333,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((sel, rest.to_string()));
         }
     }
+    if let Some((slot, text)) = &b.chosen_creature {
+        let still_there = b
+            .targets
+            .get(*slot as usize)
+            .is_some_and(|t| &t.text == text);
+        if let Some(rest) = s.strip_prefix("that creature") {
+            if still_there && (rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'')) {
+                return Some((Sel::Target(*slot), rest.to_string()));
+            }
+        }
+    }
     for p in [
         "it",
         "that creature",
@@ -609,7 +627,12 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
 /// "That creature deals damage ... to each other creature": "other" means other than the
 /// subject of the sentence, which isn't necessarily the ability's source.
 fn other_than_subject(to: Sel, subject: &Sel) -> Sel {
-    if matches!(subject, Sel::This) {
+    // "Each creature deals damage to each other creature" means other than each one in
+    // turn, which a single filter can't say; leave such sentences as they were.
+    if matches!(
+        subject,
+        Sel::This | Sel::All(_) | Sel::Union(_) | Sel::Players(_) | Sel::None
+    ) {
         return to;
     }
     let fix = |f: Filter| match f {

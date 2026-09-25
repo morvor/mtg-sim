@@ -32,18 +32,34 @@ inventory::submit! {
 
 /// "Choose target artifact or enchantment." as a sentence of its own: the target is chosen
 /// as the spell is cast (CR 601.2c, 115.1) and is "it" for the sentences that follow
-/// ("Its owner shuffles it into their library."). Choosing it does nothing by itself.
+/// ("Its owner shuffles it into their library."). Choosing it does nothing by itself. A
+/// chosen creature stays "that creature" even after "it" has come to mean another object
+/// (see `Builder::chosen_creature`).
 fn p_choose_target(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("choose ")?;
     let (spec, tail) = parse_target(r)?;
-    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+    let TargetKind::Object(f) = &spec.what else {
+        return None;
+    };
+    if !end(tail).is_empty() || spec.min != 1 || !matches!(spec.max, Value::Const(1)) {
         return None;
     }
-    if spec.min != 1 || !matches!(spec.max, Value::Const(1)) {
-        return None;
+    let creature = is_creature(f) && f.zone().is_none_or(|z| z == ZoneKind::Battlefield);
+    let slot = b.add_target(spec, r);
+    if creature {
+        b.chosen_creature = Some((slot, b.targets[slot as usize].text.clone()));
     }
-    b.add_target(spec, r);
     Some(Effect::Noop)
+}
+
+/// Whether a target filter names creatures ("target attacking or blocking creature").
+fn is_creature(f: &Filter) -> bool {
+    match f {
+        Filter::Type(crate::types::CardType::Creature) => true,
+        Filter::And(v) => v.iter().any(is_creature),
+        Filter::Or(v) => !v.is_empty() && v.iter().all(is_creature),
+        _ => false,
+    }
 }
 
 /// The subject of a "shuffles" sentence: the player, the possessive that refers back to
@@ -86,11 +102,25 @@ fn then_draw(rest: &str, who: &PlayerRef, you: bool) -> Option<Option<Effect>> {
     }))
 }
 
-fn owned_in(zone: ZoneKind) -> Sel {
+fn owned_in(zone: ZoneKind, owner: PlayerRel) -> Sel {
     Sel::All(Filter::and(vec![
         Filter::InZone(zone),
-        Filter::OwnedBy(PlayerRel::Iterated),
+        Filter::OwnedBy(owner),
     ]))
+}
+
+/// The cards each player shuffled away, for "then draws that many cards".
+const SHUFFLED: Var = vars::USER + 140;
+
+/// The owners named by a subject that is a group of players ("each player", "each
+/// opponent"), for moving all of their cards at the same time.
+fn group_owners(who: &PlayerRef) -> Option<PlayerRel> {
+    match who {
+        PlayerRef::EachPlayer => Some(PlayerRel::Any),
+        PlayerRef::EachOpponent => Some(PlayerRel::Opponent),
+        PlayerRef::EachOtherPlayer => Some(PlayerRel::NotYou),
+        _ => None,
+    }
 }
 
 /// "[player] shuffles their [hand / graveyard / hand and graveyard] into their library
@@ -116,36 +146,75 @@ fn p_shuffle_zones(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = r.strip_prefix(" into ")?.strip_prefix(poss)?;
     let r = r.strip_prefix(" library")?;
     let draw = then_draw(r, &who, matches!(who, PlayerRef::You))?;
-    let what = if zones.len() == 1 {
-        owned_in(zones[0])
-    } else {
-        Sel::Union(zones.into_iter().map(owned_in).collect())
+    let cards = |owner: PlayerRel| {
+        if zones.len() == 1 {
+            owned_in(zones[0], owner)
+        } else {
+            Sel::Union(zones.iter().map(|z| owned_in(*z, owner)).collect())
+        }
     };
-    let shuffle = Effect::ShuffleIntoLibrary {
-        what,
-        library: PlayerRef::Iterated,
-    };
-    match draw {
-        // "Then draw that many cards": each player draws the number of cards they
-        // shuffled away.
-        Some(Effect::Draw { n: Value::Prev, .. }) => Some(Effect::ForEachPlayer {
-            who,
-            effect: Box::new(Effect::seq(vec![
-                shuffle,
-                Effect::Draw {
-                    who: PlayerRef::Iterated,
-                    n: Value::Prev,
-                },
-            ])),
-        }),
-        draw => Some(Effect::seq(vec![
+    let that_many = matches!(draw, Some(Effect::Draw { n: Value::Prev, .. }));
+    if let Some(owners) = group_owners(&who) {
+        // Each of those players' cards are put into their libraries at the same time,
+        // each library is shuffled (CR 701.24c-d), and only then does anyone draw.
+        let shuffle = Effect::ShuffleIntoLibrary {
+            what: cards(owners),
+            library: who.clone(),
+        };
+        let draw = if that_many {
+            // Each player draws as many cards as they shuffled away.
             Effect::ForEachPlayer {
                 who,
-                effect: Box::new(shuffle),
+                effect: Box::new(Effect::Draw {
+                    who: PlayerRef::Iterated,
+                    n: Value::Count(Filter::and(vec![
+                        Filter::InZone(ZoneKind::Library),
+                        Filter::In(Box::new(Sel::Var(SHUFFLED))),
+                        Filter::OwnedBy(PlayerRel::Iterated),
+                    ])),
+                }),
+            }
+        } else {
+            draw.unwrap_or(Effect::Noop)
+        };
+        return Some(Effect::seq(vec![
+            shuffle,
+            Effect::Store {
+                var: SHUFFLED,
+                sel: Sel::Var(vars::IT),
             },
-            draw.unwrap_or(Effect::Noop),
-        ])),
+            draw,
+        ]));
     }
+    // A single player.
+    let shuffle = Effect::ShuffleIntoLibrary {
+        what: cards(PlayerRel::Iterated),
+        library: PlayerRef::Iterated,
+    };
+    let body = match draw {
+        // "Then draw that many cards": the number of cards shuffled away.
+        Some(Effect::Draw { n: Value::Prev, .. }) => Effect::seq(vec![
+            shuffle,
+            Effect::Draw {
+                who: PlayerRef::Iterated,
+                n: Value::Prev,
+            },
+        ]),
+        Some(draw) => {
+            return Some(Effect::seq(vec![
+                Effect::ForEachPlayer {
+                    who,
+                    effect: Box::new(shuffle),
+                },
+                draw,
+            ]))
+        }
+        None => shuffle,
+    };
+    Some(Effect::ForEachPlayer {
+        who,
+        effect: Box::new(body),
+    })
 }
 
 /// "target player shuffles up to three target cards from their graveyard into their

@@ -707,9 +707,12 @@ impl Game {
                 // CR 603.10a: leaves-the-battlefield and leaves-a-graveyard triggers look
                 // back in time at the object as it was before the event; enters-the-
                 // battlefield triggers ("enters from a graveyard") look at the permanent
-                // (CR 603.6a).
+                // (CR 603.6a), and "put into a graveyard from anywhere" triggers at the
+                // card in its new zone, as they're never leaves-the-battlefield abilities
+                // (CR 603.6c; see `looks_back`).
                 let check = if !matches!(zt, Zone::Battlefield)
                     && matches!(zf, Zone::Battlefield | Zone::Graveyard(_))
+                    && (from.is_some() || looks_back(cond, ev))
                 {
                     *old
                 } else {
