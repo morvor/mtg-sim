@@ -69,6 +69,79 @@ fn gods_willing_protection_counters_a_red_removal_spell() {
 }
 
 #[test]
+fn becomes_the_creature_type_of_your_choice() {
+    cr!("205.1a", "608.2h", "613.1d");
+    assert_supported("Mistform Dreamer");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Mistform Dreamer");
+    t.lands(P0, "Island", 1);
+    let i = types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Elf")
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    t.activate(P0, m, 0, &[]).unwrap();
+    t.resolve();
+    let c = &t.obj_now(m).chars;
+    assert!(c.has_subtype("Elf"));
+    assert!(
+        !c.has_subtype("Illusion"),
+        "the new type replaces its creature types"
+    );
+    t.advance_to(P1, turn::Step::Upkeep);
+    assert!(t.obj_now(m).chars.has_subtype("Illusion"));
+    assert!(!t.obj_now(m).chars.has_subtype("Elf"));
+}
+
+#[test]
+fn land_becomes_the_basic_land_type_of_your_choice() {
+    cr!("305.7", "608.2h");
+    assert_supported("Dream Thrush");
+    let mut t = TestGame::new(2);
+    let thrush = t.battlefield(P0, "Dream Thrush");
+    let mountain = t.battlefield(P1, "Mountain");
+    // Plains, Island, Swamp, Mountain, Forest: choose Swamp.
+    t.answer(P0, DecisionKind::Option, Answer::Index(2));
+    t.activate(P0, thrush, 0, &[Entity::Object(mountain)])
+        .unwrap();
+    t.resolve();
+    let c = &t.obj_now(mountain).chars;
+    assert!(c.has_subtype("Swamp"));
+    assert!(!c.has_subtype("Mountain"));
+    let now = t.g.current(mountain);
+    t.activate(P1, now, 0, &[]).unwrap();
+    assert_eq!(
+        t.g.players[1]
+            .mana_pool
+            .count(mtg_engine::mana::ManaType::B),
+        1
+    );
+}
+
+#[test]
+fn protection_from_the_card_type_of_your_choice() {
+    cr!("702.16b", "608.2h");
+    assert_supported("Pippin, Guard of the Citadel");
+    let mut t = TestGame::new(2);
+    let pippin = t.battlefield(P0, "Pippin, Guard of the Citadel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Card types in CardType::ALL order: artifact, battle, conspiracy, creature, ...
+    let i = types::CardType::ALL
+        .iter()
+        .position(|c| *c == types::CardType::Creature)
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    t.activate(P0, pippin, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let now = t.g.current(bears);
+    assert!(t.g.protected_from(now, goblin));
+    assert!(!t.g.protected_from(now, bolt));
+}
+
+#[test]
 fn becomes_the_color_of_your_choice() {
     cr!("105.3", "613.1e", "608.2h");
     assert_supported("Rainbow Crow");

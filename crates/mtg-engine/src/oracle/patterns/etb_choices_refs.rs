@@ -217,30 +217,71 @@ fn color_of_your_choice(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(x) => (x, Duration::EndOfTurn),
         None => (l, Duration::Permanent),
     };
-    let (subj, m) = if let Some(x) = l
-        .strip_suffix(" gains protection from the color of your choice")
-        .or_else(|| l.strip_suffix(" gain protection from the color of your choice"))
-    {
+    let protection = |f: Filter| {
         let mut k = crate::keywords::Keyword::new(crate::keywords::KeywordKind::Protection);
-        k.filter = Some(Filter::ChosenColor);
-        (x, Modification::AddKeyword(k))
-    } else if let Some(x) = l
-        .strip_suffix(" becomes the color of your choice")
-        .or_else(|| l.strip_suffix(" become the color of your choice"))
-    {
-        (x, Modification::SetChosenColor)
-    } else {
-        return None;
+        k.filter = Some(f);
+        Modification::AddKeyword(k)
     };
+    let forms: [(&str, ChoiceKind, Vec<Modification>); 5] = [
+        (
+            "protection from the color of your choice",
+            ChoiceKind::Color,
+            vec![protection(Filter::ChosenColor)],
+        ),
+        (
+            "protection from the card type of your choice",
+            ChoiceKind::CardType,
+            vec![protection(Filter::ChosenCardType)],
+        ),
+        (
+            "the color of your choice",
+            ChoiceKind::Color,
+            vec![Modification::SetChosenColor],
+        ),
+        // CR 205.1a: the new creature type replaces its other creature types.
+        (
+            "the creature type of your choice",
+            ChoiceKind::CreatureType,
+            vec![
+                Modification::RemoveAllCreatureTypes,
+                Modification::AddChosenType,
+            ],
+        ),
+        // CR 305.7.
+        (
+            "the basic land type of your choice",
+            ChoiceKind::BasicLandType,
+            vec![Modification::SetChosenBasicLandType],
+        ),
+    ];
+    let mut found = None;
+    for (phrase, kind, mods) in forms {
+        let is_protection = phrase.starts_with("protection");
+        let verbs: &[&str] = if is_protection {
+            &[" gains ", " gain "]
+        } else {
+            &[" becomes ", " become "]
+        };
+        for v in verbs {
+            if let Some(x) = l.strip_suffix(&format!("{v}{phrase}")) {
+                found = Some((x, kind.clone(), mods.clone()));
+                break;
+            }
+        }
+        if found.is_some() {
+            break;
+        }
+    }
+    let (subj, kind, mods) = found?;
     let what = subject(subj, b)?;
     Some(Effect::seq(vec![
         Effect::Choose {
             who: PlayerRef::You,
-            kind: ChoiceKind::Color,
+            kind,
         },
         Effect::Modify {
             what,
-            mods: vec![m],
+            mods,
             duration,
         },
     ]))

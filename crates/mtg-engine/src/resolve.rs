@@ -1161,6 +1161,24 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                Modification::AddChosenType => {
+                    match ctx.source.and_then(|s| {
+                        let ch = &self.obj(s).choices;
+                        ch.creature_type.clone().or(ch.basic_land_type.clone())
+                    }) {
+                        Some(t) => Modification::AddSubtypes(vec![t]),
+                        None => m.clone(),
+                    }
+                }
+                Modification::SetChosenBasicLandType => {
+                    match ctx
+                        .source
+                        .and_then(|s| self.obj(s).choices.basic_land_type.clone())
+                    {
+                        Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
                 other => other.clone(),
             })
             .collect()
