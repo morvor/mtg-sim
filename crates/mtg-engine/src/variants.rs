@@ -118,12 +118,9 @@ pub fn set_in_motion(g: &mut Game, p: PlayerId) -> Option<ObjectId> {
 }
 
 /// Turns a face-up scheme face down and puts it on the bottom of its owner's scheme deck
-/// (CR 701.33b, 704.6e).
+/// (CR 701.33b, 704.6e). It becomes a new object (CR 400.9).
 fn scheme_to_bottom(g: &mut Game, id: ObjectId) {
-    g.command.retain(|x| *x != id);
-    g.command.push(id);
-    g.objects[id.0 as usize].face_down = true;
-    g.dirty = true;
+    crate::zones::turn_face_down_in_command(g, id);
 }
 
 /// Abandons a scheme (CR 701.33): only a face-up ongoing scheme may be abandoned, and only

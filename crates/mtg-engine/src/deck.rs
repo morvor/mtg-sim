@@ -43,6 +43,9 @@ pub enum DeckProblem {
     /// Tournament rules bar the card from the format (CR 100.6): it's banned, or from a
     /// set the format doesn't use.
     NotLegalInFormat { name: String, format: String },
+    /// A card that must be removed from decks and sideboards when not playing for ante
+    /// (CR 407.3).
+    AnteCard { name: String },
 }
 
 /// Pairs of card names treated as the same English name for deck construction

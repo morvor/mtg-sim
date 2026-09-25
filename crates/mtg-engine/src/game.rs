@@ -72,6 +72,9 @@ pub struct GameConfig {
     /// previous game (CR 103.1). `None` = determined at random.
     #[serde(default)]
     pub first_turn_chooser: Option<PlayerId>,
+    /// Playing for ante, an optional variation (CR 407).
+    #[serde(default)]
+    pub ante: bool,
 }
 
 impl Default for GameConfig {
@@ -94,6 +97,7 @@ impl Default for GameConfig {
             single_planar_deck: false,
             limited: false,
             first_turn_chooser: None,
+            ante: false,
         }
     }
 }
@@ -488,6 +492,9 @@ pub struct Game {
     pub special: crate::special_actions::SpecialState,
     /// Coins and dice (CR 705, 706).
     pub dice: crate::dice::DiceState,
+    /// Zone bookkeeping: face-down exiled cards players may look at, revealed top cards
+    /// of libraries (CR 401.5, 401.6, 406.3).
+    pub zones: crate::zones::ZoneState,
 }
 
 impl Game {
@@ -575,6 +582,7 @@ impl Game {
             start: Default::default(),
             special: Default::default(),
             dice: Default::default(),
+            zones: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

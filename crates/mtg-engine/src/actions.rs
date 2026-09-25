@@ -49,6 +49,14 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // CR 400.3: objects go to their owner's library, hand, or graveyard.
+        let moves: Vec<MoveEv> = moves
+            .into_iter()
+            .map(|mut m| {
+                m.to = crate::zones::owners_zone(self, m.obj, m.to);
+                m
+            })
+            .collect();
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are
@@ -82,12 +90,13 @@ impl Game {
             if m.to == Zone::Battlefield && self.cant_enter(m) || self.move_forbidden(m) {
                 continue;
             }
-            for e in self.replace(ReplEvent::Move(m.clone())) {
+            for mut e in self.replace(ReplEvent::Move(m.clone())) {
                 // An object that can't enter the battlefield stays where it is. This also
                 // covers moves a replacement effect redirected to the battlefield, and
                 // entries a replacement modified (CR 614.17d: check the permanent as it
                 // would exist, taking those replacements into account).
-                if let ReplEvent::Move(mv) = &e {
+                if let ReplEvent::Move(mv) = &mut e {
+                    mv.to = crate::zones::owners_zone(self, mv.obj, mv.to);
                     if mv.to == Zone::Battlefield && self.cant_enter(mv) || self.move_forbidden(mv)
                     {
                         continue;
@@ -99,6 +108,9 @@ impl Game {
         // CR 613.7m: objects entering the battlefield simultaneously get timestamps in
         // APNAP order.
         self.order_simultaneous_entries(&mut finals);
+        // CR 401.4, 404.3: the owner arranges cards put into a library position or a
+        // graveyard at the same time.
+        crate::zones::order_simultaneous(self, &mut finals);
         // Look back in time for leaves-the-battlefield triggers and other zone-change
         // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
         // the stack, or a public object being put into a hand or library.
@@ -191,7 +203,8 @@ impl Game {
                 }
             }
         }
-        false
+        // CR 400.4b, 407.3, 407.4: the command zone and the ante zone.
+        crate::zones::move_forbidden(self, mv)
     }
 
     /// Whether an object can be moved to a zone: it's a current object in some zone, or a
@@ -336,7 +349,7 @@ impl Game {
         }
         if from == Zone::Stack && m.to == Zone::Battlefield {
             // Effects of resolved spells and abilities that changed a permanent spell
-            // continue to apply to the permanent it becomes (CR 112.4, 110.2b).
+            // continue to apply to the permanent it becomes (CR 112.4, 110.2b, 400.7a).
             for e in self.effects.iter_mut() {
                 if let Affected::Objects(v) = &mut e.affected {
                     for x in v.iter_mut().filter(|x| **x == old_id) {
@@ -344,6 +357,8 @@ impl Game {
                     }
                 }
             }
+            // CR 400.7c: and so do prevention effects for damage from it.
+            crate::zones::spell_became_permanent(self, old_id, new_id);
         }
         if m.to == Zone::Battlefield {
             // Choices made as it entered (CR 614.12a) or while it was cast are the
