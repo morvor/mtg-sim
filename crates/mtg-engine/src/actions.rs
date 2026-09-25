@@ -977,8 +977,10 @@ impl Game {
             }));
         }
         // CR 120.10: what would be excess damage, as the damage is about to be dealt.
-        let excess_before =
-            crate::excess_damage::thresholds_before(self, &crate::excess_damage::damage_events(&finals));
+        let excess_before = crate::excess_damage::thresholds_before(
+            self,
+            &crate::excess_damage::damage_events(&finals),
+        );
         let mut dealt: Vec<(ObjectId, Entity, u32)> = Vec::new();
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
         for e in finals {
