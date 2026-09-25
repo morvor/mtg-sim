@@ -114,6 +114,10 @@ pub struct TurnState {
     /// Steps that have begun this turn, in order (for combat timing windows, CR 506.8).
     #[serde(default)]
     pub step_log: Vec<Step>,
+    /// (attacking player, attacked player) pairs for creatures declared as attackers this
+    /// turn (CR 508.6: "has attacked [a player]").
+    #[serde(default)]
+    pub attacked_players: Vec<(PlayerId, PlayerId)>,
 }
 
 impl TurnState {
@@ -134,6 +138,7 @@ impl TurnState {
             upkeeps: 0,
             previous_active: None,
             step_log: vec![],
+            attacked_players: vec![],
         }
     }
 
@@ -234,6 +239,7 @@ impl Game {
         self.turn.upkeeps = 0;
         self.turn.cleanup_priority = false;
         self.turn.step_log.clear();
+        self.turn.attacked_players.clear();
         self.history = TurnHistory::default();
         self.turn_events.clear();
         for p in self.players.iter_mut() {
@@ -435,9 +441,7 @@ impl Game {
         let step = self.turn.step;
         // CR 500.5: effects lasting until end of step expire; mana empties.
         self.empty_mana_pools();
-        if step == Step::DeclareAttackers
-            && self.combat.as_ref().is_none_or(|c| !c.any_attackers)
-        {
+        if step == Step::DeclareAttackers && self.combat.as_ref().is_none_or(|c| !c.any_attackers) {
             // CR 508.8: if no creatures were declared as attackers or put onto the
             // battlefield attacking, skip this combat's declare blockers and combat damage
             // steps.

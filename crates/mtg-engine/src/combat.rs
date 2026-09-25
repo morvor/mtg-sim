@@ -930,6 +930,8 @@ fn perform_attack_declaration(
     had_to_attack: &[ObjectId],
     allow_optional: bool,
 ) -> bool {
+    // CR 508.1e: bands.
+    let bands = announce_bands(g, ap, &declared);
     // CR 508.1f: tap attackers (vigilance: 702.20b).
     for (a, _) in &declared {
         if !g.obj(*a).has_keyword(KeywordKind::Vigilance) {
@@ -988,6 +990,15 @@ fn perform_attack_declaration(
         .iter()
         .map(|(_, t)| entity_defender(g, *t))
         .collect();
+    // CR 508.6: record which players attacked which players.
+    for (a, t) in &final_decl {
+        if let Entity::Player(p) = t {
+            let pair = (g.obj(*a).controller, *p);
+            if !g.turn.attacked_players.contains(&pair) {
+                g.turn.attacked_players.push(pair);
+            }
+        }
+    }
     let c = g.combat.get_or_insert_with(CombatState::default);
     c.attackers_declared = true;
     c.had_to_attack = had_to_attack.to_vec();
@@ -1003,7 +1014,7 @@ fn perform_attack_declaration(
             declared: true,
             blocked: false,
             blockers: vec![],
-            band: None,
+            band: bands.iter().find(|(x, _)| x == a).map(|(_, b)| *b),
             defending_player: Some(dp),
         });
     }
@@ -1044,6 +1055,90 @@ fn perform_attack_declaration(
     }
     g.dirty = true;
     true
+}
+
+/// CR 508.1e, 702.22c–d: the active player announces which attacking creatures are banded
+/// together. A band has creatures with banding and at most one without, all attacking the
+/// same player, planeswalker, or battle. Returns (creature, band id) pairs.
+fn announce_bands(
+    g: &mut Game,
+    ap: PlayerId,
+    declared: &[(ObjectId, Entity)],
+) -> Vec<(ObjectId, u32)> {
+    let has_banding = |g: &Game, id: ObjectId| g.obj(id).has_keyword(KeywordKind::Banding);
+    let mut out: Vec<(ObjectId, u32)> = Vec::new();
+    let mut next = 1u32;
+    for (a, t) in declared {
+        if !has_banding(g, *a) || out.iter().any(|(x, _)| x == a) {
+            continue;
+        }
+        let cands: Vec<ObjectId> = declared
+            .iter()
+            .filter(|(x, u)| x != a && u == t && !out.iter().any(|(y, _)| y == x))
+            .map(|(x, _)| *x)
+            .collect();
+        if cands.is_empty() {
+            continue;
+        }
+        let name = g.obj(*a).chars.name.clone();
+        let chosen = g.ask_objects(
+            ap,
+            Some(*a),
+            &format!("Choose attacking creatures to band with {name}"),
+            cands.clone(),
+            0,
+            cands.len() as u32,
+        );
+        if chosen.is_empty() {
+            continue;
+        }
+        let without = chosen.iter().filter(|x| !has_banding(g, **x)).count();
+        if without > 1 {
+            continue; // Not a legal band (CR 702.22c).
+        }
+        out.push((*a, next));
+        for x in chosen {
+            out.push((x, next));
+        }
+        next += 1;
+    }
+    out
+}
+
+/// An effect states that a creature is attacking (CR 508.4): it becomes an attacking
+/// creature attacking `target` without being declared as an attacker, unaffected by
+/// requirements and restrictions on declaring attackers (CR 508.4c). Returns false if it
+/// doesn't become attacking (CR 506.3b–c, 506.3g, 508.4b).
+pub fn make_attacking(g: &mut Game, id: ObjectId, target: Entity) -> bool {
+    if g.combat.is_none() || g.is_attacking(id) || !g.is_live(id) {
+        return false;
+    }
+    let o = g.obj(id);
+    if o.zone != Zone::Battlefield
+        || !o.is_creature()
+        || o.is(CardType::Battle)
+        || !attacking_players(g).contains(&o.controller)
+        || !g.valid_attack_target(target)
+    {
+        return false;
+    }
+    put_onto_battlefield_attacking(g, id, target);
+    g.is_attacking(id)
+}
+
+/// "[player a] is attacking [player b]" (CR 508.6): a controls a creature attacking b.
+pub fn player_is_attacking(g: &Game, a: PlayerId, b: PlayerId) -> bool {
+    g.combat.as_ref().is_some_and(|c| {
+        c.attackers
+            .iter()
+            .any(|x| x.target == Some(Entity::Player(b)) && g.obj(x.id).controller == a)
+    })
+}
+
+/// "[player a] has attacked [player b]" this turn (CR 508.6): a declared one or more
+/// creatures as attackers attacking b.
+pub fn player_has_attacked(g: &Game, a: PlayerId, b: PlayerId) -> bool {
+    g.turn.attacked_players.contains(&(a, b))
 }
 
 // ---------------------------------------------------------------------------
@@ -2080,15 +2175,10 @@ pub fn reselect_attack_target(g: &mut Game, attacker: ObjectId, new: Entity) -> 
     {
         return false;
     }
-    // CR 508.7e: within the controller's range of influence (for a battle, its protector
-    // and the battle's controller too).
+    // CR 508.7e: within the controller's range of influence (a planeswalker via its
+    // controller; for a battle, its protector must be within range).
     if !within_range(g, ctl, defender) {
         return false;
-    }
-    if let Entity::Object(o) = new {
-        if !within_range(g, ctl, g.obj(o).controller) {
-            return false;
-        }
     }
     let Some(c) = g.combat.as_mut() else {
         return false;
