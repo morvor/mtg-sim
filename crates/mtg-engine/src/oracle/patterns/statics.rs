@@ -1527,7 +1527,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 }
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
-fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
+pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
     let fc = f.clone();
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
@@ -2460,7 +2460,7 @@ inventory::submit! {
 
 /// Removes "spell" from a filter: "can't cast creature spells" checks the card being
 /// cast, which isn't on the stack yet.
-fn without_spell(f: Filter) -> Option<Filter> {
+pub(crate) fn without_spell(f: Filter) -> Option<Filter> {
     match f {
         Filter::Spell => Some(Filter::Any),
         Filter::And(v) => Some(Filter::and(
