@@ -1,14 +1,21 @@
 //! Oracle text of the keywords of CR 702.140–702.152 that the generic keyword parser
 //! doesn't handle, and phrases that go with them:
 //!
+//! * "Whenever a creature you control mutates" (CR 702.140d); "You may cast ~ from your
+//!   graveyard using its mutate ability" (CR 702.140a) — and its blitz ability
+//!   (CR 702.152a);
+//! * "Each [quality] creature card in your graveyard has encore ..." (CR 702.141a);
 //! * "Boast — [cost]: [effect]" (CR 702.142a), "Whenever you activate a boast ability",
 //!   "Boast abilities you activate cost {1} less to activate [for each ...]", "Creatures
 //!   you control can boast twice during each of your turns rather than once"
 //!   (CR 702.142b);
-//! * "Whenever ~ trains" (CR 702.149c), and "if you control a creature with a +1/+1
-//!   counter on it that attacked this turn" (Warrior's Resolve);
-//! * "You may cast ~ from your graveyard using its blitz ability" (CR 702.152a) and
-//!   "... using its mutate ability" (CR 702.140a).
+//! * "Whenever you foretell a card", "if this spell was foretold", "It becomes foretold.
+//!   [Its foretell cost is ...]", "exile [it / a card from your hand] face down", and
+//!   changes to the foretell action (CR 702.143c–d);
+//! * "[Quality] spells you cast have demonstrate" (CR 702.144a);
+//! * "if it didn't have decayed" (CR 702.147a);
+//! * bracketed text of cards with cleave, and phrases of those cards (CR 702.148);
+//! * "Whenever ~ trains" (CR 702.149c), and phrases of cards with training.
 
 use super::{
     AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern,
