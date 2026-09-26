@@ -28,37 +28,6 @@ pub const SMALLEST_LIBRARY: &str = "hideaway:cards in the smallest library";
 pub struct Hideaway;
 
 impl KeywordRules for Hideaway {
-    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
-        let p = ctx.controller;
-        Some(match name {
-            ATTACKERS_THIS_TURN => {
-                let mut seen: Vec<ObjectId> = Vec::new();
-                for a in &g.history.attackers {
-                    if g.obj(*a).controller == p && !seen.contains(a) {
-                        seen.push(*a);
-                    }
-                }
-                seen.len() as i64
-            }
-            MOST_DAMAGE_TO_AN_OPPONENT => g
-                .history
-                .damage_dealt_to_players
-                .iter()
-                .filter(|(q, _)| g.are_opponents(p, **q))
-                .map(|(_, n)| *n as i64)
-                .max()
-                .unwrap_or(0),
-            SMALLEST_LIBRARY => g
-                .players
-                .iter()
-                .filter(|q| q.in_game())
-                .map(|q| q.library.len() as i64)
-                .min()
-                .unwrap_or(0),
-            _ => return None,
-        })
-    }
-
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Hideaway]
     }
@@ -90,6 +59,37 @@ impl KeywordRules for Hideaway {
             AbilityKind::Triggered(t),
             format!("Hideaway {n}"),
         )])
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        let p = ctx.controller;
+        Some(match name {
+            ATTACKERS_THIS_TURN => {
+                let mut seen: Vec<ObjectId> = Vec::new();
+                for a in &g.history.attackers {
+                    if g.obj(*a).controller == p && !seen.contains(a) {
+                        seen.push(*a);
+                    }
+                }
+                seen.len() as i64
+            }
+            MOST_DAMAGE_TO_AN_OPPONENT => g
+                .history
+                .damage_dealt_to_players
+                .iter()
+                .filter(|(q, _)| g.are_opponents(p, **q))
+                .map(|(_, n)| *n as i64)
+                .max()
+                .unwrap_or(0),
+            SMALLEST_LIBRARY => g
+                .players
+                .iter()
+                .filter(|q| q.in_game())
+                .map(|q| q.library.len() as i64)
+                .min()
+                .unwrap_or(0),
+            _ => return None,
+        })
     }
 
     /// Whoever controls a permanent with hideaway may look at the cards it exiled face

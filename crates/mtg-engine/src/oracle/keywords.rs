@@ -262,8 +262,6 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         KeywordKind::Banding if name.as_str() == "bands with other" => {
             kw.filter = Some(crate::kw::banding::quality_filter(rest, rest_raw)?);
         }
-        // CR 702.33b: "Kicker [cost 1] and/or [cost 2]" means "Kicker [cost 1], kicker
-        // [cost 2]": the second cost is kept in `costs`.
         // CR 702.77a: "Reinforce X—{X}{G}{G}" puts X counters, X paid in the cost (N is
         // -1, see `kw/reinforce.rs`).
         KeywordKind::Reinforce if rest.starts_with("x—") => {
@@ -274,6 +272,8 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
             kw.cost = Some(cost);
             kw.n = Some(-1);
         }
+        // CR 702.33b: "Kicker [cost 1] and/or [cost 2]" means "Kicker [cost 1], kicker
+        // [cost 2]": the second cost is kept in `costs`.
         KeywordKind::Kicker if rest_raw.contains(" and/or ") => {
             let (a, b) = rest_raw.split_once(" and/or ")?;
             kw.cost = Some(parse_keyword_cost(a)?);

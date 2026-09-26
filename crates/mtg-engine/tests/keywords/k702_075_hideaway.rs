@@ -424,3 +424,94 @@ fn windbrisk_heights_counts_the_different_creatures_declared_as_attackers() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn spinerock_knoll_counts_all_damage_dealt_to_an_opponent_this_turn() {
+    cr!("702.75a");
+    ruling!(
+        "Spinerock Knoll",
+        "It doesn't matter how the opponent was dealt damage or by whom, as long as the total damage is 7 or more."
+    );
+    ruling!(
+        "Spinerock Knoll",
+        "You'll get to play the card even if Spinerock Knoll wasn't on the battlefield at the time some or all of the 7 damage was dealt."
+    );
+    assert_supported("Spinerock Knoll");
+    let mut t = TestGame::new(2);
+    // 4 damage before the Knoll is on the battlefield, 3 more by another source later.
+    let giant = t.battlefield(P0, "Hill Giant");
+    let deal = |t: &mut TestGame, src: ObjectId, n: i32| {
+        crate::common_k702_052_066::run_effect(
+            t,
+            None,
+            P0,
+            mtg_engine::ability::Effect::DealDamage {
+                source: mtg_engine::ability::Sel::Target(0),
+                amount: mtg_engine::ability::Value::c(n),
+                to: mtg_engine::ability::Sel::Players(mtg_engine::ability::PlayerRef::Player(
+                    P1,
+                )),
+            },
+            &[Entity::Object(src)],
+        );
+    };
+    deal(&mut t, giant, 4);
+    let cards = stack_library(&mut t);
+    let knoll = t.enter(P0, "Spinerock Knoll");
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.resolve_all();
+    let text = play_ability(&t, knoll);
+    let activate = |t: &mut TestGame| {
+        let now = t.g.current(knoll);
+        t.g.objects[now.0 as usize].tapped = false;
+        t.lands(P0, "Mountain", 1);
+        t.answer_yes(P0, true);
+        activate_named(t, P0, knoll, &text, 0).unwrap();
+        t.resolve_all();
+    };
+    activate(&mut t);
+    assert_eq!(t.zone(cards[0]), Zone::Exile);
+    let other = t.battlefield(P0, "Grizzly Bears");
+    deal(&mut t, other, 3);
+    assert_eq!(t.life(P1), 13);
+    activate(&mut t);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+}
+
+#[test]
+fn howltooth_hollow_needs_every_hand_to_be_empty() {
+    cr!("702.75a");
+    assert_supported("Howltooth Hollow");
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t);
+    let hollow = t.enter(P0, "Howltooth Hollow");
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.resolve_all();
+    let text = play_ability(&t, hollow);
+    let card_in_hand = t.hand(P1, "Grizzly Bears");
+    let activate = |t: &mut TestGame| {
+        let now = t.g.current(hollow);
+        t.g.objects[now.0 as usize].tapped = false;
+        t.lands(P0, "Swamp", 1);
+        t.answer_yes(P0, true);
+        activate_named(t, P0, hollow, &text, 0).unwrap();
+        t.resolve_all();
+    };
+    activate(&mut t);
+    assert_eq!(t.zone(cards[0]), Zone::Exile);
+    // The opponent's last card leaves their hand.
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P1,
+        mtg_engine::ability::Effect::Move {
+            what: mtg_engine::ability::Sel::Target(0),
+            to: mtg_engine::ability::Destination::zone(mtg_engine::ability::ZoneKind::Graveyard),
+        },
+        &[Entity::Object(card_in_hand)],
+    );
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.hand_size(P0), 0);
+    activate(&mut t);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
