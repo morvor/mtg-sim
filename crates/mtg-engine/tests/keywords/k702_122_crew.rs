@@ -256,6 +256,44 @@ fn a_creature_that_cant_crew_vehicles_cant_pay_crew_costs() {
 }
 
 #[test]
+fn an_arrested_vehicle_cant_activate_crew_or_crew_other_vehicles() {
+    cr!("702.122d");
+    assert_supported_card("Intercessor's Arrest");
+    let mut t = TestGame::new(2);
+    // Intercessor's Arrest: "Enchanted permanent can't attack, block, or crew Vehicles.
+    // Its activated abilities can't be activated unless they're mana abilities."
+    let copter = t.battlefield(P0, "Smuggler's Copter");
+    let mech = t.battlefield(P0, "Mobilizer Mech");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let aura = t.hand(P1, "Intercessor's Arrest");
+    t.lands(P1, "Plains", 3);
+    t.g.turn.active = P1;
+    t.cast(P1, aura).target(mech).go();
+    t.resolve_all();
+    t.g.turn.active = P0;
+    // Its crew ability can't be activated.
+    assert!(!crew(&mut t, P0, mech, &[giant]));
+    // Made a creature by another effect, it still can't crew the copter.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    ctx.targets = vec![vec![Entity::Object(mech)]];
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![mtg_engine::ability::Modification::AddTypes(vec![
+                CardType::Creature,
+            ])],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(is_creature(&t, mech));
+    t.g.tap(giant);
+    assert!(!crew(&mut t, P0, copter, &[mech]));
+    assert!(!t.obj(mech).tapped);
+}
+
+#[test]
 fn some_creatures_crew_vehicles_with_more_power() {
     cr!("702.122a");
     assert_supported_card("Giant Ox");

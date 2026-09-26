@@ -431,10 +431,27 @@ fn cant_crew_vehicles(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
     if !subject.starts_with("enchanted ") {
         return None;
     }
-    let mut out = crate::oracle::statics::parse_static(
-        &format!("{subject} can't attack or block{rest}"),
-        ctx,
-    )?;
+    // "... or crew Vehicles. Its activated abilities can't be activated ...": a second
+    // static ability in the same paragraph.
+    let mut out = match rest.strip_prefix(". ") {
+        Some(next) => {
+            let mut v = crate::oracle::statics::parse_static(
+                &format!("{subject} can't attack or block"),
+                ctx,
+            )?;
+            // "Its" is the enchanted permanent's.
+            let next = match next.strip_prefix("its ") {
+                Some(r) => format!("{subject}'s {r}"),
+                None => next.to_string(),
+            };
+            v.extend(crate::oracle::statics::parse_static(&next, ctx)?);
+            v
+        }
+        None => crate::oracle::statics::parse_static(
+            &format!("{subject} can't attack or block{rest}"),
+            ctx,
+        )?,
+    };
     out.push(AbilityDef::new(
         AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
             crate::kw::crew::cant_tap_for(KeywordKind::Crew),
