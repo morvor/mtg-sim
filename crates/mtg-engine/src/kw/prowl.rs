@@ -8,6 +8,7 @@
 //! and creature types at that time (`TurnHistory::combat_damage_to_players`).
 
 use super::{KeywordRegistration, KeywordRules};
+use crate::ability::{AbilityKind, Cost, Modification, StaticEffect};
 use crate::casting::CastOption;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
@@ -62,6 +63,46 @@ pub fn prowl_condition(g: &Game, p: PlayerId, spell: &Characteristics) -> bool {
     })
 }
 
+/// Whether a permanent or command-zone object has a static ability giving prowl to
+/// objects (a quick check before working out what a spell would have as it's cast).
+fn spells_may_be_given_prowl(g: &Game) -> bool {
+    let grants = |o: &GameObject| {
+        o.chars.abilities.iter().any(|a| match &a.kind {
+            AbilityKind::Static(s) => matches!(
+                &s.effect,
+                StaticEffect::Continuous { mods, .. } if mods.iter().any(|m| matches!(m, Modification::AddKeyword(k) if k.kind == KeywordKind::Prowl))
+            ),
+            _ => false,
+        })
+    };
+    g.permanents().any(grants) || g.command.iter().any(|c| grants(g.obj(*c)))
+}
+
+/// Casting `card` for the prowl cost `cost` (of its own prowl ability, or one its spell
+/// would have, e.g. "Dinosaur spells you cast have prowl {2}{R}"), if `p` may.
+fn prowl_option(g: &Game, p: PlayerId, card: ObjectId, cost: &Cost) -> Option<CastOption> {
+    let o = g.obj(card);
+    let mut opt = CastOption::normal(FaceState::Front);
+    opt.method = CastMethod::Keyword(KeywordKind::Prowl);
+    let chars = g.option_characteristics(card, &opt);
+    if o.zone != Zone::Hand(p)
+        && (!g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false))
+    {
+        return None;
+    }
+    if !prowl_condition(g, p, &chars) {
+        return None;
+    }
+    opt.alt_cost = Some(super::modified_keyword_cost(
+        g,
+        p,
+        KeywordKind::Prowl,
+        cost,
+    ));
+    opt.tag = Some(PROWL);
+    Some(opt)
+}
+
 pub struct Prowl;
 
 impl KeywordRules for Prowl {
@@ -70,29 +111,32 @@ impl KeywordRules for Prowl {
     }
 
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
+        kw.cost
+            .as_ref()
+            .and_then(|cost| prowl_option(g, p, card, cost))
+            .into_iter()
+            .collect()
+    }
+
+    /// Prowl that the spell would have as it's cast ("Dinosaur spells you cast have prowl
+    /// {2}{R}", CR 601.3e), for a card without prowl of its own.
+    fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let o = g.obj(card);
-        let Some(cost) = kw.cost.clone() else {
-            return vec![];
-        };
-        let mut opt = CastOption::normal(FaceState::Front);
-        opt.method = CastMethod::Keyword(KeywordKind::Prowl);
-        let chars = g.option_characteristics(card, &opt);
-        if o.zone != Zone::Hand(p)
-            && (!g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false))
+        if o.chars.has_keyword(KeywordKind::Prowl)
+            || o.zone == Zone::Battlefield
+            || !spells_may_be_given_prowl(g)
         {
             return vec![];
         }
-        if !prowl_condition(g, p, &chars) {
+        let as_spell = super::with_granted_spell_keywords(g, p, card, &o.chars);
+        let Some(cost) = as_spell
+            .keywords()
+            .find(|k| k.kind == KeywordKind::Prowl)
+            .and_then(|k| k.cost.clone())
+        else {
             return vec![];
-        }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Prowl,
-            &cost,
-        ));
-        opt.tag = Some(PROWL);
-        vec![opt]
+        };
+        prowl_option(g, p, card, &cost).into_iter().collect()
     }
 
     fn after_damage(

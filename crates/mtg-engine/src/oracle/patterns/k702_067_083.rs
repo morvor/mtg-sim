@@ -281,6 +281,32 @@ fn spells_have_conspire(l: &str, text: &str, _ctx: &CompileContext) -> Option<Ve
 
 inventory::submit! { StaticPattern { name: "each [quality] spell you cast has conspire", priority: 100, parse: spells_have_conspire } }
 
+/// "Dinosaur spells you cast have prowl {2}{R}." (Hunting Velociraptor): the spells have
+/// prowl, so they can be cast for that prowl cost (see `kw/prowl.rs`).
+fn spells_have_prowl(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (subject, cost) = l.split_once(" spells you cast have prowl ")?;
+    if subject.contains(' ') {
+        return None;
+    }
+    let lower_start = text.to_lowercase().find(" have prowl ")? + " have prowl ".len();
+    let cost = crate::oracle::keywords::parse_keyword_cost(&text[lower_start..])
+        .filter(|_| !cost.is_empty())?;
+    let phrase = format!("{subject} card");
+    let (f, _, tail) = parse_object_phrase(&phrase)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(vec![f, Filter::Spell, Filter::ControlledBy(PlayerRel::You)]),
+        mods: vec![Modification::AddKeyword(
+            Keyword::with_cost(KeywordKind::Prowl, cost).text("prowl"),
+        )],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "[quality] spells you cast have prowl", priority: 100, parse: spells_have_prowl } }
+
 /// "[Quality] cards in your graveyard have retrace." (Deeproot Historian), optionally
 /// "During your turn, ..." (the effect applies only during your turn).
 fn graveyard_cards_have_retrace(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {

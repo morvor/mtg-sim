@@ -190,3 +190,43 @@ fn prowl_works_only_from_a_zone_the_card_could_be_cast_from() {
     let in_gy = t.graveyard(P0, "Morsel Theft");
     assert!(!can_cast(&mut t, P0, in_gy, PROWL));
 }
+
+#[test]
+fn spells_given_prowl_can_be_cast_for_that_prowl_cost() {
+    cr!("702.76a");
+    ruling!(
+        "Hunting Velociraptor",
+        "Prowl compares the creature types of the spell with the creature types of the creatures that dealt combat damage to players this turn."
+    );
+    assert_supported("Hunting Velociraptor");
+    // "Dinosaur spells you cast have prowl {2}{R}."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hunting Velociraptor");
+    let rogue = t.battlefield(P0, "Krovikan Scoundrel");
+    t.lands(P0, "Mountain", 3);
+    let dreadmaw = t.hand(P0, "Colossal Dreadmaw");
+    // A Rogue dealt combat damage: not a Dinosaur.
+    hit(&mut t, rogue);
+    assert!(!can_cast(&mut t, P0, dreadmaw, PROWL));
+    // A Dinosaur does.
+    let mut t = TestGame::new(2);
+    let raptor = t.battlefield(P0, "Hunting Velociraptor");
+    t.lands(P0, "Mountain", 3);
+    let dreadmaw = t.hand(P0, "Colossal Dreadmaw");
+    assert!(!can_cast(&mut t, P0, dreadmaw, PROWL));
+    hit(&mut t, raptor);
+    assert!(can_cast(&mut t, P0, dreadmaw, PROWL));
+    t.cast(P0, dreadmaw).method(PROWL).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Colossal Dreadmaw").len(), 1);
+    assert_eq!(
+        t.g.permanents()
+            .filter(|o| o.tapped && o.chars.is_land())
+            .count(),
+        3
+    );
+    // A spell that isn't a Dinosaur doesn't have prowl.
+    t.lands(P0, "Mountain", 3);
+    let giant = t.hand(P0, "Hill Giant");
+    assert!(!can_cast(&mut t, P0, giant, PROWL));
+}
