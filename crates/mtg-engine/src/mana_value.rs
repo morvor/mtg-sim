@@ -43,24 +43,26 @@ pub fn mana_value_with(g: &Game, id: ObjectId, c: &Characteristics) -> u32 {
     if o.kind != ObjKind::Card || o.face_down || is_copying(g, id) {
         return 0;
     }
-    match o.face {
-        // CR 202.3b, 712.8c, 712.8e: the mana cost of its front face.
-        FaceState::Back => match &o.card {
-            Some(card)
-                if matches!(card.layout, Layout::Transform | Layout::Battle)
-                    && card.faces.len() > 1 =>
-            {
-                card.front()
-                    .chars
-                    .mana_cost
-                    .as_ref()
-                    .map_or(0, |m| m.mana_value_with_x(x))
-            }
-            _ => 0,
-        },
-        // CR 202.3c, 712.8g: the combined mana cost of the front faces of each card
-        // that represents it.
-        FaceState::Melded => o
+    let Some(card) = &o.card else {
+        return 0;
+    };
+    // CR 202.3b, 712.8c, 712.8e: the back face of a nonmodal double-faced card (up on the
+    // battlefield or the stack, or the face a spell would have as it's cast transformed,
+    // CR 601.3e) uses the mana cost of its front face.
+    let nonmodal_dfc =
+        matches!(card.layout, Layout::Transform | Layout::Battle) && card.faces.len() > 1;
+    if nonmodal_dfc && (o.face == FaceState::Back || c.name == card.faces[1].chars.name) {
+        return card
+            .front()
+            .chars
+            .mana_cost
+            .as_ref()
+            .map_or(0, |m| m.mana_value_with_x(x));
+    }
+    // CR 202.3c, 712.8g: a melded permanent uses the combined mana cost of the front faces
+    // of each card that represents it.
+    if o.face == FaceState::Melded {
+        return o
             .merged_with
             .iter()
             .map(|part| {
@@ -75,7 +77,7 @@ pub fn mana_value_with(g: &Game, id: ObjectId, c: &Characteristics) -> u32 {
                     _ => 0,
                 }
             })
-            .sum(),
-        _ => 0,
+            .sum();
     }
+    0
 }

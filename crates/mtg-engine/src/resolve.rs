@@ -2302,7 +2302,8 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::SorcerySpeedOnly(f)
         | Restriction::CantPlayLands(f)
         | Restriction::MaxDrawsPerTurn(f, _)
-        | Restriction::MaxSpellsPerTurn(f, _) => Some(f),
+        | Restriction::MaxSpellsPerTurn(f, _)
+        | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         _ => None,
     }
 }
