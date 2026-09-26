@@ -38,6 +38,10 @@ pub struct Ctx {
     pub link: u16,
     /// Source characteristics as last known (for abilities whose source left).
     pub source_lki: Option<Box<Characteristics>>,
+    /// Filters are evaluated without regard to ranges of influence: the caller applies
+    /// the limited range of influence option itself (CR 801.13b).
+    #[serde(default)]
+    pub ignore_range: bool,
     /// Chosen opponent ("choose an opponent").
     pub chosen_player: Option<PlayerId>,
     /// Set while an "as this enters" replacement effect is being applied: modifications
@@ -180,6 +184,13 @@ impl Game {
     }
 
     pub fn player_filter_matches(&self, f: &PlayerFilter, p: PlayerId, ctx: &Ctx) -> bool {
+        // CR 801.10, 801.11: not players outside the controller's range of influence.
+        if !ctx.ignore_range
+            && crate::multiplayer::range::option_used(self)
+            && !crate::multiplayer::range::sees_player(self, ctx.controller, ctx.source, p)
+        {
+            return false;
+        }
         match f {
             PlayerFilter::Any => true,
             PlayerFilter::Is(q) => p == *q,
@@ -214,12 +225,17 @@ impl Game {
                     .count();
                 cmp.eval(n as i64, self.eval_value(v, ctx))
             }
-            PlayerFilter::Counters(k, cmp, v) => {
-                cmp.eval(self.player(p).counter(k) as i64, self.eval_value(v, ctx))
-            }
+            // CR 810.10a: a Two-Headed Giant team's poison counters.
+            PlayerFilter::Counters(k, cmp, v) => cmp.eval(
+                crate::multiplayer::two_headed::player_counter(self, p, k) as i64,
+                self.eval_value(v, ctx),
+            ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
-            PlayerFilter::Poisoned => self.player(p).poison() > 0,
+            // CR 810.10d: poisoned if the team has a poison counter.
+            PlayerFilter::Poisoned => {
+                crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -227,8 +243,21 @@ impl Game {
         }
     }
 
-    /// Resolves a [`PlayerRef`] to players (in APNAP order where there are several).
+    /// Resolves a [`PlayerRef`] to players (in APNAP order where there are several). With
+    /// the limited range of influence option, a spell or ability doesn't see or affect
+    /// players outside its controller's range (CR 801.10, 801.11).
     pub fn eval_players(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
+        let mut v = self.eval_players_unranged(r, ctx);
+        if crate::multiplayer::range::option_used(self) && !matches!(r, PlayerRef::You) {
+            v.retain(|p| {
+                crate::multiplayer::range::sees_player(self, ctx.controller, ctx.source, *p)
+            });
+        }
+        v
+    }
+
+    /// [`Game::eval_players`] regardless of ranges of influence.
+    pub(crate) fn eval_players_unranged(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
         let apnap = self.apnap();
         match r {
             PlayerRef::Player(p) => {
@@ -282,7 +311,13 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
-            PlayerRef::ActivePlayer => vec![self.turn.active],
+            // CR 805.9: with shared team turns, the active player the ability's controller
+            // chose as its effect began to apply.
+            PlayerRef::ActivePlayer => ctx
+                .vars
+                .get(&crate::teams::ACTIVE_PLAYER_VAR)
+                .and_then(|v| v.iter().find_map(|e| e.player()))
+                .map_or_else(|| vec![self.turn.active], |p| vec![p]),
             PlayerRef::DefendingPlayer => self.defending_player_for(ctx).into_iter().collect(),
             PlayerRef::ChosenPlayer(v) | PlayerRef::Var(v) => ctx
                 .vars
@@ -312,9 +347,14 @@ impl Game {
     // Objects
     // ------------------------------------------------------------------
 
-    /// Whether object `id` matches `f`, using current characteristics.
+    /// Whether object `id` matches `f`, using current characteristics. With the limited
+    /// range of influence option, a spell or ability doesn't see or affect objects outside
+    /// its controller's range (CR 801.10, 801.11).
     pub fn matches(&self, id: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
         self.matches_view(&Current, id, f, ctx)
+            && (ctx.ignore_range
+                || !crate::multiplayer::range::option_used(self)
+                || crate::multiplayer::range::sees_object(self, ctx.controller, ctx.source, id))
     }
 
     /// Controller for filter purposes: objects outside the battlefield and stack have no
@@ -364,6 +404,9 @@ impl Game {
                 self.player_rel_matches(*rel, self.filter_controller(view, id), ctx)
             }
             Filter::OwnedBy(rel) => self.player_rel_matches(*rel, o.owner, ctx),
+            Filter::ControllerMatches(pf) => {
+                self.player_filter_matches(pf, self.filter_controller(view, id), ctx)
+            }
             Filter::InZone(z) => o.zone.kind() == Some(*z),
             // Only permanents have status (CR 110.5d).
             Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
@@ -910,22 +953,24 @@ impl Game {
                     },
                 })
                 .sum(),
-            Value::PlayerCounters(r, k) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).counter(k) as i64),
+            // CR 810.10a: a Two-Headed Giant team's poison counters.
+            Value::PlayerCounters(r, k) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::two_headed::player_counter(self, p, k) as i64
+            }),
             Value::LifeTotal(r) => self
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
             Value::StartingLife => self.config.starting_life as i64,
-            Value::HandSize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).hand.len() as i64),
-            Value::LibrarySize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).library.len() as i64),
-            Value::GraveyardSize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).graveyard.len() as i64),
+            // CR 800.4i: for a player who left the game, as last known.
+            Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64
+            }),
+            Value::LibrarySize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Library) as i64
+            }),
+            Value::GraveyardSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Graveyard) as i64
+            }),
             Value::CardsInGraveyard(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
                 self.player(p)
                     .graveyard

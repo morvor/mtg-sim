@@ -37,7 +37,11 @@ pub enum PileAction {
 /// The one player a pile instruction refers to. "An opponent" (several players) means the
 /// opponent of the controller's choice.
 fn one_player(g: &mut Game, who: &PlayerRef, ctx: &Ctx) -> PlayerId {
-    let cands = g.eval_players(who, ctx);
+    let mut cands = g.eval_players(who, ctx);
+    if cands.is_empty() {
+        // CR 801.5c: no such player within the controller's range of influence.
+        cands.extend(crate::multiplayer::range::closest_chooser(g, who, ctx));
+    }
     match cands.len() {
         0 => ctx.controller,
         1 => cands[0],

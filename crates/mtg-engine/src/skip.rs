@@ -59,9 +59,25 @@ pub fn run_step_start_actions(g: &mut Game) {
 /// Whether a player's turn that's about to begin is skipped ("skip your next turn"). A
 /// skipped turn uses up one skip effect (CR 614.10a).
 pub fn consume_turn_skip(g: &mut Game, p: PlayerId) -> bool {
-    if let Some(i) = g.player(p).skips.iter().position(|k| *k == StepKind::Turn) {
-        g.players[p.idx()].skips.remove(i);
-        return true;
+    consume_skip(g, p, StepKind::Turn)
+}
+
+/// Uses up one "skip your next [step/turn]" of `p` — with shared team turns, of any player
+/// on `p`'s team: if an effect causes a player to skip a step, phase or turn, that
+/// player's team does so (CR 805.8). Returns true if one was used up.
+pub fn consume_skip(g: &mut Game, p: PlayerId, kind: StepKind) -> bool {
+    let holders = if g.uses_shared_team_turns() {
+        let mut v = vec![p];
+        v.extend(g.team_members(p).into_iter().filter(|q| *q != p));
+        v
+    } else {
+        vec![p]
+    };
+    for q in holders {
+        if let Some(i) = g.player(q).skips.iter().position(|k| *k == kind) {
+            g.players[q.idx()].skips.remove(i);
+            return true;
+        }
     }
     false
 }
@@ -94,12 +110,37 @@ pub fn queue_extra_turn(g: &mut Game, p: PlayerId, ctx: &Ctx, at_start: &Effect)
     g.extra_turns.push(p);
     let i = g.extra_turns.len() - 1;
     g.extra_turn_actions
-        .insert(i, vec![(ctx.clone(), at_start.clone())]);
+        .insert(i, (p, vec![(ctx.clone(), at_start.clone())]));
 }
 
-/// What happens as the extra turn just taken off the queue begins (it was at index
-/// `g.extra_turns.len()`); forgotten if the turn doesn't begin.
-pub fn take_extra_turn_actions(g: &mut Game) -> Vec<(Ctx, Effect)> {
+/// What happens as the extra turn of `p` just taken off the queue begins (it was at index
+/// `g.extra_turns.len()`); forgotten if the turn doesn't begin. An entry recorded for
+/// another player's turn at that index (the queue was rearranged, as in Grand Melee) is
+/// dropped rather than given to the wrong turn.
+pub fn take_extra_turn_actions(g: &mut Game, p: PlayerId) -> Vec<(Ctx, Effect)> {
     let i = g.extra_turns.len();
-    g.extra_turn_actions.remove(&i).unwrap_or_default()
+    match g.extra_turn_actions.remove(&i) {
+        Some((q, actions)) if q == p => actions,
+        _ => vec![],
+    }
+}
+
+/// The players an effect that makes players skip something or take an extra turn applies
+/// to: with shared team turns, a single effect causing more than one player on the same
+/// team to add or skip the same step, phase or turn makes that team add or skip it only
+/// once (CR 805.8).
+pub fn once_per_team(g: &Game, players: Vec<PlayerId>) -> Vec<PlayerId> {
+    if !g.uses_shared_team_turns() {
+        return players;
+    }
+    let mut teams: Vec<u8> = Vec::new();
+    players
+        .into_iter()
+        .filter(|p| {
+            let t = g.player(*p).team;
+            let first = !teams.contains(&t);
+            teams.push(t);
+            first
+        })
+        .collect()
 }

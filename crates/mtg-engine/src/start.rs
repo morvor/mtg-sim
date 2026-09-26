@@ -153,6 +153,10 @@ fn choose_starting_player_inner(g: &mut Game) -> PlayerId {
     if let Some(a) = g.archenemy() {
         return a;
     }
+    // CR 808.4, 809.4: Team vs. Team and Emperor games say who goes first.
+    if let Some(p) = crate::multiplayer::setup::variant_starting_player(g) {
+        return p;
+    }
     let n = g.players.len() as u32;
     let chooser = match g.config.first_turn_chooser {
         Some(c) => c,

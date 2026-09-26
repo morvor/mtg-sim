@@ -295,6 +295,8 @@ impl Game {
                 });
             }
         }
+        // CR 801.7: only events entirely within the controller's range of influence.
+        found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
             if t.ability.is_mana_ability() {
                 self.resolve_trigger_immediately(t);
@@ -451,7 +453,13 @@ impl Game {
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
             base.ability_uid = a.uid;
-            for info in self.trigger_matches_ctx(&t.trigger, &base, ev) {
+            let mut infos = self.trigger_matches_ctx(&t.trigger, &base, ev);
+            // CR 805.4d: "each player's" step abilities about "that player" trigger for
+            // each player on the active team.
+            infos.extend(crate::teams::more_step_trigger_infos(
+                self, t, &base, ev, &infos,
+            ));
+            for info in infos {
                 let mut ctx = Ctx::new(Some(src), ctl);
                 ctx.link = a.link;
                 // Which ability this is (e.g. one of several instances of a keyword,
@@ -539,6 +547,8 @@ impl Game {
                 }
             }
         }
+        // CR 801.7: only events entirely within the controller's range of influence.
+        found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
             // CR 605.1b / 605.4a: triggered mana abilities resolve immediately.
             if t.ability.is_mana_ability() {
@@ -1849,10 +1859,11 @@ impl Game {
         if pending.is_empty() {
             return;
         }
-        for p in self.apnap() {
+        // CR 603.3b, 805.7: each player (with shared team turns, each team) in APNAP order.
+        for (p, members) in self.trigger_groups() {
             let mut mine: Vec<PendingTrigger> = pending
                 .iter()
-                .filter(|t| t.controller == p)
+                .filter(|t| members.contains(&t.controller))
                 .cloned()
                 .collect();
             if mine.is_empty() {
@@ -1880,6 +1891,15 @@ impl Game {
     }
 
     fn put_trigger_on_stack(&mut self, t: PendingTrigger) {
+        // CR 807.5b: in Grand Melee, which turn marker's stack it goes on.
+        let back = crate::multiplayer::grand_melee::trigger_stack(self, t.controller, &t.event);
+        self.put_trigger_on_this_stack(t);
+        if let Some(b) = back {
+            crate::multiplayer::grand_melee::switch_to(self, b);
+        }
+    }
+
+    fn put_trigger_on_this_stack(&mut self, t: PendingTrigger) {
         let body = t.body.clone().unwrap_or_else(|| match &t.ability.kind {
             AbilityKind::Triggered(tr) => tr.body.clone(),
             _ => Body::default(),

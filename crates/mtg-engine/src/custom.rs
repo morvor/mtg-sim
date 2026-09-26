@@ -448,6 +448,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::game_end::custom_effect(g, name, ctx) {
         return;
     }
+    // Redistributing life totals (CR 810.9f).
+    if crate::multiplayer::two_headed::custom_effect(g, name, ctx) {
+        return;
+    }
     // "Target unblocked attacking creature becomes blocked" (CR 509.1h, 702.22i).
     if name == crate::oracle::patterns::k702_banding::TARGET_BECOMES_BLOCKED {
         let objs: Vec<ObjectId> = ctx

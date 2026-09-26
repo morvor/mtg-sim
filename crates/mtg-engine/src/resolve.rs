@@ -87,6 +87,10 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
+                    // CR 800.4f: a player who has left the game doesn't pay.
+                    if crate::multiplayer::cant_pay(self, p) {
+                        continue;
+                    }
                     if !self.can_pay_cost(p, cost, ctx.source, ctx) {
                         continue;
                     }
@@ -1135,7 +1139,9 @@ impl Game {
             Effect::SetLife { who, n } => {
                 // CR 119.5: gaining or losing the difference.
                 let k = self.eval_value(n, ctx) as i32;
-                for p in self.eval_players(who, ctx) {
+                // CR 810.9d: on a team sharing a life total, only one member is affected.
+                let players = self.eval_players(who, ctx);
+                for p in crate::multiplayer::two_headed::life_setters(self, players) {
                     let cur = self.player(p).life;
                     if k > cur {
                         self.gain_life(p, (k - cur) as u32);
@@ -1371,13 +1377,16 @@ impl Game {
                 crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
             }
             Effect::ExtraTurn { who } => {
-                // CR 500.7: most recently created extra turn is taken first.
-                for p in self.eval_players(who, ctx) {
+                // CR 500.7: most recently created extra turn is taken first. With shared
+                // team turns, the team takes it, once per team (CR 805.8).
+                let who = self.eval_players(who, ctx);
+                for p in crate::skip::once_per_team(self, who) {
                     self.extra_turns.push(p);
                 }
             }
             Effect::ExtraTurnWith { who, at_start } => {
-                for p in self.eval_players(who, ctx) {
+                let who = self.eval_players(who, ctx);
+                for p in crate::skip::once_per_team(self, who) {
                     crate::skip::queue_extra_turn(self, p, ctx, at_start);
                 }
             }
@@ -1401,7 +1410,8 @@ impl Game {
                 }
             }
             Effect::Skip { who, step } => {
-                for p in self.eval_players(who, ctx) {
+                let who = self.eval_players(who, ctx);
+                for p in crate::skip::once_per_team(self, who) {
                     self.players[p.idx()].skips.push(*step);
                 }
             }

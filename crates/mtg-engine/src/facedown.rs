@@ -112,7 +112,10 @@ pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
         // top card or one you may look at (CR 401.2, 401.5).
         return o.zone.is_public()
             || o.zone == Zone::Hand(p)
-            || crate::zones::can_see_in_library(g, p, id);
+            || crate::zones::can_see_in_library(g, p, id)
+            // CR 808.5, 809.7, 810.5, 811.5: teammates reviewing each other's hands.
+            || matches!(o.zone, Zone::Hand(q)
+                if crate::multiplayer::setup::may_review_hand(g, p, q));
     }
     // CR 406.3: face-down cards in exile, once a player is allowed to look at them.
     if o.zone == Zone::Exile {

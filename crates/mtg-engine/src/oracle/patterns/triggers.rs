@@ -296,17 +296,26 @@ fn attached_controller(s: &str) -> Option<&str> {
 }
 
 fn beginning_of(step: TriggerStep, whose: Whose) -> Parsed {
-    let cond = match whose {
-        Whose::Rel(rel) => TriggerCond::BeginningOf { step, whose: rel },
-        Whose::Player(p) => TriggerCond::Where {
-            trigger: Box::new(TriggerCond::BeginningOf {
-                step,
-                whose: PlayerRel::Any,
-            }),
-            cond: Condition::PlayerMatches(p, PlayerFilter::Active),
-        },
-    };
-    (cond, Sel::This, PlayerRef::ActivePlayer)
+    match whose {
+        // "That player" is the player whose step it is (with shared team turns, each
+        // player on the active team the ability triggers for, CR 805.4d).
+        Whose::Rel(rel) => (
+            TriggerCond::BeginningOf { step, whose: rel },
+            Sel::This,
+            PlayerRef::TriggerPlayer,
+        ),
+        Whose::Player(p) => (
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::BeginningOf {
+                    step,
+                    whose: PlayerRel::Any,
+                }),
+                cond: Condition::PlayerMatches(p, PlayerFilter::Active),
+            },
+            Sel::This,
+            PlayerRef::ActivePlayer,
+        ),
+    }
 }
 
 fn parse_at(r: &str) -> Option<Parsed> {

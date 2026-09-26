@@ -33,6 +33,23 @@ pub enum Variant {
     Vanguard,
     /// CR 809.
     Emperor,
+    /// CR 806: players compete as individuals.
+    FreeForAll,
+    /// CR 807: Free-for-All for ten or more players, with several turns at once.
+    GrandMelee,
+    /// CR 808.
+    TeamVsTeam,
+    /// CR 811.
+    AlternatingTeams,
+}
+
+/// The attack left and attack right options (CR 803).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttackSide {
+    /// CR 803.1a: only the opponent seated immediately to a player's left.
+    Left,
+    /// CR 803.1b: only the opponent seated immediately to a player's right.
+    Right,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -75,6 +92,20 @@ pub struct GameConfig {
     /// Playing for ante, an optional variation (CR 407).
     #[serde(default)]
     pub ante: bool,
+    /// The attack left or attack right option (CR 803).
+    #[serde(default)]
+    pub attack_side: Option<AttackSide>,
+    /// The deploy creatures option (CR 804).
+    #[serde(default)]
+    pub deploy_creatures: bool,
+    /// The shared team turns option (CR 805) in a team game other than Two-Headed Giant,
+    /// which always uses it (CR 810.2).
+    #[serde(default)]
+    pub shared_team_turns: bool,
+    /// Ranges of influence of individual players, overriding `range_of_influence`
+    /// (CR 801.2a: different players may have different ranges of influence).
+    #[serde(default)]
+    pub player_ranges: Vec<(PlayerId, u32)>,
 }
 
 impl Default for GameConfig {
@@ -98,6 +129,10 @@ impl Default for GameConfig {
             limited: false,
             first_turn_chooser: None,
             ante: false,
+            attack_side: None,
+            deploy_creatures: false,
+            shared_team_turns: false,
+            player_ranges: vec![],
         }
     }
 }
@@ -449,7 +484,7 @@ pub struct Game {
     pub extra_turns: Vec<PlayerId>,
     /// What happens as a queued extra turn begins ("at the beginning of that turn's end
     /// step, ..."), by its index in `extra_turns` (see `skip::queue_extra_turn`).
-    pub extra_turn_actions: BTreeMap<usize, Vec<(crate::eval::Ctx, Effect)>>,
+    pub extra_turn_actions: BTreeMap<usize, (PlayerId, Vec<(crate::eval::Ctx, Effect)>)>,
     /// Pending "the next time state-based actions are checked" flags etc.
     pub sba_flags: BTreeSet<SmolStr>,
     /// Count of state-based-action checks performed (for debugging/tests).
@@ -535,6 +570,8 @@ pub struct Game {
     pub shortcuts: crate::shortcuts::ShortcutState,
     /// Modes chosen for modal abilities ("choose one that hasn't been chosen", CR 700.2).
     pub modal_history: crate::modal_history::ModalHistory,
+    /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
+    pub multiplayer: crate::multiplayer::MultiplayerState,
 }
 
 impl Game {
@@ -635,6 +672,7 @@ impl Game {
             subgames: Default::default(),
             shortcuts: Default::default(),
             modal_history: Default::default(),
+            multiplayer: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -956,6 +994,8 @@ impl Game {
             self.recompute();
         }
         self.actions_taken += 1;
+        // CR 800.4g, 800.4h: another player makes a choice a player who left would make.
+        let player = crate::multiplayer::substitute_chooser(self, player, &decision);
         // CR 723.5: the decisions of a player controlled by another player are made by
         // that other player.
         let decider = crate::player_control::decider(self, player);

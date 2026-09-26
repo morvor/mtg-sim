@@ -425,7 +425,9 @@ fn with_limited_range_a_win_makes_opponents_in_range_lose() {
     assert!(!t.g.player(P0).has_won);
     assert_eq!(t.g.result, None, "this may not end the game");
     t.resolve_all();
-    assert_eq!(t.counters(tyrant, "+1/+1"), 10);
+    // Blood Tyrant's ability triggers only for P1's loss: P4 is two seats from P2, outside
+    // P2's range of influence (CR 801.7).
+    assert_eq!(t.counters(tyrant, "+1/+1"), 5);
 }
 
 #[allow(non_snake_case)]

@@ -81,6 +81,16 @@ pub fn shares_team_life(g: &Game) -> bool {
     g.config.variant == Variant::TwoHeadedGiant
 }
 
+/// The players whose "can't gain life" and "can't lose life" effects apply to `p`: with a
+/// shared team life total, everyone on the team (CR 810.9g, 810.9h).
+pub fn life_scope(g: &Game, p: PlayerId) -> Vec<PlayerId> {
+    if shares_team_life(g) {
+        g.team_members(p)
+    } else {
+        vec![p]
+    }
+}
+
 /// CR 810.9: damage, life loss and life gain happen to each player individually, and the
 /// result is applied to the team's shared life total. After `p`'s life total changed,
 /// the rest of the team's life total (the same shared total) follows.

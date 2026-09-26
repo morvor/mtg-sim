@@ -87,13 +87,15 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
         }
         ChoiceKind::Opponent | ChoiceKind::Player => {
             let cands: Vec<Entity> = if *kind == ChoiceKind::Opponent {
-                g.opponents(p).into_iter().map(Entity::Player).collect()
+                g.opponents(p)
             } else {
                 g.players_in_game()
-                    .into_iter()
-                    .map(Entity::Player)
-                    .collect()
-            };
+            }
+            .into_iter()
+            // CR 801.5a: a player within the chooser's range of influence.
+            .filter(|q| crate::multiplayer::range::player_in_range(g, p, *q))
+            .map(Entity::Player)
+            .collect();
             if let Some(pl) = g
                 .ask_entities(p, Some(src), "Choose a player", cands, 1, 1)
                 .first()

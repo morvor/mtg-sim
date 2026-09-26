@@ -101,15 +101,10 @@ impl Game {
     }
 
     /// A player's range of influence (CR 801.2), `None` if unlimited. In the Emperor
-    /// variant it's 2 for emperors and 1 for generals unless the game sets one (CR 809.3a).
+    /// variant it's 2 for emperors and 1 for generals unless the game sets one (CR 809.3a);
+    /// see [`crate::multiplayer::range::range_of`].
     pub fn range_of_influence(&self, p: PlayerId) -> Option<u32> {
-        if let Some(n) = self.config.range_of_influence {
-            return Some(n);
-        }
-        if self.config.variant == Variant::Emperor {
-            return Some(if self.is_emperor(p) { 2 } else { 1 });
-        }
-        None
+        crate::multiplayer::range::range_of(self, p)
     }
 
     /// Players still in the game within `p`'s range of influence, including `p`
@@ -256,6 +251,16 @@ impl Game {
     /// Extra losses when a player loses: in the Emperor variant, a team loses the game if
     /// its emperor loses (CR 104.3i, 809.5b).
     pub(crate) fn on_player_lost(&mut self, p: PlayerId) {
+        // CR 810.8a, 810.8b: in Two-Headed Giant, players lose only as a team.
+        let mates = crate::multiplayer::two_headed::teammates_losing_with(self, p);
+        if !mates.is_empty() {
+            let was = self.losing_simultaneously;
+            self.losing_simultaneously = true;
+            for q in mates {
+                self.player_loses(q);
+            }
+            self.losing_simultaneously = was;
+        }
         if self.is_emperor(p) {
             let generals: Vec<PlayerId> = self
                 .team_members(p)

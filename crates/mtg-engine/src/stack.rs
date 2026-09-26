@@ -284,12 +284,16 @@ impl Game {
         id: ObjectId,
         ctx: &mut Ctx,
     ) -> PlayerId {
+        // A player who left the game can't make the choice: another opponent does
+        // (CR 800.4g).
         if let Some(p) = ctx.chosen_player {
-            if self.are_opponents(controller, p) {
+            if self.are_opponents(controller, p) && self.player(p).in_game() {
                 return p;
             }
         }
-        let opps = self.opponents(controller);
+        // CR 801.5a, 801.5c: an opponent within the controller's range of influence, or
+        // else the closest opponent to their left.
+        let opps = crate::multiplayer::range::opponents_to_choose(self, controller);
         let p = match opps.len() {
             0 => controller,
             1 => opps[0],
@@ -436,6 +440,10 @@ impl Game {
 
     /// Hexproof, shroud, protection and "can't be the target" restrictions on objects.
     pub fn object_untargetable(&self, o: ObjectId, by: PlayerId, source: Option<ObjectId>) -> bool {
+        // CR 801.4: objects outside the controller's range of influence can't be targeted.
+        if !crate::multiplayer::range::sees_object(self, by, source, o) {
+            return true;
+        }
         let ob = self.obj(o);
         // Hexproof, shroud and protection are abilities of permanents: a spell with them
         // on the stack can still be targeted (CR 113.6, 702.11b, 702.16b, 702.18a).
@@ -500,6 +508,10 @@ impl Game {
     }
 
     pub fn player_untargetable(&self, p: PlayerId, by: PlayerId, source: Option<ObjectId>) -> bool {
+        // CR 801.4: players outside the controller's range of influence can't be targeted.
+        if !crate::multiplayer::range::sees_player(self, by, source, p) {
+            return true;
+        }
         let pl = self.player(p);
         for m in &pl.mods {
             match m {
@@ -957,6 +969,8 @@ impl Game {
 
     /// Executes a body's effect(s) for the chosen modes.
     pub fn exec_chosen(&mut self, body: &Body, chosen: &[ChosenMode], ctx: &mut Ctx) {
+        // CR 805.9: which active player "the active player" refers to.
+        crate::teams::choose_active_player(self, body, ctx);
         for cm in chosen {
             ctx.targets = cm.targets.clone();
             ctx.divided = cm.divided.clone();

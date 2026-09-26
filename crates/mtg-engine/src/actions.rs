@@ -356,6 +356,11 @@ impl Game {
         if !self.can_move(old_id) {
             return None;
         }
+        // CR 800.4b, 800.4d: not onto the battlefield or stack under the control of (or
+        // owned by) a player who has left the game.
+        if crate::multiplayer::stays_in_zone(self, &m) {
+            return None;
+        }
         let from = self.obj(old_id).zone;
         let kind = self.obj(old_id).kind;
         if kind == ObjKind::StackAbility {
@@ -1166,6 +1171,11 @@ impl Game {
         if n == 0 {
             return 0;
         }
+        // "You can't get poison counters" (with shared poison counters, for the team,
+        // CR 810.10c).
+        if crate::multiplayer::two_headed::cant_get_counters(self, target, kind) {
+            return 0;
+        }
         if self.dirty {
             self.recompute();
         }
@@ -1226,6 +1236,12 @@ impl Game {
         n: u32,
         by: Option<PlayerId>,
     ) -> u32 {
+        // CR 810.10b: a player losing poison counters in Two-Headed Giant: the team does.
+        if let Some(k) =
+            crate::multiplayer::two_headed::remove_team_poison(self, target, kind, n, by)
+        {
+            return k;
+        }
         let have = match target {
             Entity::Object(o) => self.obj(o).counter(kind),
             Entity::Player(p) => self.player(p).counter(kind),
@@ -1354,12 +1370,20 @@ impl Game {
         true
     }
 
+    /// Whether `p` can't gain life — in Two-Headed Giant, if an effect says a player on
+    /// their team can't (CR 810.9g).
     pub fn cant_gain_life(&self, p: PlayerId) -> bool {
-        self.player_restricted(p, |r| matches!(r, Restriction::CantGainLife(_)))
+        crate::life_totals::life_scope(self, p)
+            .into_iter()
+            .any(|q| self.player_restricted(q, |r| matches!(r, Restriction::CantGainLife(_))))
     }
 
+    /// Whether `p` can't lose life — in Two-Headed Giant, if an effect says a player on
+    /// their team can't (CR 810.9h).
     pub fn cant_lose_life(&self, p: PlayerId) -> bool {
-        self.player_restricted(p, |r| matches!(r, Restriction::CantLoseLife(_)))
+        crate::life_totals::life_scope(self, p)
+            .into_iter()
+            .any(|q| self.player_restricted(q, |r| matches!(r, Restriction::CantLoseLife(_))))
     }
 
     /// Checks player-filter restrictions from statics and resolved rule effects.
