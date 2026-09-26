@@ -322,6 +322,28 @@ fn you_foretell(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "you foretell a card", priority: 100, parse: you_foretell } }
 
+/// "Foretelling cards from your hand costs {1} less and can be done on any player's
+/// turn." (Cosmos Charger), "The first card you foretell each turn costs {0} to
+/// foretell." (Ranar the Ever-Watchful): changes to the foretell special action
+/// (CR 702.143a, 702.143c).
+fn foretell_action_changes(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let name = match end(l) {
+        "foretelling cards from your hand costs {1} less and can be done on any player's turn" => {
+            crate::kw::foretell::CHEAPER_ANY_TURN
+        }
+        "the first card you foretell each turn costs {0} to foretell" => {
+            crate::kw::foretell::FIRST_EACH_TURN_FREE
+        }
+        _ => return None,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name.into()))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "foretelling costs less / first card you foretell", priority: 100, parse: foretell_action_changes } }
+
 /// "if this spell was foretold" (Poison the Cup; CR 702.143c).
 fn was_foretold(l: &str) -> Option<Condition> {
     matches!(end(l), "~ was foretold" | "this spell was foretold")

@@ -37,18 +37,45 @@ pub const BECOMES_FORETOLD: &str = "foretell:it becomes foretold";
 /// mana cost reduced by {N}."
 pub const BECOMES_FORETOLD_REDUCED: &str = "foretell:it becomes foretold with its mana cost reduced by ";
 
+/// `StaticEffect::Custom`: "Foretelling cards from your hand costs {1} less and can be
+/// done on any player's turn." (Cosmos Charger).
+pub const CHEAPER_ANY_TURN: &str = "foretell:costs {1} less and can be done on any player's turn";
+/// `StaticEffect::Custom`: "The first card you foretell each turn costs {0} to foretell."
+/// (Ranar the Ever-Watchful).
+pub const FIRST_EACH_TURN_FREE: &str = "foretell:the first card you foretell each turn costs {0}";
+
 pub struct Foretell;
 
-/// The cost of foretelling a card (CR 702.143a).
-fn foretell_action_cost() -> Cost {
-    Cost::mana(crate::mana::ManaCost::parse("{2}").expect("mana"))
+/// How many active static abilities named `name` player `p` controls.
+fn statics_of(g: &Game, p: PlayerId, name: &str) -> usize {
+    g.statics
+        .customs
+        .iter()
+        .filter(|(_, ctl, n)| *ctl == p && n.as_str() == name)
+        .count()
+}
+
+/// The cost for `p` of foretelling a card (CR 702.143a): {2}, or {0} for the first card
+/// they foretell each turn with Ranar; {1} less with Cosmos Charger (which can't reduce
+/// it below {0}, and more of them don't reduce it further than that).
+fn foretell_action_cost(g: &Game, p: PlayerId) -> Cost {
+    let foretold_this_turn = g.turn_events.iter().any(|e| {
+        matches!(e, Event::Custom { name, player: Some(q), .. } if name == FORETOLD && *q == p)
+    });
+    let mut n: u32 = if !foretold_this_turn && statics_of(g, p, FIRST_EACH_TURN_FREE) > 0 {
+        0
+    } else {
+        2
+    };
+    n = n.saturating_sub(statics_of(g, p, CHEAPER_ANY_TURN) as u32);
+    Cost::mana(crate::mana::ManaCost::generic(n))
 }
 
 fn can_foretell(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     let o = g.obj(card);
     o.zone == Zone::Hand(p)
         && o.chars.has_keyword(KeywordKind::Foretell)
-        && g.turn.active == p
+        && (g.turn.active == p || statics_of(g, p, CHEAPER_ANY_TURN) > 0)
         && g.has_priority(p)
 }
 
@@ -116,7 +143,7 @@ impl KeywordRules for Foretell {
     }
 
     fn special_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
-        let cost = foretell_action_cost();
+        let cost = foretell_action_cost(g, p);
         g.player(p)
             .hand
             .iter()
@@ -143,7 +170,7 @@ impl KeywordRules for Foretell {
         if !crate::special_actions::pay(
             g,
             p,
-            &foretell_action_cost(),
+            &foretell_action_cost(g, p),
             Some(card),
             &Ctx::new(Some(card), p),
         ) {

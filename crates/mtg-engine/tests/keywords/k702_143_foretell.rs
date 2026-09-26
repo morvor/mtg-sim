@@ -260,3 +260,65 @@ fn face_down_foretold_cards_are_revealed_when_their_owner_leaves_and_at_game_end
     assert!(revealed(&t, mine));
     assert!(revealed(&t, other));
 }
+
+fn can_foretell(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.legal_actions(p)
+        .contains(&Action::Special(SpecialAction::Foretell { card }))
+}
+
+#[test]
+fn effects_can_change_how_and_when_cards_are_foretold() {
+    cr!("702.143a", "702.143c");
+    assert_supported("Cosmos Charger");
+    ruling!(
+        "Cosmos Charger",
+        "If you control two Cosmos Chargers, you can foretell cards from your hand by paying {0}."
+    );
+    ruling!(
+        "Cosmos Charger",
+        "While you control Cosmos Charger, you can foretell cards any time you have priority."
+    );
+    let mut t = TestGame::new(2);
+    // Cosmos Charger: "Foretelling cards from your hand costs {1} less and can be done on
+    // any player's turn."
+    t.battlefield(P0, "Cosmos Charger");
+    t.set_step(P1, Step::PrecombatMain);
+    let bolt = t.hand(P0, "Demon Bolt");
+    add_mana(&mut t, P0, ManaType::C, 1);
+    assert!(can_foretell(&mut t, P0, bolt));
+    t.g.take_action(P0, Action::Special(SpecialAction::Foretell { card: bolt }));
+    assert_eq!(pool(&t, P0), 0);
+    assert_eq!(face_down_foretold(&t.g, Some(P0)).len(), 1);
+    // With two, it's free.
+    t.battlefield(P0, "Cosmos Charger");
+    let cup = t.hand(P0, "Poison the Cup");
+    assert!(can_foretell(&mut t, P0, cup));
+}
+
+#[test]
+fn the_first_card_you_foretell_each_turn_can_cost_nothing() {
+    cr!("702.143a", "702.143c");
+    ruling!(
+        "Ranar the Ever-Watchful",
+        "\"The first card you foretell\" refers to the first one you exile from your hand as part of the foretell special action."
+    );
+    let mut t = TestGame::new(2);
+    // Ranar the Ever-Watchful: "The first card you foretell each turn costs {0} to
+    // foretell."
+    t.battlefield(P0, "Ranar the Ever-Watchful");
+    let bolt = t.hand(P0, "Demon Bolt");
+    let cup = t.hand(P0, "Poison the Cup");
+    assert!(can_foretell(&mut t, P0, bolt));
+    t.g.take_action(P0, Action::Special(SpecialAction::Foretell { card: bolt }));
+    t.g.flush_events();
+    // The second one costs {2}.
+    assert!(!can_foretell(&mut t, P0, cup));
+    add_mana(&mut t, P0, ManaType::C, 2);
+    assert!(can_foretell(&mut t, P0, cup));
+    // Next turn, the first one is free again.
+    let bolt2 = t.hand(P0, "Demon Bolt");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(can_foretell(&mut t, P0, bolt2));
+}
