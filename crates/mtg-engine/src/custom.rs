@@ -86,6 +86,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::spell_costs::custom_value(g, name, ctx) {
         return v;
     }
+    // "Your commander's mana value" (CR 903.3e).
+    if let Some(v) = crate::commander_rules::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.
@@ -487,6 +491,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "exile them, then meld them into [result]" (CR 701.42a).
     if crate::merge::custom_effect(g, name, ctx) {
+        return;
+    }
+    // A merged or melded commander returning to the command zone (CR 903.9c).
+    if crate::commander_rules::custom_effect(g, name, ctx) {
         return;
     }
     // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).

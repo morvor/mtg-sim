@@ -524,6 +524,13 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
 /// Value phrases: "the number of creatures you control", "its power", "X", "twice X".
 pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
+    // CR 903.3e: "your commander's mana value".
+    if let Some(rest) = s.strip_prefix("your commander's mana value") {
+        return Some((
+            Value::Custom(crate::commander_rules::YOUR_COMMANDER_MANA_VALUE.into()),
+            rest.to_string(),
+        ));
+    }
     if let Some(r) = s.strip_prefix("the number of ") {
         // "the number of +1/+1 counters on it", "the number of charge counters on ~",
         // "the number of counters on target permanent".
