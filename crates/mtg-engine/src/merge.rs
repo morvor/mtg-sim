@@ -6,8 +6,12 @@
 //! of its topmost component and the abilities of all of them (CR 730.2a, 702.140e); a
 //! melded permanent (face `Melded`) has those of the meld result's combined back face
 //! (CR 712.4a). When it leaves the battlefield, one permanent leaves and each component
-//! is put into the new zone (CR 730.3); stickers on it stay with only one of the objects
-//! it becomes, chosen by its owner (CR 123.5c).
+//! is put into the new zone (CR 712.21, 730.3): its owner arranges them in a graveyard or
+//! library, the player exiling it orders their timestamps (CR 712.21a-b, 730.3a-b), a
+//! replacement effect applied to the move applies to each (CR 712.21d, 730.3d), and an
+//! effect that finds the new object finds all of them (CR 712.21c, 730.3c,
+//! [`found_objects`]). Stickers on it stay with only one of the objects it becomes,
+//! chosen by its owner (CR 123.5c).
 
 use crate::ability::LibraryPosition;
 use crate::card::{CardDb, CardDef};
@@ -18,6 +22,7 @@ use crate::object::{Characteristics, EventInfo, FaceState, ObjKind, Zone};
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
 use smol_str::SmolStr;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// `Event::Custom` name: a spell merged with a creature as a resolving mutating creature
@@ -147,6 +152,8 @@ pub fn incarnation(g: &mut Game, old: ObjectId, new: ObjectId) {
             Some(card) if f.kind == ObjKind::Card => card.characteristics(FaceState::Front),
             _ => f.base.clone(),
         };
+        n.chars = n.base.clone();
+        n.copiable = n.base.clone();
     } else {
         let (comps, face) = (o.merged_with.clone(), o.face);
         let n = &mut g.objects[new.0 as usize];
@@ -189,6 +196,11 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
             news.push(n);
         }
     }
+    if news.len() > 1 {
+        arrange(g, old, &news, m);
+        // CR 712.21c, 730.3c: an effect that finds the new object finds all of them.
+        g.special.merge.became.insert(new, news[1..].to_vec());
+    }
     if m.to.is_public() && crate::stickers::is_stickered(g, new) && news.len() > 1 {
         let owner = g.obj(old).owner;
         let options = news.iter().map(|n| g.describe(*n)).collect();
@@ -196,6 +208,90 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
         if let Some(to) = news.get(pick).copied().filter(|to| *to != new) {
             crate::stickers::transfer(g, new, to);
         }
+    }
+}
+
+/// The objects melded and merged permanents became as they left the battlefield: for the
+/// object its first component became, the objects the others became.
+#[derive(Clone, Debug, Default)]
+pub struct MergeState {
+    pub became: BTreeMap<ObjectId, Vec<ObjectId>>,
+}
+
+/// The objects an effect that finds `id` finds: if `id` is the new object a melded or
+/// merged permanent became as it left the battlefield (or that permanent itself, found
+/// through its last known information), each of the objects its cards and tokens became
+/// (those that still exist) (CR 712.21c, 730.3c); otherwise just `id`.
+pub fn found_objects(g: &Game, id: ObjectId) -> Vec<ObjectId> {
+    let mut out = vec![id];
+    let others = g
+        .special
+        .merge
+        .became
+        .get(&id)
+        .or_else(|| g.obj(id).next.and_then(|n| g.special.merge.became.get(&n)));
+    if let Some(others) = others {
+        out.extend(others.iter().copied().filter(|o| g.is_live(*o)));
+    }
+    out
+}
+
+/// [`found_objects`] for each of `ids`.
+pub fn found_all(g: &Game, ids: Vec<ObjectId>) -> Vec<ObjectId> {
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        for o in found_objects(g, id) {
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
+/// The cards and tokens a melded or merged permanent became as they're put into the same
+/// zone: into its owner's graveyard or library, that player arranges them in any order
+/// (CR 712.21a, 730.3a; the order in a library isn't revealed); exiled, the player who
+/// exiles it determines their relative timestamp order (CR 712.21b, 730.3b).
+fn arrange(g: &mut Game, old: ObjectId, news: &[ObjectId], m: &MoveEv) {
+    let zone = g.obj(news[0]).zone;
+    if news.iter().any(|n| g.obj(*n).zone != zone) {
+        return;
+    }
+    let names: Vec<String> = news.iter().map(|n| g.describe(*n)).collect();
+    match zone {
+        Zone::Graveyard(p) | Zone::Library(p) => {
+            let order = g.ask_order(p, "Arrange the cards it became (from bottom to top)", names);
+            let list = match zone {
+                Zone::Graveyard(_) => &mut g.players[p.idx()].graveyard,
+                _ => &mut g.players[p.idx()].library,
+            };
+            let mut slots: Vec<usize> = news
+                .iter()
+                .filter_map(|n| list.iter().position(|x| x == n))
+                .collect();
+            if slots.len() != news.len() {
+                return;
+            }
+            slots.sort_unstable();
+            for (k, i) in order.iter().enumerate() {
+                list[slots[k]] = news[*i];
+            }
+        }
+        Zone::Exile => {
+            let by = m.by.unwrap_or(g.obj(old).owner);
+            let order = g.ask_order(
+                by,
+                "Order the exiled cards by timestamp (earliest first)",
+                names,
+            );
+            let mut ts: Vec<Timestamp> = news.iter().map(|n| g.obj(*n).timestamp).collect();
+            ts.sort_unstable();
+            for (k, i) in order.iter().enumerate() {
+                g.objects[news[*i].0 as usize].timestamp = ts[k];
+            }
+        }
+        _ => {}
     }
 }
 

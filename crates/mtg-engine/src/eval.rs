@@ -699,20 +699,27 @@ impl Game {
                     true => o,
                     false => crate::kw::madness::found_after_madness(self, o).unwrap_or(o),
                 })
+                // CR 712.21c, 730.3c: the new object a melded or merged permanent became
+                // as it left the battlefield is each of its cards.
+                .map(|o| crate::merge::found_objects(self, o))
+                .into_iter()
+                .flatten()
                 .filter(|o| match self.obj(*o).zone {
                     Zone::Library(_) => false,
                     Zone::Hand(p) => p == ctx.controller,
                     _ => true,
                 })
                 .map(Entity::Object)
-                .into_iter()
                 .collect(),
             Sel::TriggerLki => ctx
                 .event
                 .as_ref()
                 .and_then(|e| e.lki.or(e.object))
-                .map(Entity::Object)
+                // CR 712.21c, 730.3c (see `Sel::TriggerObject`).
+                .map(|o| crate::merge::found_objects(self, o))
                 .into_iter()
+                .flatten()
+                .map(Entity::Object)
                 .collect(),
             Sel::TriggerOtherObject => ctx
                 .event

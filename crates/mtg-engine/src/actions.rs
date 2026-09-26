@@ -211,6 +211,15 @@ impl Game {
     /// the dungeon (CR 309.2a, 309.2d).
     pub fn move_forbidden(&self, mv: &MoveEv) -> bool {
         let o = self.obj(mv.obj);
+        // CR 712.14a: a card that isn't a double-faced card put onto the battlefield
+        // transformed stays in its current zone.
+        if mv.to == Zone::Battlefield
+            && mv.etb.transformed
+            && mv.etb.face_down.is_none()
+            && !crate::transform_rules::can_enter_transformed(self, mv.obj)
+        {
+            return true;
+        }
         if mv.to == Zone::Battlefield && mv.etb.face_down.is_none() {
             let face = if mv.etb.transformed {
                 Some(FaceState::Back)

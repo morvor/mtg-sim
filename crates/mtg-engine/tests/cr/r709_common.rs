@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 pub use super::r200_common::{can_cast_face, mv, name_card};
+pub use super::r600_common::{stat, CB};
 pub use super::r703_common::{bear, oracle_card, supported};
 use mtg_engine::ability::*;
 use mtg_engine::eval::Ctx;

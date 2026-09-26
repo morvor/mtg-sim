@@ -1707,6 +1707,10 @@ pub enum ReplacementEvent {
     /// "As [this permanent] is turned face up, ..." (CR 614.1e): performed with
     /// [`ReplacementAction::AsEnters`] as the permanent turns face up.
     TurnedFaceUp,
+    /// "As [this permanent] transforms into [this face], ..." (CR 712.20): performed with
+    /// [`ReplacementAction::AsEnters`] while the permanent transforms into the face that
+    /// has it, not afterward.
+    Transforms,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

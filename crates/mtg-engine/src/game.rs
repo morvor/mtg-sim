@@ -891,6 +891,10 @@ impl Game {
         };
         if let Some(card) = &n.card {
             n.base = card.characteristics(n.face);
+            // Until characteristics are next computed (never, for most cards in a
+            // library): the card's own (e.g. a transformed card's front face, CR 712.8a).
+            n.chars = n.base.clone();
+            n.copiable = n.base.clone();
         }
         n.is_commander = o.is_commander;
         // CR 607.2p: a choice made before the game began follows the card.

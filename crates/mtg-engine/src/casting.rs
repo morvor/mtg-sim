@@ -103,6 +103,17 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
         .collect()
 }
 
+/// The casting method that names the face or half a card is cast with: one half of a
+/// split card, an Adventure or Omen (CR 709.3, 715.3, 720.3), or the back face of a modal
+/// double-faced card (CR 712.11b) is `CastMethod::Half(index of the face)`.
+pub fn face_method(face: FaceState) -> CastMethod {
+    match face {
+        FaceState::Half(i) => CastMethod::Half(i),
+        FaceState::Back => CastMethod::Half(1),
+        _ => CastMethod::Normal,
+    }
+}
+
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
 fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
     let faces = castable_faces(g, card);
@@ -135,9 +146,7 @@ pub fn cast_during_resolution(
     }
     let face = choose_face_to_cast(g, p, card);
     let mut opt = CastOption::normal(face);
-    if let FaceState::Half(i) = face {
-        opt.method = CastMethod::Half(i);
-    }
+    opt.method = face_method(face);
     opt.any_time = true;
     if method == CastMethod::Free {
         opt.method = CastMethod::Free;
@@ -431,9 +440,7 @@ impl Game {
                 .any(|g| g.player == p && g.object == card && g.free);
             let push_face = |face: FaceState, out: &mut Vec<CastOption>| {
                 let mut opt = CastOption::normal(face);
-                if let FaceState::Half(i) = face {
-                    opt.method = CastMethod::Half(i);
-                }
+                opt.method = face_method(face);
                 if grant_free {
                     opt.method = CastMethod::Free;
                     opt.alt_cost = Some(Cost::free());

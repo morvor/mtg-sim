@@ -208,6 +208,8 @@ impl Game {
                     .collect();
                 let _ = link;
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+                // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
+                let res = crate::merge::found_all(self, res);
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
@@ -285,6 +287,8 @@ impl Game {
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 let res = self.move_to_destination(objs, to, ctx);
+                // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
+                let res = crate::merge::found_all(self, res);
                 if to.zone == ZoneKind::Battlefield {
                     self.link_to_creator(ctx, &res);
                 }

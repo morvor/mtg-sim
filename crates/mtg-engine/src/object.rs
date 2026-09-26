@@ -234,7 +234,8 @@ pub enum CastMethod {
     FaceDown(KeywordKind),
     /// An alternative cost from a static ability or effect.
     Alternative(u64),
-    /// Cast as an Adventure / Omen / other half (index into faces).
+    /// Cast with a face other than the normal one (index into faces): one half of a split
+    /// card, an Adventure or Omen, or the back face of a modal double-faced card.
     Half(u8),
 }
 

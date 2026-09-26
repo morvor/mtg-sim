@@ -73,6 +73,11 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
     if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
         return false;
     }
+    // CR 712.16: melded permanents and other double-faced permanents can't be turned face
+    // down; nothing happens.
+    if crate::transform_rules::is_double_faced_permanent(g, id) {
+        return false;
+    }
     let ts = g.new_timestamp();
     let ob = &mut g.objects[id.0 as usize];
     ob.face_down = true;

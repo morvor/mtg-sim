@@ -60,6 +60,9 @@ pub struct SpecialState {
     pub stickers: crate::stickers::StickerState,
     /// The unlocked designations of Rooms (CR 709.5c).
     pub rooms: crate::rooms::RoomState,
+    /// The objects melded and merged permanents became as they left the battlefield
+    /// (CR 712.21c, 730.3c).
+    pub merge: crate::merge::MergeState,
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
