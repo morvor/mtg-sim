@@ -1,5 +1,7 @@
 //! Oracle patterns for setting schemes in motion (CR 701.32): "Whenever you set a
-//! [non-ongoing] scheme in motion" and "set that scheme in motion [again]".
+//! [non-ongoing] scheme in motion" and "set that scheme in motion [again]"; and for
+//! opening Attractions (CR 701.51): "open an Attraction", "Whenever you open an
+//! Attraction".
 
 use super::{EffectPattern, TriggerPattern};
 use crate::ability::*;
@@ -53,3 +55,31 @@ fn set_that_in_motion(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "a701 set that scheme in motion", priority: 60, parse: set_that_in_motion } }
+
+/// "open an attraction" (CR 701.51).
+fn open_attraction(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "open an attraction").then_some(Effect::KeywordAction {
+        action: KeywordAction::OpenAttraction,
+        who: PlayerRef::You,
+        what: Sel::None,
+        n: Value::c(1),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "a701 open an attraction", priority: 60, parse: open_attraction } }
+
+/// "you open an attraction" (CR 701.51c).
+fn opened_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(r) == "you open an attraction").then(|| {
+        (
+            TriggerCond::PlayerAction {
+                name: SmolStr::new(crate::kwa::attractions::OPENED),
+                who: PlayerRel::You,
+            },
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "a701 you open an attraction", priority: 60, parse: opened_trigger } }
