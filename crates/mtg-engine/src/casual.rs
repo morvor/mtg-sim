@@ -80,9 +80,9 @@ impl GameConfig {
     pub fn archenemy_game(teams: Vec<u8>) -> GameConfig {
         GameConfig {
             variant: Variant::Archenemy,
+            shared_team_turns: has_team(&teams),
             teams: Some(teams),
             attack_multiple_players: true,
-            shared_team_turns: true,
             ..Default::default()
         }
     }
@@ -105,9 +105,9 @@ impl GameConfig {
         GameConfig {
             variant: Variant::Commander,
             archenemy: true,
+            shared_team_turns: has_team(&teams),
             teams: Some(teams),
             attack_multiple_players: true,
-            shared_team_turns: true,
             ..Default::default()
         }
     }
@@ -121,6 +121,12 @@ impl GameConfig {
             ..GameConfig::free_for_all()
         }
     }
+}
+
+/// Whether some team has more than one player (the shared team turns option applies only
+/// between teams, CR 805.1).
+fn has_team(teams: &[u8]) -> bool {
+    team_sizes(teams).values().any(|n| *n > 1)
 }
 
 /// The number of players on each team, for a game of `teams` (seat → team).
