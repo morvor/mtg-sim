@@ -430,7 +430,17 @@ pub fn can_pay_mana_cost_of(
                 &usable_pool(g, p, &SpendContext::default()),
             )
             .is_some()
-                || plan_payment(g, p, &m, &SpendContext::default(), src).is_some()
+                || plan_payment(
+                    g,
+                    p,
+                    &m,
+                    &SpendContext {
+                        check_only: true,
+                        ..Default::default()
+                    },
+                    src,
+                )
+                .is_some()
         }
     }
 }
@@ -769,10 +779,10 @@ pub fn usable_pool(g: &Game, p: PlayerId, spend: &SpendContext) -> Vec<bool> {
         .collect()
 }
 
-/// Whether mana `source` would produce may pay for `spend`. When the payment's purpose is
-/// unknown (a rough "could this be paid" check), restrictions are ignored.
+/// Whether mana `source` would produce may pay for `spend`. A rough "could this be paid"
+/// check (`check_only`) ignores restrictions.
 fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &SpendContext) -> bool {
-    if !spend.is_spell && !spend.is_ability {
+    if spend.check_only {
         return true;
     }
     let AbilityKind::Activated(act) = &source.ability.kind else {
@@ -1059,8 +1069,8 @@ pub fn plan_payment(
             snow: m.snow,
             source: None,
             pool_index: Some(i),
-            // An optimistic check (purpose unknown) ignores restrictions (CR 106.6).
-            restriction_ok: !(spend.is_spell || spend.is_ability) || m.can_spend_in(g, p, spend),
+            // A rough "could this be paid" check ignores restrictions (CR 106.6).
+            restriction_ok: spend.check_only || m.can_spend_in(g, p, spend),
         });
     }
     for (si, s) in sources.iter().enumerate() {

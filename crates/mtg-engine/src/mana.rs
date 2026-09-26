@@ -430,6 +430,10 @@ pub struct SpendContext {
     /// payment (e.g. "You may spend blue mana as though it were mana of any color to pay
     /// the activation costs of this creature's abilities", CR 602.1e).
     pub any_color: Vec<ManaType>,
+    /// A rough "could this be paid" check made without knowing what the mana would be
+    /// spent on: spending restrictions (CR 106.6) are ignored. An actual payment never
+    /// sets it, so restricted mana isn't planned for a purpose it can't pay.
+    pub check_only: bool,
 }
 
 impl ManaRestriction {

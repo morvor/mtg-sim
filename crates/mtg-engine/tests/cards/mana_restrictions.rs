@@ -131,9 +131,11 @@ fn dragon_spells_or_abilities_of_dragons() {
     t.answer(P0, DecisionKind::Option, Answer::Index(3));
     t.activate(P0, orb, 0, &[]).unwrap();
     assert_eq!(pool(&t, P0), vec![ManaType::R, ManaType::R]);
-    // Not for a non-Dragon creature spell.
-    let bears = t.hand(P0, "Grizzly Bears");
-    assert!(t.cast(P0, bears).try_go().is_err());
+    // Not for a non-Dragon creature spell (Raging Goblin costs {R}).
+    let goblin = t.hand(P0, "Raging Goblin");
+    assert!(t.cast(P0, goblin).try_go().is_err());
+    assert!(t.in_hand(P0, "Raging Goblin"));
+    assert_eq!(pool(&t, P0), vec![ManaType::R, ManaType::R]);
     // For an ability of a Dragon.
     let dragon = t.battlefield(P0, "Shivan Dragon");
     t.activate(P0, dragon, 0, &[]).unwrap();
@@ -192,13 +194,15 @@ fn creature_type_lists_name_any_of_the_types() {
     let vampire = t.hand(P0, "Vampire Nighthawk");
     t.cast(P0, vampire).go();
     assert!(pool(&t, P0).is_empty());
-    // Not a Zombie spell.
+    // Not a Zombie spell (Walking Corpse costs {1}{B}).
     let mut t = TestGame::new(2);
     let master = t.battlefield(P0, "Master of Dark Rites");
     t.battlefield(P0, "Grizzly Bears");
     t.activate(P0, master, 0, &[]).unwrap();
-    let zombie = t.hand(P0, "Gravedigger");
+    let zombie = t.hand(P0, "Walking Corpse");
     assert!(t.cast(P0, zombie).try_go().is_err());
+    assert!(t.in_hand(P0, "Walking Corpse"));
+    assert_eq!(pool(&t, P0), vec![ManaType::B; 3]);
 }
 
 #[test]
@@ -222,6 +226,10 @@ fn abilities_of_creatures_are_abilities_of_creature_permanents() {
 #[test]
 fn abilities_of_sources_include_cards() {
     cr!("106.6", "109.2");
+    ruling!(
+        "Ixalli's Lorekeeper",
+        "a Dinosaur card in your hand or graveyard"
+    );
     // "... or activate an ability of a Dinosaur source": a Dinosaur card's cycling.
     let mut t = TestGame::new(2);
     let lorekeeper = t.battlefield(P0, "Ixalli's Lorekeeper");
@@ -233,4 +241,64 @@ fn abilities_of_sources_include_cards() {
     t.activate(P0, rex, 0, &[]).unwrap();
     assert!(t.in_graveyard(P0, "Titanoth Rex"));
     assert!(pool(&t, P0).is_empty());
+    // Not the cycling of a card that isn't a Dinosaur (Renewed Faith, cycling {1}{W}).
+    let mut t = TestGame::new(2);
+    let lorekeeper = t.battlefield(P0, "Ixalli's Lorekeeper");
+    t.answer(P0, DecisionKind::Option, Answer::Index(0)); // white
+    t.activate(P0, lorekeeper, 0, &[]).unwrap();
+    let wastes = t.battlefield(P0, "Wastes");
+    let faith = t.hand(P0, "Renewed Faith");
+    assert!(t.activate(P0, faith, 0, &[]).is_err());
+    assert!(t.in_hand(P0, "Renewed Faith"));
+    assert!(!t.obj_now(wastes).tapped);
+    assert_eq!(pool(&t, P0), vec![ManaType::W]);
+}
+
+#[test]
+fn restricted_mana_cant_pay_a_cost_of_a_resolving_triggered_ability() {
+    cr!("106.6", "702.21a");
+    ruling!(
+        "Base Camp",
+        "or to pay a cost in a resolving triggered ability"
+    );
+    // Base Camp's mana can pay for an ability of a Cleric, but paying the ward cost of
+    // an opposing Cleric isn't activating one of its abilities.
+    let mut t = TestGame::new(2);
+    let camp = t.battlefield(P0, "Base Camp");
+    let wastes = t.battlefield(P0, "Wastes");
+    let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
+    let servitor = t.battlefield(P1, "Quicksilver Servitor");
+    t.answer(P0, DecisionKind::Option, Answer::Index(0)); // white
+    t.activate(P0, camp, 1, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::W]);
+    t.activate(P0, sorcerer, 0, &[servitor.into()]).unwrap();
+    // Ward {2}: P0 would pay, but only the Wastes' mana can be spent.
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.obj_now(servitor).damage, 0);
+    assert!(!t.obj_now(wastes).tapped);
+    assert_eq!(pool(&t, P0), vec![ManaType::W]);
+}
+
+#[test]
+fn a_special_action_cost_isnt_planned_with_restricted_mana() {
+    cr!("106.6", "116.2h");
+    // Foretelling (a special action) with Pillar of the Paruns' mana unspent: its mana
+    // can't pay {2}, so both Wastes are tapped for it.
+    let mut t = TestGame::new(2);
+    let pillar = t.battlefield(P0, "Pillar of the Paruns");
+    t.answer(P0, DecisionKind::Option, Answer::Index(3)); // red
+    t.activate(P0, pillar, 0, &[]).unwrap();
+    let wastes = [t.battlefield(P0, "Wastes"), t.battlefield(P0, "Wastes")];
+    let bolt = t.hand(P0, "Demon Bolt");
+    t.g.turn.priority = Some(P0);
+    t.g.take_action(
+        P0,
+        mtg_engine::decision::Action::Special(mtg_engine::decision::SpecialAction::Foretell {
+            card: bolt,
+        }),
+    );
+    assert!(!t.in_hand(P0, "Demon Bolt"));
+    assert!(wastes.iter().all(|w| t.obj_now(*w).tapped));
+    assert_eq!(pool(&t, P0), vec![ManaType::R]);
 }

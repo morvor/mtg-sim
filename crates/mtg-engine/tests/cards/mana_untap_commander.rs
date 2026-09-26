@@ -110,7 +110,7 @@ fn commander(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
 
 #[test]
 fn commander_color_identity_mana() {
-    cr!("903.4", "106.1a");
+    cr!("903.4");
     let mut t = TestGame::new(2);
     commander(&mut t, P0, "Niv-Mizzet, Parun");
     let tower = t.battlefield(P0, "Command Tower");

@@ -80,7 +80,7 @@ fn x_mana_of_one_color_where_x_is_its_power() {
 
 #[test]
 fn x_mana_counts_as_the_ability_resolves() {
-    cr!("107.3c", "608.2h", "605.3b");
+    cr!("107.3c", "605.3b");
     ruling!(
         "Sanctum Weaver",
         "is a mana ability and does not use the stack"
@@ -144,7 +144,7 @@ fn any_combination_pays_a_cost_with_several_types() {
 
 #[test]
 fn remove_x_counters_for_x_mana() {
-    cr!("107.3a", "118.3");
+    cr!("107.3a");
     let mut t = TestGame::new(2);
     let haruspex = t.battlefield(P0, "Haruspex");
     t.g.add_counters(Entity::Object(haruspex), "+1/+1", 3, None);
@@ -157,7 +157,7 @@ fn remove_x_counters_for_x_mana() {
 
 #[test]
 fn storage_land_removes_any_number_of_counters() {
-    cr!("107.1c", "118.3");
+    cr!("107.1c");
     let mut t = TestGame::new(2);
     let fountain = t.battlefield(P0, "Fountain of Cho");
     t.g.add_counters(Entity::Object(fountain), "storage", 3, None);

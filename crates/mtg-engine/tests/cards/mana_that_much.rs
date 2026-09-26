@@ -74,7 +74,7 @@ fn that_much_is_the_damage_dealt_to_it() {
 
 #[test]
 fn that_much_is_the_number_of_attackers() {
-    cr!("603.2", "106.1a");
+    cr!("603.2");
     ruling!(
         "Grand Warlord Radha",
         "The amount of mana you’ll add is the number of creatures you attack with."
