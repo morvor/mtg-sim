@@ -88,7 +88,10 @@ fn an_omen_card_is_one_card() {
     );
     assert_eq!(t.hand_size(P0), 1);
     let ctx = Ctx::new(None, P0);
-    assert_eq!(t.g.eval_value(&Value::CardsDrawnThisTurn(PlayerRef::You), &ctx), 1);
+    assert_eq!(
+        t.g.eval_value(&Value::CardsDrawnThisTurn(PlayerRef::You), &ctx),
+        1
+    );
 }
 
 #[test]
@@ -101,7 +104,11 @@ fn a_player_chooses_to_cast_it_normally_or_as_an_omen() {
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let d = t.hand(P0, DRAGON);
-    let faces: Vec<FaceState> = t.g.cast_options(P0, d).into_iter().map(|o| o.face).collect();
+    let faces: Vec<FaceState> =
+        t.g.cast_options(P0, d)
+            .into_iter()
+            .map(|o| o.face)
+            .collect();
     assert_eq!(faces, vec![FaceState::Front, FaceState::Half(1)]);
     t.lands(P0, "Island", 2);
     assert!(!can_cast_face(&mut t, P0, d, FaceState::Front));
@@ -164,8 +171,20 @@ fn a_resolving_omen_is_shuffled_into_its_owners_library() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let lib = t.library_size(P0);
     cast_strike(&mut t, bears);
+    let shuffles = |t: &TestGame| {
+        t.g.turn_events
+            .iter()
+            .chain(t.g.events.iter())
+            .filter(
+                |e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == P0),
+            )
+            .count()
+    };
+    assert_eq!(shuffles(&t), 0);
     t.resolve_all();
     assert!(t.obj(bears).tapped);
+    // Shuffled in, not just put into the library.
+    assert_eq!(shuffles(&t), 1);
     // It drew a card and went into the library: the same count, plus the dragon.
     assert_eq!(t.library_size(P0), lib);
     assert_eq!(t.graveyard_size(P0), 0);
@@ -214,7 +233,10 @@ fn the_omens_name_may_be_chosen() {
     let mut t = TestGame::new(2);
     name_card(&mut t, P1, "Skimming Strike");
     let mage = t.enter(P1, "Meddling Mage");
-    assert_eq!(t.obj_now(mage).choices.card_name.as_deref(), Some("Skimming Strike"));
+    assert_eq!(
+        t.obj_now(mage).choices.card_name.as_deref(),
+        Some("Skimming Strike")
+    );
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Island", 6);
     let d = t.hand(P0, DRAGON);

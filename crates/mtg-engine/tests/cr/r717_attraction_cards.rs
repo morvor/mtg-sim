@@ -141,9 +141,11 @@ fn a_constructed_attraction_deck_has_ten_differently_named_attractions() {
     );
     let mut other = cards(&ATTRACTIONS[..10]);
     other.push(card("Grizzly Bears"));
-    assert!(check_constructed_deck(&other).contains(&DeckProblem::NotAnAttraction {
-        name: "Grizzly Bears".into()
-    }));
+    assert!(
+        check_constructed_deck(&other).contains(&DeckProblem::NotAnAttraction {
+            name: "Grizzly Bears".into()
+        })
+    );
 }
 
 #[test]

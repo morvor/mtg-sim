@@ -79,13 +79,12 @@ fn the_prepare_spell_is_part_of_the_copiable_values() {
     let cc = t.hand(P0, "Croaking Counterpart");
     t.cast(P0, cc).target(g).go();
     t.resolve_all();
-    let token = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .find(|id| t.obj(*id).kind == ObjKind::Token)
-        .expect("token");
+    let token =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|id| t.obj(*id).kind == ObjKind::Token)
+            .expect("token");
     assert_eq!(t.obj(token).chars.name, "Goblin Glasswright");
     assert_eq!(t.pt(token), (1, 1));
     assert!(designations::has_prepare_spell(&t.g, token));
@@ -134,7 +133,10 @@ fn a_preparation_card_is_one_card() {
     );
     assert_eq!(t.hand_size(P0), 1);
     let ctx = Ctx::new(None, P0);
-    assert_eq!(t.g.eval_value(&Value::CardsDrawnThisTurn(PlayerRef::You), &ctx), 1);
+    assert_eq!(
+        t.g.eval_value(&Value::CardsDrawnThisTurn(PlayerRef::You), &ctx),
+        1
+    );
 }
 
 #[test]

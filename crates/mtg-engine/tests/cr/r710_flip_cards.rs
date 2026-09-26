@@ -54,7 +54,9 @@ fn a_flip_card_has_normal_and_alternative_characteristics() {
     assert_eq!(o.chars.name, "Tok-Tok, Volcano Born");
     assert!(o.chars.is_legendary());
     assert!(o.chars.has_subtype("Shaman") && !o.chars.has_subtype("Warrior"));
-    assert!(!o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert!(!o
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
     assert!(o
         .chars
         .has_keyword(mtg_engine::keywords::KeywordKind::Protection));
@@ -102,17 +104,15 @@ fn flipping_is_one_way_until_it_leaves_the_battlefield() {
     t.g.recompute();
     assert_eq!(t.obj(akki).chars.name, "Tok-Tok, Volcano Born");
     // Once it leaves the battlefield it retains no memory of its status.
-    let hand = t
-        .g
-        .move_object(akki, Zone::Hand(P0), MoveCause::Effect, None)
-        .unwrap();
+    let hand =
+        t.g.move_object(akki, Zone::Hand(P0), MoveCause::Effect, None)
+            .unwrap();
     t.g.recompute();
     assert!(!t.obj(hand).flipped);
     assert_eq!(t.obj(hand).chars.name, "Akki Lavarunner");
-    let back = t
-        .g
-        .move_object(hand, Zone::Battlefield, MoveCause::Effect, None)
-        .unwrap();
+    let back =
+        t.g.move_object(hand, Zone::Battlefield, MoveCause::Effect, None)
+            .unwrap();
     t.g.recompute();
     assert!(!t.obj(back).flipped);
     assert_eq!(t.obj(back).chars.name, "Akki Lavarunner");

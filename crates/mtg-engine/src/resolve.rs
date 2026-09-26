@@ -1721,9 +1721,25 @@ impl Game {
             }
             Sel::This | Sel::TriggerLki => {
                 let v = self.eval_sel(sel, ctx);
-                v.into_iter()
-                    .map(|e| self.follow_zone_change_trigger_object(e, ctx))
-                    .collect()
+                let mut out = Vec::new();
+                for e in v {
+                    let followed = self.follow_zone_change_trigger_object(e, ctx);
+                    // CR 712.21c, 730.3c: the new object a melded or merged permanent
+                    // became as it left the battlefield is each of its cards.
+                    let found = match followed {
+                        Entity::Object(o) if followed != e => crate::merge::found_objects(self, o)
+                            .into_iter()
+                            .map(Entity::Object)
+                            .collect(),
+                        _ => vec![followed],
+                    };
+                    for f in found {
+                        if !out.contains(&f) {
+                            out.push(f);
+                        }
+                    }
+                }
+                out
             }
             other => self.eval_sel(other, ctx),
         }

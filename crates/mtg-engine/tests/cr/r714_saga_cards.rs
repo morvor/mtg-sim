@@ -41,13 +41,14 @@ fn a_saga_has_chapter_abilities() {
     let o = t.obj(s);
     assert!(o.chars.has_subtype("Saga"));
     // Its chapter symbols are triggered abilities: I, II and III.
-    assert!(o
-        .chars
-        .abilities
-        .iter()
-        .filter(|a| matches!(a.kind, AbilityKind::Triggered(_)))
-        .count()
-        >= 2);
+    assert!(
+        o.chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, AbilityKind::Triggered(_)))
+            .count()
+            >= 2
+    );
     let mut ns = saga::chapter_numbers(o);
     ns.sort();
     assert_eq!(ns, vec![1, 2, 3]);
@@ -59,7 +60,10 @@ fn a_saga_has_chapter_abilities() {
     assert_eq!(ns, vec![1, 2, 3, 4]);
     let custom = t.custom(
         P0,
-        saga_card("Long Tale", "I — You gain 1 life.\nIV — You gain 4 life.\nVI — You gain 6 life."),
+        saga_card(
+            "Long Tale",
+            "I — You gain 1 life.\nIV — You gain 4 life.\nVI — You gain 6 life.",
+        ),
         Zone::Battlefield,
     );
     let mut ns = saga::chapter_numbers(t.obj(custom));
@@ -210,9 +214,13 @@ fn a_saga_enters_with_a_lore_counter() {
     // Every Saga without read ahead has that ability, even one without chapter
     // abilities.
     let blank = t.custom(P0, saga_card("Blank Page", ""), Zone::Hand(P0));
-    let blank = t
-        .g
-        .move_object(blank, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None)
+    let blank =
+        t.g.move_object(
+            blank,
+            Zone::Battlefield,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        )
         .unwrap();
     assert_eq!(lore(&t, blank), 1);
     // A non-Saga enchantment doesn't.

@@ -112,14 +112,12 @@ fn solved_is_a_designation_that_stays_until_it_leaves_and_isnt_copiable() {
     assert_eq!(t.obj(copy).chars.name, PULSE);
     assert!(!cases::is_solved(&t.g, copy));
     // Leaving the battlefield, it loses the designation.
-    let back = t
-        .g
-        .move_object(case, Zone::Hand(P0), MoveCause::Effect, None)
-        .unwrap();
-    let again = t
-        .g
-        .move_object(back, Zone::Battlefield, MoveCause::Effect, None)
-        .unwrap();
+    let back =
+        t.g.move_object(case, Zone::Hand(P0), MoveCause::Effect, None)
+            .unwrap();
+    let again =
+        t.g.move_object(back, Zone::Battlefield, MoveCause::Effect, None)
+            .unwrap();
     assert!(!cases::is_solved(&t.g, again));
 }
 

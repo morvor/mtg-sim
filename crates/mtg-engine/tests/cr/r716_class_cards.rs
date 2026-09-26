@@ -144,14 +144,12 @@ fn a_level_is_a_designation_that_isnt_copiable() {
     assert!(t.obj(class).chars.has_subtype("Class"));
     assert!(has_level_3(&t, class));
     // A new object (after a zone change) has no level.
-    let back = t
-        .g
-        .move_object(class, Zone::Hand(P0), MoveCause::Effect, None)
-        .unwrap();
-    let again = t
-        .g
-        .move_object(back, Zone::Battlefield, MoveCause::Effect, None)
-        .unwrap();
+    let back =
+        t.g.move_object(class, Zone::Hand(P0), MoveCause::Effect, None)
+            .unwrap();
+    let again =
+        t.g.move_object(back, Zone::Battlefield, MoveCause::Effect, None)
+            .unwrap();
     assert_eq!(classes::level(&t.g, again), 1);
 }
 

@@ -62,12 +62,36 @@ fn the_seven_meld_pairs() {
     cr!("712.5", "712.5a", "712.5b", "712.5c", "712.5d", "712.5e", "712.5f", "712.5g");
     let pairs = [
         ("Midnight Scavengers", "Graf Rats", "Chittering Host"),
-        ("Hanweir Garrison", "Hanweir Battlements", "Hanweir, the Writhing Township"),
-        ("Bruna, the Fading Light", "Gisela, the Broken Blade", "Brisela, Voice of Nightmares"),
-        ("Phyrexian Dragon Engine", "Mishra, Claimed by Gix", "Mishra, Lost to Phyrexia"),
-        ("The Mightstone and Weakstone", "Urza, Lord Protector", "Urza, Planeswalker"),
-        ("Argoth, Sanctum of Nature", "Titania, Voice of Gaea", "Titania, Gaea Incarnate"),
-        ("Fang, Fearless l'Cie", "Vanille, Cheerful l'Cie", "Ragnarok, Divine Deliverance"),
+        (
+            "Hanweir Garrison",
+            "Hanweir Battlements",
+            "Hanweir, the Writhing Township",
+        ),
+        (
+            "Bruna, the Fading Light",
+            "Gisela, the Broken Blade",
+            "Brisela, Voice of Nightmares",
+        ),
+        (
+            "Phyrexian Dragon Engine",
+            "Mishra, Claimed by Gix",
+            "Mishra, Lost to Phyrexia",
+        ),
+        (
+            "The Mightstone and Weakstone",
+            "Urza, Lord Protector",
+            "Urza, Planeswalker",
+        ),
+        (
+            "Argoth, Sanctum of Nature",
+            "Titania, Voice of Gaea",
+            "Titania, Gaea Incarnate",
+        ),
+        (
+            "Fang, Fearless l'Cie",
+            "Vanille, Cheerful l'Cie",
+            "Ragnarok, Divine Deliverance",
+        ),
     ];
     for (a, b, result) in pairs {
         let mut t = TestGame::new(2);
@@ -82,7 +106,14 @@ fn the_seven_meld_pairs() {
         // A card of another pair isn't its counterpart.
         let mut t = TestGame::new(2);
         let ca = t.exile(P0, a);
-        let other = t.exile(P0, if result == "Chittering Host" { "Gisela, the Broken Blade" } else { "Graf Rats" });
+        let other = t.exile(
+            P0,
+            if result == "Chittering Host" {
+                "Gisela, the Broken Blade"
+            } else {
+                "Graf Rats"
+            },
+        );
         assert!(merge::meld(&mut t.g, ca, other, r, P0).is_none());
     }
 }
@@ -158,18 +189,16 @@ fn a_melded_permanent_leaving_is_one_permanent_and_two_cards() {
     let ctx = mtg_engine::eval::Ctx::new(None, P0);
     assert_eq!(t.g.eval_value(&Value::CreaturesDiedThisTurn, &ctx), 1);
     t.settle();
-    let artist = t
-        .g
-        .stack
-        .iter()
-        .filter(|s| t.g.describe(**s).contains("Blood Artist"))
-        .count();
-    let void = t
-        .g
-        .stack
-        .iter()
-        .filter(|s| t.g.describe(**s).contains("Planar Void"))
-        .count();
+    let artist =
+        t.g.stack
+            .iter()
+            .filter(|s| t.g.describe(**s).contains("Blood Artist"))
+            .count();
+    let void =
+        t.g.stack
+            .iter()
+            .filter(|s| t.g.describe(**s).contains("Planar Void"))
+            .count();
     assert_eq!((artist, void), (1, 2));
 }
 
@@ -190,13 +219,12 @@ fn the_owner_arranges_the_two_cards_in_a_graveyard_or_library() {
         // Components: Graf Rats then Midnight Scavengers. The order asked is bottom to top.
         order_answer(&mut t, P0, if reversed { vec![1, 0] } else { vec![0, 1] });
         t.g.move_object(host, Zone::Graveyard(P0), MoveCause::Destroy, None);
-        let gy: Vec<String> = t
-            .g
-            .player(P0)
-            .graveyard
-            .iter()
-            .map(|id| t.obj(*id).chars.name.to_string())
-            .collect();
+        let gy: Vec<String> =
+            t.g.player(P0)
+                .graveyard
+                .iter()
+                .map(|id| t.obj(*id).chars.name.to_string())
+                .collect();
         let expected = if reversed {
             vec!["Midnight Scavengers", "Graf Rats"]
         } else {
@@ -237,7 +265,10 @@ fn the_owner_arranges_the_two_cards_in_a_graveyard_or_library() {
 #[test]
 fn the_player_exiling_it_determines_the_cards_timestamp_order() {
     cr!("712.21b");
-    for (order, later) in [(vec![0, 1], "Midnight Scavengers"), (vec![1, 0], "Graf Rats")] {
+    for (order, later) in [
+        (vec![0, 1], "Midnight Scavengers"),
+        (vec![1, 0], "Graf Rats"),
+    ] {
         let mut t = TestGame::new(2);
         let host = chittering_host(&mut t, P0);
         // P1 exiles it and chooses the order.
@@ -313,4 +344,71 @@ fn a_replacement_effect_applied_to_one_card_applies_to_both() {
     assert_eq!(t.graveyard_size(P0), 0);
     assert_eq!(cards_named(&t, Zone::Exile, "Graf Rats"), 1);
     assert_eq!(cards_named(&t, Zone::Exile, "Midnight Scavengers"), 1);
+    // With two replacement effects that could apply (Leyline of the Void, and "If a card
+    // would be put into a graveyard from anywhere, put it on the bottom of its owner's
+    // library instead"), the owner chooses one once and it applies to both cards.
+    let mut outcomes = Vec::new();
+    for pick in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Leyline of the Void");
+        let wheel = CB::new("Wheel Lite")
+            .enchantment()
+            .ability(stat(StaticEffect::Replacement(ReplacementDef {
+                event: ReplacementEvent::ZoneChange {
+                    filter: Filter::Any,
+                    from: None,
+                    to: Some(ZoneKind::Graveyard),
+                },
+                action: ReplacementAction::MoveInstead(Destination::library_bottom()),
+                self_replacement: false,
+                optional: false,
+            })))
+            .build();
+        t.custom(P0, wheel, Zone::Battlefield);
+        let host = chittering_host(&mut t, P0);
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(pick));
+        let lib_before = t.library_size(P0);
+        t.g.move_object(host, Zone::Graveyard(P0), MoveCause::Destroy, None);
+        let replacement_choices = t
+            .asked()
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::ChooseReplacement { .. }))
+            .count();
+        assert_eq!(replacement_choices, 1, "one choice for both cards");
+        let exiled = cards_named(&t, Zone::Exile, "Graf Rats")
+            + cards_named(&t, Zone::Exile, "Midnight Scavengers");
+        let bottom = t.library_size(P0) - lib_before;
+        assert_eq!(t.graveyard_size(P0), 0);
+        outcomes.push((exiled, bottom));
+    }
+    // Each choice sent both cards to the same zone, and the two choices differ.
+    outcomes.sort();
+    assert_eq!(outcomes, vec![(0, 2), (2, 0)]);
+}
+
+#[test]
+fn its_last_known_information_is_the_melded_permanents_not_its_cards() {
+    cr!("712.21", "712.21c");
+    // "Whenever a creature you control dies, you gain life equal to its power." "Its
+    // power" is the melded permanent's last known power (Chittering Host, 5), not that of
+    // the two cards it became (Graf Rats 2 and Midnight Scavengers 3).
+    let mut t = TestGame::new(2);
+    let watcher = oracle_card(
+        "Mourning Bell",
+        "Enchantment",
+        "{0}",
+        None,
+        "Whenever a creature you control dies, you gain life equal to its power.",
+    );
+    assert!(
+        watcher.is_fully_supported(),
+        "{:?}",
+        watcher.unsupported_text()
+    );
+    t.custom(P0, watcher, Zone::Battlefield);
+    let host = chittering_host(&mut t, P0);
+    assert_eq!(t.pt(host), (5, 6));
+    t.g.move_object(host, Zone::Graveyard(P0), MoveCause::Destroy, None);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 25);
 }

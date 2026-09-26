@@ -47,7 +47,10 @@ fn a_split_card_is_one_card_with_two_faces() {
     // Drawing it is drawing one card.
     assert_eq!(t.library_size(P0), before - 1);
     assert_eq!(t.hand_size(P0), 1);
-    assert_eq!(value(&mut t, P0, Value::CardsDrawnThisTurn(PlayerRef::You)), 1);
+    assert_eq!(
+        value(&mut t, P0, Value::CardsDrawnThisTurn(PlayerRef::You)),
+        1
+    );
     // In the graveyard it's one instant card, not two.
     let fi = t.g.player(P0).hand[0];
     t.g.discard(P0, fi, None);
@@ -65,7 +68,10 @@ fn a_split_card_is_one_card_with_two_faces() {
 #[test]
 fn a_player_chooses_which_half_to_cast() {
     cr!("709.3", "709.3a", "709.3b");
-    ruling!("Fire // Ice", "To cast a split card, choose one of its halves to cast");
+    ruling!(
+        "Fire // Ice",
+        "To cast a split card, choose one of its halves to cast"
+    );
     ruling!(
         "Fire // Ice",
         "The characteristics of the half you didn't cast are ignored while the spell is on the stack"
@@ -74,12 +80,11 @@ fn a_player_chooses_which_half_to_cast() {
     t.set_step(P0, Step::PrecombatMain);
     let fi = t.hand(P0, "Fire // Ice");
     // The two ways to cast it are its two halves.
-    let methods: Vec<CastMethod> = t
-        .g
-        .cast_options(P0, fi)
-        .into_iter()
-        .map(|o| o.method)
-        .collect();
+    let methods: Vec<CastMethod> =
+        t.g.cast_options(P0, fi)
+            .into_iter()
+            .map(|o| o.method)
+            .collect();
     assert_eq!(methods, vec![CastMethod::Half(0), CastMethod::Half(1)]);
     // With only {U}{U} available, only Ice ({1}{U}) can be cast: only the chosen half's
     // cost is evaluated, not the combined {1}{R}{1}{U}.
@@ -99,7 +104,10 @@ fn a_player_chooses_which_half_to_cast() {
     assert_eq!(c.name, "Ice");
     assert!(!c.has_name("Fire"));
     assert_eq!(c.colors, ColorSet::single(Color::Blue));
-    assert_eq!(c.abilities.len(), card("Fire // Ice").faces[1].chars.abilities.len());
+    assert_eq!(
+        c.abilities.len(),
+        card("Fire // Ice").faces[1].chars.abilities.len()
+    );
     assert_eq!(mv(&mut t, spell), 2);
     t.resolve_all();
     assert!(t.obj_now(bears).tapped);
@@ -146,7 +154,10 @@ fn a_copy_of_a_split_card_can_be_cast_as_either_half() {
 #[test]
 fn a_copy_of_a_split_spell_copies_the_same_half() {
     cr!("709.3b");
-    ruling!("Fire // Ice", "If you copy a spell that's half of a split card, the copy copies that same half");
+    ruling!(
+        "Fire // Ice",
+        "If you copy a spell that's half of a split card, the copy copies that same half"
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Island", 2);
@@ -188,7 +199,10 @@ fn off_the_stack_a_split_card_has_both_halves_characteristics() {
     t.g.recompute();
     let c = t.obj(fi).chars.clone();
     // Colors and mana value come from the combined mana cost {1}{R} + {1}{U}.
-    assert_eq!(c.colors, ColorSet::single(Color::Red).union(ColorSet::single(Color::Blue)));
+    assert_eq!(
+        c.colors,
+        ColorSet::single(Color::Red).union(ColorSet::single(Color::Blue))
+    );
     assert_eq!(mv(&mut t, fi), 4);
     // "Search for a card with mana value 3 or less" can't find it.
     let ctx = Ctx::new(None, P0);
@@ -222,7 +236,10 @@ fn off_the_stack_a_split_card_has_both_halves_characteristics() {
 #[test]
 fn a_split_card_has_two_names() {
     cr!("709.4a");
-    ruling!("Fire // Ice", "you may choose one of those names, but not both");
+    ruling!(
+        "Fire // Ice",
+        "you may choose one of those names, but not both"
+    );
     let mut t = TestGame::new(2);
     let fi = t.hand(P1, "Fire // Ice");
     t.g.recompute();
@@ -250,7 +267,11 @@ fn a_split_card_has_two_names() {
         .try_go()
         .is_err());
     let fi = t.g.current(fi);
-    let r = t.cast(P1, fi).method(CastMethod::Half(0)).target(bears).try_go();
+    let r = t
+        .cast(P1, fi)
+        .method(CastMethod::Half(0))
+        .target(bears)
+        .try_go();
     assert!(r.is_ok(), "{r:?}");
 }
 
@@ -276,7 +297,10 @@ fn a_fused_split_spell_has_both_halves_characteristics() {
         .go();
     let c = t.obj(spell).chars.clone();
     assert!(c.has_name("Wear") && c.has_name("Tear"));
-    assert_eq!(c.colors, ColorSet::single(Color::Red).union(ColorSet::single(Color::White)));
+    assert_eq!(
+        c.colors,
+        ColorSet::single(Color::Red).union(ColorSet::single(Color::White))
+    );
     assert_eq!(mv(&mut t, spell), 3);
     t.resolve_all();
     assert!(!t.on_battlefield(bauble));
@@ -341,13 +365,12 @@ fn a_copy_of_a_room_spell_enters_with_that_door_unlocked() {
     t.resolve_all();
     // The copy became a token Room with Locker Room unlocked, and it still has both
     // doors: Bottomless Pool can be unlocked.
-    let token = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .find(|id| t.obj(*id).kind == ObjKind::Token)
-        .expect("token Room");
+    let token =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|id| t.obj(*id).kind == ObjKind::Token)
+            .expect("token Room");
     assert_eq!(rooms::unlocked(&t.g, token), [false, true]);
     assert_eq!(t.obj(token).chars.name, "Locker Room");
     add_mana(&mut t, P0, ManaType::U, 1);
@@ -460,23 +483,26 @@ fn unlocking_a_locked_door_with_an_effect() {
     for _ in 0..3 {
         t.library_top(P0, "Island");
     }
+    // Bottomless Pool, the left door, is cast (its unlock trigger returns no creature).
     let card_id = t.hand(P0, "Bottomless Pool // Locker Room");
-    add_mana(&mut t, P0, ManaType::U, 5);
-    cast_half(&mut t, P0, card_id, 1);
+    add_mana(&mut t, P0, ManaType::U, 1);
+    t.answer_targets(P0, &[]);
+    cast_half(&mut t, P0, card_id, 0);
     t.resolve_all();
     let hand = t.hand_size(P0);
-    let room = the(&t, "Locker Room");
+    let room = the(&t, "Bottomless Pool");
+    assert_eq!(rooms::unlocked(&t.g, room), [true, false]);
     // Ghostly Keybearer: "Whenever this creature deals combat damage to a player, unlock
-    // a locked door of up to one target Room you control." The only locked door is
-    // Bottomless Pool.
+    // a locked door of up to one target Room you control." The unlocked Bottomless Pool
+    // can't be chosen (it would be the first option): the only choice is Locker Room.
     let kb = t.battlefield(P0, "Ghostly Keybearer");
     t.set_step(P0, Step::PrecombatMain);
     t.answer_targets(P0, &[Entity::Object(room)]);
     t.attack(&[(kb, Entity::Player(P1))], &[]);
     t.resolve_all();
     assert_eq!(rooms::unlocked(&t.g, room), [true, true]);
-    // The Room became fully unlocked (Entity Tracker drew), and Locker Room's own
-    // combat-damage trigger also drew a card.
-    assert_eq!(t.hand_size(P0), hand + 2);
-    assert!(t.obj_now(room).chars.has_name("Bottomless Pool"));
+    assert!(t.obj_now(room).chars.has_name("Locker Room"));
+    // The Room became fully unlocked: Entity Tracker drew a card. (Locker Room's
+    // combat-damage trigger didn't: it was locked when the damage was dealt.)
+    assert_eq!(t.hand_size(P0), hand + 1);
 }

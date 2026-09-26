@@ -54,7 +54,11 @@ fn there_are_three_kinds_of_double_faced_cards() {
         assert!(d.layout.is_double_faced(), "{name}");
     }
     // Split, flip and adventurer cards have a normal card back.
-    for name in ["Fire // Ice", "Akki Lavarunner // Tok-Tok, Volcano Born", "Bonecrusher Giant // Stomp"] {
+    for name in [
+        "Fire // Ice",
+        "Akki Lavarunner // Tok-Tok, Volcano Born",
+        "Bonecrusher Giant // Stomp",
+    ] {
         assert!(!card(name).layout.is_double_faced(), "{name}");
     }
     // Each kind behaves differently: a nonmodal one transforms, a meld card doesn't.
@@ -172,7 +176,10 @@ fn outside_the_battlefield_and_stack_a_double_faced_card_has_only_its_front_face
     );
     for id in [ex, lib] {
         assert_eq!(t.obj(id).chars.name, "Kessig Prowler");
-        assert_eq!((t.obj(id).chars.power, t.obj(id).chars.toughness), (Some(2), Some(1)));
+        assert_eq!(
+            (t.obj(id).chars.power, t.obj(id).chars.toughness),
+            (Some(2), Some(1))
+        );
     }
     // Outside the game too (a sideboard).
     let side = t.g.add_to_sideboard(P0, vec![card(PROWLER)]);
@@ -191,12 +198,11 @@ fn a_modal_double_faced_spell_or_permanent_has_the_face_that_is_up() {
     t.set_step(P0, Step::PrecombatMain);
     let halvar = t.hand(P0, HALVAR);
     // The player chooses which face to cast: the front or the back.
-    let faces: Vec<FaceState> = t
-        .g
-        .cast_options(P0, halvar)
-        .into_iter()
-        .map(|o| o.face)
-        .collect();
+    let faces: Vec<FaceState> =
+        t.g.cast_options(P0, halvar)
+            .into_iter()
+            .map(|o| o.face)
+            .collect();
     assert_eq!(faces, vec![FaceState::Front, FaceState::Back]);
     // Sword of the Realms ({1}{W}): only that face is evaluated and put on the stack.
     t.lands(P0, "Plains", 2);
@@ -261,8 +267,14 @@ fn a_double_faced_spell_is_cast_with_its_front_face_up_by_default() {
 #[test]
 fn a_spell_cast_transformed_has_its_back_face_up() {
     cr!("712.11a", "712.11d", "712.13", "712.8c");
-    ruling!("Lunarch Veteran // Luminous Phantom", "the card is put onto the stack with its back face up");
-    ruling!("Lunarch Veteran // Luminous Phantom", "A spell cast this way enters the battlefield with its back face up");
+    ruling!(
+        "Lunarch Veteran // Luminous Phantom",
+        "the card is put onto the stack with its back face up"
+    );
+    ruling!(
+        "Lunarch Veteran // Luminous Phantom",
+        "A spell cast this way enters the battlefield with its back face up"
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Plains", 2);
@@ -436,6 +448,11 @@ fn a_face_down_double_faced_card_has_the_face_down_characteristics() {
     assert!(t.obj(m).face_down);
     assert!(c.name.is_empty());
     assert_eq!((c.power, c.toughness), (Some(2), Some(2)));
+    // While face down it can't transform.
+    transform(&mut t, m);
+    assert!(t.obj(m).face_down);
+    assert_eq!(t.obj(m).face, FaceState::Front);
+    assert_eq!(t.pt(m), (2, 2));
     // Turned face up, it has its front face up.
     assert!(facedown::turn_face_up(&mut t.g, m, false));
     t.g.recompute();
@@ -522,7 +539,12 @@ fn either_face_name_may_be_chosen_but_not_both() {
     ] {
         name_card(&mut t, P1, named);
         let mage = t.enter(P1, "Meddling Mage");
-        let chosen = t.obj_now(mage).choices.card_name.clone().unwrap_or_default();
+        let chosen = t
+            .obj_now(mage)
+            .choices
+            .card_name
+            .clone()
+            .unwrap_or_default();
         assert_eq!(chosen == named, ok, "{named}");
     }
     // Naming the back face stops casting that face, not the other.
@@ -532,7 +554,11 @@ fn either_face_name_may_be_chosen_but_not_both() {
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Plains", 4);
     let halvar = t.hand(P0, HALVAR);
-    assert!(t.cast(P0, halvar).method(CastMethod::Half(1)).try_go().is_err());
+    assert!(t
+        .cast(P0, halvar)
+        .method(CastMethod::Half(1))
+        .try_go()
+        .is_err());
     let halvar = t.g.current(halvar);
     assert!(t.cast(P0, halvar).try_go().is_ok());
 }
@@ -544,7 +570,10 @@ fn an_as_this_transforms_ability_applies_while_it_transforms() {
     // Sephiroth, One-Winged Angel, you get an emblem with 'Whenever a creature dies,
     // target opponent loses 1 life and you gain 1 life.'"
     let mut t = TestGame::new(2);
-    let seph = t.battlefield(P0, "Sephiroth, Fabled SOLDIER // Sephiroth, One-Winged Angel");
+    let seph = t.battlefield(
+        P0,
+        "Sephiroth, Fabled SOLDIER // Sephiroth, One-Winged Angel",
+    );
     let emblems = |t: &TestGame| {
         t.g.command
             .iter()

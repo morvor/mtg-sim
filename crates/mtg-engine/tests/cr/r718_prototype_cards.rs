@@ -64,7 +64,11 @@ fn a_player_chooses_to_cast_it_normally_or_prototyped() {
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let b = t.hand(P0, BLITZ);
-    let methods: Vec<CastMethod> = t.g.cast_options(P0, b).into_iter().map(|o| o.method).collect();
+    let methods: Vec<CastMethod> =
+        t.g.cast_options(P0, b)
+            .into_iter()
+            .map(|o| o.method)
+            .collect();
     assert!(methods.contains(&CastMethod::Normal) && methods.contains(&prototyped()));
     // With {2}{R}: only as a prototyped spell.
     t.lands(P0, "Mountain", 3);
@@ -114,7 +118,10 @@ fn a_prototyped_spell_and_its_permanent_have_the_prototype_characteristics() {
         assert!(c.has_keyword(KeywordKind::Haste));
     };
     check(&mut t, spell);
-    assert_eq!((t.obj(spell).chars.power, t.obj(spell).chars.toughness), (Some(3), Some(2)));
+    assert_eq!(
+        (t.obj(spell).chars.power, t.obj(spell).chars.toughness),
+        (Some(3), Some(2))
+    );
     t.resolve_all();
     let perm = t.g.current(spell);
     assert_eq!(t.obj(perm).zone, Zone::Battlefield);
@@ -145,15 +152,17 @@ fn a_copy_of_a_prototyped_spell_is_prototyped() {
     let copy = t.g.stack[1];
     assert!(prototype::is_prototyped(t.obj(copy)));
     assert_eq!(t.obj(copy).chars.colors, red());
-    assert_eq!((t.obj(copy).chars.power, t.obj(copy).chars.toughness), (Some(3), Some(2)));
+    assert_eq!(
+        (t.obj(copy).chars.power, t.obj(copy).chars.toughness),
+        (Some(3), Some(2))
+    );
     t.resolve();
-    let token = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .find(|id| t.obj(*id).kind == ObjKind::Token)
-        .expect("token");
+    let token =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|id| t.obj(*id).kind == ObjKind::Token)
+            .expect("token");
     assert_eq!(t.pt(token), (3, 2));
     assert_eq!(mv(&mut t, token), 3);
 }
@@ -206,10 +215,9 @@ fn otherwise_a_prototype_card_has_its_normal_characteristics() {
     cast_prototyped(&mut t);
     t.resolve_all();
     let blitz = t.named_on_battlefield(BLITZ)[0];
-    let hand = t
-        .g
-        .move_object(blitz, Zone::Hand(P0), MoveCause::Effect, None)
-        .unwrap();
+    let hand =
+        t.g.move_object(blitz, Zone::Hand(P0), MoveCause::Effect, None)
+            .unwrap();
     t.g.recompute();
     assert_eq!(t.obj(hand).chars.colors, ColorSet::NONE);
     assert_eq!(mv(&mut t, hand), 7);

@@ -143,8 +143,20 @@ fn the_station_ability_can_always_be_activated() {
     t.answer_choose(P0, &[Entity::Object(giant)]);
     t.activate(P0, rammer, 0, &[]).unwrap();
     assert!(t.obj(giant).tapped);
+    // Its power as the ability resolves counts: +2/+0 in response makes it 5.
+    run_effect(
+        &mut t,
+        P0,
+        None,
+        &[Entity::Object(giant)],
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::ModifyPT(Value::c(2), Value::c(0))],
+            duration: Duration::EndOfTurn,
+        },
+    );
     t.resolve_all();
-    assert_eq!(t.counters(rammer, counters::CHARGE), 3);
+    assert_eq!(t.counters(rammer, counters::CHARGE), 5);
     // With more counters than its last station symbol, it can still be activated.
     charge(&mut t, rammer, 20);
     let bears = t.battlefield(P0, "Grizzly Bears");

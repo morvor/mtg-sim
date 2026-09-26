@@ -716,15 +716,15 @@ impl Game {
                 })
                 .map(Entity::Object)
                 .collect(),
+            // Last known information: a melded or merged permanent's own, not its cards'
+            // (an effect that follows it to its new zone finds all of them, see
+            // `Game::resolve_sel`).
             Sel::TriggerLki => ctx
                 .event
                 .as_ref()
                 .and_then(|e| e.lki.or(e.object))
-                // CR 712.21c, 730.3c (see `Sel::TriggerObject`).
-                .map(|o| crate::merge::found_objects(self, o))
-                .into_iter()
-                .flatten()
                 .map(Entity::Object)
+                .into_iter()
                 .collect(),
             Sel::TriggerOtherObject => ctx
                 .event
