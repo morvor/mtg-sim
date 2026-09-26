@@ -2311,6 +2311,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::CantPlayLands(f)
         | Restriction::MaxDrawsPerTurn(f, _)
         | Restriction::MaxSpellsPerTurn(f, _) => Some(f),
+        Restriction::CantCast { who, .. } => Some(who),
         _ => None,
     }
 }
