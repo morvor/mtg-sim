@@ -445,11 +445,39 @@ pub fn ruling_citations() -> Vec<(String, String, String)> {
             .display()
             .to_string();
         for m in re.captures_iter(&text) {
-            out.push((
-                m[1].replace("\\\"", "\""),
-                m[2].replace("\\\"", "\""),
-                rel.clone(),
-            ));
+            out.push((unescape(&m[1]), unescape(&m[2]), rel.clone()));
+        }
+    }
+    out
+}
+
+/// The value of a Rust string literal's contents: `\"`, `\\`, `\n`, `\u{201c}`, and line
+/// continuations, as the `ruling!` macro sees them.
+fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match it.next() {
+            Some('u') if it.peek() == Some(&'{') => {
+                it.next();
+                let hex: String = it.by_ref().take_while(|&c| c != '}').collect();
+                if let Some(ch) = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+                    out.push(ch);
+                }
+            }
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('\n') => {
+                while it.peek().is_some_and(|c| c.is_whitespace()) {
+                    it.next();
+                }
+            }
+            Some(o) => out.push(o),
+            None => out.push('\\'),
         }
     }
     out
