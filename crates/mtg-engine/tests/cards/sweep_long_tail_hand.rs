@@ -35,7 +35,7 @@ fn last_choice_of(t: &TestGame, p: PlayerId) -> Vec<Entity> {
 
 #[test]
 fn sakura_tribe_scout_puts_a_land_without_playing_it() {
-    cr!("110.2a", "305.4");
+    cr!("305.4");
     assert_supported("Sakura-Tribe Scout");
     let mut t = TestGame::new(2);
     let scout = t.battlefield(P0, "Sakura-Tribe Scout");
@@ -61,7 +61,7 @@ fn sakura_tribe_scout_puts_a_land_without_playing_it() {
 
 #[test]
 fn sakura_tribe_scout_may_decline() {
-    cr!("110.2a");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     let scout = t.battlefield(P0, "Sakura-Tribe Scout");
     t.hand(P0, "Forest");
@@ -74,7 +74,7 @@ fn sakura_tribe_scout_may_decline() {
 
 #[test]
 fn arboreal_grazer_land_enters_tapped() {
-    cr!("110.2a");
+    cr!("110.5b");
     assert_supported("Arboreal Grazer");
     let mut t = TestGame::new(2);
     t.lands(P0, "Forest", 1);
@@ -147,7 +147,7 @@ fn braids_lets_each_player_put_a_card_on_their_upkeep() {
 
 #[test]
 fn sneak_attack_haste_then_sacrifice_at_end_step() {
-    cr!("110.2a", "603.7a");
+    cr!("603.7a");
     assert_supported("Sneak Attack");
     let mut t = TestGame::new(2);
     let sneak = t.battlefield(P0, "Sneak Attack");
@@ -221,4 +221,29 @@ fn purphoros_red_or_artifact_creature_card() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Bronze Sable"), "{}", t.dump_log());
+}
+
+#[test]
+fn braids_permanent_put_during_upkeep_misses_that_upkeeps_trigger() {
+    cr!("603.2");
+    ruling!(
+        "Braids, Conjurer Adept",
+        "it won't trigger during that upkeep"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Braids, Conjurer Adept");
+    let djinn = t.hand(P1, "Juzám Djinn");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(djinn)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Juzám Djinn").len(), 1, "{}", t.dump_log());
+    t.advance_to(P1, Step::Draw);
+    // "At the beginning of your upkeep" had already happened: no damage this turn.
+    assert_eq!(t.life(P1), 20, "{}", t.dump_log());
+    // It triggers on P1's next upkeep.
+    t.answer_yes(P1, false);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19, "{}", t.dump_log());
 }

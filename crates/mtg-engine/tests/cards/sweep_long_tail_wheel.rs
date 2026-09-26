@@ -103,3 +103,25 @@ fn colossus_of_the_blood_age_draws_that_many_plus_one() {
     assert_eq!(t.library_size(P0), lib - 3);
     assert_eq!(t.hand_size(P0), 4);
 }
+
+#[test]
+fn colossus_of_the_blood_age_may_discard_nothing_and_draw_one() {
+    cr!("107.1c", "608.2d");
+    ruling!(
+        "Colossus of the Blood Age",
+        "You may choose to discard no cards and just draw a card."
+    );
+    let mut t = TestGame::new(2);
+    let colossus = t.battlefield(P0, "Colossus of the Blood Age");
+    t.hand(P0, "Lightning Bolt");
+    t.lands(P0, "Swamp", 3);
+    let murder = t.hand(P0, "Murder");
+    t.cast(P0, murder).target(colossus).go();
+    let lib = t.library_size(P0);
+    t.answer_choose(P0, &[]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Colossus of the Blood Age"));
+    assert!(t.in_hand(P0, "Lightning Bolt"), "{}", t.dump_log());
+    assert_eq!(t.library_size(P0), lib - 1);
+    assert_eq!(t.hand_size(P0), 2);
+}

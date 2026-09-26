@@ -1,5 +1,6 @@
 //! Looking at another player's hand: "Look at target player's hand." (Gitaxian Probe,
-//! Telepathic Spies) — the cards aren't revealed (CR 701.20a) — and "Look at target
+//! Telepathic Spies) — the cards are shown only to the player looking, not revealed
+//! (CR 701.20e) — and "Look at target
 //! player's hand and choose X cards from it. That player discards those cards." (Mind
 //! Warp): the caster chooses, the player discards (CR 701.9b).
 
@@ -19,7 +20,7 @@ fn assert_supported(name: &str) {
 
 #[test]
 fn gitaxian_probe_looks_without_revealing_and_draws() {
-    cr!("701.20a");
+    cr!("701.20e");
     assert_supported("Gitaxian Probe");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
@@ -39,7 +40,7 @@ fn gitaxian_probe_looks_without_revealing_and_draws() {
 
 #[test]
 fn telepathic_spies_targets_an_opponent() {
-    cr!("701.20a");
+    cr!("701.20e", "115.1");
     assert_supported("Telepathic Spies");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 3);
@@ -62,6 +63,27 @@ fn telepathic_spies_targets_an_opponent() {
         .iter()
         .all(|c| c == &vec![Entity::Player(P1)]));
     assert!(t.dump_log().contains("looks at"), "{}", t.dump_log());
+    // Looked at, not revealed.
+    assert!(t.g.reveals.revealed.is_empty());
+}
+
+#[test]
+fn gitaxian_probe_with_an_empty_hand_still_draws() {
+    cr!("701.20e");
+    ruling!(
+        "Gitaxian Probe",
+        "The targeted player may have no cards in their hand. You'll still draw a card."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let probe = t.hand(P0, "Gitaxian Probe");
+    assert_eq!(t.hand_size(P1), 0);
+    let lib = t.library_size(P0);
+    t.cast(P0, probe).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Gitaxian Probe"));
+    assert_eq!(t.library_size(P0), lib - 1, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), 1);
 }
 
 #[test]
