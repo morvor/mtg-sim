@@ -3,7 +3,9 @@
 //! becomes monstrous", "whenever you clash", "If you win, ...", "as long as ~ is
 //! monstrous", "∞ — [ability]" (while harnessed), and "support N" as an instruction.
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
+};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
@@ -106,7 +108,10 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 inventory::submit! { TriggerPattern { name: "a701 player keyword action triggers", priority: 60, parse: player_action_trigger } }
 
 /// Replaces `Value::X` with `x` in any part of an ability.
-fn substitute_x<T: serde::Serialize + serde::de::DeserializeOwned>(t: &T, x: &Value) -> Option<T> {
+pub(crate) fn substitute_x<T: serde::Serialize + serde::de::DeserializeOwned>(
+    t: &T,
+    x: &Value,
+) -> Option<T> {
     fn subst(v: serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) -> serde_json::Value {
         use serde_json::Value as J;
         if &v == from {
@@ -162,7 +167,10 @@ fn designation_condition(c: &str) -> Option<Condition> {
     ] {
         for (subj, yes) in [
             (c.strip_suffix(&format!(" is {word}")), true),
+            (c.strip_suffix(&format!("'s {word}")), true),
             (c.strip_suffix(&format!(" isn't {word}")), false),
+            (c.strip_suffix(&format!(" is not {word}")), false),
+            (c.strip_suffix(&format!("'s not {word}")), false),
         ] {
             if let Some(s) = subj {
                 if s != "~" && s != "it" {
@@ -216,6 +224,28 @@ fn if_you_win(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "a701 if you win the clash", priority: 60, parse: if_you_win } }
+
+/// "If you won, that token gains haste": after an instruction that created a token, "that
+/// token" is the token it created.
+fn if_you_won_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !l.starts_with("if you win, ") && !l.starts_with("if you won, ") {
+        return false;
+    }
+    let created = serde_json::to_string(prev).is_ok_and(|j| j.contains("CreateToken"));
+    let saved = b.it.clone();
+    if created && l.contains("that token") {
+        b.it = Sel::Var(vars::CREATED);
+    }
+    let e = if_you_win(l, b);
+    b.it = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    *prev = Effect::seq(vec![prev.clone(), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a701 if you won the clash", priority: 60, apply: if_you_won_followup } }
 
 /// "support N" as an instruction (CR 701.41a): "put a +1/+1 counter on each of up to N
 /// other target creatures" (a permanent's ability) or "up to N target creatures" (an

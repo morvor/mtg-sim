@@ -3,7 +3,7 @@
 //! incubate, recruit, empower Jace, learn, discover, fateseal, clash, time travel, blight,
 //! harness, suspect, and detain.
 
-use super::{AbilityPattern, CostPattern, EffectPattern};
+use super::{AbilityPattern, CostPattern, EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::kwa::{kvars, Spec};
 use crate::oracle::effects::{object_ref, player_ref, Builder};
@@ -128,6 +128,15 @@ fn endure(l: &str, b: &mut Builder) -> Option<Effect> {
 /// populate, time travel, blight, clash.
 fn player_actions(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // "Whenever you discover, discover again for the same value."
+    if l == "discover again for the same value" {
+        return Some(keyword_action(
+            KeywordAction::Discover,
+            PlayerRef::You,
+            Sel::None,
+            Value::EventAmount,
+        ));
+    }
     let numbered: [(&str, KeywordAction); 6] = [
         ("bolster", KeywordAction::Bolster),
         ("incubate", KeywordAction::Incubate),
@@ -203,27 +212,64 @@ fn amass_then(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (first, rest) = l.split_once(", then ")?;
     let a = amass(first, b)?;
-    let rest = replace_amassed(rest)?;
-    let saved = b.it.clone();
-    b.it = Sel::Var(kvars::AMASSED);
-    let then = crate::oracle::effects::parse_clause(&rest, b);
-    b.it = saved;
-    Some(Effect::seq(vec![a, then?]))
+    let then = with_action_referent(rest, b)?;
+    Some(Effect::seq(vec![a, then]))
 }
 
-/// Replaces "the Army you amassed" / "the amassed Army" by pronouns (the builder's "it"
-/// is then the Army). None if the text doesn't mention it.
-fn replace_amassed(s: &str) -> Option<String> {
-    let mut out = s.to_string();
-    for (from, to) in [
-        ("the army you amassed's", "its"),
-        ("the amassed army's", "its"),
-        ("the army you amassed", "it"),
-        ("the amassed army", "it"),
-    ] {
-        out = out.replace(from, to);
+/// Objects keyword actions define for the instructions that follow them: "the Army you
+/// amassed" (CR 701.47c), "the discovered card" (CR 701.57c), "the blighted creature"
+/// (CR 701.68c).
+const ACTION_REFERENTS: [(&str, Var); 4] = [
+    ("the army you amassed", kvars::AMASSED),
+    ("the amassed army", kvars::AMASSED),
+    ("the discovered card", kvars::DISCOVERED),
+    ("the blighted creature", kvars::BLIGHTED),
+];
+
+/// Parses a clause that mentions one of the [`ACTION_REFERENTS`]: the phrase becomes a
+/// pronoun for the variable the keyword action set. None if the clause doesn't mention
+/// one.
+fn with_action_referent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (phrase, var) = ACTION_REFERENTS.iter().find(|(p, _)| l.contains(p))?;
+    let text = l
+        .replace(&format!("{phrase}'s"), "its")
+        .replace(phrase, "it");
+    let saved = b.it.clone();
+    b.it = Sel::Var(*var);
+    let e = crate::oracle::effects::parse_clause(&text, b);
+    b.it = saved;
+    e
+}
+
+fn action_referents(l: &str, b: &mut Builder) -> Option<Effect> {
+    with_action_referent(end(l), b)
+}
+
+/// "If the discovered card's mana value is less than N, [effect with 'the difference']"
+/// (CR 701.57c): only if there is a discovered card.
+fn discovered_mana_value(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if the discovered card's mana value is less than ")?;
+    let (n, rest) = r.split_once(", ")?;
+    let n = just_number(n)?;
+    let mv = Value::ManaValueOf(Box::new(Sel::Var(kvars::DISCOVERED)));
+    // "a number of [things] equal to the difference": N minus its mana value.
+    let text = rest
+        .replace("a number of ", "x ")
+        .replace(" equal to the difference", "");
+    if text == rest {
+        return None;
     }
-    (out != s).then_some(out)
+    let e = crate::oracle::effects::parse_clause(&text, b)?;
+    let diff = Value::Diff(Box::new(n.clone()), Box::new(mv.clone()));
+    let e = super::a701_action_triggers::substitute_x(&e, &diff)?;
+    Some(Effect::If {
+        cond: Condition::And(vec![
+            Condition::SelNonEmpty(Sel::Var(kvars::DISCOVERED)),
+            Condition::Compare(mv, Cmp::Lt, n),
+        ]),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
 }
 
 /// "harness ~" (CR 701.64).
@@ -255,6 +301,38 @@ fn suspect_detain(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(keyword_action(action, PlayerRef::You, what, Value::c(1)))
 }
 
+/// "[creatures] are no longer suspected", "it's no longer suspected" (CR 701.60a).
+fn no_longer_suspected(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let subject = l
+        .strip_suffix(" are no longer suspected")
+        .or_else(|| l.strip_suffix(" is no longer suspected"))
+        .or_else(|| l.strip_suffix("'s no longer suspected"))
+        .or_else(|| l.strip_suffix(" become no longer suspected"))?;
+    let subject = subject.strip_prefix("have ").unwrap_or(subject);
+    // "all suspected creatures".
+    let what = if let Some(r) = subject
+        .strip_prefix("all suspected ")
+        .or_else(|| subject.strip_prefix("each suspected "))
+    {
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        let suspected = Filter::Custom(SmolStr::new(crate::kwa::suspect_detain::SUSPECTED));
+        Sel::All(Filter::and(vec![f, suspected]))
+    } else {
+        let (what, rest) = object_ref(subject, b)?;
+        if !end(&rest).is_empty() {
+            return None;
+        }
+        what
+    };
+    let mut spec = Spec::new(KeywordAction::Suspect, PlayerRef::You, what, Value::c(1));
+    spec.undo = true;
+    Some(spec.effect())
+}
+
 /// "forage" and "collect evidence N" as instructions (CR 701.61, 701.59).
 fn forage_evidence(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
@@ -282,8 +360,23 @@ inventory::submit! { EffectPattern { name: "a701 player actions", priority: 60, 
 inventory::submit! { EffectPattern { name: "a701 adapt / monstrosity", priority: 60, parse: self_counters } }
 inventory::submit! { EffectPattern { name: "a701 amass", priority: 60, parse: amass } }
 inventory::submit! { EffectPattern { name: "a701 amass then", priority: 59, parse: amass_then } }
+inventory::submit! { EffectPattern { name: "a701 keyword action referents", priority: 50, parse: action_referents } }
+inventory::submit! { EffectPattern { name: "a701 discovered card's mana value", priority: 49, parse: discovered_mana_value } }
+
+/// The sentence after "Discover N." that checks the discovered card: parsed before the
+/// generic "if [condition], [effect]" handling, which would misread its condition.
+fn after_discover(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(e) = discovered_mana_value(l, b) else {
+        return false;
+    };
+    *prev = Effect::seq(vec![prev.clone(), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a701 discovered card's mana value", priority: 49, apply: after_discover } }
 inventory::submit! { EffectPattern { name: "a701 harness", priority: 60, parse: harness } }
 inventory::submit! { EffectPattern { name: "a701 suspect / detain", priority: 60, parse: suspect_detain } }
+inventory::submit! { EffectPattern { name: "a701 no longer suspected", priority: 60, parse: no_longer_suspected } }
 inventory::submit! { EffectPattern { name: "a701 forage / collect evidence", priority: 60, parse: forage_evidence } }
 
 /// "Support N." (CR 701.41a): on a permanent, "When this enters, put a +1/+1 counter on

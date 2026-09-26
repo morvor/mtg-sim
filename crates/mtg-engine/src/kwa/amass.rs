@@ -108,6 +108,9 @@ impl KeywordActionRules for Amass {
         for p in g.eval_players(a.who, ctx) {
             amass(g, p, &subtype, n, ctx);
         }
+        // A player amasses even if some or all of it was impossible (CR 701.47b): "When
+        // you do, ..." triggers.
+        ctx.prev_happened = true;
     }
 }
 

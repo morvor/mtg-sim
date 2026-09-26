@@ -50,6 +50,10 @@ pub struct Spec {
     /// choice (CR 701.55a), or the choices of a vote (CR 701.38a).
     #[serde(default)]
     pub options: Vec<(String, Effect)>,
+    /// The reverse of the action: a suspected creature becomes no longer suspected
+    /// (CR 701.60a).
+    #[serde(default)]
+    pub undo: bool,
 }
 
 impl Spec {
@@ -61,6 +65,7 @@ impl Spec {
             n,
             subtype: None,
             options: vec![],
+            undo: false,
         }
     }
     pub fn effect(self) -> Effect {

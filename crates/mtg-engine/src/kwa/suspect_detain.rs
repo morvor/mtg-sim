@@ -82,9 +82,17 @@ impl KeywordActionRules for Suspect {
         &[KeywordAction::Suspect]
     }
 
+    /// "Suspect [creatures]", or (`undo`) "[creatures] are no longer suspected".
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
+        let objs = g.resolve_objects(a.what, ctx);
+        if a.spec.is_some_and(|s| s.undo) {
+            for obj in objs {
+                unsuspect(g, obj);
+            }
+            return;
+        }
         let mut any = false;
-        for obj in g.resolve_objects(a.what, ctx) {
+        for obj in objs {
             any |= suspect(g, obj);
         }
         ctx.prev_happened = any;
