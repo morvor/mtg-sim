@@ -284,6 +284,9 @@ impl Game {
     }
 
     fn record_history(&mut self, ev: &Event) {
+        // CR 700.13: casting, activating, or putting on the stack a spell or ability that
+        // targets an opponent or something of theirs commits a crime.
+        crate::game_terms::check_crime(self, ev);
         match ev {
             Event::SpellCast { spell, player, .. } => {
                 self.history.spells_cast.push((*player, *spell))

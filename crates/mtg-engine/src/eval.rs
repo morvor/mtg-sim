@@ -492,12 +492,14 @@ impl Game {
                 .as_ref()
                 .is_some_and(|m| m.symbols.iter().any(|s| s.is_phyrexian())),
             Filter::Commander => o.is_commander,
+            // CR 700.9: counters, being equipped (by anyone's Equipment), or being
+            // enchanted by an Aura its controller controls.
             Filter::Modified => {
                 o.counters.values().any(|n| *n > 0)
                     || self.attachments_of(Entity::Object(id)).iter().any(|a| {
                         let ao = self.obj(*a);
-                        ao.controller == o.controller
-                            && (ao.chars.has_subtype("Equipment") || ao.chars.has_subtype("Aura"))
+                        ao.chars.has_subtype("Equipment")
+                            || (ao.controller == o.controller && ao.chars.has_subtype("Aura"))
                     })
             }
             Filter::DiedThisTurn => o
