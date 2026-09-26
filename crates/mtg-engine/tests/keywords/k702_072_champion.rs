@@ -71,6 +71,9 @@ fn champion_an_object_exiles_only_that_kind_of_permanent_you_control() {
     let changeling = t.battlefield(P0, "Woodland Changeling");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let their_elf = t.battlefield(P1, "Llanowar Elves");
+    // Only permanents: not an Elf card in the hand or graveyard.
+    let elf_card = t.hand(P0, "Llanowar Elves");
+    let dead_elf = t.graveyard(P0, "Llanowar Elves");
     // "Champion an Elf."
     t.answer_choose(P0, &[Entity::Object(elves)]);
     t.enter(P0, "Wren's Run Packmaster");
@@ -81,6 +84,8 @@ fn champion_an_object_exiles_only_that_kind_of_permanent_you_control() {
     assert!(offered.contains(&Entity::Object(changeling)));
     assert!(!offered.contains(&Entity::Object(bears)));
     assert!(!offered.contains(&Entity::Object(their_elf)));
+    assert!(!offered.contains(&Entity::Object(elf_card)));
+    assert!(!offered.contains(&Entity::Object(dead_elf)));
     assert_eq!(t.zone(elves), Zone::Exile);
 }
 

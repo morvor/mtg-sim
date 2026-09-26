@@ -63,7 +63,7 @@ fn fortify_can_be_activated_only_as_a_sorcery() {
 
 #[test]
 fn fortifications_follow_the_rules_for_fortifications() {
-    cr!("702.67b", "301.6");
+    cr!("702.67b");
     ruling!(
         "Darksteel Garrison",
         "If Darksteel Garrison and the fortified land would be destroyed at the same time, only Darksteel Garrison is destroyed."
