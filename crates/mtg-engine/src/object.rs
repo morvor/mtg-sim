@@ -422,6 +422,11 @@ pub struct GameObject {
     /// The "prepared" designation (CR 722.3a): the copy of its prepare spell in exile
     /// that its controller may cast (CR 722.3c).
     pub prepared: Option<ObjectId>,
+    /// Base power and toughness (CR 208.4b): its power and toughness after
+    /// characteristic-defining abilities and effects that set power and toughness
+    /// (layers 7a-7b), ignoring effects and counters that modify them without setting them.
+    #[serde(default)]
+    pub base_pt: (Option<i32>, Option<i32>),
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
@@ -516,6 +521,7 @@ impl GameObject {
             sector: None,
             paired_with: None,
             prepared: None,
+            base_pt: (None, None),
         }
     }
 
@@ -546,12 +552,24 @@ impl GameObject {
     pub fn toughness(&self) -> i32 {
         self.chars.toughness.unwrap_or(0)
     }
-    /// Loyalty of a planeswalker permanent = its loyalty counters (CR 306.5b).
+    /// Loyalty: a planeswalker permanent's loyalty is the number of loyalty counters on
+    /// it (CR 306.5b); anywhere else, it's the loyalty number printed on the card
+    /// (CR 209.1).
     pub fn loyalty(&self) -> i32 {
-        self.counter(crate::types::counters::LOYALTY) as i32
+        if self.zone == Zone::Battlefield {
+            self.counter(crate::types::counters::LOYALTY) as i32
+        } else {
+            self.chars.loyalty.unwrap_or(0)
+        }
     }
+    /// Defense: a battle permanent's defense is the number of defense counters on it
+    /// (CR 310.4c); anywhere else, it's the defense number printed on the card (CR 210.1).
     pub fn defense(&self) -> i32 {
-        self.counter(crate::types::counters::DEFENSE) as i32
+        if self.zone == Zone::Battlefield {
+            self.counter(crate::types::counters::DEFENSE) as i32
+        } else {
+            self.chars.defense.unwrap_or(0)
+        }
     }
     pub fn on_battlefield(&self) -> bool {
         self.zone == Zone::Battlefield

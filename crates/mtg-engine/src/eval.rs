@@ -404,6 +404,11 @@ impl Game {
             Filter::Toughness(cmp, v) => c
                 .toughness
                 .is_some_and(|t| cmp.eval(t as i64, self.eval_value(v, ctx))),
+            // CR 208.4b: compared with its power after layers 7a-7b only.
+            Filter::PowerVsBase(cmp) => match (c.power, o.base_pt.0) {
+                (Some(p), Some(b)) => cmp.eval(p as i64, b as i64),
+                _ => false,
+            },
             Filter::ManaValue(cmp, v) => {
                 // Uses the viewed characteristics' mana cost (CR 601.3e), with X on the
                 // stack (CR 107.3f) as in `mana_value_of`.
@@ -960,6 +965,11 @@ impl Game {
                 .map(|o| self.obj(*o).power() as i64)
                 .max()
                 .unwrap_or(0),
+            Value::BasePowerOf(s) => self
+                .eval_sel_objects(s, ctx)
+                .first()
+                .and_then(|o| self.obj(*o).base_pt.0)
+                .unwrap_or(0) as i64,
             Value::DistinctNames(f) => {
                 let objs = self.objects_matching(f, ctx);
                 crate::names::distinct_name_count(objs.iter().map(|o| &self.obj(*o).chars)) as i64

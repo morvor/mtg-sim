@@ -687,6 +687,16 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".
 fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
+    // "with power greater than its base power" (CR 208.4b).
+    for (p, cmp) in [
+        ("with power greater than its base power", Cmp::Gt),
+        ("each with power greater than its base power", Cmp::Gt),
+        ("with power different from its base power", Cmp::Ne),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            return Some((Filter::PowerVsBase(cmp), r));
+        }
+    }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
     } else if let Some(r) = t.strip_prefix("with toughness ") {

@@ -971,6 +971,9 @@ pub enum Filter {
     HadToAttack,
     Power(Cmp, Box<Value>),
     Toughness(Cmp, Box<Value>),
+    /// Its power compared with its base power ("with power greater than its base power",
+    /// CR 208.4b).
+    PowerVsBase(Cmp),
     ManaValue(Cmp, Box<Value>),
     /// Loyalty/defense comparisons.
     Loyalty(Cmp, Box<Value>),
@@ -1184,6 +1187,8 @@ pub enum Value {
     /// Greatest power among objects matching.
     GreatestPower(Filter),
     GreatestManaValue(Filter),
+    /// "its base power" (CR 208.4b): the base power of the first selected object.
+    BasePowerOf(Box<Sel>),
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),

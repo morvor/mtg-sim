@@ -579,6 +579,8 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     for (p, v) in [
         ("its power", Value::PowerOf(Box::new(b.it.clone()))),
+        // CR 208.4b
+        ("its base power", Value::BasePowerOf(Box::new(b.it.clone()))),
         ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
         ("~'s power", Value::PowerOf(Box::new(Sel::This))),
         ("~'s toughness", Value::ToughnessOf(Box::new(Sel::This))),

@@ -267,11 +267,14 @@ impl Game {
                 // counters and modifications apply to 0 (e.g. an equipped planeswalker
                 // that became a creature, CR 702.6e).
                 for id in &live {
-                    let c = &mut self.objects[id.0 as usize].chars;
-                    if c.is(CardType::Creature) {
-                        c.power.get_or_insert(0);
-                        c.toughness.get_or_insert(0);
+                    let o = &mut self.objects[id.0 as usize];
+                    if o.chars.is(CardType::Creature) {
+                        o.chars.power.get_or_insert(0);
+                        o.chars.toughness.get_or_insert(0);
                     }
+                    // CR 208.4b: base power and toughness are the values after layers
+                    // 7a and 7b, before modifications and counters.
+                    o.base_pt = (o.chars.power, o.chars.toughness);
                 }
                 self.apply_pt_counters(&live);
             }
