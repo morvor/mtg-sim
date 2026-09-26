@@ -4,7 +4,10 @@
 //! * "Each [quality] card in your graveyard has unearth [cost]." (CR 702.84a);
 //! * "Each creature card in your graveyard has scavenge. The scavenge cost is equal to its
 //!   mana cost." (CR 702.97a);
-//! * "Auras attached to permanents you control have umbra armor." (CR 702.89a).
+//! * "Auras attached to permanents you control have umbra armor." (CR 702.89a);
+//! * "[Quality] spells you cast [from your hand] have cascade." (CR 702.85a) and "As you
+//!   cascade, you may put a land card from among the exiled cards onto the battlefield
+//!   tapped." (CR 702.85b).
 
 use super::StaticPattern;
 use crate::ability::*;
@@ -96,3 +99,76 @@ fn auras_have_umbra_armor(l: &str, text: &str, _ctx: &CompileContext) -> Option<
 }
 
 inventory::submit! { StaticPattern { name: "auras attached to permanents you control have umbra armor", priority: 100, parse: auras_have_umbra_armor } }
+
+/// "As you cascade, you may put a land card from among the exiled cards onto the
+/// battlefield tapped." (Averna, the Chaos Bloom; CR 702.85b).
+fn as_you_cascade(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if l != "as you cascade, you may put a land card from among the exiled cards onto the battlefield tapped" {
+        return None;
+    }
+    let s = StaticAbility::new(StaticEffect::Custom(
+        crate::kw::cascade::AS_YOU_CASCADE_LAND.into(),
+    ));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "as you cascade, you may put a land card onto the battlefield", priority: 100, parse: as_you_cascade } }
+
+/// "Sliver spells you cast have cascade." (The First Sliver), "Instant and sorcery spells
+/// you cast from your hand have cascade." (Quandrix, the Proof), "Commander spells you
+/// cast have cascade." (Flamekin Herald), "Spells you cast with mana value 6 or greater
+/// have cascade." (Imoti): the spells have cascade as they're cast, so it triggers
+/// (CR 702.85a).
+fn spells_have_cascade(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_suffix(" have cascade")?;
+    let (subject, rest) = match r.strip_prefix("spells you cast") {
+        Some(rest) => ("", rest),
+        None => r.split_once(" spells you cast")?,
+    };
+    let mut parts: Vec<Filter> = Vec::new();
+    let rest = match rest.strip_prefix(" from your hand") {
+        Some(x) => {
+            parts.push(Filter::CastFrom(ZoneKind::Hand));
+            x
+        }
+        None => rest,
+    };
+    if let Some(n) = rest
+        .strip_prefix(" with mana value ")
+        .and_then(|x| x.strip_suffix(" or greater"))
+    {
+        let n: i32 = n.trim().parse().ok()?;
+        parts.push(Filter::ManaValue(Cmp::Ge, Box::new(Value::c(n))));
+    } else if !rest.is_empty() {
+        return None;
+    }
+    match subject {
+        "" => {}
+        "commander" => parts.push(Filter::Commander),
+        _ => {
+            let mut alts = Vec::new();
+            for word in subject.split(" and ") {
+                let phrase = format!("{word} card");
+                let (f, _, tail) = parse_object_phrase(&phrase)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                alts.push(f);
+            }
+            parts.push(if alts.len() == 1 {
+                alts.pop()?
+            } else {
+                Filter::Or(alts)
+            });
+        }
+    }
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    Some(grant(
+        Filter::and(parts),
+        Keyword::new(KeywordKind::Cascade).text("cascade"),
+        text,
+    ))
+}
+
+inventory::submit! { StaticPattern { name: "[quality] spells you cast have cascade", priority: 100, parse: spells_have_cascade } }
