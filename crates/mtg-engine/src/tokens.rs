@@ -47,6 +47,7 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
         rules_text: std::sync::Arc::from(""),
         all_creature_names: false,
         interchangeable_names: Default::default(),
+        all_creature_types: false,
     }
 }
 

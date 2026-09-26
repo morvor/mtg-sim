@@ -351,6 +351,10 @@ pub struct TurnHistory {
     pub descended: BTreeMap<PlayerId, u32>,
     /// Mana each player spent this turn to cast spells (CR 700.14, "expend").
     pub spell_mana_spent: BTreeMap<PlayerId, u32>,
+    /// Combat damage dealt to players this turn, with what its source was as it dealt
+    /// the damage (e.g. for prowl, CR 702.76a). Recorded by `kw/prowl.rs`.
+    #[serde(default)]
+    pub combat_damage_to_players: Vec<crate::kw::prowl::CombatDamageRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

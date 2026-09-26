@@ -12,7 +12,6 @@ use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
 use crate::types::*;
 use smallvec::SmallVec;
-use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -76,6 +75,32 @@ fn is_cant_have(m: &Modification) -> bool {
 /// modifications, which are applied at the end of layer 6).
 fn has_layer_mod(mods: &[Modification], layer: Layer) -> bool {
     mods.iter().any(|m| m.layer() == layer && !is_cant_have(m))
+}
+
+/// Whether the effect is an unconditional static ability affecting only its own source with
+/// type-changing modifications that don't depend on anything else (see
+/// `Game::pick_next_effect`).
+fn fixed_self_type_cda(e: &LayerEff, st: &LayerState) -> bool {
+    let Some(a) = st.abilities.get(&e.key) else {
+        return false;
+    };
+    let AbilityKind::Static(s) = &a.kind else {
+        return false;
+    };
+    let StaticEffect::Continuous { affected, mods } = &s.effect else {
+        return false;
+    };
+    s.condition.is_none()
+        && matches!(affected, Filter::Source)
+        && mods.iter().all(|m| {
+            matches!(
+                m,
+                Modification::AllCreatureTypes
+                    | Modification::AddTypes(_)
+                    | Modification::AddSubtypes(_)
+                    | Modification::AddSupertypes(_)
+            )
+        })
 }
 
 impl Game {
@@ -620,6 +645,13 @@ impl Game {
         // locked set of affected objects and fixed values (CR 611.2c, 608.2h), and keyword
         // counters exist regardless of other effects.
         if !effs.iter().any(|e| matches!(e.key, EffKey::Static(..))) {
+            return 0;
+        }
+        // A characteristic-defining ability that only gives its own object fixed types
+        // (changeling's "is every creature type") depends on no other characteristic-
+        // defining ability: the earliest such one applies first without the (costly)
+        // dependency analysis.
+        if layer == Layer::L4Type && effs[0].cda && fixed_self_type_cda(&effs[0], st) {
             return 0;
         }
         let mut dep = vec![vec![false; n]; n];
@@ -1295,6 +1327,9 @@ pub fn apply_mod(
             // Subtypes that no longer correspond to a card type are removed (CR 205.1b-ish).
             let types = c.card_types;
             c.subtypes.retain(|s| subtype_still_valid(s, types));
+            if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
+                c.all_creature_types = false;
+            }
         }
         Modification::AddSupertypes(ts) => {
             for t in ts {
@@ -1317,18 +1352,15 @@ pub fn apply_mod(
         Modification::SetTypes { types, subtypes } => {
             c.card_types = types.iter().copied().collect();
             c.subtypes = subtypes.iter().cloned().collect::<SmallVec<[Subtype; 3]>>();
+            c.all_creature_types = false;
         }
-        Modification::AllCreatureTypes => {
-            // Represented by adding the Changeling marker ability semantics: we add all
-            // creature types explicitly (CR 205.3m, 702.73a).
-            for s in &subtype_lists().creature {
-                let s = SmolStr::new(s);
-                if !c.subtypes.contains(&s) {
-                    c.subtypes.push(s);
-                }
-            }
+        // Every creature type (CR 205.3m, 702.73a), kept as a flag rather than a list of
+        // every creature type (see `Characteristics::has_subtype`).
+        Modification::AllCreatureTypes => c.all_creature_types = true,
+        Modification::RemoveAllCreatureTypes => {
+            c.subtypes.retain(|s| !is_creature_type(s));
+            c.all_creature_types = false;
         }
-        Modification::RemoveAllCreatureTypes => c.subtypes.retain(|s| !is_creature_type(s)),
         Modification::SetBasicLandType(ts) => {
             // CR 305.7: loses all land types and abilities from its rules text, gains the
             // basic land type(s) and their intrinsic mana abilities.

@@ -394,6 +394,8 @@ pub struct SpendContext {
     pub is_ability: bool,
     pub card_types: CardTypeSet,
     pub subtypes: Vec<Subtype>,
+    /// The spell is every creature type (changeling, CR 702.73a) besides `subtypes`.
+    pub all_creature_types: bool,
     pub has_x: bool,
     pub source: Option<ObjectId>,
     /// Mana types that may be spent as though they were mana of any color for this
@@ -409,7 +411,8 @@ impl ManaRestriction {
             ManaRestriction::SpellWithSubtype(s) => {
                 ctx.is_spell
                     && ctx.card_types.contains(CardType::Creature)
-                    && ctx.subtypes.iter().any(|x| x == s)
+                    && (ctx.subtypes.iter().any(|x| x == s)
+                        || (ctx.all_creature_types && crate::types::is_creature_type(s)))
             }
             ManaRestriction::SpellOfChosenType => false,
             ManaRestriction::SpellsOnly => ctx.is_spell,

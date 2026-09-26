@@ -245,6 +245,7 @@ impl CardDef {
                     rules_text: Arc::from(text.as_str()),
                     all_creature_names: false,
                     interchangeable_names: Default::default(),
+                    all_creature_types: false,
                 },
                 unsupported: compiled.unsupported,
                 star_power,

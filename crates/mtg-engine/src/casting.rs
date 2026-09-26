@@ -289,6 +289,11 @@ impl Game {
     fn card_has_land_face(&self, c: ObjectId) -> bool {
         let o = self.obj(c);
         o.chars.is_land()
+            // A face-down card outside the battlefield (e.g. exiled with hideaway) is
+            // played face up.
+            || (o.face_down
+                && o.zone != Zone::Battlefield
+                && self.face_characteristics(c, FaceState::Front).is_land())
             || o.card.as_ref().is_some_and(|d| {
                 d.layout == crate::card::Layout::ModalDfc
                     && d.faces.get(1).is_some_and(|f| f.chars.is_land())
@@ -1071,6 +1076,7 @@ impl Game {
             is_ability: false,
             card_types: chars.card_types,
             subtypes: chars.subtypes.to_vec(),
+            all_creature_types: crate::kw::changeling::every_creature_type(&chars),
             has_x: base_cost_has_x,
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),

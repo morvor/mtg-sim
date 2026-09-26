@@ -4,7 +4,6 @@
 
 use crate::ability::*;
 use crate::game::Game;
-use crate::keywords::KeywordKind;
 use crate::object::*;
 use crate::types::*;
 use serde::{Deserialize, Serialize};
@@ -348,7 +347,7 @@ impl Game {
                     || (is_creature_type(s)
                         && (c.card_types.contains(CardType::Creature)
                             || c.card_types.contains(CardType::Kindred))
-                        && c.has_keyword(KeywordKind::Changeling))
+                        && crate::kw::changeling::every_creature_type_by_keyword(c))
             }
             Filter::Color(col) => c.colors.contains(*col),
             Filter::ExactColors(cs) => c.colors == *cs,
@@ -435,13 +434,15 @@ impl Game {
                 .filter_map(|e| e.object())
                 .any(|x| {
                     let other = &self.obj(x).chars;
+                    let every = crate::kw::changeling::every_creature_type;
+                    let any_type = |x: &Characteristics| {
+                        every(x) || x.subtypes.iter().any(|s| is_creature_type(s))
+                    };
                     c.subtypes
                         .iter()
                         .any(|s| is_creature_type(s) && other.has_subtype(s))
-                        || (c.has_keyword(KeywordKind::Changeling)
-                            && other.subtypes.iter().any(|s| is_creature_type(s)))
-                        || (other.has_keyword(KeywordKind::Changeling)
-                            && c.subtypes.iter().any(|s| is_creature_type(s)))
+                        || (every(c) && any_type(other))
+                        || (every(other) && any_type(c))
                 }),
             Filter::SharesCardType(sel) => self
                 .eval_sel(sel, ctx)
