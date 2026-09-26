@@ -44,6 +44,7 @@ pub mod deck;
 pub mod designations;
 pub mod dfc;
 pub mod dice;
+pub mod discard_rules;
 pub mod draw_rules;
 pub mod dungeons;
 pub mod eval;

@@ -30,6 +30,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::game_terms::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "If an effect causes you to discard a card" (CR 701.9).
+    if let Some(b) = crate::discard_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
