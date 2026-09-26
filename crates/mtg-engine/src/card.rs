@@ -152,7 +152,14 @@ impl CardDef {
                 self.faces[i as usize].chars.clone()
             }
             (Layout::Flip, FaceState::Flipped) if self.faces.len() > 1 => {
-                self.faces[1].chars.clone()
+                // CR 710.1b, 710.2: the alternative name, text box, type line, power and
+                // toughness; CR 710.1c: its color and mana cost don't change.
+                let front = &self.faces[0].chars;
+                let mut c = self.faces[1].chars.clone();
+                c.mana_cost = front.mana_cost.clone();
+                c.colors = front.colors;
+                c.color_indicator = front.color_indicator;
+                c
             }
             (Layout::Split, FaceState::Front) | (Layout::Split, FaceState::Fused)
                 if self.faces.len() > 1 =>
