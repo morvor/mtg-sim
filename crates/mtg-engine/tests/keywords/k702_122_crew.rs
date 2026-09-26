@@ -30,6 +30,10 @@ fn crew_makes_the_vehicle_an_artifact_creature_until_end_of_turn() {
         "Smuggler's Copter",
         "Any untapped creature you control can be tapped to pay a crew cost, even one that just came under your control."
     );
+    ruling!(
+        "Smuggler's Copter",
+        "Each Vehicle is printed with a power and toughness, but it's not a creature. If it becomes a creature (most likely through its crew ability), it will have that power and toughness."
+    );
     assert_supported_card("Smuggler's Copter");
     let mut t = TestGame::new(2);
     // Smuggler's Copter: 3/3 flying Vehicle, crew 1.
@@ -53,6 +57,74 @@ fn crew_makes_the_vehicle_an_artifact_creature_until_end_of_turn() {
     // Until end of turn.
     t.advance_to(P1, Step::Upkeep);
     assert!(!is_creature(&t, copter));
+}
+
+#[test]
+fn a_crewed_vehicle_is_an_ordinary_artifact_creature() {
+    cr!("702.122a");
+    ruling!(
+        "Smuggler's Copter",
+        "Vehicle is an artifact type, not a creature type. A Vehicle that's crewed won't normally have any creature type."
+    );
+    ruling!(
+        "Smuggler's Copter",
+        "When a Vehicle becomes a creature, that doesn't count as having a creature enter the battlefield."
+    );
+    ruling!(
+        "Smuggler's Copter",
+        "It can't attack unless you've controlled it continuously since your turn began"
+    );
+    ruling!(
+        "Smuggler's Copter",
+        "Creatures that crew a Vehicle aren't attached to it or related in any other way."
+    );
+    let mut t = TestGame::new(2);
+    // Soul Warden: "Whenever another creature enters, you gain 1 life."
+    t.battlefield(P0, "Soul Warden");
+    let copter = t.battlefield_sick(P0, "Smuggler's Copter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(crew(&mut t, P0, copter, &[bears]));
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    let o = t.obj_now(copter);
+    assert!(!o
+        .chars
+        .subtypes
+        .iter()
+        .any(|s| mtg_engine::types::is_creature_type(s)));
+    // It came under its controller's control this turn: it can't attack.
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!mtg_engine::combat::attack_options(&t.g)
+        .iter()
+        .any(|(c, _)| *c == copter));
+    // Destroying the Vehicle doesn't affect the creature that crewed it.
+    t.g.destroy(copter, None);
+    t.settle();
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
+fn a_copy_of_a_crewed_vehicle_isnt_a_creature() {
+    cr!("702.122a");
+    ruling!(
+        "Smuggler's Copter",
+        "If a permanent becomes a copy of a Vehicle, the copy won't be a creature, even if the Vehicle it's copying has become an artifact creature."
+    );
+    let mut t = TestGame::new(2);
+    let copter = t.battlefield(P0, "Smuggler's Copter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(crew(&mut t, P0, copter, &[bears]));
+    t.resolve_all();
+    // Clone may enter as a copy of any creature: the crewed Copter.
+    t.lands(P0, "Island", 4);
+    let clone = t.hand(P0, "Clone");
+    t.cast(P0, clone).go();
+    t.answer_choose(P0, &[Entity::Object(copter)]);
+    t.resolve_all();
+    let copy = t.g.current(clone);
+    assert_eq!(t.obj(copy).chars.name, "Smuggler's Copter");
+    assert!(!is_creature(&t, copy));
+    assert!(t.obj(copy).is(CardType::Artifact));
 }
 
 #[test]
