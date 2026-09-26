@@ -1,5 +1,8 @@
 //! Oracle text that goes with the keywords of CR 702.125–702.139:
 //!
+//! * embalm (CR 702.128b): "You may have ~ enter as a copy of any creature on the
+//!   battlefield, except if ~ was embalmed, the token has no mana cost, it's white, and
+//!   it's a Zombie in addition to its other types.";
 //! * mentor (CR 702.134c): "whenever ~ mentors a creature", "whenever equipped creature
 //!   mentors a creature";
 //! * spectacle (CR 702.137a): "if its spectacle cost was paid";
@@ -226,3 +229,87 @@ fn graveyard_cards_have_escape(l: &str, text: &str, _ctx: &CompileContext) -> Op
 }
 
 inventory::submit! { StaticPattern { name: "k702.138 each card in your graveyard has escape", priority: 100, parse: graveyard_cards_have_escape } }
+
+// ---------------------------------------------------------------------------
+// Embalm (CR 702.128)
+// ---------------------------------------------------------------------------
+
+/// "You may have ~ enter as a copy of any creature on the battlefield, except if ~ was
+/// embalmed, the token has no mana cost, it's white, and it's a Zombie in addition to its
+/// other types." (Vizier of Many Faces): the exceptions apply only if the entering
+/// permanent is an embalmed token (CR 702.128b, 707.9f).
+fn enter_as_copy_if_embalmed(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let r = end(&lower).strip_prefix("you may have ~ enter as a copy of ")?;
+    let (what, exc) = r.split_once(", except if ~ was embalmed, ")?;
+    let what = what.strip_prefix("any ")?;
+    let what = what.strip_suffix(" on the battlefield").unwrap_or(what);
+    let (filter, _, tail) = parse_object_phrase(what)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let mut mods = Vec::new();
+    for part in exc.replace(", and ", ", ").split(", ") {
+        let part = part.trim();
+        let part = part
+            .strip_prefix("the token ")
+            .map(|p| format!("it {p}"))
+            .unwrap_or_else(|| part.to_string());
+        match part.as_str() {
+            "it has no mana cost" => mods.push(Modification::NoManaCost),
+            _ => {
+                if let Some(c) = part
+                    .strip_prefix("it's ")
+                    .and_then(|c| crate::types::Color::from_word(c))
+                {
+                    mods.push(Modification::SetColors(crate::types::ColorSet::single(c)));
+                } else if let Some(t) = part
+                    .strip_prefix("it's a ")
+                    .and_then(|t| t.strip_suffix(" in addition to its other types"))
+                {
+                    let st = crate::oracle::phrases::subtype_word(t)?;
+                    mods.push(Modification::AddSubtypes(vec![st]));
+                } else {
+                    return None;
+                }
+            }
+        }
+    }
+    let rep = |action, self_replacement| {
+        AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+                ReplacementDef {
+                    event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                    action,
+                    self_replacement,
+                    optional: false,
+                },
+            ))),
+            block,
+        )
+    };
+    Some(vec![
+        rep(
+            ReplacementAction::EnterAsCopy {
+                filter,
+                optional: true,
+            },
+            false,
+        ),
+        rep(
+            ReplacementAction::AsEnters(Box::new(Effect::If {
+                cond: Condition::Custom(SmolStr::new(crate::kw::embalm::EMBALMED)),
+                then: Box::new(Effect::EnterCopyExceptions(mods)),
+                otherwise: Box::new(Effect::Noop),
+            })),
+            // Applied first, while the entering permanent still has this ability; the
+            // exceptions belong to the copy effect it then enters with.
+            true,
+        ),
+    ])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.128 enter as a copy, except if ~ was embalmed", priority: 90, parse: enter_as_copy_if_embalmed } }

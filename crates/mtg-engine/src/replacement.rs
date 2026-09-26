@@ -25,6 +25,12 @@ pub struct EtbInfo {
     /// Enters as a copy of this object's copiable values (CR 707.9).
     pub copy_of: Option<ObjectId>,
     pub copy_exceptions: Vec<Modification>,
+    /// The part of `copy_exceptions` that the entering permanent's own "enter as a copy
+    /// of ..., except ..." abilities added (as self-replacement effects applied before the
+    /// copy is chosen, CR 707.9b): exceptions of the copy effect its enter-as-copy
+    /// replacement creates, which stay when that copy effect replaces the one it would
+    /// have entered with (e.g. an embalmed token copy, CR 702.128b).
+    pub own_copy_exceptions: Vec<Modification>,
     /// Parts of the copy effect's exception that are additional effects, conditional, or
     /// linked triggered abilities (CR 707.9e–707.9g).
     pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
@@ -1036,6 +1042,7 @@ impl Game {
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
+                    m.etb.own_copy_exceptions.extend(em.copy_exceptions.iter().cloned());
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
                     m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
@@ -1080,8 +1087,9 @@ impl Game {
                     if m.etb.copy_of.is_some() {
                         // CR 707.9e, 707.9g: another copy effect is applied after the one
                         // it would have entered with: that one's exceptions (and linked
-                        // triggered abilities) don't happen.
-                        m.etb.copy_exceptions.clear();
+                        // triggered abilities) don't happen; the exceptions of this one
+                        // do.
+                        m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
                         m.etb.copy_extras.clear();
                     }
                     m.etb.copy_of = Some(*o);
