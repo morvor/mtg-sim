@@ -365,6 +365,28 @@ fn apply_mana_replacement(d: &ReplacementDef, types: &[ManaType]) -> Vec<ManaTyp
     }
 }
 
+/// The units of mana `perm` makes when tapped for mana (CR 106.12b), given the units its
+/// ability would make: the replacements are applied in timestamp order, the order a
+/// payment uses when the player doesn't choose another (CR 616.1).
+fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Vec<ManaType>> {
+    produce_mana_replacements(g, perm)
+        .iter()
+        .fold(units, |units, (_, _, d)| match &d.action {
+            ReplacementAction::Multiply(k) => units
+                .iter()
+                .flat_map(|u| std::iter::repeat_n(u.clone(), (*k).max(0) as usize))
+                .collect(),
+            ReplacementAction::Instead(e) => match &**e {
+                Effect::AddMana {
+                    mana: ManaProduction::Fixed(v),
+                    ..
+                } => v.iter().map(|t| vec![*t]).collect(),
+                _ => units,
+            },
+            _ => units,
+        })
+}
+
 /// Union of the types produced after applying the replacements in every possible order
 /// (for "could produce", CR 106.7).
 fn replaced_types_any_order(g: &Game, perm: ObjectId, types: &[ManaType]) -> Vec<ManaType> {
@@ -935,9 +957,12 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             let mut ctx = Ctx::new(Some(o.id), p);
             ctx.link = a.link;
             if let Some(mut units) = production_units(g, &act.body.effect, &ctx) {
-                // CR 605.4a: triggered mana abilities that trigger on tapping it for mana
-                // add their mana right away, so they help pay too.
                 if act.cost.has_tap() && !units.is_empty() {
+                    // CR 106.12b: replacement effects that apply when it's tapped for mana
+                    // change what it makes ("it produces {B} instead").
+                    units = replaced_units(g, o.id, units);
+                    // CR 605.4a: triggered mana abilities that trigger on tapping it for
+                    // mana add their mana right away, so they help pay too.
                     let extra = triggered_mana_units(g, p, o.id, &units);
                     units.extend(extra);
                 }
@@ -1257,9 +1282,7 @@ impl<'a> Planner<'a> {
     /// abilities already being activated, then units of other abilities (the less
     /// flexible first; [`mana_sources`] orders the abilities).
     fn candidates(&self) -> Vec<usize> {
-        let mut cands: Vec<usize> = (0..self.units.len())
-            .filter(|&u| self.usable(u))
-            .collect();
+        let mut cands: Vec<usize> = (0..self.units.len()).filter(|&u| self.usable(u)).collect();
         cands.sort_by_key(|&u| {
             let unit = &self.units[u];
             let source_in_use = unit.source.is_some_and(|s| self.in_use[s] > 0);
@@ -1298,7 +1321,11 @@ impl<'a> Planner<'a> {
             .filter(|&u| self.units[u].source.is_none() && self.open(u) && f(&self.units[u]))
             .count();
         let lone: usize = self.lone_sources.iter().map(|&s| free(s)).sum();
-        let grouped: usize = self.groups.iter().map(|gr| self.best_in_group(gr, &free)).sum();
+        let grouped: usize = self
+            .groups
+            .iter()
+            .map(|gr| self.best_in_group(gr, &free))
+            .sum();
         pool + lone + grouped
     }
 
