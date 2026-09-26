@@ -4,10 +4,8 @@
 use crate::ability::*;
 use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
-use crate::events::{Event, MoveCause};
+use crate::events::Event;
 use crate::game::Game;
-use crate::object::*;
-use crate::replacement::*;
 use crate::types::*;
 
 /// Top `n` cards of a library, top first.
@@ -50,81 +48,26 @@ fn to_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
 }
 
 /// CR 701.22a: look at the top N cards, put any number on the bottom in any order and
-/// the rest on top in any order.
+/// the rest on top in any order. See [`crate::scry_rules`].
 pub fn scry(g: &mut Game, p: PlayerId, n: u32) {
-    if n == 0 {
-        return;
-    }
-    let cards = top_cards(g, p, n);
-    if cards.is_empty() {
-        return;
-    }
-    let (top, bottom) = match g.ask(
-        p,
-        Decision::Scry {
-            cards: cards.clone(),
-        },
-    ) {
-        Answer::Split(t, b) if split_ok(&cards, &t, &b) => (t, b),
-        _ => (cards.clone(), vec![]),
-    };
-    set_top(g, p, &top);
-    to_bottom(g, p, &bottom);
-    g.emit(Event::Custom {
-        name: "scry".into(),
-        player: Some(p),
-        obj: None,
-        amount: n as i32,
-    });
+    crate::scry_rules::perform(g, &[p], n, crate::scry_rules::Look::Scry, None);
 }
 
 /// CR 701.25a: look at the top N cards, put any number into the graveyard and the rest
-/// on top in any order.
+/// on top in any order. See [`crate::scry_rules`].
 pub fn surveil(g: &mut Game, p: PlayerId, n: u32) {
-    if n == 0 {
-        return;
-    }
-    let cards = top_cards(g, p, n);
-    if cards.is_empty() {
-        return;
-    }
-    let (top, gy) = match g.ask(
-        p,
-        Decision::Surveil {
-            cards: cards.clone(),
-        },
-    ) {
-        Answer::Split(t, b) if split_ok(&cards, &t, &b) => (t, b),
-        _ => (cards.clone(), vec![]),
-    };
-    set_top(g, p, &top);
-    let moves = gy
-        .iter()
-        .map(|c| MoveEv {
-            obj: *c,
-            to: Zone::Graveyard(p),
-            pos: LibraryPosition::Top,
-            cause: MoveCause::Effect,
-            by: Some(p),
-            etb: EtbInfo::default(),
-            source: None,
-        })
-        .collect();
-    g.move_objects(moves);
-    g.emit(Event::Custom {
-        name: "surveil".into(),
-        player: Some(p),
-        obj: None,
-        amount: n as i32,
-    });
+    crate::scry_rules::perform(g, &[p], n, crate::scry_rules::Look::Surveil, None);
 }
 
-fn split_ok(all: &[ObjectId], a: &[ObjectId], b: &[ObjectId]) -> bool {
-    let mut v: Vec<ObjectId> = a.iter().chain(b.iter()).copied().collect();
-    v.sort();
-    let mut w = all.to_vec();
-    w.sort();
-    v == w
+/// Puts cards already in `p`'s library on the bottom of it, the first one lowest. Cards
+/// not in that library are ignored.
+pub fn put_on_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
+    let cards: Vec<ObjectId> = cards
+        .iter()
+        .copied()
+        .filter(|c| g.player(p).library.contains(c))
+        .collect();
+    to_bottom(g, p, &cards);
 }
 
 /// Searches `owner`'s library for up to `n` cards matching `filter` (CR 701.23). The

@@ -264,6 +264,7 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
     let (to, shuffle) = if let Some(x) = t
         .strip_prefix(", then shuffle and put that card on top")
         .or_else(|| t.strip_prefix(" then shuffle and put that card on top"))
+        .or_else(|| t.strip_prefix(", then shuffle and put the card on top"))
     {
         if !x.is_empty() {
             return None;

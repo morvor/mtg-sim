@@ -1170,16 +1170,17 @@ impl Game {
                 }
             }
             Effect::Scry { who, n } => {
+                // CR 701.22c: players scrying at once do so at the same time.
                 let k = self.eval_value(n, ctx).max(0) as u32;
-                for p in self.eval_players(who, ctx) {
-                    crate::library::scry(self, p, k);
-                }
+                let players = self.eval_players(who, ctx);
+                let look = crate::scry_rules::Look::Scry;
+                crate::scry_rules::perform(self, &players, k, look, ctx.source);
             }
             Effect::Surveil { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
-                for p in self.eval_players(who, ctx) {
-                    crate::library::surveil(self, p, k);
-                }
+                let players = self.eval_players(who, ctx);
+                let look = crate::scry_rules::Look::Surveil;
+                crate::scry_rules::perform(self, &players, k, look, ctx.source);
             }
             Effect::Search {
                 who,

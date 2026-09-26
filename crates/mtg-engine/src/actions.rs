@@ -126,6 +126,8 @@ impl Game {
         // CR 401.4, 404.3: the owner arranges cards put into a library position or a
         // graveyard at the same time.
         crate::zones::order_simultaneous(self, &mut finals);
+        // CR 701.24g: a position in a library that's shuffled at the same time.
+        crate::shuffle_rules::positions_after_shuffles(self, &mut finals);
         // Look back in time for leaves-the-battlefield triggers and other zone-change
         // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
         // the stack, or a public object being put into a hand or library.

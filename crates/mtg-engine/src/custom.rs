@@ -408,6 +408,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::game_terms::custom_effect(g, name, ctx) {
         return;
     }
+    // "Each player may scry 1" (CR 701.22c).
+    if crate::scry_rules::custom_effect(g, name, ctx) {
+        return;
+    }
     // "named-token:N:Name": create N tokens by name (CR 111.11).
     if let Some(spec) = name.strip_prefix("named-token:") {
         crate::tokens::create_named_tokens(g, spec, ctx);
