@@ -1,6 +1,7 @@
 //! Oracle text of the keywords of CR 702.98–702.110 that the generic keyword parser
 //! doesn't handle, and phrases that go with them:
 //!
+//! * "Whenever ~ evolves" (CR 702.100b);
 //! * "if it's attacking the player with the most life or tied for most life" (CR 702.105a);
 //! * "Whenever you activate ~'s outlast ability" (CR 702.107a);
 //! * "When ~ exploits a creature", "Whenever a creature you control exploits a [quality]
@@ -9,6 +10,19 @@
 use super::{ConditionPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::phrases::{end, parse_object_phrase};
+
+/// "Whenever ~ evolves" (Renegade Krasis, Watchful Radstag; CR 702.100b).
+fn evolves(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (r == "~ evolves").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::evolve::EVOLVES.into()),
+            Sel::This,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "~ evolves", priority: 100, parse: evolves } }
 
 /// "if it's attacking the player with the most life or tied for most life" (Scourge of the
 /// Throne; the dethrone condition, CR 702.105a).
