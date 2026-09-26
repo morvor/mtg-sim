@@ -510,7 +510,12 @@ impl Game {
             // {2}, CR 708.4).
             return crate::facedown::face_down_spell_characteristics(k);
         }
-        self.face_characteristics(card, opt.face)
+        let mut c = self.face_characteristics(card, opt.face);
+        // Text changes the way it's cast makes (e.g. overload, CR 702.96c).
+        if let Some(tag) = opt.tag {
+            crate::kw::apply_spell_text_changes(self, card, &[tag.into()], &mut c);
+        }
+        c
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
@@ -956,6 +961,9 @@ impl Game {
                 }
             }
         }
+        // CR 601.2b: the spell's own optional additional costs and choices between
+        // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
+        crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
         // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
         crate::kw::kicker::record_kicked(&mut cast_info.paid);
@@ -1080,6 +1088,7 @@ impl Game {
             has_x: base_cost_has_x,
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),
+            check_only: false,
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -1200,8 +1209,11 @@ impl Game {
                             CostChange::ReduceMana { mana, colored_only } => {
                                 mana_reductions.push((mana.clone(), *colored_only))
                             }
+                            // Announced as the spell is cast (see `cost_choices`).
                             CostChange::AlternativeCost(_)
-                            | CostChange::FlashForAdditionalCost(_) => {}
+                            | CostChange::FlashForAdditionalCost(_)
+                            | CostChange::OptionalAdditionalCost { .. }
+                            | CostChange::AdditionalCostChoice(_) => {}
                         }
                     }
                 }
@@ -1238,7 +1250,10 @@ impl Game {
                     mana_reductions.push((mana.clone(), *colored_only))
                 }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::AlternativeCost(_) | CostChange::FlashForAdditionalCost(_) => {}
+                CostChange::AlternativeCost(_)
+                | CostChange::FlashForAdditionalCost(_)
+                | CostChange::OptionalAdditionalCost { .. }
+                | CostChange::AdditionalCostChoice(_) => {}
             }
         }
         for (n, color) in reductions {
@@ -1777,6 +1792,7 @@ impl Game {
                         v
                     })
                     .unwrap_or_default(),
+                check_only: true,
                 ..Default::default()
             };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
@@ -1799,8 +1815,10 @@ impl Game {
         let mut cost = cost.clone();
         crate::cost_rules::choose_payment_ways(self, p, src, &mut cost);
         let cost = &cost;
+        // Paying a cost while a spell or ability resolves (or an attack tax, or turning a
+        // permanent face up) isn't casting a spell or activating an ability: mana that may
+        // be spent only on those can't pay it (CR 106.6).
         let spend = SpendContext {
-            is_ability: true,
             source: src,
             ..Default::default()
         };
@@ -2322,6 +2340,8 @@ impl Game {
                     })
                     .collect();
                 let pick = self.ask_objects(p, src, "Choose cards to reveal (cost)", cands, n, n);
+                // CR 701.20a: revealed until the spell or ability leaves the stack.
+                crate::reveal::reveal_in(self, p, &pick, Some(ctx));
                 paid.objects.extend(pick);
             }
             CostPart::ExertSelf => {

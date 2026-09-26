@@ -123,7 +123,7 @@ pub fn optional_additional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cos
     crate::kw::optional_costs(g, spell)
 }
 
-/// Lets keywords adjust the spell's targets/effect as cast (overload, bestow, ...).
+/// Lets keywords adjust the spell's targets/effect as cast (entwine, mutate, ...).
 pub fn adjust_spell_body(g: &Game, id: ObjectId, body: Body) -> Body {
     crate::kw::adjust_spell_body(g, id, body)
 }
@@ -162,6 +162,12 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
     // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
+}
+
+/// After a resolved instant/sorcery was put where it goes (`new`), e.g. rebound's delayed
+/// triggered ability (CR 702.88a).
+pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {
+    crate::kw::after_spell_resolved(g, id, new);
 }
 
 /// Where a countered spell (or one that fails to resolve) goes.

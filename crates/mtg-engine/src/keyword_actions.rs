@@ -50,6 +50,13 @@ pub fn perform(
                 crate::keyword_actions_impl::proliferate(g, p, ctx);
             }
         }
+        // CR 701.4a: behold a [quality].
+        KeywordAction::Behold => {
+            let quality = crate::behold::quality(what);
+            for p in players {
+                crate::behold::behold(g, p, &quality, k.max(1), ctx);
+            }
+        }
         other => crate::keyword_actions_impl::perform(g, other, &players, &objs, k, ctx),
     }
 }

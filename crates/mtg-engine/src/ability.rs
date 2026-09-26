@@ -1577,6 +1577,9 @@ pub enum ManaProduction {
     AnyOneColor(Value),
     /// N mana in any combination of colors.
     AnyCombination(Value),
+    /// N mana in any combination of the listed types ("three mana in any combination of
+    /// {R} and/or {G}"): each mana is one of them, chosen separately.
+    CombinationOf(Vec<ManaType>, Value),
     /// One mana of one of the listed types (chosen).
     OneOf(Vec<ManaType>),
     /// One mana of any type that a permanent matching the filter could produce
@@ -1606,6 +1609,10 @@ pub enum ManaProduction {
     /// One mana of any type the triggering mana ability produced ("add one mana of any
     /// type that land produced", CR 106.12a).
     TypeProduced,
+    /// One mana of any color in the controller's commander's color identity (CR 903.4,
+    /// 702.124c: the combined identities of their commanders). Undefined without a
+    /// commander, so no mana is added (CR 903.4f).
+    CommanderIdentity,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -1662,6 +1669,11 @@ pub enum ReplacementEvent {
     },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
+    /// One or more tokens with the characteristics described by `tokens` would be created
+    /// under a player's control ("If one or more creature tokens would be created ...").
+    /// The tokens' characteristics are those they're created with, before any continuous
+    /// effects apply to them (CR 701.7b; see `create_rules.rs`).
+    CreateTokensMatching { who: PlayerFilter, tokens: Filter },
     /// A permanent would be destroyed.
     Destroy(Filter),
     /// Would lose the game.
@@ -1964,6 +1976,14 @@ pub enum CostChange {
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),
+    /// "As an additional cost to cast this spell, you may [cost]": an optional additional
+    /// cost announced as the spell is cast (CR 601.2b), recorded as `name` in the spell's
+    /// `CastInfo::paid` if it's paid (see `cost_choices.rs`).
+    OptionalAdditionalCost { name: SmolStr, cost: Cost },
+    /// "As an additional cost to cast this spell, [cost] or [cost]": the player chooses
+    /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
+    /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
+    AdditionalCostChoice(Vec<(SmolStr, Cost)>),
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -2837,6 +2857,10 @@ pub enum Effect {
         spell_filter: Filter,
         body: Box<Body>,
     },
+    /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
+    /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
+    /// step ends (the effect ends in CR 514.2).
+    PersistentMana(Box<Effect>),
     /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
     /// 716.2a).
     SetClassLevel {
@@ -3099,6 +3123,10 @@ pub enum Effect {
     RollDice(Box<crate::dice::DieRoll>),
     /// "Flip a coin. If you win the flip, ..." (CR 705).
     FlipCoins(Box<crate::dice::CoinFlip>),
+    /// Separating objects into two piles, or choosing one of them (CR 700.3).
+    Piles(Box<crate::piles::PileAction>),
+    /// Exchanging numerical values or the contents of zones (CR 701.12d, 701.12g).
+    Exchange(Box<crate::exchange::ExchangeSpec>),
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
 }

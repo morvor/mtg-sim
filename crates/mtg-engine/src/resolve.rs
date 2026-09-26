@@ -370,7 +370,9 @@ impl Game {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;
                     if a == b {
-                        self.deal_damage_batch(vec![(a, Entity::Object(a), pa)], false);
+                        // CR 701.14c: a creature that fights itself deals damage to itself
+                        // equal to twice its power.
+                        self.deal_damage_batch(vec![(a, Entity::Object(a), 2 * pa)], false);
                     } else {
                         self.deal_damage_batch(
                             vec![(a, Entity::Object(b), pa), (b, Entity::Object(a), pb)],
@@ -616,15 +618,22 @@ impl Game {
                 self.recompute();
             }
             Effect::ExchangeControl { a, b } => {
-                let a = self
+                // CR 701.12a: exactly two permanents, or no part of the exchange occurs
+                // ("two target creatures" select both from one target slot).
+                let mut both: Vec<ObjectId> = Vec::new();
+                for o in self
                     .resolve_objects(a, ctx)
                     .into_iter()
-                    .find(|o| self.is_live(*o));
-                let b = self
-                    .resolve_objects(b, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o));
-                if let (Some(a), Some(b)) = (a, b) {
+                    .chain(self.resolve_objects(b, ctx))
+                {
+                    if !both.contains(&o) {
+                        both.push(o);
+                    }
+                }
+                let on_battlefield =
+                    |g: &Self, o: &ObjectId| g.is_live(*o) && g.obj(*o).zone == Zone::Battlefield;
+                if both.len() == 2 && both.iter().all(|o| on_battlefield(self, o)) {
+                    let (a, b) = (both[0], both[1]);
                     let (ca, cb) = (self.obj(a).controller, self.obj(b).controller);
                     if ca == cb {
                         return;
@@ -849,7 +858,11 @@ impl Game {
             }
             Effect::Transform { what } => {
                 for o in self.resolve_objects(what, ctx) {
-                    crate::dfc::transform(self, o);
+                    // CR 701.27f: not if it transformed since its ability was put onto the
+                    // stack (or, for a delayed triggered ability, created).
+                    if crate::transform_rules::ability_may_transform(self, o, ctx) {
+                        crate::dfc::transform(self, o);
+                    }
                 }
             }
             Effect::Regenerate { what } => {
@@ -1147,6 +1160,9 @@ impl Game {
                     ctx,
                 );
             }
+            Effect::PersistentMana(inner) => {
+                crate::mana_abilities::resolve_persistent_mana(self, inner, ctx);
+            }
             Effect::SetClassLevel { level } => {
                 if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
                     self.obj_mut(s).class_level = *level;
@@ -1165,16 +1181,17 @@ impl Game {
                 }
             }
             Effect::Scry { who, n } => {
+                // CR 701.22c: players scrying at once do so at the same time.
                 let k = self.eval_value(n, ctx).max(0) as u32;
-                for p in self.eval_players(who, ctx) {
-                    crate::library::scry(self, p, k);
-                }
+                let players = self.eval_players(who, ctx);
+                let look = crate::scry_rules::Look::Scry;
+                crate::scry_rules::perform(self, &players, k, look, ctx.source);
             }
             Effect::Surveil { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
-                for p in self.eval_players(who, ctx) {
-                    crate::library::surveil(self, p, k);
-                }
+                let players = self.eval_players(who, ctx);
+                let look = crate::scry_rules::Look::Surveil;
+                crate::scry_rules::perform(self, &players, k, look, ctx.source);
             }
             Effect::Search {
                 who,
@@ -1185,30 +1202,54 @@ impl Game {
                 reveal,
                 shuffle,
             } => {
-                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                let owner = self.eval_player(whose, ctx).unwrap_or(p);
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                let found = crate::library::search(self, p, owner, filter, n, ctx);
-                let _ = reveal;
-                let res = if *shuffle
-                    && to.zone == ZoneKind::Library
-                    && matches!(to.position, LibraryPosition::Top)
-                {
-                    // "Then shuffle and put that card on top" (CR 701.24b): the found
-                    // cards stay in the library but aren't shuffled, then go on top (no
-                    // zone change).
-                    self.shuffle_library(owner);
-                    crate::library::put_on_top(self, owner, &found);
-                    found
-                } else {
-                    let res = self.move_to_destination(found, to, ctx);
-                    if *shuffle {
+                let mut searchers = self.eval_players(who, ctx);
+                if searchers.is_empty() {
+                    searchers.push(ctx.controller);
+                }
+                // CR 701.23i: several players searching at once look at the cards at the
+                // same time and choose in APNAP order; then the found cards move.
+                let mut founds: Vec<(PlayerId, PlayerId, Vec<ObjectId>)> = Vec::new();
+                for p in searchers {
+                    let mut c = ctx.clone();
+                    c.iter_player = Some(p);
+                    let owner = self.eval_player(whose, &c).unwrap_or(p);
+                    let found = crate::library::search(self, p, owner, filter, n, &c);
+                    founds.push((p, owner, found));
+                }
+                let mut all = Vec::new();
+                for (p, owner, found) in founds {
+                    let mut c = ctx.clone();
+                    c.iter_player = Some(p);
+                    let res = if *shuffle
+                        && to.zone == ZoneKind::Library
+                        && matches!(to.position, LibraryPosition::Top)
+                    {
+                        // "Then shuffle and put that card on top" (CR 701.24b): the found
+                        // cards stay in the library but aren't shuffled, then go on top
+                        // (no zone change).
                         self.shuffle_library(owner);
-                    }
-                    res
-                };
-                ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
-                ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
+                        crate::library::put_on_top(self, owner, &found);
+                        // CR 701.23e: revealed only if the effect says so.
+                        if *reveal {
+                            crate::reveal::reveal_in(self, p, &found, Some(&c));
+                        }
+                        found
+                    } else {
+                        // CR 701.23e: revealed only if the effect says so.
+                        if *reveal {
+                            crate::reveal::reveal_in(self, p, &found, Some(&c));
+                        }
+                        let res = self.move_to_destination(found, to, &mut c);
+                        if *shuffle {
+                            self.shuffle_library(owner);
+                        }
+                        res
+                    };
+                    all.extend(res);
+                }
+                ctx.prev_affected = all.iter().map(|o| Entity::Object(*o)).collect();
+                ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {
@@ -1301,7 +1342,13 @@ impl Game {
                     ctx,
                 );
             }
-            Effect::RevealHand { .. } => {}
+            // CR 701.20a: the cards are revealed while the rest of the effect needs them.
+            Effect::RevealHand { who } => {
+                for p in self.eval_players(who, ctx) {
+                    let hand = self.player(p).hand.clone();
+                    crate::reveal::reveal_in(self, p, &hand, Some(ctx));
+                }
+            }
             Effect::RevealUntil {
                 who,
                 filter,
@@ -1356,7 +1403,7 @@ impl Game {
                     trigger: trigger.clone(),
                     body: (**body).clone(),
                     once: *once,
-                    ctx: ctx.clone(),
+                    ctx: crate::transform_rules::delayed_ctx(self, ctx),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     for_rest_of_game: false,
@@ -1619,6 +1666,8 @@ impl Game {
                 crate::next_spell::exec_next_spell(self, filter, mods, expires, ctx);
             }
             Effect::RollDice(spec) => crate::dice::roll(self, spec, ctx),
+            Effect::Piles(action) => crate::piles::perform(self, action, ctx),
+            Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }
@@ -2064,21 +2113,22 @@ impl Game {
             }
             ManaProduction::AnyCombination(n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
-                (0..k)
-                    .map(|_| {
-                        self.choose_mana_color(
-                            p,
-                            ctx,
-                            &[
-                                ManaType::W,
-                                ManaType::U,
-                                ManaType::B,
-                                ManaType::R,
-                                ManaType::G,
-                            ],
-                        )
-                    })
-                    .collect()
+                self.choose_mana_combination(
+                    p,
+                    ctx,
+                    &[
+                        ManaType::W,
+                        ManaType::U,
+                        ManaType::B,
+                        ManaType::R,
+                        ManaType::G,
+                    ],
+                    k,
+                )
+            }
+            ManaProduction::CombinationOf(opts, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                self.choose_mana_combination(p, ctx, opts, k)
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
             ManaProduction::OneOfOrChosenColor(opts) => {
@@ -2174,6 +2224,15 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::CommanderIdentity => {
+                // CR 903.4f: undefined without a commander; no mana.
+                let types = crate::mana_abilities::commander_identity_types(self, p);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
             // CR 106.12a: one mana of any type the triggering mana ability produced.
             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
                 let types = produced_types(ctx);
@@ -2205,6 +2264,29 @@ impl Game {
                 .push(*o);
             self.objects[o.0 as usize].created_by = Some((src, ctx.link));
         }
+    }
+
+    /// Chooses the type of each of `k` mana "in any combination of" `opts`. A pending
+    /// payment's hint names one type per unit, so each hinted type is used once.
+    fn choose_mana_combination(
+        &mut self,
+        p: PlayerId,
+        ctx: &Ctx,
+        opts: &[ManaType],
+        k: usize,
+    ) -> Vec<ManaType> {
+        let mut hint = self.mana_hint.clone().unwrap_or_default();
+        let mut out = Vec::with_capacity(k);
+        for _ in 0..k {
+            if let Some(i) = hint.iter().position(|t| opts.contains(t)) {
+                out.push(hint.remove(i));
+                continue;
+            }
+            let saved = self.mana_hint.take();
+            out.push(self.choose_mana_color(p, ctx, opts));
+            self.mana_hint = saved;
+        }
+        out
     }
 
     fn choose_mana_color(&mut self, p: PlayerId, ctx: &Ctx, opts: &[ManaType]) -> ManaType {

@@ -4,10 +4,8 @@
 use crate::ability::*;
 use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
-use crate::events::{Event, MoveCause};
+use crate::events::Event;
 use crate::game::Game;
-use crate::object::*;
-use crate::replacement::*;
 use crate::types::*;
 
 /// Top `n` cards of a library, top first.
@@ -50,81 +48,26 @@ fn to_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
 }
 
 /// CR 701.22a: look at the top N cards, put any number on the bottom in any order and
-/// the rest on top in any order.
+/// the rest on top in any order. See [`crate::scry_rules`].
 pub fn scry(g: &mut Game, p: PlayerId, n: u32) {
-    if n == 0 {
-        return;
-    }
-    let cards = top_cards(g, p, n);
-    if cards.is_empty() {
-        return;
-    }
-    let (top, bottom) = match g.ask(
-        p,
-        Decision::Scry {
-            cards: cards.clone(),
-        },
-    ) {
-        Answer::Split(t, b) if split_ok(&cards, &t, &b) => (t, b),
-        _ => (cards.clone(), vec![]),
-    };
-    set_top(g, p, &top);
-    to_bottom(g, p, &bottom);
-    g.emit(Event::Custom {
-        name: "scry".into(),
-        player: Some(p),
-        obj: None,
-        amount: n as i32,
-    });
+    crate::scry_rules::perform(g, &[p], n, crate::scry_rules::Look::Scry, None);
 }
 
 /// CR 701.25a: look at the top N cards, put any number into the graveyard and the rest
-/// on top in any order.
+/// on top in any order. See [`crate::scry_rules`].
 pub fn surveil(g: &mut Game, p: PlayerId, n: u32) {
-    if n == 0 {
-        return;
-    }
-    let cards = top_cards(g, p, n);
-    if cards.is_empty() {
-        return;
-    }
-    let (top, gy) = match g.ask(
-        p,
-        Decision::Surveil {
-            cards: cards.clone(),
-        },
-    ) {
-        Answer::Split(t, b) if split_ok(&cards, &t, &b) => (t, b),
-        _ => (cards.clone(), vec![]),
-    };
-    set_top(g, p, &top);
-    let moves = gy
-        .iter()
-        .map(|c| MoveEv {
-            obj: *c,
-            to: Zone::Graveyard(p),
-            pos: LibraryPosition::Top,
-            cause: MoveCause::Effect,
-            by: Some(p),
-            etb: EtbInfo::default(),
-            source: None,
-        })
-        .collect();
-    g.move_objects(moves);
-    g.emit(Event::Custom {
-        name: "surveil".into(),
-        player: Some(p),
-        obj: None,
-        amount: n as i32,
-    });
+    crate::scry_rules::perform(g, &[p], n, crate::scry_rules::Look::Surveil, None);
 }
 
-fn split_ok(all: &[ObjectId], a: &[ObjectId], b: &[ObjectId]) -> bool {
-    let mut v: Vec<ObjectId> = a.iter().chain(b.iter()).copied().collect();
-    v.sort();
-    let mut w = all.to_vec();
-    w.sort();
-    v == w
+/// Puts cards already in `p`'s library on the bottom of it, the first one lowest. Cards
+/// not in that library are ignored.
+pub fn put_on_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
+    let cards: Vec<ObjectId> = cards
+        .iter()
+        .copied()
+        .filter(|c| g.player(p).library.contains(c))
+        .collect();
+    to_bottom(g, p, &cards);
 }
 
 /// Searches `owner`'s library for up to `n` cards matching `filter` (CR 701.23). The
@@ -140,31 +83,65 @@ pub fn search(
     if g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_))) {
         return vec![];
     }
+    // CR 701.23f: an effect may replace searching the library with searching its top
+    // cards.
+    let portion = crate::search_rules::portion(g, searcher, owner).unwrap_or(usize::MAX);
     let cands: Vec<ObjectId> = g
         .player(owner)
         .library
         .iter()
         .rev()
+        .take(portion)
         .copied()
         .filter(|c| g.matches(*c, filter, ctx))
         .collect();
     let n = n.min(cands.len() as u32);
-    let found = g.ask_objects(searcher, ctx.source, "Search: choose cards", cands, 0, n);
-    // Default answers choose none; for automated agents prefer finding cards.
-    let found = if found.is_empty() && n > 0 && g.search_finds_by_default {
-        let cands: Vec<ObjectId> = g
-            .player(owner)
-            .library
-            .iter()
-            .rev()
-            .copied()
-            .filter(|c| g.matches(*c, filter, ctx))
-            .collect();
-        cands.into_iter().take(n as usize).collect()
+    // CR 701.23b, 701.23d: cards with a stated quality needn't be found; a quantity of
+    // cards must be.
+    let min = if crate::search_rules::quantity_only(filter) {
+        n
     } else {
-        found
+        0
     };
-    g.emit(Event::Searched { player: searcher });
+    let found: Vec<ObjectId> = if cands.is_empty() || n == 0 {
+        vec![]
+    } else {
+        let ans = g.ask(
+            searcher,
+            Decision::ChooseEntities {
+                source: ctx.source,
+                prompt: "Search: choose cards".into(),
+                candidates: cands.iter().map(|c| Entity::Object(*c)).collect(),
+                min,
+                max: n,
+            },
+        );
+        let chosen: Option<Vec<ObjectId>> = match ans {
+            Answer::Entities(v) => {
+                let objs: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();
+                let mut uniq = objs.clone();
+                uniq.sort();
+                uniq.dedup();
+                (objs.len() == v.len()
+                    && uniq.len() == objs.len()
+                    && objs.len() as u32 >= min
+                    && objs.len() as u32 <= n
+                    && objs.iter().all(|o| cands.contains(o)))
+                .then_some(objs)
+            }
+            _ => None,
+        };
+        match chosen {
+            Some(v) => v,
+            // Default (or invalid) answers: automated agents prefer finding cards.
+            None if g.search_finds_by_default => cands.iter().copied().take(n as usize).collect(),
+            None => cands.iter().copied().take(min as usize).collect(),
+        }
+    };
+    // CR 701.23h: searching a library again before it's shuffled is the same search.
+    if crate::search_rules::begin(g, searcher, owner, ctx) {
+        g.emit(Event::Searched { player: searcher });
+    }
     found
 }
 
@@ -175,7 +152,7 @@ pub fn dig(
     g: &mut Game,
     p: PlayerId,
     n: u32,
-    _reveal: bool,
+    reveal: bool,
     filter: &Filter,
     take: u32,
     up_to: bool,
@@ -184,6 +161,10 @@ pub fn dig(
     ctx: &mut Ctx,
 ) {
     let cards = top_cards(g, p, n);
+    if reveal {
+        // CR 701.20a: revealed while the effect needs them.
+        crate::reveal::reveal_in(g, p, &cards, Some(ctx));
+    }
     ctx.set_var(
         vars::REVEALED,
         cards.iter().map(|o| Entity::Object(*o)).collect(),

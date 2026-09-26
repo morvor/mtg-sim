@@ -815,6 +815,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         "basic land type among lands you control" | "basic land types among lands you control" => {
             return Some(Value::Domain)
         }
+        // CR 700.8a.
+        "creature in your party" | "creatures in your party" => {
+            return Some(Value::Custom(crate::game_terms::PARTY_SIZE.into()))
+        }
         "card type among cards in your graveyard" | "card types among cards in your graveyard" => {
             return Some(Value::CardTypesAmong(your_graveyard()))
         }

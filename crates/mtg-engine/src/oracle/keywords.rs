@@ -33,6 +33,8 @@ fn names() -> &'static [(String, KeywordKind)] {
             KeywordKind::Trample,
         ));
         v.push(("hexproof from".into(), KeywordKind::Hexproof));
+        // CR 702.89b: older cards printed "totem armor"; it's now umbra armor.
+        v.push(("totem armor".into(), KeywordKind::UmbraArmor));
         v.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
         v
     })
@@ -236,10 +238,11 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
                 let pre = rest[..i].trim();
                 if !pre.is_empty() {
                     // CR 702.6c: "Equip [quality]" / "Equip [quality] creature".
-                    kw.filter = Some(if pre == "commander" {
-                        Filter::Commander
-                    } else {
-                        quality_phrase(pre)?
+                    kw.filter = Some(match pre {
+                        "commander" => Filter::Commander,
+                        // CR 700.16: "Equip worthy {1}".
+                        "worthy" => crate::game_terms::worthy_filter(),
+                        _ => quality_phrase(pre)?,
                     });
                 }
                 kw.cost = Some(parse_keyword_cost(&rest_raw[rest_raw.find('{')?..])?);
