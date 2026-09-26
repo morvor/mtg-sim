@@ -426,7 +426,11 @@ impl Game {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
-                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c)) => {
+                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c))
+                                if crate::spell_costs::alternative_cost_allowed(
+                                    self, p, card, s,
+                                ) =>
+                            {
                                 let mut opt = CastOption::normal(FaceState::Front);
                                 opt.method = CastMethod::Alternative(a.uid);
                                 opt.alt_cost = Some(c.clone());
@@ -1177,31 +1181,35 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
         }
+        // Generic and colored reductions, applied after all increases.
+        let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
             if let AbilityKind::Static(s) = &a.kind {
                 if let StaticEffect::CostModifier(cm) = &s.effect {
                     if let CostTarget::ThisSpell = cm.applies_to {
                         let ctx = Ctx::new(Some(card), p);
+                        // "This spell costs {2} less to cast if ..." (CR 601.2f).
+                        if !crate::spell_costs::own_change_applies(self, card, s, cm, &ctx) {
+                            continue;
+                        }
                         match &cm.change {
-                            CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
+                            // A repeated part ("{1}{G} more for each target beyond the
+                            // first") is part of the total before reductions apply.
+                            CostChange::AdditionalCost(c) => add_cost(
+                                &mut cost,
+                                &crate::kw::cumulative_upkeep::expand_repeated(self, c, &ctx),
+                            ),
                             CostChange::IncreaseGeneric(v) => {
                                 let n = self.eval_value(v, &ctx).max(0) as u32;
                                 add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
                             }
+                            // Reductions apply after every increase (CR 601.2f).
                             CostChange::ReduceGeneric(v) => {
-                                let n = self.eval_value(v, &ctx).max(0) as u32;
-                                if let Some(m) = cost.mana.as_mut() {
-                                    m.reduce_generic(n);
-                                }
+                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, None))
                             }
                             CostChange::ReduceColored(c, v) => {
-                                let n = self.eval_value(v, &ctx).max(0);
-                                if let Some(m) = cost.mana.as_mut() {
-                                    for _ in 0..n {
-                                        m.reduce_colored(*c);
-                                    }
-                                }
+                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
                             }
                             CostChange::IncreaseMana(m) => {
                                 add_cost(&mut cost, &Cost::mana(m.clone()))
@@ -1220,14 +1228,15 @@ impl Game {
             }
         }
         // Static cost modifiers from other permanents: increases first, then reductions.
-        let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
         for (src, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*src), *ctl);
             // (A card being considered for casting is judged as the spell it would be.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
                     self.player_rel_matches(cm.who, p, &ctx)
-                        && self.matches(card, &as_spell_filter(f), &ctx)
+                        && crate::spell_costs::spells_change_applies(
+                            self, card, f, &cm.change, &ctx,
+                        )
                 }
                 _ => false,
             };

@@ -82,6 +82,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::game_terms::custom_value(g, name, ctx) {
         return v;
     }
+    // A spell's own cost: "for each target beyond the first" (CR 601.2f).
+    if let Some(v) = crate::spell_costs::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.
@@ -197,6 +201,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     }
     // "If it's a creature card" about a revealed face-down permanent (CR 708.12).
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
+        return b;
+    }
+    // A spell's own cost: "if you've cast another spell this turn" (CR 601.2f).
+    if let Some(b) = crate::spell_costs::custom_condition(g, name, ctx) {
         return b;
     }
     // CR 307.5a: cast as though it had flash with its own ability, any time a sorcery

@@ -156,13 +156,20 @@ fn hybrid_reduction_symbols(g: &Game, p: PlayerId, spell: ObjectId) -> Vec<ManaS
     };
     for a in &o.chars.abilities {
         if let AbilityKind::Static(s) = &a.kind {
-            if let StaticEffect::CostModifier(CostModifier {
-                applies_to: CostTarget::ThisSpell,
-                change: CostChange::ReduceMana { mana, .. },
-                ..
-            }) = &s.effect
+            if let StaticEffect::CostModifier(
+                cm @ CostModifier {
+                    applies_to: CostTarget::ThisSpell,
+                    change: CostChange::ReduceMana { mana, .. },
+                    ..
+                },
+            ) = &s.effect
             {
-                push(mana);
+                // Only a reduction that applies (its condition, CR 601.2f), as in
+                // `base_total_cost`.
+                let ctx = Ctx::new(Some(spell), p);
+                if crate::spell_costs::own_change_applies(g, spell, s, cm, &ctx) {
+                    push(mana);
+                }
             }
         }
     }
