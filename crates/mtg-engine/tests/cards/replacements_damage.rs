@@ -346,6 +346,21 @@ fn inquisitors_flail_doubles_combat_damage_by_and_to_the_equipped_creature() {
     // The Bears' 2 combat damage is doubled, destroying the 6/4 Wurm.
     assert!(!t.on_battlefield(wurm));
     assert!(!t.on_battlefield(bears));
+    // Combat damage another creature deals to the equipped creature is doubled too.
+    let mut t = TestGame::new(2);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let flail = t.battlefield(P0, "Inquisitor's Flail");
+    assert!(t.g.attach(flail, Entity::Object(maw)));
+    t.recompute();
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(maw, Entity::Player(P1))], &[(blocker, maw)]);
+    assert!(!t.on_battlefield(blocker));
+    assert_eq!(t.obj_now(maw).damage, 4);
+    // Noncombat damage to the equipped creature isn't.
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.g.deal_damage(other, Entity::Object(maw), 1, false);
+    assert_eq!(t.obj_now(maw).damage, 5);
     // Noncombat damage by the equipped creature isn't doubled.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
