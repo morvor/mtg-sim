@@ -1860,6 +1860,9 @@ pub enum Restriction {
         what: Filter,
         n: u32,
     },
+    /// "Untap [permanents you control] during each other player's untap step": they untap
+    /// along with the active player's permanents (CR 502.3).
+    UntapDuringOthersUntapSteps(Filter),
     /// "can't gain life".
     CantGainLife(PlayerFilter),
     /// "can't lose life".

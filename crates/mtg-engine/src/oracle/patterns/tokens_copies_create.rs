@@ -627,8 +627,17 @@ fn f_created_pronoun(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         b.it = saved_it;
         return false;
     };
-    if !mentions_created(&e) || !matches!(e, Effect::Modify { .. } | Effect::AddCounters { .. })
-    {
+    // Also "That token attacks this combat if able" (a restriction locked onto it).
+    fn about_the_tokens(e: &Effect) -> bool {
+        match e {
+            Effect::Modify { .. } | Effect::AddCounters { .. } | Effect::AddRestriction { .. } => {
+                true
+            }
+            Effect::Seq(v) => !v.is_empty() && v.iter().all(about_the_tokens),
+            _ => false,
+        }
+    }
+    if !mentions_created(&e) || !about_the_tokens(&e) {
         b.it = saved_it;
         return false;
     }

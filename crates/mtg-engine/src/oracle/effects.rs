@@ -459,6 +459,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " for as long as you control ~",
             Duration::WhileYouControlSource,
         ),
+        // CR 611.2b.
+        (
+            " for as long as ~ remains tapped",
+            crate::untap_choice::remains_tapped(false),
+        ),
+        (
+            " for as long as you control ~ and ~ remains tapped",
+            crate::untap_choice::remains_tapped(true),
+        ),
     ] {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
@@ -1223,7 +1232,7 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Whether a filter describes a class of objects by their current qualities only, without
 /// referring to the resolving ability's targets, choices, source, or referenced objects,
 /// so it can be evaluated again later in the effect's duration.
-fn is_class_filter(f: &Filter) -> bool {
+pub(crate) fn is_class_filter(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
         Filter::Not(x) => is_class_filter(x),
