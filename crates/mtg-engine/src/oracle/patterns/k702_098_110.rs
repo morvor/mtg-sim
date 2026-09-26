@@ -2,6 +2,7 @@
 //! doesn't handle, and phrases that go with them:
 //!
 //! * "Whenever ~ evolves" (CR 702.100b);
+//! * "if tribute wasn't paid" (CR 702.104b);
 //! * "if it's attacking the player with the most life or tied for most life" (CR 702.105a);
 //! * "Whenever you activate ~'s outlast ability" (CR 702.107a);
 //! * "When ~ exploits a creature", "Whenever a creature you control exploits a [quality]
@@ -23,6 +24,14 @@ fn evolves(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "~ evolves", priority: 100, parse: evolves } }
+
+/// "if tribute wasn't paid" (CR 702.104b).
+fn tribute_not_paid(l: &str) -> Option<Condition> {
+    (l == "tribute wasn't paid")
+        .then(|| Condition::Custom(crate::kw::tribute::TRIBUTE_NOT_PAID.into()))
+}
+
+inventory::submit! { ConditionPattern { name: "tribute wasn't paid", priority: 100, parse: tribute_not_paid } }
 
 /// "if it's attacking the player with the most life or tied for most life" (Scourge of the
 /// Throne; the dethrone condition, CR 702.105a).
