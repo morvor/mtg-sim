@@ -115,6 +115,11 @@ pub struct CardDef {
     pub restricted_formats: Vec<String>,
     /// Attraction lights, for attraction cards (CR 717).
     pub attraction_lights: Vec<u32>,
+    /// An alternate name printed in the upper left corner of this printing, with the
+    /// card's Oracle name in a secondary title bar (CR 201.6). The card has only its
+    /// Oracle name for deck construction, game rules, and effects: this is never one of
+    /// its names.
+    pub alternate_name: Option<SmolStr>,
 }
 
 impl CardDef {
@@ -239,6 +244,8 @@ impl CardDef {
                     life_modifier: if i == 0 { life_modifier } else { None },
                     rules_text: Arc::from(text.as_str()),
                     all_creature_names: false,
+                    interchangeable_names: Default::default(),
+                    all_creature_types: false,
                 },
                 unsupported: compiled.unsupported,
                 star_power,
@@ -283,6 +290,7 @@ impl CardDef {
                 .map(|(k, _)| k.clone())
                 .collect(),
             attraction_lights: c.attraction_lights.clone().unwrap_or_default(),
+            alternate_name: c.flavor_name.as_deref().map(SmolStr::new),
         }
     }
 
@@ -304,6 +312,7 @@ impl CardDef {
             legal_formats: vec![],
             restricted_formats: vec![],
             attraction_lights: vec![],
+            alternate_name: None,
         }
     }
 }

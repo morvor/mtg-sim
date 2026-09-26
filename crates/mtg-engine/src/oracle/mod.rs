@@ -403,12 +403,19 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
 }
 
+/// `s` without its quoted parts: an ability granted in quotes ("creature cards in your
+/// graveyard gain \"You may cast this card from your graveyard\"") says nothing about
+/// where the ability granting it functions.
+pub(crate) fn without_quotes(s: &str) -> String {
+    s.split('"').step_by(2).collect::<Vec<_>>().join("\"\"")
+}
+
 /// Where an activated ability functions: one whose cost can be paid only from the hand
 /// ("Exile this card from your hand", "Discard this card") functions from the hand
 /// (CR 113.6j); one whose cost or effect moves the object out of a zone ("Return this card
 /// from your graveyard to the battlefield") functions only in that zone (CR 113.6m).
 fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
-    let (c, e) = (cost.to_lowercase(), effect.to_lowercase());
+    let (c, e) = (cost.to_lowercase(), without_quotes(&effect.to_lowercase()));
     let moves_self_from = |s: &str, zone: &str| {
         ["~", "this card", "this creature"]
             .iter()

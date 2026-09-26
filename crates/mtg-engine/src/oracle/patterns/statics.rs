@@ -95,9 +95,9 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
     true
 }
 
-/// Compiles a quoted ability granted to the objects matched by a static ability
-/// (CR 613.1f). `~` in it refers to the object that has the ability.
-fn granted_abilities(
+/// Compiles a quoted ability granted to the objects matched by a static ability or by
+/// a resolving effect (CR 613.1f). `~` in it refers to the object that has the ability.
+pub(crate) fn granted_abilities(
     quote_lower: &str,
     text: &str,
     hint: CardType,
@@ -1531,7 +1531,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 }
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
-fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
+pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
     let fc = f.clone();
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
@@ -2464,7 +2464,7 @@ inventory::submit! {
 
 /// Removes "spell" from a filter: "can't cast creature spells" checks the card being
 /// cast, which isn't on the stack yet.
-fn without_spell(f: Filter) -> Option<Filter> {
+pub(crate) fn without_spell(f: Filter) -> Option<Filter> {
     match f {
         Filter::Spell => Some(Filter::Any),
         Filter::And(v) => Some(Filter::and(

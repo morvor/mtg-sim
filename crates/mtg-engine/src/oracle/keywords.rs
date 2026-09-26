@@ -263,6 +263,16 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         KeywordKind::Banding if name.as_str() == "bands with other" => {
             kw.filter = Some(crate::kw::banding::quality_filter(rest, rest_raw)?);
         }
+        // CR 702.77a: "Reinforce X—{X}{G}{G}" puts X counters, X paid in the cost (N is
+        // -1, see `kw/reinforce.rs`).
+        KeywordKind::Reinforce if rest.starts_with("x—") => {
+            let cost = parse_keyword_cost(&rest_raw[rest_raw.find('—')?..])?;
+            if !cost.mana.as_ref().is_some_and(|m| m.has_x()) {
+                return None;
+            }
+            kw.cost = Some(cost);
+            kw.n = Some(-1);
+        }
         // CR 702.33b: "Kicker [cost 1] and/or [cost 2]" means "Kicker [cost 1], kicker
         // [cost 2]": the second cost is kept in `costs`.
         KeywordKind::Kicker if rest_raw.contains(" and/or ") => {
@@ -490,6 +500,13 @@ pub fn compile_keyword(kw: Keyword, text: &str) -> Vec<Ability> {
         out.push(AbilityDef::new(
             AbilityKind::Static(s),
             "Devoid (colorless)",
+        ));
+    }
+    if kw.kind == KeywordKind::Changeling {
+        // CR 702.73a: this object is every creature type (CDA, layer 4).
+        out.push(AbilityDef::new(
+            AbilityKind::Static(crate::kw::changeling::changeling_cda()),
+            "Changeling (every creature type)",
         ));
     }
     out

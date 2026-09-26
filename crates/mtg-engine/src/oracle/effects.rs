@@ -48,6 +48,13 @@ impl<'c> Builder<'c> {
     }
     pub fn add_target(&mut self, mut spec: TargetSpec, text: &str) -> u8 {
         spec.text = text.to_string();
+        // "another target creature" / "up to one other target creature" after earlier
+        // targets: different objects from those (CR 115.3 allows the same object for
+        // different instances of "target" unless the text says otherwise).
+        let other = text.starts_with("another target") || text.contains("other target");
+        if other && spec.distinct_from.is_empty() {
+            spec.distinct_from = (0..self.targets.len() as u8).collect();
+        }
         // A target player doesn't become "it" ("target opponent loses life equal to its
         // power" — "its" is still the object from before).
         let is_player = matches!(spec.what, TargetKind::Player(_));
@@ -459,6 +466,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " for as long as you control ~",
             Duration::WhileYouControlSource,
         ),
+        // CR 611.2b.
+        (
+            " for as long as ~ remains tapped",
+            crate::untap_choice::remains_tapped(false),
+        ),
+        (
+            " for as long as you control ~ and ~ remains tapped",
+            crate::untap_choice::remains_tapped(true),
+        ),
     ] {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
@@ -833,6 +849,11 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
+    if to.zone == ZoneKind::Battlefield {
+        // "It gains haste": the permanent the card became (CR 400.7), which the move
+        // records.
+        b.it = Sel::Var(vars::IT);
+    }
     Some(Effect::Move { what, to })
 }
 
@@ -1223,7 +1244,7 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Whether a filter describes a class of objects by their current qualities only, without
 /// referring to the resolving ability's targets, choices, source, or referenced objects,
 /// so it can be evaluated again later in the effect's duration.
-fn is_class_filter(f: &Filter) -> bool {
+pub(crate) fn is_class_filter(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
         Filter::Not(x) => is_class_filter(x),

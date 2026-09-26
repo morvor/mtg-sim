@@ -1470,7 +1470,7 @@ impl Game {
     ) {
         let src = self.obj(source).clone();
         let infect = src.has_keyword(KeywordKind::Infect);
-        let wither = src.has_keyword(KeywordKind::Wither);
+        let wither = crate::kw::wither::deals_damage_with_wither(self, &src);
         let deathtouch = src.has_keyword(KeywordKind::Deathtouch);
         match target {
             Entity::Player(p) => {

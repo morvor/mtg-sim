@@ -508,6 +508,10 @@ impl Game {
                 restriction,
                 duration,
             } => {
+                // CR 611.2b: a "for as long as" duration that already ended.
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let objects = self.lock_restriction_objects(restriction, ctx);
@@ -1510,7 +1514,8 @@ impl Game {
                     if *optional && !self.ask_yes_no(p, Some(o), "Play this card?", true) {
                         continue;
                     }
-                    if self.obj(o).chars.is_land() {
+                    // A face-down card (e.g. exiled with hideaway) is played face up.
+                    if self.face_characteristics(o, FaceState::Front).is_land() {
                         // CR 305.2b, 305.3: ignored if the player can't play a land now.
                         let _ = self.play_land_during_resolution(p, o);
                         continue;
@@ -1912,7 +1917,10 @@ impl Game {
         }
         // "Target creature blocks this creature this combat if able": both creatures are
         // the objects named as the effect began.
-        if let Restriction::MustBlockAttacker { blocker, attacker } = &mut r {
+        // Likewise "target creature can't block this creature this turn".
+        if let Restriction::MustBlockAttacker { blocker, attacker }
+        | Restriction::CantBeBlockedBy { attacker, blocker } = &mut r
+        {
             for f in [blocker, attacker] {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
@@ -2323,6 +2331,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::MustAttack(f)
         | Restriction::MustBlock(f)
         | Restriction::MustBeBlocked(f)
+        | Restriction::MustBeBlockedByAll(f)
         | Restriction::CantBeBlocked(f)
         | Restriction::DoesntUntap(f)
         | Restriction::CantBeCountered(f)
@@ -2348,7 +2357,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::SorcerySpeedOnly(f)
         | Restriction::CantPlayLands(f)
         | Restriction::MaxDrawsPerTurn(f, _)
-        | Restriction::MaxSpellsPerTurn(f, _) => Some(f),
+        | Restriction::MaxSpellsPerTurn(f, _)
+        | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
+        Restriction::CantCast { who, .. } => Some(who),
         _ => None,
     }
 }

@@ -165,18 +165,30 @@ impl Game {
         // Indestructible permanents can't be destroyed (702.12b); lethal damage stays marked.
         to_destroy.retain(|id| !self.obj(*id).has_keyword(KeywordKind::Indestructible));
 
-        // 704.5j: legend rule.
-        let mut legends: BTreeMap<(PlayerId, String), Vec<ObjectId>> = BTreeMap::new();
+        // 704.5j: legend rule. Permanents have the same name if they have at least one
+        // name in common (CR 201.2a), e.g. interchangeable names (CR 201.3a).
+        let mut legends: Vec<(PlayerId, Vec<ObjectId>)> = Vec::new();
         for &id in &perms {
             let o = self.obj(id);
-            if o.chars.is_legendary() && !o.chars.name.is_empty() {
-                legends
-                    .entry((o.controller, o.chars.name.to_string()))
-                    .or_default()
-                    .push(id);
+            if !o.chars.is_legendary() || !o.chars.has_a_name() {
+                continue;
             }
+            let mut group = vec![id];
+            legends.retain_mut(|(p, ids)| {
+                let same = *p == o.controller
+                    && ids
+                        .iter()
+                        .any(|x| self.obj(*x).chars.shares_name_with(&o.chars));
+                if same {
+                    group.append(ids);
+                }
+                !same
+            });
+            group.sort();
+            legends.push((o.controller, group));
         }
-        for ((p, name), ids) in legends {
+        for (p, ids) in legends {
+            let name = self.obj(ids[0]).chars.name.to_string();
             if ids.len() > 1 {
                 let keep = self.ask_objects(
                     p,

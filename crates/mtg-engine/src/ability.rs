@@ -971,12 +971,22 @@ pub enum Filter {
     HadToAttack,
     Power(Cmp, Box<Value>),
     Toughness(Cmp, Box<Value>),
+    /// Its power compared with its base power ("with power greater than its base power",
+    /// CR 208.4b).
+    PowerVsBase(Cmp),
     ManaValue(Cmp, Box<Value>),
     /// Loyalty/defense comparisons.
     Loyalty(Cmp, Box<Value>),
     Named(SmolStr),
     /// Has the same name as an object in the selection.
     SameNameAs(Box<Sel>),
+    /// "with a different name than [objects]": has at least one name and no name in
+    /// common with any of the selected objects, even if some of them have no name
+    /// (CR 201.2c).
+    DifferentNameFrom(Box<Sel>),
+    /// "with a name originally printed in the [set] expansion" (CR 206.3): the name is on
+    /// the list the Comprehensive Rules give for that set code (CR 206.3a-c).
+    NameOriginallyPrintedIn(SmolStr),
     /// Shares a creature type / card type / color with a selection.
     SharesCreatureType(Box<Sel>),
     SharesCardType(Box<Sel>),
@@ -1177,6 +1187,11 @@ pub enum Value {
     /// Greatest power among objects matching.
     GreatestPower(Filter),
     GreatestManaValue(Filter),
+    /// "its base power" (CR 208.4b): the base power of the first selected object.
+    BasePowerOf(Box<Sel>),
+    /// "the number of differently named [objects]": the most objects matching the filter
+    /// that have different names (CR 201.2b). Objects with no name don't count.
+    DistinctNames(Filter),
     /// Number of different mana types spent to cast this spell (converge etc.).
     ColorsSpent,
     /// Amount of mana spent to cast this spell.
@@ -1850,6 +1865,9 @@ pub enum Restriction {
         what: Filter,
         n: u32,
     },
+    /// "Untap [permanents you control] during each other player's untap step": they untap
+    /// along with the active player's permanents (CR 502.3).
+    UntapDuringOthersUntapSteps(Filter),
     /// "can't gain life".
     CantGainLife(PlayerFilter),
     /// "can't lose life".
@@ -1882,6 +1900,12 @@ pub enum Restriction {
     SorcerySpeedOnly(PlayerFilter),
     /// "can't play lands".
     CantPlayLands(PlayerFilter),
+    /// "can't play lands [with a quality]": land cards matching the filter (judged by the
+    /// characteristics of the face played) can't be played by those players.
+    CantPlayLandCards {
+        who: PlayerFilter,
+        what: Filter,
+    },
     /// "While [a player] is choosing targets as part of casting a spell or activating an
     /// ability, that player must choose at least one [object] if able" (CR 601.2c).
     MustTarget {
