@@ -120,7 +120,13 @@ impl KeywordRules for Companion {
         let SpecialAction::CompanionToHand { card } = sa else {
             return None;
         };
-        if unused_companion(g, p) != Some(*card) || !g.has_priority(p) || !g.is_sorcery_timing(p) {
+        if unused_companion(g, p) != Some(*card)
+            || !g.has_priority(p)
+            || !g.is_sorcery_timing(p)
+            // CR 903.11a: nor a card a Commander game's rules don't let in (before any cost
+            // is paid).
+            || !crate::commander_rules::may_bring_in(g, *card, Zone::Hand(p))
+        {
             return Some(Err(Illegal(
                 "can't put that companion into hand now".into(),
             )));

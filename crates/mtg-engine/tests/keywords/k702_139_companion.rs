@@ -250,34 +250,67 @@ fn in_commander_the_commander_is_part_of_the_starting_deck() {
         ..Default::default()
     };
     // A two-mana commander: Lurrus can be revealed, and put into hand from outside the
-    // game during the game.
-    let mut deck = copies("Forest", 60);
-    deck.extend(copies("Grizzly Bears", 39));
-    deck.push(card("Isamaru, Hound of Konda"));
-    let mut t = pregame(commander(), vec![deck.clone(), copies("Forest", 100)]);
-    assert!(t.g.designate_commander(P0, "Isamaru, Hound of Konda"));
-    let side =
-        t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
+    // game during the game (it's within Ayli's white and black color identity,
+    // CR 903.11a).
+    let mut deck = copies("Plains", 60);
+    deck.extend(copies("Savannah Lions", 39));
+    deck.push(card("Ayli, Eternal Pilgrim"));
+    let mut t = pregame(commander(), vec![deck, copies("Forest", 100)]);
+    assert!(t.g.designate_commander(P0, "Ayli, Eternal Pilgrim"));
+    let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
     t.answer_choose(P0, &[Entity::Object(side[0])]);
     t.g.start();
     assert_eq!(t.g.companion_of(P0), Some(side[0]));
     t.advance_to(P0, Step::PrecombatMain);
-    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Plains", 3);
+    assert!(specials(&mut t, P0).contains(&to_hand(side[0])));
     t.g.turn.priority = Some(P0);
     t.g.perform_action(P0, Action::Special(to_hand(side[0])))
         .unwrap();
     assert!(t.in_hand(P0, "Lurrus of the Dream-Den"));
     // A three-mana commander breaks the condition, though it's not in the library.
-    let mut deck = copies("Forest", 60);
-    deck.extend(copies("Grizzly Bears", 39));
-    deck.push(card("Hill Giant"));
+    let mut deck = copies("Plains", 60);
+    deck.extend(copies("Savannah Lions", 39));
+    deck.push(card("Tymna the Weaver"));
     let mut t = pregame(commander(), vec![deck, copies("Forest", 100)]);
-    assert!(t.g.designate_commander(P0, "Hill Giant"));
-    let side =
-        t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
+    assert!(t.g.designate_commander(P0, "Tymna the Weaver"));
+    let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
     t.answer_choose(P0, &[Entity::Object(side[0])]);
     t.g.start();
     assert_eq!(t.g.companion_of(P0), None);
+}
+
+#[test]
+fn in_commander_a_companion_outside_the_color_identity_cant_be_put_into_hand() {
+    cr!("702.139a", "702.139d", "903.11a");
+    // Lurrus (white and black) with a white commander: revealed, but it can't be brought
+    // into the game, and nothing is paid for trying.
+    let mut deck = copies("Plains", 60);
+    deck.extend(copies("Savannah Lions", 39));
+    deck.push(card("Isamaru, Hound of Konda"));
+    let mut t = pregame(
+        GameConfig {
+            variant: Variant::Commander,
+            starting_player: Some(P0),
+            ..Default::default()
+        },
+        vec![deck, copies("Forest", 100)],
+    );
+    assert!(t.g.designate_commander(P0, "Isamaru, Hound of Konda"));
+    let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
+    t.answer_choose(P0, &[Entity::Object(side[0])]);
+    t.g.start();
+    assert_eq!(t.g.companion_of(P0), Some(side[0]));
+    t.advance_to(P0, Step::PrecombatMain);
+    let lands = t.lands(P0, "Plains", 3);
+    assert!(!specials(&mut t, P0).contains(&to_hand(side[0])));
+    t.g.turn.priority = Some(P0);
+    assert!(t
+        .g
+        .perform_action(P0, Action::Special(to_hand(side[0])))
+        .is_err());
+    assert_eq!(t.zone(side[0]), Zone::Outside(P0));
+    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped));
 }
 
 #[test]
@@ -336,9 +369,9 @@ fn a_minimum_deck_size_condition_depends_on_the_format() {
     let (t, _) = start_with(config(), deck(60), vec![card("Yorion, Sky Nomad")], Some(0));
     assert_eq!(t.g.companion_of(P0), None);
     // Commander: exactly one hundred cards, never twenty more than the minimum.
-    let mut d = copies("Forest", 60);
-    d.extend(copies("Grizzly Bears", 39));
-    d.push(card("Isamaru, Hound of Konda"));
+    let mut d = copies("Plains", 60);
+    d.extend(copies("Savannah Lions", 39));
+    d.push(card("Brago, King Eternal"));
     let mut t = pregame(
         GameConfig {
             variant: Variant::Commander,
@@ -347,7 +380,7 @@ fn a_minimum_deck_size_condition_depends_on_the_format() {
         },
         vec![d, copies("Forest", 100)],
     );
-    assert!(t.g.designate_commander(P0, "Isamaru, Hound of Konda"));
+    assert!(t.g.designate_commander(P0, "Brago, King Eternal"));
     let side = t.g.add_to_sideboard(P0, vec![card("Yorion, Sky Nomad")]);
     t.answer_choose(P0, &[Entity::Object(side[0])]);
     t.g.start();
