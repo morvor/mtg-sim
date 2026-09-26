@@ -151,19 +151,24 @@ fn forbidden(g: &mut Game, p: PlayerId) -> Vec<Action> {
         g.shortcuts.involved.clear();
         g.shortcuts.last_choice.clear();
     }
-    let fp = g.loop_fingerprint();
-    g.shortcuts.current = Some(fp);
-    let n = g.shortcuts.seen.entry(fp).or_insert(0);
-    *n += 1;
-    let repeats = *n;
     let mut forbid: Vec<Action> = Vec::new();
     if let Some((q, a)) = g.shortcuts.must_differ.take() {
         if q == p {
             forbid.push(a);
         }
     }
+    // A fragmented loop needs independent actions of two or more players: game states
+    // are only watched from then on.
+    if g.shortcuts.involved.len() < 2 {
+        return forbid;
+    }
+    let fp = g.loop_fingerprint();
+    g.shortcuts.current = Some(fp);
+    let n = g.shortcuts.seen.entry(fp).or_insert(0);
+    *n += 1;
+    let repeats = *n;
     let involved = &g.shortcuts.involved;
-    if repeats >= FRAGMENTED_REPEATS && involved.len() >= 2 {
+    if repeats >= FRAGMENTED_REPEATS {
         // CR 732.3: the active player, or the first player in turn order involved.
         let breaker = if involved.contains(&g.turn.active) {
             Some(g.turn.active)
