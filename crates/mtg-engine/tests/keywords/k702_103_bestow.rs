@@ -59,6 +59,42 @@ fn a_spell_cast_bestowed_is_an_aura_spell_that_enchants_a_creature() {
 }
 
 #[test]
+fn a_bestowed_aura_never_enters_as_a_creature() {
+    cr!("702.103b");
+    let mut t = TestGame::new(2);
+    // Cloudfin Raptor (0/1, evolve) would evolve if a creature entered.
+    let raptor = t.battlefield(P0, "Cloudfin Raptor");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    bestow_rollicker(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(t.pt(raptor), (0, 1));
+    assert_eq!(t.pt(bears), (3, 3));
+}
+
+#[test]
+fn a_bestowed_aura_stays_untapped_when_it_becomes_a_creature() {
+    cr!("702.103f");
+    ruling!(
+        "Boon Satyr",
+        "Except in some rare cases, an Aura with bestow remains untapped when it becomes unattached and becomes a creature."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let (c, _) = bestow_rollicker(&mut t, bears);
+    t.resolve_all();
+    let r = t.g.current(c);
+    // The Bears attack (and tap); the Aura doesn't.
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(t.obj(bears).tapped);
+    assert!(!t.obj(r).tapped);
+    destroy(&mut t, bears);
+    t.settle();
+    assert!(t.obj(r).is_creature());
+    assert!(!t.obj(r).tapped);
+    assert!(!t.g.is_attacking(r));
+}
+
+#[test]
 fn a_bestowed_aura_spell_targets_a_creature() {
     cr!("702.103b");
     let mut t = TestGame::new(2);
