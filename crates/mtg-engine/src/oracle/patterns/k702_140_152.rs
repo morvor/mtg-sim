@@ -302,6 +302,40 @@ fn graveyard_cards_have_encore(l: &str, text: &str, _ctx: &CompileContext) -> Op
 
 inventory::submit! { StaticPattern { name: "each [quality] card in your graveyard has encore", priority: 100, parse: graveyard_cards_have_encore } }
 
+/// "Blitz costs you pay cost {1} less [for each time you've cast your commander from the
+/// command zone this game]" (Henzie "Toolbox" Torre; CR 702.152a, 601.2f).
+fn blitz_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("blitz costs you pay cost {")?;
+    let (n, rest) = r.split_once('}')?;
+    let n: i32 = n.parse().ok()?;
+    let rest = rest.strip_prefix(" less")?.trim();
+    let amount = if rest.is_empty() {
+        Value::c(n)
+    } else {
+        let each = crate::oracle::patterns::statics::parse_for_each(
+            rest.strip_prefix("for each ")?,
+            None,
+        )?;
+        if n == 1 {
+            each
+        } else {
+            Value::Mul(Box::new(Value::c(n)), Box::new(each))
+        }
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::CostModifier(
+            CostModifier {
+                applies_to: CostTarget::Keyword(KeywordKind::Blitz),
+                who: PlayerRel::You,
+                change: CostChange::ReduceGeneric(amount),
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "blitz costs you pay cost {N} less", priority: 100, parse: blitz_costs_less } }
+
 /// "Whenever a creature you control mutates" (Essence Symbiote; CR 702.140d): "that
 /// creature" is the mutated permanent.
 fn creature_you_control_mutates(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {

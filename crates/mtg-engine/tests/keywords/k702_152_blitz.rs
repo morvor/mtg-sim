@@ -273,3 +273,26 @@ fn a_blitzed_creature_doesnt_have_to_attack() {
     assert!(t.in_graveyard(P0, "Riveteers Requisitioner"));
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn blitz_costs_can_be_reduced() {
+    cr!("702.152a", "601.2f");
+    // Henzie "Toolbox" Torre's "Blitz costs you pay cost {1} less for each time you've
+    // cast your commander from the command zone this game", with a fixed amount.
+    let def = custom_card(
+        "Blitz Coach",
+        "Creature — Devil",
+        Some((1, 1)),
+        "Blitz costs you pay cost {2} less.",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, def, Zone::Battlefield);
+    // Riveteers Requisitioner: blitz {2}{R}, now {R}.
+    let c = t.hand(P0, "Riveteers Requisitioner");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    assert!(castable(&mut t, P0, c, BLITZ));
+    t.cast(P0, c).method(BLITZ).go();
+    assert_eq!(pool(&t, P0), 0);
+    t.resolve_all();
+    assert!(has_kw(&t, c, KeywordKind::Haste));
+}
