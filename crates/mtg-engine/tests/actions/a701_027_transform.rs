@@ -2,8 +2,10 @@
 
 use crate::a701_common::*;
 use mtg_engine::ability::*;
-use mtg_engine::events::Event;
+use mtg_engine::events::{Event, MoveCause};
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{FaceState, Zone};
+use mtg_engine::replacement::{EtbInfo, MoveEv};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -80,8 +82,8 @@ fn transforming_isnt_turning_face_up() {
 }
 
 #[test]
-fn a_permanent_that_isnt_a_transforming_double_faced_card_doesnt_transform() {
-    cr!("701.27c", "712.4c", "712.15a");
+fn a_permanent_that_isnt_a_double_faced_card_doesnt_transform() {
+    cr!("701.27c", "712.4c", "712.9", "712.15a");
     supported("Clone");
     let mut t = TestGame::new(2);
     let prowler = t.battlefield(P1, "Kessig Prowler");
@@ -106,16 +108,66 @@ fn a_permanent_that_isnt_a_transforming_double_faced_card_doesnt_transform() {
     let bruna = t.battlefield(P0, "Bruna, the Fading Light");
     transform(&mut t, bruna);
     assert_eq!(t.obj(bruna).face, FaceState::Front);
-    // ... or a face-down double-faced permanent (CR 712.15a).
-    let down = t.battlefield(P0, "Kessig Prowler");
-    mtg_engine::facedown::turn_face_down(&mut t.g, down);
+    // ... or a face-down double-faced permanent (CR 712.15, 712.15a): a Kessig Prowler that
+    // entered the battlefield face down.
+    let card = t
+        .g
+        .create_card_object(mtg_engine::card::card("Kessig Prowler"), P0, Zone::Nowhere);
+    let down = t
+        .g
+        .move_object_ev(MoveEv {
+            obj: card,
+            to: Zone::Battlefield,
+            pos: LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(P0),
+            etb: EtbInfo {
+                controller: Some(P0),
+                face_down: Some(KeywordKind::Morph),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .unwrap();
     t.g.recompute();
+    assert!(t.obj(down).face_down);
+    assert_eq!(
+        t.obj(down).card.as_ref().unwrap().name,
+        "Kessig Prowler // Sinuous Predator"
+    );
     transform(&mut t, down);
+    assert!(t.obj(down).face_down);
     assert_eq!(t.obj(down).face, FaceState::Front);
     assert_eq!(transformed_events(&t), 0);
-    // A transforming double-faced card does.
+    // A double-faced card does.
     transform(&mut t, prowler);
     assert_eq!(t.obj(prowler).face, FaceState::Back);
+}
+
+#[test]
+fn a_modal_double_faced_permanent_can_transform() {
+    cr!("701.27a", "712.9");
+    supported("Monica Rambeau // Photon, Living Light");
+    let mut t = TestGame::new(2);
+    // "{2}{R}{W}{W}: Transform Monica Rambeau. Activate only as a sorcery."
+    let monica = t.battlefield(P0, "Monica Rambeau // Photon, Living Light");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Plains", 4);
+    t.set_step(P0, Step::PrecombatMain);
+    let i = t
+        .obj(monica)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.contains("Transform"))
+        .expect("no transform ability");
+    t.activate(P0, monica, i, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj(monica).face, FaceState::Back);
+    assert_eq!(t.obj(monica).chars.name, "Photon, Living Light");
+    assert!(t.g.is_live(monica));
+    assert_eq!(transformed_events(&t), 1);
 }
 
 #[test]
@@ -128,7 +180,21 @@ fn a_permanent_doesnt_transform_into_an_instant_or_sorcery_face() {
     assert_eq!(t.obj(siege).face, FaceState::Front);
     assert_eq!(t.zone(siege), Zone::Battlefield);
     assert_eq!(t.obj(siege).chars.name, "Invasion of Alara");
+    // Soporific Springs, played as a land, would turn into Sink into Stupor, an instant.
+    let springs = t.hand(P0, "Sink into Stupor // Soporific Springs");
+    t.set_step(P0, Step::PrecombatMain);
+    t.play_land(P0, springs).unwrap();
+    let springs = t.g.current(springs);
+    assert_eq!(t.obj(springs).chars.name, "Soporific Springs");
+    transform(&mut t, springs);
+    assert_eq!(t.obj(springs).face, FaceState::Back);
+    assert_eq!(t.obj(springs).chars.name, "Soporific Springs");
     assert_eq!(transformed_events(&t), 0);
+    // A creature face it can transform into.
+    let monica = t.battlefield(P0, "Monica Rambeau // Photon, Living Light");
+    transform(&mut t, monica);
+    assert_eq!(t.obj(monica).chars.name, "Photon, Living Light");
+    assert_eq!(transformed_events(&t), 1);
 }
 
 #[test]
@@ -143,7 +209,8 @@ fn transforms_into_triggers_on_the_quality_after_transforming() {
     supported("Thraben Gargoyle");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Cult of the Waxing Moon");
-    // A non-Human creature before and after (Gargoyle, then Gargoyle Horror).
+    // A non-Human creature before and after (Thraben Gargoyle, then Stonewing
+    // Antagonizer).
     let gargoyle = t.battlefield(P0, "Thraben Gargoyle");
     transform(&mut t, gargoyle);
     assert_eq!(t.obj(gargoyle).chars.name, "Stonewing Antagonizer");
@@ -226,6 +293,33 @@ fn a_delayed_ability_doesnt_transform_it_if_it_transformed_since_it_was_created(
 }
 
 #[test]
+fn a_delayed_ability_counts_transformations_since_it_was_created_not_since_it_triggered() {
+    cr!("701.27f");
+    supported("Archangel Avacyn");
+    let mut t = TestGame::new(2);
+    let avacyn = t.battlefield(P0, "Archangel Avacyn");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // A non-Angel creature dies: the delayed triggered ability is created now.
+    t.g.destroy(bears, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.g.delayed_triggers.len(), 1);
+    // Another effect transforms Avacyn before the next upkeep.
+    transform(&mut t, avacyn);
+    assert_eq!(t.obj(avacyn).chars.name, "Avacyn, the Purifier");
+    assert_eq!(transformed_events(&t), 1);
+    // The delayed ability triggers and is put on the stack after that, but Avacyn has
+    // transformed since it was created: it doesn't transform her back.
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    t.resolve_all();
+    assert!(t.g.delayed_triggers.is_empty());
+    assert_eq!(t.obj(avacyn).chars.name, "Avacyn, the Purifier");
+    // (No transformation this turn.)
+    assert_eq!(transformed_events(&t), 0);
+}
+
+#[test]
 fn a_transformed_permanent_is_a_double_faced_permanent_with_its_back_face_up() {
     cr!("701.27g");
     ruling!(
@@ -246,6 +340,13 @@ fn a_transformed_permanent_is_a_double_faced_permanent_with_its_back_face_up() {
     assert_eq!(t.pt(mutagen).0, base + 1);
     // Front face up again: not a transformed permanent, though it was one.
     transform(&mut t, prowler);
+    assert_eq!(t.pt(mutagen).0, base);
+    // A modal double-faced permanent that transformed is one too (CR 712.9).
+    let monica = t.battlefield(P0, "Monica Rambeau // Photon, Living Light");
+    assert_eq!(t.pt(mutagen).0, base);
+    transform(&mut t, monica);
+    assert_eq!(t.pt(mutagen).0, base + 1);
+    transform(&mut t, monica);
     assert_eq!(t.pt(mutagen).0, base);
     // A melded permanent (back faces up) isn't one.
     t.battlefield(P0, "Graf Rats");

@@ -1,9 +1,10 @@
 //! CR 701.27 Transform.
 //!
-//! * Only permanents represented by (transforming) double-faced cards or tokens can
-//!   transform (CR 701.27a, 701.27c); a meld card can't (CR 712.4c), nor can a face-down
-//!   permanent (CR 712.15a). If the face it would transform into is an instant or sorcery
-//!   face, nothing happens (CR 701.27d).
+//! * Only permanents represented by double-faced cards or double-faced tokens can
+//!   transform (CR 701.27a, 701.27c, 712.9) — modal double-faced cards included
+//!   (CR 712.3) — but not meld cards (CR 712.4c) or face-down permanents (CR 712.15a). If
+//!   the face it would transform into is an instant or sorcery face, nothing happens
+//!   (CR 701.27d).
 //! * Transforming isn't turning face up or face down (CR 701.27b): it's a separate event
 //!   (`Event::Transformed`).
 //! * "Whenever [a permanent] transforms into [a quality]" triggers if it has that quality
@@ -13,7 +14,9 @@
 //!   only if it hasn't transformed since the ability was put onto the stack; for a delayed
 //!   triggered ability, since that ability was created (CR 701.27f).
 //! * A "transformed permanent" is a double-faced permanent with its back face up, and never
-//!   a melded or merged permanent (CR 701.27g): the custom filter [`TRANSFORMED`].
+//!   a melded or merged permanent (CR 701.27g): the custom filter [`TRANSFORMED`]. (Older
+//!   rulings also exclude modal double-faced permanents, from when those couldn't
+//!   transform; the current rule doesn't.)
 
 use crate::ability::*;
 use crate::card::Layout;
@@ -36,11 +39,9 @@ pub const DELAYED_CREATED: Var = vars::USER + 730;
 /// `Filter::Custom`: "transformed permanent" (CR 701.27g).
 pub const TRANSFORMED: &str = "transformed";
 
+/// A double-faced card or token that isn't a meld card (CR 712.9).
 fn transforming_layout(l: Layout) -> bool {
-    matches!(
-        l,
-        Layout::Transform | Layout::DoubleFacedToken | Layout::Battle
-    )
+    l.is_double_faced() && l != Layout::Meld
 }
 
 /// Whether the permanent `id` can transform now (CR 701.27a, 701.27c, 701.27d).

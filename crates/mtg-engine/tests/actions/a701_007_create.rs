@@ -80,7 +80,7 @@ fn a_token_creation_replacement_sees_the_tokens_as_they_are_created() {
 
 #[test]
 fn token_doublers_multiply_the_tokens_created() {
-    cr!("701.7a");
+    cr!("701.7a", "614.1a");
     supported("Parallel Lives");
     supported("Raise the Alarm");
     let mut t = TestGame::new(2);
@@ -123,7 +123,7 @@ fn destroying_moves_a_permanent_to_its_owners_graveyard() {
     assert_eq!(destroyed(&t), 1);
     // Lethal damage destroys it too (CR 704.5g).
     let bears = t.battlefield(P1, "Grizzly Bears");
-    t.g.deal_damage(giant.max(bears), Entity::Object(bears), 2, false);
+    t.g.deal_damage(bears, Entity::Object(bears), 2, false);
     t.settle();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(destroyed(&t), 2);
@@ -151,7 +151,7 @@ fn destroying_moves_a_permanent_to_its_owners_graveyard() {
 #[test]
 fn regeneration_replaces_destruction_but_not_sacrifice() {
     cr!("701.8b", "701.8c");
-    supported("Uncle Istvan");
+    supported("Drudge Skeletons");
     let mut t = TestGame::new(2);
     let troll = t.battlefield(P0, "Drudge Skeletons");
     t.lands(P0, "Swamp", 2);

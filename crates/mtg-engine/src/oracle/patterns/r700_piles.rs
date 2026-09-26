@@ -39,6 +39,9 @@ fn reveal_top_cards(l: &str, b: &mut Builder) -> Option<Effect> {
     if end(r) != "cards of your library" {
         return None;
     }
+    // A fixed number: "the top X cards, where X is ..." may be followed by instructions
+    // that use the same X ("with mana value X or less"), which this doesn't bind.
+    n.as_const()?;
     b.it = Sel::Var(vars::REVEALED);
     Some(Effect::Dig {
         who: PlayerRef::You,
@@ -141,6 +144,11 @@ fn put_piles(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "r700 put piles", priority: 100, parse: put_piles } }
 
+/// The objects in the chosen pile that match `f` ("all creatures in the pile").
+fn in_chosen_pile(f: Filter) -> Sel {
+    Sel::All(Filter::and(vec![f, Filter::In(Box::new(Sel::Var(CHOSEN)))]))
+}
+
 /// "that player sacrifices all permanents in the pile of their choice", "destroy all
 /// creatures in the pile of that player's choice", "exile the pile of an opponent's choice
 /// and return the other to the battlefield".
@@ -148,7 +156,7 @@ fn pile_of_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // "[player] sacrifices all [objects] in the pile of their choice"
     if let Some((who, r)) = l.split_once(" sacrifices all ") {
-        let (_, _, tail) = parse_object_phrase(r)?;
+        let (f, _, tail) = parse_object_phrase(r)?;
         if end(tail) != "in the pile of their choice" {
             return None;
         }
@@ -159,13 +167,13 @@ fn pile_of_choice(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(Effect::seq(vec![
             choose(p),
             Effect::SacrificeObjects {
-                what: Sel::Var(CHOSEN),
+                what: in_chosen_pile(f),
             },
         ]));
     }
     // "destroy all [objects] in the pile of that player's choice"
     if let Some(r) = l.strip_prefix("destroy all ") {
-        let (_, _, tail) = parse_object_phrase(r)?;
+        let (f, _, tail) = parse_object_phrase(r)?;
         let who = end(tail)
             .strip_prefix("in the pile of ")?
             .strip_suffix("'s choice")?;
@@ -176,7 +184,7 @@ fn pile_of_choice(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(Effect::seq(vec![
             choose(p),
             Effect::Destroy {
-                what: Sel::Var(CHOSEN),
+                what: in_chosen_pile(f),
                 no_regen: false,
             },
         ]));

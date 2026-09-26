@@ -149,3 +149,30 @@ fn separating_a_graveyard_into_piles_keeps_its_order() {
     assert!(t.g.is_live(b));
     let _ = (a, d);
 }
+
+#[test]
+fn objects_in_a_pile_are_still_individual_objects() {
+    cr!("700.3b");
+    // The pile of permanents isn't a creature: "all creatures in the pile" are the
+    // creature objects in it.
+    let def = oracle_card(
+        "Sorting Hat Trick",
+        "Sorcery",
+        "{0}",
+        None,
+        "Separate all permanents target player controls into two piles. That player sacrifices all creatures in the pile of their choice.",
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let forest = t.battlefield(P1, "Forest");
+    let giant = t.battlefield(P1, "Hill Giant");
+    // P0 puts the Bears and the Forest in one pile; P1 chooses it.
+    t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(forest)]);
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    let s = t.custom(P0, def, Zone::Hand(P0));
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert!(!t.g.is_live(bears));
+    assert!(t.on_battlefield(forest));
+    assert!(t.on_battlefield(giant));
+}

@@ -860,8 +860,16 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
         // "target planeswalker that was activated this turn or tapped creature": an
-        // alternative description after the first one's suffixes, ending the phrase.
-        let (f, r) = match strip(r, "or ").and_then(parse_object_phrase) {
+        // alternative description after the first one's suffixes, ending the phrase. Not
+        // after a list ("target Spirit, creature with disturb, or enchantment"), whose
+        // suffixes belong to its last item only.
+        let listed = s[..s.len() - r.len()].contains(',') || r.trim_start().starts_with(',');
+        let alternative = if listed {
+            None
+        } else {
+            strip(r, "or ").and_then(parse_object_phrase)
+        };
+        let (f, r) = match alternative {
             Some((f2, _, tail)) if end(tail).is_empty() && !filter_mentions_spell(&f2) => {
                 (Filter::Or(vec![f, f2]), tail)
             }
