@@ -60,7 +60,12 @@ fn afterlife_triggers_on_any_trip_from_the_battlefield_to_a_graveyard_only() {
     // Discarded from hand: not from the battlefield.
     let mut t = TestGame::new(2);
     let o = t.hand(P0, "Imperious Oligarch");
-    t.g.move_object(o, Zone::Graveyard(P0), mtg_engine::events::MoveCause::Discard, None);
+    t.g.move_object(
+        o,
+        Zone::Graveyard(P0),
+        mtg_engine::events::MoveCause::Discard,
+        None,
+    );
     t.g.flush_events();
     t.resolve_all();
     assert!(spirits(&t, P0).is_empty());

@@ -7,11 +7,11 @@ use mtg_engine::card::{card, CardDef};
 use mtg_engine::deck::DeckProblem;
 use mtg_engine::eval::Ctx;
 use mtg_engine::game::GameConfig;
+use mtg_engine::game::Variant;
 use mtg_engine::kw::partner::{check_commander_deck, commanders_problem};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
-use mtg_engine::game::Variant;
 use mtg_engine::*;
 use std::sync::Arc;
 
@@ -54,16 +54,30 @@ fn commander_game() -> TestGame {
 fn partner_lets_two_legendary_cards_with_partner_be_commanders() {
     cr!("702.124", "702.124a", "702.124h");
     for c in ["Kraum, Ludevic's Opus", "Tymna the Weaver"] {
-        assert!(card(c).faces[0].chars.has_keyword(mtg_engine::keywords::KeywordKind::Partner));
+        assert!(card(c).faces[0]
+            .chars
+            .has_keyword(mtg_engine::keywords::KeywordKind::Partner));
     }
     assert!(can_pair("Kraum, Ludevic's Opus", "Tymna the Weaver"));
     // A commander without partner can't be paired with one.
-    assert!(!can_pair("Kraum, Ludevic's Opus", "Isamaru, Hound of Konda"));
-    assert!(!can_pair("Isamaru, Hound of Konda", "Kraum, Ludevic's Opus"));
+    assert!(!can_pair(
+        "Kraum, Ludevic's Opus",
+        "Isamaru, Hound of Konda"
+    ));
+    assert!(!can_pair(
+        "Isamaru, Hound of Konda",
+        "Kraum, Ludevic's Opus"
+    ));
     // Either can still be a commander on its own.
     assert!(commanders_problem(&[&card("Kraum, Ludevic's Opus")]).is_none());
     // Both must be legendary.
-    let plain = custom_card("Plain Partner", "Creature — Soldier", "{2}", Some((2, 2)), "Partner");
+    let plain = custom_card(
+        "Plain Partner",
+        "Creature — Soldier",
+        "{2}",
+        Some((2, 2)),
+        "Partner",
+    );
     assert!(commanders_problem(&[&card("Kraum, Ludevic's Opus"), &plain]).is_some());
 }
 
@@ -78,8 +92,12 @@ fn the_deck_has_100_cards_including_both_commanders() {
     let ok = deck(&["Kraum, Ludevic's Opus", "Tymna the Weaver"], "Island", 98);
     assert!(check_commander_deck(&ok, &pair, &[], false).is_empty());
     let big = deck(&["Kraum, Ludevic's Opus", "Tymna the Weaver"], "Island", 99);
-    assert!(check_commander_deck(&big, &pair, &[], false)
-        .contains(&DeckProblem::TooManyCards { have: 101, max: 100 }));
+    assert!(
+        check_commander_deck(&big, &pair, &[], false).contains(&DeckProblem::TooManyCards {
+            have: 101,
+            max: 100
+        })
+    );
     // Both commanders begin the game in the command zone.
     let mut lib = deck(&["Kraum, Ludevic's Opus", "Tymna the Weaver"], "Island", 28);
     lib.rotate_left(1);
@@ -116,8 +134,11 @@ fn the_commanders_combined_color_identity() {
     assert!(check_commander_deck(&d, &pair, &[], false).is_empty());
     d.pop();
     d.push(card("Forest"));
-    assert!(check_commander_deck(&d, &pair, &[], false)
-        .contains(&DeckProblem::OutsideColorIdentity { name: "Forest".into() }));
+    assert!(check_commander_deck(&d, &pair, &[], false).contains(
+        &DeckProblem::OutsideColorIdentity {
+            name: "Forest".into()
+        }
+    ));
 }
 
 #[test]
@@ -153,7 +174,12 @@ fn each_commander_has_its_own_commander_tax() {
     let kraum = t.g.current(kraum);
     t.lands(P0, "Island", 4);
     t.lands(P0, "Mountain", 1);
-    assert!(!castable(&mut t, P0, kraum, mtg_engine::object::CastMethod::Normal));
+    assert!(!castable(
+        &mut t,
+        P0,
+        kraum,
+        mtg_engine::object::CastMethod::Normal
+    ));
     t.lands(P0, "Wastes", 2);
     t.cast(P0, kraum).go();
     assert_eq!(untapped_lands(&t, P0), 0);
@@ -182,7 +208,12 @@ fn a_commander_is_taxed_for_casts_of_either_of_its_faces() {
     // Halvar now costs {2}{W}{W} plus {2}.
     let halvar = t.g.current(halvar);
     t.lands(P0, "Plains", 4);
-    assert!(!castable(&mut t, P0, halvar, mtg_engine::object::CastMethod::Normal));
+    assert!(!castable(
+        &mut t,
+        P0,
+        halvar,
+        mtg_engine::object::CastMethod::Normal
+    ));
     t.lands(P0, "Plains", 2);
     t.cast(P0, halvar).go();
     assert_eq!(untapped_lands(&t, P0), 0);
@@ -212,7 +243,11 @@ fn commander_damage_is_counted_for_each_commander_separately() {
     t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
     t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
     declare_attack(&mut t, &[(kraum, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, decision::Answer::Blockers(vec![]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        decision::Answer::Blockers(vec![]),
+    );
     // 24 from Kraum: P1 loses (CR 903.10a) and the game ends.
     assert!(t.g.run_until(10_000, |g| g.result.is_some()));
     assert!(t.has_lost(P1));
@@ -270,11 +305,20 @@ fn different_partner_abilities_cant_be_combined() {
         "Notably, Time Lord Doctors and cards with Doctor's companion do not interact with cards which have another partner ability."
     );
     // Partner and partner with [name].
-    assert!(!can_pair("Kraum, Ludevic's Opus", "Pir, Imaginative Rascal"));
+    assert!(!can_pair(
+        "Kraum, Ludevic's Opus",
+        "Pir, Imaginative Rascal"
+    ));
     // Partner and partner—[text].
-    assert!(!can_pair("Kraum, Ludevic's Opus", "Sophina, Spearsage Deserter"));
+    assert!(!can_pair(
+        "Kraum, Ludevic's Opus",
+        "Sophina, Spearsage Deserter"
+    ));
     // Partner and choose a Background.
-    assert!(!can_pair("Kraum, Ludevic's Opus", "Wilson, Refined Grizzly"));
+    assert!(!can_pair(
+        "Kraum, Ludevic's Opus",
+        "Wilson, Refined Grizzly"
+    ));
     assert!(!can_pair("Kraum, Ludevic's Opus", "Raised by Giants"));
     // Partner and Doctor's companion or a Doctor.
     assert!(!can_pair("Kraum, Ludevic's Opus", "Rose Tyler"));
@@ -316,7 +360,10 @@ fn partner_with_text_needs_the_same_text() {
         "Othelm, Sigardian Outcast"
     ));
     assert!(can_pair("Ellie, Brick Master", "Joel, Resolute Survivor"));
-    assert!(!can_pair("Sophina, Spearsage Deserter", "Ellie, Brick Master"));
+    assert!(!can_pair(
+        "Sophina, Spearsage Deserter",
+        "Ellie, Brick Master"
+    ));
 }
 
 #[test]
@@ -335,7 +382,10 @@ fn partner_with_a_name_pairs_only_those_two() {
         "Pir, Imaginative Rascal"
     ));
     assert!(!can_pair("Pir, Imaginative Rascal", "Tymna the Weaver"));
-    assert!(!can_pair("Pir, Imaginative Rascal", "Pir, Imaginative Rascal"));
+    assert!(!can_pair(
+        "Pir, Imaginative Rascal",
+        "Pir, Imaginative Rascal"
+    ));
 }
 
 #[test]
@@ -384,8 +434,14 @@ fn choose_a_background_pairs_with_a_legendary_background() {
     assert!(commanders_problem(&[&card("Raised by Giants")]).is_some());
     assert!(!can_pair("Tymna the Weaver", "Raised by Giants"));
     // Nor can a creature with choose a Background pair with anything but a Background.
-    assert!(!can_pair("Wilson, Refined Grizzly", "Isamaru, Hound of Konda"));
-    assert!(!can_pair("Wilson, Refined Grizzly", "Wilson, Refined Grizzly"));
+    assert!(!can_pair(
+        "Wilson, Refined Grizzly",
+        "Isamaru, Hound of Konda"
+    ));
+    assert!(!can_pair(
+        "Wilson, Refined Grizzly",
+        "Wilson, Refined Grizzly"
+    ));
 }
 
 #[test]

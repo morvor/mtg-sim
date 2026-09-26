@@ -85,11 +85,11 @@ fn each_instance_of_fabricate_triggers_separately() {
         Some((1, 1)),
         "Fabricate 1\nFabricate 2",
     );
-    let id = t.g.create_card_object(std::sync::Arc::new(def), P0, Zone::Nowhere);
-    let id = t
-        .g
-        .move_object(id, Zone::Battlefield, events::MoveCause::Effect, Some(P0))
-        .unwrap();
+    let id =
+        t.g.create_card_object(std::sync::Arc::new(def), P0, Zone::Nowhere);
+    let id =
+        t.g.move_object(id, Zone::Battlefield, events::MoveCause::Effect, Some(P0))
+            .unwrap();
     t.settle();
     assert_eq!(on_stack(&t, "Fabricate 1"), 1);
     assert_eq!(on_stack(&t, "Fabricate 2"), 1);
