@@ -89,3 +89,15 @@ pub fn def(name: &str) -> mtg_engine::card::CardDef {
 pub fn exiled(t: &TestGame, id: ObjectId) -> bool {
     matches!(t.zone(id), Zone::Exile)
 }
+
+/// Asserts that no unsupported line of a real card contains `text` (lowercase match): the
+/// line the test is about compiled, whatever the card's other lines do.
+pub fn assert_line_supported(name: &str, text: &str) {
+    let c = card(name);
+    let bad: Vec<&str> = c
+        .unsupported_text()
+        .into_iter()
+        .filter(|l| l.to_lowercase().contains(&text.to_lowercase()))
+        .collect();
+    assert!(bad.is_empty(), "{name}: unsupported {bad:?}");
+}
