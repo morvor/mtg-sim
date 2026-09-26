@@ -77,6 +77,9 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         return None;
     }
     let (pre, body) = match l.split_once(", you may ") {
+        // A condition about the card itself ("If ~ is in your graveyard, ...") would be
+        // a permission to cast it from elsewhere, not only a cost.
+        Some((head, _)) if head.contains('~') => return None,
         Some((head, body)) => (Some(cost_condition(head, ctx)?), body),
         None => (None, l.strip_prefix("you may ")?),
     };
