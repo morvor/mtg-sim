@@ -285,6 +285,8 @@ impl Game {
                 });
             }
         }
+        // CR 801.7: only events entirely within the controller's range of influence.
+        found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
             if t.ability.is_mana_ability() {
                 self.resolve_trigger_immediately(t);
@@ -529,6 +531,8 @@ impl Game {
                 }
             }
         }
+        // CR 801.7: only events entirely within the controller's range of influence.
+        found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
             // CR 605.1b / 605.4a: triggered mana abilities resolve immediately.
             if t.ability.is_mana_ability() {
@@ -1839,10 +1843,11 @@ impl Game {
         if pending.is_empty() {
             return;
         }
-        for p in self.apnap() {
+        // CR 603.3b, 805.7: each player (with shared team turns, each team) in APNAP order.
+        for (p, members) in self.trigger_groups() {
             let mut mine: Vec<PendingTrigger> = pending
                 .iter()
-                .filter(|t| t.controller == p)
+                .filter(|t| members.contains(&t.controller))
                 .cloned()
                 .collect();
             if mine.is_empty() {

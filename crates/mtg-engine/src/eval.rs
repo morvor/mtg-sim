@@ -180,6 +180,12 @@ impl Game {
     }
 
     pub fn player_filter_matches(&self, f: &PlayerFilter, p: PlayerId, ctx: &Ctx) -> bool {
+        // CR 801.10, 801.11: not players outside the controller's range of influence.
+        if crate::multiplayer::range::option_used(self)
+            && !crate::multiplayer::range::sees_player(self, ctx.controller, ctx.source, p)
+        {
+            return false;
+        }
         match f {
             PlayerFilter::Any => true,
             PlayerFilter::Is(q) => p == *q,
@@ -227,8 +233,20 @@ impl Game {
         }
     }
 
-    /// Resolves a [`PlayerRef`] to players (in APNAP order where there are several).
+    /// Resolves a [`PlayerRef`] to players (in APNAP order where there are several). With
+    /// the limited range of influence option, a spell or ability doesn't see or affect
+    /// players outside its controller's range (CR 801.10, 801.11).
     pub fn eval_players(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
+        let mut v = self.eval_players_unranged(r, ctx);
+        if crate::multiplayer::range::option_used(self) && !matches!(r, PlayerRef::You) {
+            v.retain(|p| {
+                crate::multiplayer::range::sees_player(self, ctx.controller, ctx.source, *p)
+            });
+        }
+        v
+    }
+
+    fn eval_players_unranged(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
         let apnap = self.apnap();
         match r {
             PlayerRef::Player(p) => {
@@ -312,9 +330,13 @@ impl Game {
     // Objects
     // ------------------------------------------------------------------
 
-    /// Whether object `id` matches `f`, using current characteristics.
+    /// Whether object `id` matches `f`, using current characteristics. With the limited
+    /// range of influence option, a spell or ability doesn't see or affect objects outside
+    /// its controller's range (CR 801.10, 801.11).
     pub fn matches(&self, id: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
         self.matches_view(&Current, id, f, ctx)
+            && (!crate::multiplayer::range::option_used(self)
+                || crate::multiplayer::range::sees_object(self, ctx.controller, ctx.source, id))
     }
 
     /// Controller for filter purposes: objects outside the battlefield and stack have no

@@ -335,6 +335,9 @@ impl Game {
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
         // CR 723.1: player-controlling effects for this turn start (and last turn's end).
         crate::player_control::turn_began(self);
+        // CR 801.2c, 800.4m: ranges of influence; turns of players who left would have begun.
+        let previous = self.turn.previous_active;
+        crate::multiplayer::turn_began(self, previous, active, extra);
         self.emit(Event::TurnBegan {
             active,
             number: self.turn.number,
@@ -874,7 +877,7 @@ impl Game {
         self.dirty = true;
     }
 
-    fn expire_until_next_turn(&mut self, active: PlayerId) {
+    pub(crate) fn expire_until_next_turn(&mut self, active: PlayerId) {
         let until =
             |d: &Duration, c: PlayerId| matches!(d, Duration::UntilYourNextTurn) && c == active;
         self.play_grants.retain(|g| !until(&g.duration, g.player));

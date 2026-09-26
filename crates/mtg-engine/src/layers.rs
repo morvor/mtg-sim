@@ -339,6 +339,9 @@ impl Game {
                         .collect();
                     self.objects[id.0 as usize].chars.abilities.extend(extra);
                 }
+                // CR 804.2: with the deploy creatures option, each creature has the deploy
+                // ability.
+                crate::multiplayer::deploy::grant(self, &live);
             }
             if layer == Layer::L6Ability {
                 self.apply_cant_have(&live, &mut st);

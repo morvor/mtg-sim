@@ -208,6 +208,17 @@ impl Game {
         if self_only {
             cands.retain(|c| c.def.self_replacement);
         }
+        // CR 801.13: not effects that would affect objects or players outside their
+        // controller's range of influence.
+        cands.retain(|c| {
+            crate::multiplayer::range::replacement_in_range(
+                self,
+                c.controller,
+                c.source,
+                &c.def,
+                &ev,
+            )
+        });
         if cands.is_empty() {
             return vec![ev];
         }
@@ -234,7 +245,17 @@ impl Game {
                 return self.replace_rec(ev, applied, depth + 1, self_only);
             }
         }
-        let results = self.apply_replacement(&cand, ev, &applied);
+        let mut results = self.apply_replacement(&cand, ev, &applied);
+        // CR 801.13a: the parts of the modified event affecting objects or players outside
+        // the effect's controller's range of influence do nothing.
+        results.retain(|r| {
+            crate::multiplayer::range::replaced_event_in_range(
+                self,
+                cand.controller,
+                cand.source,
+                r,
+            )
+        });
         let mut out = Vec::new();
         for r in results {
             out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only));

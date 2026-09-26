@@ -114,6 +114,11 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
     if chars.is(CardType::Battle) {
         return false;
     }
+    // CR 801.8, 801.9: not to an object or player outside its controller's range of
+    // influence.
+    if !crate::multiplayer::range::attachment_in_range(g, obj, to) {
+        return false;
+    }
     match to {
         Entity::Player(p) => {
             if !g.player(p).in_game() {

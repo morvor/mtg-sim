@@ -1390,6 +1390,10 @@ impl Game {
         if who != p && !act.any_player {
             return false;
         }
+        // CR 801.6: not the abilities of an object outside the player's range of influence.
+        if who != p && !crate::multiplayer::range::object_in_range(self, p, src) {
+            return false;
+        }
         // CR 602.2, 605.3a: abilities are activated by a player with priority; mana
         // abilities also while a mana payment is being made (casting, activating, or an
         // effect asking for a payment).

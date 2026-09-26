@@ -59,17 +59,55 @@ impl Game {
         self.next_player(after)
     }
 
-    /// The first player (in seat order) of each team, the team's representative.
+    /// Each team's primary player (CR 805.2), in the order the teams first appear in seat
+    /// order: the team's representative, who takes the team's turns and makes the team's
+    /// choices when its players can't agree.
     pub fn team_representatives(&self) -> Vec<PlayerId> {
         let mut seen = Vec::new();
         let mut out = Vec::new();
         for p in &self.players {
             if !seen.contains(&p.team) {
                 seen.push(p.team);
-                out.push(p.id);
+                out.push(self.primary_player(p.id));
             }
         }
         out
+    }
+
+    /// The primary player of `p`'s team (CR 805.2): the player seated in the team's
+    /// rightmost seat from its perspective.
+    pub fn primary_player(&self, p: PlayerId) -> PlayerId {
+        crate::multiplayer::setup::primary_player(self, p)
+    }
+
+    /// Groups of players who put their triggered abilities on the stack together, in
+    /// order, each with the player who chooses the order: every player on their own in
+    /// APNAP order (CR 603.3b) or, with shared team turns, the active team's players, then
+    /// each nonactive team's in turn order, each team ordering all of its members'
+    /// abilities as it likes — its primary player deciding (CR 805.7, 805.2).
+    pub fn trigger_groups(&self) -> Vec<(PlayerId, Vec<PlayerId>)> {
+        let order = self.apnap();
+        if !self.uses_shared_team_turns() {
+            return order.into_iter().map(|p| (p, vec![p])).collect();
+        }
+        let mut groups: Vec<(PlayerId, Vec<PlayerId>)> = Vec::new();
+        for p in order {
+            let team = self.player(p).team;
+            match groups
+                .iter_mut()
+                .find(|(c, _)| self.player(*c).team == team)
+            {
+                Some((_, v)) => v.push(p),
+                None => groups.push((p, vec![p])),
+            }
+        }
+        for (chooser, members) in groups.iter_mut() {
+            let primary = self.primary_player(members[0]);
+            if members.contains(&primary) {
+                *chooser = primary;
+            }
+        }
+        groups
     }
 
     /// The order in which players act while starting the game: the starting player, who is

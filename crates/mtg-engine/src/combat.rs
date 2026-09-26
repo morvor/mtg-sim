@@ -540,7 +540,8 @@ impl Game {
 /// Whether the game uses the shared team turns option (CR 805; always used in
 /// Two-Headed Giant, CR 810).
 pub fn shared_team_turns(g: &Game) -> bool {
-    g.config.variant == Variant::TwoHeadedGiant && g.config.teams.is_some()
+    (g.config.variant == Variant::TwoHeadedGiant || g.config.shared_team_turns)
+        && g.config.teams.is_some()
 }
 
 /// The attacking player(s) (CR 506.2, 506.2b): the active player, or with shared team
@@ -567,33 +568,23 @@ fn active_team(g: &Game) -> Vec<PlayerId> {
 /// Whether `b` is within `a`'s range of influence (CR 801.2): at most N seats away,
 /// counting only players still in the game. Unlimited range if the option isn't used.
 pub fn within_range(g: &Game, a: PlayerId, b: PlayerId) -> bool {
-    let Some(n) = g.range_of_influence(a) else {
-        return true;
-    };
-    if a == b {
-        return true;
-    }
-    let seats: Vec<PlayerId> = g.players_in_game();
-    let (Some(i), Some(j)) = (
-        seats.iter().position(|p| *p == a),
-        seats.iter().position(|p| *p == b),
-    ) else {
-        return false;
-    };
-    let len = seats.len();
-    let d = (i + len - j) % len;
-    d.min(len - d) as u32 <= n
+    crate::multiplayer::range::player_in_range(g, a, b)
 }
 
 /// Beginning of combat (CR 507): set up combat and choose the defending player.
 pub fn begin_combat(g: &mut Game) {
     let ap = g.turn.active;
     let attacking = active_team(g);
-    // CR 801.3: only opponents within range of influence can be attacked.
+    // CR 801.3, 803.1: only opponents within range of influence (and, with the attack left
+    // or right option, seated on that side) can be attacked.
     let opponents: Vec<PlayerId> = g
         .opponents(ap)
         .into_iter()
-        .filter(|p| within_range(g, ap, *p))
+        .filter(|p| {
+            attacking
+                .iter()
+                .any(|a| crate::multiplayer::attack::may_attack_player(g, *a, *p))
+        })
         .collect();
     let defending =
         if opponents.len() <= 1 || g.config.attack_multiple_players || shared_team_turns(g) {
@@ -684,7 +675,12 @@ pub fn attack_options(g: &Game) -> Vec<(ObjectId, Vec<Entity>)> {
                     .iter()
                     .copied()
                     .filter(|t| {
-                        g.can_attack_target(c, *t) && within_range(g, ctl, entity_defender(g, *t))
+                        g.can_attack_target(c, *t)
+                            && crate::multiplayer::attack::may_attack_player(
+                                g,
+                                ctl,
+                                entity_defender(g, *t),
+                            )
                     })
                     .collect::<Vec<_>>(),
             )
@@ -2472,8 +2468,9 @@ pub fn reselect_attack_target(g: &mut Game, attacker: ObjectId, new: Entity) -> 
         return false;
     }
     // CR 508.7e: within the controller's range of influence (a planeswalker via its
-    // controller; for a battle, its protector must be within range).
-    if !within_range(g, ctl, defender) {
+    // controller; for a battle, its protector must be within range), and on the side the
+    // attack left or right option allows (CR 803.1).
+    if !crate::multiplayer::attack::may_attack_player(g, ctl, defender) {
         return false;
     }
     let Some(c) = g.combat.as_mut() else {

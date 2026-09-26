@@ -16,6 +16,9 @@ impl Game {
         let mut did = false;
         let mut settled = false;
         for _ in 0..1000 {
+            // CR 800.4c: objects whose default controller left the game are exiled once
+            // the effects giving others control of them end.
+            did |= crate::multiplayer::exile_orphaned_objects(self);
             self.flush_events();
             if self.result.is_some() {
                 return did;
@@ -214,17 +217,23 @@ impl Game {
             .filter(|id| self.obj(*id).chars.has_supertype(Supertype::World))
             .collect();
         if worlds.len() > 1 {
-            let newest = worlds
-                .iter()
-                .map(|id| self.obj(*id).world_since.unwrap_or(0))
-                .max()
-                .unwrap_or(0);
-            let newest_ids: Vec<ObjectId> = worlds
-                .iter()
-                .copied()
-                .filter(|id| self.obj(*id).world_since.unwrap_or(0) == newest)
-                .collect();
             for id in &worlds {
+                // CR 801.12: with limited ranges of influence, only the other world
+                // permanents within its controller's range count.
+                let considered = crate::multiplayer::range::worlds_considered(self, *id, &worlds);
+                if considered.len() < 2 {
+                    continue;
+                }
+                let newest = considered
+                    .iter()
+                    .map(|id| self.obj(*id).world_since.unwrap_or(0))
+                    .max()
+                    .unwrap_or(0);
+                let newest_ids: Vec<ObjectId> = considered
+                    .iter()
+                    .copied()
+                    .filter(|id| self.obj(*id).world_since.unwrap_or(0) == newest)
+                    .collect();
                 if newest_ids.len() > 1 || !newest_ids.contains(id) {
                     to_graveyard.push(*id);
                 }

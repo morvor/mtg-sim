@@ -87,6 +87,10 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
+                    // CR 800.4f: a player who has left the game doesn't pay.
+                    if crate::multiplayer::cant_pay(self, p) {
+                        continue;
+                    }
                     if !self.can_pay_cost(p, cost, ctx.source, ctx) {
                         continue;
                     }
