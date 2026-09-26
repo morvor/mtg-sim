@@ -2,6 +2,7 @@
 //! double that damage instead / ... plus N instead" (patterns in
 //! `src/oracle/patterns/replacements_damage.rs`).
 
+use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -254,7 +255,7 @@ fn solphim_doubles_only_noncombat_damage_to_opponents() {
 
 #[test]
 fn charging_tuskodon_doubles_combat_damage_to_players_only() {
-    cr!("701.10g", "510.2");
+    cr!("701.10g");
     ruling!(
         "Charging Tuskodon",
         "The doubled damage Charging Tuskodon deals is still combat damage."
@@ -264,12 +265,46 @@ fn charging_tuskodon_doubles_combat_damage_to_players_only() {
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(tusk, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 12);
+    // One damage event of 8, and it's combat damage.
+    let dealt: Vec<(u32, bool)> = t
+        .g
+        .turn_events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Damage {
+                source,
+                target: Entity::Player(p),
+                amount,
+                combat,
+            } if *source == tusk && *p == P1 => Some((*amount, *combat)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(dealt, vec![(8, true)]);
     // Noncombat damage isn't doubled, nor is damage to a creature.
     t.g.deal_damage(tusk, Entity::Player(P1), 1, false);
     assert_eq!(t.life(P1), 11);
     let wurm = t.battlefield(P1, "Craw Wurm");
     t.g.deal_damage(tusk, Entity::Object(wurm), 4, true);
     assert_eq!(t.obj_now(wurm).damage, 4);
+}
+
+#[test]
+fn charging_tuskodon_doubles_trample_damage_only_as_its_dealt() {
+    cr!("701.10g", "702.19b");
+    ruling!(
+        "Charging Tuskodon",
+        "that damage is assigned based on its actual power and is doubled only as it’s dealt"
+    );
+    let mut t = TestGame::new(2);
+    let tusk = t.battlefield(P0, "Charging Tuskodon");
+    // A 3/3 blocker: 3 is assigned to it (lethal damage isn't doubled), 1 tramples over
+    // to the player and is doubled to 2 as it's dealt.
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(tusk, Entity::Player(P1))], &[(giant, tusk)]);
+    assert!(!t.on_battlefield(giant));
+    assert_eq!(t.life(P1), 18);
 }
 
 #[test]
@@ -337,15 +372,31 @@ fn rem_karolus_prevents_spell_damage_and_adds_to_your_spells() {
     assert_eq!(t.life(P0), 20);
     bolt(&mut t, P1, bears);
     assert!(t.on_battlefield(bears));
+    assert_eq!(t.obj_now(bears).damage, 0);
+    // "another permanent you control": damage from a spell to Rem Karolus itself isn't
+    // prevented.
+    let shock = t.hand(P1, "Shock");
+    t.lands(P1, "Mountain", 1);
+    t.cast(P1, shock).target(rem).go();
+    t.resolve();
+    assert_eq!(t.obj_now(rem).damage, 2);
     // Damage from a creature isn't prevented.
     let giant = t.battlefield(P1, "Hill Giant");
     t.g.deal_damage(giant, Entity::Player(P0), 3, true);
     assert_eq!(t.life(P0), 17);
-    // P0's spells deal 1 more to opponents; Rem's own damage isn't increased.
+    // P0's spells deal 1 more to opponents and their permanents; Rem's own damage isn't
+    // increased.
     bolt(&mut t, P0, P1);
     assert_eq!(t.life(P1), 16);
     t.g.deal_damage(rem, Entity::Player(P1), 2, true);
     assert_eq!(t.life(P1), 14);
+    let theirs = t.battlefield(P1, "Colossal Dreadmaw");
+    bolt(&mut t, P0, theirs);
+    assert_eq!(t.obj_now(theirs).damage, 4);
+    // P0's spell damaging P0's own creature is prevented, not increased.
+    let mine = t.battlefield(P0, "Colossal Dreadmaw");
+    bolt(&mut t, P0, mine);
+    assert_eq!(t.obj_now(mine).damage, 0);
 }
 
 #[test]
@@ -365,4 +416,9 @@ fn blind_fury_doubles_combat_damage_to_creatures_this_turn() {
     assert_eq!(t.life(P1), 18);
     t.g.deal_damage(bears, Entity::Object(wurm), 1, false);
     assert_eq!(t.obj_now(wurm).damage, 5);
+    // The effect ends with the turn.
+    t.advance_to(P1, Step::Upkeep);
+    let later = t.battlefield(P1, "Craw Wurm");
+    t.g.deal_damage(bears, Entity::Object(later), 2, true);
+    assert_eq!(t.obj_now(later).damage, 2);
 }

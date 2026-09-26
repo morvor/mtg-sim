@@ -139,6 +139,18 @@ fn angels_grace_lasts_until_end_of_turn() {
     assert_eq!(t.life(P0), -2);
     t.g.deal_damage(giant, Entity::Player(P0), 1, true);
     assert_eq!(t.life(P0), -3);
+
+    // The effect ends with the turn.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 1);
+    let grace = t.hand(P0, "Angel's Grace");
+    t.cast(P0, grace).go();
+    t.resolve();
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    set_life(&mut t, P0, 4);
+    t.g.deal_damage(giant, Entity::Player(P0), 10, true);
+    assert_eq!(t.life(P0), -6);
 }
 
 #[test]

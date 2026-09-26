@@ -116,7 +116,7 @@ fn safe_passage_protects_you_and_your_creatures_but_not_planeswalkers() {
 
 #[test]
 fn harmless_assault_prevents_combat_damage_by_attackers_only() {
-    cr!("615.1a", "510.2");
+    cr!("615.1a");
     ruling!(
         "Harmless Assault",
         "Combat damage dealt by blocking creatures isn’t prevented."
@@ -166,7 +166,7 @@ fn vine_snare_checks_power_as_the_damage_would_be_dealt() {
 
 #[test]
 fn haze_frog_prevents_combat_damage_by_other_creatures_including_later_ones() {
-    cr!("615.1a", "603.2");
+    cr!("615.1a", "611.2c");
     ruling!(
         "Haze Frog",
         "Combat damage dealt by Haze Frog itself during the turn it enters isn't prevented."
@@ -305,7 +305,7 @@ fn chameleon_blur_prevents_creature_damage_to_players_only() {
 
 #[test]
 fn armored_transport_prevents_combat_damage_from_its_blockers() {
-    cr!("615.1a", "509.1");
+    cr!("615.1a");
     let mut t = TestGame::new(2);
     let transport = t.battlefield(P0, "Armored Transport");
     let blocker = t.battlefield(P1, "Grizzly Bears");

@@ -2,6 +2,8 @@
 //! graveyard]" — self-replacement effects of counterspells (CR 614.15, 701.6a; patterns in
 //! `src/oracle/patterns/replacements_counter.rs`).
 
+use mtg_engine::events::Event;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -58,6 +60,29 @@ fn dissipate_exiles_the_countered_spell() {
     assert!(t.in_exile("Grizzly Bears"));
     assert!(!t.in_graveyard(P0, "Grizzly Bears"));
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    // The spell moved from the stack straight to exile: no zone change put it into a
+    // graveyard on the way.
+    let moves: Vec<(Zone, Zone)> = t
+        .g
+        .turn_events
+        .iter()
+        .filter_map(|e| match e {
+            Event::ZoneChange { new, from, to, .. }
+                if t.g.obj(*new).chars.name == "Grizzly Bears" =>
+            {
+                Some((*from, *to))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        moves.contains(&(Zone::Stack, Zone::Exile)),
+        "moves: {moves:?}"
+    );
+    assert!(
+        !moves.iter().any(|(_, to)| matches!(to, Zone::Graveyard(_))),
+        "moves: {moves:?}"
+    );
     // Dissipate itself goes to the graveyard as usual.
     assert!(t.in_graveyard(P1, "Dissipate"));
 }
@@ -140,10 +165,6 @@ fn remand_on_a_spell_that_cant_be_countered_still_draws() {
 #[test]
 fn spell_crumple_puts_both_spells_on_the_bottom() {
     cr!("614.15", "701.6a");
-    ruling!(
-        "Spell Crumple",
-        "If the targeted spell can’t be countered, it won’t be put onto the bottom of its owner’s library. Spell Crumple will still be put on the bottom of its owner’s library."
-    );
     let mut t = TestGame::new(2);
     t.library_top(P0, "Forest");
     t.library_top(P1, "Island");
@@ -163,6 +184,36 @@ fn spell_crumple_puts_both_spells_on_the_bottom() {
     assert_eq!(bottom(&t, P1), "Spell Crumple");
     assert_eq!(t.g.obj(t.g.library_top(P0).unwrap()).chars.name, "Forest");
     assert!(!t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn spell_crumple_on_a_spell_that_cant_be_countered_still_goes_to_the_bottom() {
+    cr!("614.15", "701.6a");
+    ruling!(
+        "Spell Crumple",
+        "If the targeted spell can’t be countered, it won’t be put onto the bottom of its owner’s library. Spell Crumple will still be put on the bottom of its owner’s library."
+    );
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Forest");
+    t.library_top(P1, "Island");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P1, "Island", 3);
+    let victim = t.battlefield(P1, "Ornithopter");
+    let decay = t.hand(P0, "Abrupt Decay");
+    let spell = t.cast(P0, decay).target(victim).go();
+    let c = t.hand(P1, "Spell Crumple");
+    t.cast(P1, c).target(spell).go();
+    t.resolve_all();
+    // Abrupt Decay resolved and went to its owner's graveyard, not to the library.
+    assert!(!t.on_battlefield(victim));
+    assert!(t.in_graveyard(P0, "Abrupt Decay"));
+    let lib0 = &t.g.player(P0).library;
+    assert!(lib0.iter().all(|o| t.g.obj(*o).chars.name != "Abrupt Decay"));
+    // Spell Crumple is on the bottom of P1's library all the same.
+    let lib1 = &t.g.player(P1).library;
+    assert_eq!(t.g.obj(lib1[0]).chars.name, "Spell Crumple");
+    assert!(!t.in_graveyard(P1, "Spell Crumple"));
 }
 
 #[test]
