@@ -71,12 +71,15 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
                 }
             }
         }
-        // CR 603.10a: sacrificing a permanent (these triggers match the zone change the
-        // sacrifice is, so "when you sacrifice ~" sees the permanent as it was).
+        // CR 603.10a: sacrificing a permanent.
+        // They're matched against the zone change itself (see `trigger_matches`), so the
+        // sacrificed permanent's own "when you sacrifice ~" ability triggers.
+        (TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_), Event::Sacrificed { .. }) => {
+            true
+        }
         (
             TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_),
-            Event::Sacrificed { .. }
-            | Event::ZoneChange {
+            Event::ZoneChange {
                 from: Zone::Battlefield,
                 cause: crate::events::MoveCause::Sacrifice,
                 ..

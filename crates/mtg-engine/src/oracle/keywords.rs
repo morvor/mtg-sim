@@ -35,6 +35,10 @@ fn names() -> &'static [(String, KeywordKind)] {
         v.push(("hexproof from".into(), KeywordKind::Hexproof));
         // CR 702.89b: older cards printed "totem armor"; it's now umbra armor.
         v.push(("totem armor".into(), KeywordKind::UmbraArmor));
+        // CR 702.145a: daybound and nightbound are printed on opposite faces (the
+        // keyword's text tells them apart, see `kw/daybound.rs`).
+        v.push(("daybound".into(), KeywordKind::DayboundAndNightbound));
+        v.push(("nightbound".into(), KeywordKind::DayboundAndNightbound));
         v.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
         v
     })
