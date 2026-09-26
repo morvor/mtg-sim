@@ -295,3 +295,43 @@ fn simultaneous_persist_triggers_are_put_on_the_stack_in_apnap_order() {
     assert_eq!(t.g.obj(back[0]).owner, P1);
     let _ = (mine, theirs);
 }
+
+#[test]
+fn persist_granted_by_an_effect_works_for_each_creature() {
+    cr!("702.79a");
+    assert_supported("Cauldron Haze");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Plains", 2);
+    let haze = t.hand(P0, "Cauldron Haze");
+    // "Choose any number of target creatures. Each of those creatures gains persist
+    // until end of turn."
+    t.cast(P0, haze)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Destroy {
+            what: Sel::All(Filter::creature()),
+            no_regen: false,
+        },
+        &[],
+    );
+    t.settle();
+    assert_eq!(stack_triggers(&t, "Persist").len(), 2);
+    t.resolve_all();
+    let bears_back = on_bf(&t, "Grizzly Bears");
+    let giant_back = on_bf(&t, "Hill Giant");
+    assert_eq!(bears_back.len(), 1);
+    assert_eq!(giant_back.len(), 1);
+    assert_eq!(t.pt(giant_back[0]), (2, 2));
+    assert_eq!(t.pt(bears_back[0]), (1, 1));
+    // The returned creatures are new objects: they don't have persist any more.
+    destroy(&mut t, bears_back[0]);
+    t.settle();
+    assert!(stack_triggers(&t, "Persist").is_empty());
+}

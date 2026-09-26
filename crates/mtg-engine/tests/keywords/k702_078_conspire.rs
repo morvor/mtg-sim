@@ -147,3 +147,45 @@ fn each_instance_of_conspire_is_paid_separately_and_triggers_on_its_own_payment(
         );
     }
 }
+
+#[test]
+fn conspire_given_to_spells_cast_from_exile() {
+    cr!("702.78a");
+    // Rassilon's "Each noncreature spell you cast from exile has conspire."
+    let def = crate::common_k702_011_017::custom_card(
+        "Exile Schemer",
+        "Creature — Human",
+        Some((2, 2)),
+        "Each noncreature spell you cast from exile has conspire.",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+    let g1 = t.battlefield(P0, "Raging Goblin");
+    let g2 = t.battlefield(P0, "Raging Goblin");
+    t.lands(P0, "Mountain", 2);
+    // From the hand: no conspire.
+    let from_hand = t.hand(P0, "Lightning Bolt");
+    let spell = t.cast(P0, from_hand).target(P1).go();
+    assert_eq!(t.g.obj(spell).chars.keyword_count(KeywordKind::Conspire), 0);
+    t.resolve_all();
+    // From exile (with a permission to cast it): conspire.
+    let exiled = t.exile(P0, "Lightning Bolt");
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::GrantPlayPermission {
+            who: mtg_engine::ability::PlayerRef::You,
+            what: mtg_engine::ability::Sel::Target(0),
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+            free: false,
+        },
+        &[Entity::Object(exiled)],
+    );
+    pay_conspire(&mut t, P0, &[g1, g2]);
+    let spell = t.cast(P0, exiled).target(P1).go();
+    assert_eq!(t.g.obj(spell).chars.keyword_count(KeywordKind::Conspire), 1);
+    t.resolve_all();
+    // 3 from the first Bolt, 3 + 3 from the second and its copy.
+    assert_eq!(t.life(P1), 11);
+}

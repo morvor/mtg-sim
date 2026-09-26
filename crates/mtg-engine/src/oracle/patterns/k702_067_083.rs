@@ -209,12 +209,26 @@ fn exiled_card_effects(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(r) => (true, r),
         None => (false, l),
     };
-    let r = r.strip_prefix("play the exiled card without paying its mana cost")?;
-    let play = Effect::PlayCard {
-        who: PlayerRef::You,
-        what: Sel::Linked,
-        free: true,
-        optional,
+    let (play, r) = if let Some(r) = r.strip_prefix("cast the exiled card without paying its mana cost")
+    {
+        // "you may cast the exiled card without paying its mana cost" (Smuggler's
+        // Buggy): the spells cast are "it" for "If you do, ...".
+        let cast = Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::Linked,
+            free: true,
+            optional,
+        };
+        (cast, r)
+    } else {
+        let r = r.strip_prefix("play the exiled card without paying its mana cost")?;
+        let play = Effect::PlayCard {
+            who: PlayerRef::You,
+            what: Sel::Linked,
+            free: true,
+            optional,
+        };
+        (play, r)
     };
     if r.is_empty() {
         return Some(play);
@@ -237,16 +251,21 @@ inventory::submit! { EffectPattern { name: "play / put the exiled card", priorit
 /// "Each [quality] spell you cast has conspire." (Wort, the Raidmother; Raiding
 /// Schemes): the spells have conspire as they're cast.
 fn spells_have_conspire(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let subject = l
-        .strip_prefix("each ")?
-        .strip_suffix(" spell you cast has conspire")?;
+    let r = l.strip_prefix("each ")?.strip_suffix(" has conspire")?;
+    // "Each noncreature spell you cast from exile has conspire." (Rassilon)
+    let (subject, from) = match r.strip_suffix(" spell you cast from exile") {
+        Some(s) => (s, Some(Filter::CastFrom(ZoneKind::Exile))),
+        None => (r.strip_suffix(" spell you cast")?, None),
+    };
     let phrase = format!("{subject} card");
     let (f, _, tail) = parse_object_phrase(&phrase)?;
     if !end(tail).is_empty() {
         return None;
     }
+    let mut parts = vec![f, Filter::Spell, Filter::ControlledBy(PlayerRel::You)];
+    parts.extend(from);
     let s = StaticAbility::new(StaticEffect::Continuous {
-        affected: Filter::and(vec![f, Filter::Spell, Filter::ControlledBy(PlayerRel::You)]),
+        affected: Filter::and(parts),
         mods: vec![Modification::AddKeyword(
             Keyword::new(KeywordKind::Conspire).text("conspire"),
         )],
@@ -370,3 +389,99 @@ fn hideaway_conditions(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "hideaway land conditions", priority: 100, parse: hideaway_conditions } }
+
+/// "Whenever ~ deals combat damage to a player, if there are cards exiled with it, you may
+/// play one of them without paying its mana cost." (Evercoat Ursine, whose two hideaway
+/// abilities exile cards with it).
+fn play_one_of_the_exiled_cards(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    if t.to_lowercase()
+        != "whenever ~ deals combat damage to a player, if there are cards exiled with it, you may play one of them without paying its mana cost."
+    {
+        return None;
+    }
+    let exiled_with_it = Filter::and(vec![
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::InZone(ZoneKind::Exile),
+    ]);
+    let mut trig = TriggeredAbility::new(
+        TriggerCond::DealsDamage {
+            source: Filter::Source,
+            to: DamageRecipient::Player(PlayerRel::Any),
+            combat_only: true,
+        },
+        Body::effect(Effect::PlayCard {
+            who: PlayerRef::You,
+            what: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: exiled_with_it.clone(),
+                count: Value::c(1),
+                up_to: true,
+                store: None,
+            },
+            free: true,
+            optional: false,
+        }),
+    );
+    trig.intervening_if = Some(Condition::Exists(exiled_with_it));
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(trig), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "play one of the cards exiled with it", priority: 100, parse: play_one_of_the_exiled_cards } }
+
+// ---------------------------------------------------------------------------
+// Persist and other keywords granted to any number of targets
+// ---------------------------------------------------------------------------
+
+/// "Choose any number of target creatures." — the targets are "those creatures" for the
+/// next sentence (Cauldron Haze, Cauldron of Souls).
+fn choose_any_number_of_targets(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l.strip_prefix("choose ")?;
+    if !r.starts_with("any number of target ") {
+        return None;
+    }
+    let (spec, tail) = crate::oracle::phrases::parse_target(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let slot = b.add_target(spec, r);
+    b.it = Sel::Target(slot);
+    Some(Effect::Noop)
+}
+
+inventory::submit! { EffectPattern { name: "choose any number of target creatures", priority: 100, parse: choose_any_number_of_targets } }
+
+/// "Each of those creatures gains persist until end of turn." after "Choose any number of
+/// target creatures.".
+fn each_of_those_gains(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l.strip_prefix("each of those creatures gains ")?;
+    let Sel::Target(slot) = b.it else {
+        return None;
+    };
+    let (duration, kws) = crate::oracle::effects::duration_suffix(r);
+    let mods = crate::oracle::effects::keyword_mods(kws)?;
+    Some(Effect::Modify {
+        what: Sel::Target(slot),
+        mods,
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each of those creatures gains [keyword]", priority: 100, parse: each_of_those_gains } }
+
+// ---------------------------------------------------------------------------
+// Wither (CR 702.80)
+// ---------------------------------------------------------------------------
+
+/// "All damage is dealt as though its source had wither." (Everlasting Torment)
+fn all_damage_as_though_wither(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if end(l) != "all damage is dealt as though its source had wither" {
+        return None;
+    }
+    let s = StaticAbility::new(StaticEffect::Custom(
+        crate::kw::wither::ALL_DAMAGE_AS_THOUGH_WITHER.into(),
+    ));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "all damage is dealt as though its source had wither", priority: 100, parse: all_damage_as_though_wither } }

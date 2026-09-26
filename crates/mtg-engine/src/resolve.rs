@@ -1466,7 +1466,8 @@ impl Game {
                     if *optional && !self.ask_yes_no(p, Some(o), "Play this card?", true) {
                         continue;
                     }
-                    if self.obj(o).chars.is_land() {
+                    // A face-down card (e.g. exiled with hideaway) is played face up.
+                    if self.face_characteristics(o, FaceState::Front).is_land() {
                         // CR 305.2b, 305.3: ignored if the player can't play a land now.
                         let _ = self.play_land_during_resolution(p, o);
                         continue;

@@ -201,3 +201,98 @@ fn the_exiled_card_can_be_played_by_the_hideaway_permanents_linked_ability() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+/// The text of the first nonmana activated ability of `id`.
+fn play_ability(t: &TestGame, id: ObjectId) -> String {
+    t.obj_now(id)
+        .chars
+        .abilities
+        .iter()
+        .find(|a| matches!(&a.kind, AbilityKind::Activated(x) if !x.is_mana_ability))
+        .map(|a| a.text.clone())
+        .expect("play ability")
+}
+
+#[test]
+fn an_exiled_land_card_is_played_only_with_a_land_play_left() {
+    cr!("702.75a");
+    ruling!(
+        "Evercoat Ursine",
+        "If one of the exiled cards is a land card, you may play it only if you have an available land play remaining this turn."
+    );
+    assert_supported("Shelldock Isle");
+    let mut t = TestGame::new(2);
+    let forest = on_top(&mut t, P0, "Forest");
+    let isle = t.enter(P0, "Shelldock Isle");
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Exile);
+    // "... if a library has twenty or fewer cards in it": any library.
+    ruling!(
+        "Shelldock Isle",
+        "It doesn't matter which library has twenty or fewer cards in it"
+    );
+    while t.library_size(P1) > 20 {
+        let top = *t.g.player(P1).library.last().unwrap();
+        t.g.players[1].library.pop();
+        let _ = top;
+    }
+    let text = play_ability(&t, isle);
+    // A land was already played this turn: the Forest stays exiled.
+    t.g.players[0].lands_played_this_turn = 1;
+    let now = t.g.current(isle);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.lands(P0, "Island", 1);
+    t.answer_yes(P0, true);
+    activate_named(&mut t, P0, isle, &text, 0).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Exile);
+    // With a land play left, it's played.
+    t.g.players[0].lands_played_this_turn = 0;
+    let now = t.g.current(isle);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.lands(P0, "Island", 1);
+    t.answer_yes(P0, true);
+    activate_named(&mut t, P0, isle, &text, 0).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Battlefield);
+    assert!(!t.obj_now(forest).face_down);
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1);
+}
+
+#[test]
+fn cards_exiled_by_several_hideaway_abilities_are_all_exiled_with_it() {
+    cr!("702.75a", "607.2a");
+    ruling!(
+        "Evercoat Ursine",
+        "You choose and play the card while Evercoat Ursine's last ability is resolving and still on the stack."
+    );
+    assert_supported("Evercoat Ursine");
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t);
+    // Hideaway 3, hideaway 3: two triggers, each exiling one card.
+    let bear = t.enter(P0, "Evercoat Ursine");
+    t.settle();
+    assert_eq!(stack_triggers(&t, "Hideaway 3").len(), 2);
+    // The first looks at the Lightning Bolt, Llanowar Elves, and Counterspell; the second
+    // at the Grizzly Bears and the two cards under it.
+    t.answer_choose(P0, &[Entity::Object(cards[3])]);
+    t.resolve();
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.resolve_all();
+    assert_eq!(t.zone(cards[3]), Zone::Exile);
+    assert_eq!(t.zone(cards[0]), Zone::Exile);
+    // "Whenever this creature deals combat damage to a player, if there are cards exiled
+    // with it, you may play one of them without paying its mana cost."
+    t.g.objects[bear.0 as usize].summoning_sick = false;
+    crate::common_k702_011_017::attack_with(&mut t, &[(bear, Entity::Player(P1))]);
+    crate::common_k702_018_026::declare_blocks(&mut t, P1, &[]);
+    // Play the Grizzly Bears, exiled by the second ability (a creature card: cast without
+    // paying its mana cost).
+    let exiled_bears = t.g.current(cards[0]);
+    t.answer_choose(P0, &[Entity::Object(exiled_bears)]);
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.zone(cards[3]), Zone::Exile);
+}

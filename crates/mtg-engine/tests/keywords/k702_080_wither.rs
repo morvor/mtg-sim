@@ -133,3 +133,19 @@ fn wither_damage_can_kill_by_reducing_toughness() {
     assert!(!t.on_battlefield(bears));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn all_damage_can_be_dealt_as_though_its_source_had_wither() {
+    cr!("702.80a", "120.3d");
+    assert_supported("Everlasting Torment");
+    let mut t = TestGame::new(2);
+    // "All damage is dealt as though its source had wither."
+    t.battlefield(P1, "Everlasting Torment");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    deal(&mut t, giant, Entity::Object(wurm), 3);
+    assert_eq!(t.counters(wurm, counters::MINUS1), 3);
+    assert_eq!(t.obj_now(wurm).damage, 0);
+    deal(&mut t, giant, Entity::Player(P1), 3);
+    assert_eq!(t.life(P1), 17);
+}
