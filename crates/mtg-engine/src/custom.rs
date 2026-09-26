@@ -477,6 +477,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::merge::custom_effect(g, name, ctx) {
         return;
     }
+    // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).
+    if crate::rooms::custom_effect(g, name, ctx) {
+        return;
+    }
     // "Roll again", rerolling stored results (CR 706.3c, 706.8b).
     if crate::dice::custom_effect(g, name, ctx) {
         return;

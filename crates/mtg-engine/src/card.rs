@@ -246,6 +246,7 @@ impl CardDef {
                     all_creature_names: false,
                     interchangeable_names: Default::default(),
                     all_creature_types: false,
+                    room: None,
                 },
                 unsupported: compiled.unsupported,
                 star_power,

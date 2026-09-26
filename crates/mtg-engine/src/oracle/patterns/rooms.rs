@@ -1,12 +1,16 @@
 //! Oracle patterns for Rooms (CR 709.5): "When you unlock this door, [effect]" on a half
-//! (CR 709.5h) and "whenever you fully unlock a Room" (CR 709.5i).
+//! (CR 709.5h), "whenever you fully unlock a Room" (CR 709.5i), and effects that lock or
+//! unlock a door (CR 709.5f, 709.5g).
 
-use super::{AbilityPattern, TriggerPattern};
+use super::{AbilityPattern, EffectPattern, TriggerPattern};
 use crate::ability::*;
 use crate::card::Layout;
-use crate::oracle::phrases::end;
+use crate::oracle::effects::Builder;
+use crate::oracle::phrases::{end, parse_target};
 use crate::oracle::CompileContext;
-use crate::rooms::{FULLY_UNLOCKED, UNLOCK_THIS_DOOR};
+use crate::rooms::{
+    FULLY_UNLOCKED, LOCK_EFFECT, LOCK_OR_UNLOCK_EFFECT, UNLOCK_EFFECT, UNLOCK_THIS_DOOR,
+};
 use smol_str::SmolStr;
 use std::sync::Arc;
 
@@ -56,5 +60,32 @@ fn room_triggers(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     ))
 }
 
+/// "Lock or unlock a door of target Room you control", "unlock a locked door of up to one
+/// target Room you control", "lock an unlocked door of ..." (CR 709.5f, 709.5g; a door is
+/// a half of a Room, CR 709.5j).
+fn lock_unlock_door(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (name, rest) = if let Some(r) = l.strip_prefix("lock or unlock a door of ") {
+        (LOCK_OR_UNLOCK_EFFECT, r)
+    } else if let Some(r) = l.strip_prefix("unlock a locked door of ") {
+        (UNLOCK_EFFECT, r)
+    } else if let Some(r) = l.strip_prefix("lock an unlocked door of ") {
+        (LOCK_EFFECT, r)
+    } else {
+        return None;
+    };
+    let (spec, tail) = parse_target(rest)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let slot = b.add_target(spec, rest);
+    Some(Effect::ForEach {
+        sel: Sel::Target(slot),
+        var: vars::AFFECTED,
+        effect: Box::new(Effect::Custom(name.into())),
+    })
+}
+
 inventory::submit! { AbilityPattern { name: "when you unlock this door", priority: 0, parse: unlock_this_door } }
 inventory::submit! { TriggerPattern { name: "room unlock triggers", priority: 0, parse: room_triggers } }
+inventory::submit! { EffectPattern { name: "lock or unlock a door", priority: 0, parse: lock_unlock_door } }

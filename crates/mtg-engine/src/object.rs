@@ -44,6 +44,11 @@ pub struct Characteristics {
     /// can have it (CR 205.3d).
     #[serde(default)]
     pub all_creature_types: bool,
+    /// The split card with a shared type line whose halves ("doors") these
+    /// characteristics represent (CR 709.5). The halves are part of the copiable values,
+    /// so a copy of a Room has both doors too (CR 709.5b).
+    #[serde(skip)]
+    pub room: Option<crate::rooms::RoomCard>,
 }
 
 impl Characteristics {
