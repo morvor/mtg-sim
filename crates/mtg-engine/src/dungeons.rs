@@ -107,22 +107,36 @@ fn enter_room(g: &mut Game, p: PlayerId, d: ObjectId, room: usize) {
     });
 }
 
-/// The dungeon cards `p` owns outside the game. A player who owns none uses the standard
-/// dungeons (they're created outside the game the first time they're needed).
-fn dungeons_outside(g: &mut Game, p: PlayerId) -> Vec<ObjectId> {
+/// The dungeon cards `p` owns outside the game that they may venture into: those named
+/// `name` when venturing into [quality] (CR 701.49d), otherwise those that don't say
+/// they can be entered only that way (Undercity, see `kwa/venture.rs`). A player who owns
+/// none uses the standard dungeons, or the named one (they're created outside the game the
+/// first time they're needed).
+fn dungeons_outside(g: &mut Game, p: PlayerId, name: Option<&str>) -> Vec<ObjectId> {
     let owned = |g: &Game| -> Vec<ObjectId> {
         g.player(p)
             .sideboard
             .iter()
             .copied()
-            .filter(|id| is_dungeon_card(g.obj(*id)))
+            .filter(|id| {
+                let o = g.obj(*id);
+                is_dungeon_card(o)
+                    && match name {
+                        Some(n) => o.chars.name.eq_ignore_ascii_case(n),
+                        None => !crate::kwa::venture::only_by_venturing_into_it(o),
+                    }
+            })
             .collect()
     };
     let have = owned(g);
     if !have.is_empty() {
         return have;
     }
-    for name in STANDARD_DUNGEONS {
+    let names: Vec<&str> = match name {
+        Some(n) => vec![n],
+        None => STANDARD_DUNGEONS.to_vec(),
+    };
+    for name in names {
         if let Some(card) = crate::card::CardDb::global().get(name) {
             let id = g.create_card_object(card, p, Zone::Outside(p));
             g.players[p.idx()].sideboard.push(id);
@@ -133,8 +147,13 @@ fn dungeons_outside(g: &mut Game, p: PlayerId) -> Vec<ObjectId> {
 
 /// `p` chooses a dungeon card they own from outside the game, puts it into the command
 /// zone, and puts their venture marker on its topmost room (CR 309.2a, 309.4a).
-fn bring_in_dungeon(g: &mut Game, p: PlayerId, source: Option<ObjectId>) -> bool {
-    let options = dungeons_outside(g, p);
+fn bring_in_dungeon(
+    g: &mut Game,
+    p: PlayerId,
+    source: Option<ObjectId>,
+    name: Option<&str>,
+) -> bool {
+    let options = dungeons_outside(g, p, name);
     if options.is_empty() {
         return false;
     }
@@ -174,8 +193,14 @@ fn complete(g: &mut Game, p: PlayerId, d: ObjectId) {
 /// advance to the next room (the player chooses when several arrows lead away), or — from
 /// the bottommost room — complete the dungeon and enter the first room of a new one.
 pub fn venture(g: &mut Game, p: PlayerId, source: Option<ObjectId>) {
+    venture_into(g, p, source, None);
+}
+
+/// Ventures into the dungeon, or with `name`, "venture into [name]" (CR 701.49d): a new
+/// dungeon must be the named one.
+pub fn venture_into(g: &mut Game, p: PlayerId, source: Option<ObjectId>, name: Option<&str>) {
     let Some((d, room)) = marker(g, p) else {
-        bring_in_dungeon(g, p, source);
+        bring_in_dungeon(g, p, source, name);
         return;
     };
     let leads = rooms(g.obj(d))
@@ -186,7 +211,7 @@ pub fn venture(g: &mut Game, p: PlayerId, source: Option<ObjectId>) {
     if leads.is_empty() {
         // CR 701.49c.
         complete(g, p, d);
-        bring_in_dungeon(g, p, source);
+        bring_in_dungeon(g, p, source, name);
         return;
     }
     // CR 701.49b: choose an arrow to follow.
