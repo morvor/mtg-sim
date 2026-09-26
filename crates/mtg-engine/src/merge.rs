@@ -561,6 +561,23 @@ pub fn mutate(g: &mut Game, spell: ObjectId, target: ObjectId) {
     let s = &mut g.objects[spell.0 as usize];
     s.zone = Zone::Nowhere;
     s.next = Some(target);
+    // CR 702.140f: effects that modified the mutating creature spell (from resolved spells
+    // and abilities, CR 400.7a) modify the mutated permanent.
+    for e in g.effects.iter_mut() {
+        if let crate::game::Affected::Objects(v) = &mut e.affected {
+            for x in v.iter_mut().filter(|x| **x == spell) {
+                *x = target;
+            }
+        }
+    }
+    for e in g.rule_effects.iter_mut() {
+        if let Some(v) = e.objects.as_mut() {
+            for x in v.iter_mut().filter(|x| **x == spell) {
+                *x = target;
+            }
+        }
+    }
+    g.dirty = true;
     g.log(|g| format!("{} mutates", g.describe(target)));
     g.emit(Event::Custom {
         name: SmolStr::new(MUTATES),
