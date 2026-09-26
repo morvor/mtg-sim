@@ -239,7 +239,27 @@ pub fn plural_pronoun(s: &str) -> Option<&str> {
 pub fn singular_it(b: &Builder) -> Sel {
     match (&b.it, &b.group) {
         (Sel::Var(v), Some(g)) if *v == GROUP => g.it_before.clone(),
+        // The objects of a "one or more" trigger are "they", never "it".
+        (Sel::TriggerObjects, _) => Sel::None,
         (it, _) => it.clone(),
+    }
+}
+
+/// What "they" refers to in a "one or more [objects] [event]" trigger: the objects of the
+/// batch, for events after which they're still the same permanents (attacking, becoming
+/// blocked, tapped or untapped, entering). Objects that left the battlefield would need
+/// their last known information, so those batches have no such referent.
+pub fn batch_referent(c: &TriggerCond) -> Sel {
+    match c {
+        TriggerCond::Attacks(_)
+        | TriggerCond::BecomesBlocked(_)
+        | TriggerCond::BecomesTapped(_)
+        | TriggerCond::BecomesUntapped(_)
+        | TriggerCond::EntersBattlefield(_) => Sel::TriggerObjects,
+        TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger) => {
+            batch_referent(trigger)
+        }
+        _ => Sel::None,
     }
 }
 

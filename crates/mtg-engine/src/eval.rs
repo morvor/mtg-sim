@@ -736,6 +736,11 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
+            Sel::TriggerObjects => ctx
+                .event
+                .as_ref()
+                .map(|e| e.objects.iter().copied().map(Entity::Object).collect())
+                .unwrap_or_default(),
             Sel::TriggerPlayer => ctx
                 .event
                 .as_ref()

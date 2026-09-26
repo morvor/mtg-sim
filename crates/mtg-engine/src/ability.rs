@@ -691,6 +691,10 @@ pub enum Sel {
     TriggerLki,
     /// The other object involved in the trigger (e.g. the blocker, or the damage source).
     TriggerOtherObject,
+    /// The objects of the batch of events that triggered a "one or more" ability
+    /// ("Whenever one or more creatures you control attack, they gain indestructible until
+    /// end of turn.", CR 603.2c).
+    TriggerObjects,
     /// The player from the triggering event ("that player").
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").

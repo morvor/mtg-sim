@@ -1122,6 +1122,8 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     let this_or = |other: Sel| if so { Sel::This } else { other };
     let ctl_of = |sel: Sel| PlayerRef::ControllerOf(Box::new(sel));
     let batch = |cond: TriggerCond, per_player: bool, player: PlayerRef| {
+        // "they" / "those creatures": the batch's objects, while they're still permanents.
+        let they = super::pronoun_groups::batch_referent(&cond);
         (
             TriggerCond::Batched {
                 trigger: Box::new(cond),
@@ -1131,7 +1133,7 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                     BatchPer::Batch
                 },
             },
-            Sel::None,
+            they,
             player,
         )
     };
@@ -1858,7 +1860,8 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
                     trigger: Box::new(cond),
                     per: BatchPer::Player,
                 },
-                Sel::None,
+                // "put a +1/+1 counter on each of those creatures": the sources.
+                Sel::TriggerObjects,
                 PlayerRef::TriggerPlayer,
             ),
             rest,
