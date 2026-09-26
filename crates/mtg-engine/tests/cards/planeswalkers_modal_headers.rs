@@ -188,7 +188,7 @@ fn demonic_pact_modes_are_used_up_until_only_losing_remains() {
     cr!("700.2b");
     ruling!(
         "Demonic Pact",
-        "you may not be able to choose a mode, either because all modes have previously been chosen"
+        "if the fourth mode is the only one remaining, you must choose it"
     );
     assert_supported(&["Demonic Pact", "Kimoyo Beads"]);
     let mut t = TestGame::new(2);
@@ -230,7 +230,7 @@ fn demonic_pact_modes_are_used_up_until_only_losing_remains() {
 
 #[test]
 fn each_demonic_pact_tracks_its_own_modes() {
-    cr!("700.2b", "400.7");
+    cr!("700.2b");
     ruling!(
         "Demonic Pact",
         "refers only to that specific Demonic Pact"
@@ -270,8 +270,8 @@ fn each_demonic_pact_tracks_its_own_modes() {
 fn modes_not_chosen_this_turn_reset_each_turn() {
     cr!("700.2b", "603.3c");
     ruling!(
-        "Lita, Little Orphan Amphibian",
-        "If you can't legally choose a mode because all three have been chosen that turn, that instance of the ability is removed from the stack with no effect."
+        "Galadriel, Light of Valinor",
+        "If all three modes have been chosen this turn, Galadriel, Light of Valinor's triggered ability is removed from the stack with no effect."
     );
     assert_supported(&[
         "Galadriel, Light of Valinor",
@@ -309,6 +309,38 @@ fn modes_not_chosen_this_turn_reset_each_turn() {
     assert_eq!(modes_of(&t, top(&t)), vec![1]);
     t.resolve_all();
     assert_eq!(t.counters(gal, "+1/+1"), 2);
+}
+
+#[test]
+fn a_permanent_that_returns_to_the_battlefield_has_no_memory_of_its_modes() {
+    cr!("400.7", "700.2b");
+    ruling!(
+        "Galadriel, Light of Valinor",
+        "it will be a new object with no memory of the modes chosen when it was previously on the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    let gal = t.battlefield(P0, "Galadriel, Light of Valinor");
+    // "• Put a +1/+1 counter on each creature you control."
+    choose_modes(&mut t, P0, &[1]);
+    t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.counters(gal, "+1/+1"), 1);
+    // "Exile target creature you control, then return that card to the battlefield under
+    // your control."
+    t.lands(P0, "Plains", 1);
+    let shift = t.hand(P0, "Cloudshift");
+    t.cast(P0, shift).target(gal).go();
+    t.resolve();
+    let gal2 = t.g.current(gal);
+    assert_ne!(gal2, gal);
+    assert!(t.on_battlefield(gal2));
+    // The same turn, the new Galadriel can choose that mode again.
+    choose_modes(&mut t, P0, &[1]);
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(modes_of(&t, top(&t)), vec![1]);
+    t.resolve_all();
+    assert_eq!(t.counters(gal2, "+1/+1"), 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +395,7 @@ fn a_condition_as_you_cast_lets_you_choose_more_modes() {
 
 #[test]
 fn kicked_inscription_chooses_any_number_of_modes() {
-    cr!("601.2b", "702.33d");
+    cr!("601.2b", "702.33d", "700.2d");
     ruling!(
         "Inscription of Ruin",
         "If you kick Inscription of Ruin, you can't choose any one mode more than once."
@@ -406,6 +438,22 @@ fn kicked_inscription_chooses_any_number_of_modes() {
     t.resolve();
     assert_eq!(t.hand_size(P1), hand - 2);
     assert!(!t.g.is_live(bear));
+    // Kicked, "Destroy target creature with mana value 3 or less" twice isn't a legal
+    // choice (CR 700.2d).
+    t.lands(P0, "Swamp", 7);
+    let bear2 = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let ins = t.hand(P0, "Inscription of Ruin");
+    let s = t
+        .cast(P0, ins)
+        .kicked(true)
+        .modes(&[2, 2])
+        .target(bear2)
+        .target(giant)
+        .go();
+    let modes = modes_of(&t, s);
+    assert_ne!(modes, vec![2, 2]);
+    assert!(modes.windows(2).all(|w| w[0] != w[1]), "{modes:?}");
 }
 
 #[test]
@@ -429,6 +477,13 @@ fn a_trigger_checks_its_mode_condition_as_it_is_put_on_the_stack() {
     assert_eq!(t.life(P0), 12);
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.graveyard_size(P1), 0);
+    // At 12 life, only one mode.
+    let disciple = t.battlefield(P0, "Disciple of Perdition");
+    choose_modes(&mut t, P0, &[0, 1]);
+    t.g.destroy(disciple, None);
+    t.settle();
+    assert_eq!(last_mode_bounds(&t, P0), (1, 1));
+    assert_eq!(modes_of(&t, top(&t)).len(), 1);
 }
 
 // ---------------------------------------------------------------------------

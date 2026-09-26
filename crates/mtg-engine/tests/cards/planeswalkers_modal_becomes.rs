@@ -3,6 +3,8 @@
 //! type and basic land type changes, for a stated duration or indefinitely.
 
 use mtg_engine::ability::AbilityKind;
+use mtg_engine::mana::ManaType;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::{CardType, Color};
@@ -87,7 +89,7 @@ fn gideon_becomes_a_creature_thats_still_a_planeswalker_until_end_of_turn() {
 
 #[test]
 fn a_planeswalker_becoming_a_creature_doesnt_enter_the_battlefield() {
-    cr!("611.2a");
+    cr!("603.6a");
     ruling!(
         "Gideon Jura",
         "that doesn't count as having a creature enter"
@@ -286,14 +288,23 @@ fn opal_champion_becomes_a_creature_and_is_no_longer_an_enchantment() {
     assert!(!is(&t, opal, CardType::Enchantment));
     assert!(has_subtype(&t, opal, "Knight"));
     assert_eq!(t.pt(opal), (3, 3));
+    // Once it's no longer an enchantment, another creature spell doesn't trigger it: the
+    // intervening "if" is checked as the trigger event occurs (CR 603.4).
+    t.resolve_all();
+    t.lands(P1, "Forest", 2);
+    let bears2 = t.hand(P1, "Grizzly Bears");
+    let spell2 = t.cast(P1, bears2).go();
+    t.settle();
+    assert_eq!(t.g.stack.clone(), vec![spell2]);
     // The effect has no duration: it lasts (CR 611.2a).
     t.resolve_all();
     t.advance_to(P0, Step::Upkeep);
     assert!(is(&t, opal, CardType::Creature));
-    // The spell itself didn't change.
-    let bear = t.named_on_battlefield("Grizzly Bears")[0];
-    assert_eq!(t.pt(bear), (2, 2));
-    assert!(!has_subtype(&t, bear, "Knight"));
+    // The spells themselves didn't change.
+    for bear in t.named_on_battlefield("Grizzly Bears") {
+        assert_eq!(t.pt(bear), (2, 2));
+        assert!(!has_subtype(&t, bear, "Knight"));
+    }
 }
 
 #[test]
@@ -333,7 +344,74 @@ fn a_land_that_becomes_an_island_loses_its_other_land_types() {
     assert!(has_subtype(&t, forest, "Island"));
     assert!(!has_subtype(&t, forest, "Forest"));
     assert!(is(&t, forest, CardType::Land));
+    // It taps for {U} now, not {G}.
+    let chars = &t.obj_now(forest).chars;
+    assert!(chars.abilities.iter().any(|a| a.text == "{T}: Add {U}."));
+    assert!(!chars.abilities.iter().any(|a| a.text == "{T}: Add {G}."));
+    t.activate(P1, forest, 0, &[]).unwrap();
+    assert_eq!(t.g.players[1].mana_pool.count(ManaType::U), 1);
+    assert_eq!(t.g.players[1].mana_pool.count(ManaType::G), 0);
     t.advance_to(P1, Step::Upkeep);
     assert!(has_subtype(&t, forest, "Forest"));
     assert!(!has_subtype(&t, forest, "Island"));
+}
+
+// ---------------------------------------------------------------------------
+// "If [condition], it has base power and toughness N/N instead."
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_instead_that_restates_only_the_power_and_toughness_keeps_the_type_change() {
+    cr!("205.1b", "613.4b", "701.59c");
+    assert_supported(&["Behind the Mask"]);
+    for collect in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 1);
+        // A noncreature artifact.
+        let stone = t.battlefield(P0, "Mind Stone");
+        let dragon = t.graveyard(P0, "Shivan Dragon");
+        let mask = t.hand(P0, "Behind the Mask");
+        // "Until end of turn, target artifact or creature becomes an artifact creature
+        // with base power and toughness 4/3. If evidence was collected, it has base power
+        // and toughness 1/1 until end of turn instead."
+        t.cast(P0, mask).kicked(collect).target(stone).go();
+        t.resolve();
+        assert_eq!(t.zone(dragon) == Zone::Exile, collect);
+        assert!(is(&t, stone, CardType::Creature), "collect={collect}");
+        assert!(is(&t, stone, CardType::Artifact));
+        assert_eq!(t.pt(stone), if collect { (1, 1) } else { (4, 3) });
+        t.advance_to(P1, Step::Upkeep);
+        assert!(!is(&t, stone, CardType::Creature));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "Those creatures" after "each creature you control"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn those_creatures_are_the_ones_that_got_counters() {
+    cr!("700.2b", "611.2a");
+    assert_supported(&["Felidar Retreat", "Song of Freyalise", "Domri, City Smasher"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Felidar Retreat");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    // "• Put a +1/+1 counter on each creature you control. Those creatures gain vigilance
+    // until end of turn."
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.enter(P0, "Plains");
+    t.resolve_all();
+    for c in [bears, giant] {
+        assert_eq!(t.counters(c, "+1/+1"), 1);
+        assert!(t
+            .obj_now(c)
+            .chars
+            .has_keyword(mtg_engine::keywords::KeywordKind::Vigilance));
+    }
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t
+        .obj_now(bears)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Vigilance));
 }

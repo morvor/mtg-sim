@@ -1156,6 +1156,11 @@ fn p_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
+    // "Put a +1/+1 counter on each creature you control. Those creatures gain vigilance
+    // until end of turn.": "those creatures" are the group that got the counters.
+    if matches!(what, Sel::All(_)) {
+        b.it = what.clone();
+    }
     Some(Effect::AddCounters { what, kind, n })
 }
 
