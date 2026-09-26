@@ -1088,6 +1088,7 @@ impl Game {
             has_x: base_cost_has_x,
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),
+            check_only: false,
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -1791,6 +1792,7 @@ impl Game {
                         v
                     })
                     .unwrap_or_default(),
+                check_only: true,
                 ..Default::default()
             };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
@@ -1813,8 +1815,10 @@ impl Game {
         let mut cost = cost.clone();
         crate::cost_rules::choose_payment_ways(self, p, src, &mut cost);
         let cost = &cost;
+        // Paying a cost while a spell or ability resolves (or an attack tax, or turning a
+        // permanent face up) isn't casting a spell or activating an ability: mana that may
+        // be spent only on those can't pay it (CR 106.6).
         let spend = SpendContext {
-            is_ability: true,
             source: src,
             ..Default::default()
         };

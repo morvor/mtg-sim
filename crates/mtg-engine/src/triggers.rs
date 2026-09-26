@@ -226,6 +226,12 @@ impl Game {
                 if !die_roll && g.iter().all(|i| i.amount == 0) {
                     info.amount = g.len() as i32;
                 }
+                // Each attack event reports the size of the whole declaration; "whenever
+                // one or more creatures you control attack, add that much mana" counts the
+                // matching attackers (one event each).
+                if matches!(**trigger, TriggerCond::Attacks(_)) {
+                    info.amount = g.len() as i32;
+                }
                 info.objects = Vec::new();
                 for i in &g {
                     if let Some(o) = i.object.or(i.other) {
