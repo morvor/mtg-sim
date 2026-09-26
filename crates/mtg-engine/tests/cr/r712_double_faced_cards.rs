@@ -331,6 +331,18 @@ fn a_spell_entering_transformed_with_an_instant_or_sorcery_back_face_goes_to_the
     let perm = t.g.current(spell);
     assert_eq!(t.obj(perm).zone, Zone::Battlefield);
     assert_eq!(t.obj(perm).chars.name, "Sinuous Predator");
+    // A creature spell that isn't represented by a double-faced card (nor a meld card,
+    // which can't be transformed) can't enter transformed: it just enters.
+    for (name, land) in [("Grizzly Bears", "Forest"), ("Graf Rats", "Swamp")] {
+        t.lands(P0, land, 2);
+        let c = t.hand(P0, name);
+        let spell = t.cast(P0, c).go();
+        t.resolve_all();
+        let perm = t.g.current(spell);
+        assert_eq!(t.obj(perm).zone, Zone::Battlefield, "{name}");
+        assert_eq!(t.obj(perm).face, FaceState::Front, "{name}");
+        assert_eq!(t.obj(perm).chars.name, name);
+    }
     // Invasion of Kylem's back face is a sorcery: it doesn't enter the battlefield and is
     // put into its owner's graveyard instead.
     t.lands(P0, "Mountain", 3);

@@ -970,7 +970,11 @@ impl Game {
                 }
             }
             (ReplacementAction::EnterTransformed, ReplEvent::Move(mut m)) => {
-                m.etb.transformed = true;
+                // Only a permanent represented by a double-faced card or token can enter
+                // transformed (CR 712.9, 712.13a); any other permanent just enters.
+                if crate::transform_rules::can_enter_transformed(self, m.obj) {
+                    m.etb.transformed = true;
+                }
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterTapped, ReplEvent::Move(mut m)) => {

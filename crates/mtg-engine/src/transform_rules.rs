@@ -80,14 +80,18 @@ pub fn is_double_faced_permanent(g: &Game, id: ObjectId) -> bool {
 }
 
 /// Whether the card `id` can be put onto the battlefield transformed (with its back face
-/// up): a double-faced card or token that can transform (not a meld card, CR 712.4c). A
-/// card that isn't double-faced stays in its current zone (CR 712.14a).
+/// up): a double-faced card or token that can transform (not a meld card, CR 712.4c), or
+/// a copy of one cast or copied as a spell (CR 712.11a, 712.13a). A card that isn't
+/// double-faced stays in its current zone (CR 712.14a).
 pub fn can_enter_transformed(g: &Game, id: ObjectId) -> bool {
     let o = g.obj(id);
-    matches!(o.kind, ObjKind::Card | ObjKind::Token)
-        && o.card
-            .as_ref()
-            .is_some_and(|c| transforming_layout(c.layout) && c.faces.len() >= 2)
+    matches!(
+        o.kind,
+        ObjKind::Card | ObjKind::Token | ObjKind::CardCopy | ObjKind::SpellCopy
+    ) && o
+        .card
+        .as_ref()
+        .is_some_and(|c| transforming_layout(c.layout) && c.faces.len() >= 2)
 }
 
 /// Records that `id` transformed, with the new timestamp it got.
