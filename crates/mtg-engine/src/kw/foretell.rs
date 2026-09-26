@@ -29,6 +29,8 @@ use smol_str::SmolStr;
 pub const FORETOLD: &str = "foretold";
 /// `TriggerCond::Custom`: "Whenever you foretell a card".
 pub const YOU_FORETELL: &str = "foretell:you foretell a card";
+/// `Filter::Custom`: "foretold card" — a foretold card in exile (CR 702.143c–d).
+pub const FORETOLD_CARD: &str = "foretell:foretold card";
 /// `Condition::Custom`: "if this spell was foretold" (CR 702.143c).
 pub const WAS_FORETOLD: &str = "foretell:this spell was foretold";
 /// `Effect::Custom`: "[the exiled cards (`vars::IT`)] become foretold" (CR 702.143d).
@@ -257,6 +259,10 @@ impl KeywordRules for Foretell {
             }],
             _ => vec![],
         })
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        (name == FORETOLD_CARD).then(|| is_foretold(g, id))
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {

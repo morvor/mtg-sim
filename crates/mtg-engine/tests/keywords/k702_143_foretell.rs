@@ -322,3 +322,27 @@ fn the_first_card_you_foretell_each_turn_can_cost_nothing() {
     t.advance_to(P0, Step::PrecombatMain);
     assert!(can_foretell(&mut t, P0, bolt2));
 }
+
+#[test]
+fn effects_can_count_foretold_cards_in_exile() {
+    cr!("702.143c", "702.143d");
+    let mut t = TestGame::new(2);
+    // Two foretold cards: one foretold, one that became foretold.
+    let bolt = t.hand(P0, "Demon Bolt");
+    foretell(&mut t, P0, bolt);
+    let giant = t.hand(P0, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Ethereal Valkyrie");
+    t.resolve_all();
+    // Neither a card exiled face up nor an opponent's foretold card counts.
+    t.exile(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    let theirs = t.hand(P1, "Demon Bolt");
+    foretell(&mut t, P1, theirs);
+    t.set_step(P0, Step::PrecombatMain);
+    // Niko Defies Destiny, chapter I: "You gain 2 life for each foretold card you own in
+    // exile."
+    t.enter(P0, "Niko Defies Destiny");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 24);
+}
