@@ -347,9 +347,11 @@ pub fn strip_ability_word(text: &str) -> &str {
             && head.chars().next().is_some_and(|c| c.is_uppercase())
             && !head.contains('{')
             // "Companion — [condition]" is a keyword, not an ability word (CR 702.139a);
-            // so is "Forecast — [activated ability]" (CR 702.57a).
+            // so are "Forecast — [activated ability]" (CR 702.57a) and "Max speed —
+            // [ability]" (CR 702.178a).
             && head != "Companion"
-            && head != "Forecast";
+            && head != "Forecast"
+            && head != "Max speed";
         if looks_like_word {
             return rest;
         }
