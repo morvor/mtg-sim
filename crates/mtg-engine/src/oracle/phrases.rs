@@ -563,6 +563,10 @@ pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &s
 fn parse_originally_printed_suffix(t: &str) -> Option<(Filter, &str)> {
     let r = t.strip_prefix("with a name originally printed in the ")?;
     let (set, rest) = r.split_once(" expansion")?;
+    // Only the expansions whose names the Comprehensive Rules list are known (CR 206.3a-c).
+    if !crate::names::has_listed_names(set) {
+        return None;
+    }
     Some((Filter::NameOriginallyPrintedIn(set.trim().into()), rest))
 }
 

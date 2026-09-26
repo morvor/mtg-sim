@@ -101,7 +101,12 @@ fn objects_with_no_mana_cost() {
     assert!(!can_cast(&mut t, P0, vision));
     assert!(t.cast(P0, vision).try_go().is_err());
     // A land is played without paying any cost.
-    let untapped = |t: &TestGame| t.g.battlefield.iter().filter(|i| !t.obj_now(**i).tapped).count();
+    let untapped = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|i| !t.obj_now(**i).tapped)
+            .count()
+    };
     let before = untapped(&t);
     t.play_land(P0, forest).unwrap();
     assert_eq!(untapped(&t), before + 1);
@@ -247,11 +252,19 @@ fn effects_can_change_an_objects_color() {
     let w1 = t.hand(P0, "Cerulean Wisps");
     t.cast(P0, w1).target(thopter).go();
     t.resolve_all();
-    assert_eq!(colors(&t, thopter), cs("U"), "a colorless object gets a color");
+    assert_eq!(
+        colors(&t, thopter),
+        cs("U"),
+        "a colorless object gets a color"
+    );
     let w2 = t.hand(P0, "Cerulean Wisps");
     t.cast(P0, w2).target(bears).go();
     t.resolve_all();
-    assert_eq!(colors(&t, bears), cs("U"), "the new color replaces its color");
+    assert_eq!(
+        colors(&t, bears),
+        cs("U"),
+        "the new color replaces its color"
+    );
     // An effect can make a colored object colorless.
     run_effect(
         &mut t,
@@ -356,6 +369,49 @@ fn a_transformed_permanent_uses_its_front_faces_mana_cost() {
     t.play_land(P0, mammoth).unwrap();
     let valley = t.named_on_battlefield("Kazandu Valley")[0];
     assert_eq!(mv(&mut t, valley), 0);
+}
+
+/// A permanent whose controller's opponents can't cast spells with mana value `mv`.
+fn mana_value_prohibition(mv: i32) -> mtg_engine::card::CardDef {
+    crate::r609_common::permanent(
+        "Prohibitor",
+        &[CardType::Enchantment],
+        vec![crate::r609_common::static_ab(StaticEffect::Restriction(
+            Restriction::CantCast {
+                who: PlayerFilter::Opponent,
+                what: Filter::ManaValue(Cmp::Eq, Box::new(Value::c(mv))),
+            },
+        ))],
+    )
+}
+
+#[test]
+fn a_back_face_evaluated_for_casting_has_its_front_faces_mana_value() {
+    // CR 202.3b, 712.8c, 712.11c: whether Luminous Phantom (the back face of Lunarch
+    // Veteran, {W}) may be cast with disturb is determined by the back face, whose mana
+    // value is its front face's: 1, not 0.
+    cr!("202.3b", "712.8c", "712.11c");
+    let disturb = CastMethod::Keyword(KeywordKind::Disturb);
+    let castable = |t: &mut TestGame, card: ObjectId| {
+        t.g.turn.priority = Some(P0);
+        t.g.legal_actions(P0).iter().any(|a| {
+            matches!(a, decision::Action::Cast { card: c, method: m } if *c == card && *m == disturb)
+        })
+    };
+    // Spells with mana value 0 can't be cast: Luminous Phantom still can.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.custom(P1, mana_value_prohibition(0), Zone::Battlefield);
+    let vet = t.graveyard(P0, "Lunarch Veteran // Luminous Phantom");
+    assert!(castable(&mut t, vet));
+    // Spells with mana value 1 can't be cast: it can't.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.custom(P1, mana_value_prohibition(1), Zone::Battlefield);
+    let vet = t.graveyard(P0, "Lunarch Veteran // Luminous Phantom");
+    assert!(!castable(&mut t, vet));
+    assert!(t.cast(P0, vet).method(disturb).try_go().is_err());
+    assert_eq!(t.zone(vet), Zone::Graveyard(P0));
 }
 
 #[test]
@@ -489,5 +545,8 @@ fn additional_costs_arent_part_of_the_mana_cost() {
     let splinters = t.hand(P0, "Bone Splinters");
     let spell = t.cast(P0, splinters).target(bear).go();
     assert_eq!(mv(&mut t, spell), 1);
-    assert!(t.in_graveyard(P0, "Grizzly Bears"), "the sacrifice was paid while casting");
+    assert!(
+        t.in_graveyard(P0, "Grizzly Bears"),
+        "the sacrifice was paid while casting"
+    );
 }

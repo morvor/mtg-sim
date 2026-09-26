@@ -29,7 +29,10 @@ fn the_parts_of_a_card() {
     let titania = card("Titania");
     assert_eq!(titania.front().chars.hand_modifier, Some(2));
     assert_eq!(titania.front().chars.life_modifier, Some(-5));
-    assert_eq!(card("Dryad Arbor").front().chars.color_indicator, Some(cs("G")));
+    assert_eq!(
+        card("Dryad Arbor").front().chars.color_indicator,
+        Some(cs("G"))
+    );
     // More than one of a part: a split card has two names, mana costs, type lines and
     // text boxes; a double-faced card has two faces.
     let fi = card("Fire // Ice");
@@ -106,7 +109,10 @@ fn some_parts_of_a_card_are_characteristics() {
     // (CR 201.6), isn't part of the object at all.
     let kibo = t.battlefield(P0, "Kibo, Uktabi Prince");
     assert_eq!(t.obj_now(kibo).chars.name, "Kibo, Uktabi Prince");
-    assert!(!t.obj_now(kibo).chars.has_name("Monkey, Awakened to Emptiness"));
+    assert!(!t
+        .obj_now(kibo)
+        .chars
+        .has_name("Monkey, Awakened to Emptiness"));
 }
 
 #[test]
@@ -164,13 +170,12 @@ fn tokens_and_copies_have_only_the_parts_that_are_characteristics() {
         },
         &[Entity::Object(exiled)],
     );
-    let copy = t
-        .g
-        .exile
-        .iter()
-        .copied()
-        .find(|i| *i != exiled)
-        .expect("a copy of the card");
+    let copy =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|i| *i != exiled)
+            .expect("a copy of the card");
     let o = t.obj_now(copy);
     assert_eq!(o.kind, ObjKind::CardCopy);
     assert_eq!(o.zone, Zone::Exile);

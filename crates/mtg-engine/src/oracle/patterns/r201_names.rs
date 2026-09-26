@@ -86,7 +86,11 @@ fn cant_cast_or_play_with(l: &str, text: &str, _ctx: &CompileContext) -> Option<
         return None;
     }
     let f = match f {
-        Filter::And(v) => Filter::and(v.into_iter().filter(|x| !matches!(x, Filter::Card)).collect()),
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Card))
+                .collect(),
+        ),
         other => other,
     };
     if matches!(f, Filter::Card | Filter::Any) {

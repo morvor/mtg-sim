@@ -58,8 +58,18 @@ fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
     if matches!(b.it, Sel::None | Sel::This) {
         return None;
     }
-    let mut s = end(l).to_string();
-    let before = s.clone();
+    let before = end(l);
+    let s = that_possessives_to_its(before);
+    if s == before {
+        return None;
+    }
+    parse_clause(&s, b)
+}
+
+/// Rewrites the possessives of "it"'s referent ("that creature's", "that spell's", ...)
+/// to "its".
+pub(crate) fn that_possessives_to_its(s: &str) -> String {
+    let mut s = s.to_string();
     for p in [
         "that creature's ",
         "that permanent's ",
@@ -72,10 +82,7 @@ fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
     ] {
         s = s.replace(p, "its ");
     }
-    if s == before {
-        return None;
-    }
-    parse_clause(&s, b)
+    s
 }
 
 /// "attach it to target creature you control" (it = the source), "attach ~ to target

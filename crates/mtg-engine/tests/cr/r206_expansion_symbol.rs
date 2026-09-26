@@ -9,6 +9,7 @@ use mtg_engine::card::card;
 use mtg_engine::deck::{check_format_legality, DeckProblem};
 use mtg_engine::names::originally_printed_in;
 use mtg_engine::testing::*;
+use mtg_engine::types::TypeLine;
 use mtg_engine::*;
 
 fn printed_in(set: &str) -> Filter {
@@ -28,10 +29,7 @@ fn names_originally_printed_in_a_set() {
     let mut t = TestGame::new(2);
     // Kird Ape's current printing (Eternal Masters) has another expansion symbol; its
     // name was originally printed in Arabian Nights.
-    assert_ne!(
-        mtg_data::cards().by_name("Kird Ape").unwrap().set,
-        "arn"
-    );
+    assert_ne!(mtg_data::cards().by_name("Kird Ape").unwrap().set, "arn");
     let ape = t.hand(P0, "Kird Ape");
     let ape_bf = t.battlefield(P1, "Kird Ape");
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -53,6 +51,29 @@ fn names_originally_printed_in_a_set() {
     );
     t.g.recompute();
     assert!(matches(&t, renamed, &f, P0));
+    // Only the expansions the rules list names for can be referred to: text naming
+    // another expansion isn't understood.
+    let understood = |set: &str| {
+        let tl = TypeLine::parse("Artifact");
+        let ctx = mtg_engine::oracle::CompileContext {
+            card_name: "Set Sweeper",
+            full_name: "Set Sweeper",
+            type_line: &tl,
+            layout: mtg_engine::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let text = format!(
+            "{{T}}: Destroy all permanents with a name originally printed in the {set} expansion."
+        );
+        mtg_engine::oracle::compile(&text, &ctx)
+            .unsupported
+            .is_empty()
+    };
+    assert!(understood("Homelands"));
+    assert!(!understood("Mirrodin"));
 }
 
 #[test]
@@ -62,10 +83,34 @@ fn city_in_a_bottle_and_arabian_nights_names() {
         "City in a Bottle",
         "even if the physical card representing that permanent is a reprint with a different expansion symbol"
     );
+    ruling!(
+        "City in a Bottle",
+        "Token creatures and counters created by Arabian Nights cards are not removed."
+    );
     supported("City in a Bottle");
     let mut t = TestGame::new(2);
-    let city = t.battlefield(P0, "City in a Bottle");
     let mine = t.battlefield(P0, "Kird Ape");
+    // A token copy of Kird Ape has an Arabian Nights name, but it's a token.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![Entity::Object(mine)]];
+    t.g.exec(
+        &Effect::CreateTokenCopy {
+            of: Sel::Target(0),
+            count: Value::c(1),
+            controller: PlayerRef::You,
+            tapped: false,
+            attacking: false,
+            mods: vec![],
+        },
+        &mut ctx,
+    );
+    t.settle();
+    let token = t
+        .named_on_battlefield("Kird Ape")
+        .into_iter()
+        .find(|i| t.obj_now(*i).is_token())
+        .expect("a token copy of Kird Ape");
+    let city = t.battlefield(P0, "City in a Bottle");
     let theirs = t.battlefield(P1, "Kird Ape");
     let djinn = t.battlefield(P1, "Juzám Djinn");
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -80,6 +125,7 @@ fn city_in_a_bottle_and_arabian_nights_names() {
     // Other permanents stay, including City in a Bottle itself (also an Arabian Nights
     // name: "other").
     assert!(t.g.is_live(bears) && t.g.is_live(city));
+    assert!(t.g.is_live(token), "tokens aren't sacrificed");
     // Players can't cast spells or play lands with those names.
     let ape = t.hand(P0, "Kird Ape");
     let library = t.hand(P0, "Library of Alexandria");

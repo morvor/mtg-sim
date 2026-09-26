@@ -70,7 +70,11 @@ fn italicized_text_has_no_game_function() {
     // Primal Clay's reminder text about defender adds nothing.
     supported("Primal Clay");
     let clay = card("Primal Clay");
-    assert!(clay.front().chars.rules_text.contains("(A creature with defender can't attack.)"));
+    assert!(clay
+        .front()
+        .chars
+        .rules_text
+        .contains("(A creature with defender can't attack.)"));
     assert_eq!(clay.front().chars.abilities.len(), 1);
     assert!(clay
         .front()
@@ -159,7 +163,10 @@ fn cryptic_spires_circled_colors_are_printed_rules_text() {
     assert!(circle_colors(&card("Forest"), [Color::White, Color::Blue]).is_none());
     let wu = circle_colors(&printed, [Color::White, Color::Blue]).unwrap();
     assert!(wu.front().chars.rules_text.contains("{W} or {U}"));
-    assert!(circle_colors(&wu, [Color::Red, Color::Green]).is_none(), "circled once");
+    assert!(
+        circle_colors(&wu, [Color::Red, Color::Green]).is_none(),
+        "circled once"
+    );
     // It taps for either circled color.
     let mut t = TestGame::new(2);
     let spires = t.custom(P0, wu.clone(), Zone::Battlefield);
@@ -196,9 +203,9 @@ fn cryptic_spires_circled_colors_are_printed_rules_text() {
     let isamaru = card("Isamaru, Hound of Konda");
     let mut deck = vec![isamaru.clone(), Arc::new(wu)];
     deck.extend((0..98).map(|_| card("Plains")));
-    assert!(check_commander(&deck, &isamaru, &[], false)
-        .iter()
-        .any(|p| matches!(p, DeckProblem::OutsideColorIdentity { name } if name == "Cryptic Spires")));
+    assert!(check_commander(&deck, &isamaru, &[], false).iter().any(
+        |p| matches!(p, DeckProblem::OutsideColorIdentity { name } if name == "Cryptic Spires")
+    ));
     deck[1] = printed;
     assert!(check_commander(&deck, &isamaru, &[], false).is_empty());
 }

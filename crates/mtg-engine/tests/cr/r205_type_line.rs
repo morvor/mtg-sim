@@ -7,9 +7,9 @@ use crate::r609_common::{continuous, permanent};
 use crate::r703_common::{
     add_scheme_deck, archenemy_game, keyword_action, oracle_card, run_effect,
 };
+use mtg_engine::ability::KeywordAction;
 use mtg_engine::ability::*;
 use mtg_engine::card::card;
-use mtg_engine::ability::KeywordAction;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
@@ -18,7 +18,11 @@ use mtg_engine::*;
 /// The list of names a rule of CR 205.3 gives ("... types are A, B (see rule ...), and
 /// C."), read directly from the rule text.
 fn cr_list(rule: &str) -> Vec<String> {
-    let text = mtg_data::comprehensive_rules().get(rule).unwrap().text.clone();
+    let text = mtg_data::comprehensive_rules()
+        .get(rule)
+        .unwrap()
+        .text
+        .clone();
     let list = text
         .rsplit_once(" types are ")
         .or_else(|| text.rsplit_once(" type is "))
@@ -188,7 +192,10 @@ fn each_subtype_is_correlated_to_its_card_type() {
     // and Dryad a creature type. When it stops being a creature, it keeps Forest but
     // loses Dryad.
     cr!("205.3c");
-    ruling!("Dryad Arbor", "Forest is a land type and Dryad is a creature type.");
+    ruling!(
+        "Dryad Arbor",
+        "Forest is a land type and Dryad is a creature type."
+    );
     assert_eq!(subtype_kind("Forest"), Some(SubtypeKind::Land));
     assert_eq!(subtype_kind("Dryad"), Some(SubtypeKind::Creature));
     let mut t = TestGame::new(2);
@@ -214,7 +221,10 @@ fn each_subtype_is_correlated_to_its_card_type() {
 #[test]
 fn choosing_a_subtype_means_exactly_one_existing_subtype_of_the_right_kind() {
     cr!("205.3e");
-    ruling!("Xenograft", "You must choose an existing _Magic_ creature type.");
+    ruling!(
+        "Xenograft",
+        "You must choose an existing _Magic_ creature type."
+    );
     // Xenograft: "As this enchantment enters, choose a creature type."
     let mut t = TestGame::new(2);
     let x = t.enter(P0, "Xenograft");
@@ -222,7 +232,14 @@ fn choosing_a_subtype_means_exactly_one_existing_subtype_of_the_right_kind() {
     for ok in ["Merfolk", "Wizard", "Time Lord", "Human"] {
         assert!(opts.iter().any(|o| o == ok), "{ok} is a creature type");
     }
-    for bad in ["Merfolk Wizard", "Artifact", "Opponent", "Swamp", "Truck", "Equipment"] {
+    for bad in [
+        "Merfolk Wizard",
+        "Artifact",
+        "Opponent",
+        "Swamp",
+        "Truck",
+        "Equipment",
+    ] {
         assert!(!opts.iter().any(|o| o == bad), "{bad} can't be chosen");
     }
     let chosen = t.obj_now(x).choices.creature_type.clone().unwrap();
@@ -543,7 +560,10 @@ fn world_permanents_are_subject_to_the_world_rule() {
 #[test]
 fn snow_permanents_have_the_snow_supertype() {
     cr!("205.4g");
-    ruling!("Snow-Covered Forest", "Snow is a supertype, not a card type.");
+    ruling!(
+        "Snow-Covered Forest",
+        "Snow is a supertype, not a card type."
+    );
     ruling!(
         "Snow-Covered Forest",
         "It represents a cost that can be paid by one mana that was produced by a snow source."

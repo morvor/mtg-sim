@@ -111,7 +111,10 @@ fn the_hand_modifier_changes_starting_and_maximum_hand_size() {
     assert_eq!(t.hand_size(P0), 8);
     assert_eq!(t.player(P0).max_hand_size, Some(8));
     // Zero: Stuffy Doll Avatar (+0).
-    assert_eq!(card("Stuffy Doll Avatar").front().chars.hand_modifier, Some(0));
+    assert_eq!(
+        card("Stuffy Doll Avatar").front().chars.hand_modifier,
+        Some(0)
+    );
     let mut t = vanguard_pregame("Stuffy Doll Avatar");
     t.g.start();
     assert_eq!(t.hand_size(P0), 7);
@@ -131,7 +134,10 @@ fn the_life_modifier_changes_the_starting_life_total() {
     t.g.start();
     assert_eq!(t.life(P0), 25);
     // Zero: Dakkon Blackblade Avatar (+0).
-    assert_eq!(card("Dakkon Blackblade Avatar").front().chars.life_modifier, Some(0));
+    assert_eq!(
+        card("Dakkon Blackblade Avatar").front().chars.life_modifier,
+        Some(0)
+    );
     let mut t = vanguard_pregame("Dakkon Blackblade Avatar");
     t.g.start();
     assert_eq!(t.life(P0), 20);

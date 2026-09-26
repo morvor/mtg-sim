@@ -97,6 +97,12 @@ pub fn has_name_originally_printed_in(c: &Characteristics, set: &str) -> bool {
     c.names().any(|n| originally_printed_in(set, n))
 }
 
+/// Whether the Comprehensive Rules list the names originally printed in the named
+/// expansion (CR 206.3a-c).
+pub fn has_listed_names(set: &str) -> bool {
+    originally_printed_lists().contains_key(&norm(set))
+}
+
 /// The expansions whose original names the Comprehensive Rules list (CR 206.3a-c).
 pub fn expansions_with_listed_names() -> Vec<String> {
     let mut v: Vec<String> = originally_printed_lists().keys().cloned().collect();

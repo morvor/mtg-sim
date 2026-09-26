@@ -85,10 +85,19 @@ fn subst(
 fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (clause, value_s) = l.rsplit_once(", where x is ")?;
+    let it = b.it.clone();
+    where_x_is_parts(clause, value_s, b, it)
+}
+
+/// "[clause], where X is [value]": the value is read first, with pronouns as they are
+/// ("that spell's mana value"); then "it" in the clause names `it` (e.g. a token the
+/// previous instruction created: "Put X +1/+1 counters on it, where X is ...").
+pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
     let (v, tail) = value_phrase(value_s, b)?;
     if !end(&tail).is_empty() {
         return None;
     }
+    b.it = it;
     let first_target = b.targets.len();
     let e = crate::oracle::effects::parse_clause(clause, b)?;
     let x = nonnegative(v);

@@ -146,8 +146,38 @@ fn differently_named_objects_are_counted_once_per_name() {
     let chars = |ids: &[ObjectId]| -> Vec<mtg_engine::object::Characteristics> {
         ids.iter().map(|i| t.obj_now(*i).chars.clone()).collect()
     };
-    assert_eq!(mtg_engine::names::distinct_name_count(&chars(&[fi, ice])), 1);
-    assert_eq!(mtg_engine::names::distinct_name_count(&chars(&[fi, shock])), 2);
+    assert_eq!(
+        mtg_engine::names::distinct_name_count(&chars(&[fi, ice])),
+        1
+    );
+    assert_eq!(
+        mtg_engine::names::distinct_name_count(&chars(&[fi, shock])),
+        2
+    );
+}
+
+#[test]
+fn counters_for_each_differently_named_land_go_on_the_created_token() {
+    // Emil, Vastlands Roamer: "{4}{G}, {T}: Create a 0/0 green and blue Fractal creature
+    // token. Put X +1/+1 counters on it, where X is the number of differently named lands
+    // you control." Three Forests, an Island and a Plains are three differently named
+    // lands; the counters go on the token ("it"), not on Emil.
+    cr!("201.2b");
+    crate::r703_common::supported("Emil, Vastlands Roamer");
+    let mut t = TestGame::new(2);
+    let emil = t.battlefield(P0, "Emil, Vastlands Roamer");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Plains", 1);
+    t.battlefield(P1, "Mountain");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, emil, 0, &[]).unwrap();
+    t.resolve_all();
+    let fractals = t.named_on_battlefield("Fractal Token");
+    assert_eq!(fractals.len(), 1);
+    assert_eq!(t.counters(fractals[0], "+1/+1"), 3);
+    assert_eq!(t.pt(fractals[0]), (3, 3));
+    assert_eq!(t.counters(emil, "+1/+1"), 0);
 }
 
 #[test]
@@ -221,16 +251,38 @@ fn interchangeable_names_are_the_same_name_for_rules_and_effects() {
     let plain = t.battlefield(P1, "Grizzly Bears");
     t.g.recompute();
     // Effects referring to names: "named Runeclaw Bear" matches the Grizzly Bears.
-    assert!(matches(&t, bears, &Filter::Named("Runeclaw Bear".into()), P0));
-    assert!(matches(&t, rune, &Filter::Named("Grizzly Bears".into()), P0));
-    assert!(t.obj_now(bears).chars.shares_name_with(&t.obj_now(rune).chars));
+    assert!(matches(
+        &t,
+        bears,
+        &Filter::Named("Runeclaw Bear".into()),
+        P0
+    ));
+    assert!(matches(
+        &t,
+        rune,
+        &Filter::Named("Grizzly Bears".into()),
+        P0
+    ));
+    assert!(t
+        .obj_now(bears)
+        .chars
+        .shares_name_with(&t.obj_now(rune).chars));
     // Their own names remain: "named Grizzly Bears" still matches it too.
-    assert!(matches(&t, bears, &Filter::Named("Grizzly Bears".into()), P0));
-    assert!(t.obj_now(plain).chars.shares_name_with(&t.obj_now(rune).chars));
+    assert!(matches(
+        &t,
+        bears,
+        &Filter::Named("Grizzly Bears".into()),
+        P0
+    ));
+    assert!(t
+        .obj_now(plain)
+        .chars
+        .shares_name_with(&t.obj_now(rune).chars));
     // Rules referring to names: two legendary permanents with interchangeable names are
     // subject to the legend rule (CR 704.5j).
     let mut ta = TestGame::new(2);
-    let isamaru = with_interchangeable_names("Isamaru, Hound of Konda", &["Ragavan, Nimble Pilferer"]);
+    let isamaru =
+        with_interchangeable_names("Isamaru, Hound of Konda", &["Ragavan, Nimble Pilferer"]);
     let x = ta.custom(P0, isamaru, Zone::Battlefield);
     let y = ta.battlefield(P0, "Ragavan, Nimble Pilferer");
     ta.settle();
@@ -256,9 +308,14 @@ fn interchangeable_names_are_the_same_name_for_deck_construction() {
     deck.extend((0..2).map(|_| b.clone()));
     let problems = check_constructed_with(&deck, &[], &NameEquivalence::default());
     assert!(
-        problems
-            .iter()
-            .any(|p| matches!(p, DeckProblem::TooManyCopies { have: 5, max: 4, .. })),
+        problems.iter().any(|p| matches!(
+            p,
+            DeckProblem::TooManyCopies {
+                have: 5,
+                max: 4,
+                ..
+            }
+        )),
         "{problems:?}"
     );
     // Four in all is fine.
@@ -336,8 +393,14 @@ fn a_flip_cards_alternative_name_may_be_chosen() {
     assert_eq!(chosen_name(&t, m), "Erayo's Essence");
     assert!(valid_card_name("Erayo's Essence", Some("enchantment")));
     assert!(!valid_card_name("Erayo's Essence", Some("creature")));
-    assert!(valid_card_name("Erayo, Soratami Ascendant", Some("creature")));
-    assert!(!valid_card_name("Erayo, Soratami Ascendant", Some("enchantment")));
+    assert!(valid_card_name(
+        "Erayo, Soratami Ascendant",
+        Some("creature")
+    ));
+    assert!(!valid_card_name(
+        "Erayo, Soratami Ascendant",
+        Some("enchantment")
+    ));
 }
 
 #[test]
@@ -351,7 +414,10 @@ fn the_back_face_name_of_a_double_faced_card_may_be_chosen() {
     assert_eq!(chosen_name(&t, needle), "Lord of Lineage");
     t.set_step(P1, Step::PrecombatMain);
     t.g.turn.priority = Some(P1);
-    assert!(t.activate(P1, keeper, 0, &[]).is_ok(), "the front face isn't named");
+    assert!(
+        t.activate(P1, keeper, 0, &[]).is_ok(),
+        "the front face isn't named"
+    );
     t.resolve_all();
     t.set_step(P1, Step::PrecombatMain);
     assert!(mtg_engine::dfc::transform(&mut t.g, keeper));
@@ -374,10 +440,21 @@ fn the_combined_back_face_name_of_a_meld_pair_may_be_chosen() {
     // back face's are used: it's a nonland creature card name, not a land card name.
     cr!("201.4e");
     let mut t = TestGame::new(2);
-    let m = enter_naming(&mut t, P0, "Meddling Mage", "Hanweir, the Writhing Township");
+    let m = enter_naming(
+        &mut t,
+        P0,
+        "Meddling Mage",
+        "Hanweir, the Writhing Township",
+    );
     assert_eq!(chosen_name(&t, m), "Hanweir, the Writhing Township");
-    assert!(valid_card_name("Hanweir, the Writhing Township", Some("creature")));
-    assert!(!valid_card_name("Hanweir, the Writhing Township", Some("land")));
+    assert!(valid_card_name(
+        "Hanweir, the Writhing Township",
+        Some("creature")
+    ));
+    assert!(!valid_card_name(
+        "Hanweir, the Writhing Township",
+        Some("land")
+    ));
     // The front face Hanweir Battlements is a land.
     let m = enter_naming(&mut t, P0, "Meddling Mage", "Hanweir Battlements");
     assert_eq!(chosen_name(&t, m), "");
@@ -473,15 +550,14 @@ fn a_gained_ability_naming_its_first_source_refers_to_the_new_object() {
     let spell = t.cast(P0, spike).kicked(true).target(P1).target(bear).go();
     t.resolve();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
-    let dealt: Vec<(ObjectId, ObjectId)> = t
-        .g
-        .history
-        .damage_by_source
+    let dealt: Vec<(ObjectId, ObjectId)> = t.g.history.damage_by_source.iter().copied().collect();
+    assert!(
+        dealt.iter().any(|(s, d)| *s == spell && *d == bear),
+        "{dealt:?}"
+    );
+    assert!(!dealt
         .iter()
-        .copied()
-        .collect();
-    assert!(dealt.iter().any(|(s, d)| *s == spell && *d == bear), "{dealt:?}");
-    assert!(!dealt.iter().any(|(s, _)| *s == ray || t.g.current(*s) == t.g.current(ray)));
+        .any(|(s, _)| *s == ray || t.g.current(*s) == t.g.current(ray)));
 }
 
 // ---------------------------------------------------------------------------
