@@ -7,7 +7,8 @@
 //! * `rulings-coverage [--write PATH] [--check] [--card NAME] [--text SUBSTR]` — which
 //!   Scryfall rulings are cited by tests (via `ruling!(...)`) or exempted
 //!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status.
-//! * `unsupported [--limit N] [--filter TEXT]` — dump unsupported ability texts with counts.
+//! * `unsupported [--limit N] [--filter TEXT] [--card NAME]` — dump unsupported ability texts
+//!   with counts (`--card`: only that card's texts, by exact name, case-insensitive).
 
 use mtg_data::rules::RuleKind;
 use regex::Regex;
@@ -365,6 +366,7 @@ fn unsupported(args: &[String]) {
     use mtg_engine::card::CardDef;
     let mut limit = 100usize;
     let mut filter: Option<String> = None;
+    let mut card: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -376,6 +378,10 @@ fn unsupported(args: &[String]) {
                 filter = Some(args[i + 1].to_lowercase());
                 i += 1;
             }
+            "--card" => {
+                card = Some(args[i + 1].to_lowercase());
+                i += 1;
+            }
             _ => {}
         }
         i += 1;
@@ -383,6 +389,9 @@ fn unsupported(args: &[String]) {
     let mut patterns: HashMap<String, (usize, String)> = HashMap::new();
     for c in mtg_data::cards().iter() {
         if !c.is_playable_card() || !c.is_legal_somewhere() {
+            continue;
+        }
+        if card.as_ref().is_some_and(|n| c.name.to_lowercase() != *n) {
             continue;
         }
         let def = CardDef::from_scryfall(c);
