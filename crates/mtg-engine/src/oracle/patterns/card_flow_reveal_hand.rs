@@ -10,7 +10,7 @@ use crate::oracle::patterns::{EffectPattern, FollowupPattern};
 use crate::oracle::phrases::*;
 
 /// The cards chosen from the revealed hand.
-const CHOSEN: Var = vars::USER + 55;
+pub(crate) const CHOSEN: Var = vars::USER + 55;
 
 inventory::submit! {
     EffectPattern { name: "card_flow: [player] reveals their hand", priority: 90, parse: reveals_hand }
@@ -45,7 +45,7 @@ fn rel_of(p: &PlayerRef) -> Option<PlayerRel> {
 
 fn revealed_hand_owner(e: &Effect) -> Option<PlayerRef> {
     match e {
-        Effect::RevealHand { who } => Some(who.clone()),
+        Effect::RevealHand { who } | Effect::LookAtHand { who } => Some(who.clone()),
         Effect::Seq(v) => v.last().and_then(revealed_hand_owner),
         _ => None,
     }
@@ -53,7 +53,7 @@ fn revealed_hand_owner(e: &Effect) -> Option<PlayerRef> {
 
 /// "you choose a nonland card from it", "you may choose a creature card from it", "you
 /// choose a card from it with mana value 3 or greater", "... from it and exile that card".
-fn choose_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn choose_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let (up_to, r) = if let Some(r) = l.strip_prefix("you may choose ") {
         (true, r)
     } else if let Some(r) = l.strip_prefix("you choose ") {
@@ -64,7 +64,8 @@ fn choose_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((n, r)) = parse_number(r) else {
         return false;
     };
-    if n.as_const().is_none() {
+    // "choose X cards from it" (Mind Warp): X as announced.
+    if n.as_const().is_none() && !matches!(n, Value::X) {
         return false;
     }
     let Some((desc, after)) = r.split_once(" from it") else {

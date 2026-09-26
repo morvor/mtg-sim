@@ -7,8 +7,10 @@
 //! * `rulings-coverage [--write PATH] [--check] [--card NAME] [--text SUBSTR]` — which
 //!   Scryfall rulings are cited by tests (via `ruling!(...)`) or exempted
 //!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status.
-//! * `unsupported [--limit N] [--filter TEXT] [--card NAME]` — dump unsupported ability texts
-//!   with counts (`--card`: only that card's texts, by exact name, case-insensitive).
+//! * `unsupported [--limit N] [--filter TEXT] [--card NAME] [--paper] [--single]` — dump
+//!   unsupported ability texts with counts (`--card`: only that card's texts, by exact name,
+//!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
+//!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks).
 
 use mtg_data::rules::RuleKind;
 use regex::Regex;
@@ -367,9 +369,13 @@ fn unsupported(args: &[String]) {
     let mut limit = 100usize;
     let mut filter: Option<String> = None;
     let mut card: Option<String> = None;
+    let mut paper = false;
+    let mut single = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--paper" => paper = true,
+            "--single" => single = true,
             "--limit" => {
                 limit = args[i + 1].parse().unwrap();
                 i += 1;
@@ -394,8 +400,15 @@ fn unsupported(args: &[String]) {
         if card.as_ref().is_some_and(|n| c.name.to_lowercase() != *n) {
             continue;
         }
+        if paper && c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+            continue;
+        }
         let def = CardDef::from_scryfall(c);
-        for u in def.unsupported_text() {
+        let texts = def.unsupported_text();
+        if single && texts.len() != 1 {
+            continue;
+        }
+        for u in texts {
             if filter
                 .as_ref()
                 .is_some_and(|f| !u.to_lowercase().contains(f))
