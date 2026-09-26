@@ -586,6 +586,16 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::GreatestManaValue(f), rest.to_string()));
     }
+    // CR 701.17c–d: "the milled card's mana value" (each milled card's, summed).
+    if let Some(rest) = s
+        .strip_prefix("the milled card's mana value")
+        .or_else(|| s.strip_prefix("the milled cards' total mana value"))
+    {
+        return Some((
+            Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),
+            rest.to_string(),
+        ));
+    }
     for (p, v) in [
         ("its power", Value::PowerOf(Box::new(b.it.clone()))),
         ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),

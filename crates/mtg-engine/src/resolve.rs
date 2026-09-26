@@ -370,7 +370,9 @@ impl Game {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;
                     if a == b {
-                        self.deal_damage_batch(vec![(a, Entity::Object(a), pa)], false);
+                        // CR 701.14c: a creature that fights itself deals damage to itself
+                        // equal to twice its power.
+                        self.deal_damage_batch(vec![(a, Entity::Object(a), 2 * pa)], false);
                     } else {
                         self.deal_damage_batch(
                             vec![(a, Entity::Object(b), pa), (b, Entity::Object(a), pb)],

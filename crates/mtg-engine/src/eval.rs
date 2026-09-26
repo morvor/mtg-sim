@@ -620,6 +620,24 @@ impl Game {
     /// Enumerates objects matching a filter in the filter's zone (battlefield by default).
     /// Phased-out permanents are excluded (CR 702.26b).
     pub fn objects_matching(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
+        // Objects among a selection ("a land card milled this way") are wherever they are.
+        if f.zone().is_none() {
+            let within = |f: &Filter| match f {
+                Filter::In(sel) => Some(sel.clone()),
+                _ => None,
+            };
+            let sel = match f {
+                Filter::And(v) => v.iter().find_map(within),
+                other => within(other),
+            };
+            if let Some(sel) = sel {
+                return self
+                    .eval_sel_objects(&sel, ctx)
+                    .into_iter()
+                    .filter(|id| self.is_live(*id) && self.matches(*id, f, ctx))
+                    .collect();
+            }
+        }
         let zone = f.zone().unwrap_or(ZoneKind::Battlefield);
         self.objects_in_zone_kind(zone)
             .into_iter()

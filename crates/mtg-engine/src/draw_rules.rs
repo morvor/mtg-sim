@@ -84,6 +84,13 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                     .all(|p| draws_left(g, p).is_none_or(|left| n <= left))
         }
         Effect::Seq(v) => v.iter().all(|x| can_choose(g, x, ctx)),
+        // CR 701.17b: a player can't choose to mill more cards than their library has.
+        Effect::Mill { who, n } => {
+            let n = g.eval_value(n, ctx).max(0) as usize;
+            g.eval_players(who, ctx)
+                .into_iter()
+                .all(|p| g.player(p).library.len() >= n)
+        }
         // CR 701.4a: beholding needs enough [quality] cards in hand or permanents.
         Effect::KeywordAction {
             action: KeywordAction::Behold,

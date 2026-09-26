@@ -66,6 +66,7 @@ pub mod mana;
 pub mod mana_abilities;
 pub mod match_play;
 pub mod merge;
+pub mod mill_rules;
 pub mod mulligan;
 pub mod multiplayer;
 pub mod next_spell;
