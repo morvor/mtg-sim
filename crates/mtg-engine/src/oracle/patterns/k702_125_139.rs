@@ -5,6 +5,9 @@
 //!   it's a Zombie in addition to its other types.";
 //! * ascend on an instant or sorcery (CR 702.131a): the keyword and its spell ability,
 //!   which comes first;
+//! * companion conditions (CR 702.139a) the general companion pattern doesn't read: different
+//!   names, even or odd mana values, activated abilities, a shared card type, a minimum
+//!   deck size, and repeated mana symbols;
 //! * mentor (CR 702.134c): "whenever ~ mentors a creature", "whenever equipped creature
 //!   mentors a creature";
 //! * spectacle (CR 702.137a): "if its spectacle cost was paid";
@@ -350,3 +353,64 @@ fn ascend_spell(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "k702.131 ascend on an instant or sorcery", priority: 100, parse: ascend_spell } }
+
+// ---------------------------------------------------------------------------
+// Companion (CR 702.139)
+// ---------------------------------------------------------------------------
+
+/// "Companion — [condition]" for the conditions of Lutri, Gyruda, Obosh, Zirda, Umori,
+/// Yorion, and Jegantha: the keyword plus its condition on the starting deck, which
+/// functions outside the game (CR 103.2b, 702.139a).
+fn companion_conditions(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::companion::{EVEN_MANA_VALUE, HAS_ACTIVATED_ABILITY, ODD_MANA_VALUE};
+    use crate::start::DeckCondition;
+    let t = block.trim();
+    let l = t.to_lowercase();
+    let cond = l
+        .strip_prefix("companion — ")
+        .or_else(|| l.strip_prefix("companion—"))?;
+    let cond = cond.split_once(" (").map_or(cond, |(c, _)| c);
+    let nonland = || Filter::not(Filter::Type(crate::types::CardType::Land));
+    let custom = |n: &str| Filter::Custom(SmolStr::new(n));
+    let dc = match end(cond) {
+        "each nonland card in your starting deck has a different name" => {
+            DeckCondition::DifferentNames { each: nonland() }
+        }
+        "your starting deck contains only cards with even mana values" => DeckCondition::Each {
+            each: Filter::Any,
+            must: custom(EVEN_MANA_VALUE),
+        },
+        "your starting deck contains only cards with odd mana values and land cards" => {
+            DeckCondition::Each {
+                each: nonland(),
+                must: custom(ODD_MANA_VALUE),
+            }
+        }
+        "each permanent card in your starting deck has an activated ability" => {
+            DeckCondition::Each {
+                each: Filter::PermanentCard,
+                must: custom(HAS_ACTIVATED_ABILITY),
+            }
+        }
+        "each nonland card in your starting deck shares a card type" => {
+            DeckCondition::ShareACardType { each: nonland() }
+        }
+        "your starting deck contains at least twenty cards more than the minimum deck size" => {
+            DeckCondition::MoreThanMinimumSize(20)
+        }
+        "no card in your starting deck has more than one of the same mana symbol in its mana cost" => {
+            DeckCondition::NoRepeatedManaSymbol
+        }
+        _ => return None,
+    };
+    let mut kw = Keyword::new(KeywordKind::Companion);
+    kw.text = Some(t.into());
+    let mut s = StaticAbility::new(StaticEffect::Companion(dc));
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![
+        AbilityDef::new(AbilityKind::Keyword(kw), t),
+        AbilityDef::new(AbilityKind::Static(s), t),
+    ])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.139 companion conditions", priority: -2, parse: companion_conditions } }

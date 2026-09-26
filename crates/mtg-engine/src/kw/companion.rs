@@ -21,6 +21,34 @@ use crate::types::*;
 
 pub struct Companion;
 
+/// `Filter::Custom`: a card with an even mana value ("only cards with even mana values").
+pub const EVEN_MANA_VALUE: &str = "companion:even mana value";
+/// `Filter::Custom`: a card with an odd mana value.
+pub const ODD_MANA_VALUE: &str = "companion:odd mana value";
+/// `Filter::Custom`: a card with an activated ability, including the activated abilities
+/// its keywords stand for (e.g. cycling) and a basic land type's intrinsic mana ability.
+pub const HAS_ACTIVATED_ABILITY: &str = "companion:has an activated ability";
+
+fn has_activated_ability(g: &Game, id: ObjectId) -> bool {
+    let chars = &g.obj(id).chars;
+    // CR 305.6: a land with a basic land type has its intrinsic mana ability.
+    if chars.is_land()
+        && chars
+            .subtypes
+            .iter()
+            .any(|s| crate::layers::intrinsic_mana_ability(s).is_some())
+    {
+        return true;
+    }
+    chars.abilities.iter().any(|a| match &a.kind {
+        AbilityKind::Activated(_) => true,
+        AbilityKind::Keyword(k) => crate::keyword_impls::derived_abilities(k)
+            .iter()
+            .any(|d| matches!(d.kind, AbilityKind::Activated(_))),
+        _ => false,
+    })
+}
+
 fn companion_cost() -> Cost {
     Cost::mana(crate::mana::ManaCost::parse("{3}").expect("mana"))
 }
@@ -55,6 +83,15 @@ fn unused_companion(g: &Game, p: PlayerId) -> Option<ObjectId> {
 impl KeywordRules for Companion {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Companion]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        match name {
+            EVEN_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 0),
+            ODD_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 1),
+            HAS_ACTIVATED_ABILITY => Some(has_activated_ability(g, id)),
+            _ => None,
+        }
     }
 
     fn special_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
