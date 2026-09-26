@@ -385,6 +385,34 @@ pub enum ManaRestriction {
     NotNonartifactSpell,
     /// Several restrictions, any of which permits the spend.
     AnyOf(Vec<ManaRestriction>),
+    /// "Spend this mana only to cast Dragon spells": the spell being cast matches the
+    /// filter (checked with the game, see [`ManaRestriction::allows_in`]).
+    CastSpell(SpendFilter),
+    /// "... or activate abilities of Dragons": the source of the ability being activated
+    /// matches the filter.
+    ActivateAbilityOf(SpendFilter),
+}
+
+/// A filter inside a [`ManaRestriction`], compared structurally.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpendFilter(pub Box<crate::ability::Filter>);
+
+impl SpendFilter {
+    pub fn new(f: crate::ability::Filter) -> Self {
+        SpendFilter(Box::new(f))
+    }
+}
+
+impl PartialEq for SpendFilter {
+    fn eq(&self, o: &Self) -> bool {
+        format!("{:?}", self.0) == format!("{:?}", o.0)
+    }
+}
+impl Eq for SpendFilter {}
+impl std::hash::Hash for SpendFilter {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        format!("{:?}", self.0).hash(h)
+    }
 }
 
 /// What the mana is being spent on, for checking restrictions.
@@ -433,6 +461,32 @@ impl ManaRestriction {
                 !ctx.is_spell || ctx.card_types.contains(CardType::Artifact)
             }
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
+            // Filters need the game: see `allows_in`.
+            ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,
+        }
+    }
+
+    /// [`ManaRestriction::allows`], also checking filter restrictions against the spell
+    /// or the ability's source being paid for (`ctx.source`). "You" in a filter is the
+    /// player spending the mana.
+    pub fn allows_in(
+        &self,
+        g: &crate::game::Game,
+        payer: crate::types::PlayerId,
+        mana_source: Option<ObjectId>,
+        ctx: &SpendContext,
+    ) -> bool {
+        let matches = |f: &SpendFilter| {
+            ctx.source.is_some_and(|s| {
+                g.try_obj(s).is_some()
+                    && g.matches(s, &f.0, &crate::eval::Ctx::new(mana_source, payer))
+            })
+        };
+        match self {
+            ManaRestriction::CastSpell(f) => ctx.is_spell && matches(f),
+            ManaRestriction::ActivateAbilityOf(f) => ctx.is_ability && matches(f),
+            ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows_in(g, payer, mana_source, ctx)),
+            other => other.allows(ctx),
         }
     }
 }
@@ -489,6 +543,17 @@ impl Mana {
     }
     pub fn can_spend(&self, ctx: &SpendContext) -> bool {
         self.restriction.as_ref().is_none_or(|r| r.allows(ctx))
+    }
+    /// [`Mana::can_spend`], checking filter restrictions with the game (CR 106.6).
+    pub fn can_spend_in(
+        &self,
+        g: &crate::game::Game,
+        payer: crate::types::PlayerId,
+        ctx: &SpendContext,
+    ) -> bool {
+        self.restriction
+            .as_ref()
+            .is_none_or(|r| r.allows_in(g, payer, self.source, ctx))
     }
 }
 
@@ -568,6 +633,19 @@ pub fn find_payment(
     ctx: &SpendContext,
     max_life: u32,
 ) -> Option<PaymentPlan> {
+    let usable: Vec<bool> = pool.iter().map(|m| m.can_spend(ctx)).collect();
+    find_payment_with(pool, cost, ctx, max_life, &usable)
+}
+
+/// [`find_payment`] where `usable[i]` says whether `pool[i]` may be spent on this payment
+/// (its restrictions, CR 106.6, already checked).
+pub fn find_payment_with(
+    pool: &[Mana],
+    cost: &ManaCost,
+    ctx: &SpendContext,
+    max_life: u32,
+    usable: &[bool],
+) -> Option<PaymentPlan> {
     let mut reqs: Vec<Req> = Vec::new();
     for s in &cost.symbols {
         match *s {
@@ -586,12 +664,11 @@ pub fn find_payment(
         }
     }
     reqs.sort_by_key(|r| r.rank());
-    let usable: Vec<bool> = pool.iter().map(|m| m.can_spend(ctx)).collect();
     let mut used = vec![false; pool.len()];
     let mut plan = PaymentPlan::default();
     if solve(
         pool,
-        &usable,
+        usable,
         &reqs,
         0,
         &mut used,

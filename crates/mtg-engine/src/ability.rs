@@ -1577,6 +1577,9 @@ pub enum ManaProduction {
     AnyOneColor(Value),
     /// N mana in any combination of colors.
     AnyCombination(Value),
+    /// N mana in any combination of the listed types ("three mana in any combination of
+    /// {R} and/or {G}"): each mana is one of them, chosen separately.
+    CombinationOf(Vec<ManaType>, Value),
     /// One mana of one of the listed types (chosen).
     OneOf(Vec<ManaType>),
     /// One mana of any type that a permanent matching the filter could produce
@@ -2837,6 +2840,10 @@ pub enum Effect {
         spell_filter: Filter,
         body: Box<Body>,
     },
+    /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
+    /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
+    /// step ends (the effect ends in CR 514.2).
+    PersistentMana(Box<Effect>),
     /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
     /// 716.2a).
     SetClassLevel {

@@ -1147,6 +1147,9 @@ impl Game {
                     ctx,
                 );
             }
+            Effect::PersistentMana(inner) => {
+                crate::mana_abilities::resolve_persistent_mana(self, inner, ctx);
+            }
             Effect::SetClassLevel { level } => {
                 if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
                     self.obj_mut(s).class_level = *level;
@@ -2063,21 +2066,22 @@ impl Game {
             }
             ManaProduction::AnyCombination(n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
-                (0..k)
-                    .map(|_| {
-                        self.choose_mana_color(
-                            p,
-                            ctx,
-                            &[
-                                ManaType::W,
-                                ManaType::U,
-                                ManaType::B,
-                                ManaType::R,
-                                ManaType::G,
-                            ],
-                        )
-                    })
-                    .collect()
+                self.choose_mana_combination(
+                    p,
+                    ctx,
+                    &[
+                        ManaType::W,
+                        ManaType::U,
+                        ManaType::B,
+                        ManaType::R,
+                        ManaType::G,
+                    ],
+                    k,
+                )
+            }
+            ManaProduction::CombinationOf(opts, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                self.choose_mana_combination(p, ctx, opts, k)
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
             ManaProduction::OneOfOrChosenColor(opts) => {
@@ -2204,6 +2208,29 @@ impl Game {
                 .push(*o);
             self.objects[o.0 as usize].created_by = Some((src, ctx.link));
         }
+    }
+
+    /// Chooses the type of each of `k` mana "in any combination of" `opts`. A pending
+    /// payment's hint names one type per unit, so each hinted type is used once.
+    fn choose_mana_combination(
+        &mut self,
+        p: PlayerId,
+        ctx: &Ctx,
+        opts: &[ManaType],
+        k: usize,
+    ) -> Vec<ManaType> {
+        let mut hint = self.mana_hint.clone().unwrap_or_default();
+        let mut out = Vec::with_capacity(k);
+        for _ in 0..k {
+            if let Some(i) = hint.iter().position(|t| opts.contains(t)) {
+                out.push(hint.remove(i));
+                continue;
+            }
+            let saved = self.mana_hint.take();
+            out.push(self.choose_mana_color(p, ctx, opts));
+            self.mana_hint = saved;
+        }
+        out
     }
 
     fn choose_mana_color(&mut self, p: PlayerId, ctx: &Ctx, opts: &[ManaType]) -> ManaType {

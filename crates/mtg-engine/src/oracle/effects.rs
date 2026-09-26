@@ -1428,6 +1428,7 @@ fn p_shuffle(l: &str, _b: &mut Builder) -> Option<Effect> {
 pub fn is_mana_effect(e: &Effect) -> bool {
     match e {
         Effect::AddMana { .. } => true,
+        Effect::PersistentMana(inner) => is_mana_effect(inner),
         Effect::Seq(v) => {
             v.iter().any(is_mana_effect) && v.iter().all(|x| !matches!(x, Effect::Draw { .. }))
         }

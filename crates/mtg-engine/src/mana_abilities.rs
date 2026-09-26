@@ -41,6 +41,9 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 vec![ALL_COLORS.to_vec(); g.eval_value(n, ctx).max(0) as usize]
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
+            ManaProduction::CombinationOf(opts, n) => {
+                vec![opts.clone(); g.eval_value(n, ctx).max(0) as usize]
+            }
             ManaProduction::ChosenColor(n) => {
                 // CR 607.2d: the color chosen by the linked ability; CR 607.5a: no mana if
                 // no color was chosen.
@@ -162,6 +165,7 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
         }
         Effect::If { then, .. } => production_units(g, then, ctx),
         Effect::AddManaWithSpentTrigger { add, .. } => production_units(g, add, ctx),
+        Effect::PersistentMana(inner) => production_units(g, inner, ctx),
         _ => None,
     }
 }
@@ -396,11 +400,12 @@ pub fn can_pay_mana_cost_of(
         None => false,
         Some(m) if m.mana_value() == 0 && m.symbols.is_empty() => true,
         Some(m) => {
-            find_payment(
+            find_payment_with(
                 &g.player(p).mana_pool.mana,
                 &m,
                 &SpendContext::default(),
                 g.player(p).life.max(0) as u32,
+                &usable_pool(g, p, &SpendContext::default()),
             )
             .is_some()
                 || plan_payment(g, p, &m, &SpendContext::default(), src).is_some()
@@ -569,6 +574,23 @@ pub fn resolve_add_mana_with_rider(
     }
 }
 
+/// Resolves `Effect::PersistentMana` (CR 106.4, 514.2): the mana the inner effect adds
+/// doesn't empty from its pool as steps and phases end until the turn's cleanup step.
+pub fn resolve_persistent_mana(g: &mut Game, inner: &Effect, ctx: &mut Ctx) {
+    let before: Vec<usize> = g.players.iter().map(|p| p.mana_pool.mana.len()).collect();
+    g.exec(inner, ctx);
+    for (i, pl) in g.players.iter_mut().enumerate() {
+        let from = before
+            .get(i)
+            .copied()
+            .unwrap_or(0)
+            .min(pl.mana_pool.mana.len());
+        for m in &mut pl.mana_pool.mana[from..] {
+            m.persistent = true;
+        }
+    }
+}
+
 fn add_mana_with(
     g: &mut Game,
     who: &PlayerRef,
@@ -604,15 +626,9 @@ fn add_mana_with(
         }
     }
     // "of the chosen type": the type chosen for the source (CR 607.2d).
-    let restriction = match restriction {
-        Some(ManaRestriction::SpellOfChosenType) => Some(
-            ctx.source
-                .and_then(|s| g.obj(s).choices.creature_type.clone())
-                .map(ManaRestriction::SpellWithSubtype)
-                .unwrap_or(ManaRestriction::SpellOfChosenType),
-        ),
-        other => other.clone(),
-    };
+    let restriction = restriction
+        .as_ref()
+        .map(|r| bind_restriction(g, ctx.source, r));
     let snow = ctx
         .source
         .is_some_and(|s| g.obj(s).chars.has_supertype(Supertype::Snow));
@@ -639,6 +655,57 @@ fn add_mana_with(
     }
     // CR 106.12a: `add_mana` reports the permanent as tapped for mana.
     g.add_mana(p, units, ctx.source);
+}
+
+/// Binds a restriction that refers to a choice made for the mana's source ("of the chosen
+/// type", CR 607.2d) as the mana is produced.
+fn bind_restriction(g: &Game, source: Option<ObjectId>, r: &ManaRestriction) -> ManaRestriction {
+    match r {
+        ManaRestriction::SpellOfChosenType => source
+            .and_then(|s| g.obj(s).choices.creature_type.clone())
+            .map(ManaRestriction::SpellWithSubtype)
+            .unwrap_or(ManaRestriction::SpellOfChosenType),
+        other => other.clone(),
+    }
+}
+
+/// The spending restriction on the mana an ability's effect adds, if any (CR 106.6).
+fn effect_restriction(e: &Effect) -> Option<&ManaRestriction> {
+    match e {
+        Effect::AddMana { restriction, .. } => restriction.as_ref(),
+        Effect::Seq(v) => v.iter().find_map(effect_restriction),
+        Effect::ChooseOne { options, .. } => {
+            options.iter().find_map(|(_, o)| effect_restriction(o))
+        }
+        Effect::If { then, .. } => effect_restriction(then),
+        Effect::AddManaWithSpentTrigger { add, .. } => effect_restriction(add),
+        Effect::PersistentMana(inner) => effect_restriction(inner),
+        _ => None,
+    }
+}
+
+/// Whether each unit of mana in `p`'s pool may be spent on this payment (CR 106.6).
+pub fn usable_pool(g: &Game, p: PlayerId, spend: &SpendContext) -> Vec<bool> {
+    g.player(p)
+        .mana_pool
+        .mana
+        .iter()
+        .map(|m| m.can_spend_in(g, p, spend))
+        .collect()
+}
+
+/// Whether mana `source` would produce may pay for `spend`. When the payment's purpose is
+/// unknown (a rough "could this be paid" check), restrictions are ignored.
+fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &SpendContext) -> bool {
+    if !spend.is_spell && !spend.is_ability {
+        return true;
+    }
+    let AbilityKind::Activated(act) = &source.ability.kind else {
+        return true;
+    };
+    effect_restriction(&act.body.effect).is_none_or(|r| {
+        bind_restriction(g, Some(source.obj), r).allows_in(g, p, Some(source.obj), spend)
+    })
 }
 
 /// Extra mana units that triggered mana abilities would add to `p`'s pool when `obj`
@@ -690,6 +757,7 @@ fn triggered_mana_units(
                 match e {
                     Effect::AddMana { who, .. } => Some(who),
                     Effect::Seq(v) => v.iter().find_map(recipient),
+                    Effect::PersistentMana(inner) => recipient(inner),
                     _ => None,
                 }
             }
@@ -916,18 +984,20 @@ pub fn plan_payment(
             snow: m.snow,
             source: None,
             pool_index: Some(i),
-            restriction_ok: m.can_spend(spend),
+            // An optimistic check (purpose unknown) ignores restrictions (CR 106.6).
+            restriction_ok: !(spend.is_spell || spend.is_ability) || m.can_spend_in(g, p, spend),
         });
     }
     for (si, s) in sources.iter().enumerate() {
         let snow = g.obj(s.obj).chars.has_supertype(Supertype::Snow);
+        let ok = source_restriction_ok(g, p, s, spend);
         for u in &s.units {
             units.push(Unit {
                 types: widen(u.clone()),
                 snow,
                 source: Some(si),
                 pool_index: None,
-                restriction_ok: true,
+                restriction_ok: ok,
             });
         }
     }
@@ -1210,7 +1280,13 @@ pub fn pay_mana(
     let max_life = if cant_pay_life { 0 } else { life };
     // Prefer paying from the pool if possible (without life for Phyrexian if mana suffices).
     let try_pool = |g: &Game, allow_life: u32| {
-        find_payment(&g.player(p).mana_pool.mana, cost, spend, allow_life)
+        find_payment_with(
+            &g.player(p).mana_pool.mana,
+            cost,
+            spend,
+            allow_life,
+            &usable_pool(g, p, spend),
+        )
     };
     let plan_now = try_pool(g, 0);
     if plan_now.is_none() {

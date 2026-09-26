@@ -12,7 +12,7 @@ use crate::oracle::CompileContext;
 use crate::types::*;
 
 /// Parses the restriction in "Spend this mana only ..." / "This mana can't be spent ...".
-fn parse_restriction(s: &str) -> Option<ManaRestriction> {
+pub(crate) fn parse_restriction(s: &str) -> Option<ManaRestriction> {
     let s = end(s);
     if let Some(r) = s.strip_prefix("spend this mana only ") {
         return Some(match r {
@@ -39,7 +39,8 @@ fn parse_restriction(s: &str) -> Option<ManaRestriction> {
             "to cast artifact spells or activate abilities of artifacts" => {
                 ManaRestriction::ArtifactSpellOrAbility
             }
-            _ => return None,
+            // Other spell and ability purposes (`mana_restrictions.rs`).
+            _ => return crate::oracle::patterns::mana_restrictions::parse_purposes(r),
         });
     }
     match s {

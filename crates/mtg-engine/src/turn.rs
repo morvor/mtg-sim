@@ -833,6 +833,13 @@ impl Game {
             o.deathtouch_damage = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // "Until end of turn, you don't lose this mana as steps and phases end": the pool
+        // empties as this step ends (CR 106.4).
+        for p in self.players.iter_mut() {
+            for m in p.mana_pool.mana.iter_mut() {
+                m.persistent = false;
+            }
+        }
         // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
         self.delayed_triggers
             .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
