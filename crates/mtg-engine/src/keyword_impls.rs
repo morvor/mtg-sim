@@ -55,28 +55,10 @@ fn derived_abilities_keyed(kw: &Keyword, key: String) -> Vec<Ability> {
 }
 
 fn build_derived(kw: &Keyword) -> Vec<Ability> {
-    use KeywordKind as K;
-    let text = kw.kind.name();
-    match kw.kind {
-        // CR 702.108a: "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn."
-        K::Prowess => vec![AbilityDef::new(
-            AbilityKind::Triggered(TriggeredAbility::new(
-                TriggerCond::CastSpell {
-                    who: PlayerRel::You,
-                    filter: Filter::not(Filter::creature()),
-                },
-                Body::effect(Effect::Modify {
-                    what: Sel::This,
-                    mods: vec![Modification::ModifyPT(Value::c(1), Value::c(1))],
-                    duration: Duration::EndOfTurn,
-                }),
-            )),
-            text,
-        )],
-        // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
-        // CR 702.29 cycling and typecycling: see `kw/cycling.rs`.
-        _ => crate::kw::derived(kw),
-    }
+    // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
+    // CR 702.29 cycling and typecycling: see `kw/cycling.rs`. CR 702.108 prowess:
+    // `kw/prowess.rs`.
+    crate::kw::derived(kw)
 }
 
 /// Appends derived abilities for every keyword on the object (called after layer 6).
