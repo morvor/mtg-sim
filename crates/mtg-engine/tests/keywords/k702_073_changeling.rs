@@ -26,13 +26,20 @@ fn is_a(t: &TestGame, id: ObjectId, subtype: &str) -> bool {
 fn a_changeling_is_every_creature_type() {
     cr!("702.73", "702.73a");
     ruling!(
+        "Graveshifter",
+        "A creature card with changeling is just as much a Kithkin, a Goblin, a Merfolk, and a Brushwagg as it is a Shapeshifter."
+    );
+    ruling!(
         "Masked Vandal",
         "A creature card with changeling is just as much an Elf, a Dwarf, a Sliver, a Goat, a Coward, and a Zombie as it is a Shapeshifter."
     );
     assert_supported("Woodland Changeling");
     let mut t = TestGame::new(2);
     let wc = t.battlefield(P0, "Woodland Changeling");
-    for ty in ["Shapeshifter", "Elf", "Dwarf", "Sliver", "Goat", "Coward", "Zombie", "Time Lord"] {
+    for ty in [
+        "Shapeshifter", "Elf", "Dwarf", "Sliver", "Goat", "Coward", "Zombie", "Time Lord",
+        "Kithkin", "Goblin", "Merfolk", "Brushwagg",
+    ] {
         assert!(t.obj_now(wc).chars.has_subtype(ty), "{ty}");
         assert!(is_a(&t, wc, ty), "{ty}");
     }
@@ -143,6 +150,10 @@ fn a_changeling_that_loses_all_abilities_is_still_every_creature_type() {
 fn an_effect_setting_its_creature_type_overwrites_changeling() {
     cr!("702.73a");
     ruling!(
+        "Masked Vandal",
+        "If an effect causes a creature with changeling to become a new creature type, it will be only that new creature type."
+    );
+    ruling!(
         "Graveshifter",
         "It will still have changeling; the effect making it all creature types will simply be overwritten."
     );
@@ -195,4 +206,29 @@ fn a_creature_given_changeling_by_an_effect_is_every_creature_type() {
     grant(&mut t, bears, Keyword::new(KeywordKind::Changeling));
     assert!(is_a(&t, bears, "Goblin"));
     assert!(is_a(&t, bears, "Bear"));
+}
+
+#[test]
+fn a_changeling_card_that_loses_its_abilities_in_the_graveyard_keeps_every_type() {
+    cr!("702.73a");
+    ruling!(
+        "Yixlid Jailer",
+        "If a card with changeling is in a graveyard, it still has all creature types."
+    );
+    let mut t = TestGame::new(2);
+    let gy = t.graveyard(P0, "Woodland Changeling");
+    // As with Yixlid Jailer's "Cards in graveyards lose all abilities."
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(gy)],
+    );
+    assert!(!t.obj_now(gy).chars.has_keyword(KeywordKind::Changeling));
+    assert!(is_a(&t, gy, "Kithkin"));
 }

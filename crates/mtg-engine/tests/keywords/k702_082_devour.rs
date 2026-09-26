@@ -96,6 +96,14 @@ fn creatures_are_devoured_as_the_spell_resolves() {
 fn a_creature_entering_at_the_same_time_cant_be_devoured() {
     cr!("702.82a", "614.12a");
     ruling!(
+        "Thorn-Thrash Viashino",
+        "You may sacrifice only creatures that are already on the battlefield."
+    );
+    ruling!(
+        "Predator Dragon",
+        "the creature with devour can't devour that other creature. The creature with devour also can't devour itself."
+    );
+    ruling!(
         "Skullmulcher",
         "Because devour applies as Skullmulcher enters the battlefield, it can't devour creatures that enter the battlefield at the same time as it."
     );
@@ -176,6 +184,10 @@ fn devour_quality_sacrifices_permanents_with_that_quality() {
     cr!("702.82c");
     ruling!(
         "Caprichrome",
+        "If you cast this as a spell, you choose how many and which artifacts to devour as part of the resolution of the spell."
+    );
+    ruling!(
+        "Caprichrome",
         "It allows you to sacrifice artifacts rather than creatures, but otherwise functions identically to devour."
     );
     assert_supported("Caprichrome");
@@ -195,6 +207,10 @@ fn devour_quality_sacrifices_permanents_with_that_quality() {
 #[test]
 fn devour_food_sacrifices_foods() {
     cr!("702.82c");
+    ruling!(
+        "Feasting Hobbit",
+        "Devour Food is a variant of the devour ability. It allows you to sacrifice Foods rather than creatures, but otherwise functions identically to devour."
+    );
     assert_supported("Feasting Hobbit");
     let mut t = TestGame::new(2);
     run_effect(
@@ -236,4 +252,110 @@ fn devour_x_squares_the_number_of_creatures_devoured() {
         .collect();
     let th = cast_devouring(&mut t, P0, "Thromok the Insatiable", &v);
     assert_eq!(t.counters(th, counters::PLUS1), 9);
+}
+
+#[test]
+fn devouring_no_artifacts_is_allowed() {
+    cr!("702.82c");
+    ruling!(
+        "Caprichrome",
+        "You may choose not to sacrifice any artifacts for the devour artifact ability."
+    );
+    ruling!(
+        "Feasting Hobbit",
+        "You may choose not to sacrifice any Foods for the devour Food ability."
+    );
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let c = cast_devouring(&mut t, P0, "Caprichrome", &[]);
+    assert!(t.on_battlefield(thopter));
+    assert_eq!(t.counters(c, counters::PLUS1), 0);
+}
+
+#[test]
+fn devour_food_can_sacrifice_a_food_that_isnt_a_token() {
+    cr!("702.82c");
+    ruling!(
+        "Feasting Hobbit",
+        "If an effect refers to a Food, it means any Food artifact, not just a Food artifact token."
+    );
+    let mut t = TestGame::new(2);
+    // Tough Cookie: an Artifact Creature — Food Golem.
+    let cookie = t.battlefield(P0, "Tough Cookie");
+    let h = cast_devouring(&mut t, P0, "Feasting Hobbit", &[cookie]);
+    assert!(devour_candidates(&t).contains(&Entity::Object(cookie)));
+    assert!(t.in_graveyard(P0, "Tough Cookie"));
+    assert_eq!(t.counters(h, counters::PLUS1), 3);
+}
+
+#[test]
+fn permanents_entering_at_the_same_time_cant_devour_each_other_or_the_same_objects() {
+    cr!("702.82a", "702.82c");
+    ruling!(
+        "Caprichrome",
+        "they can't devour the same objects. They can't devour each other, themselves, or any other objects entering the battlefield at the same time."
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Ornithopter");
+    let b = t.battlefield(P0, "Ornithopter");
+    let c1 = t.hand(P0, "Caprichrome");
+    let c2 = t.hand(P0, "Caprichrome");
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::Move {
+            what: Sel::Target(0),
+            to: Destination::battlefield(),
+        },
+        &[Entity::Object(c1), Entity::Object(c2)],
+    );
+    // The second one could devour only the Ornithopter the first one didn't.
+    assert_eq!(devour_candidates(&t), vec![Entity::Object(b)]);
+    let both = t.named_on_battlefield("Caprichrome");
+    assert_eq!(both.len(), 2);
+    for c in both {
+        assert_eq!(t.counters(c, counters::PLUS1), 1);
+    }
+}
+
+/// `what` becomes a copy of `of` (as an effect would).
+fn become_copy(t: &mut TestGame, what: ObjectId, of: ObjectId) {
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    ctx.targets = vec![vec![Entity::Object(what)], vec![Entity::Object(of)]];
+    t.g.exec(
+        &Effect::BecomeCopy {
+            what: Sel::Target(0),
+            of: Sel::Target(1),
+            duration: Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    t.g.flush_events();
+}
+
+#[test]
+fn a_copy_checks_what_it_devoured_itself() {
+    cr!("702.82b");
+    ruling!(
+        "Hellkite Hatchling",
+        "the second ability checks to see whether that creature — not the original Hellkite Hatchling — devoured a creature as it entered"
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let hatchling = cast_devouring(&mut t, P0, "Hellkite Hatchling", &[a]);
+    assert!(t.obj_now(hatchling).chars.has_keyword(KeywordKind::Flying));
+    // A creature that devoured nothing becomes a copy: no flying.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    become_copy(&mut t, bears, hatchling);
+    assert_eq!(t.obj_now(bears).chars.name, "Hellkite Hatchling");
+    assert!(!t.obj_now(bears).chars.has_keyword(KeywordKind::Flying));
+    // One that devoured a creature does.
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let wurm = cast_devouring(&mut t, P0, "Gorger Wurm", &[b]);
+    become_copy(&mut t, wurm, hatchling);
+    assert!(t.obj_now(wurm).chars.has_keyword(KeywordKind::Flying));
 }

@@ -14,6 +14,14 @@ use mtg_engine::*;
 fn each_exalted_ability_pumps_a_creature_that_attacks_alone() {
     cr!("702.83", "702.83a");
     ruling!(
+        "Akrasan Squire",
+        "Exalted abilities will resolve before blockers are declared."
+    );
+    ruling!(
+        "Rafiq of the Many",
+        "Exalted abilities will resolve before blockers are declared."
+    );
+    ruling!(
         "Rafiq of the Many",
         "Ultimately, the attacking creature will wind up with +1/+1 for each of your exalted abilities."
     );
@@ -58,6 +66,10 @@ fn exalted_bonuses_last_until_end_of_turn() {
 fn the_attacking_creatures_own_exalted_triggers() {
     cr!("702.83a");
     ruling!(
+        "Akrasan Squire",
+        "each exalted ability on each permanent you control (including, perhaps, the attacking creature itself) will trigger"
+    );
+    ruling!(
         "Noble Hierarch",
         "each exalted ability on each permanent you control (including, perhaps, the attacking creature itself) will trigger"
     );
@@ -95,6 +107,10 @@ fn exalted_doesnt_trigger_when_several_creatures_attack() {
 fn a_creature_left_alone_after_others_are_removed_didnt_attack_alone() {
     cr!("702.83b");
     ruling!(
+        "Akrasan Squire",
+        "If you attack with multiple creatures, but then all but one are removed from combat, your exalted abilities won’t trigger."
+    );
+    ruling!(
         "Rafiq of the Many",
         "If you attack with multiple creatures, but then all but one are removed from combat, your exalted abilities won't trigger."
     );
@@ -126,6 +142,10 @@ fn a_creature_left_alone_after_others_are_removed_didnt_attack_alone() {
 #[test]
 fn creatures_put_onto_the_battlefield_attacking_are_ignored() {
     cr!("702.83b");
+    ruling!(
+        "Akrasan Squire",
+        "Since those creatures were never declared as attackers, they’re ignored by exalted abilities."
+    );
     ruling!(
         "Rafiq of the Many",
         "Since those creatures were never declared as attackers, they're ignored by exalted abilities."
@@ -210,6 +230,14 @@ fn exalted_triggers_again_for_a_creature_attacking_alone_in_an_additional_combat
 fn in_two_headed_giant_only_the_attacking_creatures_controllers_exalted_triggers() {
     cr!("702.83a", "702.83b");
     ruling!(
+        "Rafiq of the Many",
+        "If you control that attacking creature, your exalted abilities will trigger but your teammate's exalted abilities won't."
+    );
+    ruling!(
+        "Noble Hierarch",
+        "if it's the only creature declared as an attacker by your entire team"
+    );
+    ruling!(
         "Akrasan Squire",
         "If you control that attacking creature, your exalted abilities will trigger but your teammate’s exalted abilities won’t."
     );
@@ -229,4 +257,53 @@ fn in_two_headed_giant_only_the_attacking_creatures_controllers_exalted_triggers
     assert_eq!(triggers_on_stack(&t, "Exalted"), 1);
     t.resolve_all();
     assert_eq!(t.pt(bears), (3, 3));
+}
+
+#[test]
+fn in_two_headed_giant_a_creature_attacking_with_a_teammates_creature_doesnt_attack_alone() {
+    cr!("702.83b");
+    ruling!(
+        "Akrasan Squire",
+        "a creature “attacks alone” if it’s the only creature declared as an attacker by your entire team"
+    );
+    let mut t = TestGame::with_config(
+        4,
+        GameConfig {
+            variant: Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.battlefield(P0, "Akrasan Squire");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    attack_with(
+        &mut t,
+        &[(bears, Entity::Player(P2)), (theirs, Entity::Player(P2))],
+    );
+    t.settle();
+    assert!(t.g.is_attacking(theirs));
+    assert_eq!(triggers_on_stack(&t, "Exalted"), 0);
+}
+
+#[test]
+fn each_instance_of_exalted_among_your_permanents_triggers() {
+    cr!("702.83a");
+    ruling!(
+        "Sublime Archangel",
+        "count the number of instances of exalted among permanents you control"
+    );
+    assert_supported("Sublime Archangel");
+    let mut t = TestGame::new(2);
+    // Sublime Archangel has exalted, and "Other creatures you control have exalted."
+    t.battlefield(P0, "Sublime Archangel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Forest");
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.settle();
+    // The Archangel's, the Bears' and the Elves' exalted.
+    assert_eq!(triggers_on_stack(&t, "Exalted"), 3);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 5));
 }

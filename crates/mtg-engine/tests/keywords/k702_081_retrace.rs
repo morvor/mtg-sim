@@ -14,6 +14,10 @@ const RETRACE: CastMethod = CastMethod::Keyword(KeywordKind::Retrace);
 fn retrace_casts_the_card_from_the_graveyard_by_discarding_a_land() {
     cr!("702.81", "702.81a");
     ruling!(
+        "Worm Harvest",
+        "You're casting it from your graveyard rather than your hand, and you must discard a land card in addition to any other costs."
+    );
+    ruling!(
         "Flame Jab",
         "You're casting it from your graveyard rather than your hand, and you must discard a land card in addition to any other costs."
     );
@@ -61,6 +65,10 @@ fn retrace_works_only_from_the_graveyard() {
 fn a_retrace_spell_follows_its_normal_timing() {
     cr!("702.81a");
     ruling!(
+        "Worm Harvest",
+        "Casting a card with retrace from your graveyard follows the normal timing rules for its card type."
+    );
+    ruling!(
         "Raven's Crime",
         "A retrace card cast from your graveyard follows the normal timing rules for its card type."
     );
@@ -79,6 +87,14 @@ fn a_retrace_spell_follows_its_normal_timing() {
 #[test]
 fn a_countered_retrace_spell_goes_back_to_the_graveyard() {
     cr!("702.81a");
+    ruling!(
+        "Worm Harvest",
+        "When a retrace card you cast from your graveyard resolves, fails to resolve, or is countered, it's put back into your graveyard."
+    );
+    ruling!(
+        "Worm Harvest",
+        "When a retrace card you cast from your graveyard resolves or is countered, it's put back into your graveyard."
+    );
     ruling!(
         "Raven's Crime",
         "When a retrace card you cast from your graveyard resolves, fails to resolve, or is countered, it’s put back into your graveyard."
@@ -136,4 +152,33 @@ fn cards_given_retrace_can_be_cast_from_the_graveyard() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
     assert!(t.in_graveyard(P0, "Forest"));
+}
+
+#[test]
+fn the_active_player_can_cast_a_retrace_card_again_right_after_it_resolves() {
+    cr!("702.81a");
+    ruling!(
+        "Flame Jab",
+        "The active player has priority after the spell resolves, so they can immediately cast a new spell."
+    );
+    ruling!(
+        "Worm Harvest",
+        "If it's your turn, you may do so before any other player may take actions to try to remove it from your graveyard."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let jab = t.graveyard(P0, "Flame Jab");
+    let l1 = t.hand(P0, "Forest");
+    t.hand(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(l1)]);
+    t.cast(P0, jab).method(RETRACE).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Flame Jab"));
+    // P0 receives priority first and may cast it again at once.
+    t.g.settle();
+    assert_eq!(t.g.turn.priority, Some(P0));
+    assert!(can_cast(&mut t, P0, jab, RETRACE));
+    t.cast(P0, jab).method(RETRACE).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
 }

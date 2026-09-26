@@ -50,6 +50,14 @@ fn an_evoked_creature_is_sacrificed_when_it_enters() {
 fn the_controller_orders_the_evoke_trigger_and_the_creatures_own_trigger() {
     cr!("702.74a");
     ruling!(
+        "Shriekmaw",
+        "own triggered ability resolve before the evoke triggered ability"
+    );
+    ruling!(
+        "Solitude",
+        "own triggered ability resolve before the evoke triggered ability"
+    );
+    ruling!(
         "Mulldrifter",
         "If you pay the evoke cost, you can have Mulldrifter's own triggered ability resolve before the evoke triggered ability."
     );

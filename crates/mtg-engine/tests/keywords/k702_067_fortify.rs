@@ -157,3 +157,35 @@ fn any_of_several_fortify_abilities_may_be_used() {
         4
     );
 }
+
+#[test]
+fn a_fortifications_abilities_refer_to_the_fortified_land() {
+    cr!("702.67a", "702.67b");
+    ruling!(
+        "Darksteel Garrison",
+        "The second ability triggers whenever the fortified land becomes tapped, not just when it’s tapped for mana."
+    );
+    let mut t = TestGame::new(2);
+    let garrison = t.battlefield(P0, "Darksteel Garrison");
+    let forest = t.battlefield(P0, "Forest");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Wastes", 3);
+    t.answer_targets(P0, &[Entity::Object(forest)]);
+    activate_named(&mut t, P0, garrison, FORTIFY, 0).unwrap();
+    t.resolve();
+    // "Whenever fortified land becomes tapped, target creature gets +1/+1 until end of
+    // turn." Tapped by an effect, not for mana.
+    t.g.objects[forest.0 as usize].tapped = false;
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Tap {
+            what: Sel::Target(0),
+        },
+        &[Entity::Object(forest)],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 3));
+}

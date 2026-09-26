@@ -130,3 +130,29 @@ fn frenzy_n_gives_plus_n() {
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 15);
 }
+
+#[test]
+fn a_frenzy_sliver_that_isnt_a_sliver_doesnt_have_frenzy() {
+    cr!("702.68a");
+    ruling!(
+        "Frenzy Sliver",
+        "If the creature type of a Sliver changes so it’s no longer a Sliver, it will no longer be affected by its own ability."
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Frenzy Sliver");
+    let b = t.battlefield(P0, "Frenzy Sliver");
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllCreatureTypes],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(a)],
+    );
+    assert_eq!(t.obj_now(a).chars.keyword_count(KeywordKind::Frenzy), 0);
+    // Its ability still gives the other Sliver frenzy.
+    assert_eq!(t.obj_now(b).chars.keyword_count(KeywordKind::Frenzy), 2);
+}

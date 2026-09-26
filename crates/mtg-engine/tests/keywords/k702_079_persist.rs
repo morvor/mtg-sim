@@ -33,6 +33,10 @@ fn on_bf(t: &TestGame, name: &str) -> Vec<ObjectId> {
 fn persist_returns_it_with_a_minus_one_counter() {
     cr!("702.79", "702.79a");
     ruling!(
+        "Murderous Redcap",
+        "When a permanent with persist returns to the battlefield, it’s a new object with no memory of or connection to its previous existence."
+    );
+    ruling!(
         "Kitchen Finks",
         "When a permanent with persist returns to the battlefield, it's a new object with no memory of or connection to its previous existence."
     );
@@ -107,6 +111,10 @@ fn a_plus_one_counter_cancelling_the_minus_one_counter_lets_it_persist_again() {
 fn a_creature_killed_by_minus_one_counters_despite_plus_one_counters_doesnt_persist() {
     cr!("702.79a");
     ruling!(
+        "Murderous Redcap",
+        "persist won’t trigger and the card won’t return to the battlefield"
+    );
+    ruling!(
         "Kitchen Finks",
         "persist won't trigger and the card won't return to the battlefield. That's because persist checks the creature's existence just before it leaves the battlefield"
     );
@@ -148,6 +156,10 @@ fn a_persisted_creature_enters_with_the_counter_already_on_it() {
 fn a_token_with_persist_cant_return() {
     cr!("702.79a");
     ruling!(
+        "Murderous Redcap",
+        "However, the token will cease to exist and can’t return to the battlefield."
+    );
+    ruling!(
         "Kitchen Finks",
         "If a token with no -1/-1 counters on it has persist, the ability will trigger when the token is put into the graveyard. However, the token will cease to exist and can't return to the battlefield."
     );
@@ -184,6 +196,10 @@ fn a_token_with_persist_cant_return() {
 #[test]
 fn redundant_instances_of_persist_trigger_but_return_it_once() {
     cr!("702.79a");
+    ruling!(
+        "Murderous Redcap",
+        "they’ll each trigger separately, but the redundant instances will have no effect"
+    );
     ruling!(
         "Kitchen Finks",
         "If a permanent has multiple instances of persist, they'll each trigger separately, but the redundant instances will have no effect."
@@ -269,6 +285,10 @@ fn persist_does_nothing_if_the_card_left_the_graveyard() {
 fn simultaneous_persist_triggers_are_put_on_the_stack_in_apnap_order() {
     cr!("702.79a", "603.3b");
     ruling!(
+        "Murderous Redcap",
+        "the nonactive player’s persist creatures will return to the battlefield first"
+    );
+    ruling!(
         "Kitchen Finks",
         "That means that in a two-player game, the nonactive player's persist creatures will return to the battlefield first"
     );
@@ -334,4 +354,41 @@ fn persist_granted_by_an_effect_works_for_each_creature() {
     destroy(&mut t, bears_back[0]);
     t.settle();
     assert!(stack_triggers(&t, "Persist").is_empty());
+}
+
+#[test]
+fn a_persisting_creatures_enters_ability_uses_its_last_known_power() {
+    cr!("702.79a", "608.2h");
+    ruling!(
+        "Murderous Redcap",
+        "If it’s left the battlefield by then, its last known information is used."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // The Redcap enters (2/2); in response to its trigger it gets +2/+0 and then dies:
+    // its power as it last existed (4) is used.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let redcap = t.enter(P0, "Murderous Redcap");
+    t.settle();
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::ModifyPT(Value::c(2), Value::c(0))],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(redcap)],
+    );
+    destroy(&mut t, redcap);
+    t.settle();
+    // Persist triggered on top: resolve it (the returned Redcap's trigger targets the
+    // Bears), then the first trigger.
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    // The returned Redcap (1/1) dealt 1 damage to the Bears.
+    assert_eq!(t.obj_now(bears).damage, 1);
 }

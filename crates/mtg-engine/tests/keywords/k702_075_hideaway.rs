@@ -27,6 +27,14 @@ fn bottom(t: &TestGame, p: PlayerId, n: usize) -> Vec<ObjectId> {
 fn hideaway_exiles_one_of_the_top_n_cards_face_down() {
     cr!("702.75", "702.75a");
     ruling!(
+        "Mosswort Bridge",
+        "Exile one of them face down and put the rest on the bottom of your library in a random order. The exiled card gains 'The player who controls the permanent that exiled this card may look at this card in the exile zone.'"
+    );
+    ruling!(
+        "Evercoat Ursine",
+        "Exile one of them face down and put the rest on the bottom of your library in a random order."
+    );
+    ruling!(
         "Watcher for Tomorrow",
         "Hideaway now causes you to put the rest of the cards on the bottom of your library in a random order instead of any order."
     );
@@ -61,6 +69,10 @@ fn hideaway_exiles_one_of_the_top_n_cards_face_down() {
 #[test]
 fn the_linked_ability_returns_the_exiled_card() {
     cr!("702.75a", "607.2a");
+    ruling!(
+        "Watcher for Tomorrow",
+        "You don't reveal the exiled card when you put it into its owner's hand."
+    );
     let mut t = TestGame::new(2);
     let cards = stack_library(&mut t);
     let watcher = t.enter(P0, "Watcher for Tomorrow");
@@ -295,4 +307,91 @@ fn cards_exiled_by_several_hideaway_abilities_are_all_exiled_with_it() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.zone(cards[3]), Zone::Exile);
+}
+
+#[test]
+fn windbrisk_heights_counts_the_different_creatures_declared_as_attackers() {
+    cr!("702.75a");
+    ruling!(
+        "Windbrisk Heights",
+        "A creature declared as an attacker in two different attack phases counts only once. A creature that entered attacking (such as a token created by Militia's Pride) doesn't count because you never attacked with it."
+    );
+    assert_supported("Windbrisk Heights");
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t);
+    let heights = t.enter(P0, "Windbrisk Heights");
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.resolve_all();
+    let text = play_ability(&t, heights);
+    let a = t.battlefield(P0, "Llanowar Elves");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    let c = t.hand(P0, "Llanowar Elves");
+    crate::common_k702_011_017::attack_with(
+        &mut t,
+        &[(a, Entity::Player(P1)), (b, Entity::Player(P1))],
+    );
+    // A third creature put onto the battlefield attacking wasn't declared as an attacker.
+    let mut to = mtg_engine::ability::Destination::battlefield();
+    to.attacking = true;
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::Move {
+            what: mtg_engine::ability::Sel::Target(0),
+            to,
+        },
+        &[Entity::Object(c)],
+    );
+    crate::common_k702_018_026::declare_blocks(&mut t, P1, &[]);
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    // An additional combat: the first creature attacks again.
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::ExtraCombat { after_this: true },
+        &[],
+    );
+    let now = t.g.current(a);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(a, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::DeclareAttackers);
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    // Two different creatures attacked: not enough.
+    let now = t.g.current(heights);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.lands(P0, "Plains", 1);
+    t.answer_yes(P0, true);
+    activate_named(&mut t, P0, heights, &text, 0).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(cards[0]), Zone::Exile);
+    // Three different creatures declared as attackers: the card is played.
+    let d = t.battlefield(P0, "Llanowar Elves");
+    t.g.objects[d.0 as usize].tapped = false;
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::ExtraCombat { after_this: true },
+        &[],
+    );
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(d, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::DeclareAttackers);
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    let now = t.g.current(heights);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.lands(P0, "Plains", 1);
+    t.answer_yes(P0, true);
+    activate_named(&mut t, P0, heights, &text, 0).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }

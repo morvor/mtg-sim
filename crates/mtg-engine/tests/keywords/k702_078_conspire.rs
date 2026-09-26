@@ -149,6 +149,30 @@ fn each_instance_of_conspire_is_paid_separately_and_triggers_on_its_own_payment(
 }
 
 #[test]
+fn conspire_can_be_paid_for_a_spell_cast_with_flashback() {
+    cr!("702.78a");
+    ruling!(
+        "Wort, the Raidmother",
+        "You may pay additional costs, such as conspire."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Wort, the Raidmother");
+    let g1 = t.battlefield(P0, "Raging Goblin");
+    let g2 = t.battlefield(P0, "Raging Goblin");
+    t.lands(P0, "Mountain", 5);
+    // Firebolt: 2 damage to any target; flashback {4}{R}.
+    let bolt = t.graveyard(P0, "Firebolt");
+    pay_conspire(&mut t, P0, &[g1, g2]);
+    t.cast(P0, bolt)
+        .method(mtg_engine::object::CastMethod::Keyword(KeywordKind::Flashback))
+        .target(P1)
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert!(t.in_exile("Firebolt"));
+}
+
+#[test]
 fn conspire_given_to_spells_cast_from_exile() {
     cr!("702.78a");
     // Rassilon's "Each noncreature spell you cast from exile has conspire."

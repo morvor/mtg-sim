@@ -122,3 +122,31 @@ fn ten_poison_counters_from_poisonous_lose_the_game() {
     assert_eq!(poison(&t, P1), 10);
     assert!(t.has_lost(P1));
 }
+
+#[test]
+fn a_virulent_sliver_that_isnt_a_sliver_doesnt_have_poisonous() {
+    cr!("702.70a");
+    ruling!(
+        "Virulent Sliver",
+        "If the creature type of a Sliver changes so it's no longer a Sliver, it will no longer be affected by its own ability."
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Virulent Sliver");
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllCreatureTypes],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(a)],
+    );
+    assert_eq!(t.obj_now(a).chars.keyword_count(KeywordKind::Poisonous), 0);
+    attack_with(&mut t, &[(a, Entity::Player(P1))]);
+    declare_blocks(&mut t, P1, &[]);
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(poison(&t, P1), 0);
+}
