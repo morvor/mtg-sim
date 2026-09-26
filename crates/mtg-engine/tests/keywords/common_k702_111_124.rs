@@ -63,6 +63,8 @@ pub fn declare_attack(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
             || g.turn.number != turn
     });
     assert!(ok && t.g.turn.number == turn, "attackers not declared");
+    // Attack triggers are put on the stack before the active player receives priority.
+    t.settle();
 }
 
 /// Advances to `step` of the current turn (the active player has priority).
