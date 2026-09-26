@@ -1,6 +1,8 @@
 //! Saga chapter abilities with flavor words (CR 714.2b, 207.2d) and "When you next cast
 //! [a spell] this turn, [effect]" delayed triggers (CR 603.7b) in chapters and spells.
 
+use mtg_engine::ability::AbilityKind;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::counters;
@@ -167,4 +169,79 @@ fn next_creature_spell_enters_with_an_additional_counter() {
     pts.sort();
     // Only the next creature spell.
     assert_eq!(pts, vec![(2, 2), (3, 3)]);
+}
+
+#[test]
+fn the_next_creature_spell_gains_haste_and_keeps_it_as_a_permanent() {
+    cr!("714.2b", "603.7b", "400.7a");
+    let mut t = TestGame::new(2);
+    // II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains
+    // haste until end of turn.
+    let saga = t.enter(P0, "Summon: Brynhildr");
+    t.resolve_all();
+    add_lore(&mut t, saga, 1);
+    t.resolve_all();
+    t.lands(P0, "Forest", 4);
+    let first = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, first).go();
+    t.resolve_all();
+    let second = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, second).go();
+    t.resolve_all();
+    let hasty: Vec<bool> = t
+        .named_on_battlefield("Grizzly Bears")
+        .into_iter()
+        .map(|b| t.obj_now(b).has_keyword(KeywordKind::Haste))
+        .collect();
+    // Only the next creature spell.
+    assert_eq!(hasty.iter().filter(|h| **h).count(), 1, "{hasty:?}");
+    assert_eq!(hasty.len(), 2);
+}
+
+#[test]
+fn the_next_instant_cast_from_hand_gains_rebound() {
+    cr!("603.7b", "702.88a");
+    let mut t = TestGame::new(2);
+    let narset = t.battlefield(P0, "Narset Transcendent");
+    t.set_step(P0, Step::PrecombatMain);
+    // −2: When you next cast an instant or sorcery spell from your hand this turn, it
+    // gains rebound.
+    let minus_two = t
+        .obj(narset)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.starts_with("-2"))
+        .unwrap();
+    t.activate(P0, narset, minus_two, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(narset, "loyalty"), 4);
+    bolt(&mut t, P0, P1);
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lightning Bolt"));
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+    // Only the next one.
+    bolt(&mut t, P0, P1);
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+}
+
+#[test]
+fn a_cast_trigger_from_your_hand_means_the_spell_was_cast_from_there() {
+    // "Whenever you cast an instant spell from your hand, it gains rebound": the spell is
+    // on the stack as the ability triggers (CR 601.2a, 601.2i).
+    cr!("601.2a", "601.2i", "702.88a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ojer Pakpatiq, Deepest Epoch // Temple of Cyclical Time");
+    t.set_step(P0, Step::PrecombatMain);
+    bolt(&mut t, P0, P1);
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lightning Bolt"));
+    // A sorcery isn't an instant spell.
+    t.lands(P0, "Mountain", 1);
+    let sorcery = t.hand(P0, "Lava Spike");
+    t.cast(P0, sorcery).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert!(t.in_graveyard(P0, "Lava Spike"));
 }

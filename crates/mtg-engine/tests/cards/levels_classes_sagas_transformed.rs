@@ -96,7 +96,8 @@ fn delayed_return_does_nothing_if_the_card_left_the_graveyard() {
 
 #[test]
 fn when_you_sacrifice_it_returns_transformed_under_its_owners_control() {
-    cr!("712.14a", "603.7a");
+    // The sacrificed permanent's own "when you sacrifice ~" ability looks back in time.
+    cr!("712.14a", "603.7a", "603.10a");
     let mut t = TestGame::new(2);
     let seer = t.battlefield(P0, "Viscera Seer");
     let egg = t.battlefield(P0, "Biolume Egg // Biolume Serpent");
@@ -297,7 +298,7 @@ fn journey_to_eternity_and_its_creature_destroyed_together_both_return() {
 
 #[test]
 fn aura_back_face_returns_attached_to_target_opponent() {
-    cr!("712.14a", "303.4f");
+    cr!("712.14a", "303.4");
     let mut t = TestGame::new(2);
     let witch = t.battlefield(P0, "Accursed Witch // Infectious Curse");
     t.answer_targets(P0, &[Entity::Player(P1)]);
@@ -310,7 +311,7 @@ fn aura_back_face_returns_attached_to_target_opponent() {
 
 #[test]
 fn aura_back_face_returns_attached_to_target_creature() {
-    cr!("712.14a", "303.4f");
+    cr!("712.14a", "303.4");
     let mut t = TestGame::new(2);
     let strangler = t.battlefield(P0, "Vengeful Strangler // Strangling Grasp");
     let victim = t.battlefield(P1, "Grizzly Bears");
@@ -347,4 +348,76 @@ fn a_stolen_loyal_cathar_returns_under_your_control() {
     assert_eq!(t.obj_now(back).controller, P0);
     assert_eq!(t.obj_now(back).owner, P1);
     assert_eq!(t.obj_now(back).face, FaceState::Back);
+}
+
+const GALLEON: &str = "Conqueror's Galleon // Conqueror's Foothold";
+
+/// Conqueror's Galleon, made a 5/5 artifact creature by Ensoul Artifact.
+fn animated_galleon(t: &mut TestGame) -> ObjectId {
+    let galleon = t.battlefield(P0, GALLEON);
+    t.lands(P0, "Island", 2);
+    let aura = t.hand(P0, "Ensoul Artifact");
+    t.cast(P0, aura).target(galleon).go();
+    t.resolve_all();
+    assert_eq!(t.pt(galleon), (5, 5));
+    galleon
+}
+
+/// Declares the Galleon as an attacker and resolves its attack trigger.
+fn galleon_attacks(t: &mut TestGame) -> ObjectId {
+    let galleon = animated_galleon(t);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(galleon, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.resolve_all();
+    galleon
+}
+
+#[test]
+fn exiled_at_end_of_combat_then_returned_transformed() {
+    cr!("603.7a", "712.14a", "400.7");
+    ruling!(
+        "Conqueror's Galleon // Conqueror's Foothold",
+        "Conqueror's Galleon is exiled and then returned to battlefield transformed. It will be considered a new object entering the battlefield. Notably, it will return to the battlefield untapped."
+    );
+    let mut t = TestGame::new(2);
+    let galleon = galleon_attacks(&mut t);
+    // The attack trigger has resolved: nothing happens until end of combat.
+    assert_eq!(t.g.current(galleon), galleon);
+    assert!(t.on_battlefield(galleon));
+    assert_eq!(t.obj_now(galleon).face, FaceState::Front);
+    assert!(t.obj_now(galleon).tapped);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+    let foothold = one_named(&t, "Conqueror's Foothold");
+    assert_ne!(foothold, galleon);
+    let o = t.obj_now(foothold);
+    assert_eq!(o.face, FaceState::Back);
+    assert_eq!(o.controller, P0);
+    assert!(!o.tapped);
+    assert!(o.is(types::CardType::Land));
+    assert!(t.g.find_in_zone(Zone::Exile, "Conqueror's Galleon").is_empty());
+}
+
+#[test]
+fn a_galleon_that_dies_in_combat_isnt_exiled_or_returned() {
+    cr!("603.7c", "400.7");
+    ruling!(
+        "Conqueror's Galleon // Conqueror's Foothold",
+        "Conqueror's Galleon won't be exiled if it doesn't survive combat."
+    );
+    let mut t = TestGame::new(2);
+    let dreadmaw = t.battlefield(P1, "Colossal Dreadmaw");
+    let galleon = animated_galleon(&mut t);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(galleon, Entity::Player(P1))], &[(dreadmaw, galleon)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Conqueror's Galleon"));
+    assert!(t.named_on_battlefield("Conqueror's Foothold").is_empty());
+    assert!(t.g.find_in_zone(Zone::Exile, "Conqueror's Galleon").is_empty());
 }

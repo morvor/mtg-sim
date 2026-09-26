@@ -57,7 +57,8 @@ fn p_next_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "levels_classes_sagas: when you next cast", priority: 90, parse: p_next_cast } }
+// After the narrower "..., that spell gains [keyword]" pattern (`k702_038_051.rs`).
+inventory::submit! { EffectPattern { name: "levels_classes_sagas: when you next cast", priority: 110, parse: p_next_cast } }
 
 /// An instant or sorcery whose text begins "When you next cast ...": a spell ability that
 /// creates the delayed trigger, not a triggered ability of the card.

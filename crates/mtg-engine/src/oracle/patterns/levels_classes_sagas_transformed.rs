@@ -14,15 +14,18 @@
 //!   gendered pronouns naming the card are read like "it" for the core
 //!   exile-then-return pattern.
 //!
+//! * "Exile it at end of combat, then return it to the battlefield transformed under your
+//!   control": both happen when the delayed triggered ability resolves.
+//!
 //! "Return ~" in an Aura's "When enchanted creature dies" ability finds the Aura card in
-//! its owner's graveyard (CR 400.7f, see `Game::follow_aura_of_leaving_host`).
+//! its owner's graveyard (CR 400.7f; the ability's source becomes that card as it
+//! resolves, see `Game::resolve_ability`).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{object_ref, player_ref, Builder};
 use crate::oracle::phrases::*;
 use crate::types::CounterKind;
-
 
 /// "with three time counters on it", "with a +1/+1 counter on it".
 fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
@@ -37,7 +40,7 @@ fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
 /// "to the battlefield tapped and transformed under its owner's control" (or "onto the
 /// battlefield ..."): a battlefield destination that includes "transformed". `what` is
 /// the returning object (whose owner "its owner" is). "... attached to target opponent"
-/// adds that target: the Aura enters attached to it (CR 303.4f), or stays where it is if
+/// adds that target: the Aura enters attached to it (CR 303.4), or stays where it is if
 /// it can't legally enchant it then (CR 303.4i, see `attach::entry_attachment`).
 fn transformed_destination(s: &str, what: &Sel, b: &mut Builder) -> Option<Destination> {
     let mut t = s
@@ -163,10 +166,61 @@ fn f_gendered_return(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "levels_classes_sagas: return her/him", priority: 60, apply: f_gendered_return } }
 
+/// "exile it at end of combat, then return it to the battlefield transformed under your
+/// control" (after the delayed-removal pattern's "exile it at end of combat"): the return
+/// is part of the same delayed triggered ability, right after the exile, and "it" is the
+/// card in exile, a new object (CR 603.7, 400.7). If the permanent has left the
+/// battlefield by then, it isn't exiled and nothing returns (CR 603.7c).
+fn f_delayed_exile_then_return(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = l.to_lowercase();
+    let Some(rest) = end(&l).strip_prefix("return it ") else {
+        return false;
+    };
+    // No new targets for the delayed part.
+    if rest.contains("target") {
+        return false;
+    }
+    let Some(Effect::AtNext { effect, .. }) = last_effect_mut(prev) else {
+        return false;
+    };
+    if !matches!(
+        &**effect,
+        Effect::Exile {
+            what: Sel::Var(_),
+            face_down: false,
+            ..
+        }
+    ) {
+        return false;
+    }
+    let returned = Sel::Var(vars::IT);
+    let Some(to) = transformed_destination(rest, &returned, b) else {
+        return false;
+    };
+    let exile = std::mem::replace(&mut **effect, Effect::Noop);
+    **effect = Effect::seq(vec![
+        exile,
+        Effect::Move {
+            what: returned,
+            to,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "levels_classes_sagas: delayed exile then return transformed", priority: 60, apply: f_delayed_exile_then_return } }
+
 /// The last effect of a sequence (in execution order).
 fn last_effect(e: &Effect) -> &Effect {
     match e {
         Effect::Seq(v) => v.last().map_or(e, last_effect),
         other => other,
+    }
+}
+
+fn last_effect_mut(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(last_effect_mut),
+        other => Some(other),
     }
 }

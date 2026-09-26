@@ -1820,32 +1820,8 @@ impl Game {
                     e
                 }
             }
-            (Some(host), _) => self.follow_aura_of_leaving_host(id, host, ctx).unwrap_or(e),
             _ => e,
         }
-    }
-
-    /// CR 400.7f: an ability of an Aura that triggers when the permanent it enchanted
-    /// leaves the battlefield can find the new object the Aura became in its owner's
-    /// graveyard, if it was put there at the same time or, having become unattached, as a
-    /// state-based action (CR 704.5m) — the Aura's next zone change — and it's still there.
-    fn follow_aura_of_leaving_host(
-        &self,
-        aura: ObjectId,
-        host: ObjectId,
-        ctx: &Ctx,
-    ) -> Option<Entity> {
-        let o = self.obj(aura);
-        if ctx.source != Some(aura)
-            || o.zone != Zone::Battlefield
-            || o.attached_to != Some(Entity::Object(host))
-            || self.obj(host).zone != Zone::Battlefield
-        {
-            return None;
-        }
-        let new = o.next?;
-        (self.is_live(new) && self.obj(new).zone == Zone::Graveyard(o.owner))
-            .then_some(Entity::Object(new))
     }
 
     pub fn resolve_objects(&mut self, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {

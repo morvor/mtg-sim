@@ -1,5 +1,6 @@
 //! CR 702.145 Daybound and Nightbound (with CR 731 day and night).
 
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::FaceState;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -32,6 +33,16 @@ fn daybound_and_nightbound_lines_compile() {
     ] {
         let def = mtg_engine::card::card(c);
         assert!(def.unsupported_text().is_empty(), "{c}: {:?}", def.unsupported_text());
+        // Daybound on the front face, nightbound on the back face.
+        let words = |face| -> Vec<String> {
+            def.characteristics(face)
+                .keywords()
+                .filter(|k| k.kind == KeywordKind::DayboundAndNightbound)
+                .map(|k| k.text.as_deref().unwrap_or_default().to_lowercase())
+                .collect()
+        };
+        assert_eq!(words(FaceState::Front), ["daybound"], "{c}");
+        assert_eq!(words(FaceState::Back), ["nightbound"], "{c}");
     }
 }
 
