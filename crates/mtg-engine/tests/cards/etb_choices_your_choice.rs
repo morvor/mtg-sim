@@ -201,10 +201,11 @@ fn permanents_of_that_type_gain_keywords() {
 fn artifact_becomes_the_chosen_color() {
     cr!("105.3", "607.2d", "613.1e");
     let c = card("Puca's Eye");
-    assert_eq!(
-        c.unsupported_text().len(),
-        1,
-        "only the five-colors activation restriction is unsupported: {:?}",
+    // The five-colors activation restriction is compiled too (see
+    // `cards/misc_game_rules_vivid.rs`).
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{:?}",
         c.unsupported_text()
     );
     let mut t = TestGame::new(2);
