@@ -118,6 +118,14 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::CommanderIdentity => {
+                let t = commander_identity_types(g, ctx.controller);
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
             // CR 106.12a: the types of mana the triggering mana ability produced.
             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
                 let t = crate::resolve::produced_types(ctx);
@@ -168,6 +176,20 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
         Effect::PersistentMana(inner) => production_units(g, inner, ctx),
         _ => None,
     }
+}
+
+/// The colors of mana in `p`'s commanders' combined color identity (CR 903.4, 702.124c),
+/// as established for their cards before the game began (CR 903.4a).
+pub fn commander_identity_types(g: &Game, p: PlayerId) -> Vec<ManaType> {
+    let mut cs = ColorSet::NONE;
+    for o in &g.objects {
+        if o.is_commander && o.owner == p && g.is_live(o.id) {
+            if let Some(c) = &o.card {
+                cs = cs.union(c.color_identity);
+            }
+        }
+    }
+    cs.iter().map(ManaType::from_color).collect()
 }
 
 /// Mana types that permanents matching `f` could produce (CR 106.7): any type an ability

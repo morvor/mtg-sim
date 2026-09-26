@@ -1609,6 +1609,10 @@ pub enum ManaProduction {
     /// One mana of any type the triggering mana ability produced ("add one mana of any
     /// type that land produced", CR 106.12a).
     TypeProduced,
+    /// One mana of any color in the controller's commander's color identity (CR 903.4,
+    /// 702.124c: the combined identities of their commanders). Undefined without a
+    /// commander, so no mana is added (CR 903.4f).
+    CommanderIdentity,
 }
 
 /// Replacement effect definitions (CR 614–616).

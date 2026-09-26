@@ -53,6 +53,9 @@ fn amount(s: &str) -> Option<(Value, &str)> {
 /// The production after "add ", for the amounts the core parser doesn't read.
 fn production(r: &str) -> Option<ManaProduction> {
     let r = end(r);
+    if r == "one mana of any color in your commander's color identity" {
+        return Some(ManaProduction::CommanderIdentity);
+    }
     let (n, rest) = amount(r)?;
     let rest = rest.trim_start();
     // "x mana of any one color", "ten mana of any one color".

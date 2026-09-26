@@ -2177,6 +2177,15 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::CommanderIdentity => {
+                // CR 903.4f: undefined without a commander; no mana.
+                let types = crate::mana_abilities::commander_identity_types(self, p);
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
             // CR 106.12a: one mana of any type the triggering mana ability produced.
             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
                 let types = produced_types(ctx);
