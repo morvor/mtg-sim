@@ -142,7 +142,17 @@ fn creatures_put_onto_the_battlefield_attacking_after_it_resolves_dont_get_the_b
     };
     assert_eq!(top_text, "Battle Cry");
     t.resolve_all();
-    for o in t.g.permanents().filter(|o| o.is_token()) {
-        assert_eq!((o.power(), o.toughness()), (1, 1));
+    let tokens: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token() && o.controller == P0)
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(tokens.len(), 2);
+    for tok in tokens {
+        assert!(t.g.is_attacking(tok));
+        assert_eq!(t.pt(tok), (1, 1));
     }
+    // The Hero itself isn't "each other attacking creature".
+    assert_eq!(t.pt(hero), (3, 4));
 }

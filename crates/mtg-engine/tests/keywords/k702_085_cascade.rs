@@ -70,7 +70,23 @@ fn cascade_exiles_until_a_cheaper_nonland_card_and_casts_it_for_free() {
     t.settle();
     assert_eq!(triggers_on_stack(&t, "Cascade"), 1);
     // Resolve the cascade trigger (it's above the spell).
+    let seen = watch_exile(&mut t, P0);
     t.resolve();
+    // When asked whether to cast Grizzly Bears, the four exiled cards were in exile face
+    // up.
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1);
+    let mut exiled = seen[0].clone();
+    exiled.sort();
+    assert_eq!(
+        exiled,
+        vec![
+            ("Forest".to_string(), false),
+            ("Grizzly Bears".to_string(), false),
+            ("Hill Giant".to_string(), false),
+            ("Mountain".to_string(), false),
+        ]
+    );
     // Grizzly Bears (mana value 2 < 4) was cast without paying its mana cost, above the
     // Elf; Hill Giant (4) doesn't have a lesser mana value.
     assert_eq!(spell_names(&t), vec!["Bloodbraid Elf", "Grizzly Bears"]);
@@ -328,6 +344,41 @@ impl Agent for PickLandByName {
         }
         self.inner.decide(g, p, d)
     }
+}
+
+/// The exiled cards seen by one of `p`'s yes/no decisions: (name, face down).
+type ExileSnapshots = std::sync::Arc<std::sync::Mutex<Vec<Vec<(String, bool)>>>>;
+
+/// Records the cards in exile (and whether each is face down) whenever `p` is asked a
+/// yes/no question, leaving the answer to the scripted agent.
+struct WatchExile {
+    inner: Box<dyn Agent>,
+    seen: ExileSnapshots,
+}
+
+impl Agent for WatchExile {
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
+        if matches!(d, Decision::YesNo { .. }) {
+            let snapshot = g
+                .exile
+                .iter()
+                .map(|c| (g.obj(*c).chars.name.to_string(), g.obj(*c).face_down))
+                .collect();
+            self.seen.lock().unwrap().push(snapshot);
+        }
+        self.inner.decide(g, p, d)
+    }
+}
+
+fn watch_exile(t: &mut TestGame, p: PlayerId) -> ExileSnapshots {
+    let seen = ExileSnapshots::default();
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(&mut agents[p.idx()], Box::new(PassiveAgent));
+    agents[p.idx()] = Box::new(WatchExile {
+        inner,
+        seen: seen.clone(),
+    });
+    seen
 }
 
 fn pick_land(t: &mut TestGame, p: PlayerId, name: &'static str) {

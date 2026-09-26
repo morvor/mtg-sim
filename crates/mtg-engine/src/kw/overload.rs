@@ -84,9 +84,30 @@ impl KeywordRules for Overload {
     }
 }
 
-/// "target" → "each" in display text.
+/// The word "target" → "each" in display text (whole words only: "targets" isn't the word
+/// "target").
 fn target_to_each(s: &str) -> String {
-    s.replace("target", "each").replace("Target", "Each")
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    let is_word = |c: char| c.is_alphanumeric() || c == '\'' || c == '’';
+    while let Some(i) = rest.find(['t', 'T']) {
+        let (before, at) = rest.split_at(i);
+        out.push_str(before);
+        let word = at.get(..6).filter(|w| *w == "target" || *w == "Target");
+        let starts_word = !out.chars().next_back().is_some_and(is_word);
+        match word {
+            Some(w) if starts_word && !at[6..].chars().next().is_some_and(is_word) => {
+                out.push_str(if w == "target" { "each" } else { "Each" });
+                rest = &at[6..];
+            }
+            _ => {
+                out.push_str(&at[..1]);
+                rest = &at[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// A spell ability with "target" replaced by "each" (the same ability if it has no

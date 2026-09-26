@@ -97,9 +97,11 @@ fn a_creature_attacking_a_sacrificed_planeswalker_keeps_attacking() {
     assert_eq!(t.life(P1), 20);
 }
 
+/// With the attack multiple players option every opponent is a defending player, but an
+/// attacking creature's ability refers to the one it attacks (CR 802.2a).
 #[test]
 fn the_defending_player_is_the_player_the_creature_attacks() {
-    cr!("702.86a", "506.2");
+    cr!("702.86a", "802.2a");
     let mut t = TestGame::with_config(
         3,
         GameConfig {
