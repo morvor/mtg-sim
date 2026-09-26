@@ -273,3 +273,54 @@ fn outlaws_you_control_are_outlaw_permanents() {
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
 }
+
+/// Index of Mjölnir's equip ability among its activated abilities.
+fn equip_index(t: &TestGame, id: ObjectId) -> usize {
+    t.g.obj(id)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.starts_with("Equip"))
+        .expect("no equip ability")
+}
+
+#[test]
+fn a_worthy_creature_is_legendary_non_villain_and_red_or_white() {
+    cr!("700.16");
+    supported("Mjölnir, Hammer of Thor");
+    let villain = oracle_card(
+        "Test Villain",
+        "Legendary Creature — Human Villain",
+        "{R}",
+        Some((2, 2)),
+        "",
+    );
+    // "Equip worthy {1}": only a worthy creature can be equipped.
+    for (name, worthy) in [
+        ("Grizzly Bears", false),
+        ("Yeva, Nature's Herald", false),
+        ("Test Villain", false),
+        ("Isamaru, Hound of Konda", true),
+    ] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Plains", 1);
+        let mj = t.battlefield(P0, "Mjölnir, Hammer of Thor");
+        let c = if name == "Test Villain" {
+            t.custom(P0, villain.clone(), Zone::Battlefield)
+        } else {
+            t.battlefield(P0, name)
+        };
+        let i = equip_index(&t, mj);
+        let ok = t.activate(P0, mj, i, &[Entity::Object(c)]).is_ok();
+        assert_eq!(ok, worthy, "{name}");
+        if ok {
+            t.resolve();
+            assert_eq!(t.obj(mj).attached_to, Some(Entity::Object(c)));
+            // "Double all damage equipped creature would deal."
+            t.set_step(P0, Step::BeginningOfCombat);
+            t.attack(&[(c, Entity::Player(P1))], &[]);
+            assert_eq!(t.life(P1), 16);
+        }
+    }
+}
