@@ -17,7 +17,8 @@ pub fn proliferate(g: &mut Game, p: PlayerId, ctx: &Ctx) {
         }
     }
     for pl in g.players_in_game() {
-        if g.player(pl).counters.values().any(|n| *n > 0) {
+        // CR 810.10d: in Two-Headed Giant, a player has their team's poison counters.
+        if !crate::kwa::proliferate_teams::player_counter_kinds(g, pl).is_empty() {
             cands.push(Entity::Player(pl));
         }
     }
@@ -31,6 +32,9 @@ pub fn proliferate(g: &mut Game, p: PlayerId, ctx: &Ctx) {
         0,
         n,
     );
+    // CR 701.34b: one additional poison counter per team.
+    let no_poison =
+        crate::kwa::proliferate_teams::players_without_poison(g, p, &chosen, ctx.source);
     for e in chosen {
         let kinds: Vec<CounterKind> = match e {
             Entity::Object(o) => g
@@ -40,12 +44,9 @@ pub fn proliferate(g: &mut Game, p: PlayerId, ctx: &Ctx) {
                 .filter(|(_, n)| **n > 0)
                 .map(|(k, _)| k.clone())
                 .collect(),
-            Entity::Player(pl) => g
-                .player(pl)
-                .counters
-                .iter()
-                .filter(|(_, n)| **n > 0)
-                .map(|(k, _)| k.clone())
+            Entity::Player(pl) => crate::kwa::proliferate_teams::player_counter_kinds(g, pl)
+                .into_iter()
+                .filter(|k| !(no_poison.contains(&pl) && k.as_str() == counters::POISON))
                 .collect(),
         };
         for k in kinds {
