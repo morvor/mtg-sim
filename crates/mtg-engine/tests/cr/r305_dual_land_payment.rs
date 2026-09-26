@@ -342,3 +342,23 @@ fn a_replacement_for_tapping_for_mana_changes_what_a_dual_land_pays_with() {
     t.resolve();
     assert_eq!(pool(&t, ManaType::B), 3);
 }
+
+#[test]
+fn a_cost_larger_than_the_mana_the_lands_can_make_cant_be_paid() {
+    cr!("118.3", "601.2h");
+    // Twelve dual lands make twelve mana: Emrakul, the Aeons Torn ({15}) can't be cast,
+    // and finding that out doesn't try every order of tapping them.
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P0, "Volcanic Island", 12);
+    let emrakul = t.hand(P0, "Emrakul, the Aeons Torn");
+    let start = std::time::Instant::now();
+    assert!(!can_cast(&mut t, P0, emrakul));
+    assert!(t.cast(P0, emrakul).try_go().is_err());
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    assert!(lands.iter().all(|l| !tapped(&t, *l)));
+    // Blightsteel Colossus ({12}) can.
+    let colossus = t.hand(P0, "Blightsteel Colossus");
+    assert!(can_cast(&mut t, P0, colossus));
+    t.cast(P0, colossus).go();
+    assert!(lands.iter().all(|l| tapped(&t, *l)));
+}

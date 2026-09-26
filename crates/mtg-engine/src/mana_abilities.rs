@@ -1004,7 +1004,7 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
     // Prefer cheap, less flexible sources first: among equally cheap abilities, those of
     // permanents that make fewer types of mana, so a payment of {R} taps a Mountain
     // rather than a Volcanic Island and keeps the island's {U} available.
-    out.sort_by_key(|s| {
+    out.sort_by_cached_key(|s| {
         (
             s.cost_rank,
             s.units.iter().map(|u| u.len()).sum::<usize>(),
