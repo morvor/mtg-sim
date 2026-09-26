@@ -351,6 +351,50 @@ fn emrakul_controls_the_opponents_next_turn_then_they_take_an_extra_turn() {
     assert_eq!(decider(&t.g, P1), P1);
 }
 
+#[test]
+fn secret_of_bloodbending_controls_the_opponent_during_their_next_combat_phase() {
+    cr!("723.5");
+    ruling!(
+        "Secret of Bloodbending",
+        "If the targeted player skips their next combat phase or turn, you'll control the next combat phase or turn the affected player actually takes."
+    );
+    let (mut t, log) = recorded(2);
+    t.lands(P0, "Island", 4);
+    let secret = t.hand(P0, "Secret of Bloodbending");
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    // Without waterbending: control during P1's next combat phase only.
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(false));
+    t.cast(P0, secret).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    // P1 skips their next combat phase: the effect waits for the next one P1 has.
+    t.g.players[1].skips.push(StepKind::Combat);
+    t.advance_to(P1, Step::PostcombatMain);
+    assert!(!t.g.turn.step_log.contains(&Step::BeginningOfCombat));
+    assert_eq!(decider(&t.g, P1), P1);
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(decider(&t.g, P1), P1);
+    // P0 has P1's Bears attack P0.
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bear, Entity::Player(P0))]),
+    );
+    t.advance_to(P1, Step::BeginningOfCombat);
+    assert_eq!(decider(&t.g, P1), P0);
+    t.advance_to(P1, Step::PostcombatMain);
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(decider(&t.g, P1), P1);
+    let attackers: Vec<PlayerId> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, _, p, d)| *p == P1 && matches!(d, Decision::DeclareAttackers { .. }))
+        .map(|(_, a, _, _)| *a)
+        .collect();
+    assert_eq!(attackers, vec![P0]);
+}
+
 /// P0 casts Word of Command targeting P1, choosing `chosen` from P1's hand.
 fn word_of_command(t: &mut TestGame, chosen: ObjectId) {
     t.lands(P0, "Swamp", 2);
