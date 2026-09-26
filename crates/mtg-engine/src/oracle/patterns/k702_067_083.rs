@@ -185,17 +185,23 @@ inventory::submit! { ConditionPattern { name: "its prowl/evoke cost was paid", p
 // Hideaway (CR 702.75a): "the exiled card"
 // ---------------------------------------------------------------------------
 
+/// The cards exiled with this permanent that are still in exile: one that left exile is a
+/// new object, no longer "the exiled card" (CR 400.7).
+fn still_exiled() -> Sel {
+    Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::InZone(ZoneKind::Exile),
+    ]))
+}
+
 /// "you may play the exiled card without paying its mana cost [if <condition>]" and "put
 /// the exiled card into its owner's hand": the card exiled with this permanent (by its
 /// hideaway ability, CR 607.2a).
 fn exiled_card_effects(l: &str, b: &mut Builder) -> Option<Effect> {
-    if matches!(
-        l,
-        "put the exiled card into its owner's hand" | "return the exiled card to its owner's hand"
-    ) {
+    if l == "put the exiled card into its owner's hand" {
         const V: Var = vars::USER + 73;
         return Some(Effect::ForEach {
-            sel: Sel::Linked,
+            sel: still_exiled(),
             var: V,
             effect: Box::new(Effect::Move {
                 what: Sel::Var(V),
@@ -215,7 +221,7 @@ fn exiled_card_effects(l: &str, b: &mut Builder) -> Option<Effect> {
         // Buggy): the spells cast are "it" for "If you do, ...".
         let cast = Effect::CastCard {
             who: PlayerRef::You,
-            what: Sel::Linked,
+            what: still_exiled(),
             free: true,
             optional,
         };
@@ -224,7 +230,7 @@ fn exiled_card_effects(l: &str, b: &mut Builder) -> Option<Effect> {
         let r = r.strip_prefix("play the exiled card without paying its mana cost")?;
         let play = Effect::PlayCard {
             who: PlayerRef::You,
-            what: Sel::Linked,
+            what: still_exiled(),
             free: true,
             optional,
         };

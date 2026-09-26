@@ -87,6 +87,35 @@ fn the_linked_ability_returns_the_exiled_card() {
 }
 
 #[test]
+fn a_card_that_left_exile_is_no_longer_the_exiled_card() {
+    cr!("702.75a", "400.7");
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t);
+    let watcher = t.enter(P0, "Watcher for Tomorrow");
+    t.answer_choose(P0, &[Entity::Object(cards[3])]);
+    t.resolve_all();
+    let exiled = t.g.current(cards[3]);
+    assert_eq!(t.g.obj(exiled).zone, Zone::Exile);
+    // Another effect puts the card into its owner's graveyard.
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P1,
+        mtg_engine::ability::Effect::Move {
+            what: mtg_engine::ability::Sel::Target(0),
+            to: mtg_engine::ability::Destination::zone(mtg_engine::ability::ZoneKind::Graveyard),
+        },
+        &[Entity::Object(exiled)],
+    );
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    destroy(&mut t, watcher);
+    t.resolve_all();
+    // It stays in the graveyard.
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert!(!t.in_hand(P0, "Lightning Bolt"));
+}
+
+#[test]
 fn leaving_before_hideaway_resolves_strands_the_card() {
     cr!("702.75a");
     ruling!(
