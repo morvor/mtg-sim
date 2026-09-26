@@ -52,7 +52,7 @@ fn attack_with(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
 
 #[test]
 fn activate_only_during_your_turn_before_attackers_are_declared() {
-    cr!("506.8a", "506.8g", "602.5b");
+    cr!("506.8a", "506.8g", "602.5");
     compiles("Apprentice Sorcerer");
     compiles("Talas Researcher");
     compiles("King's Assassin");
@@ -65,6 +65,11 @@ fn activate_only_during_your_turn_before_attackers_are_declared() {
     // Once the declare attackers step has begun (even with no attackers), it's too late.
     t.advance_to(P0, Step::DeclareAttackers);
     assert!(!activatable(&mut t, P0, sorcerer));
+    // CR 602.5: activating it anyway is refused.
+    assert!(t
+        .activate(P0, sorcerer, 0, &[Entity::Player(P1)])
+        .is_err());
+    assert_eq!(t.stack_len(), 0);
     t.advance_to(P0, Step::PostcombatMain);
     assert!(!activatable(&mut t, P0, sorcerer));
     // Not during an opponent's turn, even before their attackers are declared.
@@ -159,4 +164,43 @@ fn cast_only_during_your_end_step_or_an_opponents_upkeep() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P1, Step::BeginningOfCombat);
     assert!(!t.g.can_attack(bears));
+}
+
+#[test]
+fn attacked_means_you_not_your_planeswalkers() {
+    cr!("601.3", "508.1");
+    ruling!(
+        "Eightfold Maze",
+        "If all the attacking creatures attack your planeswalkers, you can’t cast Eightfold Maze."
+    );
+    ruling!(
+        "Eightfold Maze",
+        "it can target any attacking creature (including one attacking a planeswalker)"
+    );
+    compiles("Eightfold Maze");
+    // Only P1's planeswalker is attacked: P1 can't cast it.
+    let mut t = TestGame::new(2);
+    let maze = t.hand(P1, "Eightfold Maze");
+    t.lands(P1, "Plains", 3);
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let giant = t.battlefield(P0, "Hill Giant");
+    attack_with(&mut t, &[(giant, Entity::Object(jace))]);
+    assert_eq!(t.g.attackers(), vec![giant]);
+    assert!(!castable(&mut t, P1, maze));
+    // With P1 attacked too, it can be cast, targeting the creature attacking Jace.
+    let mut t = TestGame::new(2);
+    let maze = t.hand(P1, "Eightfold Maze");
+    t.lands(P1, "Plains", 3);
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack_with(
+        &mut t,
+        &[(giant, Entity::Object(jace)), (bears, Entity::Player(P1))],
+    );
+    assert!(castable(&mut t, P1, maze));
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, maze).target(giant).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
 }

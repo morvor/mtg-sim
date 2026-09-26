@@ -47,7 +47,7 @@ fn blocking(t: &TestGame) -> Vec<ObjectId> {
 
 #[test]
 fn target_creature_attacks_this_turn_if_able() {
-    cr!("508.1d", "611.2c");
+    cr!("508.1d", "611.2a");
     compiles("Into the Fray");
     compiles("Heckling Fiends");
     let mut t = TestGame::new(2);
@@ -138,7 +138,7 @@ fn all_creatures_able_to_block_target_creature_do_so() {
 
 #[test]
 fn target_creature_cant_block_this_creature_this_turn() {
-    cr!("509.1b", "611.2c");
+    cr!("509.1b");
     compiles("Spin Engine");
     let mut t = TestGame::new(2);
     let engine = t.battlefield(P0, "Spin Engine");
@@ -229,7 +229,7 @@ fn goblin_tokens(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 
 #[test]
 fn the_created_token_attacks_this_combat_if_able_not_the_source() {
-    cr!("508.1d", "611.2c");
+    cr!("508.1d");
     compiles("Legion Warboss");
     compiles("Howlsquad Heavy");
     let mut t = TestGame::new(2);
@@ -270,7 +270,7 @@ fn the_created_token_attacks_this_combat_if_able_not_the_source() {
 
 #[test]
 fn those_creatures_are_the_ones_the_previous_sentence_affected() {
-    cr!("508.1d", "611.2c");
+    cr!("508.1d");
     compiles("Suicidal Charge");
     let mut t = TestGame::new(2);
     let charge = t.battlefield(P0, "Suicidal Charge");

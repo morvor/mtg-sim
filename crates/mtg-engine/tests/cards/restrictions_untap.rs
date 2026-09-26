@@ -290,10 +290,6 @@ fn only_the_matching_permanents_untap_and_doesnt_untap_effects_dont_apply() {
         "Unwinding Clock",
         "These effects won’t apply and stop the artifact from untapping during another player’s untap step."
     );
-    ruling!(
-        "Murkfiend Liege",
-        "effects that would otherwise cause your green and/or blue creatures to stay tapped don't apply"
-    );
     compiles("Unwinding Clock");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Unwinding Clock");
@@ -315,6 +311,68 @@ fn only_the_matching_permanents_untap_and_doesnt_untap_effects_dont_apply() {
     assert!(!tapped(&t, stone));
     assert!(!tapped(&t, colossus));
     assert!(tapped(&t, bears));
+}
+
+#[test]
+fn green_and_or_blue_creatures_untap_during_each_other_players_untap_step() {
+    cr!("502.3");
+    ruling!(
+        "Murkfiend Liege",
+        "effects that would otherwise cause your green and/or blue creatures to stay tapped don't apply"
+    );
+    ruling!(
+        "Murkfiend Liege",
+        "You can't untap your permanents more than once in a single untap step."
+    );
+    compiles("Murkfiend Liege");
+    compiles("Nettle Sentinel");
+    let mut t = TestGame::new(2);
+    let liege = t.battlefield(P0, "Murkfiend Liege");
+    t.battlefield(P0, "Murkfiend Liege");
+    let sentinel = t.battlefield(P0, "Nettle Sentinel");
+    let merfolk = t.battlefield(P0, "Coral Merfolk");
+    let goblin = t.battlefield(P0, "Raging Goblin");
+    let forest = t.battlefield(P0, "Forest");
+    for id in [liege, sentinel, merfolk, goblin, forest] {
+        t.g.tap(id);
+    }
+    let untaps_before = untap_events(&t, sentinel);
+    // P1's untap step: the green and blue creatures untap (Nettle Sentinel too: its
+    // "doesn't untap during your untap step" doesn't apply), once each.
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, liege) && !tapped(&t, sentinel) && !tapped(&t, merfolk));
+    assert!(tapped(&t, goblin));
+    assert!(tapped(&t, forest));
+    assert_eq!(untap_events(&t, sentinel), untaps_before + 1);
+    // P0's own untap step: Nettle Sentinel stays tapped as usual.
+    t.g.tap(sentinel);
+    next_untap(&mut t, P0);
+    assert!(tapped(&t, sentinel));
+    assert!(!tapped(&t, goblin));
+}
+
+fn untap_events(t: &TestGame, id: ObjectId) -> usize {
+    t.g.turn_events
+        .iter()
+        .filter(|e| matches!(e, mtg_engine::events::Event::Untapped { obj } if *obj == id))
+        .count()
+}
+
+#[test]
+fn a_restriction_whose_source_untapped_before_resolution_does_nothing() {
+    cr!("611.2b");
+    let mut t = TestGame::new(2);
+    let leech = t.battlefield(P0, "Mana Leech");
+    let forest = t.battlefield(P1, "Forest");
+    t.activate(P0, leech, 0, &[forest.into()]).unwrap();
+    t.g.untap(leech);
+    t.g.tap(leech);
+    t.resolve();
+    // The land is tapped, but its "doesn't untap" effect never began.
+    assert!(tapped(&t, forest));
+    assert!(tapped(&t, leech));
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, forest));
 }
 
 #[test]

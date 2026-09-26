@@ -28,7 +28,7 @@ fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
 
 #[test]
 fn your_opponents_cant_cast_spells_this_turn() {
-    cr!("601.3", "611.2c");
+    cr!("601.3");
     ruling!("Silence", "The only thing Silence stops is casting spells.");
     compiles("Silence");
     compiles("Orim's Chant");
@@ -82,6 +82,30 @@ fn its_controller_cant_cast_spells_even_if_not_countered() {
     t.resolve();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert!(!castable(&mut t, P1, bolt));
+}
+
+#[test]
+fn the_countered_spells_controller_cant_cast_spells() {
+    cr!("601.3", "701.6a");
+    let mut t = TestGame::new(2);
+    let render = t.hand(P0, "Render Silent");
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Island", 2);
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.lands(P1, "Forest", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    let mine = t.hand(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    t.set_step(P1, Step::PrecombatMain);
+    let spell = t.cast(P1, bears).go();
+    t.cast(P0, render).target(spell).go();
+    t.resolve();
+    // The spell is countered and its controller (not Render Silent's) is silenced.
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(!castable(&mut t, P1, bolt));
+    assert!(castable(&mut t, P0, mine));
 }
 
 #[test]
