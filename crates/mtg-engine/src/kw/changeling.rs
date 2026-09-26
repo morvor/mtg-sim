@@ -12,6 +12,7 @@
 use crate::ability::*;
 use crate::keywords::KeywordKind;
 use crate::object::Characteristics;
+use crate::types::CardType;
 
 /// Whether the characteristics include changeling's characteristic-defining ability.
 pub fn has_changeling_cda(c: &Characteristics) -> bool {
@@ -29,6 +30,15 @@ pub fn has_changeling_cda(c: &Characteristics) -> bool {
 /// every creature type (a keyword granted by an effect).
 pub fn every_creature_type_by_keyword(c: &Characteristics) -> bool {
     c.has_keyword(KeywordKind::Changeling) && !has_changeling_cda(c)
+}
+
+/// Whether an object with these characteristics is every creature type: through
+/// changeling's characteristic-defining ability (or another "is every creature type"
+/// effect), or a changeling keyword an effect gave it. Only creatures and kindred
+/// objects have creature types (CR 205.3d).
+pub fn every_creature_type(c: &Characteristics) -> bool {
+    (c.all_creature_types || every_creature_type_by_keyword(c))
+        && (c.is(CardType::Creature) || c.is(CardType::Kindred))
 }
 
 /// The characteristic-defining ability changeling stands for: "This object is every

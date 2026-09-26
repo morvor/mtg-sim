@@ -239,6 +239,7 @@ impl CardDef {
                     life_modifier: if i == 0 { life_modifier } else { None },
                     rules_text: Arc::from(text.as_str()),
                     all_creature_names: false,
+                    all_creature_types: false,
                 },
                 unsupported: compiled.unsupported,
                 star_power,

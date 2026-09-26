@@ -42,8 +42,7 @@ fn creature_types(c: &Characteristics) -> (Vec<SmolStr>, bool) {
         .filter(|s| is_creature_type(s))
         .cloned()
         .collect();
-    let every = crate::kw::changeling::every_creature_type_by_keyword(c)
-        && (c.is(CardType::Creature) || c.is(CardType::Kindred));
+    let every = crate::kw::changeling::every_creature_type(c);
     (types, every)
 }
 

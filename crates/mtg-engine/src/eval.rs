@@ -429,13 +429,15 @@ impl Game {
                 .filter_map(|e| e.object())
                 .any(|x| {
                     let other = &self.obj(x).chars;
+                    let every = crate::kw::changeling::every_creature_type;
+                    let any_type = |x: &Characteristics| {
+                        every(x) || x.subtypes.iter().any(|s| is_creature_type(s))
+                    };
                     c.subtypes
                         .iter()
                         .any(|s| is_creature_type(s) && other.has_subtype(s))
-                        || (crate::kw::changeling::every_creature_type_by_keyword(c)
-                            && other.subtypes.iter().any(|s| is_creature_type(s)))
-                        || (crate::kw::changeling::every_creature_type_by_keyword(other)
-                            && c.subtypes.iter().any(|s| is_creature_type(s)))
+                        || (every(c) && any_type(other))
+                        || (every(other) && any_type(c))
                 }),
             Filter::SharesCardType(sel) => self
                 .eval_sel(sel, ctx)

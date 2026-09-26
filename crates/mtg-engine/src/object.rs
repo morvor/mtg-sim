@@ -35,6 +35,11 @@ pub struct Characteristics {
     /// Also has the name of each nonlegendary creature card (Spy Kit, CR 612.7).
     #[serde(default)]
     pub all_creature_names: bool,
+    /// Is every creature type (changeling, CR 702.73a; "is every creature type",
+    /// CR 205.3m), in addition to its listed subtypes. Only a creature or kindred object
+    /// can have it (CR 205.3d).
+    #[serde(default)]
+    pub all_creature_types: bool,
 }
 
 impl Characteristics {
@@ -58,6 +63,9 @@ impl Characteristics {
     }
     pub fn has_subtype(&self, s: &str) -> bool {
         self.subtypes.iter().any(|x| x.as_str() == s)
+            || (self.all_creature_types
+                && (self.is(CardType::Creature) || self.is(CardType::Kindred))
+                && is_creature_type(s))
     }
     pub fn mana_value(&self) -> u32 {
         self.mana_cost.as_ref().map_or(0, |m| m.mana_value())
