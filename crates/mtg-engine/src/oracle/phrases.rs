@@ -148,6 +148,8 @@ pub fn head_noun(w: &str) -> Option<Filter> {
         // Tokens and copies aren't cards (CR 108.2, 108.2b).
         "card" => return Some(Filter::Card),
         "token" => return Some(Filter::Token),
+        // CR 700.12.
+        "outlaw" => return Some(crate::game_terms::outlaw_filter()),
         _ => {}
     }
     if let Some(t) = CardType::from_word(&sg) {
@@ -194,6 +196,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,
+        // CR 700.16.
+        "worthy" => crate::game_terms::worthy_filter(),
+        // CR 701.27g.
+        "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
         _ => return None,
     })
 }
@@ -521,6 +527,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("that were dealt damage this turn"))
         {
             (Filter::DealtDamageThisTurn, r)
+        } else if let Some(r) = t
+            .strip_prefix("that was activated this turn")
+            .or_else(|| t.strip_prefix("that were activated this turn"))
+        {
+            // CR 700.10.
+            (
+                Filter::Custom(crate::game_terms::ACTIVATED_THIS_TURN.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
         } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {
@@ -844,6 +859,22 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Ability(Filter::Any), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
+        // "target planeswalker that was activated this turn or tapped creature": an
+        // alternative description after the first one's suffixes, ending the phrase. Not
+        // after a list ("target Spirit, creature with disturb, or enchantment"), whose
+        // suffixes belong to its last item only.
+        let listed = s[..s.len() - r.len()].contains(',') || r.trim_start().starts_with(',');
+        let alternative = if listed {
+            None
+        } else {
+            strip(r, "or ").and_then(parse_object_phrase)
+        };
+        let (f, r) = match alternative {
+            Some((f2, _, tail)) if end(tail).is_empty() && !filter_mentions_spell(&f2) => {
+                (Filter::Or(vec![f, f2]), tail)
+            }
+            _ => (f, r),
+        };
         let is_spell = filter_mentions_spell(&f);
         let f = if another {
             Filter::and(vec![f, Filter::Other])

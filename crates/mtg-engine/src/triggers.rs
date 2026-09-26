@@ -284,6 +284,8 @@ impl Game {
     }
 
     fn record_history(&mut self, ev: &Event) {
+        // Crimes (CR 700.13), descending (CR 700.11).
+        crate::game_terms::on_event(self, ev);
         match ev {
             Event::SpellCast { spell, player, .. } => {
                 self.history.spells_cast.push((*player, *spell))
@@ -1062,7 +1064,10 @@ impl Game {
                 }
             }
             (TriggerCond::Discards { who, filter }, Event::Discarded { player, card }) => {
-                if self.player_rel_matches(*who, *player, &ctx) && self.matches(*card, filter, &ctx)
+                // CR 701.9c: a card discarded into a hidden zone has undefined
+                // characteristics.
+                if self.player_rel_matches(*who, *player, &ctx)
+                    && crate::discard_rules::discarded_card_matches(self, *card, filter, &ctx)
                 {
                     one(EventInfo {
                         player: Some(*player),

@@ -70,6 +70,24 @@ pub fn perform(
 ) {
     let _ = Zone::Battlefield;
     match action {
+        // CR 701.15a: goad creatures until the goading player's next turn (their
+        // designation is cleared as that turn begins, CR 701.15b). The same player goading
+        // a creature again has no effect (CR 701.15d); several players can goad it
+        // (CR 701.15c).
+        KeywordAction::Goad => {
+            for o in objs {
+                if !g.is_live(*o) || g.obj(*o).zone != Zone::Battlefield || !g.obj(*o).is_creature()
+                {
+                    continue;
+                }
+                let by = ctx.controller;
+                let obj = &mut g.objects[o.0 as usize];
+                if !obj.goaded_by.contains(&by) {
+                    obj.goaded_by.push(by);
+                    g.log(|g| format!("{by} goads {}", g.describe(*o)));
+                }
+            }
+        }
         // CR 701.49: venture into the dungeon.
         KeywordAction::Venture => {
             for p in players {

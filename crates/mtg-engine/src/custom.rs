@@ -26,6 +26,18 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::battle::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // Game terms: "that was activated this turn" (CR 700.10), ...
+    if let Some(b) = crate::game_terms::custom_filter(g, name, id, ctx) {
+        return b;
+    }
+    // "If an effect causes you to discard a card" (CR 701.9).
+    if let Some(b) = crate::discard_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
+    // "transformed permanent" (CR 701.27g).
+    if let Some(b) = crate::transform_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
@@ -64,6 +76,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     }
     // Die roll results (CR 706).
     if let Some(v) = crate::dice::custom_value(g, name, ctx) {
+        return v;
+    }
+    // Game terms: the number of creatures in your party (CR 700.8), ...
+    if let Some(v) = crate::game_terms::custom_value(g, name, ctx) {
         return v;
     }
     let _ = (g, ctx);
@@ -398,6 +414,14 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // A Siege's intrinsic ability (CR 310.12b).
     if crate::battle::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Game terms: choosing a party (CR 700.8d), ...
+    if crate::game_terms::custom_effect(g, name, ctx) {
+        return;
+    }
+    // "Each player may scry 1" (CR 701.22c).
+    if crate::scry_rules::custom_effect(g, name, ctx) {
         return;
     }
     // "named-token:N:Name": create N tokens by name (CR 111.11).

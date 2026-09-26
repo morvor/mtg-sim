@@ -118,6 +118,10 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     if p == "sacrifice ~" {
         return Some(CostPart::SacrificeSelf);
     }
+    // CR 701.4a: "behold three Elementals".
+    if let Some(c) = super::patterns::a701_behold::behold_cost_part(p) {
+        return Some(c);
+    }
     if let Some(r) = strip(p, "sacrifice") {
         let (n, r2) = parse_number(r).unwrap_or((Value::Const(1), r));
         let (f, _, tail) = parse_object_phrase(r2)?;

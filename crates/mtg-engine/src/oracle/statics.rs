@@ -537,6 +537,20 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some(rest) = r.strip_prefix("cards in your graveyard") {
             return Some((Value::GraveyardSize(PlayerRef::You), rest.to_string()));
         }
+        // CR 700.11: "the number of times you descended this turn".
+        if let Some(rest) = r.strip_prefix("times you descended this turn") {
+            return Some((
+                Value::Custom(crate::game_terms::TIMES_DESCENDED.into()),
+                rest.to_string(),
+            ));
+        }
+        // CR 700.8a: "the number of creatures in your party".
+        if let Some(rest) = r.strip_prefix("creatures in your party") {
+            return Some((
+                Value::Custom(crate::game_terms::PARTY_SIZE.into()),
+                rest.to_string(),
+            ));
+        }
         if let Some(rest) = r.strip_prefix("creature cards in your graveyard") {
             return Some((
                 Value::CardsInGraveyard(PlayerRef::You, Filter::creature()),
@@ -576,6 +590,16 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the greatest mana value among ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::GreatestManaValue(f), rest.to_string()));
+    }
+    // CR 701.17c–d: "the milled card's mana value" (each milled card's, summed).
+    if let Some(rest) = s
+        .strip_prefix("the milled card's mana value")
+        .or_else(|| s.strip_prefix("the milled cards' total mana value"))
+    {
+        return Some((
+            Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),
+            rest.to_string(),
+        ));
     }
     for (p, v) in [
         ("its power", Value::PowerOf(Box::new(b.it.clone()))),

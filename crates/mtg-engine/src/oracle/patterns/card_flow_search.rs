@@ -62,6 +62,16 @@ fn searcher(l: &str, b: &mut Builder) -> Option<(Searcher, String)> {
         }
         return None;
     }
+    // "each player searches their library for": they search at the same time
+    // (CR 701.23i), each their own library.
+    if let Some(r) = l.strip_prefix("each player searches their library for ") {
+        let s = Searcher {
+            who: PlayerRef::EachPlayer,
+            whose: PlayerRef::Iterated,
+            may: false,
+        };
+        return Some((s, r.to_string()));
+    }
     // "[player] may search their library for", "[player] searches their library for".
     let (who, rest) = player_ref(l, b)?;
     let rest = rest.trim_start();
@@ -203,6 +213,15 @@ fn battlefield(r: &str, tapped: bool, searcher: &PlayerRef) -> Option<Destinatio
 fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (s, r) = searcher(l, b)?;
+    // "each player searches ..., puts them onto the battlefield, then shuffles".
+    let r = if matches!(s.who, PlayerRef::EachPlayer) {
+        r.replace(", reveals ", ", reveal ")
+            .replace(", puts ", ", put ")
+            .replace(" and puts ", " and put ")
+            .replace(", then shuffles", ", then shuffle")
+    } else {
+        r
+    };
     let (count, r) = search_count(&r)?;
     // The card description runs to the first action.
     const ACTIONS: [&str; 8] = [
@@ -216,18 +235,36 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
         ", then shuffle",
     ];
     let cut = ACTIONS.iter().filter_map(|a| r.find(a)).min()?;
-    let filter = card_filter(&r[..cut], b)?;
+    // "a card with the same name as that creature" (CR 701.23c: a nameless object's name
+    // is undefined, and no card has it).
+    let desc = &r[..cut];
+    let filter = match desc.split_once(" with the same name as ") {
+        Some((cards, obj)) => {
+            let (sel, tail) = crate::oracle::effects::object_ref(obj, b)?;
+            if !end(&tail).is_empty() {
+                return None;
+            }
+            Filter::and(vec![
+                card_filter(cards, b)?,
+                Filter::SameNameAs(Box::new(sel)),
+            ])
+        }
+        None => card_filter(desc, b)?,
+    };
     let mut t = &r[cut..];
-    // Optional reveal.
+    // Optional reveal (CR 701.23e: without it, the found cards aren't revealed).
+    let mut revealed = false;
     for p in [", reveal ", " and reveal "] {
         if let Some(x) = t.strip_prefix(p) {
             t = strip_pronoun(x)?;
+            revealed = true;
             break;
         }
     }
     let (to, shuffle) = if let Some(x) = t
         .strip_prefix(", then shuffle and put that card on top")
         .or_else(|| t.strip_prefix(" then shuffle and put that card on top"))
+        .or_else(|| t.strip_prefix(", then shuffle and put the card on top"))
     {
         if !x.is_empty() {
             return None;
@@ -252,8 +289,13 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
             Some(d) => (d, true),
             None => (x, false),
         };
+        // Each searching player puts the cards under their own control.
+        let under = match s.who {
+            PlayerRef::EachPlayer => PlayerRef::Iterated,
+            ref w => w.clone(),
+        };
         let to = if put {
-            destination(dest.trim(), &s.who)?
+            destination(dest.trim(), &under)?
         } else if dest.trim().is_empty() {
             Destination::zone(ZoneKind::Exile)
         } else {
@@ -272,7 +314,7 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
         filter: Filter::and(vec![filter, Filter::InZone(ZoneKind::Library)]),
         count,
         to,
-        reveal: true,
+        reveal: revealed,
         shuffle,
     };
     b.it = Sel::Var(vars::IT);

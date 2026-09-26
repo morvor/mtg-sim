@@ -41,6 +41,8 @@ impl KeywordRules for Miracle {
             return;
         }
         g.log(|_| format!("{p} reveals {name} as they draw it"));
+        // CR 701.20a: it stays revealed until the triggered ability leaves the stack.
+        crate::reveal::reveal(g, p, &[card], None);
         // "When you reveal this card this way, ...": it triggers now and is put on the
         // stack the next time a player would receive priority.
         g.trigger_order += 1;

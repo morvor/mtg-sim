@@ -1662,6 +1662,11 @@ pub enum ReplacementEvent {
     },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
+    /// One or more tokens with the characteristics described by `tokens` would be created
+    /// under a player's control ("If one or more creature tokens would be created ...").
+    /// The tokens' characteristics are those they're created with, before any continuous
+    /// effects apply to them (CR 701.7b; see `create_rules.rs`).
+    CreateTokensMatching { who: PlayerFilter, tokens: Filter },
     /// A permanent would be destroyed.
     Destroy(Filter),
     /// Would lose the game.
@@ -1964,6 +1969,14 @@ pub enum CostChange {
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),
+    /// "As an additional cost to cast this spell, you may [cost]": an optional additional
+    /// cost announced as the spell is cast (CR 601.2b), recorded as `name` in the spell's
+    /// `CastInfo::paid` if it's paid (see `cost_choices.rs`).
+    OptionalAdditionalCost { name: SmolStr, cost: Cost },
+    /// "As an additional cost to cast this spell, [cost] or [cost]": the player chooses
+    /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
+    /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
+    AdditionalCostChoice(Vec<(SmolStr, Cost)>),
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -3096,6 +3109,10 @@ pub enum Effect {
     RollDice(Box<crate::dice::DieRoll>),
     /// "Flip a coin. If you win the flip, ..." (CR 705).
     FlipCoins(Box<crate::dice::CoinFlip>),
+    /// Separating objects into two piles, or choosing one of them (CR 700.3).
+    Piles(Box<crate::piles::PileAction>),
+    /// Exchanging numerical values or the contents of zones (CR 701.12d, 701.12g).
+    Exchange(Box<crate::exchange::ExchangeSpec>),
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
 }
