@@ -563,8 +563,10 @@ impl Game {
                         }
                     }
                 }
-                if o.chars.has_subtype("Saga") && crate::saga::has_chapters(o) {
-                    counters_to_add.push((counters::LORE.into(), 1));
+                // CR 714.3a, 714.3b: a Saga enters with lore counters.
+                let lore = crate::saga::entering_lore_counters(self, new_id);
+                if lore > 0 {
+                    counters_to_add.push((counters::LORE.into(), lore));
                 }
                 for (k, n) in counters_to_add {
                     // Counters placed as it enters are part of the ETB event; replacement

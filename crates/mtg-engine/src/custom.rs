@@ -350,7 +350,10 @@ pub fn custom_trigger(
                 let mut out = Vec::new();
                 for part in ns.split(',') {
                     if let Ok(k) = part.trim().parse::<u32>() {
-                        if before < k && after >= k {
+                        if before < k
+                            && after >= k
+                            && crate::saga::chapter_may_trigger(g, src, k, after)
+                        {
                             out.push(EventInfo {
                                 object: Some(src),
                                 amount: k as i32,
