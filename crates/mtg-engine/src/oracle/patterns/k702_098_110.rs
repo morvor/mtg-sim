@@ -5,14 +5,15 @@
 //! * "You may cast ~ from your graveyard using its bestow ability" (CR 702.103a);
 //! * "if tribute wasn't paid" (CR 702.104b);
 //! * "if it's attacking the player with the most life or tied for most life" (CR 702.105a);
+//! * "Double agenda" (CR 702.106f);
 //! * "Whenever you activate ~'s outlast ability" (CR 702.107a);
 //! * "Dash costs you pay cost {N} less" (CR 702.109a);
 //! * "When ~ exploits a creature", "Whenever a creature you control exploits a [quality]
 //!   creature" (CR 702.110b).
 
-use super::{ConditionPattern, StaticPattern, TriggerPattern};
+use super::{AbilityPattern, ConditionPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
-use crate::keywords::KeywordKind;
+use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
 
@@ -86,6 +87,18 @@ fn dash_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abi
 }
 
 inventory::submit! { StaticPattern { name: "dash costs you pay cost {N} less", priority: 100, parse: dash_costs_less } }
+
+/// "Double agenda" (Summoner's Bond): hidden agenda choosing two names (CR 702.106f).
+fn double_agenda(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim().trim_end_matches('.');
+    if !text.eq_ignore_ascii_case("double agenda") {
+        return None;
+    }
+    let kw = Keyword::with_n(KeywordKind::HiddenAgenda, 2).text(text);
+    Some(vec![AbilityDef::new(AbilityKind::Keyword(kw), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "double agenda", priority: 100, parse: double_agenda } }
 
 /// "Whenever you activate ~'s outlast ability" (Herald of Anafenza).
 fn activate_outlast(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {

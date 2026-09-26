@@ -8,7 +8,6 @@ use crate::card::CardDef;
 use crate::decision::Answer;
 use crate::eval::Ctx;
 use crate::game::{Game, Variant};
-use crate::keywords::KeywordKind;
 use crate::object::Zone;
 use crate::types::*;
 use serde::{Deserialize, Serialize};
@@ -363,10 +362,10 @@ fn conspiracies_to_command_zone(g: &mut Game) {
             _ => cands.clone(),
         };
         for c in pick {
-            let hidden = g.obj(c).base.has_keyword(KeywordKind::HiddenAgenda);
             g.players[p.idx()].sideboard.retain(|x| *x != c);
             g.objects[c.0 as usize].zone = Zone::Command;
-            g.objects[c.0 as usize].face_down = hidden;
+            // CR 702.106a: face down, with a secretly chosen card name.
+            crate::kw::hidden_agenda::as_put_into_command_zone(g, p, c);
             g.command.push(c);
         }
     }

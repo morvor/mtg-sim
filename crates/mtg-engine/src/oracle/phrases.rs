@@ -596,6 +596,15 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that's the chosen color", Filter::ChosenColor),
         ("that are the chosen color", Filter::ChosenColor),
         ("with the chosen name", Filter::ChosenName),
+        // Double agenda's names (CR 702.106f).
+        (
+            "with one of the chosen names",
+            Filter::Custom(crate::kw::hidden_agenda::ONE_OF_CHOSEN_NAMES.into()),
+        ),
+        (
+            "with the other chosen name",
+            Filter::Custom(crate::kw::hidden_agenda::OTHER_CHOSEN_NAME.into()),
+        ),
         // "Choose a creature type. ... creatures of that type": the choice just made.
         ("of that type", Filter::ChosenType),
         ("of that color", Filter::ChosenColor),

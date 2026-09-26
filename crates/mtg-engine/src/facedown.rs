@@ -215,12 +215,18 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<
 }
 
 /// CR 708.9: when a player leaves the game (`Some(p)`), their face-down permanents and
-/// spells are revealed; at the end of the game (`None`), everyone's are.
+/// spells are revealed; at the end of the game (`None`), everyone's are. So are face-down
+/// conspiracy cards (hidden agenda, CR 702.106e).
 pub fn reveal_all(g: &mut Game, owner: Option<PlayerId>) {
+    let conspiracies = g
+        .command
+        .iter()
+        .filter(|id| g.obj(**id).face_down && g.obj(**id).base.is(CardType::Conspiracy));
     let ids: Vec<ObjectId> = g
         .battlefield
         .iter()
         .chain(g.stack.iter())
+        .chain(conspiracies)
         .copied()
         .filter(|id| owner.is_none_or(|p| g.obj(*id).owner == p))
         .collect();
