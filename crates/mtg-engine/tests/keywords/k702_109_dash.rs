@@ -41,6 +41,28 @@ fn a_dashed_creature_has_haste_and_returns_at_the_next_end_step() {
 }
 
 #[test]
+fn a_dashed_creature_doesnt_have_to_attack() {
+    cr!("702.109a");
+    ruling!(
+        "Goblin Heelcutter",
+        "You don’t have to attack with the creature with dash unless another ability says you do."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let c = t.hand(P0, "Mardu Scout");
+    t.cast(P0, c).method(DASH).go();
+    t.resolve_all();
+    // No attackers are declared; it still returns at the end step.
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[], &[]);
+    assert!(!t.g.is_attacking(t.g.current(c)));
+    assert_eq!(t.life(P1), 20);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Mardu Scout"));
+}
+
+#[test]
 fn cast_normally_it_has_no_haste_and_stays() {
     cr!("702.109a");
     let mut t = TestGame::new(2);

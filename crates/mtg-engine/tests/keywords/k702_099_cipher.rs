@@ -45,10 +45,15 @@ fn a_spell_with_cipher_is_exiled_encoded_on_a_creature() {
         "Hidden Strings",
         "The cipher ability doesn’t target that creature"
     );
+    ruling!(
+        "Hands of Binding",
+        "You can choose only a creature to encode the card onto."
+    );
     assert_supported("Shadow Slice");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let theirs = t.battlefield(P1, "Grizzly Bears");
+    let saw = t.battlefield(P0, "Bone Saw");
     let c = cast_shadow_slice(&mut t, Some(bears));
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.zone(c), Zone::Exile);
@@ -74,6 +79,7 @@ fn a_spell_with_cipher_is_exiled_encoded_on_a_creature() {
         .unwrap();
     assert_eq!(cands, vec![Entity::Object(bears)]);
     assert!(!cands.contains(&Entity::Object(theirs)));
+    assert!(!cands.contains(&Entity::Object(saw)));
 }
 
 #[test]

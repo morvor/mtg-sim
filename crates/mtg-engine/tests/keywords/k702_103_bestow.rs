@@ -59,6 +59,32 @@ fn a_spell_cast_bestowed_is_an_aura_spell_that_enchants_a_creature() {
 }
 
 #[test]
+fn bestow_cant_be_combined_with_another_alternative_cost() {
+    cr!("702.103a");
+    ruling!(
+        "Boon Satyr",
+        "Bestow is an alternative cost to cast the spell with bestow. It can't be combined with other alternative costs, such as casting a spell “without paying its mana cost.”"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    let c = t.hand(P0, "Nyxborn Rollicker");
+    // P0 may cast it without paying its mana cost: as a creature spell only.
+    t.g.play_grants.push(mtg_engine::casting::PlayGrant {
+        player: P0,
+        object: c,
+        duration: Duration::EndOfTurn,
+        free: true,
+        source: None,
+        turn: 1,
+    });
+    assert!(can_cast(&mut t, P0, c, CastMethod::Free));
+    assert!(!can_cast(&mut t, P0, c, BESTOW));
+    // Casting it bestowed means paying its bestow cost.
+    t.lands(P0, "Mountain", 2);
+    assert!(can_cast(&mut t, P0, c, BESTOW));
+}
+
+#[test]
 fn a_bestowed_aura_never_enters_as_a_creature() {
     cr!("702.103b");
     let mut t = TestGame::new(2);
