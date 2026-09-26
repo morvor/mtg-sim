@@ -521,6 +521,8 @@ pub struct Game {
     pub player_control: crate::player_control::PlayerControlState,
     /// Merged permanents that left the battlefield (CR 730.3).
     pub merges: crate::merge::MergeState,
+    /// Subgames (CR 729).
+    pub subgames: crate::subgame::SubgameState,
 }
 
 impl Game {
@@ -617,6 +619,7 @@ impl Game {
             transforms: Default::default(),
             player_control: Default::default(),
             merges: Default::default(),
+            subgames: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
