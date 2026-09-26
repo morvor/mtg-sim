@@ -27,7 +27,6 @@ fn pool(t: &TestGame, p: PlayerId) -> Vec<ManaType> {
 
 #[test]
 fn restricted_lands_compile() {
-    cr!("106.6");
     assert_supported(&[
         "Pillar of the Paruns",
         "Haven of the Spirit Dragon",
@@ -183,7 +182,7 @@ fn a_spells_restriction_applies_to_all_its_mana() {
 
 #[test]
 fn creature_type_lists_name_any_of_the_types() {
-    cr!("106.6", "205.3");
+    cr!("106.6");
     let mut t = TestGame::new(2);
     let master = t.battlefield(P0, "Master of Dark Rites");
     t.battlefield(P0, "Grizzly Bears");
@@ -200,4 +199,38 @@ fn creature_type_lists_name_any_of_the_types() {
     t.activate(P0, master, 0, &[]).unwrap();
     let zombie = t.hand(P0, "Gravedigger");
     assert!(t.cast(P0, zombie).try_go().is_err());
+}
+
+#[test]
+fn abilities_of_creatures_are_abilities_of_creature_permanents() {
+    cr!("106.6", "109.2");
+    ruling!(
+        "Castle Garenbrig",
+        "can't be spent to activate abilities of creature cards that aren't on the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    let castle = t.battlefield(P0, "Castle Garenbrig");
+    t.lands(P0, "Forest", 4);
+    t.activate(P0, castle, 1, &[]).unwrap();
+    // Krosan Tusker's cycling ({2}{G}) is an ability of a creature card in a hand.
+    let tusker = t.hand(P0, "Krosan Tusker");
+    assert!(t.activate(P0, tusker, 0, &[]).is_err());
+    assert!(t.in_hand(P0, "Krosan Tusker"));
+    assert_eq!(pool(&t, P0), vec![ManaType::G; 6]);
+}
+
+#[test]
+fn abilities_of_sources_include_cards() {
+    cr!("106.6", "109.2");
+    // "... or activate an ability of a Dinosaur source": a Dinosaur card's cycling.
+    let mut t = TestGame::new(2);
+    let lorekeeper = t.battlefield(P0, "Ixalli's Lorekeeper");
+    t.answer(P0, DecisionKind::Option, Answer::Index(4)); // green
+    t.activate(P0, lorekeeper, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::G]);
+    t.battlefield(P0, "Wastes");
+    let rex = t.hand(P0, "Titanoth Rex");
+    t.activate(P0, rex, 0, &[]).unwrap();
+    assert!(t.in_graveyard(P0, "Titanoth Rex"));
+    assert!(pool(&t, P0).is_empty());
 }

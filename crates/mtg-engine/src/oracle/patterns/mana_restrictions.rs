@@ -155,17 +155,27 @@ fn activate_purpose(s: &str) -> Option<ManaRestriction> {
         .strip_prefix("a ")
         .or_else(|| r.strip_prefix("an "))
         .unwrap_or(r);
-    let r = r
+    // CR 109.2: "abilities of creatures" are abilities of creature permanents; "creature
+    // sources" are creature objects in any zone.
+    let (r, any_zone) = match r
         .strip_suffix(" sources")
         .or_else(|| r.strip_suffix(" source"))
-        .unwrap_or(r);
-    if unsupported_spell_words(r) {
+    {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    if unsupported_spell_words(r) || r.contains("card") {
         return None;
     }
     let (f, _, tail) = parse_object_phrase(r)?;
     if !end(tail).trim().is_empty() || names_spells(&f) {
         return None;
     }
+    let f = if any_zone {
+        f
+    } else {
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)])
+    };
     Some(ManaRestriction::ActivateAbilityOf(SpendFilter::new(f)))
 }
 
