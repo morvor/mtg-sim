@@ -50,6 +50,8 @@ pub fn copy_spell(
     }
     // Cards spliced onto the spell were choices made while casting it (CR 702.47).
     crate::splice::copy_splices(g, spell, id);
+    // A copy of a prepare spell is one too (CR 722.3d).
+    crate::designations::spell_copied(g, spell, id);
     g.dirty = true;
     g.recompute();
     if orig.kind != ObjKind::StackAbility {

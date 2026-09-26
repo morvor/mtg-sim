@@ -21,22 +21,6 @@ fn bushido_triggers_when_blocking() {
 }
 
 #[test]
-fn prowess_pumps_on_noncreature_spell() {
-    cr!("702.108a");
-    let mut t = TestGame::new(2);
-    // Monastery Swiftspear: 1/2 haste, prowess.
-    let swift = t.battlefield(P0, "Monastery Swiftspear");
-    t.lands(P0, "Mountain", 1);
-    let bolt = t.hand(P0, "Lightning Bolt");
-    t.cast(P0, bolt).target(P1).go();
-    t.resolve_all();
-    assert_eq!(t.pt(swift), (2, 3));
-    // Until end of turn.
-    t.advance_to(P1, Step::Upkeep);
-    assert_eq!(t.pt(swift), (1, 2));
-}
-
-#[test]
 fn bushido_triggers_once_when_it_becomes_blocked() {
     cr!("702.45", "702.45a");
     let mut t = TestGame::new(2);

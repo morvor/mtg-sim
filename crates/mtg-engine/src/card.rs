@@ -87,6 +87,30 @@ impl Layout {
     }
 }
 
+/// The card a set of characteristics comes from ([`Characteristics::printed`]): its halves,
+/// faces and alternative characteristics are part of the copiable values (CR 709.5b,
+/// 715.2b, 720.2b, 722.2b).
+#[derive(Clone)]
+pub struct PrintedCard(pub Arc<CardDef>);
+
+impl std::fmt::Debug for PrintedCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PrintedCard({})", self.0.name)
+    }
+}
+
+/// Layer 0: characteristics include the card they come from (see [`PrintedCard`]), except
+/// a face-down object's (CR 708.2).
+pub fn mark_printed(g: &mut crate::game::Game, live: &[ObjectId]) {
+    for id in live {
+        let o = &mut g.objects[id.0 as usize];
+        if o.face_down {
+            continue;
+        }
+        o.chars.printed = o.card.clone().map(PrintedCard);
+    }
+}
+
 /// One face (or half) of a card.
 #[derive(Clone, Debug)]
 pub struct FaceDef {
@@ -152,7 +176,14 @@ impl CardDef {
                 self.faces[i as usize].chars.clone()
             }
             (Layout::Flip, FaceState::Flipped) if self.faces.len() > 1 => {
-                self.faces[1].chars.clone()
+                // CR 710.1b, 710.2: the alternative name, text box, type line, power and
+                // toughness; CR 710.1c: its color and mana cost don't change.
+                let front = &self.faces[0].chars;
+                let mut c = self.faces[1].chars.clone();
+                c.mana_cost = front.mana_cost.clone();
+                c.colors = front.colors;
+                c.color_indicator = front.color_indicator;
+                c
             }
             (Layout::Split, FaceState::Front) | (Layout::Split, FaceState::Fused)
                 if self.faces.len() > 1 =>
@@ -202,8 +233,15 @@ impl CardDef {
                     None
                 })
                 .map(|ci| ColorSet::from_letters(ci));
-            let (power, star_power) = parse_pt(f.power.as_deref());
-            let (toughness, star_toughness) = parse_pt(f.toughness.as_deref());
+            let (mut power, star_power) = parse_pt(f.power.as_deref());
+            let (mut toughness, star_toughness) = parse_pt(f.toughness.as_deref());
+            // CR 721.2b, 721.2c: a station card's power/toughness box belongs to its
+            // highest station symbol; elsewhere than the battlefield it has no power or
+            // toughness.
+            if c.keywords.iter().any(|k| k.eq_ignore_ascii_case("station")) {
+                power = None;
+                toughness = None;
+            }
             let (loyalty, _) = parse_pt(f.loyalty.as_deref());
             let (defense, _) = parse_pt(f.defense.as_deref());
             let hand_modifier = c
@@ -246,6 +284,7 @@ impl CardDef {
                     all_creature_names: false,
                     interchangeable_names: Default::default(),
                     all_creature_types: false,
+                    printed: None,
                 },
                 unsupported: compiled.unsupported,
                 star_power,

@@ -60,6 +60,10 @@ pub struct SpecialState {
     pub stickers: crate::stickers::StickerState,
     /// The unlocked designations of Rooms (CR 709.5c).
     pub rooms: crate::rooms::RoomState,
+    /// Cards exiled as Adventure spells resolved (CR 715.3d).
+    pub adventures: crate::adventure::AdventureState,
+    /// Spells cast as prepare spells, and copies of them (CR 722.3d).
+    pub prepare_spells: Vec<ObjectId>,
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,

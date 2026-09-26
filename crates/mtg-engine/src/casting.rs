@@ -80,6 +80,57 @@ pub fn grant_play_permission(
     }
 }
 
+/// The faces or halves a card could be cast with: either half of a split card
+/// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
+/// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
+/// that are lands can't be cast (CR 305.9). A preparation card is cast only normally
+/// (CR 722.3).
+pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
+    use crate::card::Layout;
+    let o = g.obj(card);
+    let faces = match o.card.as_ref().map(|d| (d.layout, d.faces.len())) {
+        Some((Layout::Split, 2)) => vec![FaceState::Half(0), FaceState::Half(1)],
+        Some((Layout::Adventure, 2)) => vec![FaceState::Front, FaceState::Half(1)],
+        Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
+        _ => vec![FaceState::Front],
+    };
+    if faces.len() == 1 || o.face_down {
+        return vec![FaceState::Front];
+    }
+    faces
+        .into_iter()
+        .filter(|f| !g.face_characteristics(card, *f).is_land())
+        .collect()
+}
+
+/// The casting method that names the face or half a card is cast with: one half of a
+/// split card, an Adventure or Omen (CR 709.3, 715.3, 720.3), or the back face of a modal
+/// double-faced card (CR 712.11b) is `CastMethod::Half(index of the face)`.
+pub fn face_method(face: FaceState) -> CastMethod {
+    match face {
+        FaceState::Half(i) => CastMethod::Half(i),
+        FaceState::Back => CastMethod::Half(1),
+        _ => CastMethod::Normal,
+    }
+}
+
+/// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
+fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
+    let faces = castable_faces(g, card);
+    match faces.len() {
+        0 => FaceState::Front,
+        1 => faces[0],
+        _ => {
+            let names = faces
+                .iter()
+                .map(|f| format!("Cast {}", g.face_characteristics(card, *f).name))
+                .collect();
+            let k = g.ask_option(p, Some(card), "Choose what to cast", names);
+            faces[k.min(faces.len() - 1)]
+        }
+    }
+}
+
 /// Casts a card during the resolution of a spell or ability (CR 608.2g). No player
 /// receives priority afterward.
 pub fn cast_during_resolution(
@@ -93,8 +144,9 @@ pub fn cast_during_resolution(
     if g.split_second_on_stack() {
         return Err(Illegal("a spell with split second is on the stack".into()));
     }
-    let face = FaceState::Front;
+    let face = choose_face_to_cast(g, p, card);
     let mut opt = CastOption::normal(face);
+    opt.method = face_method(face);
     opt.any_time = true;
     if method == CastMethod::Free {
         opt.method = CastMethod::Free;
@@ -388,9 +440,7 @@ impl Game {
                 .any(|g| g.player == p && g.object == card && g.free);
             let push_face = |face: FaceState, out: &mut Vec<CastOption>| {
                 let mut opt = CastOption::normal(face);
-                if let FaceState::Half(i) = face {
-                    opt.method = CastMethod::Half(i);
-                }
+                opt.method = face_method(face);
                 if grant_free {
                     opt.method = CastMethod::Free;
                     opt.alt_cost = Some(Cost::free());
@@ -404,6 +454,11 @@ impl Game {
                     if o.chars.has_keyword(KeywordKind::Fuse) && in_hand {
                         let mut f = CastOption::normal(FaceState::Fused);
                         f.method = CastMethod::Keyword(KeywordKind::Fuse);
+                        // Cast from hand without paying its mana cost, both halves can be
+                        // cast that way (CR 702.102a, 702.102c).
+                        if grant_free {
+                            f.alt_cost = Some(Cost::free());
+                        }
                         out.push(f);
                     }
                 }
@@ -1093,6 +1148,7 @@ impl Game {
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),
             check_only: false,
+            class_level: false,
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -1136,6 +1192,7 @@ impl Game {
         // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
         // this is loses the designation now (CR 722.3c).
         if from == Zone::Exile && self.obj(card).kind == ObjKind::CardCopy {
+            crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
@@ -1688,6 +1745,7 @@ impl Game {
             card_types: src_chars.card_types,
             source: Some(src),
             any_color: self.any_color_mana(p, src, true),
+            class_level: crate::classes::gains_a_level(act),
             ..Default::default()
         };
         let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;

@@ -333,8 +333,13 @@ impl Game {
         if self.result.is_some() {
             return false;
         }
+        // A decision called for by the tournament rules: a player controlling another
+        // player can't make it for them (CR 723.5b).
         for p in self.apnap() {
-            if !self.ask_yes_no(p, None, "Agree to an intentional draw?", false) {
+            let agree = crate::player_control::own_decisions(self, |g| {
+                g.ask_yes_no(p, None, "Agree to an intentional draw?", false)
+            });
+            if !agree {
                 return false;
             }
         }
@@ -416,7 +421,7 @@ impl Game {
 
     /// A fingerprint of the game state that doesn't depend on object ids (which change with
     /// every zone change, CR 400.7), for recognizing repeated states.
-    fn loop_fingerprint(&self) -> u64 {
+    pub(crate) fn loop_fingerprint(&self) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // Everything that could make a repetition end on its own must be part of the
         // fingerprint (a creature shrinking each time around isn't a loop).

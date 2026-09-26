@@ -48,6 +48,7 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
         all_creature_names: false,
         interchangeable_names: Default::default(),
         all_creature_types: false,
+        printed: None,
     }
 }
 

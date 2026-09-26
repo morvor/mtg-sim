@@ -207,6 +207,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "worthy" => crate::game_terms::worthy_filter(),
         // CR 701.27g.
         "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
+        // A prepared permanent (CR 722.3a); a spell cast as a prepare spell (CR 722.3d).
+        "prepared" => Filter::Prepared,
         _ => return None,
     })
 }
@@ -558,6 +560,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_originally_printed_suffix(t) {
             (f, r)
+        } else if let Some((f, r)) = parse_inset_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -577,6 +581,21 @@ pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &s
     }
     if let Some(r) = t.strip_prefix("target opponent controls") {
         return Some((PlayerFilter::Opponent, "target opponent", r));
+    }
+    None
+}
+
+/// "that has an Adventure" (CR 715.2a), "that has an Omen" (CR 720.2a).
+fn parse_inset_suffix(t: &str) -> Option<(Filter, &str)> {
+    for (p, name) in [
+        ("that has an adventure", crate::adventure::HAS_ADVENTURE),
+        ("that have an adventure", crate::adventure::HAS_ADVENTURE),
+        ("that has an omen", crate::adventure::HAS_OMEN),
+        ("that have an omen", crate::adventure::HAS_OMEN),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            return Some((Filter::Custom(name.into()), r));
+        }
     }
     None
 }
@@ -603,6 +622,15 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that's the chosen color", Filter::ChosenColor),
         ("that are the chosen color", Filter::ChosenColor),
         ("with the chosen name", Filter::ChosenName),
+        // Double agenda's names (CR 702.106f).
+        (
+            "with one of the chosen names",
+            Filter::Custom(crate::kw::hidden_agenda::ONE_OF_CHOSEN_NAMES.into()),
+        ),
+        (
+            "with the other chosen name",
+            Filter::Custom(crate::kw::hidden_agenda::OTHER_CHOSEN_NAME.into()),
+        ),
         // "Choose a creature type. ... creatures of that type": the choice just made.
         ("of that type", Filter::ChosenType),
         ("of that color", Filter::ChosenColor),
@@ -673,22 +701,23 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let f = Filter::Custom(crate::custom::HAS_NONMANA_ACTIVATED_ABILITY.into());
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
-    if !negate {
-        if let Some(r) = rest
-            .strip_prefix("a ")
-            .or_else(|| rest.strip_prefix("one or more "))
+    // "with a +1/+1 counter on it", "without a +1/+1 counter on it" (Arcus Acolyte).
+    if let Some(r) = rest.strip_prefix("a ").or_else(|| {
+        (!negate)
+            .then(|| rest.strip_prefix("one or more "))
+            .flatten()
+    }) {
+        let (kind, r2) = split_word(r);
+        if let Some(tail) = r2
+            .strip_prefix("counter on it")
+            .or_else(|| r2.strip_prefix("counters on it"))
         {
-            let (kind, r2) = split_word(r);
-            if let Some(tail) = r2
-                .strip_prefix("counter on it")
-                .or_else(|| r2.strip_prefix("counters on it"))
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || kind.chars().all(|c| c.is_alphabetic())
             {
-                if kind.starts_with('+')
-                    || kind.starts_with('-')
-                    || kind.chars().all(|c| c.is_alphabetic())
-                {
-                    return Some((Filter::HasCounter(Some(kind.into())), tail));
-                }
+                let f = Filter::HasCounter(Some(kind.into()));
+                return Some((if negate { Filter::not(f) } else { f }, tail));
             }
         }
     }

@@ -106,16 +106,19 @@ pub fn search(
     let found: Vec<ObjectId> = if cands.is_empty() || n == 0 {
         vec![]
     } else {
-        let ans = g.ask(
-            searcher,
-            Decision::ChooseEntities {
-                source: ctx.source,
-                prompt: "Search: choose cards".into(),
-                candidates: cands.iter().map(|c| Entity::Object(*c)).collect(),
-                min,
-                max: n,
-            },
-        );
+        let decision = Decision::ChooseEntities {
+            source: ctx.source,
+            prompt: "Search: choose cards".into(),
+            candidates: cands.iter().map(|c| Entity::Object(*c)).collect(),
+            min,
+            max: n,
+        };
+        // "While they're searching their libraries" (CR 723.2).
+        let ans = if searcher == owner {
+            crate::player_control::while_searching(g, searcher, |g| g.ask(searcher, decision))
+        } else {
+            g.ask(searcher, decision)
+        };
         let chosen: Option<Vec<ObjectId>> = match ans {
             Answer::Entities(v) => {
                 let objs: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();

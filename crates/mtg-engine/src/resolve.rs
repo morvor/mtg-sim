@@ -87,17 +87,22 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
-                    if self.can_pay_cost(p, cost, ctx.source, ctx)
-                        && self.ask_yes_no(
-                            p,
-                            ctx.source,
-                            &format!("Pay {}?", describe_cost(cost)),
-                            false,
-                        )
-                        && self.pay_cost(p, cost, ctx.source, ctx)
-                    {
+                    if !self.can_pay_cost(p, cost, ctx.source, ctx) {
+                        continue;
+                    }
+                    let pays = self.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("Pay {}?", describe_cost(cost)),
+                        false,
+                    );
+                    if pays && self.pay_cost(p, cost, ctx.source, ctx) {
                         paid = true;
                         break;
+                    }
+                    if !pays && matches!(**then, Effect::Noop) {
+                        // CR 732.6: declining the [B] of "[A] unless [B]".
+                        crate::shortcuts::declined_unless(self);
                     }
                 }
                 ctx.prev_happened = paid;
@@ -208,6 +213,8 @@ impl Game {
                     .collect();
                 let _ = link;
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+                // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
+                let res = crate::merge::found_all(self, res);
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
@@ -285,6 +292,8 @@ impl Game {
             Effect::Move { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 let res = self.move_to_destination(objs, to, ctx);
+                // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
+                let res = crate::merge::found_all(self, res);
                 if to.zone == ZoneKind::Battlefield {
                     self.link_to_creator(ctx, &res);
                 }
@@ -1165,7 +1174,7 @@ impl Game {
             }
             Effect::SetClassLevel { level } => {
                 if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
-                    self.obj_mut(s).class_level = *level;
+                    crate::classes::set_level(self, s, *level);
                 }
             }
             Effect::ActivateManaAbilities { who, filter } => {
@@ -1686,11 +1695,14 @@ impl Game {
                 let p = self.eval_player(chooser, ctx).unwrap_or(ctx.controller);
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 // CR 614.13a: objects entering the battlefield right now can't be chosen.
-                let cands: Vec<ObjectId> = self
+                let mut cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| !self.entering.contains(o))
                     .collect();
+                // CR 723.4: a controlled player can't be made to choose cards from
+                // outside the game.
+                crate::player_control::visible_choices(self, p, &mut cands);
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
@@ -1717,9 +1729,25 @@ impl Game {
             }
             Sel::This | Sel::TriggerLki => {
                 let v = self.eval_sel(sel, ctx);
-                v.into_iter()
-                    .map(|e| self.follow_zone_change_trigger_object(e, ctx))
-                    .collect()
+                let mut out = Vec::new();
+                for e in v {
+                    let followed = self.follow_zone_change_trigger_object(e, ctx);
+                    // CR 712.21c, 730.3c: the new object a melded or merged permanent
+                    // became as it left the battlefield is each of its cards.
+                    let found = match followed {
+                        Entity::Object(o) if followed != e => crate::merge::found_objects(self, o)
+                            .into_iter()
+                            .map(Entity::Object)
+                            .collect(),
+                        _ => vec![followed],
+                    };
+                    for f in found {
+                        if !out.contains(&f) {
+                            out.push(f);
+                        }
+                    }
+                }
+                out
             }
             other => self.eval_sel(other, ctx),
         }

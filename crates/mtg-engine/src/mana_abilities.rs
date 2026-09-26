@@ -879,6 +879,11 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if g.activation_prohibited(p, o.id, true) {
                 continue;
             }
+            // A player controlled by another may be restricted to lands' mana abilities
+            // (CR 723.7).
+            if !crate::player_control::mana_source_allowed(g, p, o.id) {
+                continue;
+            }
             // Only plan with abilities whose costs are simple to pay automatically.
             let mut rank = 0u8;
             let mut ok = true;

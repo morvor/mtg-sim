@@ -567,7 +567,12 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_name.as_ref())
                 .is_some_and(|n| c.has_name(n)),
-            Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
+            // A prepared permanent (CR 722.3a), or a spell cast as a prepare spell or a
+            // copy of one (CR 722.3d).
+            Filter::Prepared => {
+                (o.zone == Zone::Battlefield && o.prepared.is_some())
+                    || crate::designations::is_prepare_spell(self, id)
+            }
             Filter::ChosenCardType => self
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)
@@ -701,7 +706,11 @@ impl Game {
             Sel::This => ctx.source.map(Entity::Object).into_iter().collect(),
             Sel::Target(slot) => ctx.targets.get(*slot as usize).cloned().unwrap_or_default(),
             Sel::AllTargets => ctx.targets.iter().flatten().copied().collect(),
-            Sel::Var(v) => ctx.vars.get(v).cloned().unwrap_or_default(),
+            // CR 730.3c: an effect that finds the new object a merged permanent became
+            // finds all of them.
+            Sel::Var(v) => {
+                crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
+            }
             // CR 603.6: an ability can't find an object that went to a zone hidden from its
             // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
@@ -714,14 +723,21 @@ impl Game {
                     true => o,
                     false => crate::kw::madness::found_after_madness(self, o).unwrap_or(o),
                 })
+                // CR 712.21c, 730.3c: the new object a melded or merged permanent became
+                // as it left the battlefield is each of its cards.
+                .map(|o| crate::merge::found_objects(self, o))
+                .into_iter()
+                .flatten()
                 .filter(|o| match self.obj(*o).zone {
                     Zone::Library(_) => false,
                     Zone::Hand(p) => p == ctx.controller,
                     _ => true,
                 })
                 .map(Entity::Object)
-                .into_iter()
                 .collect(),
+            // Last known information: a melded or merged permanent's own, not its cards'
+            // (an effect that follows it to its new zone finds all of them, see
+            // `Game::resolve_sel`).
             Sel::TriggerLki => ctx
                 .event
                 .as_ref()

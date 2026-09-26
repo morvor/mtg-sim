@@ -23,12 +23,23 @@ pub fn take_initiative(g: &mut Game, p: PlayerId) {
 // Prepared (CR 722.3)
 // ---------------------------------------------------------------------------
 
-/// Whether a permanent has a prepare spell (CR 722.2a).
+/// The preparation card whose prepare spell the object `o` has: the alternative
+/// characteristics are part of its copiable values (CR 722.2a, 722.2b), so a copy of a
+/// preparation card's permanent has them too.
+fn prepare_card(g: &Game, o: ObjectId) -> Option<std::sync::Arc<crate::card::CardDef>> {
+    let ob = g.obj(o);
+    let card = match &ob.copiable.printed {
+        Some(p) => Some(p.0.clone()),
+        // Characteristics not computed (a card in a library): its own card.
+        None if matches!(ob.zone, Zone::Library(_) | Zone::Nowhere) => ob.card.clone(),
+        None => None,
+    }?;
+    (card.layout == crate::card::Layout::Prepare && card.faces.len() > 1).then_some(card)
+}
+
+/// Whether an object has a prepare spell (CR 722.2a), even if it doesn't use it.
 pub fn has_prepare_spell(g: &Game, o: ObjectId) -> bool {
-    g.obj(o)
-        .card
-        .as_ref()
-        .is_some_and(|c| c.layout == crate::card::Layout::Prepare && c.faces.len() > 1)
+    prepare_card(g, o).is_some()
 }
 
 /// The permanent becomes prepared (CR 722.3a): if it has a prepare spell and isn't
@@ -42,8 +53,12 @@ pub fn become_prepared(g: &mut Game, o: ObjectId) {
     {
         return;
     }
-    let card = g.obj(o).card.clone().unwrap();
+    let Some(card) = prepare_card(g, o) else {
+        return;
+    };
     let controller = g.obj(o).controller;
+    // Only the prepare spell's characteristics, ignoring copy exceptions that apply to
+    // the permanent (CR 722.3c).
     let chars = card.faces[1].chars.clone();
     let id = g.create_card_object(card, controller, Zone::Exile);
     {
@@ -98,4 +113,26 @@ pub fn castable_prepared_copies(g: &Game, p: PlayerId) -> Vec<ObjectId> {
         .filter_map(|x| g.obj(*x).prepared)
         .filter(|c| g.is_live(*c) && g.obj(*c).zone == Zone::Exile)
         .collect()
+}
+
+/// A prepared permanent's prepare-spell copy `copy` was cast as the spell `spell`: it's
+/// a spell cast as a prepare spell (CR 722.3c, 722.3d).
+pub fn prepare_spell_cast(g: &mut Game, copy: ObjectId, spell: ObjectId) {
+    if is_prepared_copy(g, copy) {
+        g.special.prepare_spells.push(spell);
+    }
+}
+
+/// A spell was copied (CR 707.10): a copy of a prepare spell is a prepare spell too
+/// (CR 722.3d).
+pub fn spell_copied(g: &mut Game, spell: ObjectId, copy: ObjectId) {
+    if g.special.prepare_spells.contains(&spell) {
+        g.special.prepare_spells.push(copy);
+    }
+}
+
+/// Whether the spell `id` was cast as a prepare spell, or is a copy of such a spell
+/// (CR 722.3d).
+pub fn is_prepare_spell(g: &Game, id: ObjectId) -> bool {
+    g.obj(id).zone == Zone::Stack && g.special.prepare_spells.contains(&id)
 }

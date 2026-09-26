@@ -211,6 +211,15 @@ impl Game {
     /// the dungeon (CR 309.2a, 309.2d).
     pub fn move_forbidden(&self, mv: &MoveEv) -> bool {
         let o = self.obj(mv.obj);
+        // CR 712.14a: a card that isn't a double-faced card put onto the battlefield
+        // transformed stays in its current zone.
+        if mv.to == Zone::Battlefield
+            && mv.etb.transformed
+            && mv.etb.face_down.is_none()
+            && !crate::transform_rules::can_enter_transformed(self, mv.obj)
+        {
+            return true;
+        }
         if mv.to == Zone::Battlefield && mv.etb.face_down.is_none() {
             let face = if mv.etb.transformed {
                 Some(FaceState::Back)
@@ -554,8 +563,10 @@ impl Game {
                         }
                     }
                 }
-                if o.chars.has_subtype("Saga") && crate::saga::has_chapters(o) {
-                    counters_to_add.push((counters::LORE.into(), 1));
+                // CR 714.3a, 714.3b: a Saga enters with lore counters.
+                let lore = crate::saga::entering_lore_counters(self, new_id);
+                if lore > 0 {
+                    counters_to_add.push((counters::LORE.into(), lore));
                 }
                 for (k, n) in counters_to_add {
                     // Counters placed as it enters are part of the ETB event; replacement
@@ -773,9 +784,15 @@ impl Game {
     // Drawing (CR 121)
     // ------------------------------------------------------------------
 
-    /// Draws without replacement effects (used for opening hands, CR 103.4).
+    /// Draws without replacement effects (used for opening hands, CR 103.4). A player
+    /// with fewer cards in their library than their opening hand attempted to draw from an
+    /// empty library, and loses the next time state-based actions are checked (CR 704.5b,
+    /// 727.3, 729.3).
     pub fn draw_card_raw(&mut self, p: PlayerId) -> Option<ObjectId> {
-        let top = self.players[p.idx()].library.pop()?;
+        let Some(top) = self.players[p.idx()].library.pop() else {
+            self.players[p.idx()].drew_from_empty_library = true;
+            return None;
+        };
         let new = self.create_incarnation(top, Zone::Hand(p));
         self.objects[new.0 as usize].zone = Zone::Hand(p);
         self.players[p.idx()].hand.push(new);

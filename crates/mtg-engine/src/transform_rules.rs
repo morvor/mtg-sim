@@ -70,6 +70,30 @@ pub fn can_transform(g: &Game, id: ObjectId) -> bool {
     !types.contains(CardType::Instant) && !types.contains(CardType::Sorcery)
 }
 
+/// Whether `id` is represented by a double-faced card or a double-faced token (a meld
+/// card and a melded permanent included, CR 712.1), as opposed to a single-faced object
+/// that may be a copy of one (CR 712.9).
+pub fn is_double_faced_permanent(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    matches!(o.kind, ObjKind::Card | ObjKind::Token)
+        && o.card.as_ref().is_some_and(|c| c.layout.is_double_faced())
+}
+
+/// Whether the card `id` can be put onto the battlefield transformed (with its back face
+/// up): a double-faced card or token that can transform (not a meld card, CR 712.4c), or
+/// a copy of one cast or copied as a spell (CR 712.11a, 712.13a). A card that isn't
+/// double-faced stays in its current zone (CR 712.14a).
+pub fn can_enter_transformed(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    matches!(
+        o.kind,
+        ObjKind::Card | ObjKind::Token | ObjKind::CardCopy | ObjKind::SpellCopy
+    ) && o
+        .card
+        .as_ref()
+        .is_some_and(|c| transforming_layout(c.layout) && c.faces.len() >= 2)
+}
+
 /// Records that `id` transformed, with the new timestamp it got.
 pub fn record(g: &mut Game, id: ObjectId, ts: Timestamp) {
     g.transforms.last.insert(id, ts);

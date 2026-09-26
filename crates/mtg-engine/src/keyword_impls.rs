@@ -55,28 +55,10 @@ fn derived_abilities_keyed(kw: &Keyword, key: String) -> Vec<Ability> {
 }
 
 fn build_derived(kw: &Keyword) -> Vec<Ability> {
-    use KeywordKind as K;
-    let text = kw.kind.name();
-    match kw.kind {
-        // CR 702.108a: "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn."
-        K::Prowess => vec![AbilityDef::new(
-            AbilityKind::Triggered(TriggeredAbility::new(
-                TriggerCond::CastSpell {
-                    who: PlayerRel::You,
-                    filter: Filter::not(Filter::creature()),
-                },
-                Body::effect(Effect::Modify {
-                    what: Sel::This,
-                    mods: vec![Modification::ModifyPT(Value::c(1), Value::c(1))],
-                    duration: Duration::EndOfTurn,
-                }),
-            )),
-            text,
-        )],
-        // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
-        // CR 702.29 cycling and typecycling: see `kw/cycling.rs`.
-        _ => crate::kw::derived(kw),
-    }
+    // CR 702.6 equip: see `kw/equip.rs`. CR 702.21 ward: see `kw/ward.rs`.
+    // CR 702.29 cycling and typecycling: see `kw/cycling.rs`. CR 702.108 prowess:
+    // `kw/prowess.rs`.
+    crate::kw::derived(kw)
 }
 
 /// Appends derived abilities for every keyword on the object (called after layer 6).
@@ -159,6 +141,10 @@ pub fn cost_reductions_from_keywords(
 /// effects tied to how it was cast.
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
+    // A spell cast as an Adventure or an Omen (CR 715.3d, 720.3d).
+    if let Some(d) = crate::adventure::resolved_destination(g, id) {
+        return d;
+    }
     // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
@@ -167,6 +153,7 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
 /// After a resolved instant/sorcery was put where it goes (`new`), e.g. rebound's delayed
 /// triggered ability (CR 702.88a).
 pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {
+    crate::adventure::after_resolved(g, id, new);
     crate::kw::after_spell_resolved(g, id, new);
 }
 

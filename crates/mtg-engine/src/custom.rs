@@ -350,7 +350,10 @@ pub fn custom_trigger(
                 let mut out = Vec::new();
                 for part in ns.split(',') {
                     if let Ok(k) = part.trim().parse::<u32>() {
-                        if before < k && after >= k {
+                        if before < k
+                            && after >= k
+                            && crate::saga::chapter_may_trigger(g, src, k, after)
+                        {
                             out.push(EventInfo {
                                 object: Some(src),
                                 amount: k as i32,
@@ -475,6 +478,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "exile them, then meld them into [result]" (CR 701.42a).
     if crate::merge::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).
+    if crate::rooms::custom_effect(g, name, ctx) {
         return;
     }
     // "Roll again", rerolling stored results (CR 706.3c, 706.8b).

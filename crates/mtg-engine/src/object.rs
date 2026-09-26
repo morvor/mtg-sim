@@ -44,6 +44,12 @@ pub struct Characteristics {
     /// can have it (CR 205.3d).
     #[serde(default)]
     pub all_creature_types: bool,
+    /// The card these characteristics come from, with all its halves, faces and
+    /// alternative characteristics. It's part of the copiable values: a copy of a Room has
+    /// both doors (CR 709.5b), a copy of an adventurer, omen or preparation card has its
+    /// Adventure, Omen or prepare spell (CR 715.2b, 720.2b, 722.2b).
+    #[serde(skip)]
+    pub printed: Option<crate::card::PrintedCard>,
 }
 
 impl Characteristics {
@@ -229,7 +235,8 @@ pub enum CastMethod {
     FaceDown(KeywordKind),
     /// An alternative cost from a static ability or effect.
     Alternative(u64),
-    /// Cast as an Adventure / Omen / other half (index into faces).
+    /// Cast with a face other than the normal one (index into faces): one half of a split
+    /// card, an Adventure or Omen, or the back face of a modal double-faced card.
     Half(u8),
 }
 

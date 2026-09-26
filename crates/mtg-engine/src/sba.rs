@@ -238,6 +238,10 @@ impl Game {
             let is_equipment = o.chars.has_subtype("Equipment");
             let is_fortification = o.chars.has_subtype("Fortification");
             if is_aura && o.chars.is(CardType::Enchantment) {
+                // E.g. a bestowed Aura (CR 702.103f): see the keyword's own SBA.
+                if crate::kw::keeps_unattached_aura(self, id) {
+                    continue;
+                }
                 match o.attached_to {
                     None => to_graveyard.push(id),
                     // CR 303.4d, 310.10: an Aura that's also a creature or a battle becomes

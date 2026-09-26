@@ -517,6 +517,14 @@ pub struct Game {
     pub searches: crate::search_rules::SearchState,
     /// When permanents last transformed (CR 701.27f).
     pub transforms: crate::transform_rules::TransformState,
+    /// Players controlling other players (CR 723).
+    pub player_control: crate::player_control::PlayerControlState,
+    /// Merged permanents that left the battlefield (CR 730.3).
+    pub merges: crate::merge::MergeState,
+    /// Subgames (CR 729).
+    pub subgames: crate::subgame::SubgameState,
+    /// Shortcuts and loops (CR 732).
+    pub shortcuts: crate::shortcuts::ShortcutState,
     /// Modes chosen for modal abilities ("choose one that hasn't been chosen", CR 700.2).
     pub modal_history: crate::modal_history::ModalHistory,
 }
@@ -613,6 +621,10 @@ impl Game {
             reveals: Default::default(),
             searches: Default::default(),
             transforms: Default::default(),
+            player_control: Default::default(),
+            merges: Default::default(),
+            subgames: Default::default(),
+            shortcuts: Default::default(),
             modal_history: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
@@ -894,6 +906,10 @@ impl Game {
         };
         if let Some(card) = &n.card {
             n.base = card.characteristics(n.face);
+            // Until characteristics are next computed (never, for most cards in a
+            // library): the card's own (e.g. a transformed card's front face, CR 712.8a).
+            n.chars = n.base.clone();
+            n.copiable = n.base.clone();
         }
         n.is_commander = o.is_commander;
         // CR 607.2p: a choice made before the game began follows the card.
@@ -931,14 +947,26 @@ impl Game {
             self.recompute();
         }
         self.actions_taken += 1;
+        // CR 723.5: the decisions of a player controlled by another player are made by
+        // that other player.
+        let decider = crate::player_control::decider(self, player);
+        let decision = if decider != player {
+            crate::player_control::for_controller(self, decision)
+        } else {
+            decision
+        };
         let agents = self.agents.clone();
         let mut guard = agents
             .0
             .lock()
             .expect("agent mutex poisoned (re-entrant ask?)");
-        let answer = guard[player.idx()].decide(self, player, &decision);
+        let answer = guard[decider.idx()].decide(self, player, &decision);
         drop(guard);
-        answer
+        if decider != player {
+            crate::player_control::check_answer(answer)
+        } else {
+            answer
+        }
     }
 
     /// Asks a yes/no question; `Default` answers `default`.

@@ -202,8 +202,11 @@ impl Game {
         }
         // Face-up planes and phenomena are controlled by the planar controller (CR 901.6).
         crate::planechase::apply_planar_control(self);
-        // Locked halves of Rooms (CR 709.5).
-        crate::rooms::apply_locks(self, &live);
+        // The card's halves, faces and alternative characteristics are part of the
+        // copiable values (CR 709.5b, 715.2b, 720.2b, 722.2b).
+        crate::card::mark_printed(self, &live);
+        // Prototyped spells and permanents (CR 718.3b).
+        crate::kw::prototype::prototyped_characteristics(self, &live);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self
@@ -273,6 +276,8 @@ impl Game {
             let o = &mut self.objects[id.0 as usize];
             o.copiable = o.chars.clone();
         }
+        // Locked halves of Rooms (CR 709.5), by each permanent's own designations.
+        crate::rooms::apply_locks(self, &live);
 
         // Layers 2–7.
         let mut st = LayerState::default();

@@ -34,7 +34,7 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
     // Split at each "cast"/"activate" verb that starts a purpose.
     let mut chunks: Vec<(&str, Vec<&str>)> = Vec::new();
     for (i, w) in words.iter().enumerate() {
-        let starts = matches!(*w, "cast" | "activate")
+        let starts = matches!(*w, "cast" | "activate" | "gain")
             && (i == 0
                 || matches!(words[i - 1], "to" | "or" | "and" | "and/or")
                 || words[i - 1].ends_with(','));
@@ -59,6 +59,9 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
         let text = joined.trim_end_matches(',');
         out.push(match verb {
             "cast" => cast_purpose(text)?,
+            // "to gain a Class level" (CR 716.2c).
+            "gain" if text == "a class level" => ManaRestriction::ClassLevel,
+            "gain" => return None,
             _ => activate_purpose(text)?,
         });
     }

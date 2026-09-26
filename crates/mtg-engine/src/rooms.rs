@@ -3,8 +3,12 @@
 //! (CR 709.5c); a locked half's name, mana cost and rules text don't exist on the
 //! battlefield (CR 709.5). A half cast as a spell enters unlocked (CR 709.5d), a player
 //! may pay a locked half's mana cost to unlock it as a special action (CR 116.2m,
-//! 709.5e), and abilities trigger when a door is unlocked (CR 709.5h) or a Room is fully
-//! unlocked (CR 709.5i).
+//! 709.5e), effects may lock or unlock a door (CR 709.5f, 709.5g), and abilities trigger
+//! when a door is unlocked (CR 709.5h) or a Room is fully unlocked (CR 709.5i).
+//!
+//! The halves and the static abilities of the shared type line are part of the copiable
+//! values (CR 709.5, 709.5b): [`Characteristics::printed`] carries the halves, and the locks
+//! apply after copy effects according to each permanent's own designations.
 
 use crate::card::{CardDef, Layout};
 use crate::casting::Illegal;
@@ -36,6 +40,15 @@ pub struct RoomState {
     pub unlocked: BTreeMap<ObjectId, [bool; 2]>,
 }
 
+/// The split card with a shared type line whose halves the characteristics `c` represent
+/// ([`Characteristics::printed`], part of the copiable values, CR 709.5b).
+fn room_of(c: &Characteristics) -> Option<Arc<CardDef>> {
+    c.printed
+        .as_ref()
+        .map(|p| p.0.clone())
+        .filter(|card| is_room_card(card))
+}
+
 /// Whether a card is a split card with a shared type line: a permanent card with two
 /// halves (CR 709.5).
 pub fn is_room_card(card: &CardDef) -> bool {
@@ -47,13 +60,16 @@ pub fn is_room_card(card: &CardDef) -> bool {
             .all(|f| f.chars.card_types.has_permanent_type())
 }
 
+/// The split card with a shared type line whose halves the object `id` has as part of its
+/// copiable values: its own card, or the Room it's a copy of (CR 709.5b).
+pub fn room_card(g: &Game, id: ObjectId) -> Option<Arc<CardDef>> {
+    room_of(&g.obj(id).copiable)
+}
+
 /// Whether `id` is a face-up permanent with a shared type line.
 pub fn is_room(g: &Game, id: ObjectId) -> bool {
     let o = g.obj(id);
-    o.zone == Zone::Battlefield
-        && !o.face_down
-        && o.face == FaceState::Front
-        && o.card.as_deref().is_some_and(is_room_card)
+    o.zone == Zone::Battlefield && !o.face_down && room_card(g, id).is_some()
 }
 
 /// The unlocked designations of `id` (left, right).
@@ -75,67 +91,87 @@ pub fn locked_halves(g: &Game, id: ObjectId) -> Vec<usize> {
     (0..2).filter(|i| !u[*i]).collect()
 }
 
-/// The characteristics of a Room permanent with the given unlocked halves: a locked
-/// half's name, mana cost and rules text don't exist (CR 709.5); its types are the
-/// shared type line (CR 709.5a).
-fn room_characteristics(card: &CardDef, u: [bool; 2]) -> Characteristics {
-    let mut out = card.characteristics(FaceState::Front);
+/// Removes from the characteristics `c` of a Room permanent the name, mana cost and rules
+/// text of each locked half (CR 709.5): it has the combined characteristics of its
+/// unlocked halves. Its types are the shared type line (CR 709.5a). Abilities it has
+/// from elsewhere (e.g. a copy effect's exceptions) are kept.
+fn remove_locked_halves(c: &mut Characteristics, card: &CardDef, u: [bool; 2]) {
+    if card.faces.len() != 2 {
+        return;
+    }
     let halves: Vec<&Characteristics> = (0..2)
         .filter(|i| u[*i])
         .map(|i| &card.faces[i].chars)
         .collect();
-    out.name = SmolStr::new(
+    c.name = SmolStr::new(
         halves
             .iter()
-            .map(|c| c.name.as_str())
+            .map(|h| h.name.as_str())
             .collect::<Vec<_>>()
             .join(" // "),
     );
-    out.mana_cost = if halves.is_empty() {
+    c.mana_cost = if halves.is_empty() {
         None
     } else {
         let mut cost = ManaCost::default();
-        for c in &halves {
-            if let Some(m) = &c.mana_cost {
+        for h in &halves {
+            if let Some(m) = &h.mana_cost {
                 cost.symbols.extend(m.symbols.iter().copied());
             }
         }
         Some(cost)
     };
     // Its colors come from its (remaining) mana cost (CR 202.2).
-    out.colors = match out.color_indicator {
-        Some(ci) => ci,
-        None => halves
+    if c.color_indicator.is_none() {
+        c.colors = halves
             .iter()
-            .fold(ColorSet::NONE, |acc, c| acc.union(c.colors)),
-    };
-    out.abilities = halves
-        .iter()
-        .flat_map(|c| c.abilities.iter().cloned())
-        .collect();
-    out.rules_text = Arc::from(
+            .fold(ColorSet::NONE, |acc, h| acc.union(h.colors));
+    }
+    // The halves' abilities come first, the left half's then the right half's (as in the
+    // combined characteristics, CR 709.4c), in the same order when copied.
+    let n = [
+        card.faces[0].chars.abilities.len(),
+        card.faces[1].chars.abilities.len(),
+    ];
+    if c.abilities.len() >= n[0] + n[1] {
+        let rest = c.abilities.split_off(n[0] + n[1]);
+        let right = c.abilities.split_off(n[0]);
+        let left = std::mem::take(&mut c.abilities);
+        if u[0] {
+            c.abilities.extend(left);
+        }
+        if u[1] {
+            c.abilities.extend(right);
+        }
+        c.abilities.extend(rest);
+    }
+    c.rules_text = Arc::from(
         halves
             .iter()
-            .map(|c| &*c.rules_text)
+            .map(|h| &*h.rules_text)
             .collect::<Vec<_>>()
             .join("\n//\n")
             .as_str(),
     );
-    out
 }
 
-/// Layer 0: the shared type line's static abilities remove the name, mana cost and rules
-/// text of each locked half (CR 709.5). Called as characteristics are computed.
+/// The shared type line's static abilities remove the name, mana cost and rules text of
+/// each locked half of a Room permanent (CR 709.5). They're part of its copiable values,
+/// so they apply to a copy of a Room according to the copy's own unlocked designations
+/// (CR 709.5b). Called as characteristics are computed, after copy effects.
 pub fn apply_locks(g: &mut Game, live: &[ObjectId]) {
     for id in live {
-        if !is_room(g, *id) {
+        let o = &g.objects[id.0 as usize];
+        if o.zone != Zone::Battlefield || o.face_down {
             continue;
         }
-        let Some(card) = g.obj(*id).card.clone() else {
+        let Some(card) = room_of(&o.chars) else {
             continue;
         };
         let u = unlocked(g, *id);
-        g.objects[id.0 as usize].chars = room_characteristics(&card, u);
+        let mut c = std::mem::take(&mut g.objects[id.0 as usize].chars);
+        remove_locked_halves(&mut c, &card, u);
+        g.objects[id.0 as usize].chars = c;
     }
 }
 
@@ -235,7 +271,7 @@ pub fn unlock_actions(g: &Game, p: PlayerId) -> Vec<Action> {
 
 /// A half's unlock cost: its mana cost (CR 116.2m).
 fn unlock_cost(g: &Game, id: ObjectId, half: usize) -> Option<crate::ability::Cost> {
-    let card = g.obj(id).card.clone()?;
+    let card = room_card(g, id)?;
     let m = card
         .faces
         .get(half)?
@@ -291,4 +327,70 @@ pub fn custom_trigger(name: &str, src: ObjectId, ev: &Event) -> Option<Vec<Event
         }],
         _ => vec![],
     })
+}
+
+/// `Effect::Custom` name: "lock or unlock a door of [the Room bound to
+/// `vars::AFFECTED`]" (CR 709.5f, 709.5g).
+pub const LOCK_OR_UNLOCK_EFFECT: &str = "room: lock or unlock a door";
+/// `Effect::Custom` name: "unlock a locked door of [the Room]" (CR 709.5f).
+pub const UNLOCK_EFFECT: &str = "room: unlock a locked door";
+/// `Effect::Custom` name: "lock an unlocked door of [the Room]" (CR 709.5g).
+pub const LOCK_EFFECT: &str = "room: lock an unlocked door";
+
+/// "Lock or unlock a door of [a Room]", "unlock a locked door of ...", "lock an unlocked
+/// door of ...": the player chooses a locked half to unlock (CR 709.5f) or an unlocked
+/// half to lock (CR 709.5g) of each Room bound to `vars::AFFECTED`. A door that is
+/// already unlocked can't be chosen to unlock, nor a locked one to lock. Returns false if
+/// `name` isn't one of these effects.
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
+    let (may_lock, may_unlock) = match name {
+        LOCK_OR_UNLOCK_EFFECT => (true, true),
+        UNLOCK_EFFECT => (false, true),
+        LOCK_EFFECT => (true, false),
+        _ => return false,
+    };
+    if g.dirty {
+        g.recompute();
+    }
+    let p = ctx.controller;
+    let rooms: Vec<ObjectId> = ctx
+        .vars
+        .get(&crate::ability::vars::AFFECTED)
+        .map(|v| v.iter().filter_map(|e| e.object()).collect())
+        .unwrap_or_default();
+    for id in rooms {
+        if !g.is_live(id) || !is_room(g, id) {
+            continue;
+        }
+        let Some(card) = room_card(g, id) else {
+            continue;
+        };
+        let u = unlocked(g, id);
+        // (unlock?, half)
+        let options: Vec<(bool, usize)> = (0..2)
+            .filter_map(|h| match u[h] {
+                false if may_unlock => Some((true, h)),
+                true if may_lock => Some((false, h)),
+                _ => None,
+            })
+            .collect();
+        if options.is_empty() {
+            continue;
+        }
+        let labels = options
+            .iter()
+            .map(|(un, h)| {
+                let door = card.faces.get(*h).map_or("", |f| f.chars.name.as_str());
+                format!("{} {door}", if *un { "Unlock" } else { "Lock" })
+            })
+            .collect();
+        let k = g.ask_option(p, Some(id), "Choose a door", labels);
+        let (un, h) = options[k.min(options.len() - 1)];
+        if un {
+            unlock(g, id, h, p);
+        } else {
+            lock(g, id, h);
+        }
+    }
+    true
 }

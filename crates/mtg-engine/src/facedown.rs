@@ -73,6 +73,14 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
     if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
         return false;
     }
+    // CR 712.16: melded permanents and other double-faced permanents can't be turned face
+    // down; nothing happens. CR 730.2j: nor can a face-up merged permanent with a
+    // double-faced component.
+    if crate::transform_rules::is_double_faced_permanent(g, id)
+        || crate::merge::cant_turn_face_down(g, id)
+    {
+        return false;
+    }
     let ts = g.new_timestamp();
     let ob = &mut g.objects[id.0 as usize];
     ob.face_down = true;
@@ -88,6 +96,8 @@ pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
         ob.choices.text = None;
     }
     g.dirty = true;
+    // CR 730.2f: each face-up component of a merged permanent is turned face down.
+    crate::merge::turned_face(g, id, true);
     g.emit(Event::TurnedFaceDown { obj: id });
     true
 }
@@ -215,12 +225,18 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<
 }
 
 /// CR 708.9: when a player leaves the game (`Some(p)`), their face-down permanents and
-/// spells are revealed; at the end of the game (`None`), everyone's are.
+/// spells are revealed; at the end of the game (`None`), everyone's are. So are face-down
+/// conspiracy cards (hidden agenda, CR 702.106e).
 pub fn reveal_all(g: &mut Game, owner: Option<PlayerId>) {
+    let conspiracies = g
+        .command
+        .iter()
+        .filter(|id| g.obj(**id).face_down && g.obj(**id).base.is(CardType::Conspiracy));
     let ids: Vec<ObjectId> = g
         .battlefield
         .iter()
         .chain(g.stack.iter())
+        .chain(conspiracies)
         .copied()
         .filter(|id| owner.is_none_or(|p| g.obj(*id).owner == p))
         .collect();
@@ -243,7 +259,11 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     // CR 701.40g, 701.58g: one represented by an instant or sorcery card is revealed and
     // stays face down; "turned face up" abilities don't trigger.
     let front = revealed_characteristics(g, id);
-    if front.is(CardType::Instant) || front.is(CardType::Sorcery) {
+    // CR 730.2g: so is a merged permanent that contains an instant or sorcery card.
+    if front.is(CardType::Instant)
+        || front.is(CardType::Sorcery)
+        || crate::merge::cant_turn_face_up(g, id)
+    {
         reveal(g, id);
         return false;
     }
@@ -252,6 +272,8 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     ob.face_down = false;
     ob.timestamp = ts; // CR 613.7f
     g.dirty = true;
+    // CR 730.2f: each face-down component of a merged permanent is turned face up.
+    crate::merge::turned_face(g, id, false);
     g.recompute();
     // CR 614.1e: "As [this] is turned face up, ..." replacement effects apply as it turns
     // face up, before anything sees it face up.
