@@ -56,6 +56,9 @@ pub fn amass(g: &mut Game, p: PlayerId, subtype: &Subtype, n: u32, ctx: &mut Ctx
             },
             &mut c,
         );
+        // The token enters as a 0/0 before it gets counters: abilities that trigger on
+        // it entering see it that way.
+        g.flush_events();
         g.recompute();
     }
     let cands = armies(g, p);

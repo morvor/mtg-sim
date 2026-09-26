@@ -142,3 +142,16 @@ pub fn asked_since(t: &TestGame, from: usize) -> Vec<(PlayerId, Decision)> {
 pub fn place(t: &mut TestGame, p: PlayerId, name: &str, zone: Zone) -> ObjectId {
     t.custom(p, (*card(name)).clone(), zone)
 }
+
+/// Number of triggered abilities on the stack whose text contains `text`.
+pub fn triggers_on_stack(t: &TestGame, text: &str) -> usize {
+    t.g.stack
+        .iter()
+        .filter(|id| {
+            t.g.obj(**id).stack.as_ref().is_some_and(|si| {
+                matches!(&si.kind, mtg_engine::object::StackKind::Triggered { ability, .. }
+                    if ability.text.contains(text))
+            })
+        })
+        .count()
+}
