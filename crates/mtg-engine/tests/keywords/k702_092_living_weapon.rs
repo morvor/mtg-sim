@@ -109,3 +109,47 @@ fn the_germ_is_still_created_if_the_equipment_left_the_battlefield() {
     assert!(created.iter().all(|o| !t.g.is_live(o.id)));
     assert!(!t.g.player(P0).graveyard.iter().any(|c| t.g.obj(*c).is_token()));
 }
+
+#[test]
+fn with_two_germs_the_equipment_is_attached_to_one_of_them() {
+    cr!("702.92a");
+    ruling!(
+        "Batterskull",
+        "If the living weapon trigger causes two Germs to be created (due to an effect such as that of Doubling Season), the Equipment becomes attached to one of them. The other will be put into your graveyard and subsequently cease to exist"
+    );
+    let mut t = TestGame::new(2);
+    // Doubling Season: "If an effect would create one or more tokens under your control,
+    // it creates twice that many of those tokens instead."
+    t.battlefield(P0, "Doubling Season");
+    let skull = t.enter(P0, "Batterskull");
+    t.resolve_all();
+    let created = t
+        .g
+        .objects
+        .iter()
+        .filter(|o| o.is_token() && o.prev.is_none() && o.chars.has_subtype("Germ"))
+        .count();
+    assert_eq!(created, 2);
+    let germ = germs(&t, P0);
+    assert_eq!(germ.len(), 1);
+    assert_eq!(t.g.obj(skull).attached_to, Some(Entity::Object(germ[0])));
+    assert_eq!(t.pt(germ[0]), (4, 4));
+}
+
+#[test]
+fn the_germ_enters_as_a_0_0_creature() {
+    cr!("702.92a");
+    ruling!(
+        "Batterskull",
+        "The Germ token enters the battlefield as a 0/0 creature and the Equipment becomes attached to it before state-based actions would cause the token to die."
+    );
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Batterskull");
+    t.settle();
+    t.resolve();
+    let germ = germs(&t, P0)[0];
+    // Its printed power and toughness are 0/0; the Equipment makes it 4/4.
+    assert_eq!(t.g.obj(germ).base.power, Some(0));
+    assert_eq!(t.g.obj(germ).base.toughness, Some(0));
+    assert!(t.on_battlefield(germ));
+}

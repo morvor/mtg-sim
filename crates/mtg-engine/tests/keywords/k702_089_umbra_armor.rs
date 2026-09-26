@@ -41,6 +41,10 @@ fn umbra_armor_destroys_the_aura_instead_of_the_enchanted_creature() {
         "Hyena Umbra",
         "Umbra armor's effect is applied no matter why the enchanted creature would be destroyed"
     );
+    ruling!(
+        "Hyena Umbra",
+        "Umbra armor's effect is mandatory. If the enchanted creature would be destroyed, you must remove all damage from it (if it has any) and destroy the Aura that has umbra armor instead."
+    );
     assert_supported("Hyena Umbra");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -52,6 +56,11 @@ fn umbra_armor_destroys_the_aura_instead_of_the_enchanted_creature() {
     assert!(!t.on_battlefield(umbra));
     assert!(t.in_graveyard(P0, "Hyena Umbra"));
     assert_eq!(t.pt(bears), (2, 2));
+    // Mandatory: nobody was asked.
+    assert!(!t.asked().iter().any(|(_, d)| matches!(
+        d,
+        Decision::YesNo { .. } | Decision::ChooseReplacement { .. }
+    )));
 }
 
 #[test]

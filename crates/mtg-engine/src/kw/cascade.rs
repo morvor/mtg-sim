@@ -103,7 +103,12 @@ fn cascade(g: &mut Game, ctx: &mut Ctx) {
     // Exile cards one at a time, face up, until a nonland card with lesser mana value.
     let mut exiled: Vec<ObjectId> = Vec::new();
     let mut hit: Option<ObjectId> = None;
+    let mut left = g.player(p).library.len();
     while let Some(top) = crate::library::top_cards(g, p, 1).first().copied() {
+        if left == 0 {
+            break;
+        }
+        left -= 1;
         let Some(card) = g.move_object(top, Zone::Exile, MoveCause::Effect, Some(p)) else {
             break;
         };

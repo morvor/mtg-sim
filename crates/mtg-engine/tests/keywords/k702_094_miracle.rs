@@ -191,3 +191,45 @@ fn a_card_not_revealed_isnt_revealed_and_doesnt_trigger() {
     assert!(!is_revealed(&t.g, card));
     assert!(stack_triggers(&t, "Miracle").is_empty());
 }
+
+#[test]
+fn the_miracle_card_is_still_drawn() {
+    cr!("702.94a");
+    ruling!(
+        "Terminus",
+        "You still draw the card, whether you use the miracle ability or not. Any ability that triggers whenever you draw a card, for example, will trigger. If you don't cast the card using its miracle ability, it will remain in your hand."
+    );
+    let mut t = TestGame::new(2);
+    // Psychosis Crawler: "Whenever you draw a card, each opponent loses 1 life."
+    t.battlefield(P0, "Psychosis Crawler");
+    t.library_top(P0, "Temporal Mastery");
+    t.answer_yes(P0, true); // reveal
+    t.answer_yes(P0, false); // don't cast
+    t.g.draw_cards(P0, 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert!(t.in_hand(P0, "Temporal Mastery"));
+    assert!(t.g.extra_turns.is_empty());
+}
+
+#[test]
+fn cost_increases_apply_to_the_miracle_cost() {
+    cr!("702.94a", "601.2f");
+    ruling!(
+        "Terminus",
+        "To determine the total cost of a spell, start with the mana cost or alternative cost (such as a miracle cost) you're paying, add any cost increases, then apply any cost reductions. The mana value of the spell remains unchanged"
+    );
+    let mut t = TestGame::new(2);
+    // Thalia: noncreature spells cost {1} more.
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.library_top(P0, "Temporal Mastery");
+    let islands = t.lands(P0, "Island", 3);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.g.draw_cards(P0, 1);
+    t.resolve();
+    let spell = *t.g.stack.last().unwrap();
+    assert_eq!(t.g.obj(spell).chars.name, "Temporal Mastery");
+    assert_eq!(t.g.obj(spell).chars.mana_value(), 7);
+    assert!(islands.iter().all(|l| t.g.obj(*l).tapped));
+}
