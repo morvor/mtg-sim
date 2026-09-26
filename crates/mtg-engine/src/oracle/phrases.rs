@@ -114,6 +114,13 @@ pub fn subtype_word(w: &str) -> Option<Subtype> {
     if subtype_kind(&cap).is_some() {
         return Some(SmolStr::new(cap));
     }
+    // Hyphenated subtypes: "Assembly-Worker".
+    if sg.contains('-') {
+        let cap = sg.split('-').map(capitalize).collect::<Vec<_>>().join("-");
+        if subtype_kind(&cap).is_some() {
+            return Some(SmolStr::new(cap));
+        }
+    }
     // Plurals the general rule gets wrong: "Horses", "Heroes", "Mice", "Pegasi".
     let irregular = match lower.as_str() {
         "mice" => Some("mouse"),

@@ -29,6 +29,7 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     }
     // Intervening "if" clause (CR 603.4).
     let mut intervening = None;
+    let subject_is_source;
     let el = eff.to_lowercase();
     if let Some(r) = el.strip_prefix("if ") {
         if let Some((c, _)) = r.split_once(", ") {
@@ -44,6 +45,14 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
             if let Some(cond) = super::statics::parse_condition(c, ctx) {
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];
+                // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the
+                // subject "it" is the condition's.
+                if c.starts_with("~ ") {
+                    if let Some(r) = eff.strip_prefix("it ") {
+                        subject_is_source = format!("~ {r}");
+                        eff = &subject_is_source;
+                    }
+                }
             }
         }
     }
