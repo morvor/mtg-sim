@@ -1663,6 +1663,10 @@ pub enum ReplacementEvent {
     GainLife(PlayerFilter),
     /// A player would lose life.
     LoseLife(PlayerFilter),
+    /// A player would lose life as the result of being dealt damage (CR 120.3a): "damage
+    /// that would reduce your life total to less than 1 ..." changes the result of the
+    /// damage, not the damage itself.
+    LifeLossFromDamage(PlayerFilter),
     /// Counters would be put on an object/player.
     PutCounters {
         on_objects: Option<Filter>,
@@ -1760,6 +1764,10 @@ pub enum ReplacementAction {
     PreventAndThen(Option<Value>, Box<Effect>),
     /// Enters transformed, with its back face up (CR 616.1d, 712.14).
     EnterTransformed,
+    /// "... reduces it to N instead": a life loss that would bring the player's life total
+    /// below N brings it to N. A player who already has less than N life loses life
+    /// normally.
+    LifeFloor(Value),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.

@@ -726,7 +726,7 @@ impl Game {
                 self.perform_draw(player);
             }
             ReplEvent::GainLife { player, amount } => self.perform_gain_life(player, amount),
-            ReplEvent::LoseLife { player, amount } => self.perform_lose_life(player, amount),
+            ReplEvent::LoseLife { player, amount, .. } => self.perform_lose_life(player, amount),
             ReplEvent::AddCounters {
                 target, kind, n, ..
             } => self.perform_add_counters(target, kind, n),
@@ -1299,6 +1299,7 @@ impl Game {
         for e in self.replace(ReplEvent::LoseLife {
             player: p,
             amount: n,
+            from_damage: false,
         }) {
             self.execute_repl_event(e);
         }
@@ -1479,7 +1480,11 @@ impl Game {
                     self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);
                 } else {
                     // CR 120.3a (life loss can be replaced as "lose life")
-                    for e in self.replace(ReplEvent::LoseLife { player: p, amount }) {
+                    for e in self.replace(ReplEvent::LoseLife {
+                        player: p,
+                        amount,
+                        from_damage: true,
+                    }) {
                         self.execute_repl_event(e);
                     }
                 }

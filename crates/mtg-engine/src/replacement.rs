@@ -105,6 +105,8 @@ pub enum ReplEvent {
     LoseLife {
         player: PlayerId,
         amount: u32,
+        /// The life loss is the result of damage dealt to the player (CR 120.3a).
+        from_damage: bool,
     },
     AddCounters {
         target: Entity,
@@ -723,9 +725,17 @@ impl Game {
             (ReplacementEvent::GainLife(pf), ReplEvent::GainLife { player, amount }) => {
                 *amount > 0 && self.player_filter_matches(pf, *player, ctx)
             }
-            (ReplacementEvent::LoseLife(pf), ReplEvent::LoseLife { player, amount }) => {
+            (ReplacementEvent::LoseLife(pf), ReplEvent::LoseLife { player, amount, .. }) => {
                 *amount > 0 && self.player_filter_matches(pf, *player, ctx)
             }
+            (
+                ReplacementEvent::LifeLossFromDamage(pf),
+                ReplEvent::LoseLife {
+                    player,
+                    amount,
+                    from_damage: true,
+                },
+            ) => *amount > 0 && self.player_filter_matches(pf, *player, ctx),
             (
                 ReplacementEvent::PutCounters {
                     on_objects,
@@ -1063,6 +1073,33 @@ impl Game {
             (ReplacementAction::Multiply(k), ev) => {
                 vec![scale_event(ev, |n| n.saturating_mul(k.max(0) as u32))]
             }
+            (
+                ReplacementAction::LifeFloor(v),
+                ReplEvent::LoseLife {
+                    player,
+                    amount,
+                    from_damage,
+                },
+            ) => {
+                // "Damage that would reduce your life total to less than N reduces it to N
+                // instead": a player with less than N life loses life normally.
+                let floor = self.eval_value(&v, &ctx) as i32;
+                let life = self.player(player).life;
+                let amount = if life >= floor && life - (amount as i32) < floor {
+                    (life - floor) as u32
+                } else {
+                    amount
+                };
+                if amount == 0 {
+                    vec![]
+                } else {
+                    vec![ReplEvent::LoseLife {
+                        player,
+                        amount,
+                        from_damage,
+                    }]
+                }
+            }
             (ReplacementAction::Add(v), ev) => {
                 let d = self.eval_value(&v, &ctx).max(0) as u32;
                 vec![scale_event(ev, |n| n + d)]
@@ -1201,9 +1238,14 @@ fn scale_event(ev: ReplEvent, f: impl Fn(u32) -> u32) -> ReplEvent {
             player,
             amount: f(amount),
         },
-        ReplEvent::LoseLife { player, amount } => ReplEvent::LoseLife {
+        ReplEvent::LoseLife {
+            player,
+            amount,
+            from_damage,
+        } => ReplEvent::LoseLife {
             player,
             amount: f(amount),
+            from_damage,
         },
         ReplEvent::AddCounters {
             target,
@@ -1262,7 +1304,7 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.amount = *amount as i32;
         }
         ReplEvent::Draw { player } | ReplEvent::LoseGame { player } => e.player = Some(*player),
-        ReplEvent::GainLife { player, amount } | ReplEvent::LoseLife { player, amount } => {
+        ReplEvent::GainLife { player, amount } | ReplEvent::LoseLife { player, amount, .. } => {
             e.player = Some(*player);
             e.amount = *amount as i32;
         }
