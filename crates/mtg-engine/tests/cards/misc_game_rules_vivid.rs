@@ -150,3 +150,23 @@ fn draw_cards_equal_to_the_greatest_power() {
     // Drew three (Hill Giant's power); the spell left the hand.
     assert_eq!(t.hand_size(P0), before - 1 + 3);
 }
+
+#[test]
+fn draw_cards_equal_to_the_countered_spells_mana_value() {
+    cr!("121.2", "701.6a");
+    compiles("Overwhelming Intellect");
+    let mut t = TestGame::new(2);
+    // P1 casts Hill Giant ({3}{R}, mana value 4); P0 counters it with Overwhelming
+    // Intellect ({4}{U}{U}).
+    t.lands(P1, "Mountain", 4);
+    let giant = t.hand(P1, "Hill Giant");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let spell = t.cast(P1, giant).go();
+    t.lands(P0, "Island", 6);
+    let intellect = t.hand(P0, "Overwhelming Intellect");
+    let before = t.hand_size(P0);
+    t.cast(P0, intellect).target(spell).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.hand_size(P0), before - 1 + 4);
+}
