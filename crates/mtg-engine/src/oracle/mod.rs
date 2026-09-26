@@ -346,6 +346,8 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.to_lowercase().starts_with("choose")
             && head.chars().next().is_some_and(|c| c.is_uppercase())
             && !head.contains('{')
+            // Not a dash inside a quoted ability ("All creatures have "Boast — ...").
+            && !head.contains('"')
             // "Companion — [condition]" is a keyword, not an ability word (CR 702.139a);
             // so are "Forecast — [activated ability]" (CR 702.57a) and "Max speed —
             // [ability]" (CR 702.178a).

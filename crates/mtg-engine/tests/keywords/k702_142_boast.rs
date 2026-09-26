@@ -260,3 +260,28 @@ fn creatures_can_boast_twice_during_your_turn() {
     assert_eq!(t.pt(pup), (5, 1));
     assert!(!activatable(&mut t, P0, pup, boast));
 }
+
+#[test]
+fn a_granted_boast_ability_follows_the_boast_rules() {
+    cr!("702.142a");
+    // Besieged Viking Village's "All creatures have "Boast — {1}: Put a +1/+1 counter on
+    // this creature."" on an enchantment.
+    let def = crate::common_k702_011_017::custom_card(
+        "Boasting Banner",
+        "Enchantment",
+        None,
+        "All creatures have \"Boast — {1}: Put a +1/+1 counter on this creature.\"",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let boast = ability_uid(&mut t, bears, "Boast");
+    add_mana(&mut t, P0, ManaType::C, 1);
+    assert!(!activatable(&mut t, P0, bears, boast));
+    attack(&mut t, &[bears]);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    activate_uid(&mut t, P0, bears, boast).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert!(!activatable(&mut t, P0, bears, boast));
+}
