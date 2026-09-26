@@ -1169,7 +1169,7 @@ impl Game {
             }
             Effect::SetClassLevel { level } => {
                 if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
-                    self.obj_mut(s).class_level = *level;
+                    crate::classes::set_level(self, s, *level);
                 }
             }
             Effect::ActivateManaAbilities { who, filter } => {

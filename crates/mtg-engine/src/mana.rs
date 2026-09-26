@@ -391,6 +391,9 @@ pub enum ManaRestriction {
     /// "... or activate abilities of Dragons": the source of the ability being activated
     /// matches the filter.
     ActivateAbilityOf(SpendFilter),
+    /// "... or to gain a Class level": to activate a class level bar's ability
+    /// (CR 716.2c).
+    ClassLevel,
 }
 
 /// A filter inside a [`ManaRestriction`], compared structurally.
@@ -434,6 +437,9 @@ pub struct SpendContext {
     /// spent on: spending restrictions (CR 106.6) are ignored. An actual payment never
     /// sets it, so restricted mana isn't planned for a purpose it can't pay.
     pub check_only: bool,
+    /// The ability being activated is a class level bar's: activating it is gaining a
+    /// Class level (CR 716.2c).
+    pub class_level: bool,
 }
 
 impl ManaRestriction {
@@ -464,6 +470,7 @@ impl ManaRestriction {
             ManaRestriction::NotNonartifactSpell => {
                 !ctx.is_spell || ctx.card_types.contains(CardType::Artifact)
             }
+            ManaRestriction::ClassLevel => ctx.is_ability && ctx.class_level,
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
             // Filters need the game: see `allows_in`.
             ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,

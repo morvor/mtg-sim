@@ -32,6 +32,7 @@ pub mod behold;
 pub mod card;
 pub mod casting;
 pub mod choices;
+pub mod classes;
 pub mod combat;
 pub mod copy;
 pub mod copy_rules;

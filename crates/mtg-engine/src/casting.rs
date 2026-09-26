@@ -1143,6 +1143,7 @@ impl Game {
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),
             check_only: false,
+            class_level: false,
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
@@ -1738,6 +1739,7 @@ impl Game {
             card_types: src_chars.card_types,
             source: Some(src),
             any_color: self.any_color_mana(p, src, true),
+            class_level: crate::classes::gains_a_level(act),
             ..Default::default()
         };
         let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
