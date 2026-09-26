@@ -240,6 +240,13 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     if o.card.is_none() {
         return false;
     }
+    // CR 701.40g, 701.58g: one represented by an instant or sorcery card is revealed and
+    // stays face down; "turned face up" abilities don't trigger.
+    let front = revealed_characteristics(g, id);
+    if front.is(CardType::Instant) || front.is(CardType::Sorcery) {
+        reveal(g, id);
+        return false;
+    }
     let ts = g.new_timestamp();
     let ob = &mut g.objects[id.0 as usize];
     ob.face_down = false;

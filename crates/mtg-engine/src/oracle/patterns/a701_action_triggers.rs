@@ -86,6 +86,16 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     } else {
         return None;
     };
+    if matches!(rest, "manifest dread" | "manifests dread") {
+        return Some((
+            TriggerCond::PlayerAction {
+                name: SmolStr::new(crate::kwa::manifest::MANIFESTED_DREAD),
+                who,
+            },
+            Sel::None,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     let name = match rest.trim_end_matches('s') {
         "clash" | "clashe" => crate::kwa::fateseal_clash::CLASHED,
         "discover" => crate::kwa::discover::DISCOVERED_EVENT,

@@ -333,6 +333,58 @@ fn no_longer_suspected(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(spec.effect())
 }
 
+/// "manifest the top [N] card(s) of your library", "manifest dread [N times]", "cloak the
+/// top card of your library", "cloak [cards]", "[player] manifests ..." (CR 701.40,
+/// 701.58, 701.62). What follows can refer to the new permanent(s) as "it" / "that
+/// creature".
+fn manifest_cloak(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, verb, rest) = if let Some((who, rest)) = player_verb(l, "manifest", b) {
+        (who, KeywordAction::Manifest, rest)
+    } else if let Some((who, rest)) = player_verb(l, "cloak", b) {
+        (who, KeywordAction::Cloak, rest)
+    } else {
+        return None;
+    };
+    let top = |r: &str| -> Option<Value> {
+        let r = r.strip_prefix("the top ")?;
+        let (n, r) = match parse_number(r) {
+            Some((n, r)) if r.trim_start().starts_with("cards") => (n, r.trim_start()),
+            _ => (Value::c(1), r),
+        };
+        let r = r.strip_prefix("cards ").or_else(|| r.strip_prefix("card "))?;
+        matches!(r, "of your library" | "of their library").then_some(n)
+    };
+    let e = if let Some(r) = rest.strip_prefix("dread").filter(|_| verb == KeywordAction::Manifest)
+    {
+        keyword_action(KeywordAction::ManifestDread, who, Sel::None, times(r)?)
+    } else if let Some(n) = top(&rest) {
+        keyword_action(verb, who, Sel::None, n)
+    } else {
+        let (what, tail) = object_ref(&rest, b)?;
+        if !end(&tail).is_empty() {
+            return None;
+        }
+        keyword_action(verb, who, what, Value::c(1))
+    };
+    b.it = Sel::Var(vars::IT);
+    Some(e)
+}
+
+/// "attach ~ to it" / "attach ~ to that creature" after an instruction that put a new
+/// permanent onto the battlefield ("manifest dread, then attach this Equipment to that
+/// creature").
+fn attach_to_new_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("attach ~ to ")?;
+    if !matches!(r, "it" | "that creature" | "that permanent") || !matches!(b.it, Sel::Var(_)) {
+        return None;
+    }
+    Some(Effect::Attach {
+        what: Sel::This,
+        to: b.it.clone(),
+    })
+}
+
 /// "forage" and "collect evidence N" as instructions (CR 701.61, 701.59).
 fn forage_evidence(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
@@ -377,6 +429,8 @@ inventory::submit! { FollowupPattern { name: "a701 discovered card's mana value"
 inventory::submit! { EffectPattern { name: "a701 harness", priority: 60, parse: harness } }
 inventory::submit! { EffectPattern { name: "a701 suspect / detain", priority: 60, parse: suspect_detain } }
 inventory::submit! { EffectPattern { name: "a701 no longer suspected", priority: 60, parse: no_longer_suspected } }
+inventory::submit! { EffectPattern { name: "a701 manifest / cloak", priority: 60, parse: manifest_cloak } }
+inventory::submit! { EffectPattern { name: "a701 attach to the new permanent", priority: 60, parse: attach_to_new_permanent } }
 inventory::submit! { EffectPattern { name: "a701 forage / collect evidence", priority: 60, parse: forage_evidence } }
 
 /// "Support N." (CR 701.41a): on a permanent, "When this enters, put a +1/+1 counter on

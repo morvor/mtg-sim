@@ -143,10 +143,24 @@ fn static_actions(g: &Game) -> Vec<(ObjectId, u64, SpecialActionDef)> {
     out
 }
 
+/// Whether the card representing a face-down permanent has morph or disguise: it can be
+/// turned face up for that cost (CR 702.37e, 702.168d), by `kw/morph_face_up.rs`.
+fn has_morph_or_disguise(g: &Game, id: ObjectId) -> bool {
+    g.obj(id).card.as_ref().is_some_and(|card| {
+        card.characteristics(FaceState::Front)
+            .abilities
+            .iter()
+            .any(|a| {
+                matches!(&a.kind, AbilityKind::Keyword(k)
+                    if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise))
+            })
+    })
+}
+
 /// The cost of turning a face-down manifested or cloaked permanent face up (CR 116.2b):
-/// the mana cost of a creature card (CR 701.40b, 701.58b). A permanent with morph or
-/// disguise is turned face up for that cost instead (CR 702.37e, 702.168d), by
-/// `kw/morph_face_up.rs`.
+/// the mana cost of a creature card (CR 701.40b, 701.58b). A manifested or cloaked card
+/// with morph or disguise may also be turned face up for that cost instead (CR 701.40c–d,
+/// 701.58c–d), by `kw/morph_face_up.rs`.
 pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield {
@@ -154,12 +168,6 @@ pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     }
     let card = o.card.as_ref()?;
     let face = card.characteristics(FaceState::Front);
-    if face.abilities.iter().any(|a| {
-        matches!(&a.kind, AbilityKind::Keyword(k)
-            if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise))
-    }) {
-        return None;
-    }
     let kind = o.choices.text.as_deref().unwrap_or("");
     if matches!(kind, "Manifest" | "Cloak") && face.card_types.contains(CardType::Creature) {
         return face.mana_cost.clone().map(Cost::mana);
@@ -271,8 +279,20 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
             if o.controller != p {
                 return bad("you don't control that permanent");
             }
-            // Morph and disguise: see `kw/morph_face_up.rs`.
+            // Morph and disguise: see `kw/morph_face_up.rs`. A manifested or cloaked
+            // card with one of them may be turned face up either way (CR 701.40c–d,
+            // 701.58c–d): its controller chooses.
             let cost = turn_face_up_cost(g, obj)?;
+            if has_morph_or_disguise(g, obj)
+                && g.ask_option(
+                    p,
+                    Some(obj),
+                    "Turn it face up by paying",
+                    vec!["Its mana cost".into(), "Its morph or disguise cost".into()],
+                ) == 1
+            {
+                return None;
+            }
             if !pay(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p)) {
                 return bad("can't pay the cost");
             }
