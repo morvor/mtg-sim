@@ -11,6 +11,8 @@
 //!   recursively; "this creature" in them is the object that has the ability, and the
 //!   ability belongs to it (CR 113.6, 613.1f). A quote that names the card itself is
 //!   left unsupported (see `statics::quote_names_card`).
+//! - One choice among alternatives, made by the controller as the effect is created:
+//!   "gains your choice of flying, vigilance, or lifelink", "gets +1/-1 or -1/+1".
 //! - "Switch target creature's power and toughness until end of turn" (layer 7d, CR
 //!   613.4d).
 //! - "Whenever ~ becomes blocked, it gets +1/+1 until end of turn for each creature
@@ -378,11 +380,13 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let mut used_x = false;
     let mut mods = Vec::new();
+    // "gets +1/-1 or -1/+1", "gains your choice of flying or lifelink": the controller
+    // chooses one alternative as the effect is created (at most one such choice).
+    let mut choice: Option<Vec<(String, Modification)>> = None;
     for (verb, body) in &preds {
         match verb {
             Verb::Get => {
-                let (p, t, tail) = parse_pt_mod(body)?;
-                let (p, t) = match &x {
+                let mut sub_x = |p: Value, t: Value| match &x {
                     Some(x) if mentions_x(&p) || mentions_x(&t) => {
                         used_x = true;
                         // CR 107.1b: a negative X uses 0 instead.
@@ -391,7 +395,22 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                     }
                     _ => (p, t),
                 };
+                let (p, t, tail) = parse_pt_mod(body)?;
+                let (p, t) = sub_x(p, t);
                 let tail = tail.trim();
+                if let Some(alt) = tail.strip_prefix("or ") {
+                    let (p2, t2, rest) = parse_pt_mod(alt)?;
+                    if !rest.trim().is_empty() || choice.is_some() {
+                        return None;
+                    }
+                    let (p2, t2) = sub_x(p2, t2);
+                    let first = body[..body.len() - tail.len()].trim().to_string();
+                    choice = Some(vec![
+                        (first, Modification::ModifyPT(p, t)),
+                        (alt.trim().to_string(), Modification::ModifyPT(p2, t2)),
+                    ]);
+                    continue;
+                }
                 let (p, t) = if tail.is_empty() {
                     (p, t)
                 } else {
@@ -415,6 +434,13 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                 mods.push(Modification::ModifyPT(p, t));
             }
             Verb::Gain => {
+                if let Some(list) = body.strip_prefix("your choice of ") {
+                    if choice.is_some() {
+                        return None;
+                    }
+                    choice = Some(keyword_choice(list)?);
+                    continue;
+                }
                 mods.extend(grants(body, &quotes, hint, b.ctx)?);
             }
             Verb::BasePt => {
@@ -445,6 +471,26 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
     if where_text.is_some() && !used_x {
         return None;
     }
+    if let Some(options) = choice {
+        return Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: options
+                .into_iter()
+                .map(|(label, m)| {
+                    let mut all = mods.clone();
+                    all.push(m);
+                    (
+                        label,
+                        Effect::Modify {
+                            what: what.clone(),
+                            mods: all,
+                            duration: dur.clone(),
+                        },
+                    )
+                })
+                .collect(),
+        });
+    }
     if mods.is_empty() {
         return None;
     }
@@ -453,6 +499,27 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
         mods,
         duration: dur,
     })
+}
+
+/// "flying, vigilance, or lifelink", "double strike or trample": one keyword each.
+fn keyword_choice(list: &str) -> Option<Vec<(String, Modification)>> {
+    let items: Vec<&str> = list
+        .split(", or ")
+        .flat_map(|p| p.split(" or "))
+        .flat_map(|p| p.split(", "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    if items.len() < 2 {
+        return None;
+    }
+    items
+        .into_iter()
+        .map(|k| {
+            let mut m = keyword_mods(k)?;
+            (m.len() == 1).then(|| (k.to_string(), m.remove(0)))
+        })
+        .collect()
 }
 
 inventory::submit! { EffectPattern { name: "pump: predicate list", priority: 95, parse: predicate_list } }

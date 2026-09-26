@@ -482,6 +482,70 @@ fn switching_applies_after_other_pt_changes() {
     assert_eq!(t.pt(fiend), (4, 2));
 }
 
+// ---------------------------------------------------------------------------
+// Choices: "your choice of", "+N/-N or -N/+N"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn choice_cards_compile() {
+    assert_supported(&[
+        "Alchemist's Gift",
+        "Endling",
+        "Multiform Wonder",
+    ]);
+}
+
+#[test]
+fn alchemists_gift_gives_the_chosen_keyword_and_the_pump() {
+    cr!("611.2a", "613.1f");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 2);
+    let spell = t.hand(P0, "Alchemist's Gift");
+    t.cast(P0, spell).target(bears).go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.resolve();
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Lifelink));
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::Deathtouch));
+    // Cast again choosing the first option.
+    let spell = t.hand(P0, "Alchemist's Gift");
+    t.cast(P0, spell).target(bears).go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 4));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Deathtouch));
+}
+
+#[test]
+fn endling_gets_the_chosen_pt_change() {
+    cr!("602.2", "613.4c");
+    let mut t = TestGame::new(2);
+    let endling = t.battlefield(P0, "Endling");
+    t.lands(P0, "Swamp", 2);
+    t.activate(P0, endling, 3, &[]).unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.resolve();
+    assert_eq!(t.pt(endling), (2, 4));
+    t.activate(P0, endling, 3, &[]).unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.resolve();
+    assert_eq!(t.pt(endling), (3, 3));
+}
+
+#[test]
+fn liliana_of_the_dark_realms_x_applies_to_either_choice() {
+    cr!("608.2h");
+    let mut t = TestGame::new(2);
+    let liliana = t.battlefield(P0, "Liliana of the Dark Realms");
+    t.lands(P0, "Swamp", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.activate(P0, liliana, 1, &[giant.into()]).unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.resolve();
+    assert!(!t.on_battlefield(giant), "-3/-3 on a 3/3");
+}
+
 #[test]
 fn might_of_alara_counts_basic_land_types() {
     cr!("608.2h");
