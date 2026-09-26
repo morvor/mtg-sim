@@ -164,6 +164,9 @@ impl Game {
         if batch.is_empty() {
             return;
         }
+        // The initiative's "whenever one or more creatures a player controls deal combat
+        // damage to the player who has the initiative" (CR 726.2).
+        crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
         // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
         // this batch still see the batch.
@@ -423,6 +426,9 @@ impl Game {
                 }
             }
         }
+        // The monarch's and the initiative's inherent triggered abilities (CR 725.2,
+        // 726.2).
+        crate::monarch_initiative::detect(self, ev);
         let mut found: Vec<PendingTrigger> = Vec::new();
         for (src, ctl, a) in sources {
             let AbilityKind::Triggered(t) = &a.kind else {

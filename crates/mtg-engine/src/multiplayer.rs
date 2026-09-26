@@ -67,23 +67,9 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
     for id in controlled {
         g.exile_object(id, None);
     }
-    if g.monarch == Some(p) {
-        // CR 725.4: the monarch leaving makes the active player (or next) the monarch.
-        let next = if g.turn.active != p {
-            g.turn.active
-        } else {
-            g.next_player(p)
-        };
-        g.monarch = Some(next);
-    }
-    if g.initiative == Some(p) {
-        let next = if g.turn.active != p {
-            g.turn.active
-        } else {
-            g.next_player(p)
-        };
-        g.initiative = Some(next);
-    }
+    // CR 725.4, 726.4: the monarch or the player with the initiative leaving passes the
+    // designation to the active player (or the next player in turn order).
+    crate::monarch_initiative::player_left(g, p);
     if let Some(c) = g.combat.as_mut() {
         c.defending_players.retain(|x| *x != p);
     }
