@@ -1863,7 +1863,12 @@ fn assign_attacker_damage(
         )),
         _ => None,
     };
-    if !ai.blocked {
+    // "You may have it assign its combat damage as though it weren't blocked" (Thorn
+    // Elemental): assigned all to what it's attacking as though unblocked (CR 510.1b), even
+    // if no creatures are blocking it anymore (rather than none, CR 510.1c).
+    let as_though_unblocked =
+        ai.blocked && target.is_some() && crate::keyword_impls::assigns_as_though_unblocked(g, id);
+    if !ai.blocked || as_though_unblocked {
         // CR 510.1b
         return match (target, spill) {
             (Some(_), Some(_)) => {
@@ -1888,11 +1893,6 @@ fn assign_attacker_damage(
             }
             _ => vec![],
         };
-    }
-    if crate::keyword_impls::assigns_as_though_unblocked(g, id) {
-        if let Some(t) = target {
-            return vec![(id, t, power)];
-        }
     }
     let lethal: Vec<u32> = blockers
         .iter()

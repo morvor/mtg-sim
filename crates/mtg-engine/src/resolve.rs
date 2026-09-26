@@ -1367,6 +1367,18 @@ impl Game {
                     crate::reveal::reveal_in(self, p, &hand, Some(ctx));
                 }
             }
+            Effect::LookAtHand { who } => {
+                // Looking gives the controller information only; the cards aren't
+                // revealed and nothing else happens.
+                let viewer = ctx.controller;
+                for p in self.eval_players(who, ctx) {
+                    let hand = self.player(p).hand.clone();
+                    self.log(|g| {
+                        let cards: Vec<String> = hand.iter().map(|c| g.describe(*c)).collect();
+                        format!("{viewer} looks at {p}'s hand: {}", cards.join(", "))
+                    });
+                }
+            }
             Effect::RevealUntil {
                 who,
                 filter,
