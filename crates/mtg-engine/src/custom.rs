@@ -82,6 +82,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::game_terms::custom_value(g, name, ctx) {
         return v;
     }
+    // A spell's own cost: "for each target beyond the first" (CR 601.2f).
+    if let Some(v) = crate::spell_costs::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.

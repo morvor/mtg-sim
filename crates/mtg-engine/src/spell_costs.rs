@@ -8,6 +8,26 @@ use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
 
+/// "for each target beyond the first" (strive): how many targets the spell `ctx.source`
+/// has beyond the first, once they're chosen (CR 601.2c); none before that.
+pub const TARGETS_BEYOND_FIRST: &str = "spell_targets_beyond_first";
+
+pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+    if name != TARGETS_BEYOND_FIRST {
+        return None;
+    }
+    let n: usize = ctx
+        .source
+        .and_then(|s| g.obj(s).stack.as_deref())
+        .map_or(0, |si| {
+            si.chosen
+                .iter()
+                .map(|cm| cm.targets.iter().map(Vec::len).sum::<usize>())
+                .sum()
+        });
+    Some(n.saturating_sub(1) as i64)
+}
+
 /// Whether a condition depends on choices made while the spell is proposed (its targets,
 /// or which optional costs are paid, CR 601.2b–c), which aren't known before then.
 fn depends_on_choices(c: &Condition) -> bool {

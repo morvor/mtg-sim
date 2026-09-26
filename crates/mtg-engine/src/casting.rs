@@ -1189,7 +1189,12 @@ impl Game {
                             continue;
                         }
                         match &cm.change {
-                            CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
+                            // A repeated part ("{1}{G} more for each target beyond the
+                            // first") is part of the total before reductions apply.
+                            CostChange::AdditionalCost(c) => add_cost(
+                                &mut cost,
+                                &crate::kw::cumulative_upkeep::expand_repeated(self, c, &ctx),
+                            ),
                             CostChange::IncreaseGeneric(v) => {
                                 let n = self.eval_value(v, &ctx).max(0) as u32;
                                 add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));

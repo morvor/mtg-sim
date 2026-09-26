@@ -86,6 +86,12 @@ fn leading_mana(s: &str) -> Option<(ManaCost, &str)> {
 fn for_each_value(s: &str) -> Option<Value> {
     let s = end(s);
     match s {
+        // Strive (an ability word, CR 207.2c): counted once targets are chosen.
+        "target beyond the first" => {
+            return Some(Value::Custom(
+                crate::spell_costs::TARGETS_BEYOND_FIRST.into(),
+            ))
+        }
         // CR 700.4: "dies" means put into a graveyard from the battlefield.
         "creature that died this turn" => return Some(Value::CreaturesDiedThisTurn),
         "card you've drawn this turn" => return Some(Value::CardsDrawnThisTurn(PlayerRef::You)),
@@ -134,7 +140,14 @@ fn cost_change(mana: ManaCost, more: bool, times: Option<Value>) -> Option<CostC
             [ManaSymbol::Colored(c)] => Some(CostChange::ReduceColored(*c, t)),
             _ => None,
         },
-        (true, Some(_)) => None,
+        // "{1}{G} more for each ...": the mana, repeated (added to the total before
+        // reductions apply).
+        (true, Some(t)) => Some(CostChange::AdditionalCost(Cost::free().with(
+            CostPart::Repeated {
+                cost: Box::new(Cost::mana(mana)),
+                times: t,
+            },
+        ))),
     }
 }
 
