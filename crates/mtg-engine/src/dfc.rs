@@ -9,12 +9,22 @@ use crate::types::*;
 /// Transforms a double-faced permanent (CR 701.27a). Returns true if it transformed.
 /// It stays the same object, so effects that applied to it keep applying (CR 712.18).
 pub fn transform(g: &mut Game, id: ObjectId) -> bool {
+    transform_by(g, id, false)
+}
+
+/// Transforms a permanent due to its own daybound or nightbound ability (CR 702.145b,
+/// 702.145e), the only way such a permanent can transform.
+pub fn transform_by_day_night(g: &mut Game, id: ObjectId) -> bool {
+    transform_by(g, id, true)
+}
+
+fn transform_by(g: &mut Game, id: ObjectId, day_night: bool) -> bool {
     // CR 730.2i: a merged permanent's double-faced components transform.
     if crate::merge::is_merged(g, id) {
         return crate::merge::transform_merged(g, id);
     }
     // CR 701.27c, 701.27d, 712.4c, 712.15a: otherwise nothing happens.
-    if !crate::transform_rules::can_transform(g, id) {
+    if !crate::transform_rules::can_transform_by(g, id, day_night) {
         return false;
     }
     let o = g.obj(id);
