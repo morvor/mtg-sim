@@ -85,3 +85,29 @@ pub const PHENOMENA: [&str; 4] = [
     "Chaotic Aether",
     "Spatial Merging",
 ];
+
+/// A card with just a name, for booster packs.
+pub fn named(name: &str) -> Arc<CardDef> {
+    Arc::new(CardDef::custom(mtg_engine::object::Characteristics {
+        name: smol_str::SmolStr::new(name),
+        rules_text: Arc::from(""),
+        ..Default::default()
+    }))
+}
+
+/// Booster packs for a draft: player `p` opens pack `r` in round `r + 1`; each pack has
+/// `size` cards named "P{p}R{r}C{k}".
+pub fn boosters(players: usize, rounds: usize, size: usize) -> Vec<Vec<Vec<Arc<CardDef>>>> {
+    (0..players)
+        .map(|p| {
+            (0..rounds)
+                .map(|r| (0..size).map(|k| named(&format!("P{p}R{r}C{k}"))).collect())
+                .collect()
+        })
+        .collect()
+}
+
+/// The names of cards.
+pub fn names_of(cards: &[Arc<CardDef>]) -> Vec<String> {
+    cards.iter().map(|c| c.name.to_string()).collect()
+}
