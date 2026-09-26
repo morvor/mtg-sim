@@ -181,12 +181,21 @@ fn a_player_passes_the_marker_to_their_left_after_their_turn() {
     });
     concede(&mut t, P1);
     assert!(holders(&t).contains(&P2), "{:?}", markers(&t));
-    // A holder who leaves during their turn: the player to their left takes the marker
-    // once that turn ends.
+    // A holder who leaves during their turn: the turn continues without them (CR 800.4j),
+    // the players next to their seat getting priority for its stack, and the player to
+    // their left takes the marker once that turn ends.
     let mut t = gm(10);
     concede(&mut t, P0);
     assert!(holders(&t).contains(&P0));
-    run(&mut t, "P1 takes a turn", |g| taking_turn(g, P1));
+    grand_melee::switch_to(&mut t.g, 0);
+    assert_eq!(grand_melee::priority_players(&t.g), vec![P1, pid(9)]);
+    run(&mut t, "P1 takes the first marker's turn", |g| {
+        grand_melee::markers(g)
+            .iter()
+            .any(|m| m.number == 1 && m.holder == P1 && m.taking_turn)
+    });
+    // The second marker is still on its way: it hasn't gone around the table to P1.
+    assert!(holders(&t).iter().all(|h| h.idx() >= 4 || *h == P1), "{:?}", markers(&t));
 }
 
 #[test]

@@ -215,6 +215,27 @@ fn a_leaving_players_objects_leave_and_what_they_control_is_exiled() {
 }
 
 #[test]
+fn a_static_control_effect_of_a_leaving_player_ends_before_their_objects_are_exiled() {
+    cr!("800.4a");
+    // P1 controls a Mind Control ("You control enchanted creature.") that P2 owns — it
+    // entered under P1's control — enchanting P3's creature.
+    let mut t = ffa(4);
+    let bears = bear(&mut t, P3);
+    let mc = t.battlefield(P2, "Mind Control");
+    t.g.objects[mc.0 as usize].base_controller = P1;
+    assert!(t.g.attach(mc, Entity::Object(bears)));
+    t.g.recompute();
+    assert_eq!(t.obj_now(mc).controller, P1);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    // P1 leaves. The effect giving P1 control of the creature ends first: it returns to P3
+    // and stays. Then the Aura, which P1 still controls, is exiled.
+    concede(&mut t, P1);
+    assert!(on_bf(&t, bears));
+    assert_eq!(t.obj_now(bears).controller, P3);
+    assert_eq!(t.zone(mc), Zone::Exile);
+}
+
+#[test]
 fn nothing_changes_to_the_control_of_a_player_who_left() {
     cr!("800.4b");
     let mut t = ffa(4);

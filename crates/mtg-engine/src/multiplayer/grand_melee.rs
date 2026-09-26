@@ -519,10 +519,29 @@ pub fn gets_priority(g: &Game, p: PlayerId) -> bool {
         return g.player(p).in_game();
     }
     let holder = g.turn.active;
-    super::range::player_in_range(g, p, holder)
+    marker_in_range(g, p, holder)
         || g.stack
             .iter()
             .any(|s| super::range::player_in_range(g, p, g.obj(*s).controller))
+}
+
+/// Whether the turn marker `holder` has is within `p`'s range of influence (CR 807.5a).
+/// The marker is at its holder's seat — also once the holder has left the game during
+/// their turn, which continues without them (CR 800.4j): then it's measured over the
+/// seats of the players still in the game and the holder's.
+fn marker_in_range(g: &Game, p: PlayerId, holder: PlayerId) -> bool {
+    if g.player(holder).in_game() {
+        return super::range::player_in_range(g, p, holder);
+    }
+    let Some(n) = super::range::range_of(g, p) else {
+        return true;
+    };
+    let seated: Vec<PlayerId> = g
+        .player_ids()
+        .into_iter()
+        .filter(|q| g.player(*q).in_game() || *q == holder)
+        .collect();
+    super::range::seat_distance(&seated, p, holder).is_some_and(|d| d <= n)
 }
 
 /// The players who get priority for the stack being played, in turn order from the
@@ -553,7 +572,7 @@ fn gets_priority_for(g: &Game, p: PlayerId, j: usize) -> bool {
         return gets_priority(g, p);
     }
     let m = &gm(g).markers[j];
-    super::range::player_in_range(g, p, m.holder)
+    marker_in_range(g, p, m.holder)
         || m.ctx.as_ref().is_some_and(|c| {
             c.stack
                 .iter()

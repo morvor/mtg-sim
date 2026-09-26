@@ -1035,7 +1035,13 @@ impl Game {
 
     fn apply_mod_to(&mut self, target: ObjectId, m: &Modification, ctx: &Ctx) {
         if let Modification::SetController(r) = m {
-            if let Some(p) = self.eval_player(r, ctx) {
+            // CR 800.4a, 800.4b: an effect that would give control to a player who has
+            // left the game doesn't (a static ability of a permanent that player still
+            // controls, as they leave, included).
+            if let Some(p) = self
+                .eval_player(r, ctx)
+                .filter(|p| self.player(*p).in_game())
+            {
                 self.objects[target.0 as usize].controller = p;
             }
             return;

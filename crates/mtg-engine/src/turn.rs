@@ -472,7 +472,13 @@ impl Game {
             return;
         };
         if !crate::multiplayer::grand_melee::gets_priority(self, p) {
-            self.turn.priority = Some(crate::multiplayer::grand_melee::next_priority(self, p));
+            if crate::multiplayer::grand_melee::priority_players(self).is_empty() {
+                // No one gets priority for this stack (CR 807.5a): as if everyone passed,
+                // the top object resolves or the step ends (CR 800.4j).
+                self.all_passed();
+            } else {
+                self.turn.priority = Some(crate::multiplayer::grand_melee::next_priority(self, p));
+            }
             return;
         }
         // The player's choice, with shortcuts and loops (CR 732, 104.4b).
@@ -520,18 +526,23 @@ impl Game {
         // CR 807.5a: in Grand Melee, only the players who get priority for this stack.
         let n = crate::multiplayer::grand_melee::priority_players(self).len() as u32;
         if self.turn.passes >= n {
-            // CR 117.4: all players passed in succession.
-            self.turn.passes = 0;
-            if self.stack.is_empty() {
-                self.turn.stage = Stage::End;
-                self.turn.priority = None;
-            } else {
-                self.resolve_top();
-                // CR 117.3b: the active player receives priority after resolution.
-                self.turn.priority = Some(self.turn.active);
-            }
+            self.all_passed();
         } else {
             self.turn.priority = Some(crate::multiplayer::grand_melee::next_priority(self, p));
+        }
+    }
+
+    /// CR 117.4: all players passed in succession: the top object on the stack resolves,
+    /// or with an empty stack the step ends.
+    fn all_passed(&mut self) {
+        self.turn.passes = 0;
+        if self.stack.is_empty() {
+            self.turn.stage = Stage::End;
+            self.turn.priority = None;
+        } else {
+            self.resolve_top();
+            // CR 117.3b: the active player receives priority after resolution.
+            self.turn.priority = Some(self.turn.active);
         }
     }
 
