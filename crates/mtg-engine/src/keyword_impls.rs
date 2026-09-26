@@ -5,7 +5,11 @@
 //! 1. **Derived abilities** — [`derived_abilities`] expands a keyword into the triggered,
 //!    activated, or static abilities it stands for (e.g. prowess → a triggered ability).
 //!    Derived abilities are added to an object's characteristics at the end of layer 6,
-//!    so keywords granted by effects work exactly like printed ones.
+//!    so keywords granted by effects work exactly like printed ones. A derived static
+//!    ability that generates a continuous effect applies in that effect's own layers as
+//!    soon as the object has the keyword (so a printed keyword's "has haste" applies in
+//!    layer 6 and a keyword's characteristic-changing effect in layers 2–5), with the
+//!    keyword's timestamp and taking part in dependencies (CR 613.1, 613.7a, 613.8).
 //! 2. **Rule hooks** — functions below that the core calls at specific points (combat
 //!    damage, casting options, spell destinations, special actions, ...).
 //!
@@ -61,9 +65,19 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
     crate::kw::derived(kw)
 }
 
-/// Appends derived abilities for every keyword on the object (called after layer 6).
+/// Appends derived abilities for every keyword on the object.
 pub fn expand_keywords(chars: &mut Characteristics) {
-    let mut extra: Vec<Ability> = Vec::new();
+    let extra = derived_by_keyword(chars);
+    chars.abilities.extend(extra.into_iter().map(|(_, a)| a));
+}
+
+/// The abilities the keywords among `chars`' abilities stand for, each paired with the
+/// uid of the keyword ability it comes from. The layer system applies derived static
+/// abilities in their own layers as soon as the keyword exists (CR 613.1, 613.7a) and
+/// adds all derived abilities to the characteristics after layer 6 (see
+/// `Game::compute_characteristics`).
+pub fn derived_by_keyword(chars: &Characteristics) -> Vec<(u64, Ability)> {
+    let mut out: Vec<(u64, Ability)> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     for a in &chars.abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
@@ -75,10 +89,36 @@ pub fn expand_keywords(chars: &mut Characteristics) {
                 format!("{base}#{nth}")
             };
             seen.push(base);
-            extra.extend(derived_abilities_keyed(k, key));
+            out.extend(
+                derived_abilities_keyed(k, key)
+                    .into_iter()
+                    .map(|d| (a.uid, d)),
+            );
         }
     }
-    chars.abilities.extend(extra);
+    out
+}
+
+/// Whether a keyword among `abilities` stands for a static ability that functions in
+/// every zone, such as devoid's characteristic-defining ability (CR 604.3, 702.114a).
+/// Cached per keyword ability.
+pub fn derives_ability_functioning_everywhere(abilities: &[Ability]) -> bool {
+    static C: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
+    abilities.iter().any(|a| {
+        let AbilityKind::Keyword(k) = &a.kind else {
+            return false;
+        };
+        let cache = C.get_or_init(Default::default);
+        if let Some(b) = cache.lock().unwrap().get(&a.uid) {
+            return *b;
+        }
+        let b = derived_abilities(k).iter().any(|d| {
+            matches!(&d.kind, AbilityKind::Static(s)
+                if s.is_cda || s.zone == FunctionZone::Anywhere)
+        });
+        cache.lock().unwrap().insert(a.uid, b);
+        b
+    })
 }
 
 /// If the ability is derived from a keyword, which one.

@@ -1072,7 +1072,8 @@ fn keyword_mods(item: &str) -> Option<Vec<Modification>> {
             AbilityKind::Keyword(k) if k.n == Some(-1) => return None,
             AbilityKind::Keyword(k) if !functions_on_battlefield(k.kind) => return None,
             AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
-            // Keywords that imply more (devoid's colorlessness) aren't granted this way.
+            // Keywords that compile to more than the keyword (a printed changeling's
+            // characteristic-defining ability) aren't granted this way.
             _ => return None,
         }
     }
