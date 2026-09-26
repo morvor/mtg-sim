@@ -23,21 +23,11 @@ fn escalate_costs_more_for_each_mode_beyond_the_first() {
     t.lands(P0, "Mountain", 3);
     let c = t.hand(P0, "Borrowed Hostility");
     // Both modes cost {3}{R}: not enough mana.
-    let r = t
-        .cast(P0, c)
-        .modes(&[0, 1])
-        .target(bears)
-        .target(bears)
-        .try_go();
+    let r = t.cast(P0, c).modes(&[0, 1]).target(bears).target(bears).try_go();
     assert!(r.is_err());
     t.clear_answers();
     t.lands(P0, "Mountain", 1);
-    let spell = t
-        .cast(P0, c)
-        .modes(&[0, 1])
-        .target(bears)
-        .target(bears)
-        .go();
+    let spell = t.cast(P0, c).modes(&[0, 1]).target(bears).target(bears).go();
     assert_eq!(untapped_lands(&t, P0), 0);
     assert_eq!(t.g.mana_value_of(spell), 1);
     t.resolve_all();
@@ -155,11 +145,7 @@ fn cost_reductions_apply_to_the_total_including_escalate_costs() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Mountain", 3);
     let c = t.hand(P0, "Borrowed Hostility");
-    t.cast(P0, c)
-        .modes(&[0, 1])
-        .target(bears)
-        .target(bears)
-        .go();
+    t.cast(P0, c).modes(&[0, 1]).target(bears).target(bears).go();
     assert_eq!(untapped_lands(&t, P0), 0);
     t.resolve_all();
     assert_eq!(t.pt(bears), (5, 2));
@@ -176,14 +162,7 @@ fn escalate_is_paid_even_without_paying_the_mana_cost() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Mountain", 3);
     let c = t.hand(P0, "Borrowed Hostility");
-    mtg_engine::casting::grant_play_permission(
-        &mut t.g,
-        P0,
-        vec![c],
-        Duration::EndOfTurn,
-        true,
-        None,
-    );
+    mtg_engine::casting::grant_play_permission(&mut t.g, P0, vec![c], Duration::EndOfTurn, true, None);
     t.cast(P0, c)
         .method(CastMethod::Free)
         .modes(&[0, 1])
