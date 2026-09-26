@@ -484,10 +484,6 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::rooms::custom_effect(g, name, ctx) {
         return;
     }
-    // Flipping a flip card (CR 710).
-    if crate::flip::custom_effect(g, name, ctx) {
-        return;
-    }
     // "Roll again", rerolling stored results (CR 706.3c, 706.8b).
     if crate::dice::custom_effect(g, name, ctx) {
         return;

@@ -62,7 +62,7 @@ fn restart_game(g: &mut Game, req: RestartRequest) {
     // (sideboards) stay there.
     let mut decks: Vec<Vec<Arc<CardDef>>> = vec![Vec::new(); n];
     let mut kept: Vec<(PlayerId, Arc<CardDef>, bool)> = Vec::new();
-    let mut sideboards: Vec<Vec<Arc<CardDef>>> = vec![Vec::new(); n];
+    let mut sideboards: Vec<Vec<(ObjectId, Arc<CardDef>)>> = vec![Vec::new(); n];
     for (i, o) in g.objects.iter().enumerate() {
         let id = ObjectId(i as u32);
         if o.next.is_some() || o.zone == Zone::Nowhere || o.kind != ObjKind::Card {
@@ -76,7 +76,7 @@ fn restart_game(g: &mut Game, req: RestartRequest) {
             continue;
         }
         if matches!(o.zone, Zone::Outside(_)) {
-            sideboards[owner.idx()].push(card);
+            sideboards[owner.idx()].push((id, card));
         } else if req.keep.contains(&id) {
             kept.push((owner, card, o.is_commander));
         } else {
@@ -108,9 +108,15 @@ fn restart_game(g: &mut Game, req: RestartRequest) {
             new.players[i].has_lost = p.has_lost;
         }
     }
+    // Each card outside the old game: (old object, new object).
+    let mut outside: Vec<(ObjectId, ObjectId)> = Vec::new();
     for (i, side) in sideboards.into_iter().enumerate() {
-        new.add_to_sideboard(PlayerId(i as u8), side);
+        let (olds, cards): (Vec<ObjectId>, Vec<Arc<CardDef>>) = side.into_iter().unzip();
+        let news = new.add_to_sideboard(PlayerId(i as u8), cards);
+        outside.extend(olds.into_iter().zip(news));
     }
+    // CR 727.6: a restarted subgame is still the subgame.
+    crate::subgame::restarted(g, &mut new, &outside);
     for (i, names) in commanders.into_iter().enumerate() {
         for name in names {
             // CR 727.5a: an exempted commander remains that deck's commander.

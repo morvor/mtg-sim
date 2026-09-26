@@ -784,9 +784,15 @@ impl Game {
     // Drawing (CR 121)
     // ------------------------------------------------------------------
 
-    /// Draws without replacement effects (used for opening hands, CR 103.4).
+    /// Draws without replacement effects (used for opening hands, CR 103.4). A player
+    /// with fewer cards in their library than their opening hand attempted to draw from an
+    /// empty library, and loses the next time state-based actions are checked (CR 704.5b,
+    /// 727.3, 729.3).
     pub fn draw_card_raw(&mut self, p: PlayerId) -> Option<ObjectId> {
-        let top = self.players[p.idx()].library.pop()?;
+        let Some(top) = self.players[p.idx()].library.pop() else {
+            self.players[p.idx()].drew_from_empty_library = true;
+            return None;
+        };
         let new = self.create_incarnation(top, Zone::Hand(p));
         self.objects[new.0 as usize].zone = Zone::Hand(p);
         self.players[p.idx()].hand.push(new);

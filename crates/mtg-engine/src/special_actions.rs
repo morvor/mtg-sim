@@ -60,9 +60,6 @@ pub struct SpecialState {
     pub stickers: crate::stickers::StickerState,
     /// The unlocked designations of Rooms (CR 709.5c).
     pub rooms: crate::rooms::RoomState,
-    /// The objects melded and merged permanents became as they left the battlefield
-    /// (CR 712.21c, 730.3c).
-    pub merge: crate::merge::MergeState,
     /// Cards exiled as Adventure spells resolved (CR 715.3d).
     pub adventures: crate::adventure::AdventureState,
     /// Spells cast as prepare spells, and copies of them (CR 722.3d).

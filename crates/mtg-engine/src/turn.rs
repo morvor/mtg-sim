@@ -1,7 +1,7 @@
 //! Turn structure (CR 500–514), priority (CR 117), and the main game loop.
 
 use crate::ability::*;
-use crate::decision::{Action, Answer, Decision};
+use crate::decision::Action;
 use crate::events::Event;
 use crate::game::*;
 use crate::object::Zone;
@@ -94,6 +94,10 @@ fn step_of(ts: TriggerStep) -> Option<Step> {
     })
 }
 
+/// Illegal actions in a row after which a player with priority is considered to pass
+/// (a safeguard against agents that keep proposing illegal actions).
+const MAX_ILLEGAL_ATTEMPTS: u32 = 3;
+
 /// Where we are within the current step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stage {
@@ -137,6 +141,9 @@ pub struct TurnState {
     /// turn (CR 508.6: "has attacked [a player]").
     #[serde(default)]
     pub attacked_players: Vec<(PlayerId, PlayerId)>,
+    /// Illegal actions the player with priority attempted in a row (CR 733.2).
+    #[serde(default)]
+    pub illegal_attempts: u32,
 }
 
 impl TurnState {
@@ -158,6 +165,7 @@ impl TurnState {
             previous_active: None,
             step_log: vec![],
             attacked_players: vec![],
+            illegal_attempts: 0,
         }
     }
 
@@ -325,6 +333,8 @@ impl Game {
             o.goaded_by.retain(|p| *p != active);
         }
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
+        // CR 723.1: player-controlling effects for this turn start (and last turn's end).
+        crate::player_control::turn_began(self);
         self.emit(Event::TurnBegan {
             active,
             number: self.turn.number,
@@ -361,6 +371,7 @@ impl Game {
         }
         self.expire_effects_at_step_begin(step);
         self.turn.step_log.push(step);
+        crate::player_control::step_began(self, step);
         self.emit(Event::StepBegan { step, active });
         // CR 614.10b: an action a skip effect scheduled is the first thing that happens.
         crate::skip::run_step_start_actions(self);
@@ -443,23 +454,9 @@ impl Game {
             self.turn.priority = Some(self.next_player(p));
             return;
         }
-        let actions = self.legal_actions(p);
-        // CR 104.4b: a loop of mandatory actions is a draw.
-        let forced = actions
-            .iter()
-            .all(|a| matches!(a, Action::Pass | Action::Concede));
-        if self.check_mandatory_loop(forced) {
+        // The player's choice, with shortcuts and loops (CR 732, 104.4b).
+        let Some(action) = self.priority_decision(p) else {
             return;
-        }
-        let answer = self.ask(
-            p,
-            Decision::Priority {
-                actions: actions.clone(),
-            },
-        );
-        let action = match answer {
-            Answer::Action(a) => a,
-            _ => Action::Pass,
         };
         self.take_action(p, action);
     }
@@ -481,8 +478,14 @@ impl Game {
                     // CR 117.3c: the player who acted receives priority again.
                     self.turn.passes = 0;
                     self.turn.priority = Some(p);
+                    self.turn.illegal_attempts = 0;
+                } else if self.turn.illegal_attempts + 1 < MAX_ILLEGAL_ATTEMPTS {
+                    // CR 733.2: the illegal action was reversed (CR 733.1); the player who
+                    // had priority retains it and may take another action or pass.
+                    self.turn.illegal_attempts += 1;
+                    self.turn.priority = Some(p);
                 } else {
-                    // Illegal action: treat as pass to avoid infinite loops with bad agents.
+                    // An agent that keeps proposing illegal actions passes.
                     self.pass_priority(p);
                 }
             }
@@ -491,6 +494,7 @@ impl Game {
 
     /// Player `p` passes priority (CR 117.3d).
     pub fn pass_priority(&mut self, p: PlayerId) {
+        self.turn.illegal_attempts = 0;
         self.turn.passes += 1;
         let n = self.players_in_game().len() as u32;
         if self.turn.passes >= n {

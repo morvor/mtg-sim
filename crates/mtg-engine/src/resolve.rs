@@ -87,17 +87,22 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
-                    if self.can_pay_cost(p, cost, ctx.source, ctx)
-                        && self.ask_yes_no(
-                            p,
-                            ctx.source,
-                            &format!("Pay {}?", describe_cost(cost)),
-                            false,
-                        )
-                        && self.pay_cost(p, cost, ctx.source, ctx)
-                    {
+                    if !self.can_pay_cost(p, cost, ctx.source, ctx) {
+                        continue;
+                    }
+                    let pays = self.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("Pay {}?", describe_cost(cost)),
+                        false,
+                    );
+                    if pays && self.pay_cost(p, cost, ctx.source, ctx) {
                         paid = true;
                         break;
+                    }
+                    if !pays && matches!(**then, Effect::Noop) {
+                        // CR 732.6: declining the [B] of "[A] unless [B]".
+                        crate::shortcuts::declined_unless(self);
                     }
                 }
                 ctx.prev_happened = paid;
@@ -1690,11 +1695,14 @@ impl Game {
                 let p = self.eval_player(chooser, ctx).unwrap_or(ctx.controller);
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 // CR 614.13a: objects entering the battlefield right now can't be chosen.
-                let cands: Vec<ObjectId> = self
+                let mut cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| !self.entering.contains(o))
                     .collect();
+                // CR 723.4: a controlled player can't be made to choose cards from
+                // outside the game.
+                crate::player_control::visible_choices(self, p, &mut cands);
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
