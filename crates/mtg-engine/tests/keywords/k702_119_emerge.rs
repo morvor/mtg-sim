@@ -166,6 +166,35 @@ fn emerge_from_a_quality_sacrifices_a_permanent_with_that_quality() {
 }
 
 #[test]
+fn abilities_can_trigger_on_sacrificing_while_casting_a_spell_with_emerge() {
+    // "When you sacrifice ~" looks back in time (CR 603.10a): the sacrificed permanent's
+    // ability triggers.
+    cr!("702.119a", "702.119c", "603.10a");
+    ruling!(
+        "Foul Emissary",
+        "Foul Emissary’s last ability triggers if it’s sacrificed for any reason while you’re casting a spell with emerge, whether or not you’re casting that spell for its emerge cost."
+    );
+    assert_supported_card("Foul Emissary");
+    // Sacrificed for the emerge cost: a 3/2 Eldrazi Horror.
+    let mut t = TestGame::new(2);
+    let emissary = t.battlefield(P0, "Foul Emissary");
+    t.lands(P0, "Island", 3);
+    let gryff = t.hand(P0, "Wretched Gryff");
+    t.answer_choose(P0, &[Entity::Object(emissary)]);
+    t.cast(P0, gryff).method(EMERGE).go();
+    t.resolve_all();
+    let horrors = tokens_of(&t, P0);
+    assert_eq!(horrors.len(), 1);
+    assert_eq!(t.pt(horrors[0]), (3, 2));
+    // Sacrificed while not casting a spell with emerge: nothing.
+    let mut t = TestGame::new(2);
+    let emissary = t.battlefield(P0, "Foul Emissary");
+    t.g.sacrifice(emissary, P0);
+    t.resolve_all();
+    assert!(tokens_of(&t, P0).is_empty());
+}
+
+#[test]
 fn the_sacrificed_creature_is_gone_before_cast_triggers() {
     cr!("702.119c");
     ruling!(

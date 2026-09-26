@@ -26,6 +26,11 @@ use crate::types::*;
 /// The name recorded in `CastInfo::paid` when a spell is cast for its emerge cost.
 pub const EMERGE: &str = "emerge";
 
+/// `Condition::Custom`: a spell with emerge that the ability's controller is casting is on
+/// top of the stack ("When you sacrifice ~ while casting a spell with emerge"), whether or
+/// not it's being cast for its emerge cost.
+pub const CASTING_A_SPELL_WITH_EMERGE: &str = "emerge:you're casting a spell with emerge";
+
 /// The variable of the spell's saved context holding the permanent chosen to be
 /// sacrificed for its emerge cost.
 const CHOSEN: Var = vars::USER + 119;
@@ -64,6 +69,21 @@ pub struct Emerge;
 impl KeywordRules for Emerge {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Emerge]
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name != CASTING_A_SPELL_WITH_EMERGE {
+            return None;
+        }
+        Some(
+            g.special.casting > 0
+                && g.stack.last().is_some_and(|s| {
+                    let o = g.obj(*s);
+                    o.is_spell()
+                        && o.controller == ctx.controller
+                        && o.chars.has_keyword(KeywordKind::Emerge)
+                }),
+        )
     }
 
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {

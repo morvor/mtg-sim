@@ -71,10 +71,17 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
                 }
             }
         }
-        // CR 603.10a: sacrificing a permanent.
-        (TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_), Event::Sacrificed { .. }) => {
-            true
-        }
+        // CR 603.10a: sacrificing a permanent (these triggers match the zone change the
+        // sacrifice is, so "when you sacrifice ~" sees the permanent as it was).
+        (
+            TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_),
+            Event::Sacrificed { .. }
+            | Event::ZoneChange {
+                from: Zone::Battlefield,
+                cause: crate::events::MoveCause::Sacrifice,
+                ..
+            },
+        ) => true,
         // CR 603.10c: becoming unattached.
         (
             TriggerCond::BecomesUnattached(_)

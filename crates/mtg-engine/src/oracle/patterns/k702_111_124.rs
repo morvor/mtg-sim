@@ -152,6 +152,26 @@ fn emerge_from(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "k702.119b emerge from [quality]", priority: 100, parse: emerge_from } }
 
+/// "you sacrifice ~ while casting a spell with emerge" (Foul Emissary): sacrificed for any
+/// reason while its controller casts a spell with emerge.
+fn sacrificed_while_casting_emerge(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(r) != "you sacrifice ~ while casting a spell with emerge" {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::YouSacrifice(Filter::Source)),
+            cond: Condition::Custom(SmolStr::new(
+                crate::kw::emerge::CASTING_A_SPELL_WITH_EMERGE,
+            )),
+        },
+        Sel::TriggerObject,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "k702.119 you sacrifice ~ while casting a spell with emerge", priority: 100, parse: sacrificed_while_casting_emerge } }
+
 /// "its surge cost was paid", "~'s surge cost was paid", "this spell's emerge cost was
 /// paid", "you cast it for its surge cost".
 fn alt_cost_paid(c: &str) -> Option<Condition> {
@@ -341,6 +361,25 @@ fn crewed_by_n(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.122e it was crewed by N creatures", priority: 100, parse: crewed_by_n } }
+
+/// "an Assassin crewed it this turn": a creature with that quality crewed the source this
+/// turn (CR 702.122c).
+fn quality_crewed_it(c: &str) -> Option<Condition> {
+    let subj = end(c).strip_suffix(" crewed it this turn")?;
+    let s = subj
+        .strip_prefix("a ")
+        .or_else(|| subj.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(s)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Condition::Exists(Filter::and(vec![
+        f,
+        Filter::Custom(SmolStr::new(crate::kw::crew::CREWED_IT_THIS_TURN)),
+    ])))
+}
+
+inventory::submit! { ConditionPattern { name: "k702.122c a [quality] crewed it this turn", priority: 100, parse: quality_crewed_it } }
 
 /// "~ crews Vehicles as though its power were N greater", "~ saddles Mounts and crews
 /// Vehicles as though its power were N greater", "~ crews Vehicles using its toughness
