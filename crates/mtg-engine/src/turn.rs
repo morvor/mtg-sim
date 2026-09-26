@@ -1,7 +1,7 @@
 //! Turn structure (CR 500–514), priority (CR 117), and the main game loop.
 
 use crate::ability::*;
-use crate::decision::{Action, Answer, Decision};
+use crate::decision::Action;
 use crate::events::Event;
 use crate::game::*;
 use crate::object::Zone;
@@ -452,23 +452,9 @@ impl Game {
             self.turn.priority = Some(self.next_player(p));
             return;
         }
-        let actions = self.legal_actions(p);
-        // CR 104.4b: a loop of mandatory actions is a draw.
-        let forced = actions
-            .iter()
-            .all(|a| matches!(a, Action::Pass | Action::Concede));
-        if self.check_mandatory_loop(forced) {
+        // The player's choice, with shortcuts and loops (CR 732, 104.4b).
+        let Some(action) = self.priority_decision(p) else {
             return;
-        }
-        let answer = self.ask(
-            p,
-            Decision::Priority {
-                actions: actions.clone(),
-            },
-        );
-        let action = match answer {
-            Answer::Action(a) => a,
-            _ => Action::Pass,
         };
         self.take_action(p, action);
     }

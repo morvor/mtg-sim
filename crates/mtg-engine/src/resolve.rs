@@ -87,17 +87,22 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let mut paid = false;
                 for p in players {
-                    if self.can_pay_cost(p, cost, ctx.source, ctx)
-                        && self.ask_yes_no(
-                            p,
-                            ctx.source,
-                            &format!("Pay {}?", describe_cost(cost)),
-                            false,
-                        )
-                        && self.pay_cost(p, cost, ctx.source, ctx)
-                    {
+                    if !self.can_pay_cost(p, cost, ctx.source, ctx) {
+                        continue;
+                    }
+                    let pays = self.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("Pay {}?", describe_cost(cost)),
+                        false,
+                    );
+                    if pays && self.pay_cost(p, cost, ctx.source, ctx) {
                         paid = true;
                         break;
+                    }
+                    if !pays && matches!(**then, Effect::Noop) {
+                        // CR 732.6: declining the [B] of "[A] unless [B]".
+                        crate::shortcuts::declined_unless(self);
                     }
                 }
                 ctx.prev_happened = paid;

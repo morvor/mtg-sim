@@ -421,7 +421,7 @@ impl Game {
 
     /// A fingerprint of the game state that doesn't depend on object ids (which change with
     /// every zone change, CR 400.7), for recognizing repeated states.
-    fn loop_fingerprint(&self) -> u64 {
+    pub(crate) fn loop_fingerprint(&self) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // Everything that could make a repetition end on its own must be part of the
         // fingerprint (a creature shrinking each time around isn't a loop).

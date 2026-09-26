@@ -523,6 +523,8 @@ pub struct Game {
     pub merges: crate::merge::MergeState,
     /// Subgames (CR 729).
     pub subgames: crate::subgame::SubgameState,
+    /// Shortcuts and loops (CR 732).
+    pub shortcuts: crate::shortcuts::ShortcutState,
 }
 
 impl Game {
@@ -620,6 +622,7 @@ impl Game {
             player_control: Default::default(),
             merges: Default::default(),
             subgames: Default::default(),
+            shortcuts: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

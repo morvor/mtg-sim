@@ -94,6 +94,7 @@ pub mod saga;
 pub mod sba;
 pub mod scry_rules;
 pub mod search_rules;
+pub mod shortcuts;
 pub mod shuffle_rules;
 pub mod skip;
 pub mod special_actions;
