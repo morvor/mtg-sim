@@ -866,11 +866,33 @@ impl Game {
         card: ObjectId,
         method: CastMethod,
     ) -> Result<ObjectId, Illegal> {
-        let opts = self.cast_options(p, card);
-        let opt = opts
+        let mut opts: Vec<CastOption> = self
+            .cast_options(p, card)
             .into_iter()
-            .find(|o| o.method == method)
-            .ok_or_else(|| Illegal(format!("no such casting method {method:?}")))?;
+            .filter(|o| o.method == method)
+            .collect();
+        if opts.is_empty() {
+            return Err(Illegal(format!("no such casting method {method:?}")));
+        }
+        // Several instances of a keyword give several ways to cast it the same way (e.g.
+        // two blitz costs): only one may be used, the player's choice (CR 702.152b).
+        let i = if opts.len() > 1 {
+            let options = opts
+                .iter()
+                .map(|o| match (&o.tag, &o.alt_cost) {
+                    (Some(t), _) => t.to_string(),
+                    (None, Some(c)) => format!("{c:?}"),
+                    (None, None) => format!("{:?}", o.method),
+                })
+                .collect();
+            match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
+                Answer::Index(i) if i < opts.len() => i,
+                _ => 0,
+            }
+        } else {
+            0
+        };
+        let opt = opts.swap_remove(i);
         let chars = self.option_characteristics(card, &opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
             return Err(Illegal("timing".into()));
