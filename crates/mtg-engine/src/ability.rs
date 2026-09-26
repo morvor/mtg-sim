@@ -1399,6 +1399,12 @@ pub enum Duration {
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
+    /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
+    /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
+    /// end it).
+    UntilPlaneswalk {
+        away_from_plane: bool,
+    },
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -1453,6 +1459,10 @@ pub enum Modification {
         word: SmolStr,
         position: u32,
     },
+    /// "It has no mana cost": an exception of a copy effect, which becomes part of the
+    /// copy's copiable values (CR 707.9b), e.g. the token an embalm or eternalize ability
+    /// creates (CR 702.128a, 702.129a).
+    NoManaCost,
     // Layer 4
     AddTypes(Vec<CardType>),
     RemoveTypes(Vec<CardType>),
@@ -1528,7 +1538,8 @@ impl Modification {
             | FullTextOf(_)
             | AddText { .. }
             | AllCreatureNames
-            | NameSticker { .. } => Layer::L3Text,
+            | NameSticker { .. }
+            | NoManaCost => Layer::L3Text,
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)

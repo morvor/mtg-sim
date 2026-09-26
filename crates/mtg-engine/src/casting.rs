@@ -116,7 +116,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
 fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
-    let faces = castable_faces(g, card);
+    let mut faces = castable_faces(g, card);
+    // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
+    // CR 702.127a).
+    let allowed: Vec<FaceState> = faces
+        .iter()
+        .copied()
+        .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
+        .collect();
+    if !allowed.is_empty() {
+        faces = allowed;
+    }
     match faces.len() {
         0 => FaceState::Front,
         1 => faces[0],
@@ -523,10 +533,12 @@ impl Game {
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
-        // Lands can't be cast (CR 305.9).
+        // Lands can't be cast (CR 305.9); nor can a card in a way a keyword's rule
+        // prohibits, whatever choices its proposal would make (e.g. aftermath,
+        // CR 702.127a).
         out.retain(|opt| {
             let chars = self.option_characteristics(card, opt);
-            !chars.is_land()
+            !chars.is_land() && !crate::kw::cast_prohibited(self, p, card, &chars)
         });
         out
     }
@@ -718,6 +730,10 @@ impl Game {
         chars: &Characteristics,
     ) -> bool {
         if self.legendary_spell_prohibited(p, chars) {
+            return true;
+        }
+        // Rules keywords define (e.g. aftermath, CR 702.127a).
+        if crate::kw::cast_prohibited(self, p, card, chars) {
             return true;
         }
         let spells_cast = self
@@ -1163,7 +1179,8 @@ impl Game {
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-            si.cast.mana_spent = paid.mana_spent.clone();
+            // With any mana another player already spent on it (assist, CR 702.132a).
+            si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
             si.cast.cost_objects = paid.objects.clone();
         }
         // "The sacrificed creature" (resolution reads the spell's saved context).

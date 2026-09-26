@@ -11,11 +11,23 @@ pub const DEFAULT_STARTING_LIFE: i32 = 20;
 /// Whether `p` is an archenemy (CR 904.2a): the only player on their team. In a
 /// Supervillain Rumble game (no teams) each player is an archenemy (CR 904.12b).
 pub fn is_archenemy(g: &Game, p: PlayerId) -> bool {
-    if g.config.variant != Variant::Archenemy {
+    if !is_archenemy_game(g) {
         return false;
     }
     let team = g.player(p).team;
     g.players.iter().filter(|q| q.team == team).count() == 1
+}
+
+/// Whether the game uses the Archenemy rules: an Archenemy game, or a Commander game with
+/// the Archenemy Commander option (CR 904.13a).
+pub fn is_archenemy_game(g: &Game) -> bool {
+    g.config.variant == Variant::Archenemy
+        || (g.config.archenemy && g.config.variant == Variant::Commander)
+}
+
+/// Whether this is a Commander game with the Archenemy Commander option (CR 904.13).
+pub fn is_archenemy_commander(g: &Game) -> bool {
+    g.config.archenemy && g.config.variant == Variant::Commander
 }
 
 /// The number of players on `p`'s team.
@@ -48,6 +60,9 @@ pub fn starting_life(g: &Game, p: PlayerId) -> i32 {
         Variant::TwoHeadedGiant => 30 + 15 * team_size(g, p).saturating_sub(2) as i32,
         // CR 119.1b, 902.4: 20 plus or minus the life modifier of the vanguard card.
         Variant::Vanguard => base + vanguard_life_modifier(g, p),
+        // CR 904.13b: with the Archenemy Commander option, the archenemy starts with 60
+        // life, and so does the opposing team's shared life total.
+        Variant::Commander if is_archenemy_commander(g) => 60,
         // CR 119.1c, 903.7; Brawl (CR 119.1d, 903.12): 25 in a two-player game, 30 in a
         // multiplayer game.
         Variant::Commander => {
@@ -76,9 +91,10 @@ pub fn set_starting_life_totals(g: &mut Game) {
     }
 }
 
-/// Whether players on a team share a life total (CR 810.4).
+/// Whether players on a team share a life total (CR 810.4; the archenemy's opponents in
+/// an Archenemy Commander game, CR 904.13b).
 pub fn shares_team_life(g: &Game) -> bool {
-    g.config.variant == Variant::TwoHeadedGiant
+    g.config.variant == Variant::TwoHeadedGiant || is_archenemy_commander(g)
 }
 
 /// The players whose "can't gain life" and "can't lose life" effects apply to `p`: with a

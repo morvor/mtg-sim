@@ -124,7 +124,8 @@ impl Game {
 
     pub fn player_rel_matches(&self, rel: PlayerRel, p: PlayerId, ctx: &Ctx) -> bool {
         match rel {
-            PlayerRel::You => p == ctx.controller,
+            // CR 901.12c: "you" of a plane in Two-Headed Giant is the whole team.
+            PlayerRel::You => p == ctx.controller || crate::planechase::is_you(self, p, ctx),
             PlayerRel::Opponent => self.are_opponents(ctx.controller, p),
             PlayerRel::Any => true,
             PlayerRel::NotYou => p != ctx.controller,
@@ -267,7 +268,9 @@ impl Game {
                     vec![]
                 }
             }
-            PlayerRef::You => vec![ctx.controller],
+            PlayerRef::You => {
+                crate::planechase::you_players(self, ctx).unwrap_or_else(|| vec![ctx.controller])
+            }
             PlayerRef::EachOpponent => apnap
                 .into_iter()
                 .filter(|p| self.are_opponents(ctx.controller, *p))
@@ -1219,7 +1222,8 @@ impl Game {
                     .chain(self.events.iter())
                     .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
             }),
-            Condition::CitysBlessing => self.player(ctx.controller).has_citys_blessing,
+            // CR 702.131: including a blessing a permanent's ascend ability gives now.
+            Condition::CitysBlessing => crate::kw::ascend::has_citys_blessing(self, ctx.controller),
             Condition::IsMonarch => self.monarch == Some(ctx.controller),
             Condition::HasInitiative => self.initiative == Some(ctx.controller),
             Condition::IsDay => self.day == Some(true),

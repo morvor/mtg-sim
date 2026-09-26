@@ -1257,10 +1257,7 @@ impl Game {
         for (i, m) in mods.into_iter().enumerate() {
             // CR 313.6, 902.5b: the hand modifier of the player's vanguard applies to their
             // maximum hand size.
-            let vanguard = self
-                .vanguard_of(PlayerId(i as u8))
-                .and_then(|v| self.obj(v).base.hand_modifier)
-                .unwrap_or(0);
+            let vanguard = self.vanguard_hand_modifier(PlayerId(i as u8));
             let mut max_hand: Option<i32> = Some(7 + vanguard);
             let mut land_plays = 1u32;
             for (x, ctx) in &m {
@@ -1426,6 +1423,7 @@ pub fn apply_mod(
             c.interchangeable_names.clear();
         }
         Modification::AllCreatureNames => c.all_creature_names = true,
+        Modification::NoManaCost => c.mana_cost = None,
         Modification::NameSticker { word, position } => {
             c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
             // A new name isn't interchangeable with the old one's partners (CR 201.3).

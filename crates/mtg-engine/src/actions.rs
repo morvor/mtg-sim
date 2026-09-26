@@ -1532,9 +1532,10 @@ impl Game {
                 *self.history.damage_dealt_to_players.entry(p).or_insert(0) += amount;
                 if combat && src.is_commander {
                     // CR 903.10a
+                    let key = crate::commander_rules::commander_damage_key(self, source);
                     *self.players[p.idx()]
                         .commander_damage
-                        .entry(src.chars.name.clone())
+                        .entry(key)
                         .or_insert(0) += amount;
                 }
             }

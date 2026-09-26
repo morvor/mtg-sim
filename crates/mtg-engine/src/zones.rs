@@ -213,7 +213,8 @@ pub fn move_forbidden(g: &Game, mv: &MoveEv) -> bool {
     {
         return true;
     }
-    crate::ante::move_forbidden(g, mv)
+    // CR 903.11: bringing cards into a Commander game from outside it.
+    crate::ante::move_forbidden(g, mv) || crate::commander_rules::outside_game_move_forbidden(g, mv)
 }
 
 /// CR 401.4, 404.3: cards put into the same library position, or into the same
