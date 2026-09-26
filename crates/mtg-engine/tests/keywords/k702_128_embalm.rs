@@ -2,7 +2,6 @@
 
 use crate::common_k702_125_139::*;
 use mtg_engine::keywords::KeywordKind;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -59,10 +58,26 @@ fn the_token_has_the_cards_enters_abilities() {
         "Vizier of Many Faces",
         "If the card copied by the token had any \"when [this permanent] enters the battlefield\" abilities, then the token also has those abilities and will trigger them when it's created."
     );
-    assert_supported_card("Anointer Priest");
+    assert_supported_card("Angel of Sanctions");
     let mut t = TestGame::new(2);
-    // Anointer Priest: "Whenever a creature token you control enters, you gain 1 life.";
-    // embalm {3}{W}. The token sees itself enter.
+    // Angel of Sanctions: "When this creature enters, you may exile target nonland
+    // permanent an opponent controls until this creature leaves the battlefield."; embalm
+    // {5}{W}.
+    t.lands(P0, "Plains", 6);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let angel = t.graveyard(P0, "Angel of Sanctions");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.activate(P0, angel, 0, &[]).unwrap();
+    t.resolve_all();
+    let tokens = tokens_of(&t, P0);
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(t.obj_now(tokens[0]).chars.name, "Angel of Sanctions");
+    assert!(!t.on_battlefield(giant));
+    assert!(t.in_exile("Hill Giant"));
+    // Anointer Priest's token sees itself enter: "Whenever a creature token you control
+    // enters, you gain 1 life."
+    let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 4);
     let priest = t.graveyard(P0, "Anointer Priest");
     t.activate(P0, priest, 0, &[]).unwrap();
@@ -133,7 +148,6 @@ fn the_embalmed_tokens_exceptions_are_copiable() {
     assert!(c.chars.has_subtype("Zombie"));
     assert_eq!(c.chars.colors, ColorSet::single(Color::White));
     assert!(c.chars.mana_cost.is_none());
-    let _ = Zone::Battlefield;
 }
 
 #[test]
@@ -177,6 +191,16 @@ fn whenever_you_activate_an_embalm_or_eternalize_ability() {
     assert_eq!(t.hand_size(P0), hand + 1);
     t.resolve_all();
     assert_eq!(tokens_of(&t, P0).len(), 1);
+    // An eternalize ability triggers it too.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Anointed");
+    t.lands(P0, "Island", 6);
+    let pc = t.graveyard(P0, "Proven Combatant");
+    let hand = t.hand_size(P0);
+    t.activate(P0, pc, 0, &[]).unwrap();
+    t.settle();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 1);
     // Other activated abilities don't trigger it.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Vizier of the Anointed");

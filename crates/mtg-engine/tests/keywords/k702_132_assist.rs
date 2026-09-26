@@ -111,6 +111,53 @@ fn assist_pays_part_of_x_and_cost_changes() {
     t.cast(P0, gu).target(Entity::Object(giant)).go();
     t.resolve_all();
     assert!(!t.on_battlefield(giant));
+    // Thalia, Guardian of Thraben makes Bring Down ({3}{W}) cost {4}{W}: the other player
+    // may pay four generic mana, more than the reminder text's three.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    let mine = t.lands(P0, "Plains", 1);
+    let theirs = t.lands(P1, "Plains", 5);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let bd = t.hand(P0, "Bring Down");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer(P1, DecisionKind::Number, Answer::Number(4));
+    t.cast(P0, bd).target(Entity::Object(wurm)).go();
+    assert_eq!(untapped(&t, &mine), 0);
+    assert_eq!(untapped(&t, &theirs), 1);
+    let max: Vec<i64> = t
+        .asked()
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseNumber { max, .. } if *p == P1 => Some(*max),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(max, vec![4]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+}
+
+#[test]
+fn mana_the_other_player_pays_is_spent_to_cast_the_spell() {
+    cr!("702.132a");
+    let mut def = custom_card(
+        "Assisted Hatchling",
+        "Creature — Hydra",
+        Some((0, 0)),
+        "Assist\nThis creature enters with a +1/+1 counter on it for each mana spent to cast it.",
+    );
+    def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{3}{G}");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    t.lands(P1, "Forest", 3);
+    let c = t.custom(P0, def, mtg_engine::object::Zone::Hand(P0));
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer(P1, DecisionKind::Number, Answer::Number(3));
+    t.cast(P0, c).go();
+    t.resolve_all();
+    // {G} from P0 and {3} from P1.
+    assert!(t.on_battlefield(c));
+    assert_eq!(t.pt(c), (4, 4));
 }
 
 #[test]

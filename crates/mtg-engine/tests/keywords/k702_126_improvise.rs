@@ -90,21 +90,21 @@ fn improvise_applies_after_the_total_cost_is_determined() {
     );
     assert_supported_card("Whir of Invention");
     let mut t = TestGame::new(2);
-    // Whir of Invention {X}{U}{U}{U} with X=3: total {3}{U}{U}{U}; two artifacts pay {2}.
+    // Whir of Invention {X}{U}{U}{U} with X=3: the total cost is {3}{U}{U}{U}, so at most
+    // three of the four artifacts can be tapped; two of them pay {2}.
     t.lands(P0, "Island", 4);
-    let arts = battlefield_n(&mut t, P0, "Ornithopter", 2);
+    let arts = battlefield_n(&mut t, P0, "Ornithopter", 4);
     t.library_top(P0, "Memnite");
     let whir = t.hand(P0, "Whir of Invention");
     t.answer(P0, DecisionKind::X, Answer::Number(3));
     t.answer_choose(
         P0,
-        &arts.iter().map(|a| Entity::Object(*a)).collect::<Vec<_>>(),
+        &arts[..2].iter().map(|a| Entity::Object(*a)).collect::<Vec<_>>(),
     );
     t.cast(P0, whir).go();
     assert_eq!(tapped(&t, &arts), 2);
     assert_eq!(untapped_lands(&t, P0), 0);
-    // Only the generic part of the total cost can be paid: at most three artifacts.
-    assert_eq!(improvise_prompts(&t), vec![2]);
+    assert_eq!(improvise_prompts(&t), vec![3]);
 }
 
 #[test]
@@ -138,13 +138,16 @@ fn multiple_instances_of_improvise_are_redundant() {
     );
     def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{3}{U}{U}");
     let mut t = TestGame::new(2);
-    t.lands(P0, "Island", 2);
+    t.lands(P0, "Island", 4);
     let arts = battlefield_n(&mut t, P0, "Ornithopter", 5);
     let s = t.custom(P0, def, Zone::Hand(P0));
+    // One artifact pays {1}; the Islands pay the rest. A second instance would offer the
+    // remaining {2} again.
+    t.answer_choose(P0, &[Entity::Object(arts[0])]);
     t.cast(P0, s).go();
-    // Offered once, for the three generic mana only.
     assert_eq!(improvise_prompts(&t), vec![3]);
-    assert_eq!(tapped(&t, &arts), 3);
+    assert_eq!(tapped(&t, &arts), 1);
+    assert_eq!(untapped_lands(&t, P0), 0);
 }
 
 #[test]

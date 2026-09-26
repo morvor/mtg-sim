@@ -24,9 +24,16 @@ fn afflict_makes_the_defending_player_lose_life_when_it_becomes_blocked() {
     assert_eq!(triggers_on_stack(&t, "Afflict 1"), 1);
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
-    // Life loss, not damage: a "damage can't be dealt" shield wouldn't stop it, and the
-    // player wasn't dealt damage.
-    assert!(t.g.history.life_lost.get(&P1).is_some_and(|n| *n == 1));
+    // Life loss, not damage: the player wasn't dealt damage.
+    assert_eq!(t.g.history.life_lost.get(&P1).copied(), Some(1));
+    assert_eq!(
+        t.g.history
+            .damage_dealt_to_players
+            .get(&P1)
+            .copied()
+            .unwrap_or(0),
+        0
+    );
 }
 
 #[test]

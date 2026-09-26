@@ -1178,7 +1178,8 @@ impl Game {
         };
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-            si.cast.mana_spent = paid.mana_spent.clone();
+            // With any mana another player already spent on it (assist, CR 702.132a).
+            si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
             si.cast.cost_objects = paid.objects.clone();
         }
         // "The sacrificed creature" (resolution reads the spell's saved context).

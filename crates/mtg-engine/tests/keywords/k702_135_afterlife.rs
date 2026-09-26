@@ -4,7 +4,6 @@ use crate::common_k702_125_139::*;
 use mtg_engine::keywords::{Keyword, KeywordKind};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
-use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -122,7 +121,8 @@ fn spirit_tokens_arent_created_in_time_to_block() {
     for id in s {
         assert!(!is_blocking_now(&t, id));
     }
-    let _ = Step::EndOfCombat;
+    // The Giant stayed blocked: no combat damage to P1.
+    assert_eq!(t.life(P1), 20);
 }
 
 fn is_blocking_now(t: &TestGame, id: ObjectId) -> bool {

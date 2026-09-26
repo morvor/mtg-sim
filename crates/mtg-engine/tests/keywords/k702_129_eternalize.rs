@@ -45,16 +45,22 @@ fn eternalize_is_a_sorcery_speed_graveyard_ability_and_its_token_isnt_embalmed()
     let tok = tokens_of(&t, P0)[0];
     assert_eq!(t.pt(tok), (4, 4));
     assert!(!mtg_engine::kw::embalm::is_embalmed(&t.g, tok));
-    // Its enters abilities work: Earthshaker Khenra's token (4/4) can target a creature
-    // with power 4 or less.
+}
+
+#[test]
+fn the_tokens_power_is_4_as_its_enters_ability_resolves() {
+    cr!("702.129a");
+    assert_supported_card("Sunscourge Champion");
+    // Sunscourge Champion: 2/3, "When this creature enters, you gain life equal to its
+    // power."; eternalize—{2}{W}{W}, discard a card.
     let mut t = TestGame::new(2);
-    t.lands(P0, "Mountain", 6);
-    let ogre = t.battlefield(P1, "Hill Giant");
-    let khenra = t.graveyard(P0, "Earthshaker Khenra");
-    t.answer_targets(P0, &[Entity::Object(ogre)]);
-    t.activate(P0, khenra, 0, &[]).unwrap();
+    t.lands(P0, "Plains", 4);
+    let champ = t.graveyard(P0, "Sunscourge Champion");
+    let fodder = t.hand(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    t.activate(P0, champ, 0, &[]).unwrap();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
     t.resolve_all();
-    let tok = tokens_of(&t, P0)[0];
-    assert_eq!(t.pt(tok), (4, 4));
-    assert!(has(&t, tok, KeywordKind::Haste));
+    assert_eq!(tokens_of(&t, P0).len(), 1);
+    assert_eq!(t.life(P0), 24);
 }

@@ -98,6 +98,13 @@ fn a_revealed_companion_is_put_into_hand_once_for_three_as_a_special_action() {
     assert!(!specials(&mut t, P0).contains(&to_hand(lurrus)));
     t.set_step(P0, Step::PostcombatMain);
     assert!(specials(&mut t, P0).contains(&to_hand(lurrus)));
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    assert!(!specials(&mut t, P0).contains(&to_hand(lurrus)));
+    t.resolve_all();
+    assert!(specials(&mut t, P0).contains(&to_hand(lurrus)));
     t.g.turn.priority = Some(P0);
     t.g.perform_action(P0, Action::Special(to_hand(lurrus)))
         .unwrap();

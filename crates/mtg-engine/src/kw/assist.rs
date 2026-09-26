@@ -6,7 +6,8 @@
 //!
 //! By default a teammate is chosen (if one could pay) and pays as much as they can; an
 //! opponent pays nothing unless their agent says otherwise. For the check whether a spell
-//! could be cast, only teammates' mana is counted.
+//! could be cast, only teammates' mana is counted. The mana the other player pays is
+//! recorded as mana spent to cast the spell, with the caster's.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -112,9 +113,14 @@ impl KeywordRules for Assist {
             &spend,
             &ctx,
         ) {
-            Ok(_) => {
+            Ok(paid) => {
                 if let Some(m) = cost.mana.as_mut() {
                     m.reduce_generic(n);
+                }
+                // That mana was spent to cast the spell too (e.g. "the amount of mana spent
+                // to cast this spell").
+                if let Some(si) = g.objects[spell.0 as usize].stack.as_mut() {
+                    si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
                 }
                 g.log(|g| format!("{helper} assists with {n} mana for {}", g.describe(spell)));
             }

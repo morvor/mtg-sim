@@ -2,22 +2,28 @@
 
 use crate::common_k702_125_139::*;
 use mtg_engine::ability::*;
+use mtg_engine::decision::Decision;
 use mtg_engine::keywords::{Keyword, KeywordKind};
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// Legal targets of the mentor trigger of `src` right now: attacking creatures with power
-/// less than `src`'s.
-fn mentor_candidates(t: &TestGame, src: ObjectId) -> Vec<ObjectId> {
-    let p = t.g.obj(src).controller;
-    let ctx = mtg_engine::eval::Ctx::new(Some(src), p);
-    let f = Filter::and(vec![
-        Filter::creature(),
-        Filter::Attacking,
-        Filter::Power(Cmp::Lt, Box::new(Value::PowerOf(Box::new(Sel::This)))),
-    ]);
-    t.g.objects_matching(&f, &ctx)
+/// The candidates offered for the targets of `src`'s mentor triggers.
+fn mentor_candidates(t: &TestGame, src: ObjectId) -> Vec<Vec<Entity>> {
+    t.asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets {
+                source, candidates, ..
+            } if t.g.obj(source).stack.as_deref().is_some_and(|si| {
+                matches!(&si.kind, mtg_engine::object::StackKind::Triggered { .. })
+            }) && t.g.obj(source).controller == t.g.obj(src).controller =>
+            {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -48,7 +54,9 @@ fn mentor_can_only_target_attacking_creatures_with_lesser_power() {
     let stalwart = t.battlefield(P0, "Sunhome Stalwart");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let elves = t.battlefield(P0, "Llanowar Elves");
-    let home = t.battlefield(P0, "Savannah Lions");
+    let home = t.battlefield(P0, "Llanowar Elves");
+    // An answer naming the Bears (equal power) isn't a legal target.
+    t.answer_targets(P0, &[Entity::Object(bears)]);
     attack_with(
         &mut t,
         &[
@@ -57,10 +65,19 @@ fn mentor_can_only_target_attacking_creatures_with_lesser_power() {
             (elves, Entity::Player(P1)),
         ],
     );
-    let c = mentor_candidates(&t, stalwart);
-    // Bears has equal power; Savannah Lions (1 power) isn't attacking; itself isn't less.
-    assert_eq!(c, vec![elves]);
-    let _ = home;
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Mentor"), 1);
+    // Offered only the attacking Elves: not the Bears (equal power), the Elves at home
+    // (not attacking), or the Stalwart itself.
+    assert_eq!(
+        mentor_candidates(&t, stalwart),
+        vec![vec![Entity::Object(elves)]]
+    );
+    t.resolve_all();
+    assert_eq!(plus1(&t, elves), 1);
+    assert_eq!(plus1(&t, bears), 0);
+    assert_eq!(plus1(&t, home), 0);
+    assert_eq!(plus1(&t, stalwart), 0);
 }
 
 #[test]
