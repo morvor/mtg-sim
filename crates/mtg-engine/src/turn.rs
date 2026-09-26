@@ -94,6 +94,10 @@ fn step_of(ts: TriggerStep) -> Option<Step> {
     })
 }
 
+/// Illegal actions in a row after which a player with priority is considered to pass
+/// (a safeguard against agents that keep proposing illegal actions).
+const MAX_ILLEGAL_ATTEMPTS: u32 = 3;
+
 /// Where we are within the current step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stage {
@@ -137,6 +141,9 @@ pub struct TurnState {
     /// turn (CR 508.6: "has attacked [a player]").
     #[serde(default)]
     pub attacked_players: Vec<(PlayerId, PlayerId)>,
+    /// Illegal actions the player with priority attempted in a row (CR 733.2).
+    #[serde(default)]
+    pub illegal_attempts: u32,
 }
 
 impl TurnState {
@@ -158,6 +165,7 @@ impl TurnState {
             previous_active: None,
             step_log: vec![],
             attacked_players: vec![],
+            illegal_attempts: 0,
         }
     }
 
@@ -482,8 +490,14 @@ impl Game {
                     // CR 117.3c: the player who acted receives priority again.
                     self.turn.passes = 0;
                     self.turn.priority = Some(p);
+                    self.turn.illegal_attempts = 0;
+                } else if self.turn.illegal_attempts + 1 < MAX_ILLEGAL_ATTEMPTS {
+                    // CR 733.2: the illegal action was reversed (CR 733.1); the player who
+                    // had priority retains it and may take another action or pass.
+                    self.turn.illegal_attempts += 1;
+                    self.turn.priority = Some(p);
                 } else {
-                    // Illegal action: treat as pass to avoid infinite loops with bad agents.
+                    // An agent that keeps proposing illegal actions passes.
                     self.pass_priority(p);
                 }
             }
@@ -492,6 +506,7 @@ impl Game {
 
     /// Player `p` passes priority (CR 117.3d).
     pub fn pass_priority(&mut self, p: PlayerId) {
+        self.turn.illegal_attempts = 0;
         self.turn.passes += 1;
         let n = self.players_in_game().len() as u32;
         if self.turn.passes >= n {
