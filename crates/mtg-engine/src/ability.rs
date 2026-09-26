@@ -2994,6 +2994,11 @@ pub enum Effect {
     RevealHand {
         who: PlayerRef,
     },
+    /// "Look at [player]'s hand": the controller sees the cards in those players' hands;
+    /// unlike revealing (CR 701.20a), no other player sees them.
+    LookAtHand {
+        who: PlayerRef,
+    },
     /// Reveal cards from the top until a card matching filter is revealed.
     RevealUntil {
         who: PlayerRef,

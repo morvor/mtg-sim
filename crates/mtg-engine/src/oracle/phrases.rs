@@ -391,7 +391,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             let cw2 = cw.trim_end_matches(',');
             if matches!(cw2, "card" | "cards")
                 && matches!(heads.last(), Some(Filter::And(v)) if v.len() == 2
-                    && matches!(v[0], Filter::Subtype(_))
+                    // "Dragon creature card", "artifact creature card".
+                    && matches!(v[0], Filter::Subtype(_) | Filter::Type(_))
                     && matches!(v[1], Filter::Type(_)))
             {
                 if cw2 == "cards" {
