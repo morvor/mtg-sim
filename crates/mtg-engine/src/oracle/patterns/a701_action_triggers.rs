@@ -140,6 +140,9 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         "learn" => crate::kwa::learn::LEARNED,
         "collect evidence" => crate::kwa::evidence_forage::COLLECTED_EVIDENCE,
         "forage" => crate::kwa::evidence_forage::FORAGED,
+        "airbend" => crate::kwa::bending::AIRBENT_EVENT,
+        "earthbend" => crate::kwa::bending::EARTHBENT_EVENT,
+        "waterbend" => crate::kwa::bending::WATERBENT_EVENT,
         _ => return None,
     };
     Some((

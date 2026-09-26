@@ -76,8 +76,8 @@ impl Spec {
 /// State kept by keyword actions, in [`Game::kwa`].
 #[derive(Clone, Debug, Default)]
 pub struct KwaState {
-    /// Cards exiled by airbending, with their owners: while each remains exiled, its
-    /// owner may cast it by paying {2} rather than its mana cost (CR 701.65a).
+    /// Cards exiled by airbending: while each remains exiled (the same object), its owner
+    /// may cast it by paying {2} rather than its mana cost (CR 701.65a).
     pub airbent: Vec<ObjectId>,
     /// Earthbent lands (CR 701.66a): (land, player who earthbent it).
     pub earthbent: Vec<(ObjectId, PlayerId)>,
