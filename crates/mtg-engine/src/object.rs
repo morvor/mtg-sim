@@ -269,6 +269,10 @@ pub struct CastInfo {
     /// exile: the cards "exiled with it".
     #[serde(default)]
     pub delved: Vec<ObjectId>,
+    /// It was cast during its caster's main phase ("if you cast this spell during your
+    /// main phase", addendum).
+    #[serde(default)]
+    pub main_phase: bool,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that

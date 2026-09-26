@@ -948,6 +948,7 @@ impl Game {
             was_cast: true,
             turn: self.turn.number,
             instant_timing: !sorcery_time,
+            main_phase: self.turn.step.is_main() && self.turn.active == p,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
