@@ -66,6 +66,18 @@ pub(crate) fn cost_condition(c: &str, ctx: &CompileContext) -> Option<Condition>
     if let Some(cond) = targets_condition(c) {
         return Some(cond);
     }
+    // Spells cast before this one (it isn't cast until its costs are paid, CR 601.2i).
+    let custom = |n: &str| Some(Condition::Custom(n.into()));
+    match c {
+        "you've cast another spell this turn" => {
+            return custom(crate::spell_costs::CAST_ANOTHER_SPELL)
+        }
+        "you've cast another instant or sorcery spell this turn"
+        | "you've cast an instant or sorcery spell this turn" => {
+            return custom(crate::spell_costs::CAST_ANOTHER_INSTANT_OR_SORCERY)
+        }
+        _ => {}
+    }
     parse_condition(c, ctx)
 }
 

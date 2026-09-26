@@ -28,6 +28,29 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
     Some(n.saturating_sub(1) as i64)
 }
 
+/// "if you've cast another spell this turn" in a spell's own cost change: a spell other
+/// than this one (`ctx.source`), which isn't cast until its costs are paid (CR 601.2i).
+pub const CAST_ANOTHER_SPELL: &str = "spell_costs:cast_another_spell_this_turn";
+/// "... another instant or sorcery spell ..." / "... an instant or sorcery spell ...".
+pub const CAST_ANOTHER_INSTANT_OR_SORCERY: &str =
+    "spell_costs:cast_another_instant_or_sorcery_this_turn";
+
+pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    let instant_or_sorcery = match name {
+        CAST_ANOTHER_SPELL => false,
+        CAST_ANOTHER_INSTANT_OR_SORCERY => true,
+        _ => return None,
+    };
+    Some(g.history.spells_cast.iter().any(|(p, s)| {
+        *p == ctx.controller
+            && Some(*s) != ctx.source
+            && (!instant_or_sorcery || {
+                let t = &g.obj(*s).chars.card_types;
+                t.contains(CardType::Instant) || t.contains(CardType::Sorcery)
+            })
+    }))
+}
+
 /// Whether a condition depends on choices made while the spell is proposed (its targets,
 /// or which optional costs are paid, CR 601.2b–c), which aren't known before then.
 fn depends_on_choices(c: &Condition) -> bool {

@@ -271,3 +271,33 @@ fn costs_x_less_where_x_is_devotion() {
     t.resolve();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn costs_less_if_you_cast_another_spell_this_turn() {
+    cr!("601.2f", "601.2i");
+    compiles("Focus the Mind");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    let focus = t.hand(P0, "Focus the Mind");
+    t.lands(P0, "Island", 3);
+    // The spell itself doesn't count: {4}{U}.
+    assert!(!castable(&mut t, P0, focus));
+    // An opponent's spell doesn't count either.
+    let theirs = t.hand(P1, "Opt");
+    t.lands(P1, "Island", 1);
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, theirs).go();
+    t.resolve();
+    assert!(!castable(&mut t, P0, focus));
+    let opt = t.hand(P0, "Opt");
+    t.lands(P0, "Island", 1);
+    t.cast(P0, opt).go();
+    t.resolve();
+    // After casting Opt: {2}{U}, paid with the three other Islands.
+    assert!(castable(&mut t, P0, focus));
+    t.cast(P0, focus).go();
+    assert_eq!(t.stack_len(), 1);
+}
