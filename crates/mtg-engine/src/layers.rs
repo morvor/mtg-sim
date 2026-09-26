@@ -49,26 +49,42 @@ struct LayerState {
     /// abilities derived from them, which share their timestamp.
     grants: HashMap<(ObjectId, u64), Timestamp>,
     /// The abilities keywords stand for (see [`crate::keyword_impls::derived_by_keyword`]),
-    /// memoized by the uids of an object's keyword abilities.
-    derived: HashMap<Vec<u64>, Arc<Vec<(u64, Ability)>>>,
+    /// memoized by the uids of an object's keyword abilities, and the latest ones of each
+    /// object.
+    derived: HashMap<Vec<u64>, Derived>,
+    derived_of: HashMap<ObjectId, (Vec<u64>, Derived)>,
 }
 
-/// The abilities the keywords of an object with characteristics `c` stand for, each with
-/// the uid of its keyword ability (CR 702.1).
-fn keyword_derived(c: &Characteristics, st: &mut LayerState) -> Arc<Vec<(u64, Ability)>> {
-    let kws: Vec<u64> = c
-        .abilities
+/// Abilities keywords stand for, each with the uid of its keyword ability.
+type Derived = Arc<Vec<(u64, Ability)>>;
+
+fn keyword_uids(c: &Characteristics) -> impl Iterator<Item = u64> + Clone + '_ {
+    c.abilities
         .iter()
         .filter(|a| matches!(a.kind, AbilityKind::Keyword(_)))
         .map(|a| a.uid)
-        .collect();
-    if kws.is_empty() {
-        return Arc::default();
+}
+
+/// The abilities the keywords of object `id` stand for, as its interim characteristics
+/// stand (CR 702.1), each with the uid of its keyword ability. `None` if it has no
+/// keywords.
+fn keyword_derived(g: &Game, id: ObjectId, st: &mut LayerState) -> Option<Derived> {
+    let c = &g.obj(id).chars;
+    let mut kws = keyword_uids(c).peekable();
+    kws.peek()?;
+    if let Some((sig, d)) = st.derived_of.get(&id) {
+        if kws.clone().eq(sig.iter().copied()) {
+            return Some(d.clone());
+        }
     }
-    st.derived
-        .entry(kws)
+    let sig: Vec<u64> = kws.collect();
+    let d = st
+        .derived
+        .entry(sig.clone())
         .or_insert_with(|| Arc::new(crate::keyword_impls::derived_by_keyword(c)))
-        .clone()
+        .clone();
+    st.derived_of.insert(id, (sig, d.clone()));
+    Some(d)
 }
 
 /// The derived static abilities of the object's keywords (CR 702.1) that generate
@@ -78,7 +94,9 @@ fn keyword_derived(c: &Characteristics, st: &mut LayerState) -> Arc<Vec<(u64, Ab
 /// keyword (CR 613.7a): the object's, or that of the effect or keyword counter that gave
 /// the object the keyword.
 fn derived_statics(g: &Game, id: ObjectId, st: &mut LayerState) -> Vec<Ability> {
-    let derived = keyword_derived(&g.obj(id).chars, st);
+    let Some(derived) = keyword_derived(g, id, st) else {
+        return vec![];
+    };
     let mut out = Vec::new();
     for (kw, a) in derived.iter() {
         let AbilityKind::Static(s) = &a.kind else {
@@ -402,7 +420,9 @@ impl Game {
                 // abilities' effects in layers 2–6 have already been applied (see
                 // `derived_statics`); from layer 7 on they're among the object's abilities.
                 for id in &live {
-                    let derived = keyword_derived(&self.obj(*id).chars, &mut st);
+                    let Some(derived) = keyword_derived(self, *id, &mut st) else {
+                        continue;
+                    };
                     for (kw, a) in derived.iter() {
                         share_keyword_timestamp(&mut st, *id, *kw, a.uid);
                     }
@@ -845,9 +865,8 @@ impl Game {
                 // (see `derived_statics`).
                 let has_ability = o.chars.abilities.iter().any(|x| x.uid == *uid)
                     || (layer < Layer::L7aCda
-                        && keyword_derived(&o.chars, st)
-                            .iter()
-                            .any(|(_, x)| x.uid == *uid));
+                        && keyword_derived(self, *src, st)
+                            .is_some_and(|d| d.iter().any(|(_, x)| x.uid == *uid)));
                 let started = st.started.get(&e.key);
                 let exists = started.is_some()
                     || (has_ability
