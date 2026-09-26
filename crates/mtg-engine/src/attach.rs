@@ -100,11 +100,7 @@ pub fn can_attach_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> 
 
 /// Whether `obj` attached to `to` is legal (used by SBAs 704.5m/n).
 pub fn legal_attachment(g: &Game, obj: ObjectId, to: Entity) -> bool {
-    let o = g.obj(obj);
     legal_attachment_as(g, obj, to, false)
-        // An Equipment with reconfigure stops being a creature as it becomes attached
-        // (CR 702.151b); one that's still a creature can't stay attached (CR 301.5c).
-        && !(o.chars.has_subtype("Equipment") && o.is_creature())
 }
 
 fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> bool {

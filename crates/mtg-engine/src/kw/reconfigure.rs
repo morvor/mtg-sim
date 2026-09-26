@@ -10,7 +10,8 @@
 //! characteristic-changing effect in layer 4 generated along with the keyword, so it
 //! keeps applying if the Equipment loses its abilities in layer 6 (CR 613.6, Bronzeplate
 //! Boar rulings). An Equipment with reconfigure that's still a creature while attached
-//! (another effect makes it one) becomes unattached (see `attach::legal_attachment`).
+//! (another effect makes it one) becomes unattached, as any attached creature does
+//! (CR 704.5p, see `sba.rs`).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;

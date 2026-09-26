@@ -197,7 +197,7 @@ fn it_isnt_a_creature_while_attached_even_if_it_loses_its_abilities() {
 
 #[test]
 fn if_it_is_still_a_creature_after_it_becomes_attached_it_becomes_unattached() {
-    cr!("702.151b", "301.5c");
+    cr!("702.151b", "704.5p");
     ruling!(
         "Bronzeplate Boar",
         "If a permanent with reconfigure is somehow still a creature after it becomes attached (perhaps due to an effect like that of March of the Machines), it immediately becomes unattached from the equipped creature."

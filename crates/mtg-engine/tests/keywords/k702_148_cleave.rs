@@ -277,6 +277,51 @@ fn alchemists_gambit_loses_the_game_only_if_not_cleaved() {
     }
 }
 
+/// Gives P0 "Prevent all damage that would be dealt to you this turn", then has the Hill
+/// Giant deal 3 damage to P0; returns the life P0 lost.
+fn life_lost_behind_a_shield(t: &mut TestGame, giant: ObjectId) -> i32 {
+    crate::common_k702_052_066::run_effect(
+        t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::PreventDamage {
+            to: mtg_engine::ability::Sel::Target(0),
+            amount: None,
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+            combat_only: false,
+        },
+        &[Entity::Player(P0)],
+    );
+    let before = t.life(P0);
+    t.g.deal_damage(giant, Entity::Player(P0), 3, false);
+    before - t.life(P0)
+}
+
+#[test]
+fn alchemists_gambit_makes_damage_unpreventable_during_the_extra_turn_only() {
+    cr!("615.12", "500.7");
+    // Alchemist's Gambit: "Take an extra turn after this one. During that turn, damage
+    // can't be prevented. [...]"
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let card = t.hand(P0, "Alchemist's Gambit");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    add_mana(&mut t, P0, ManaType::R, 1);
+    add_mana(&mut t, P0, ManaType::C, 4);
+    t.cast(P0, card).method(CLEAVE).go();
+    t.resolve_all();
+    // This turn, damage can still be prevented.
+    assert_eq!(life_lost_behind_a_shield(&mut t, giant), 0);
+    // During the extra turn, it can't.
+    let turn = t.g.turn.number;
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.g.turn.number, turn + 1);
+    assert_eq!(life_lost_behind_a_shield(&mut t, giant), 3);
+    // Afterward, it can again.
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(life_lost_behind_a_shield(&mut t, giant), 0);
+}
+
 #[test]
 fn a_spell_cast_without_paying_its_mana_cost_isnt_cleaved() {
     cr!("702.148a");

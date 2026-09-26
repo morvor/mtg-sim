@@ -222,9 +222,17 @@ fn hand_size_for_rest_of_game(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "your maximum hand size is reduced by N for the rest of the game", priority: 100, parse: hand_size_for_rest_of_game } }
 
-/// "X is the number of creatures you control." after a sentence using X (Lantern Flare):
-/// the value of X for the rest of the resolution.
+/// "X is the number of creatures you control." after a sentence using X in an instant or
+/// sorcery (Lantern Flare): the value of X for the rest of the resolution. (In an
+/// activated ability, such a sentence defines the X of its cost instead, "{X}, {T}: ...
+/// X is the mana value of that card.", which this doesn't implement.)
 fn x_is(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let types = b.ctx.type_line.card_types;
+    if !(types.contains(crate::types::CardType::Instant)
+        || types.contains(crate::types::CardType::Sorcery))
+    {
+        return false;
+    }
     let Some(r) = end(s).strip_prefix("x is ") else {
         return false;
     };
@@ -275,12 +283,8 @@ fn graveyard_cards_have_encore(l: &str, text: &str, _ctx: &CompileContext) -> Op
     let f = parse(quality).or_else(|| {
         let q = quality.strip_suffix(" creature card")?;
         let quality = match q {
-            "outlaw" => Filter::Or(
-                ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
-                    .into_iter()
-                    .map(|s| Filter::Subtype(s.into()))
-                    .collect(),
-            ),
+            // CR 700.12.
+            "outlaw" => crate::game_terms::outlaw_filter(),
             q => parse(q)?,
         };
         Some(Filter::And(vec![
@@ -520,7 +524,9 @@ fn put_exiled_cards_onto_battlefield(l: &str, b: &mut Builder) -> Option<Effect>
 inventory::submit! { EffectPattern { name: "put the exiled cards onto the battlefield under their owners' control", priority: 100, parse: put_exiled_cards_onto_battlefield } }
 
 /// "if it didn't have decayed" / "if it had flying" in a "dies" trigger (Wilhelt, the
-/// Rotcleaver): the creature as it last existed on the battlefield (CR 603.10a).
+/// Rotcleaver): the creature as it last existed on the battlefield (CR 603.10a). Only for
+/// a trigger's intervening "if" clause ([`trigger_if_it_had_keyword`]), where "it" is
+/// the trigger object.
 fn it_had_keyword(l: &str) -> Option<Condition> {
     let l = end(l);
     let (negated, kw) = if let Some(k) = l.strip_prefix("it didn't have ") {
@@ -536,8 +542,6 @@ fn it_had_keyword(l: &str) -> Option<Condition> {
         has
     })
 }
-
-inventory::submit! { ConditionPattern { name: "it had / didn't have [keyword]", priority: 100, parse: it_had_keyword } }
 
 /// "Whenever another Zombie you control dies, if it didn't have decayed, [effect]": an
 /// intervening "if" clause (CR 603.4) about the trigger object as it last existed.

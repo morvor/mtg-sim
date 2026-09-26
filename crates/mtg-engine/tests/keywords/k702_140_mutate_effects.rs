@@ -16,7 +16,7 @@ const MUTATE: CastMethod = CastMethod::Keyword(KeywordKind::Mutate);
 
 #[test]
 fn effects_that_modified_the_mutating_spell_modify_the_mutated_permanent() {
-    cr!("702.140f", "400.7a");
+    cr!("702.140f");
     assert_supported("Ersatz Gnomes");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -156,11 +156,22 @@ fn the_number_of_times_a_creature_has_mutated() {
     // of times this creature has mutated." Mutate {2}{R}.
     let bears = t.battlefield(P0, "Grizzly Bears");
     mutate_onto(&mut t, "Porcuparrot", bears, true, &[(ManaType::R, 1), (ManaType::C, 2)]);
-    mutate_onto(&mut t, "Gemrazer", bears, false, &[(ManaType::G, 2), (ManaType::C, 1)]);
-    // It has mutated twice: the ability from the top card deals 2 damage.
+    // Gemrazer goes on top: the permanent has Gemrazer's characteristics, and still has
+    // Porcuparrot's ability from the card under it.
+    mutate_onto(&mut t, "Gemrazer", bears, true, &[(ManaType::G, 2), (ManaType::C, 1)]);
+    assert_eq!(t.obj(bears).chars.name, "Gemrazer");
+    assert_eq!(t.pt(bears), (4, 4));
+    // It has mutated twice: Porcuparrot's ability deals 2 damage.
     let uid = ability_uid(&mut t, bears, "{T}");
     t.answer_targets(P0, &[Entity::Player(P1)]);
     activate_uid(&mut t, P0, bears, uid).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // A creature that never mutated: X is 0.
+    let parrot = t.battlefield(P0, "Porcuparrot");
+    let uid = ability_uid(&mut t, parrot, "{T}");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_uid(&mut t, P0, parrot, uid).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
 }
