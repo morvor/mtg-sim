@@ -50,6 +50,10 @@ pub fn can_transform(g: &Game, id: ObjectId) -> bool {
     if o.zone != Zone::Battlefield || !g.is_live(id) || o.face_down {
         return false;
     }
+    // "Can't transform" (and so can't convert, CR 701.28f).
+    if crate::kwa::convert::cant_transform(g, id) {
+        return false;
+    }
     let Some(card) = o.card.as_ref() else {
         return false;
     };
