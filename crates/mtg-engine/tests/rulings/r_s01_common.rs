@@ -155,3 +155,48 @@ pub fn triggers_on_stack(t: &TestGame, text: &str) -> usize {
         })
         .count()
 }
+
+/// Game state seen by one of a player's decisions (see [`watch`]).
+pub type Seen<T> = Arc<std::sync::Mutex<Vec<T>>>;
+
+/// Wraps `p`'s agent: whenever `p` is asked a decision for which `when` holds, `look`
+/// records something about the game at that moment; the answer is still the scripted one.
+pub fn watch<T: Send + 'static>(
+    t: &mut TestGame,
+    p: PlayerId,
+    when: fn(&mtg_engine::decision::Decision) -> bool,
+    look: fn(&mtg_engine::game::Game) -> T,
+) -> Seen<T> {
+    struct Watch<T> {
+        inner: Box<dyn mtg_engine::decision::Agent>,
+        when: fn(&mtg_engine::decision::Decision) -> bool,
+        look: fn(&mtg_engine::game::Game) -> T,
+        seen: Seen<T>,
+    }
+    impl<T: Send> mtg_engine::decision::Agent for Watch<T> {
+        fn decide(
+            &mut self,
+            g: &mtg_engine::game::Game,
+            p: PlayerId,
+            d: &mtg_engine::decision::Decision,
+        ) -> mtg_engine::decision::Answer {
+            if (self.when)(d) {
+                self.seen.lock().unwrap().push((self.look)(g));
+            }
+            self.inner.decide(g, p, d)
+        }
+    }
+    let seen: Seen<T> = Default::default();
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Watch {
+        inner,
+        when,
+        look,
+        seen: seen.clone(),
+    });
+    seen
+}
