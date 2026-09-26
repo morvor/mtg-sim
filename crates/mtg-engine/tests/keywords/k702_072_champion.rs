@@ -106,6 +106,33 @@ fn the_card_returns_under_its_owners_control() {
 }
 
 #[test]
+fn a_championed_card_that_left_exile_isnt_returned() {
+    cr!("702.72a", "400.7");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let hero = t.enter(P0, "Changeling Hero");
+    t.resolve_all();
+    let exiled = t.g.current(bears);
+    assert_eq!(t.g.obj(exiled).zone, Zone::Exile);
+    // Another effect puts the exiled card into its owner's graveyard.
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P1,
+        mtg_engine::ability::Effect::Move {
+            what: mtg_engine::ability::Sel::Target(0),
+            to: mtg_engine::ability::Destination::zone(mtg_engine::ability::ZoneKind::Graveyard),
+        },
+        &[Entity::Object(exiled)],
+    );
+    destroy(&mut t, hero);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+}
+
+#[test]
 fn the_two_abilities_are_linked() {
     cr!("702.72b", "607.2k");
     let mut t = TestGame::new(2);

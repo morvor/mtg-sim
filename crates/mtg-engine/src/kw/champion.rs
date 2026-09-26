@@ -65,10 +65,15 @@ impl KeywordRules for Champion {
                 },
             ])),
         );
+        // "The exiled card": only while it's still exiled (a card that left exile is a new
+        // object, CR 400.7).
         let leaves = TriggeredAbility::new(
             TriggerCond::LeavesBattlefield(Filter::Source),
             Body::effect(Effect::ForEach {
-                sel: Sel::Linked,
+                sel: Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(Sel::Linked)),
+                    Filter::InZone(ZoneKind::Exile),
+                ])),
                 var: V,
                 effect: Box::new(Effect::Move {
                     what: Sel::Var(V),
