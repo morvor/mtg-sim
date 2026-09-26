@@ -167,16 +167,34 @@ fn forbidden(g: &mut Game, p: PlayerId) -> Vec<Action> {
     let n = g.shortcuts.seen.entry(fp).or_insert(0);
     *n += 1;
     let repeats = *n;
-    let involved = &g.shortcuts.involved;
     if repeats >= FRAGMENTED_REPEATS {
+        // The players involved in the loop: those who took an action other than passing
+        // in a game state that keeps coming back.
+        let in_loop: BTreeSet<PlayerId> = g
+            .shortcuts
+            .last_choice
+            .iter()
+            .filter(|((f, _), a)| {
+                !matches!(a, Action::Pass | Action::Concede)
+                    && g.shortcuts.seen.get(f).copied().unwrap_or(0) >= FRAGMENTED_REPEATS - 1
+            })
+            .map(|((_, q), _)| *q)
+            .collect();
         // CR 732.3: the active player, or the first player in turn order involved.
-        let breaker = if involved.contains(&g.turn.active) {
+        let breaker = if in_loop.contains(&g.turn.active) {
             Some(g.turn.active)
         } else {
-            g.apnap().into_iter().find(|q| involved.contains(q))
+            g.apnap().into_iter().find(|q| in_loop.contains(q))
         };
         if breaker == Some(p) {
-            if let Some(a) = g.shortcuts.last_choice.get(&(fp, p)) {
+            // A player who only passed here took no independent action in the loop, and
+            // no player can be forced to take an action to end a loop (CR 732.5).
+            if let Some(a) = g
+                .shortcuts
+                .last_choice
+                .get(&(fp, p))
+                .filter(|a| !matches!(a, Action::Pass))
+            {
                 forbid.push(a.clone());
             }
         }

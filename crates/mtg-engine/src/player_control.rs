@@ -21,7 +21,7 @@
 use crate::ability::*;
 use crate::decision::{Action, Answer, Decision};
 use crate::eval::Ctx;
-use crate::game::{Game, Variant};
+use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
 use crate::object::Zone;
@@ -123,8 +123,8 @@ pub fn parse_control_effect(name: &str) -> Option<(ControlSpan, u8, bool)> {
 }
 
 /// `controller` gains control of `player` during `player`'s next turn or combat phase.
-/// In Two-Headed Giant, gaining control of a player gains control of each player on that
-/// team.
+/// With shared team turns (Two-Headed Giant, Archenemy), the first player controls the
+/// affected player's team (CR 805.8).
 pub fn gain_control(
     g: &mut Game,
     controller: PlayerId,
@@ -132,7 +132,7 @@ pub fn gain_control(
     span: ControlSpan,
     extra_turn_after: bool,
 ) {
-    let players = if g.config.variant == Variant::TwoHeadedGiant {
+    let players = if g.uses_shared_team_turns() {
         g.team_members(player)
     } else {
         vec![player]
@@ -192,11 +192,14 @@ pub fn turn_began(g: &mut Game) {
 /// A step began (hook in `Game::begin_step`): control during a combat phase starts as the
 /// player's combat phase begins and ends when it's over.
 pub fn step_began(g: &mut Game, step: Step) {
-    if !step.is_combat() {
+    // A step outside a combat phase, or the first step of another combat phase: the
+    // controlled combat phase is over.
+    if !step.is_combat() || step == Step::BeginningOfCombat {
         g.player_control
             .active
             .retain(|e| e.span != ControlSpan::NextCombatPhase);
-    } else if step == Step::BeginningOfCombat {
+    }
+    if step == Step::BeginningOfCombat {
         let actives = g.active_players();
         start(g, &actives, ControlSpan::NextCombatPhase);
     }
@@ -438,6 +441,27 @@ pub fn while_searching<T>(g: &mut Game, p: PlayerId, f: impl FnOnce(&mut Game) -
     r
 }
 
+/// The names of the optional additional costs the spell `spell`'s own text offers
+/// (CR 601.2b).
+fn own_optional_costs(g: &Game, spell: ObjectId) -> Vec<SmolStr> {
+    g.obj(spell)
+        .chars
+        .abilities
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AbilityKind::Static(s) => match &s.effect {
+                StaticEffect::CostModifier(CostModifier {
+                    applies_to: CostTarget::ThisSpell,
+                    change: CostChange::OptionalAdditionalCost { name, .. },
+                    ..
+                }) => Some(name.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
 struct PlayerControlRules;
 
 impl KeywordRules for PlayerControlRules {
@@ -472,10 +496,16 @@ impl KeywordRules for PlayerControlRules {
         if name != ADDITIONAL_COST_PAID {
             return None;
         }
+        // One of the spell's own optional additional costs ("As an additional cost to
+        // cast this spell, you may ...") was paid; alternative costs such as flashback
+        // don't count.
+        let own = ctx
+            .source
+            .map(|s| own_optional_costs(g, s))
+            .unwrap_or_default();
         let paid = g
             .cast_info(ctx)
-            .map(|c| !c.paid.is_empty())
-            .unwrap_or(false);
+            .is_some_and(|c| c.paid.iter().any(|p| own.contains(p)));
         Some(paid)
     }
 }

@@ -255,3 +255,54 @@ fn a_loop_with_a_declined_unless_payment_continues_as_though_mandatory() {
     assert_eq!(t.g.result, Some(GameResult::Draw));
     assert!(t.g.actions_taken < 500, "recognized quickly");
 }
+
+#[test]
+fn a_fragmented_loop_is_broken_by_the_first_player_in_turn_order_involved_in_it() {
+    cr!("732.3", "732.5");
+    let mut t = TestGame::new(3);
+    let tapper = custom_card("Tapping Rod", "Artifact", None, "{0}: Tap target creature.");
+    let untapper = custom_card("Untapping Rod", "Artifact", None, "{0}: Untap target creature.");
+    let tap_rod = t.custom(P1, tapper, Zone::Battlefield);
+    let untap_rod = t.custom(P2, untapper, Zone::Battlefield);
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    let (u1, u2) = (ability_uid(&t, tap_rod), ability_uid(&t, untap_rod));
+    t.g.set_agent(
+        P1,
+        Box::new(Looper {
+            rod: tap_rod,
+            uid: u1,
+            bears,
+            tap: true,
+        }),
+    );
+    t.g.set_agent(
+        P2,
+        Box::new(Looper {
+            rod: untap_rod,
+            uid: u2,
+            bears,
+            tap: false,
+        }),
+    );
+    // The active player acted earlier this step (played a land), then only passes while
+    // P1 and P2 loop. P0 could cast Lightning Bolt, but isn't forced to: P1, the first
+    // player in turn order involved in the loop, must make a different choice.
+    let mountain = t.hand(P0, "Mountain");
+    t.hand(P0, "Lightning Bolt");
+    t.answer(
+        P0,
+        DecisionKind::Priority,
+        Answer::Action(Action::PlayLand { card: mountain }),
+    );
+    let ok = t
+        .g
+        .run_until(3000, |g| g.turn.step != Step::PrecombatMain || g.is_over());
+    assert!(ok);
+    assert_eq!(t.g.result, None);
+    assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
+    assert!(t.on_battlefield(mountain) || t.named_on_battlefield("Mountain").len() == 1);
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+    // P1 stopped tapping the Bears.
+    assert!(!t.g.obj(bears).tapped);
+    assert!(t.g.actions_taken < 300);
+}

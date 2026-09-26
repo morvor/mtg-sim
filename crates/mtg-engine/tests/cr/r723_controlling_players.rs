@@ -382,6 +382,14 @@ fn secret_of_bloodbending_controls_the_opponent_during_their_next_combat_phase()
     );
     t.advance_to(P1, Step::BeginningOfCombat);
     assert_eq!(decider(&t.g, P1), P0);
+    // An additional combat phase follows this one: P0 controls only this one.
+    t.g.add_extra_combat(false);
+    let ok = t.g.run_until(200, |g| {
+        g.turn.step_log.iter().filter(|s| **s == Step::BeginningOfCombat).count() == 2
+    });
+    assert!(ok);
+    assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
+    assert_eq!(decider(&t.g, P1), P1);
     t.advance_to(P1, Step::PostcombatMain);
     assert_eq!(t.life(P0), 18);
     assert_eq!(decider(&t.g, P1), P1);
@@ -509,4 +517,67 @@ fn word_of_command_controls_the_player_while_the_chosen_spell_resolves() {
         .map(|(_, a, _, _)| *a)
         .collect();
     assert_eq!(discards, vec![P0]);
+}
+
+#[test]
+fn secret_of_bloodbending_with_its_additional_cost_paid_controls_the_whole_turn() {
+    cr!("723.1");
+    ruling!(
+        "Secret of Bloodbending",
+        "The player you're controlling is still the active player during that turn."
+    );
+    // Waterbend {10} paid: control during P1's whole next turn.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 14);
+    let secret = t.hand(P0, "Secret of Bloodbending");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.cast(P0, secret).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.g.turn.active, P1);
+    assert_eq!(decider(&t.g, P1), P0);
+    t.advance_to(P1, Step::PostcombatMain);
+    assert_eq!(decider(&t.g, P1), P0);
+    // Cast with flashback (an alternative cost) without waterbending: only P1's next
+    // combat phase.
+    let mut t = TestGame::new(2);
+    let secret = t.graveyard(P0, "Secret of Bloodbending");
+    t.answer_targets(P0, &[Entity::Object(secret)]);
+    t.enter(P0, "Snapcaster Mage");
+    t.resolve_all();
+    t.lands(P0, "Island", 4);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(false));
+    t.cast(P0, secret)
+        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert!(t.in_exile("Secret of Bloodbending"));
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(decider(&t.g, P1), P1);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    assert_eq!(decider(&t.g, P1), P0);
+}
+
+#[test]
+fn with_shared_team_turns_the_controller_controls_the_affected_players_team() {
+    cr!("805.8");
+    ruling!(
+        "Secret of Bloodbending",
+        "In a Two-Headed Giant game, gaining control of a player causes you to gain control of each player on that team."
+    );
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    mindslaver(&mut t, P0, P2);
+    t.advance_to(P2, Step::Upkeep);
+    assert_eq!(decider(&t.g, P2), P0);
+    assert_eq!(decider(&t.g, P3), P0);
+    // P0's teammate isn't affected.
+    assert_eq!(decider(&t.g, P1), P1);
 }

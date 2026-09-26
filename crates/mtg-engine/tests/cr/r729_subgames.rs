@@ -159,7 +159,6 @@ fn nothing_of_the_main_game_has_meaning_in_the_subgame() {
 #[test]
 fn a_subgame_has_its_own_zones_made_from_the_main_game_libraries() {
     cr!("729.2", "729.4");
-    ruling!("Shahrazad", "You randomly chose which player chooses to go first or draw first.");
     let mut t = TestGame::with_config(
         2,
         GameConfig {
@@ -189,7 +188,7 @@ fn a_subgame_has_its_own_zones_made_from_the_main_game_libraries() {
     assert_eq!(s.g.turn.number, 1);
     end_subgame(&mut t, s, outside);
     assert_eq!(names(&t.g, &t.g.player(P0).library.clone()), main_lib);
-    // Which player goes first is determined at random.
+    // Which player goes first is determined at random: no player chooses.
     let mut first = std::collections::BTreeSet::new();
     for seed in 0..12u64 {
         let mut t = TestGame::with_config(
@@ -200,7 +199,15 @@ fn a_subgame_has_its_own_zones_made_from_the_main_game_libraries() {
             },
         );
         t.g.rng = ChaCha8Rng::seed_from_u64(seed);
+        // Whoever would be asked would choose to go second.
+        t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P1)]));
+        t.answer(P1, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P0)]));
+        let asked = t.asked().len();
         let (s, outside) = start_subgame(&mut t);
+        assert!(!t.asked()[asked..].iter().any(|(_, d)| matches!(
+            d,
+            mtg_engine::decision::Decision::ChooseEntities { prompt, .. } if prompt.contains("first turn")
+        )));
         first.insert(s.g.turn.starting_player);
         end_subgame(&mut t, s, outside);
     }
@@ -415,4 +422,48 @@ fn restarting_a_subgame_doesnt_affect_the_main_game() {
     let result = subgame::finish(&mut t.g, Subgame { game: s.g, outside });
     assert_eq!(subgame::winners(&result), vec![P0]);
     assert_eq!(t.library_size(P0), 30 + 1);
+}
+
+#[test]
+fn a_restarted_subgame_still_returns_the_right_cards_to_the_main_game() {
+    cr!("727.6", "729.4a", "729.5");
+    let mut t = TestGame::with_config(
+        2,
+        GameConfig {
+            skip_mulligans: true,
+            ..Default::default()
+        },
+    );
+    // A main-game permanent that stays in the main game, and a main-game graveyard card
+    // brought into the subgame before the subgame restarts.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let lions = t.hand(P0, "Savannah Lions");
+    let (mut s, outside) = start_subgame(&mut t);
+    s.set_step(P0, Step::PrecombatMain);
+    let wish = s.hand(P0, "Living Wish");
+    s.lands(P0, "Forest", 2);
+    let proxy = outside.iter().find(|(_, m)| *m == giant).unwrap().0;
+    s.answer_choose(P0, &[Entity::Object(proxy)]);
+    s.cast(P0, wish).go();
+    s.resolve_all();
+    assert!(s.in_hand(P0, "Hill Giant"));
+    // The subgame restarts: the Giant is now a card of the restarted subgame.
+    let k = s.battlefield(P0, "Karn Liberated");
+    s.g.objects[k.0 as usize].counters.insert("loyalty".into(), 30);
+    s.activate(P0, k, 2, &[]).unwrap();
+    s.g.resolve_top();
+    assert_eq!(s.g.turn.number, 1);
+    assert_eq!(s.g.subgames.depth, 1);
+    let count = |t: &TestGame, zone: Zone, name: &str| t.g.find_in_zone(zone, name).len();
+    assert_eq!(count(&s, Zone::Library(P0), "Hill Giant") + count(&s, Zone::Hand(P0), "Hill Giant"), 1);
+    end_subgame(&mut t, s, outside);
+    // Main-game objects that weren't brought into the subgame stayed where they were.
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.zone(lions), Zone::Hand(P0));
+    // The Giant left the main-game graveyard and is in the main-game library, once.
+    assert!(!t.in_graveyard(P0, "Hill Giant"));
+    assert_eq!(count(&t, Zone::Library(P0), "Hill Giant"), 1);
+    assert_eq!(count(&t, Zone::Library(P0), "Grizzly Bears"), 0);
+    assert_eq!(count(&t, Zone::Library(P0), "Savannah Lions"), 0);
 }

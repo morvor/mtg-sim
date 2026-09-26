@@ -48,13 +48,22 @@ pub struct SubgameState {
     pub played: u32,
     /// The last subgame played from this game, as it ended.
     pub last: Option<Box<Game>>,
+    /// In a subgame: the main-game cards outside it, as (object in this game's
+    /// outside-the-game zone, main-game object) (CR 729.4). Kept up to date when the
+    /// subgame restarts (CR 727.6).
+    pub main_links: Vec<(ObjectId, ObjectId)>,
+    /// In a restarted subgame: the main-game objects whose cards had been brought into
+    /// the subgame before it restarted; those cards are now cards of the restarted
+    /// subgame (CR 727.2, 729.4a).
+    pub brought_before_restart: Vec<ObjectId>,
 }
 
 /// A subgame in progress.
 pub struct Subgame {
     pub game: Game,
-    /// Cards outside the subgame that are main-game cards: (object in the subgame's
-    /// outside-the-game zone, main-game object) (CR 729.4).
+    /// Cards outside the subgame that are main-game cards, as the subgame began:
+    /// (object in the subgame's outside-the-game zone, main-game object) (CR 729.4).
+    /// [`finish`] uses the subgame's own `subgames.main_links`, which follow a restart.
     pub outside: Vec<(ObjectId, ObjectId)>,
 }
 
@@ -118,13 +127,13 @@ pub fn begin(g: &mut Game) -> Subgame {
     for id in moved {
         g.objects[id.0 as usize].zone = Zone::Nowhere;
     }
-    // CR 729.2: randomly determine which player goes first.
+    // CR 729.2: randomly determine which player goes first (no player chooses).
     let players: Vec<PlayerId> = g.players_in_game();
-    let chooser = players[g.random_range(0, players.len() as u32 - 1) as usize];
+    let first = players[g.random_range(0, players.len() as u32 - 1) as usize];
     let seed: u64 = g.rng.gen();
     let config = GameConfig {
-        starting_player: None,
-        first_turn_chooser: Some(chooser),
+        starting_player: Some(first),
+        first_turn_chooser: None,
         seed,
         ..g.config.clone()
     };
@@ -167,9 +176,28 @@ pub fn begin(g: &mut Game) -> Subgame {
         sub.players[owner.idx()].sideboard.push(s);
         outside.push((s, id));
     }
+    sub.subgames.main_links = outside.clone();
     g.subgames.played += 1;
     g.log(|_| "--- A subgame begins ---".to_string());
     Subgame { game: sub, outside }
+}
+
+/// A game restarted (hook in `restart::restart_game`): a restarted subgame is still the
+/// subgame (CR 727.6). `outside` maps each card outside the old game to its object in the
+/// new game. Main-game cards still outside the subgame stay linked to their main-game
+/// objects; those that had been brought into it are now cards of the new game
+/// (CR 727.2).
+pub fn restarted(old: &Game, new: &mut Game, outside: &[(ObjectId, ObjectId)]) {
+    new.subgames.depth = old.subgames.depth;
+    let mut brought = old.subgames.brought_before_restart.clone();
+    for (s, m) in &old.subgames.main_links {
+        let now = old.current(*s);
+        match outside.iter().find(|(o, _)| *o == now) {
+            Some((_, n)) => new.subgames.main_links.push((*n, *m)),
+            None => brought.push(*m),
+        }
+    }
+    new.subgames.brought_before_restart = brought;
 }
 
 /// The cards represented by an object in the subgame: a merged or melded permanent's
@@ -190,14 +218,15 @@ fn represented_cards(sub: &Game, id: ObjectId) -> Vec<(PlayerId, Arc<CardDef>)> 
 /// Ends a subgame (CR 729.5): the cards return to the main game and the main game
 /// continues. Returns the subgame's result.
 pub fn finish(g: &mut Game, sub: Subgame) -> Option<GameResult> {
-    let Subgame { game: sub, outside } = sub;
+    let sub = sub.game;
     let result = sub.result.clone();
     let n = g.players.len();
     let in_game: Vec<bool> = g.players.iter().map(|p| p.in_game()).collect();
     // Cards brought into the subgame from the main game (CR 729.4a): their main-game
-    // objects left their zones; they go to their owners' libraries with the rest.
+    // objects left their zones; they go to their owners' libraries with the rest (the
+    // main-game object moves there, standing for the card in the subgame).
     let mut brought: Vec<ObjectId> = Vec::new();
-    for (s, m) in &outside {
+    for (s, m) in &sub.subgames.main_links {
         if sub.is_live(*s) && matches!(sub.obj(*s).zone, Zone::Outside(_)) {
             continue;
         }
@@ -206,6 +235,29 @@ pub fn finish(g: &mut Game, sub: Subgame) -> Option<GameResult> {
             let owner = g.obj(*m).owner;
             g.move_object(*m, Zone::Library(owner), MoveCause::Other, None);
         }
+    }
+    // Cards brought in before the subgame restarted are cards of the restarted subgame
+    // (CR 727.2): one of their owner's cards with that name there stands for each.
+    for m in &sub.subgames.brought_before_restart {
+        if !g.is_live(*m) {
+            continue;
+        }
+        let (owner, name) = (
+            g.obj(*m).owner,
+            g.obj(*m).card.as_ref().map(|c| c.name.clone()),
+        );
+        let stand_in = sub.objects.iter().find(|o| {
+            o.next.is_none()
+                && !matches!(o.zone, Zone::Nowhere | Zone::Outside(_))
+                && o.kind == ObjKind::Card
+                && o.owner == owner
+                && o.card.as_ref().map(|c| c.name.clone()) == name
+                && !brought.contains(&o.id)
+        });
+        if let Some(o) = stand_in {
+            brought.push(o.id);
+        }
+        g.move_object(*m, Zone::Library(owner), MoveCause::Other, None);
     }
     let mut to_library: Vec<(PlayerId, Arc<CardDef>)> = Vec::new();
     let mut to_decks: Vec<(PlayerId, Arc<CardDef>)> = Vec::new();
