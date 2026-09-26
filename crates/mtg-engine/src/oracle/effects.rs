@@ -84,7 +84,7 @@ fn controlled_by_opponent(f: &Filter) -> bool {
 /// Parses a full body (possibly modal).
 pub fn parse_body(text: &str, ctx: &CompileContext) -> Option<Body> {
     let t = text.trim();
-    if let Some(modal) = parse_modal(t, ctx) {
+    if let Some(modal) = parse_modal(t, ctx, None) {
         return Some(Body {
             targets: vec![],
             effect: Effect::Noop,
@@ -121,7 +121,7 @@ pub fn parse_trigger_body(
     it_player: PlayerRef,
 ) -> Option<Body> {
     let t = text.trim();
-    if let Some(modal) = parse_modal(t, ctx) {
+    if let Some(modal) = parse_modal(t, ctx, Some((&it, &it_player))) {
         return Some(Body {
             targets: vec![],
             effect: Effect::Noop,
@@ -140,20 +140,36 @@ pub fn parse_trigger_body(
     })
 }
 
-/// "Choose one —\n• mode\n• mode" (CR 700.2).
-fn parse_modal(t: &str, ctx: &CompileContext) -> Option<Modal> {
+/// "Choose one —\n• mode\n• mode" (CR 700.2). In a triggered ability (`trigger`: what
+/// "it" and "that player" refer to), the modes' pronouns refer to what the trigger's do.
+fn parse_modal(
+    t: &str,
+    ctx: &CompileContext,
+    trigger: Option<(&Sel, &PlayerRef)>,
+) -> Option<Modal> {
     let (head, rest) = t.split_once('\n')?;
     let hl = head.to_lowercase();
-    let hl = hl.trim().trim_end_matches(['—', ':', ' ']);
-    let (min, max) = match hl {
-        "choose one" => (1, 1),
-        "choose two" => (2, 2),
-        "choose three" => (3, 3),
-        "choose one or both" => (1, 2),
-        "choose one or more" => (1, 99),
-        "choose any number" => (0, 99),
-        "choose one or two" => (1, 2),
-        _ => return None,
+    let hl = hl.trim().trim_end_matches(['—', ':', '.', ' ']);
+    let fixed = match hl {
+        "choose one" => Some((1, 1)),
+        "choose two" => Some((2, 2)),
+        "choose three" => Some((3, 3)),
+        "choose one or both" => Some((1, 2)),
+        "choose one or more" => Some((1, 99)),
+        "choose any number" => Some((0, 99)),
+        "choose one or two" => Some((1, 2)),
+        _ => None,
+    };
+    let header = match fixed {
+        Some((min, max)) => super::patterns::ModalHeader {
+            min: Value::Const(min),
+            max: Value::Const(max),
+            allow_repeat: false,
+            chooser: ModeChooser::Controller,
+        },
+        None => super::patterns::modal_header_patterns()
+            .iter()
+            .find_map(|p| (p.parse)(hl, ctx))?,
     };
     let mut modes = Vec::new();
     for line in rest.lines() {
@@ -162,7 +178,12 @@ fn parse_modal(t: &str, ctx: &CompileContext) -> Option<Modal> {
             continue;
         }
         let mut b = Builder::new(ctx);
-        let effect = parse_effect_text(l, &mut b)?;
+        if let Some((it, it_player)) = trigger {
+            b.in_trigger = true;
+            b.it = it.clone();
+            b.it_player = it_player.clone();
+        }
+        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,
@@ -173,15 +194,38 @@ fn parse_modal(t: &str, ctx: &CompileContext) -> Option<Modal> {
     if modes.is_empty() {
         return None;
     }
-    let max = max.min(modes.len() as i32);
+    let n = modes.len() as i32;
+    let max = match header.max {
+        Value::Const(m) => Value::Const(m.min(n)),
+        other => other,
+    };
     Some(Modal {
-        min: Value::Const(min),
-        max: Value::Const(max),
-        allow_repeat: false,
+        min: header.min,
+        max,
+        allow_repeat: header.allow_repeat,
         modes,
         per_mode_cost: false,
-        chooser: ModeChooser::Controller,
+        chooser: header.chooser,
     })
+}
+
+/// A mode's text without its flavor word ("Cure Wounds — You gain 2 life."): flavor words
+/// have no rules meaning (CR 207.2d).
+pub fn strip_flavor_word(mode: &str) -> &str {
+    match mode.split_once(" — ") {
+        Some((head, rest))
+            if !head.is_empty()
+                && head.split_whitespace().count() <= 6
+                && !head.contains(['{', ':', '"', '.', ','])
+                && head
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_uppercase() || c == '~') =>
+        {
+            rest.trim()
+        }
+        _ => mode,
+    }
 }
 
 /// Splits text into sentences at ". " boundaries outside quotes.
