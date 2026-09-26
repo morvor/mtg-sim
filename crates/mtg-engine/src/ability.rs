@@ -1647,6 +1647,11 @@ pub enum ReplacementEvent {
     },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
+    /// One or more tokens with the characteristics described by `tokens` would be created
+    /// under a player's control ("If one or more creature tokens would be created ...").
+    /// The tokens' characteristics are those they're created with, before any continuous
+    /// effects apply to them (CR 701.7b; see `create_rules.rs`).
+    CreateTokensMatching { who: PlayerFilter, tokens: Filter },
     /// A permanent would be destroyed.
     Destroy(Filter),
     /// Would lose the game.

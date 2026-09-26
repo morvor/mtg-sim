@@ -37,6 +37,7 @@ pub mod copy_rules;
 pub mod cost_choices;
 pub mod cost_rules;
 pub mod counter_rules;
+pub mod create_rules;
 pub mod custom;
 pub mod decision;
 pub mod deck;

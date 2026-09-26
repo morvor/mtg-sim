@@ -749,6 +749,19 @@ impl Game {
                     controller, count, ..
                 },
             ) => *count > 0 && self.player_filter_matches(pf, *controller, ctx),
+            (
+                ReplacementEvent::CreateTokensMatching { who, tokens },
+                ReplEvent::CreateTokens {
+                    controller,
+                    count,
+                    spec,
+                    ..
+                },
+            ) => {
+                *count > 0
+                    && self.player_filter_matches(who, *controller, ctx)
+                    && crate::create_rules::token_chars_match(&spec.chars, tokens)
+            }
             (ReplacementEvent::Destroy(f), ReplEvent::Destroy { obj, .. }) => {
                 locked_ok(*obj) && self.matches(*obj, f, ctx)
             }
