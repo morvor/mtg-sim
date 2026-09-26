@@ -3,7 +3,7 @@
 //! becomes monstrous", "whenever you clash", "If you win, ...", "as long as ~ is
 //! monstrous", "∞ — [ability]" (while harnessed), and "support N" as an instruction.
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, TriggerPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
@@ -180,6 +180,17 @@ fn designation_condition(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "a701 designations", priority: 60, parse: designation_condition } }
+
+/// "As long as ~ is monstrous, it has [abilities]": "it" is the permanent itself.
+fn designation_static(l: &str, _text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as long as ")?;
+    let (c, rest) = r.split_once(", ")?;
+    designation_condition(c)?;
+    let rest = rest.strip_prefix("it ")?;
+    crate::oracle::statics::parse_static(&format!("as long as {c}, ~ {rest}"), ctx)
+}
+
+inventory::submit! { StaticPattern { name: "a701 designation statics", priority: 60, parse: designation_static } }
 
 /// "If you win, [effect]" after "clash with an opponent" (CR 701.30d): the clash result is
 /// the previous instruction's outcome. "If you won, [effect]" in an ability that triggers
