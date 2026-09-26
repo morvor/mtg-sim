@@ -1,0 +1,254 @@
+//! "You may choose not to untap ~ during your untap step." (CR 502.3) and effects that
+//! last "for as long as ~ remains tapped" (CR 611.2b, 611.2c).
+
+use mtg_engine::decision::Decision;
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::types::*;
+use mtg_engine::*;
+
+fn compiles(name: &str) {
+    let def = card(name);
+    assert!(
+        def.unsupported_text().is_empty(),
+        "{name} has unsupported text: {:?}",
+        def.unsupported_text()
+    );
+}
+
+fn tapped(t: &TestGame, id: ObjectId) -> bool {
+    t.obj_now(id).tapped
+}
+
+fn controller(t: &TestGame, id: ObjectId) -> PlayerId {
+    t.obj_now(id).controller
+}
+
+/// Moves on to `p`'s next upkeep, through their untap step.
+fn next_untap(t: &mut TestGame, p: PlayerId) {
+    let other = if p == P0 { P1 } else { P0 };
+    t.set_step(other, Step::End);
+    t.advance_to(p, Step::Upkeep);
+}
+
+fn untap_questions(t: &TestGame, p: PlayerId) -> usize {
+    t.asked()
+        .iter()
+        .filter(|(q, d)| *q == p && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("during your untap step")))
+        .count()
+}
+
+#[test]
+fn keeps_control_for_as_long_as_it_remains_tapped() {
+    cr!("502.3", "611.2b");
+    compiles("Rubinia Soulsinger");
+    compiles("Willow Satyr");
+    compiles("Helm of Possession");
+    let mut t = TestGame::new(2);
+    let rubinia = t.battlefield(P0, "Rubinia Soulsinger");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, rubinia, 0, &[bears.into()]).unwrap();
+    t.resolve();
+    assert_eq!(controller(&t, bears), P0);
+    // Its controller chooses to leave it tapped (the default while its effect lasts).
+    next_untap(&mut t, P0);
+    assert!(tapped(&t, rubinia));
+    assert_eq!(controller(&t, bears), P0);
+    assert_eq!(untap_questions(&t, P0), 1);
+    // Choosing to untap it ends the effect.
+    t.answer_yes(P0, true);
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, rubinia));
+    assert_eq!(controller(&t, bears), P1);
+}
+
+#[test]
+fn untapped_before_resolution_means_no_effect() {
+    cr!("611.2b");
+    ruling!(
+        "Rubinia Soulsinger",
+        "even if it becomes tapped again right away — you won’t gain control"
+    );
+    let mut t = TestGame::new(2);
+    let rubinia = t.battlefield(P0, "Rubinia Soulsinger");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, rubinia, 0, &[bears.into()]).unwrap();
+    t.g.untap(rubinia);
+    t.g.tap(rubinia);
+    t.resolve();
+    assert_eq!(controller(&t, bears), P1);
+    // Untapped and not tapped again: likewise.
+    let mut t = TestGame::new(2);
+    let rubinia = t.battlefield(P0, "Rubinia Soulsinger");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, rubinia, 0, &[bears.into()]).unwrap();
+    t.g.untap(rubinia);
+    t.resolve();
+    assert_eq!(controller(&t, bears), P1);
+}
+
+#[test]
+fn leaving_the_battlefield_ends_the_effect() {
+    cr!("611.2b", "400.7");
+    ruling!(
+        "Rubinia Soulsinger",
+        "If Rubinia Soulsinger leaves the battlefield, you no longer control it"
+    );
+    let mut t = TestGame::new(2);
+    let rubinia = t.battlefield(P0, "Rubinia Soulsinger");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, rubinia, 0, &[bears.into()]).unwrap();
+    t.resolve();
+    assert_eq!(controller(&t, bears), P0);
+    t.g.destroy(rubinia, None);
+    t.g.recompute();
+    assert_eq!(controller(&t, bears), P1);
+}
+
+#[test]
+fn tapped_land_doesnt_untap_while_the_source_stays_tapped() {
+    cr!("502.3", "611.2b");
+    compiles("Mana Leech");
+    compiles("Sand Squid");
+    compiles("Deserter's Quarters");
+    let mut t = TestGame::new(2);
+    let leech = t.battlefield(P0, "Mana Leech");
+    let forest = t.battlefield(P1, "Forest");
+    t.activate(P0, leech, 0, &[forest.into()]).unwrap();
+    t.resolve();
+    assert!(tapped(&t, forest));
+    next_untap(&mut t, P1);
+    assert!(tapped(&t, forest));
+    // Mana Leech's controller untaps it; the land untaps during its controller's next
+    // untap step.
+    t.answer_yes(P0, true);
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, leech));
+    assert!(tapped(&t, forest));
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, forest));
+}
+
+#[test]
+fn affected_permanent_you_control_stays_tapped_the_step_the_source_untaps() {
+    cr!("502.3");
+    ruling!(
+        "Rust Tick",
+        "that artifact won’t untap during the untap step in which you choose to untap Rust Tick"
+    );
+    ruling!(
+        "Rust Tick",
+        "If the affected artifact is untapped by some other spell or ability, Rust Tick’s effect will not end."
+    );
+    compiles("Rust Tick");
+    let mut t = TestGame::new(2);
+    let tick = t.battlefield(P0, "Rust Tick");
+    let stone = t.battlefield(P0, "Mind Stone");
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, tick, 0, &[stone.into()]).unwrap();
+    t.resolve();
+    assert!(tapped(&t, stone));
+    // Untapped by something else and tapped again: still held.
+    t.g.untap(stone);
+    t.g.tap(stone);
+    next_untap(&mut t, P0);
+    assert!(tapped(&t, tick) && tapped(&t, stone));
+    t.answer_yes(P0, true);
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, tick));
+    assert!(tapped(&t, stone));
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, stone));
+}
+
+#[test]
+fn pump_lasts_while_tapped() {
+    cr!("611.2b");
+    compiles("Zelyon Sword");
+    compiles("Everglove Courier");
+    compiles("Endoskeleton");
+    let mut t = TestGame::new(2);
+    let courier = t.battlefield(P0, "Everglove Courier");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 3);
+    t.activate(P0, courier, 0, &[elves.into()]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(elves), (3, 3));
+    assert!(t
+        .obj_now(elves)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+    t.g.untap(courier);
+    t.g.recompute();
+    assert_eq!(t.pt(elves), (1, 1));
+    assert!(!t
+        .obj_now(elves)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+}
+
+#[test]
+fn all_creatures_means_those_on_the_battlefield_as_it_resolves() {
+    cr!("611.2c");
+    compiles("Thran Weaponry");
+    let mut t = TestGame::new(2);
+    let weaponry = t.battlefield(P0, "Thran Weaponry");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Wastes", 2);
+    t.activate(P0, weaponry, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(mine), (4, 4));
+    assert_eq!(t.pt(theirs), (4, 4));
+    let later = t.battlefield(P1, "Grizzly Bears");
+    assert_eq!(t.pt(later), (2, 2));
+    // The default choice keeps it tapped while its effect lasts.
+    next_untap(&mut t, P0);
+    assert!(tapped(&t, weaponry));
+    assert_eq!(t.pt(mine), (4, 4));
+}
+
+#[test]
+fn without_the_option_the_source_untaps_as_usual() {
+    cr!("502.3");
+    ruling!(
+        "Kill Switch",
+        "Only the artifacts that it tried to tap when the ability resolved are prevented from untapping."
+    );
+    ruling!(
+        "Kill Switch",
+        "you can’t choose to leave this card tapped during your untap step"
+    );
+    compiles("Kill Switch");
+    let mut t = TestGame::new(2);
+    let switch = t.battlefield(P0, "Kill Switch");
+    let stone = t.battlefield(P1, "Mind Stone");
+    t.lands(P0, "Wastes", 2);
+    t.activate(P0, switch, 0, &[]).unwrap();
+    t.resolve();
+    assert!(tapped(&t, stone));
+    let later = t.battlefield(P1, "Mind Stone");
+    t.g.tap(later);
+    next_untap(&mut t, P1);
+    assert!(tapped(&t, stone));
+    assert!(!tapped(&t, later));
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, switch));
+    assert_eq!(untap_questions(&t, P0), 0);
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, stone));
+}
+
+#[test]
+fn nothing_to_keep_tapped_untaps_by_default() {
+    cr!("502.3");
+    compiles("Tawnos's Weaponry");
+    let mut t = TestGame::new(2);
+    let leech = t.battlefield(P0, "Mana Leech");
+    t.g.tap(leech);
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, leech));
+    // It can also be left tapped.
+    t.g.tap(leech);
+    t.answer_yes(P0, false);
+    next_untap(&mut t, P0);
+    assert!(tapped(&t, leech));
+}

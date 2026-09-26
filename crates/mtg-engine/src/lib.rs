@@ -92,6 +92,7 @@ pub mod triggers;
 pub mod turn;
 pub mod turn_structure;
 pub mod types;
+pub mod untap_choice;
 pub mod untap_limits;
 pub mod until;
 pub mod variants;

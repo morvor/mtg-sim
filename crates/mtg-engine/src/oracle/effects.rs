@@ -459,6 +459,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " for as long as you control ~",
             Duration::WhileYouControlSource,
         ),
+        // CR 611.2b.
+        (
+            " for as long as ~ remains tapped",
+            crate::untap_choice::remains_tapped(false),
+        ),
+        (
+            " for as long as you control ~ and ~ remains tapped",
+            crate::untap_choice::remains_tapped(true),
+        ),
     ] {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);

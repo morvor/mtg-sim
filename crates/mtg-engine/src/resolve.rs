@@ -506,6 +506,10 @@ impl Game {
                 restriction,
                 duration,
             } => {
+                // CR 611.2b: a "for as long as" duration that already ended.
+                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                    return;
+                }
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let objects = self.lock_restriction_objects(restriction, ctx);
