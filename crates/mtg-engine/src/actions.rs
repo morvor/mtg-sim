@@ -126,6 +126,8 @@ impl Game {
         // CR 401.4, 404.3: the owner arranges cards put into a library position or a
         // graveyard at the same time.
         crate::zones::order_simultaneous(self, &mut finals);
+        // CR 701.24g: a position in a library that's shuffled at the same time.
+        crate::shuffle_rules::positions_after_shuffles(self, &mut finals);
         // Look back in time for leaves-the-battlefield triggers and other zone-change
         // triggers that look back (CR 603.10a): leaving the battlefield, a graveyard, or
         // the stack, or a public object being put into a hand or library.
@@ -884,6 +886,8 @@ impl Game {
 
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.
     pub fn mill(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
+        // CR 701.17d: replacement effects may change how many cards are milled.
+        let n = crate::mill_rules::replaced_count(self, p, n);
         // CR 614.13c: cards entering the battlefield from the library aren't milled.
         let lib: Vec<ObjectId> = self.players[p.idx()]
             .library
@@ -907,10 +911,17 @@ impl Game {
             })
             .collect();
         let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+        // CR 701.17c: a milled card is found in the zone it moved to, if that's a public
+        // zone (it may have been exiled instead of put into the graveyard).
         let milled: Vec<ObjectId> = res
             .iter()
             .copied()
-            .filter(|c| matches!(self.obj(*c).zone, Zone::Graveyard(_)))
+            .filter(|c| {
+                !matches!(
+                    self.obj(*c).zone,
+                    Zone::Library(_) | Zone::Hand(_) | Zone::Outside(_) | Zone::Nowhere
+                )
+            })
             .collect();
         if !milled.is_empty() {
             self.emit(Event::Milled {
