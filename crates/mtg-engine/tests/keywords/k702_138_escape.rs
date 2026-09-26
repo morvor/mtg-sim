@@ -280,3 +280,33 @@ fn a_granted_escape_costs_the_cards_mana_cost_plus_more() {
     graveyard_n(&mut t, P0, "Grizzly Bears", 3);
     assert!(!castable(&mut t, P0, ancestral, ESCAPE));
 }
+
+#[test]
+fn a_card_can_gain_escape_until_end_of_turn() {
+    cr!("702.138a", "702.138b");
+    assert_supported_card("Confession Dial");
+    let mut t = TestGame::new(2);
+    // Confession Dial: "{T}: Target legendary creature card in your graveyard gains escape
+    // until end of turn. The escape cost is equal to its mana cost plus exile three other
+    // cards from your graveyard."
+    let dial = t.battlefield(P0, "Confession Dial");
+    let isamaru = t.graveyard(P0, "Isamaru, Hound of Konda");
+    graveyard_n(&mut t, P0, "Grizzly Bears", 3);
+    t.lands(P0, "Plains", 1);
+    assert!(!castable(&mut t, P0, isamaru, ESCAPE));
+    t.activate(P0, dial, 0, &[Entity::Object(isamaru)]).unwrap();
+    t.resolve_all();
+    assert!(castable(&mut t, P0, isamaru, ESCAPE));
+    t.cast(P0, isamaru).method(ESCAPE).go();
+    assert_eq!(exile_count(&t), 3);
+    t.resolve_all();
+    assert!(t.on_battlefield(isamaru));
+    // It escaped (the ability was granted to the card; the spell keeps it, CR 400.7g).
+    let perm = t.g.current(isamaru);
+    assert!(t
+        .g
+        .obj(perm)
+        .cast
+        .as_deref()
+        .is_some_and(|c| c.paid.iter().any(|p| p == "escape")));
+}

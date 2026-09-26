@@ -146,3 +146,45 @@ fn multiple_instances_of_improvise_are_redundant() {
     assert_eq!(improvise_prompts(&t), vec![3]);
     assert_eq!(tapped(&t, &arts), 3);
 }
+
+#[test]
+fn spells_you_cast_can_be_given_improvise() {
+    cr!("702.126a");
+    assert_supported_card("Inspiring Statuary");
+    let mut t = TestGame::new(2);
+    // Inspiring Statuary: "Nonartifact spells you cast have improvise."
+    let statuary = t.battlefield(P0, "Inspiring Statuary");
+    t.lands(P0, "Island", 1);
+    let orni = t.battlefield(P0, "Ornithopter");
+    let div = t.hand(P0, "Divination");
+    assert!(castable(&mut t, P0, div, NORMAL));
+    t.cast(P0, div).go();
+    assert_eq!(tapped(&t, &[statuary, orni]), 2);
+    // An artifact spell doesn't have improvise.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Inspiring Statuary");
+    battlefield_n(&mut t, P0, "Ornithopter", 3);
+    t.lands(P0, "Island", 1);
+    let jugg = t.hand(P0, "Juggernaut");
+    assert!(!castable(&mut t, P0, jugg, NORMAL));
+}
+
+#[test]
+fn the_next_spell_you_cast_this_turn_has_improvise() {
+    cr!("702.126a");
+    assert_supported_card("Archway of Innovation");
+    let mut t = TestGame::new(2);
+    // Archway of Innovation: "{U}, {T}: The next spell you cast this turn has improvise."
+    let archway = t.battlefield(P0, "Archway of Innovation");
+    t.lands(P0, "Island", 2);
+    let arts = battlefield_n(&mut t, P0, "Ornithopter", 2);
+    let div = t.hand(P0, "Divination");
+    // {U} from an Island and tapping the Archway: one Island is left, and the two
+    // artifacts can pay the rest.
+    t.activate(P0, archway, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(untapped_lands(&t, P0), 1);
+    assert!(castable(&mut t, P0, div, NORMAL));
+    t.cast(P0, div).go();
+    assert_eq!(tapped(&t, &arts), 2);
+}

@@ -54,17 +54,15 @@ pub fn exceptions(kind: KeywordKind) -> Vec<Modification> {
     }
 }
 
+/// `Condition::Custom`: the activated ability of the trigger event is an embalm or
+/// eternalize ability ("Whenever you activate an eternalize or embalm ability").
+pub const EMBALM_OR_ETERNALIZE_ACTIVATED: &str =
+    "embalm:the activated ability is an embalm or eternalize ability";
+
 /// Whether `ability` is an embalm ability (one this implementation derives).
 fn is_embalm_ability(ability: &Ability) -> bool {
-    match &ability.kind {
-        AbilityKind::Activated(a) => match &a.body.effect {
-            Effect::Seq(v) => v
-                .iter()
-                .any(|e| matches!(e, Effect::Custom(n) if n == MARK_EMBALMED)),
-            _ => false,
-        },
-        _ => false,
-    }
+    matches!(ability.kind, AbilityKind::Activated(_))
+        && crate::keyword_impls::ability_from_keyword(ability) == Some(KeywordKind::Embalm)
 }
 
 /// Whether `obj` is an embalmed token: one marked as created by an embalm ability, or a
@@ -133,7 +131,22 @@ impl KeywordRules for Embalm {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
-        (name == EMBALMED).then(|| ctx.source.is_some_and(|s| is_embalmed(g, s)))
+        match name {
+            EMBALMED => Some(ctx.source.is_some_and(|s| is_embalmed(g, s))),
+            EMBALM_OR_ETERNALIZE_ACTIVATED => {
+                let Some(ab) = ctx.event.as_ref().and_then(|e| e.spell) else {
+                    return Some(false);
+                };
+                Some(g.obj(ab).stack.as_deref().is_some_and(|si| {
+                    matches!(&si.kind, StackKind::Activated { ability, .. }
+                    if matches!(
+                        crate::keyword_impls::ability_from_keyword(ability),
+                        Some(KeywordKind::Embalm | KeywordKind::Eternalize)
+                    ))
+                }))
+            }
+            _ => None,
+        }
     }
 }
 

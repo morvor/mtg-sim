@@ -135,3 +135,55 @@ fn the_embalmed_tokens_exceptions_are_copiable() {
     assert!(c.chars.mana_cost.is_none());
     let _ = Zone::Battlefield;
 }
+
+#[test]
+fn a_granted_embalm_ability_costs_the_cards_mana_cost() {
+    cr!("702.128a");
+    assert_supported_card("Cursecloth Wrappings");
+    let mut t = TestGame::new(2);
+    // Cursecloth Wrappings: "Zombies you control get +1/+1. {T}: Target creature card in
+    // your graveyard gains embalm until end of turn. The embalm cost is equal to its mana
+    // cost."
+    let wraps = t.battlefield(P0, "Cursecloth Wrappings");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.activate(P0, wraps, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(has(&t, bears, KeywordKind::Embalm));
+    t.lands(P0, "Forest", 2);
+    assert!(can_activate_now(&mut t, P0, bears));
+    t.activate(P0, bears, 0, &[]).unwrap();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve_all();
+    let tok = tokens_of(&t, P0)[0];
+    assert_eq!(t.obj_now(tok).chars.name, "Grizzly Bears");
+    assert!(t.obj_now(tok).chars.has_subtype("Zombie"));
+    // A white Zombie Bear, and a Zombie you control: 3/3.
+    assert_eq!(t.pt(tok), (3, 3));
+}
+
+#[test]
+fn whenever_you_activate_an_embalm_or_eternalize_ability() {
+    cr!("702.128a", "702.129a");
+    assert_line_supported("Vizier of the Anointed", "whenever you activate");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Anointed");
+    t.lands(P0, "Plains", 1);
+    let cat = t.graveyard(P0, "Sacred Cat");
+    let hand = t.hand_size(P0);
+    t.activate(P0, cat, 0, &[]).unwrap();
+    t.settle();
+    // The draw trigger resolves first.
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P0).len(), 1);
+    // Other activated abilities don't trigger it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Anointed");
+    let wraps = t.battlefield(P0, "Cursecloth Wrappings");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    t.activate(P0, wraps, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+}

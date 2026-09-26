@@ -1,5 +1,6 @@
 //! Oracle text that goes with the keywords of CR 702.125–702.139:
 //!
+//! * embalm and eternalize: "Whenever you activate an eternalize or embalm ability";
 //! * embalm (CR 702.128b): "You may have ~ enter as a copy of any creature on the
 //!   battlefield, except if ~ was embalmed, the token has no mana cost, it's white, and
 //!   it's a Zombie in addition to its other types.";
@@ -8,6 +9,10 @@
 //! * companion conditions (CR 702.139a) the general companion pattern doesn't read: different
 //!   names, even or odd mana values, activated abilities, a shared card type, a minimum
 //!   deck size, and repeated mana symbols;
+//! * granted keywords: "[Quality] spells you cast have improvise", "The next spell you
+//!   cast this turn has improvise", "... gains embalm until end of turn. The embalm cost is
+//!   equal to its mana cost.", "... gains escape until end of turn. The escape cost is
+//!   equal to its mana cost plus [cost].";
 //! * mentor (CR 702.134c): "whenever ~ mentors a creature", "whenever equipped creature
 //!   mentors a creature";
 //! * spectacle (CR 702.137a): "if its spectacle cost was paid";
@@ -414,3 +419,131 @@ fn companion_conditions(block: &str, _ctx: &CompileContext) -> Option<Vec<Abilit
 }
 
 inventory::submit! { AbilityPattern { name: "k702.139 companion conditions", priority: -2, parse: companion_conditions } }
+
+// ---------------------------------------------------------------------------
+// Granted keywords
+// ---------------------------------------------------------------------------
+
+/// "Nonartifact spells you cast have improvise.", "Noncreature spells you cast have
+/// improvise.": the spells have improvise as they're cast (CR 702.126a).
+fn spells_you_cast_have_improvise(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let subject = end(l)
+        .strip_suffix("spells you cast have improvise")?
+        .trim();
+    let mut parts = vec![Filter::Spell, Filter::ControlledBy(PlayerRel::You)];
+    if !subject.is_empty() {
+        let phrase = format!("{subject} spell");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        parts.insert(0, f);
+    }
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(parts),
+        mods: vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Improvise,
+        ))],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.126 spells you cast have improvise", priority: 90, parse: spells_you_cast_have_improvise } }
+
+/// "The next spell you cast this turn has improvise." (CR 611.2f): it has improvise as
+/// it's cast.
+fn next_spell_has_improvise(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "the next spell you cast this turn has improvise").then(|| Effect::NextSpell {
+        filter: Filter::Spell,
+        mods: vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Improvise,
+        ))],
+        expires: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.126 the next spell you cast this turn has improvise", priority: 90, parse: next_spell_has_improvise } }
+
+/// The keyword of `kind` without a cost of its own that `e` grants, to be given one.
+fn costless_granted_keyword(e: &mut Effect, kind: KeywordKind) -> Option<&mut Keyword> {
+    match e {
+        Effect::Modify { mods, .. } => mods.iter_mut().find_map(|m| match m {
+            Modification::AddKeyword(k) if k.kind == kind && k.cost.is_none() => Some(k),
+            _ => None,
+        }),
+        Effect::Seq(v) => v.iter_mut().find_map(|x| costless_granted_keyword(x, kind)),
+        Effect::If { then, .. } => costless_granted_keyword(then, kind),
+        Effect::May { effect, .. } | Effect::ForEach { effect, .. } => {
+            costless_granted_keyword(effect, kind)
+        }
+        _ => None,
+    }
+}
+
+/// "[card] gains embalm until end of turn. The embalm cost is equal to its mana cost."
+/// (a granted embalm ability without a cost of its own costs the card's mana cost, see
+/// `kw/embalm.rs`); "[card] gains escape until end of turn. The escape cost is equal to
+/// its mana cost plus exile three other cards from your graveyard." (see `kw/escape.rs`).
+fn granted_keyword_cost(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(s);
+    if matches!(
+        l,
+        "the embalm cost is equal to its mana cost"
+            | "the embalm cost is equal to that card's mana cost"
+    ) {
+        return costless_granted_keyword(prev, KeywordKind::Embalm).is_some();
+    }
+    let Some(plus) = l
+        .strip_prefix("the escape cost is equal to its mana cost plus ")
+        .or_else(|| l.strip_prefix("the escape cost is equal to that card's mana cost plus "))
+    else {
+        return false;
+    };
+    let Some((cost, _)) = crate::oracle::costs::parse_cost(plus) else {
+        return false;
+    };
+    if cost.mana.is_some() || cost.parts.is_empty() {
+        return false;
+    }
+    match costless_granted_keyword(prev, KeywordKind::Escape) {
+        Some(k) => {
+            k.cost = Some(cost);
+            k.text = Some(SmolStr::new(crate::kw::escape::MANA_COST_PLUS));
+            true
+        }
+        None => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "k702.128/138 granted embalm or escape cost", priority: 90, apply: granted_keyword_cost } }
+
+/// "Whenever you activate an eternalize or embalm ability" (Vizier of the Anointed).
+fn activate_embalm_or_eternalize(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if !matches!(
+        end(r),
+        "you activate an eternalize or embalm ability"
+            | "you activate an embalm or eternalize ability"
+    ) {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::AbilityActivated {
+                who: PlayerRel::You,
+                source: Filter::Any,
+                include_mana: false,
+            }),
+            cond: Condition::Custom(SmolStr::new(
+                crate::kw::embalm::EMBALM_OR_ETERNALIZE_ACTIVATED,
+            )),
+        },
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "k702.128 you activate an eternalize or embalm ability", priority: 100, parse: activate_embalm_or_eternalize } }
