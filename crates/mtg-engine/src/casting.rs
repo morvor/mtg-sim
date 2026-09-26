@@ -2530,6 +2530,8 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         | CostPart::RemoveCountersFromAmong { count, .. }
         | CostPart::TapUntapped { count, .. } => is_x(count),
         CostPart::Loyalty(_) => false,
+        // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
+        CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
         _ => false,
     }
 }

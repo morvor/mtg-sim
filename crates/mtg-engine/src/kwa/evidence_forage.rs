@@ -36,18 +36,46 @@ fn total_mana_value(g: &Game, cards: &[ObjectId]) -> u32 {
     cards.iter().map(|c| g.mana_value_of(*c)).sum()
 }
 
+/// The cards in `p`'s graveyard that could be exiled to collect evidence, other than
+/// `excluded`.
+fn evidence(g: &Game, p: PlayerId, excluded: &[ObjectId]) -> Vec<ObjectId> {
+    g.player(p)
+        .graveyard
+        .iter()
+        .copied()
+        .filter(|c| !excluded.contains(c))
+        .collect()
+}
+
 /// Whether `p` could collect evidence N (CR 701.59b).
 pub fn can_collect_evidence(g: &Game, p: PlayerId, n: u32) -> bool {
-    total_mana_value(g, &g.player(p).graveyard) >= n
+    can_collect_evidence_without(g, p, n, &[])
+}
+
+/// Whether `p` could collect evidence N without exiling the cards `excluded` (cards the
+/// same instruction exiles otherwise: "exile it and collect evidence 4").
+pub fn can_collect_evidence_without(g: &Game, p: PlayerId, n: u32, excluded: &[ObjectId]) -> bool {
+    total_mana_value(g, &evidence(g, p, excluded)) >= n
 }
 
 /// `p` collects evidence N (CR 701.59a): they choose cards in their graveyard with total
 /// mana value N or greater and exile them. Returns false (doing nothing) if they can't.
 pub fn collect_evidence(g: &mut Game, p: PlayerId, n: u32, src: Option<ObjectId>) -> bool {
-    if !can_collect_evidence(g, p, n) {
+    collect_evidence_without(g, p, n, src, &[])
+}
+
+/// `p` collects evidence N without exiling the cards `excluded`.
+fn collect_evidence_without(
+    g: &mut Game,
+    p: PlayerId,
+    n: u32,
+    src: Option<ObjectId>,
+    excluded: &[ObjectId],
+) -> bool {
+    if !can_collect_evidence_without(g, p, n, excluded) {
         return false;
     }
-    let gy = g.player(p).graveyard.clone();
+    let gy = evidence(g, p, excluded);
     let picked = g.ask_objects(
         p,
         src,
@@ -155,19 +183,39 @@ impl KeywordActionRules for CollectEvidence {
         &[KeywordAction::CollectEvidence]
     }
 
+    /// "Collect evidence N". `what`, if any, are cards that can't be exiled for it,
+    /// because the same instruction exiles them otherwise ("you may exile it and collect
+    /// evidence 4": it can't also be evidence).
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
         let n = number(g, a.n, ctx);
+        let excluded = excluded(g, a, ctx);
+        let mut all = true;
         for p in g.eval_players(a.who, ctx) {
-            collect_evidence(g, p, n, ctx.source);
+            all &= collect_evidence_without(g, p, n, ctx.source, &excluded);
         }
+        // "If you do" (CR 701.59b: it may be impossible).
+        ctx.prev_happened = all;
     }
 
     fn can_choose(&self, g: &Game, a: &Args, ctx: &Ctx) -> bool {
         let n = number(g, a.n, ctx);
+        let excluded = excluded(g, a, ctx);
         g.eval_players(a.who, ctx)
             .into_iter()
-            .all(|p| can_collect_evidence(g, p, n))
+            .all(|p| can_collect_evidence_without(g, p, n, &excluded))
     }
+}
+
+/// The cards an instruction to collect evidence can't exile (its `what`).
+fn excluded(g: &Game, a: &Args, ctx: &Ctx) -> Vec<ObjectId> {
+    if matches!(a.what, Sel::None) {
+        return vec![];
+    }
+    g.eval_sel(a.what, ctx)
+        .into_iter()
+        .filter_map(|e| e.object())
+        .map(|o| g.current(o))
+        .collect()
 }
 
 inventory::submit! { KeywordActionRegistration(&CollectEvidence) }
@@ -180,9 +228,12 @@ impl KeywordActionRules for Forage {
     }
 
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
+        let mut all = true;
         for p in g.eval_players(a.who, ctx) {
-            forage(g, p, ctx.source);
+            all &= forage(g, p, ctx.source);
         }
+        // "If you do": a player who can do neither doesn't forage.
+        ctx.prev_happened = all;
     }
 
     fn can_choose(&self, g: &Game, a: &Args, ctx: &Ctx) -> bool {

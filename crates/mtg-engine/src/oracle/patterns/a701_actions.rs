@@ -324,6 +324,34 @@ fn suspect_detain(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(keyword_action(action, PlayerRef::You, what, Value::c(1)))
 }
 
+/// "create [a token] and suspect it" (Case of the Stashed Skeleton): "it" is the token
+/// just created.
+fn create_and_suspect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let first = end(l).strip_suffix(" and suspect it")?;
+    if !first.starts_with("create ") {
+        return None;
+    }
+    let saved = b.it.clone();
+    let created = crate::oracle::effects::parse_simple(first, b)
+        .filter(|e| matches!(e, Effect::CreateToken { .. }));
+    let Some(created) = created else {
+        b.it = saved;
+        return None;
+    };
+    b.it = Sel::Var(vars::CREATED);
+    Some(Effect::seq(vec![
+        created,
+        keyword_action(
+            KeywordAction::Suspect,
+            PlayerRef::You,
+            Sel::Var(vars::CREATED),
+            Value::c(1),
+        ),
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "a701 create a token and suspect it", priority: 59, parse: create_and_suspect } }
+
 /// "[creatures] are no longer suspected", "it's no longer suspected" (CR 701.60a).
 fn no_longer_suspected(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
@@ -408,8 +436,10 @@ fn attach_to_new_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-/// "forage" and "collect evidence N" as instructions (CR 701.61, 701.59).
-fn forage_evidence(l: &str, _b: &mut Builder) -> Option<Effect> {
+/// "forage" and "collect evidence N" as instructions (CR 701.61, 701.59), and "exile it
+/// and collect evidence N" (the card exiled can't also be evidence, so the choice is
+/// possible only if the rest of the graveyard is enough; see `kwa/evidence_forage.rs`).
+fn forage_evidence(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if l == "forage" {
         return Some(Effect::KeywordAction {
@@ -419,14 +449,74 @@ fn forage_evidence(l: &str, _b: &mut Builder) -> Option<Effect> {
             n: Value::c(1),
         });
     }
-    let n = just_number(l.strip_prefix("collect evidence ")?)?;
-    Some(keyword_action(
-        KeywordAction::CollectEvidence,
-        PlayerRef::You,
-        Sel::None,
-        n,
-    ))
+    let (exiled, r) = match l.split_once(" and collect evidence ") {
+        Some((first, r)) => {
+            let what = match first {
+                "exile it" => b.it.clone(),
+                "exile ~" => Sel::This,
+                _ => return None,
+            };
+            (Some(what), r)
+        }
+        None => (None, l.strip_prefix("collect evidence ")?),
+    };
+    let n = just_number(r)?;
+    // "Collect evidence X" with nothing defining X (the player would choose it as the
+    // ability resolves) isn't supported.
+    if matches!(n, Value::X) {
+        return None;
+    }
+    let Some(what) = exiled else {
+        return Some(keyword_action(
+            KeywordAction::CollectEvidence,
+            PlayerRef::You,
+            Sel::None,
+            n,
+        ));
+    };
+    Some(Effect::seq(vec![
+        Effect::Exile {
+            what: what.clone(),
+            face_down: false,
+            link: false,
+        },
+        Effect::Store {
+            var: kvars::EXILED_WITH_EVIDENCE,
+            sel: Sel::Var(vars::IT),
+        },
+        keyword_action(KeywordAction::CollectEvidence, PlayerRef::You, what, n),
+    ]))
 }
+
+/// "If you do, return ~ to the battlefield [tapped]" after "you may exile it and collect
+/// evidence N" (Lamplight Phoenix): the effect finds the card it exiled (CR 400.7j).
+fn return_exiled_with_evidence(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if you do, return ~ ") else {
+        return false;
+    };
+    let exiled = format!("\"var\":{}", kvars::EXILED_WITH_EVIDENCE);
+    if !serde_json::to_string(prev).is_ok_and(|j| j.contains(&exiled)) {
+        return false;
+    }
+    let saved = b.it.clone();
+    b.it = Sel::Var(kvars::EXILED_WITH_EVIDENCE);
+    let e = crate::oracle::effects::parse_clause(&format!("return it {r}"), b);
+    b.it = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    *prev = Effect::seq(vec![
+        prev.clone(),
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a701 return the card exiled with evidence", priority: 50, apply: return_exiled_with_evidence } }
 
 inventory::submit! { EffectPattern { name: "a701 explore", priority: 60, parse: explore } }
 inventory::submit! { EffectPattern { name: "a701 connive", priority: 60, parse: connive } }

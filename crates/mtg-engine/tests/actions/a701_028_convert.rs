@@ -10,6 +10,7 @@ use mtg_engine::*;
 
 const GOLDBUG: &str = "Goldbug, Humanity's Ally // Goldbug, Scrappy Scout";
 const JETFIRE: &str = "Jetfire, Ingenious Scientist // Jetfire, Air Guardian";
+const CYCLONUS: &str = "Cyclonus, the Saboteur // Cyclonus, Cybertronian Fighter";
 
 /// Converts `id` with an effect of no source.
 fn convert(t: &mut TestGame, id: ObjectId) {
@@ -265,4 +266,63 @@ fn a_permanent_that_cant_transform_cant_convert() {
     );
     assert_eq!(t.obj_now(intruder).chars.name, "Moonrise Intruder");
     assert_eq!(t.obj_now(messenger).chars.name, "Village Messenger");
+}
+
+#[test]
+fn if_you_do_after_convert_is_whether_it_converted() {
+    cr!("701.28a", "701.28f");
+    supported(CYCLONUS);
+    // Cyclonus, Cybertronian Fighter: "Whenever Cyclonus deals combat damage to a player,
+    // convert it. If you do, there is an additional beginning phase after this phase."
+    let fighter = |cant_transform: bool| -> (String, bool) {
+        let mut t = TestGame::new(2);
+        let c = t.battlefield(P0, CYCLONUS);
+        convert(&mut t, c);
+        assert_eq!(t.obj_now(c).chars.name, "Cyclonus, Cybertronian Fighter");
+        // A creature (living metal isn't needed for this).
+        run(
+            &mut t,
+            P0,
+            None,
+            Effect::Modify {
+                what: Sel::Target(0),
+                mods: vec![mtg_engine::ability::Modification::AddTypes(vec![
+                    CardType::Creature,
+                ])],
+                duration: mtg_engine::ability::Duration::Permanent,
+            },
+            &[Entity::Object(c)],
+        );
+        if cant_transform {
+            t.custom(
+                P1,
+                text_card(
+                    "Rust Box",
+                    "Artifact",
+                    "{2}",
+                    None,
+                    "Artifact creatures can't transform.",
+                ),
+                Zone::Battlefield,
+            );
+        }
+        t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+        t.attack(&[(c, Entity::Player(P1))], &[]);
+        assert_eq!(t.life(P1), 15);
+        let extra = t
+            .g
+            .turn
+            .schedule
+            .contains(&mtg_engine::turn::Step::Untap);
+        (t.obj_now(c).chars.name.to_string(), extra)
+    };
+    assert_eq!(
+        fighter(false),
+        ("Cyclonus, the Saboteur".to_string(), true)
+    );
+    // It can't convert: no additional beginning phase.
+    assert_eq!(
+        fighter(true),
+        ("Cyclonus, Cybertronian Fighter".to_string(), false)
+    );
 }

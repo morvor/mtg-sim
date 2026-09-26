@@ -154,3 +154,24 @@ fn a_suspected_permanent_cant_become_suspected_again() {
     assert!(t.g.can_block_at_all(bears));
     assert_eq!(custom_events(&t, SUSPECTED).len(), 1);
 }
+
+#[test]
+fn suspecting_the_token_just_created() {
+    cr!("701.60a", "701.60c");
+    // Case of the Stashed Skeleton: "When this Case enters, create a 2/1 black Skeleton
+    // creature token and suspect it."
+    let mut t = TestGame::new(2);
+    let case = t.enter(P0, "Case of the Stashed Skeleton");
+    t.resolve_all();
+    let skeletons: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token() && o.chars.has_subtype("Skeleton"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(skeletons.len(), 1);
+    assert!(suspected(&t, skeletons[0]));
+    assert!(t.obj(skeletons[0]).has_keyword(KeywordKind::Menace));
+    assert!(!t.g.can_block_at_all(skeletons[0]));
+    assert!(!suspected(&t, case));
+}

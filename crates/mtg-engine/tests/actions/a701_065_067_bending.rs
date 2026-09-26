@@ -334,3 +334,56 @@ fn whenever_you_waterbend_triggers_however_the_cost_was_paid() {
         vec![(Some(P0), None, 4)]
     );
 }
+
+
+#[test]
+fn waterbend_x_uses_the_x_announced_as_the_spell_is_cast() {
+    cr!("701.67a", "601.2b");
+    supported("Waterbender's Restoration");
+    // {U}{U}: "As an additional cost to cast this spell, waterbend {X}. Exile X target
+    // creatures you control. Return those cards to the battlefield under their owner's
+    // control at the beginning of the next end step."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let a = t.battlefield(P0, "Ornithopter");
+    let b = t.battlefield(P0, "Ornithopter");
+    let islands = t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Waterbender's Restoration");
+    // X = 2: tap both Ornithopters for the waterbend {2}.
+    choose(&mut t, P0, &[a, b]);
+    t.cast(P0, spell)
+        .x(2)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    assert!(t.obj_now(a).tapped && t.obj_now(b).tapped);
+    assert_eq!(islands.iter().filter(|i| t.obj_now(**i).tapped).count(), 2);
+    assert_eq!(
+        custom_events(&t, WATERBENT_EVENT),
+        vec![(Some(P0), None, 2)]
+    );
+    // X target creatures: up to two could be chosen.
+    let maxes: Vec<u32> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { max, .. } => Some(max),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(maxes, vec![2]);
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
+    // X = 3 is too much: after {U}{U}, one Island and one creature to tap are left.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Waterbender's Restoration");
+    assert!(t
+        .cast(P0, spell)
+        .x(3)
+        .targets(&[Entity::Object(bears)])
+        .try_go()
+        .is_err());
+}

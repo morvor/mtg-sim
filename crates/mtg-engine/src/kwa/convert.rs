@@ -38,13 +38,16 @@ impl KeywordActionRules for Convert {
     }
 
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
+        let mut converted = false;
         for o in g.resolve_objects(a.what, ctx) {
             // CR 701.28e: not if it converted or transformed since its ability was put
             // onto the stack (or, for a delayed triggered ability, created).
             if crate::transform_rules::ability_may_transform(g, o, ctx) {
-                crate::dfc::transform(g, o);
+                converted |= crate::dfc::transform(g, o);
             }
         }
+        // "Convert it. If you do, ..." (CR 701.28c–f: it may not convert).
+        ctx.prev_happened = converted;
     }
 }
 

@@ -365,3 +365,41 @@ fn collecting_evidence_for_an_alternative_cost_isnt_the_linked_additional_cost()
     assert_eq!(clues(&t), 2);
     assert_eq!(t.counters(target, counters::STUN), 1);
 }
+
+#[test]
+fn a_card_exiled_by_the_same_instruction_isnt_evidence() {
+    cr!("701.59a", "701.59b");
+    ruling!(
+        "Lamplight Phoenix",
+        "You can't exile Lamplight Phoenix from your graveyard to pay the collect evidence cost of its triggered ability."
+    );
+    supported("Lamplight Phoenix");
+    // {1}{R}{R}: "When this creature dies, you may exile it and collect evidence 4. If you
+    // do, return this card to the battlefield tapped."
+    // The Phoenix (mana value 3) and Llanowar Elves (1) total 4, but without the Phoenix
+    // there's only 1: the player can't choose to.
+    let mut t = TestGame::new(2);
+    let phoenix = t.battlefield(P0, "Lamplight Phoenix");
+    let elves = t.graveyard(P0, "Llanowar Elves");
+    t.answer_yes(P0, true);
+    t.g.destroy(phoenix, None);
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(phoenix)), Zone::Graveyard(P0));
+    assert_eq!(t.zone(elves), Zone::Graveyard(P0));
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::YesNo { .. })));
+    // With Hill Giant (4) instead, it can: the Giant is exiled and the Phoenix returns.
+    let mut t = TestGame::new(2);
+    let phoenix = t.battlefield(P0, "Lamplight Phoenix");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.g.destroy(phoenix, None);
+    t.resolve_all();
+    let back = t.g.current(phoenix);
+    assert_eq!(t.zone(back), Zone::Battlefield);
+    assert!(t.obj_now(back).tapped);
+    assert_eq!(t.zone(giant), Zone::Exile);
+    assert_eq!(custom_events(&t, COLLECTED_EVIDENCE), vec![(Some(P0), None, 4)]);
+}

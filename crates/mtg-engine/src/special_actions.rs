@@ -143,17 +143,14 @@ fn static_actions(g: &Game) -> Vec<(ObjectId, u64, SpecialActionDef)> {
     out
 }
 
-/// Whether the card representing a face-down permanent has morph or disguise: it can be
-/// turned face up for that cost (CR 702.37e, 702.168d), by `kw/morph_face_up.rs`.
-fn has_morph_or_disguise(g: &Game, id: ObjectId) -> bool {
-    g.obj(id).card.as_ref().is_some_and(|card| {
-        card.characteristics(FaceState::Front)
-            .abilities
-            .iter()
-            .any(|a| {
-                matches!(&a.kind, AbilityKind::Keyword(k)
-                    if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise))
-            })
+/// Whether `p` could turn the face-down permanent `id` face up for its morph or disguise
+/// cost (CR 702.37e, 702.168d), by `kw/morph_face_up.rs` (with X = 0).
+fn morph_or_disguise_payable(g: &Game, p: PlayerId, id: ObjectId) -> bool {
+    crate::kw::morph_face_up::face_up_cost(g, id).is_some_and(|(_, mut cost)| {
+        if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+            cost.mana = Some(m.with_x(0));
+        }
+        g.can_pay_cost(p, &cost, Some(id), &Ctx::new(Some(id), p))
     })
 }
 
@@ -281,17 +278,20 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
             }
             // Morph and disguise: see `kw/morph_face_up.rs`. A manifested or cloaked
             // card with one of them may be turned face up either way (CR 701.40c–d,
-            // 701.58c–d): its controller chooses.
+            // 701.58c–d): its controller chooses when both costs could be paid.
             let cost = turn_face_up_cost(g, obj)?;
-            if has_morph_or_disguise(g, obj)
-                && g.ask_option(
-                    p,
-                    Some(obj),
-                    "Turn it face up by paying",
-                    vec!["Its mana cost".into(), "Its morph or disguise cost".into()],
-                ) == 1
-            {
-                return None;
+            if morph_or_disguise_payable(g, p, obj) {
+                let mana_payable = g.can_pay_cost(p, &cost, Some(obj), &Ctx::new(Some(obj), p));
+                if !mana_payable
+                    || g.ask_option(
+                        p,
+                        Some(obj),
+                        "Turn it face up by paying",
+                        vec!["Its mana cost".into(), "Its morph or disguise cost".into()],
+                    ) == 1
+                {
+                    return None;
+                }
             }
             if !pay(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p)) {
                 return bad("can't pay the cost");

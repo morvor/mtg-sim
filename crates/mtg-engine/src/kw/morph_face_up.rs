@@ -54,7 +54,7 @@ fn effects_could_change_abilities(g: &Game) -> bool {
 /// permanent that would have morph, megamorph, or disguise if it were face up (CR 702.37e:
 /// if it wouldn't have a morph cost face up, e.g. because of an effect that would apply to
 /// it, it can't be turned face up this way).
-fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
+pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;

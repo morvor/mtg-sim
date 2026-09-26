@@ -125,14 +125,17 @@ fn a_manifested_card_with_morph_turns_face_up_either_way() {
         t.lands(P0, "Plains", 3),
     ]
     .concat();
-    // Five lands: only the morph cost can be paid.
+    // Five lands: only the morph cost can be paid, so it's paid without a choice.
     assert!(can_turn_up(&mut t, P0, m));
-    option(&mut t, P0, 1);
     assert!(turn_up(&mut t, P0, m));
     assert!(!t.obj(m).face_down);
     assert_eq!(t.obj(m).chars.name.as_str(), "Sagu Mauler");
     assert!(lands.iter().all(|l| t.obj(*l).tapped));
-    // Or its mana cost.
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
+    // With seven lands, both costs can be paid and the player chooses: its mana cost ...
     let mut t = TestGame::new(2);
     let m = summon(&mut t, "Sagu Mauler");
     t.lands(P0, "Forest", 1);
@@ -142,6 +145,16 @@ fn a_manifested_card_with_morph_turns_face_up_either_way() {
     assert!(turn_up(&mut t, P0, m));
     assert!(!t.obj(m).face_down);
     assert_eq!(plains.iter().filter(|l| t.obj(**l).tapped).count(), 4);
+    // ... or its morph cost.
+    let mut t = TestGame::new(2);
+    let m = summon(&mut t, "Sagu Mauler");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Island", 1);
+    let plains = t.lands(P0, "Plains", 5);
+    option(&mut t, P0, 1);
+    assert!(turn_up(&mut t, P0, m));
+    assert!(!t.obj(m).face_down);
+    assert_eq!(plains.iter().filter(|l| t.obj(**l).tapped).count(), 3);
 }
 
 #[test]
@@ -152,11 +165,19 @@ fn a_manifested_card_with_disguise_turns_face_up_either_way() {
     let m = summon(&mut t, "Nightdrinker Moroii");
     // Manifested, not disguised: no ward {2}.
     assert!(!t.obj(m).has_keyword(KeywordKind::Ward));
+    // Two Swamps: only the disguise cost can be paid.
     t.lands(P0, "Swamp", 2);
     assert!(can_turn_up(&mut t, P0, m));
-    option(&mut t, P0, 1);
     assert!(turn_up(&mut t, P0, m));
     assert_eq!(t.obj(m).chars.name.as_str(), "Nightdrinker Moroii");
+    // Four: the player chooses, here its mana cost.
+    let mut t = TestGame::new(2);
+    let m = summon(&mut t, "Nightdrinker Moroii");
+    let swamps = t.lands(P0, "Swamp", 4);
+    option(&mut t, P0, 0);
+    assert!(turn_up(&mut t, P0, m));
+    assert!(!t.obj(m).face_down);
+    assert!(swamps.iter().all(|s| t.obj(*s).tapped));
 }
 
 #[test]

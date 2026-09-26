@@ -211,6 +211,9 @@ pub mod kvars {
     pub const BLIGHTED: Var = vars::USER + 1068;
     /// "The cards exiled this way" by airbending (CR 701.65a).
     pub const AIRBENT: Var = vars::USER + 1065;
+    /// The card "exile it and collect evidence N" exiled (other than the evidence), which
+    /// the rest of the effect can find in exile (CR 400.7j).
+    pub const EXILED_WITH_EVIDENCE: Var = vars::USER + 1059;
 }
 
 /// Reports that a player performed a keyword action (for "whenever you [action]"

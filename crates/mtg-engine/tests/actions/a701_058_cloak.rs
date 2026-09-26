@@ -84,9 +84,10 @@ fn a_cloaked_card_with_morph_turns_face_up_either_way() {
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Island", 1);
     t.lands(P0, "Plains", 3);
-    option(&mut t, P0, 1);
+    // Only the morph cost ({3}{G}{U}) can be paid, not the mana cost ({4}{G}{U}).
     assert!(turn_up(&mut t, P0, c));
     assert_eq!(t.obj(c).chars.name.as_str(), "Sagu Mauler");
+    assert!(!t.obj(c).has_keyword(KeywordKind::Ward));
 }
 
 #[test]
@@ -97,13 +98,15 @@ fn a_cloaked_card_with_disguise_turns_face_up_either_way() {
         "If a cloaked creature would have disguise (or morph) if it were face up, you may also turn it face up by paying its disguise (or morph) cost."
     );
     // Nightdrinker Moroii: mana cost {3}{B}, disguise {B}{B}.
+    // With four Swamps, either cost can be paid: the player chooses the disguise cost ...
     let mut t = TestGame::new(2);
     let c = cloak(&mut t, "Nightdrinker Moroii");
-    t.lands(P0, "Swamp", 2);
+    let swamps = t.lands(P0, "Swamp", 4);
     option(&mut t, P0, 1);
     assert!(turn_up(&mut t, P0, c));
     assert_eq!(t.obj(c).chars.name.as_str(), "Nightdrinker Moroii");
-    // Or for its mana cost.
+    assert_eq!(swamps.iter().filter(|s| t.obj(**s).tapped).count(), 2);
+    // ... or its mana cost.
     let mut t = TestGame::new(2);
     let c = cloak(&mut t, "Nightdrinker Moroii");
     let swamps = t.lands(P0, "Swamp", 4);
