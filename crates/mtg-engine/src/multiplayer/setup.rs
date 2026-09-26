@@ -52,6 +52,11 @@ pub enum SetupError {
     /// An emperor would begin the game within the range of influence of another emperor
     /// (CR 809.6a).
     EmperorsInRange,
+    /// An Archenemy game is between exactly two teams, one of them a single player
+    /// (CR 904.2, 904.2a, 904.2b), or every player plays alone (CR 904.12a).
+    ArchenemyTeams,
+    /// The variant uses only certain multiplayer options (CR 904.2, 904.12a).
+    VariantOptions,
 }
 
 impl GameConfig {
@@ -243,6 +248,8 @@ impl GameConfig {
             }
             _ => {}
         }
+        // CR 900: the casual variants' setups.
+        errors.extend(crate::casual::setup_errors(self, &teams));
         if self.shared_team_turns {
             if !has_teams {
                 errors.push(SetupError::SharedTeamTurnsWithoutTeams);

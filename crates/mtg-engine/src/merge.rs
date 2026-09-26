@@ -31,6 +31,9 @@ pub struct MergeState {
     /// The objects a merged permanent became as it left the battlefield (CR 730.3), by the
     /// first of them (the one `Game::current` follows).
     pub left_together: BTreeMap<ObjectId, Vec<ObjectId>>,
+    /// A merged or melded commander is being put into the command zone instead of into
+    /// this zone: its components that aren't commanders go there instead (CR 903.9c).
+    pub commander_split: Option<(Zone, LibraryPosition)>,
 }
 
 /// `Event::Custom` name: a spell merged with a creature as a resolving mutating creature
@@ -75,6 +78,13 @@ fn new_component(g: &mut Game, obj: ObjectId) -> ObjectId {
     };
     let c = &mut g.objects[id.0 as usize];
     c.face_down = o.face_down;
+    // CR 903.3: the commander designation is an attribute of the card; a choice made
+    // for it before the game follows it (CR 607.2p).
+    c.is_commander = o.is_commander;
+    if let Some(ch) = o.linked_choices.get(&crate::ability::PREGAME_LINK) {
+        c.linked_choices
+            .insert(crate::ability::PREGAME_LINK, ch.clone());
+    }
     // A double-faced component keeps the face it has up; a flipped one stays flipped.
     if matches!(o.face, FaceState::Back | FaceState::Flipped) && c.kind == ObjKind::Card {
         c.face = o.face;
@@ -343,7 +353,21 @@ pub fn merge(g: &mut Game, obj: ObjectId, target: ObjectId, on_top: bool) {
     }
     crate::stickers::merge_into(g, obj, target);
     refresh(g, target);
+    // CR 903.3c: a merged permanent with a commander component is that player's
+    // commander.
+    mark_commander(g, target);
     g.recompute();
+}
+
+/// A merged or melded permanent is a commander if one of its components is (CR 903.3b,
+/// 903.3c).
+fn mark_commander(g: &mut Game, id: ObjectId) {
+    let any = physical_components(g, id)
+        .iter()
+        .any(|c| g.obj(*c).is_commander);
+    if any {
+        g.objects[id.0 as usize].is_commander = true;
+    }
 }
 
 /// Called as the object `new` is created for `old` (CR 400.7). A merged or melded
@@ -363,6 +387,8 @@ pub fn incarnation(g: &mut Game, old: ObjectId, new: ObjectId) {
         n.card = f.card.clone();
         n.kind = f.kind;
         n.owner = f.owner;
+        // Each card keeps its own commander designation (CR 903.3).
+        n.is_commander = f.is_commander;
         n.face = FaceState::Front;
         n.base = match &f.card {
             Some(card) if f.kind == ObjKind::Card => card.characteristics(FaceState::Front),
@@ -393,9 +419,20 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
     }
     let token_permanent = g.obj(old).kind == ObjKind::Token;
     let mut news = vec![new];
+    // CR 903.9c: a merged or melded commander put into the command zone instead of into
+    // its owner's hand or library: the other components go there.
+    let split = g.merges.commander_split.take();
     for c in &phys[1..] {
         let owner = g.obj(*c).owner;
-        let to = match m.to {
+        let dest = match split {
+            Some((z, _)) if !g.obj(*c).is_commander => z,
+            _ => m.to,
+        };
+        let pos = match split {
+            Some((_, p)) if !g.obj(*c).is_commander => p,
+            _ => m.pos,
+        };
+        let to = match dest {
             Zone::Graveyard(_) => Zone::Graveyard(owner),
             Zone::Hand(_) => Zone::Hand(owner),
             Zone::Library(_) => Zone::Library(owner),
@@ -404,7 +441,7 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
         let ev = MoveEv {
             obj: *c,
             to,
-            pos: m.pos,
+            pos,
             cause: m.cause,
             by: m.by,
             etb: EtbInfo {
@@ -638,6 +675,8 @@ pub fn meld(
         o.base = result.characteristics(FaceState::Melded);
         o.merged_with = vec![ca, cb];
     }
+    // CR 903.3b: melded with a commander, the melded permanent is that commander.
+    mark_commander(g, m);
     crate::stickers::redirect(g, &[a, b], m);
     let new = g.move_object_ev(MoveEv {
         obj: m,

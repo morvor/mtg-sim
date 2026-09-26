@@ -103,6 +103,8 @@ pub fn left_players_seated_between(g: &Game, after: PlayerId, next: PlayerId) ->
 /// ante zone stay (CR 800.4n). Other effects created by that player's spells and
 /// abilities continue to apply (CR 800.4m).
 pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
+    // CR 901.6, 901.10, 901.14b: planar cards and the planar controller.
+    let planar = crate::planechase::player_leaving(g, p);
     // CR 800.4i: remember what the player's zones held as they left.
     let pl = g.player(p);
     let info = DepartedPlayer {
@@ -189,6 +191,9 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
         c.defending_players.retain(|x| *x != p);
     }
     grand_melee::player_left(g, p);
+    // CR 901.10: if a face-up planar card left the game, the planar controller
+    // planeswalks.
+    crate::planechase::player_left(g, p, planar);
     g.dirty = true;
 }
 

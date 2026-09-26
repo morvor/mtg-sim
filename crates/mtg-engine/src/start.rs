@@ -53,6 +53,8 @@ pub struct StartState {
     pub sticker_sheets: BTreeMap<PlayerId, Vec<crate::stickers::StickerSheet>>,
     /// The names of the sticker sheets each player revealed (CR 103.2d).
     pub revealed_sticker_sheets: BTreeMap<PlayerId, Vec<SmolStr>>,
+    /// Information noted during the draft before the game (CR 905.2b).
+    pub draft: crate::draft::DraftInfo,
 }
 
 impl Game {
@@ -89,13 +91,20 @@ impl Game {
     }
 
     /// A player's starting hand size (CR 103.5): normally seven, modified by their
-    /// vanguard's hand modifier (CR 103.5a).
+    /// vanguard's hand modifier in a Vanguard game (CR 103.5a, 902.5).
     pub fn starting_hand_size(&self, p: PlayerId) -> u32 {
-        let modifier = self
-            .vanguard_of(p)
+        (self.config.starting_hand_size as i32 + self.vanguard_hand_modifier(p)).max(0) as u32
+    }
+
+    /// The hand modifier of `p`'s vanguard (CR 313.6), which applies only in a Vanguard
+    /// game: only the Vanguard variant uses vanguard cards (CR 313.1, 902.5, 902.5b).
+    pub fn vanguard_hand_modifier(&self, p: PlayerId) -> i32 {
+        if self.config.variant != Variant::Vanguard {
+            return 0;
+        }
+        self.vanguard_of(p)
             .and_then(|v| self.obj(v).base.hand_modifier)
-            .unwrap_or(0);
-        (self.config.starting_hand_size as i32 + modifier).max(0) as u32
+            .unwrap_or(0)
     }
 
     /// Designates the card named `name` in `p`'s deck as their commander (CR 903.3), before

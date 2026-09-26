@@ -180,6 +180,31 @@ pub fn ensure(g: &mut Game) {
     switch_to(g, 0);
 }
 
+/// The players who start the game with turn markers (CR 807.4b): the starting player and
+/// the player four seats to the left of each previous one, one for each marker, in marker
+/// order.
+pub fn starting_holders(g: &Game) -> Vec<PlayerId> {
+    let first = g.turn.starting_player;
+    (0..marker_count(g.players_in_game().len()))
+        .map(|k| seat_left(g, first, 4 * k))
+        .collect()
+}
+
+/// Whether the players who have left the game, now that one more has, leave fewer players
+/// than the turn markers in play (not counting those already designated for removal)
+/// require: the departure reduces the number of turn markers (CR 807.4e, 901.14b).
+pub fn departure_reduces_markers(g: &Game) -> bool {
+    if !is_grand_melee(g) {
+        return false;
+    }
+    let effective = if markers_set(g) {
+        gm(g).markers.iter().filter(|m| m.removals == 0).count()
+    } else {
+        marker_count(g.players.len())
+    };
+    marker_count(g.players_in_game().len()) < effective
+}
+
 /// Swaps marker `i`'s turn into the game (and the current one out).
 pub fn switch_to(g: &mut Game, i: usize) {
     let cur = gm(g).current;

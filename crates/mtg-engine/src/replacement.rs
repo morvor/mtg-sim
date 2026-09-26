@@ -459,9 +459,8 @@ impl Game {
                             from: None,
                             to: None,
                         },
-                        action: ReplacementAction::MoveInstead(Destination::zone(
-                            ZoneKind::Command,
-                        )),
+                        // CR 903.9c: a merged or melded commander splits up.
+                        action: crate::commander_rules::command_zone_instead(self, m),
                         self_replacement: false,
                         optional: true,
                     },

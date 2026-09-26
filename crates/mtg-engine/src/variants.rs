@@ -128,7 +128,7 @@ fn scheme_to_bottom(g: &mut Game, id: ObjectId) {
 pub fn abandon(g: &mut Game, id: ObjectId) -> bool {
     let id = g.current(id);
     let o = g.obj(id);
-    if g.config.variant != crate::game::Variant::Archenemy
+    if !crate::life_totals::is_archenemy_game(g)
         || o.zone != Zone::Command
         || o.face_down
         || !is_scheme_card(o)
@@ -292,7 +292,7 @@ pub fn dungeon_sba(g: &mut Game) -> bool {
 /// CR 704.6e/f: archenemy scheme and planechase phenomenon SBAs.
 pub fn variant_sbas(g: &mut Game) -> bool {
     let mut performed = false;
-    if g.config.variant == crate::game::Variant::Archenemy {
+    if crate::life_totals::is_archenemy_game(g) {
         performed |= scheme_sba(g);
     }
     performed |= phenomenon_sba(g);

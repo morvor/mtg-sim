@@ -98,6 +98,10 @@ impl KeywordRules for Companion {
         let Some(card) = unused_companion(g, p) else {
             return vec![];
         };
+        // CR 903.11a: in a Commander game, not a card the rules don't let in.
+        if !crate::commander_rules::may_bring_in(g, card, Zone::Hand(p)) {
+            return vec![];
+        }
         if !g.has_priority(p)
             || !g.is_sorcery_timing(p)
             || !g.can_pay_cost(p, &companion_cost(), Some(card), &Ctx::new(Some(card), p))

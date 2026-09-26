@@ -91,6 +91,19 @@ pub enum DeckProblem {
     /// Commander: the cards designated as the deck's commander can't be its commanders
     /// together (CR 702.124, see `kw/partner.rs`).
     InvalidCommanders { reason: String },
+    /// A supplementary deck (a planar or scheme deck) with a card of the wrong type
+    /// (CR 901.3, 904.3).
+    WrongCardType { name: String, expected: String },
+    /// A planar deck with more phenomenon cards than allowed (CR 901.3, 901.15a).
+    TooManyPhenomena { have: usize, max: usize },
+    /// Commander: a card with a basic land type that could produce a color of mana
+    /// outside the commander's color identity (CR 903.5d).
+    ManaOutsideColorIdentity { name: String },
+    /// Brawl with a colorless commander: basic lands of more than one basic land type
+    /// (CR 903.12e).
+    BasicLandTypes { types: Vec<String> },
+    /// Commander Draft: a card that isn't in the player's card pool (CR 903.13e, 903.13f).
+    NotInCardPool { name: String },
 }
 
 /// Conspiracy cards among `cards` (CR 315.1, 315.3).
@@ -390,13 +403,23 @@ pub(crate) fn check_commander_cards(
                 });
             }
         }
-        let ci = c.color_identity;
-        if ci.union(commander.color_identity) != commander.color_identity {
+        // CR 903.5c: every color in its color identity is in the commander's — except
+        // Brawl's basic lands for a colorless commander (CR 903.12e).
+        let identity = crate::commander_rules::color_identity(commander);
+        if crate::commander_rules::brawl_basic_exception(c, &identity, brawl) {
+            continue;
+        }
+        let ci = crate::commander_rules::color_identity(c);
+        if ci.union(identity) != identity {
             problems.push(DeckProblem::OutsideColorIdentity {
                 name: name.to_string(),
             });
         }
     }
+    // CR 903.5d, 903.12e: cards with basic land types.
+    problems.extend(crate::commander_rules::basic_land_type_problems(
+        &cards, commander, brawl,
+    ));
     if !sideboard.is_empty() {
         problems.push(DeckProblem::SideboardNotAllowed);
     }
