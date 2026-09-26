@@ -336,6 +336,14 @@ fn cards_exiled_by_several_hideaway_abilities_are_all_exiled_with_it() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.zone(cards[3]), Zone::Exile);
+    // The other exiled card (an instant) can't be played later in the turn.
+    t.lands(P0, "Mountain", 1);
+    assert!(!crate::common_k702_027_037::can_cast(
+        &mut t,
+        P0,
+        cards[3],
+        mtg_engine::object::CastMethod::Normal
+    ));
 }
 
 #[test]
@@ -514,4 +522,86 @@ fn howltooth_hollow_needs_every_hand_to_be_empty() {
     assert_eq!(t.hand_size(P0), 0);
     activate(&mut t);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+/// Smuggler's Buggy (a 5/5 Vehicle) with the Lightning Bolt exiled by its hideaway ability,
+/// made a creature and attacking P1 unblocked; stops in the postcombat main phase.
+fn buggy_hits(cast_it: bool) -> (TestGame, Vec<ObjectId>) {
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t);
+    let buggy = t.enter(P0, "Smuggler's Buggy");
+    t.answer_choose(P0, &[Entity::Object(cards[3])]);
+    t.resolve_all();
+    assert_eq!(t.zone(cards[3]), Zone::Exile);
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![mtg_engine::ability::Modification::AddTypes(vec![
+                mtg_engine::types::CardType::Creature,
+            ])],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &[Entity::Object(buggy)],
+    );
+    t.g.objects[buggy.0 as usize].summoning_sick = false;
+    crate::common_k702_011_017::attack_with(&mut t, &[(buggy, Entity::Player(P1))]);
+    crate::common_k702_018_026::declare_blocks(&mut t, P1, &[]);
+    // "Whenever this Vehicle deals combat damage to a player, you may cast the exiled card
+    // without paying its mana cost. If you do, return this Vehicle to its owner's hand."
+    t.answer_yes(P0, cast_it);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.advance_to(P0, mtg_engine::turn::Step::PostcombatMain);
+    t.resolve_all();
+    (t, cards)
+}
+
+#[test]
+fn a_hideaway_permanent_can_cast_the_exiled_card_for_free() {
+    cr!("702.75a", "607.2a");
+    assert_supported("Smuggler's Buggy");
+    let (t, cards) = buggy_hits(true);
+    // 5 combat damage, then the Lightning Bolt cast for free.
+    assert_eq!(t.life(P1), 12);
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert!(t.g.permanents().all(|o| !o.tapped || !o.chars.is_land()));
+    // "If you do": the Vehicle returns to its owner's hand.
+    assert!(t.in_hand(P0, "Smuggler's Buggy"));
+    let _ = cards;
+    // Not cast: the card stays exiled and the Vehicle stays.
+    let (t, cards) = buggy_hits(false);
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.zone(cards[3]), Zone::Exile);
+    assert_eq!(t.named_on_battlefield("Smuggler's Buggy").len(), 1);
+}
+
+#[test]
+fn fight_rigging_plays_the_exiled_card_once_you_control_a_big_creature() {
+    cr!("702.75a", "607.2a");
+    assert_supported("Fight Rigging");
+    for (creature, played) in [("Hill Giant", false), ("Craw Wurm", true)] {
+        let mut t = TestGame::new(2);
+        let cards = stack_library(&mut t);
+        let c = t.battlefield(P0, creature);
+        t.enter(P0, "Fight Rigging");
+        // Hideaway 5: exile the Grizzly Bears.
+        t.answer_choose(P0, &[Entity::Object(cards[0])]);
+        t.resolve_all();
+        // "At the beginning of combat on your turn, put a +1/+1 counter on target creature
+        // you control. Then if you control a creature with power 7 or greater, you may play
+        // the exiled card without paying its mana cost."
+        t.answer_targets(P0, &[Entity::Object(c)]);
+        t.answer_yes(P0, true);
+        t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+        t.resolve_all();
+        assert_eq!(t.counters(c, mtg_engine::types::counters::PLUS1), 1);
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            played as usize,
+            "{creature}"
+        );
+        assert_eq!(t.zone(cards[0]) == Zone::Exile, !played);
+    }
 }

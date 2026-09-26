@@ -77,17 +77,33 @@ fn a_wither_source_that_left_its_zone_uses_last_known_information() {
         "Spiteful Wretch",
         "Creature — Elemental",
         Some((1, 1)),
-        "Wither\nWhen this creature dies, it deals 2 damage to target creature.",
+        "When this creature dies, it deals 2 damage to target creature.",
     );
+    let mut t = TestGame::new(2);
+    let wretch = bf(&mut t, P0, def.clone());
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    // Wither only from an effect on the permanent: the card in the graveyard doesn't
+    // have it, but the permanent as it last existed did.
+    grant(&mut t, wretch, Keyword::new(KeywordKind::Wither));
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    destroy(&mut t, wretch);
+    t.settle();
+    assert!(!t
+        .obj_now(wretch)
+        .chars
+        .has_keyword(KeywordKind::Wither));
+    t.resolve_all();
+    assert_eq!(t.counters(wurm, counters::MINUS1), 2);
+    assert_eq!(t.obj_now(wurm).damage, 0);
+    // Without wither as it last existed, the damage is marked as usual.
     let mut t = TestGame::new(2);
     let wretch = bf(&mut t, P0, def);
     let wurm = t.battlefield(P1, "Craw Wurm");
     t.answer_targets(P0, &[Entity::Object(wurm)]);
     destroy(&mut t, wretch);
     t.resolve_all();
-    // It's in the graveyard as it deals the damage: as it last existed it had wither.
-    assert_eq!(t.counters(wurm, counters::MINUS1), 2);
-    assert_eq!(t.obj_now(wurm).damage, 0);
+    assert_eq!(t.counters(wurm, counters::MINUS1), 0);
+    assert_eq!(t.obj_now(wurm).damage, 2);
 }
 
 #[test]

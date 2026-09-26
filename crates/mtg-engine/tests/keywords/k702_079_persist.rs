@@ -350,10 +350,16 @@ fn persist_granted_by_an_effect_works_for_each_creature() {
     assert_eq!(giant_back.len(), 1);
     assert_eq!(t.pt(giant_back[0]), (2, 2));
     assert_eq!(t.pt(bears_back[0]), (1, 1));
-    // The returned creatures are new objects: they don't have persist any more.
+    // The returned creatures are new objects: they don't have persist any more (even
+    // once a +1/+1 counter cancels the -1/-1 counter).
+    put_counters(&mut t, bears_back[0], counters::PLUS1, 1);
+    t.settle();
+    assert_eq!(t.g.obj(bears_back[0]).counter(counters::MINUS1), 0);
     destroy(&mut t, bears_back[0]);
     t.settle();
     assert!(stack_triggers(&t, "Persist").is_empty());
+    t.resolve_all();
+    assert!(on_bf(&t, "Grizzly Bears").is_empty());
 }
 
 #[test]

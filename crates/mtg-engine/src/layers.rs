@@ -1327,6 +1327,9 @@ pub fn apply_mod(
             // Subtypes that no longer correspond to a card type are removed (CR 205.1b-ish).
             let types = c.card_types;
             c.subtypes.retain(|s| subtype_still_valid(s, types));
+            if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
+                c.all_creature_types = false;
+            }
         }
         Modification::AddSupertypes(ts) => {
             for t in ts {

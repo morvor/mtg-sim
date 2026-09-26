@@ -1076,6 +1076,7 @@ impl Game {
             is_ability: false,
             card_types: chars.card_types,
             subtypes: chars.subtypes.to_vec(),
+            all_creature_types: crate::kw::changeling::every_creature_type(&chars),
             has_x: base_cost_has_x,
             source: Some(id),
             any_color: self.any_color_mana(p, id, false),

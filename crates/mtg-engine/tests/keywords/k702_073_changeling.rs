@@ -232,3 +232,36 @@ fn a_changeling_card_that_loses_its_abilities_in_the_graveyard_keeps_every_type(
     assert!(!t.obj_now(gy).chars.has_keyword(KeywordKind::Changeling));
     assert!(is_a(&t, gy, "Kithkin"));
 }
+
+#[test]
+fn a_changeling_spell_is_a_spell_of_every_creature_type_for_mana_restrictions() {
+    cr!("702.73a");
+    assert_supported("Unclaimed Territory");
+    // "Spend this mana only to cast a creature spell of the chosen type." (Elf): one green
+    // from it and a Forest pay for Woodland Changeling ({1}{G}).
+    let with_elf_mana = || {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+        let i = mtg_engine::types::subtype_lists()
+            .creature
+            .iter()
+            .position(|s| s == "Elf")
+            .expect("creature type");
+        t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+        let land = t.enter(P0, "Unclaimed Territory");
+        let now = t.g.current(land);
+        // Green.
+        t.answer(P0, DecisionKind::Any, mtg_engine::decision::Answer::Index(4));
+        t.activate(P0, now, 1, &[]).unwrap();
+        t.lands(P0, "Forest", 1);
+        t
+    };
+    let mut t = with_elf_mana();
+    let wc = t.hand(P0, "Woodland Changeling");
+    assert!(t.cast(P0, wc).try_go().is_ok());
+    assert!(t.g.player(P0).mana_pool.mana.is_empty());
+    // A creature spell that isn't an Elf can't use the mana.
+    let mut t = with_elf_mana();
+    let bears = t.hand(P0, "Grizzly Bears");
+    assert!(t.cast(P0, bears).try_go().is_err());
+}
