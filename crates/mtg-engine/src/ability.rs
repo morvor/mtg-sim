@@ -1651,6 +1651,14 @@ pub enum ReplacementEvent {
         to_objects: Option<Filter>,
         combat_only: bool,
     },
+    /// Noncombat damage would be dealt (CR 120.2b): "prevent all noncombat damage that
+    /// would be dealt to ...", "if a source would deal noncombat damage to ...". The
+    /// fields filter the damage event as in [`ReplacementEvent::Damage`].
+    NoncombatDamage {
+        source: Filter,
+        to_players: Option<PlayerFilter>,
+        to_objects: Option<Filter>,
+    },
     /// A player would gain life.
     GainLife(PlayerFilter),
     /// A player would lose life.

@@ -701,6 +701,25 @@ impl Game {
                     }
                 }
             }
+            // CR 120.2b: noncombat damage is any damage other than combat damage.
+            (
+                ReplacementEvent::NoncombatDamage {
+                    source,
+                    to_players,
+                    to_objects,
+                },
+                ReplEvent::Damage { combat: false, .. },
+            ) => self.repl_event_matches(
+                &ReplacementEvent::Damage {
+                    source: source.clone(),
+                    to_players: to_players.clone(),
+                    to_objects: to_objects.clone(),
+                    combat_only: false,
+                },
+                ctx,
+                ev,
+                locked,
+            ),
             (ReplacementEvent::GainLife(pf), ReplEvent::GainLife { player, amount }) => {
                 *amount > 0 && self.player_filter_matches(pf, *player, ctx)
             }

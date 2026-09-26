@@ -49,6 +49,15 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             to_objects: to_objects.as_ref().map(lf),
             combat_only: *combat_only,
         },
+        ReplacementEvent::NoncombatDamage {
+            source,
+            to_players,
+            to_objects,
+        } => ReplacementEvent::NoncombatDamage {
+            source: lf(source),
+            to_players: to_players.clone(),
+            to_objects: to_objects.as_ref().map(lf),
+        },
         ReplacementEvent::PutCounters {
             on_objects,
             on_players,
@@ -122,7 +131,9 @@ pub fn source_candidates(g: &Game) -> Vec<ObjectId> {
         for o in r.objects.iter().flatten() {
             push(*o, &mut out);
         }
-        if let ReplacementEvent::Damage { source, .. } = &r.def.event {
+        if let ReplacementEvent::Damage { source, .. }
+        | ReplacementEvent::NoncombatDamage { source, .. } = &r.def.event
+        {
             for o in filter_objects(source) {
                 push(o, &mut out);
             }
