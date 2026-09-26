@@ -62,66 +62,13 @@ pub fn perform(
 }
 
 /// CR 701.59a: collect evidence N — exile cards with total mana value N or greater from
-/// your graveyard. Returns false if impossible.
+/// your graveyard. Returns false if impossible. See `kwa/evidence_forage.rs`.
 pub fn collect_evidence(g: &mut Game, p: PlayerId, n: u32, src: Option<ObjectId>) -> bool {
-    let gy = g.player(p).graveyard.clone();
-    let total: u32 = gy.iter().map(|c| g.mana_value_of(*c)).sum();
-    if total < n {
-        return false;
-    }
-    // Choose cards greedily by highest mana value unless the player chooses.
-    let mut sorted = gy.clone();
-    sorted.sort_by_key(|c| std::cmp::Reverse(g.mana_value_of(*c)));
-    let mut chosen = Vec::new();
-    let mut sum = 0;
-    for c in sorted {
-        if sum >= n {
-            break;
-        }
-        sum += g.mana_value_of(c);
-        chosen.push(c);
-    }
-    for c in chosen {
-        g.exile_object(c, src);
-    }
-    true
+    crate::kwa::evidence_forage::collect_evidence(g, p, n, src)
 }
 
 /// CR 701.61a: forage — exile three cards from your graveyard or sacrifice a Food.
+/// Returns false if impossible. See `kwa/evidence_forage.rs`.
 pub fn forage(g: &mut Game, p: PlayerId, src: Option<ObjectId>) -> bool {
-    let foods: Vec<ObjectId> = g
-        .permanents()
-        .filter(|o| o.controller == p && o.chars.has_subtype("Food"))
-        .map(|o| o.id)
-        .collect();
-    let gy = g.player(p).graveyard.clone();
-    let can_exile = gy.len() >= 3;
-    if !can_exile && foods.is_empty() {
-        return false;
-    }
-    let use_food = if can_exile && !foods.is_empty() {
-        g.ask_option(
-            p,
-            src,
-            "Forage",
-            vec![
-                "Exile three cards from your graveyard".into(),
-                "Sacrifice a Food".into(),
-            ],
-        ) == 1
-    } else {
-        !can_exile
-    };
-    if use_food {
-        let f = g.ask_objects(p, src, "Choose a Food to sacrifice", foods, 1, 1);
-        if let Some(f) = f.first() {
-            g.sacrifice(*f, p);
-        }
-    } else {
-        let pick = g.ask_objects(p, src, "Choose three cards to exile", gy, 3, 3);
-        for c in pick {
-            g.exile_object(c, src);
-        }
-    }
-    true
+    crate::kwa::evidence_forage::forage(g, p, src)
 }

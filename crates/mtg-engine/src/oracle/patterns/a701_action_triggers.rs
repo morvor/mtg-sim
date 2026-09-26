@@ -123,6 +123,8 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         "amas" | "amass" => crate::kwa::amass::AMASSED_EVENT,
         "time travel" => crate::kwa::time_travel::TIME_TRAVELED,
         "learn" => crate::kwa::learn::LEARNED,
+        "collect evidence" => crate::kwa::evidence_forage::COLLECTED_EVIDENCE,
+        "forage" => crate::kwa::evidence_forage::FORAGED,
         _ => return None,
     };
     Some((
