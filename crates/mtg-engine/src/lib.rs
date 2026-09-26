@@ -47,6 +47,7 @@ pub mod dice;
 pub mod discard_rules;
 pub mod draw_rules;
 pub mod dungeons;
+pub mod end_turn;
 pub mod eval;
 pub mod events;
 pub mod excess_damage;
