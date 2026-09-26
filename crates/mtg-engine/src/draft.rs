@@ -11,8 +11,11 @@
 //! There's no active player or priority during a draft: every player drafts from the
 //! pack in front of them, in any order, and the packs are passed once all have drafted;
 //! players who want to act at the same time act in a random order (CR 905.2a). A player
-//! sees only the pack they're drafting from, the cards they've drafted, cards revealed as
-//! they were drafted, and cards drafted face up (CR 905.1c, 903.13d).
+//! sees only the pack they're drafting from, the cards they've drafted, cards currently
+//! revealed as they're drafted, and cards drafted face up (CR 905.1c, 903.13d). A card
+//! revealed as it's drafted stays revealed while the players draft from the packs in
+//! front of them; it's turned face down as the packs are passed, and only the noted
+//! information stays public (CR 905.2b).
 //!
 //! Some cards function during the draft (CR 905.2): "Draft [this card] face up"
 //! ([`DRAFT_FACE_UP`], CR 905.2c) and "Reveal [this card] as you draft it and note ..."
@@ -126,7 +129,8 @@ pub struct Draft {
     drafted: Vec<Vec<DraftedCard>>,
     /// Cards each player drafted this round.
     this_round: Vec<usize>,
-    /// Cards revealed as they were drafted (CR 905.2b).
+    /// Cards currently revealed as they're drafted (CR 905.2b): until the packs are
+    /// passed.
     revealed: Vec<(PlayerId, Arc<CardDef>)>,
     pub info: DraftInfo,
     rng: ChaCha8Rng,
@@ -217,8 +221,9 @@ impl Draft {
     }
 
     /// The cards `p` may look at (CR 905.1c, 903.13d): the pack they're drafting from,
-    /// the cards they've drafted, cards revealed as they were drafted (CR 905.2b), and
-    /// cards other players drafted face up (CR 905.2c).
+    /// the cards they've drafted, cards currently revealed as they're drafted
+    /// (CR 905.2b), and cards other players drafted face up (CR 905.2c). The information
+    /// noted for revealed cards ([`Draft::info`]) is public at any time.
     pub fn visible(&self, p: PlayerId) -> Vec<Arc<CardDef>> {
         let mut out: Vec<Arc<CardDef>> = self.packs[p.idx()].clone();
         out.extend(self.drafted[p.idx()].iter().map(|d| d.card.clone()));
@@ -295,6 +300,9 @@ impl Draft {
     /// Passes each pack to the next player in the round's direction.
     fn pass(&mut self) {
         let n = self.players();
+        // CR 905.2b: the revealed cards were turned face down once their information was
+        // noted; nobody sees them any more.
+        self.revealed.clear();
         if self.packs.iter().all(|p| p.is_empty()) {
             self.start_round();
             return;

@@ -63,17 +63,30 @@ pub fn computed_color_identity(card: &CardDef) -> ColorSet {
         if let Some(ind) = c.color_indicator {
             out = out.union(ind);
         }
-        out = out.union(c.colors);
+        // A characteristic-defining ability's colors — unless the card says that ability
+        // doesn't affect its color identity (Fallaji Wayfarer).
+        if !c
+            .rules_text
+            .to_lowercase()
+            .contains("doesn't affect its color identity")
+        {
+            out = out.union(c.colors);
+        }
         out = out.union(text_symbol_colors(&c.rules_text));
     }
     out
 }
 
-/// A card's color identity (CR 903.4): the one established for the card (Scryfall's, or
-/// the colors circled or chosen as the deck was built), together with the one computed
-/// from its characteristics.
+/// A card's color identity (CR 903.4): for a real card, the one Scryfall established for
+/// it (which already accounts for CR 903.4–903.4e); for a card made up for a game or a
+/// test, the one computed from its characteristics. Either way, together with colors
+/// added as the deck was built (a color chosen for the commander, CR 903.4b).
 pub fn color_identity(card: &CardDef) -> ColorSet {
-    card.color_identity.union(computed_color_identity(card))
+    if card.oracle_id.is_empty() {
+        card.color_identity.union(computed_color_identity(card))
+    } else {
+        card.color_identity
+    }
 }
 
 /// The color identity of the card `id` represents in a game, as established before the
@@ -423,14 +436,19 @@ pub fn check_commander_draft_deck(
     pool: &[Arc<CardDef>],
     sets: &[&str],
 ) -> Vec<DeckProblem> {
-    use crate::kw::partner::{can_be_commander, commanders_problem, ineligible_commander};
+    use crate::kw::partner::{
+        can_be_commander, commanders_problem, ineligible_commander, partner_abilities,
+        PartnerAbility,
+    };
     let mut problems = Vec::new();
     let refs: Vec<&CardDef> = commanders.iter().map(|c| c.as_ref()).collect();
+    // Each of the two has partner: its own, or the one it's considered to have.
     let masters_partners = sets.contains(&COMMANDER_MASTERS)
         && refs.len() == 2
-        && refs
-            .iter()
-            .all(|c| can_be_commander(c, false) && color_identity(c).count() <= 1);
+        && refs.iter().all(|c| {
+            (can_be_commander(c, false) && color_identity(c).count() <= 1)
+                || partner_abilities(&c.front().chars).contains(&PartnerAbility::Partner)
+        });
     if !masters_partners {
         if let Some(reason) = commanders_problem(&refs) {
             problems.push(DeckProblem::InvalidCommanders { reason });

@@ -398,16 +398,10 @@ pub fn set_starting_plane(g: &mut Game) {
 /// Ends effects that last until a player planeswalks (CR 901.11) — and those that last
 /// until a player planeswalks away from a plane, if `from_plane`.
 fn end_until_planeswalk_effects(g: &mut Game, from_plane: bool) {
-    let ends = |d: &Duration| match d {
+    g.expire_effects(|d| match d {
         Duration::UntilPlaneswalk { away_from_plane } => !*away_from_plane || from_plane,
         _ => false,
-    };
-    g.effects.retain(|e| !ends(&e.duration));
-    g.rule_effects.retain(|e| !ends(&e.duration));
-    g.player_effects.retain(|e| !ends(&e.duration));
-    g.replacements.retain(|e| !ends(&e.duration));
-    g.play_grants.retain(|x| !ends(&x.duration));
-    g.dirty = true;
+    });
 }
 
 /// Planeswalks (CR 701.31b): each face-up plane and phenomenon card goes to the bottom of
@@ -679,12 +673,16 @@ pub fn player_leaving(g: &mut Game, p: PlayerId) -> Departure {
     // CR 901.15b: with the single planar deck option, the new planar controller owns the
     // communal planar deck.
     apply_planar_control(g);
+    // CR 901.14b: the cards `p` controlled as a planar controller whose designation ends
+    // without a successor. Those `p` owns leave the game with them without anyone
+    // planeswalking.
+    let mut dissolved_cards: Vec<ObjectId> = Vec::new();
     if is_grand_melee(g) && crate::multiplayer::grand_melee::departure_reduces_markers(g) {
         let theirs: Vec<u32> = live_slots(g)
             .into_iter()
             .filter(|s| marker_holder(g, *s) == Some(p))
             .collect();
-        let controlled: Vec<ObjectId> = face_up_planar_cards(g)
+        dissolved_cards = face_up_planar_cards(g)
             .into_iter()
             .filter(|id| {
                 g.planechase
@@ -696,15 +694,14 @@ pub fn player_leaving(g: &mut Game, p: PlayerId) -> Departure {
         for s in theirs {
             g.planechase.dissolved.insert(s);
         }
-        for id in controlled {
-            if g.obj(id).owner != p {
-                to_bottom_face_down(g, id);
+        for id in &dissolved_cards {
+            if g.obj(*id).owner != p {
+                to_bottom_face_down(g, *id);
             } else {
-                g.planechase.slots.remove(&id);
+                g.planechase.slots.remove(id);
             }
         }
         g.dirty = true;
-        return dep;
     }
     let Some(new_pc) = planar_controller(g) else {
         return dep;
@@ -740,8 +737,10 @@ pub fn player_leaving(g: &mut Game, p: PlayerId) -> Departure {
     // Face-up planar cards the player owns leave the game with them; whoever controlled
     // them planeswalks away from them (CR 901.11a, 901.11b). Their "planeswalk away"
     // abilities trigger now, while they still exist (CR 603.10g).
+    // (Not the ones whose planar controller `p` was, if that designation just ended with
+    // no one taking over, CR 901.14b: they're gone without a planeswalk.)
     for id in face_up_planar_cards(g) {
-        if g.obj(id).owner == p {
+        if g.obj(id).owner == p && !dissolved_cards.contains(&id) {
             let ctl = controller_of(g, id).unwrap_or(new_pc);
             dep.face_up.push((id, ctl));
             crate::kwa::planeswalk::planeswalking_away(g, ctl, &[id]);

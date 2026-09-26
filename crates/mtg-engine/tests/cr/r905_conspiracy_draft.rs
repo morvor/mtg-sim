@@ -151,11 +151,22 @@ fn what_a_drafting_player_may_look_at() {
     assert!(d.can_see(P1, "P1R0C0"));
     assert!(d.can_see(P1, "Cogwork Librarian"));
     assert!(!d.can_see(P1, "P2R0C0"));
-    // P1 drafts Garbage Fire, revealing it: everyone may see it.
+    // P1 drafts Garbage Fire, revealing it: while it's revealed, everyone may see it.
     d.pick(P1, &[0]).unwrap();
+    assert!(d.can_see(P2, "Garbage Fire"));
+    assert!(d.can_see(P0, "Garbage Fire"));
     d.pick(P0, &[0]).unwrap();
     d.pick(P2, &[0]).unwrap();
-    assert!(d.can_see(P2, "Garbage Fire"));
+    // Once it's turned face down (the packs have been passed), only its drafter sees it;
+    // the noted information stays public.
+    assert!(!d.can_see(P2, "Garbage Fire"));
+    assert!(!d.can_see(P0, "Garbage Fire"));
+    assert!(d.can_see(P1, "Garbage Fire"));
+    assert!(d
+        .info
+        .notes
+        .iter()
+        .any(|n| n.player == P1 && n.card == "Garbage Fire" && n.number == Some(2)));
     // A card drafted without being revealed stays hidden.
     let theirs = names_of(&d.pool(P2));
     assert!(!d.can_see(P0, &theirs[1]));
@@ -248,11 +259,18 @@ fn noted_draft_information_is_used_during_the_game() {
     // P0 now has P2's pack: Garbage Fire is its first card.
     assert_eq!(names_of(d.pack(P0))[0], "Garbage Fire");
     d.pick(P0, &[0]).unwrap();
-    // Revealed: any player can look at the noted information.
+    // Revealed as it's drafted, and the number is noted.
     assert!(d.can_see(P1, "Garbage Fire"));
     assert_eq!(d.info.notes.len(), 1);
     assert_eq!(d.info.notes[0].number, Some(2));
     assert_eq!(d.info.notes[0].player, P0);
+    // Then it's turned face down and added to P0's pile; any player can still look at
+    // the noted information.
+    d.pick(P1, &[0]).unwrap();
+    d.pick(P2, &[0]).unwrap();
+    assert!(!d.can_see(P1, "Garbage Fire"));
+    assert!(d.drafted(P0).iter().any(|c| c.card.name == "Garbage Fire" && !c.face_up));
+    assert_eq!(d.info.notes[0].card, "Garbage Fire");
     draft_all(&mut d);
     let (_, info) = d.finish();
     // In the game: "Garbage Fire deals damage to target creature equal to the highest

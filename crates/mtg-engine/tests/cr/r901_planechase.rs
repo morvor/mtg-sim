@@ -867,6 +867,29 @@ fn a_planar_controller_leaving_that_removes_a_turn_marker_isnt_replaced() {
 }
 
 #[test]
+fn a_departure_removing_a_turn_marker_still_makes_the_planar_controller_planeswalk() {
+    cr!("901.10", "901.14b");
+    let mut t = grand_melee_planechase();
+    // Turn marker 2 has passed from P4 to P5, who now controls P4's Goldmeadow and has a
+    // planar deck of their own.
+    add_planar_deck(&mut t, pid(5), &["Naar Isle"]);
+    t.g.multiplayer.grand_melee.as_mut().unwrap().markers[1].holder = pid(5);
+    t.g.recompute();
+    assert_eq!(t.obj(face_up_of(&t, "Goldmeadow")).controller, pid(5));
+    // P4 leaves: seven players need only one turn marker, but P4 isn't a planar
+    // controller, so no designation ends. Goldmeadow leaves the game with its owner, and
+    // P5, who controlled it, turns the top card of their planar deck face up.
+    let before = planeswalks(&t);
+    t.g.turn.priority = Some(P4);
+    t.g.perform_action(P4, Action::Concede).unwrap();
+    t.g.recompute();
+    assert!(face_up_names(&t).contains(&"Naar Isle".to_string()));
+    assert!(!face_up_names(&t).contains(&"Goldmeadow".to_string()));
+    assert_eq!(planeswalks(&t), before + 1);
+    assert_eq!(t.obj(face_up_of(&t, "Naar Isle")).controller, pid(5));
+}
+
+#[test]
 fn the_single_planar_deck_option() {
     cr!("901.15", "901.15a");
     // A communal planar deck: at least forty cards or ten per player, whichever is

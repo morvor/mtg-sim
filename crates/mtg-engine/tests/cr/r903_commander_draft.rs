@@ -221,6 +221,18 @@ fn commander_draft_deck_construction() {
     assert!(check_commander_draft_deck(&d, &two, &pool_k, &[COMMANDER_LEGENDS])
         .iter()
         .any(|p| matches!(p, DeckProblem::InvalidCommanders { .. })));
+    // It can partner with a two-color card that has partner itself (Akiri, Line-Slinger:
+    // red and white): Krenko is considered to have partner.
+    let akiri = card("Akiri, Line-Slinger");
+    let two = [krenko.clone(), akiri.clone()];
+    let mut pool_a = pool.clone();
+    pool_a.extend([krenko.clone(), akiri.clone()]);
+    let mut d = vec![krenko.clone(), akiri.clone()];
+    d.extend((0..58).map(|_| card("Plains")));
+    assert!(check_commander_draft_deck(&d, &two, &pool_a, &[COMMANDER_MASTERS]).is_empty());
+    assert!(check_commander_draft_deck(&d, &two, &pool_a, &[COMMANDER_LEGENDS])
+        .iter()
+        .any(|p| matches!(p, DeckProblem::InvalidCommanders { .. })));
     // Not a two-color card.
     let niv = card("Niv-Mizzet, Parun");
     let two = [isamaru.clone(), niv.clone()];
