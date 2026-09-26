@@ -219,3 +219,85 @@ fn must_be_blocked_applies_to_the_class_but_the_pump_doesnt() {
     assert!(!block_legal(&t, P1, &[]));
     assert!(block_legal(&t, P1, &[(wall, later)]));
 }
+
+fn goblin_tokens(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
+    t.g.permanents()
+        .filter(|o| o.controller == p && o.is_token() && o.chars.has_subtype("Goblin"))
+        .map(|o| o.id)
+        .collect()
+}
+
+#[test]
+fn the_created_token_attacks_this_combat_if_able_not_the_source() {
+    cr!("508.1d", "611.2c");
+    compiles("Legion Warboss");
+    compiles("Howlsquad Heavy");
+    let mut t = TestGame::new(2);
+    let warboss = t.battlefield(P0, "Legion Warboss");
+    let p1 = Entity::Player(P1);
+    // "That token gains haste until end of turn and attacks this combat if able."
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let tokens = goblin_tokens(&t, P0);
+    assert_eq!(tokens.len(), 1);
+    let token = tokens[0];
+    assert!(t
+        .obj_now(token)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert!(!t
+        .obj_now(warboss)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    let opts = attack_options(&t.g);
+    // The token must attack; Legion Warboss itself needn't.
+    assert!(!attack_declaration_legal(&t.g, &opts, &[]));
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(warboss, p1)]));
+    assert!(attack_declaration_legal(&t.g, &opts, &[(token, p1)]));
+    attack_with(&mut t, &[]);
+    assert_eq!(t.g.attackers(), vec![token]);
+
+    // Howlsquad Heavy: "That token attacks this combat if able." The token has haste
+    // from Howlsquad Heavy's other ability.
+    let mut t = TestGame::new(2);
+    let heavy = t.battlefield(P0, "Howlsquad Heavy");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let token = goblin_tokens(&t, P0)[0];
+    let opts = attack_options(&t.g);
+    assert!(!attack_declaration_legal(&t.g, &opts, &[]));
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(heavy, p1)]));
+    assert!(attack_declaration_legal(&t.g, &opts, &[(token, p1)]));
+}
+
+#[test]
+fn those_creatures_are_the_ones_the_previous_sentence_affected() {
+    cr!("508.1d", "611.2c");
+    compiles("Suicidal Charge");
+    let mut t = TestGame::new(2);
+    let charge = t.battlefield(P0, "Suicidal Charge");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P0, charge, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(giant), (2, 2));
+    assert_eq!(t.pt(mine), (2, 2));
+    // A creature P1 gets later got no -1/-1 and needn't attack.
+    let later = t.battlefield(P1, "Grizzly Bears");
+    assert_eq!(t.pt(later), (2, 2));
+    t.advance_to(P1, Step::BeginningOfCombat);
+    let opts = attack_options(&t.g);
+    let p0 = Entity::Player(P0);
+    assert!(!attack_declaration_legal(&t.g, &opts, &[]));
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(later, p0)]));
+    assert!(attack_declaration_legal(&t.g, &opts, &[(giant, p0)]));
+    // P0's own creatures aren't required to attack on P0's turn.
+    let mut t = TestGame::new(2);
+    let charge = t.battlefield(P0, "Suicidal Charge");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, charge, 0, &[]).unwrap();
+    t.resolve();
+    t.set_step(P0, Step::BeginningOfCombat);
+    let opts = attack_options(&t.g);
+    assert!(attack_declaration_legal(&t.g, &opts, &[]));
+}

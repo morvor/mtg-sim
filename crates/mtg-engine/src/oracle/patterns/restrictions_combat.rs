@@ -5,7 +5,7 @@
 //! be blocked by creatures with power 2 or less this turn.", and the same after a
 //! pump: "Target creature gets +2/+2 until end of turn and can't be blocked this turn."
 
-use super::EffectPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{duration_suffix, is_class_filter, object_ref, parse_simple, Builder};
 use crate::oracle::patterns::statics::restriction_predicate;
@@ -15,6 +15,18 @@ use crate::oracle::phrases::end;
 /// class (it can affect objects that join it later, CR 611.2c); specific objects are
 /// locked in as the effect begins. Other groups ("creatures target player controls")
 /// aren't handled.
+/// Whether `what`, parsed from the subject text `subject`, may be the source itself: a
+/// pronoun with nothing else to refer to ("that token" after creating a token, "those
+/// creatures" after a group) falls back to the source, which would put the restriction on
+/// the wrong object. Only "~" and "it" (as in "When you do, it ...") name the source.
+fn names_source_faithfully(subject: &str, what: &Sel) -> bool {
+    let subject = subject.trim();
+    !matches!(what, Sel::This)
+        || subject.starts_with('~')
+        || subject == "it"
+        || subject.starts_with("it ")
+}
+
 fn subject_filter(what: &Sel) -> Option<Filter> {
     match what {
         Sel::All(f) if is_class_filter(f) => Some(f.clone()),
@@ -113,7 +125,7 @@ fn temporary_restriction(l: &str, b: &mut Builder) -> Option<Effect> {
             return None;
         };
         let (what, tail) = object_ref(r, b)?;
-        if !end(&tail).is_empty() {
+        if !end(&tail).is_empty() || !names_source_faithfully(r, &what) {
             return None;
         }
         // CR 509.1c: a requirement on each creature able to block it.
@@ -129,6 +141,9 @@ fn temporary_restriction(l: &str, b: &mut Builder) -> Option<Effect> {
         let Effect::Modify { what, .. } = &modify else {
             return None;
         };
+        if !names_source_faithfully(first, what) {
+            return None;
+        }
         let f = subject_filter(what)?;
         let (rs, dur) = predicate(second, &f)?;
         let mut v = vec![modify];
@@ -136,9 +151,48 @@ fn temporary_restriction(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(Effect::seq(v));
     }
     let (what, rest) = object_ref(l, b)?;
+    let subject = l.trim().strip_suffix(rest.as_str()).unwrap_or(l);
+    if !names_source_faithfully(subject, &what) {
+        return None;
+    }
     let f = subject_filter(&what)?;
     let (rs, dur) = predicate(&rest, &f)?;
     Some(Effect::seq(add(rs, dur)))
 }
 
 inventory::submit! { EffectPattern { name: "restrictions: temporary combat restrictions", priority: 100, parse: temporary_restriction } }
+
+/// "Creatures your opponents control get -1/-1 until end of turn. Those creatures attack
+/// this turn if able.": the pronoun names the objects the previous sentence changed, fixed
+/// as the effect begins (CR 611.2c).
+fn f_those_creatures_restriction(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    fn affected(e: &Effect) -> Option<Sel> {
+        match e {
+            Effect::Modify {
+                what: w @ Sel::All(_),
+                ..
+            } => Some(w.clone()),
+            Effect::Seq(v) => v.last().and_then(affected),
+            _ => None,
+        }
+    }
+    let Some(rest) = ["those creatures ", "they "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))
+    else {
+        return false;
+    };
+    let Some(what) = affected(prev) else {
+        return false;
+    };
+    let Some((rs, dur)) = predicate(rest, &Filter::In(Box::new(what))) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    let mut v = vec![old];
+    v.extend(add(rs, dur));
+    *prev = Effect::seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "restrictions: those creatures [restriction]", priority: 0, apply: f_those_creatures_restriction } }
