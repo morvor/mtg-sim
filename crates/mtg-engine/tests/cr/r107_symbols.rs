@@ -286,9 +286,9 @@ fn loyalty_symbols() {
     assert_eq!(t.counters(jace, "loyalty"), 2);
     t.resolve();
     // [0] puts zero loyalty counters on it (Gideon, Ally of Zendikar: "0: Create a 2/2
-    // white Knight Ally creature token.").
+    // white Knight Ally creature token."), its second loyalty ability.
     let gideon = t.battlefield(P0, "Gideon, Ally of Zendikar");
-    t.activate(P0, gideon, 0, &[]).unwrap();
+    t.activate(P0, gideon, 1, &[]).unwrap();
     assert_eq!(t.counters(gideon, "loyalty"), 4);
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Knight Ally Token").len(), 1);

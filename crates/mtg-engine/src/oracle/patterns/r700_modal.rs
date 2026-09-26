@@ -9,7 +9,7 @@
 use super::{AbilityPattern, BlockGroupPattern};
 use crate::ability::*;
 use crate::oracle::costs::parse_cost;
-use crate::oracle::effects::{parse_effect_text, Builder};
+use crate::oracle::effects::{parse_effect_text, strip_flavor_word, Builder};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
@@ -24,7 +24,7 @@ fn bullet_modes(lines: &[&str], ctx: &CompileContext, it_player: &PlayerRef) -> 
         let l = l.strip_prefix('•')?.trim();
         let mut b = Builder::new(ctx);
         b.it_player = it_player.clone();
-        let effect = parse_effect_text(l, &mut b)?;
+        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,
