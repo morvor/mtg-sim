@@ -447,6 +447,9 @@ pub struct Game {
     pub spells_cast_last_turn_by_active: u32,
     /// Extra turns queued (CR 500.7): taken after the current turn, most recent first.
     pub extra_turns: Vec<PlayerId>,
+    /// What happens as a queued extra turn begins ("at the beginning of that turn's end
+    /// step, ..."), by its index in `extra_turns` (see `skip::queue_extra_turn`).
+    pub extra_turn_actions: BTreeMap<usize, Vec<(crate::eval::Ctx, Effect)>>,
     /// Pending "the next time state-based actions are checked" flags etc.
     pub sba_flags: BTreeSet<SmolStr>,
     /// Count of state-based-action checks performed (for debugging/tests).
@@ -593,6 +596,7 @@ impl Game {
             day: None,
             spells_cast_last_turn_by_active: 0,
             extra_turns: vec![],
+            extra_turn_actions: BTreeMap::new(),
             sba_flags: BTreeSet::new(),
             sba_checks: 0,
             planar_die_rolls: 0,

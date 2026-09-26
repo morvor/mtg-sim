@@ -1376,6 +1376,11 @@ impl Game {
                     self.extra_turns.push(p);
                 }
             }
+            Effect::ExtraTurnWith { who, at_start } => {
+                for p in self.eval_players(who, ctx) {
+                    crate::skip::queue_extra_turn(self, p, ctx, at_start);
+                }
+            }
             Effect::ExtraCombat { after_this } => {
                 let _ = after_this;
                 self.add_extra_combat(true);

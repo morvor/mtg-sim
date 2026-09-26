@@ -2995,6 +2995,14 @@ pub enum Effect {
     ExtraTurn {
         who: PlayerRef,
     },
+    /// "Take an extra turn after this one. At the beginning of that turn's end step, ...":
+    /// an extra turn (CR 500.7) and what happens as that turn begins, if it does (a skipped
+    /// turn never begins, CR 614.10) — effects that refer to "that turn", performed then as
+    /// effects of "this turn" (e.g. `AtNext` an end step).
+    ExtraTurnWith {
+        who: PlayerRef,
+        at_start: Box<Effect>,
+    },
     ExtraCombat {
         after_this: bool,
     },

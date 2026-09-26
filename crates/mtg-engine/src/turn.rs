@@ -550,11 +550,17 @@ impl Game {
             let mut after = self.turn.active;
             for _ in 0..1000 {
                 if let Some(p) = self.extra_turns.pop() {
+                    let at_start = crate::skip::take_extra_turn_actions(self);
                     if self.player(p).in_game() {
-                        if crate::skip::consume_turn_skip(self, p) {
+                        if crate::skip::consume_turn_skip(self, p)
+                            || crate::skip::extra_turn_skipped(self, p)
+                        {
                             continue;
                         }
                         self.begin_turn(p, true);
+                        for (mut ctx, e) in at_start {
+                            self.exec(&e, &mut ctx);
+                        }
                         return;
                     }
                 }

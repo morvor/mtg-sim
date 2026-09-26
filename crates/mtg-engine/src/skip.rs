@@ -65,3 +65,41 @@ pub fn consume_turn_skip(g: &mut Game, p: PlayerId) -> bool {
     }
     false
 }
+
+/// `StaticEffect::Custom` name of "If a player would begin an extra turn, that player
+/// skips that turn instead." (Ugin's Nexus, Gerrard's Hourglass Pendant).
+pub const SKIP_EXTRA_TURNS: &str = "skip extra turns";
+/// `StaticEffect::Custom` name of "If an opponent would begin an extra turn, that player
+/// skips that turn instead." (Stranglehold).
+pub const OPPONENTS_SKIP_EXTRA_TURNS: &str = "opponents skip extra turns";
+
+/// Whether an extra turn `p` would begin is skipped instead (CR 614.10): a replacement
+/// effect of a permanent on the battlefield as the turn would begin, not when the turn was
+/// created.
+pub fn extra_turn_skipped(g: &Game, p: PlayerId) -> bool {
+    g.statics
+        .customs
+        .iter()
+        .any(|(_, ctl, name)| match name.as_str() {
+            SKIP_EXTRA_TURNS => true,
+            OPPONENTS_SKIP_EXTRA_TURNS => g.are_opponents(*ctl, p),
+            _ => false,
+        })
+}
+
+/// Queues an extra turn for `p` (CR 500.7) and what happens as that turn begins (see
+/// `Effect::ExtraTurnWith`): queued turns are a stack, so the entry keeps its index until
+/// it's taken or skipped.
+pub fn queue_extra_turn(g: &mut Game, p: PlayerId, ctx: &Ctx, at_start: &Effect) {
+    g.extra_turns.push(p);
+    let i = g.extra_turns.len() - 1;
+    g.extra_turn_actions
+        .insert(i, vec![(ctx.clone(), at_start.clone())]);
+}
+
+/// What happens as the extra turn just taken off the queue begins (it was at index
+/// `g.extra_turns.len()`); forgotten if the turn doesn't begin.
+pub fn take_extra_turn_actions(g: &mut Game) -> Vec<(Ctx, Effect)> {
+    let i = g.extra_turns.len();
+    g.extra_turn_actions.remove(&i).unwrap_or_default()
+}
