@@ -236,3 +236,32 @@ fn target_player_becomes_each_player() {
     assert_eq!(t.hand_size(P2), 1);
     assert_eq!(t.zone(rake), Zone::Graveyard(P0));
 }
+
+#[test]
+fn a_copy_of_an_overloaded_spell_is_overloaded() {
+    cr!("702.96c", "707.10");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 6);
+    let dyna = t.hand(P0, "Dynacharge");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let spell = t.cast(P0, dyna).method(OVERLOAD).go();
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::CopySpell {
+            what: Sel::Target(0),
+            count: Value::c(1),
+            new_targets: false,
+        },
+        &[Entity::Object(spell)],
+    );
+    let copy = *t.g.stack.last().unwrap();
+    assert_ne!(copy, spell);
+    assert!(t.g.obj(copy).chars.rules_text.contains("Each creature"));
+    t.resolve_all();
+    // Each creature you control got +2/+0 twice.
+    assert_eq!(t.pt(bears), (6, 2));
+    assert_eq!(t.pt(elves), (5, 1));
+}

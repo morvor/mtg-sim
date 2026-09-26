@@ -123,7 +123,7 @@ pub fn optional_additional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cos
     crate::kw::optional_costs(g, spell)
 }
 
-/// Lets keywords adjust the spell's targets/effect as cast (overload, bestow, ...).
+/// Lets keywords adjust the spell's targets/effect as cast (entwine, mutate, ...).
 pub fn adjust_spell_body(g: &Game, id: ObjectId, body: Body) -> Body {
     crate::kw::adjust_spell_body(g, id, body)
 }
