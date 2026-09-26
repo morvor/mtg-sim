@@ -8,7 +8,7 @@
 //! condition, if any, is true (see [`crate::spell_costs::alternative_cost_allowed`]).
 
 use super::costs_casting_self::{cost_condition, this_spell_cost_ability};
-use super::AbilityPattern;
+use super::{AbilityPattern, ConditionPattern};
 use crate::ability::*;
 use crate::mana::ManaCost;
 use crate::oracle::costs::parse_cost;
@@ -46,7 +46,7 @@ fn cost_action(s: &str) -> Option<Cost> {
 
 /// "pay {1} and return a basic land you control to its owner's hand": the actions joined
 /// by "and", paid together.
-fn alternative_cost(s: &str) -> Option<Cost> {
+pub(crate) fn plain_cost(s: &str) -> Option<Cost> {
     // A value defined by the card paid ("a black card with mana value X") isn't a cost
     // this compiler can express.
     if s.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
@@ -80,12 +80,19 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         Some((head, body)) => (Some(cost_condition(head, ctx)?), body),
         None => (None, l.strip_prefix("you may ")?),
     };
-    let (cost_s, tail) = body.split_once(" rather than pay ~'s mana cost")?;
+    // "you may cast ~ without paying its mana cost" (CR 118.9): an alternative cost of
+    // nothing.
+    let (cost, tail) = match body.strip_prefix("cast ~ without paying its mana cost") {
+        Some(tail) => (Cost::free(), tail),
+        None => {
+            let (cost_s, tail) = body.split_once(" rather than pay ~'s mana cost")?;
+            (plain_cost(cost_s)?, tail)
+        }
+    };
     let post = match tail.trim() {
         "" => None,
         t => Some(cost_condition(t, ctx)?),
     };
-    let cost = alternative_cost(cost_s)?;
     let cond = match (pre, post) {
         (Some(a), Some(b)) => Some(Condition::And(vec![a, b])),
         (a, b) => a.or(b),
@@ -98,3 +105,16 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 }
 
 inventory::submit! { AbilityPattern { name: "costs_casting: rather than pay this spell's mana cost", priority: 80, parse: own_alternative_cost } }
+
+/// "you control a commander" (CR 903.3): a commander, anyone's, on the battlefield under
+/// your control.
+fn control_a_commander(c: &str) -> Option<Condition> {
+    (end(c) == "you control a commander").then(|| {
+        Condition::Exists(Filter::and(vec![
+            Filter::Commander,
+            Filter::ControlledBy(PlayerRel::You),
+        ]))
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "costs_casting: you control a commander", priority: 80, parse: control_a_commander } }
