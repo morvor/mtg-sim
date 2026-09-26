@@ -544,6 +544,19 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
                 rest.to_string(),
             ));
         }
+        // CR 903.8: "the number of times you've cast your commander from the command
+        // zone this game" (also "for each time ..." read as "the number of time ...").
+        if let Some(rest) = r
+            .strip_prefix("times you've cast your commander from the command zone this game")
+            .or_else(|| {
+                r.strip_prefix("time you've cast your commander from the command zone this game")
+            })
+        {
+            return Some((
+                Value::Custom(crate::kw::partner::COMMANDER_CASTS.into()),
+                rest.to_string(),
+            ));
+        }
         // CR 700.8a: "the number of creatures in your party".
         if let Some(rest) = r.strip_prefix("creatures in your party") {
             return Some((

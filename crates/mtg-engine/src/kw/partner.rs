@@ -37,6 +37,21 @@ use std::sync::Arc;
 pub const CHOOSE_A_BACKGROUND: &str = "partner:choose a background";
 /// `StaticEffect::Custom` name of "[This card] can be your commander." (CR 903.3a).
 pub const CAN_BE_YOUR_COMMANDER: &str = "commander:can be your commander";
+/// `Value::Custom` name of "the number of times you've cast your commander from the
+/// command zone this game": each of your commanders counts (CR 702.124d, 903.8).
+pub const COMMANDER_CASTS: &str = "commander:times cast from the command zone";
+
+/// How many times `p` has cast their commanders from the command zone this game — both
+/// of them if they have two (CR 702.124e). Casts count as the spell becomes cast, even if
+/// it's later countered.
+pub fn times_cast_commanders(g: &Game, p: PlayerId) -> u32 {
+    let pl = g.player(p);
+    pl.commander_casts
+        .iter()
+        .filter(|(k, _)| pl.commander_names.iter().any(|n| n == *k))
+        .map(|(_, n)| *n)
+        .sum()
+}
 /// `StaticEffect::Custom` name of "Doctor's companion" (CR 702.124m).
 pub const DOCTORS_COMPANION: &str = "partner:doctor's companion";
 
@@ -344,6 +359,10 @@ impl KeywordRules for Partner {
             PartnerAbility::With(name) => Some(vec![partner_with_trigger(&name)]),
             _ => Some(vec![]),
         }
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+        (name == COMMANDER_CASTS).then(|| times_cast_commanders(g, ctx.controller) as i64)
     }
 }
 

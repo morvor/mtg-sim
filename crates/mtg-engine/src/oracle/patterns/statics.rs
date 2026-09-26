@@ -815,6 +815,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         "basic land type among lands you control" | "basic land types among lands you control" => {
             return Some(Value::Domain)
         }
+        // CR 903.8.
+        "time you've cast your commander from the command zone this game" => {
+            return Some(Value::Custom(crate::kw::partner::COMMANDER_CASTS.into()))
+        }
         // CR 700.8a.
         "creature in your party" | "creatures in your party" => {
             return Some(Value::Custom(crate::game_terms::PARTY_SIZE.into()))
