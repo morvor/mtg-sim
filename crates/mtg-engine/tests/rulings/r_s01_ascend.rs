@@ -152,7 +152,7 @@ fn the_blessing_stays_for_the_rest_of_the_game() {
     t.resolve_all();
     assert!(blessed(&t, P0));
     assert_eq!(t.hand_size(P0), 3);
-    // All of those permanents leave; a player gaining control of the rest doesn't matter.
+    // Most of those permanents leave: fewer than ten remain, but the blessing stays.
     for l in &lands[3..] {
         t.g.move_object(*l, Zone::Exile, MoveCause::Effect, None);
     }

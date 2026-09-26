@@ -145,7 +145,7 @@ fn an_airbent_spell_with_a_mandatory_additional_cost_needs_it_paid() {
 
 #[test]
 fn airbent_lands_cant_be_played_from_exile() {
-    cr!("701.65a", "305.1");
+    cr!("701.65a", "305.1", "305.9");
     ruling!(
         "Airbender Ascension",
         "Lands exiled this way cannot be played from exile."

@@ -87,7 +87,7 @@ fn a_spell_cast_without_paying_its_mana_cost_had_no_mana_spent() {
 
 #[test]
 fn a_cost_reduction_cant_be_waived_to_spend_more_mana() {
-    cr!("601.2f", "118.7a");
+    cr!("601.2f");
     ruling!(
         "Rally for the Throne",
         "Similarly, you can't waive a cost reduction unless that effect says you may."

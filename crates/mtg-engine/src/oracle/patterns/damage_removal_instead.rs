@@ -60,12 +60,7 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((c, x)) = r.split_once(", ") else {
         return false;
     };
-    // "If [condition], instead [effect]" / "..., instead only [effect]" is the same
-    // replacement ("If you have the city's blessing, instead only you draw a card.").
-    let Some(x) = x.strip_suffix(" instead").or_else(|| {
-        x.strip_prefix("instead ")
-            .map(|y| y.strip_prefix("only ").unwrap_or(y))
-    }) else {
+    let Some(x) = x.strip_suffix(" instead") else {
         return false;
     };
     if matches!(prev, Effect::Seq(_) | Effect::Noop) || !pronoun_free(c) {
