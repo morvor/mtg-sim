@@ -36,6 +36,37 @@ fn up_to(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
 
 inventory::submit! { ModalHeaderPattern { name: "choose up to n", priority: 100, parse: up_to } }
 
+/// "choose up to four. you may choose the same mode more than once", "choose x. you may
+/// choose the same mode more than once" (CR 700.2d; X is announced before the modes are
+/// chosen, CR 601.2b).
+fn repeatable(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
+    let r = h
+        .strip_suffix(". you may choose the same mode more than once")?
+        .strip_prefix("choose ")?;
+    let (min, max) = if r == "x" {
+        (Value::X, Value::X)
+    } else {
+        let (up_to, r) = match r.strip_prefix("up to ") {
+            Some(r) => (true, r),
+            None => (false, r),
+        };
+        let (n, rest) = parse_number(r)?;
+        let n = n.as_const()?;
+        if !rest.trim().is_empty() || n < 1 {
+            return None;
+        }
+        (Value::c(if up_to { 0 } else { n }), Value::c(n))
+    };
+    Some(ModalHeader {
+        min,
+        max,
+        allow_repeat: true,
+        chooser: ModeChooser::Controller,
+    })
+}
+
+inventory::submit! { ModalHeaderPattern { name: "choose n, same mode more than once", priority: 100, parse: repeatable } }
+
 /// "choose one at random"
 fn at_random(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     (h == "choose one at random").then(|| header(Value::c(1), Value::c(1), ModeChooser::Random))

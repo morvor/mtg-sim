@@ -430,3 +430,46 @@ fn a_trigger_checks_its_mode_condition_as_it_is_put_on_the_stack() {
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.graveyard_size(P1), 0);
 }
+
+// ---------------------------------------------------------------------------
+// "Choose up to four / Choose X. You may choose the same mode more than once."
+// ---------------------------------------------------------------------------
+
+#[test]
+fn choose_x_modes_with_repeats() {
+    cr!("700.2d", "601.2b");
+    assert_supported(&["Doomsday Confluence", "Moment of Reckoning"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 5);
+    let conf = t.hand(P0, "Doomsday Confluence");
+    // X = 2: "Create a 3/3 black Dalek artifact creature token with menace." twice.
+    let s = t.cast(P0, conf).x(2).modes(&[1, 1]).go();
+    assert_eq!(last_mode_bounds(&t, P0), (2, 2));
+    assert_eq!(modes_of(&t, s), vec![1, 1]);
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Dalek Token").len(), 2);
+}
+
+#[test]
+fn choose_up_to_four_modes_with_repeats() {
+    cr!("700.2d");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Swamp", 4);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P1, "Ornithopter");
+    let moment = t.hand(P0, "Moment of Reckoning");
+    // "Destroy target nonland permanent." three times.
+    let s = t
+        .cast(P0, moment)
+        .modes(&[0, 0, 0])
+        .target(a)
+        .target(b)
+        .target(c)
+        .go();
+    assert_eq!(last_mode_bounds(&t, P0), (0, 4));
+    assert_eq!(modes_of(&t, s), vec![0, 0, 0]);
+    t.resolve();
+    assert!(!t.g.is_live(a) && !t.g.is_live(b) && !t.g.is_live(c));
+}

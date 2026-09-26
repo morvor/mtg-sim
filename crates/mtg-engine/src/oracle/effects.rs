@@ -196,7 +196,8 @@ fn parse_modal(
     }
     let n = modes.len() as i32;
     let max = match header.max {
-        Value::Const(m) => Value::Const(m.min(n)),
+        // Without repeats, at most every mode (CR 700.2d).
+        Value::Const(m) if !header.allow_repeat => Value::Const(m.min(n)),
         other => other,
     };
     Some(Modal {
