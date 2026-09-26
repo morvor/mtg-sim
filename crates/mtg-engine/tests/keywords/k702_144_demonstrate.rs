@@ -30,6 +30,14 @@ fn you_may_copy_it_and_then_an_opponent_you_choose_copies_it() {
         "Incarnation Technique",
         "Similarly, the opponent you chose to create a copy may choose new targets for that copy as it’s created."
     );
+    ruling!(
+        "Incarnation Technique",
+        "You choose whether to make a copy as the demonstrate ability resolves. This happens before the original spell resolves. Your copy goes on the stack above the original spell."
+    );
+    ruling!(
+        "Incarnation Technique",
+        "If you copy a spell with demonstrate, you then immediately choose an opponent. If they copy the spell, it goes on top of the stack."
+    );
     let mut t = TestGame::new(3);
     // Excavation Technique: "Demonstrate. Destroy target nonland permanent. Its controller
     // creates two Treasure tokens."

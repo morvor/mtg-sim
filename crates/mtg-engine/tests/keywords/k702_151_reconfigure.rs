@@ -42,6 +42,10 @@ fn reconfigure_attaches_it_to_another_creature_and_it_stops_being_a_creature() {
         "Bronzeplate Boar",
         "Attaching an Equipment with reconfigure to a creature causes that Equipment to stop being a creature until it becomes unattached. It also loses any creature subtypes it had."
     );
+    ruling!(
+        "Bronzeplate Boar",
+        "Reconfigure represents two activated abilities."
+    );
     let mut t = TestGame::new(2);
     // Lizard Blades: 1/1 artifact creature — Equipment Lizard, double strike, "Equipped
     // creature has double strike." Reconfigure {2}.
@@ -246,4 +250,44 @@ fn an_equipment_isnt_tapped_or_untapped_with_the_creature() {
     t.resolve_all();
     assert!(t.obj(blades).is_creature());
     assert!(!t.obj(blades).tapped);
+}
+
+#[test]
+fn auras_that_can_enchant_only_creatures_fall_off_as_it_stops_being_a_creature() {
+    cr!("702.151b", "704.5m");
+    ruling!(
+        "Bronzeplate Boar",
+        "As soon as an Equipment creature with reconfigure stops being a creature, any Equipment and Auras with enchant creature abilities become unattached."
+    );
+    let mut t = TestGame::new(2);
+    let blades = t.battlefield(P0, "Lizard Blades");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Holy Strength ("Enchant creature. Enchanted creature gets +1/+2.") on the Blades.
+    let aura = t.hand(P0, "Holy Strength");
+    add_mana(&mut t, P0, ManaType::W, 1);
+    t.cast(P0, aura).target(blades).go();
+    t.resolve_all();
+    assert_eq!(t.pt(blades), (2, 3));
+    attach_with_reconfigure(&mut t, blades, bears);
+    assert!(!t.obj(blades).is_creature());
+    assert!(t.in_graveyard(P0, "Holy Strength"));
+}
+
+#[test]
+fn reconfigure_isnt_an_equip_ability() {
+    cr!("702.151a");
+    ruling!(
+        "Bronzeplate Boar",
+        "Although it causes an Equipment to become attached to a creature, reconfigure is not an “equip ability”"
+    );
+    let mut t = TestGame::new(2);
+    // Bureau Headmaster: "Equip abilities you activate cost {1} less to activate."
+    t.battlefield(P0, "Bureau Headmaster");
+    let blades = t.battlefield(P0, "Lizard Blades");
+    t.battlefield(P0, "Grizzly Bears");
+    let (attach, _) = reconfigure_uids(&mut t, blades);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    assert!(!activatable(&mut t, P0, blades, attach));
+    add_mana(&mut t, P0, ManaType::C, 1);
+    assert!(activatable(&mut t, P0, blades, attach));
 }

@@ -276,3 +276,40 @@ fn alchemists_gambit_loses_the_game_only_if_not_cleaved() {
         assert_eq!(t.has_lost(P0), !cleave, "cleave {cleave}");
     }
 }
+
+#[test]
+fn a_spell_cast_without_paying_its_mana_cost_isnt_cleaved() {
+    cr!("702.148a");
+    ruling!(
+        "Lantern Flare",
+        "If an effect allows you to “cast a spell without paying its mana cost,” you can't cast that spell for its cleave cost."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::BeginningOfCombat);
+    declare_attackers(&mut t, &[(giant, Entity::Player(P0))]);
+    let card = t.hand(P0, "Fierce Retribution");
+    // Cast without paying its mana cost, it's "Destroy target attacking creature": the
+    // Bears aren't a legal target, the attacking Hill Giant is.
+    let from = t.asked().len();
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::CastCard {
+            who: mtg_engine::ability::PlayerRef::You,
+            what: mtg_engine::ability::Sel::Target(0),
+            free: true,
+            optional: false,
+        },
+        &[Entity::Object(card)],
+    );
+    let candidates = offered(&t, from);
+    assert!(candidates.contains(&Entity::Object(giant)));
+    assert!(!candidates.contains(&Entity::Object(bears)));
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.on_battlefield(bears));
+}

@@ -38,6 +38,10 @@ fn encore_creates_a_hasty_token_copy_attacking_each_opponent() {
     cr!("702.141", "702.141a");
     assert_supported("Impulsive Pilferer");
     ruling!("Impulsivity", "Each token must attack the appropriate player if able.");
+    ruling!(
+        "Impulsivity",
+        "Exiling the card with encore is a cost to activate the encore ability."
+    );
     let mut t = TestGame::new(3);
     // Impulsive Pilferer: {R} 1/1, "When this creature dies, create a Treasure token."
     // Encore {3}{R}.
@@ -92,6 +96,10 @@ fn encore_creates_a_hasty_token_copy_attacking_each_opponent() {
 #[test]
 fn encore_is_activated_only_from_the_graveyard_as_a_sorcery() {
     cr!("702.141a");
+    ruling!(
+        "Impulsivity",
+        "Encore is an activated ability that functions from the graveyard."
+    );
     let mut t = TestGame::new(2);
     let card = t.hand(P0, "Impulsive Pilferer");
     add_mana(&mut t, P0, ManaType::R, 4);

@@ -128,6 +128,10 @@ fn a_copy_of_a_blitzed_creature_isnt_blitzed() {
         "Star Athlete",
         "If a creature enters as a copy of or becomes a copy of a creature whose blitz cost was paid, the copy won't have haste, won't be sacrificed, and its controller won't draw a card when it dies."
     );
+    ruling!(
+        "Mezzio Mugger",
+        "If a creature enters the battlefield as a copy of or becomes a copy of a creature whose blitz cost was paid, the copy won't have haste, won't be sacrificed, and its controller won't draw a card when it dies."
+    );
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 4);
     let c = t.hand(P0, "Star Athlete");
@@ -244,4 +248,28 @@ fn a_card_may_say_it_can_be_cast_from_the_graveyard_using_its_blitz_ability() {
     let underdog = t.g.current(c);
     add_mana(&mut t, P0, ManaType::B, 4);
     assert!(castable(&mut t, P0, underdog, BLITZ));
+}
+
+#[test]
+fn a_blitzed_creature_doesnt_have_to_attack() {
+    cr!("702.152a");
+    ruling!(
+        "Mezzio Mugger",
+        "You don't have to attack with the creature with blitz unless another ability says you do."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let c = t.hand(P0, "Riveteers Requisitioner");
+    t.cast(P0, c).method(BLITZ).go();
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[], &[]);
+    assert!(!t.g.is_attacking(t.g.current(c)));
+    assert_eq!(t.life(P1), 20);
+    // It's still sacrificed at the end step, drawing a card.
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Riveteers Requisitioner"));
+    assert_eq!(t.hand_size(P0), hand + 1);
 }

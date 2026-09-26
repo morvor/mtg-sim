@@ -166,3 +166,35 @@ fn other_replacement_effects_apply_as_normal() {
         assert_eq!(loyalty(&t, vraska), expected, "order {first}");
     }
 }
+
+#[test]
+fn tamiyo_paid_with_life_has_mana_value_five_and_three_loyalty() {
+    cr!("702.150a");
+    ruling!(
+        "Tamiyo, Compleated Sage",
+        "Specifically, Tamiyo’s mana value is always 5, even if you pay {2}{G}{U} and 2 life to cast her."
+    );
+    ruling!(
+        "Tamiyo, Compleated Sage",
+        "Compleated is a replacement effect, and it applies only to a permanent that is entering the battlefield with loyalty counters."
+    );
+    let mut t = TestGame::new(2);
+    // Tamiyo, Compleated Sage: {2}{G}{G/U/P}{U}, loyalty 5.
+    let tamiyo = t.hand(P0, "Tamiyo, Compleated Sage");
+    add_mana(&mut t, P0, ManaType::G, 1);
+    add_mana(&mut t, P0, ManaType::U, 1);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    // Pay 2 life for {G/U/P} (the third option, after "either way" and the two colors).
+    t.answer(P0, DecisionKind::Option, Answer::Index(3));
+    let spell = t.cast(P0, tamiyo).go();
+    assert_eq!(t.g.mana_value_of(spell), 5);
+    assert_eq!(t.life(P0), 18);
+    t.resolve_all();
+    assert_eq!(loyalty(&t, tamiyo), 3);
+    // Later loyalty counters aren't affected: +1 gives it 4.
+    let plus = ability_uid(&mut t, tamiyo, "+1");
+    t.answer_targets(P0, &[]);
+    activate_uid(&mut t, P0, tamiyo, plus).unwrap();
+    t.resolve_all();
+    assert_eq!(loyalty(&t, tamiyo), 4);
+}
