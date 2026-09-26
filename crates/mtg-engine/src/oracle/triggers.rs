@@ -110,7 +110,7 @@ fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         }
         _ => {}
     }
-    if eff.contains("~ from your graveyard") {
+    if super::without_quotes(eff).contains("~ from your graveyard") {
         return FunctionZone::Graveyard;
     }
     FunctionZone::Battlefield

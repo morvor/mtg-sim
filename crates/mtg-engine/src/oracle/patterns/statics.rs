@@ -95,9 +95,9 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
     true
 }
 
-/// Compiles a quoted ability granted to the objects matched by a static ability
-/// (CR 613.1f). `~` in it refers to the object that has the ability.
-fn granted_abilities(
+/// Compiles a quoted ability granted to the objects matched by a static ability or by
+/// a resolving effect (CR 613.1f). `~` in it refers to the object that has the ability.
+pub(crate) fn granted_abilities(
     quote_lower: &str,
     text: &str,
     hint: CardType,

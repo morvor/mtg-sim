@@ -23,7 +23,7 @@
 //! (CR 608.2h), and the affected set is locked in then (CR 611.2c) — the resolver does
 //! both for [`Effect::Modify`].
 
-use super::statics::{mask_quotes, quote_names_card};
+use super::statics::{granted_abilities, mask_quotes};
 use super::EffectPattern;
 use crate::ability::*;
 use crate::oracle::effects::{
@@ -83,8 +83,53 @@ fn with_duration(e: Effect, dur: &Duration) -> Option<Effect> {
                 d => d,
             },
         },
+        // The group a predicate list affects, recorded for "those creatures".
+        e @ Effect::Store { .. } => e,
         _ => return None,
     })
+}
+
+/// "Target creature you control gets +3/+3 and other creatures you control get +1/+1":
+/// "other" there means other than the subject named before it in the same sentence, not
+/// other than the source (which is the resolving spell). `prev` is the latest subject
+/// seen (`None` for the source itself, where "other" already means "not the source").
+fn other_than_previous_subject(e: &mut Effect, prev: &mut Option<Sel>) {
+    fn rewrite(f: &mut Filter, prev: &Sel) {
+        let not_prev = || Filter::Not(Box::new(Filter::In(Box::new(prev.clone()))));
+        match f {
+            Filter::Other => *f = not_prev(),
+            Filter::And(v) => {
+                for x in v.iter_mut().filter(|x| matches!(x, Filter::Other)) {
+                    *x = not_prev();
+                }
+            }
+            _ => {}
+        }
+    }
+    match e {
+        Effect::Seq(v) => {
+            for x in v {
+                other_than_previous_subject(x, prev);
+            }
+        }
+        Effect::Store {
+            sel: Sel::All(f), ..
+        } => {
+            if let Some(p) = prev {
+                rewrite(f, p);
+            }
+        }
+        Effect::Modify { what, .. } => {
+            if let (Sel::All(f), Some(p)) = (&mut *what, &*prev) {
+                rewrite(f, p);
+            }
+            *prev = match what {
+                Sel::This => None,
+                w => Some(w.clone()),
+            };
+        }
+        _ => {}
+    }
 }
 
 /// "until end of turn, [clause]", "until your next turn, [clause]" (CR 611.2a).
@@ -96,8 +141,9 @@ fn leading_duration(l: &str, b: &mut Builder) -> Option<Effect> {
     // "until end of turn, whenever ..." (a delayed trigger) and "until end of turn, you
     // may ..." (a permission) are other patterns' business: only continuous effects on
     // objects qualify here.
-    let e = parse_clause(rest, b)?;
-    with_duration(e, &dur)
+    let mut e = with_duration(parse_clause(rest, b)?, &dur)?;
+    other_than_previous_subject(&mut e, &mut None);
+    Some(e)
 }
 
 inventory::submit! { EffectPattern { name: "pump: leading duration", priority: 90, parse: leading_duration } }
@@ -195,57 +241,6 @@ fn grant_items(s: &str) -> Vec<String> {
     items
 }
 
-/// The quoted segments of a text, in order.
-fn quoted_segments(text: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(i) = rest.find('"') {
-        let after = &rest[i + 1..];
-        let Some(j) = after.find('"') else { break };
-        out.push(&after[..j]);
-        rest = &after[j + 1..];
-    }
-    out
-}
-
-/// Compiles a quoted ability granted by an effect. `~` in it is the object that gets
-/// the ability (CR 113.6); the card itself can't be named there (the quote is left
-/// unsupported instead).
-fn quoted_abilities(quote_lower: &str, hint: CardType, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let norm = crate::oracle::normalize(&crate::oracle::raw_text(), ctx);
-    let orig = quoted_segments(&norm)
-        .into_iter()
-        .find(|q| q.to_lowercase() == quote_lower)?
-        .to_string();
-    if quote_names_card(&orig, ctx) {
-        return None;
-    }
-    let mut tl = TypeLine::default();
-    tl.card_types.insert(hint);
-    let gctx = CompileContext {
-        card_name: "\u{1}",
-        full_name: "\u{1}",
-        type_line: &tl,
-        layout: crate::card::Layout::Normal,
-        face_index: 0,
-        keywords: &[],
-        power: None,
-        toughness: None,
-    };
-    let blocks = crate::oracle::split_abilities(&orig);
-    if blocks.len() != 1 {
-        return None;
-    }
-    let v = crate::oracle::parse_ability(&blocks[0], &gctx)?;
-    if v.is_empty()
-        || v.iter()
-            .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))
-    {
-        return None;
-    }
-    Some(v)
-}
-
 fn grants(
     body: &str,
     quotes: &[String],
@@ -259,7 +254,8 @@ fn grants(
             .and_then(|x| x.strip_suffix('"'))
             .and_then(|x| x.parse::<usize>().ok())
         {
-            for a in quoted_abilities(quotes.get(k)?, hint, ctx)? {
+            let text = crate::oracle::normalize(&crate::oracle::raw_text(), ctx);
+            for a in granted_abilities(quotes.get(k)?, &text, hint, ctx)? {
                 out.push(Modification::AddAbility(a));
             }
         } else if item == "all creature types" {
@@ -291,14 +287,35 @@ fn subst_x(v: Value, with: &Value) -> Value {
     }
 }
 
-/// "for each [thing] [beyond the first]": how many there are.
-fn for_each_count(s: &str, b: &mut Builder) -> Option<Value> {
+/// "for each [thing] [beyond the first]": how many there are. `subject` is what gets the
+/// bonus: "target attacking creature gets +1/+1 for each other attacking creature"
+/// counts creatures other than that one (for the source, "other" already means that).
+fn for_each_count(s: &str, subject: &Sel, b: &mut Builder) -> Option<Value> {
     let s = s.trim();
     let (s, beyond_first) = match s.strip_suffix(" beyond the first") {
         Some(r) => (r, true),
         None => (s, false),
     };
-    let v = if s == "basic land type among lands you control" {
+    let (s, other_than) = match s.strip_prefix("other ") {
+        Some(r) if !matches!(subject, Sel::This) => {
+            // Only a single object can be excluded from one count (each member of a
+            // group would need its own).
+            let single = match subject {
+                Sel::Target(slot) => b
+                    .targets
+                    .get(*slot as usize)
+                    .is_some_and(|t| t.max.as_const() == Some(1)),
+                Sel::TriggerObject => true,
+                _ => false,
+            };
+            if !single {
+                return None;
+            }
+            (r, Some(subject.clone()))
+        }
+        _ => (s, None),
+    };
+    let v = if s == "basic land type among lands you control" && other_than.is_none() {
         // Domain (CR 207.2c).
         Value::Domain
     } else {
@@ -306,7 +323,14 @@ fn for_each_count(s: &str, b: &mut Builder) -> Option<Value> {
         if !end(&rest).trim().is_empty() {
             return None;
         }
-        v
+        match (v, other_than) {
+            (v, None) => v,
+            (Value::Count(f), Some(o)) => Value::Count(Filter::and(vec![
+                f,
+                Filter::Not(Box::new(Filter::In(Box::new(o)))),
+            ])),
+            _ => return None,
+        }
     };
     Some(if beyond_first {
         Value::Max(
@@ -359,7 +383,7 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         CardType::Creature
     };
-    let (what, rest) = object_ref(&main, b)?;
+    let (mut what, rest) = object_ref(&main, b)?;
     let rest = rest.trim();
     let rest = rest.strip_prefix("each ").unwrap_or(rest);
     let preds = split_predicates(rest)?;
@@ -422,7 +446,7 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                         dur = d;
                     }
                     let f = tail.strip_prefix("for each ")?;
-                    let n = for_each_count(f, b)?;
+                    let n = for_each_count(f, &what, b)?;
                     let (Some(pc), Some(tc)) = (p.as_const(), t.as_const()) else {
                         return None;
                     };
@@ -471,8 +495,27 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
     if where_text.is_some() && !used_x {
         return None;
     }
+    // A group's members are fixed as the effect begins (CR 611.2c); "those creatures" in
+    // a later instruction are those members ("Each creature with mana value X or less
+    // loses all abilities until end of turn. Destroy those creatures.").
+    let group = if matches!(what, Sel::All(_)) {
+        b.it = Sel::Var(vars::IT);
+        Some(std::mem::replace(&mut what, Sel::Var(vars::IT)))
+    } else {
+        None
+    };
+    let bind = |e: Effect| match &group {
+        Some(sel) => Effect::seq(vec![
+            Effect::Store {
+                var: vars::IT,
+                sel: sel.clone(),
+            },
+            e,
+        ]),
+        None => e,
+    };
     if let Some(options) = choice {
-        return Some(Effect::ChooseOne {
+        return Some(bind(Effect::ChooseOne {
             who: PlayerRef::You,
             options: options
                 .into_iter()
@@ -489,16 +532,16 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                     )
                 })
                 .collect(),
-        });
+        }));
     }
     if mods.is_empty() {
         return None;
     }
-    Some(Effect::Modify {
+    Some(bind(Effect::Modify {
         what,
         mods,
         duration: dur,
-    })
+    }))
 }
 
 /// "flying, vigilance, or lifelink", "double strike or trample": one keyword each.
@@ -576,12 +619,18 @@ fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
 /// enters with are placed as it enters (CR 122.6).
 fn return_to_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("return ")?;
+    let names_source = r.starts_with('~');
     let (what, tail) = object_ref(r, b)?;
     // What returns must be findable where it is: the source, the object of a dies
     // trigger (CR 400.7e), or a target card in a graveyard. (A permanent exiled earlier
     // in the same effect is a new object in exile, CR 400.7; that's another pattern's.)
+    // A pronoun means the source only in the source's own triggered ability ("When ~
+    // dies, return it ..."); elsewhere the source is only the default referent, and
+    // "return that card" names an object handled earlier that isn't tracked ("You may
+    // sacrifice a creature. If you do, return that card ...").
     let ok = match &what {
-        Sel::This | Sel::TriggerObject => true,
+        Sel::This => names_source || b.in_trigger,
+        Sel::TriggerObject => true,
         Sel::Target(slot) => b.targets.get(*slot as usize).is_some_and(
             |t| matches!(&t.what, TargetKind::Object(f) if f.zone() == Some(ZoneKind::Graveyard)),
         ),

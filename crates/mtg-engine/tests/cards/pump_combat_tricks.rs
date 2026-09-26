@@ -3,11 +3,17 @@
 //! base power/toughness and ability loss, switching power and toughness, "for each
 //! creature blocking it", and returning a creature that died.
 
+use mtg_engine::card::Layout;
 use mtg_engine::decision::Answer;
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::{Characteristics, Zone};
+use mtg_engine::oracle::{self, CompileContext};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::*;
 use mtg_engine::*;
+use smol_str::SmolStr;
+use std::sync::Arc;
 
 fn assert_supported(names: &[&str]) {
     for n in names {
@@ -19,11 +25,47 @@ fn assert_supported(names: &[&str]) {
 /// Declares attackers (and blockers) and advances to the declare blockers step, so
 /// that spells can be cast before combat damage.
 fn to_blocks(t: &mut TestGame, attackers: &[(ObjectId, Entity)], blocks: &[(ObjectId, ObjectId)]) {
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(attackers.to_vec()));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(attackers.to_vec()),
+    );
     if !blocks.is_empty() {
-        t.answer(P1, DecisionKind::Blockers, Answer::Blockers(blocks.to_vec()));
+        t.answer(
+            P1,
+            DecisionKind::Blockers,
+            Answer::Blockers(blocks.to_vec()),
+        );
     }
     t.advance_to(P0, Step::DeclareBlockers);
+}
+
+/// An artifact compiled from oracle text with the real compiler.
+fn artifact(name: &str, text: &str) -> CardDef {
+    let tl = TypeLine::parse("Artifact");
+    let ctx = CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    assert!(
+        compiled.unsupported.is_empty(),
+        "{:?}",
+        compiled.unsupported
+    );
+    CardDef::custom(Characteristics {
+        name: SmolStr::new(name),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: Arc::from(text),
+        ..Default::default()
+    })
 }
 
 /// Ends the turn: the cleanup step ends "until end of turn" effects (CR 514.2).
@@ -52,7 +94,10 @@ fn leading_duration_cards_compile() {
 #[test]
 fn rookie_mistake_modifies_both_targets_until_end_of_turn() {
     cr!("611.2a", "514.2", "115.3");
-    ruling!("Rookie Mistake", "You can't cast Rookie Mistake unless you choose two creatures");
+    ruling!(
+        "Rookie Mistake",
+        "You can't cast Rookie Mistake unless you choose two creatures"
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Island", 1);
@@ -68,6 +113,98 @@ fn rookie_mistake_modifies_both_targets_until_end_of_turn() {
     next_turn(&mut t);
     assert_eq!(t.pt(bears), (2, 2));
     assert_eq!(t.pt(giant), (3, 3));
+}
+
+#[test]
+fn seeds_of_strength_may_target_one_creature_three_times() {
+    cr!("115.3");
+    ruling!(
+        "Seeds of Strength",
+        "You may choose the same creature as a target multiple times"
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Plains", 1);
+    let spell = t.hand(P0, "Seeds of Strength");
+    // Without "another", each "target" may be the same creature.
+    t.cast(P0, spell)
+        .target(bears)
+        .target(bears)
+        .target(bears)
+        .go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (5, 5));
+}
+
+#[test]
+fn sigil_blessing_other_creatures_are_other_than_the_target() {
+    cr!("611.2c");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Plains", 1);
+    let spell = t.hand(P0, "Sigil Blessing");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve();
+    // The target gets only +3/+3: it isn't one of the "other creatures".
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.pt(lions), (3, 2));
+    assert_eq!(t.pt(giant), (3, 3), "only creatures you control");
+    let later = t.battlefield(P0, "Grizzly Bears");
+    assert_eq!(
+        t.pt(later),
+        (2, 2),
+        "the set was fixed as the spell resolved"
+    );
+}
+
+#[test]
+fn sigil_blessing_does_nothing_if_its_target_is_gone() {
+    cr!("608.2b");
+    ruling!("Sigil Blessing", "Your other creatures won");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Sigil Blessing");
+    t.cast(P0, spell).target(bears).go();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(bears).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.pt(lions), (2, 1));
+}
+
+#[test]
+fn day_of_black_sun_destroys_the_creatures_that_lost_their_abilities() {
+    cr!("611.2c", "702.12b", "603.10a");
+    ruling!(
+        "Day of Black Sun",
+        "loses that ability and is then destroyed, that ability will not trigger"
+    );
+    let mut t = TestGame::new(2);
+    let dissenter = t.battlefield(P1, "Doomed Dissenter");
+    let myr = t.battlefield(P1, "Darksteel Myr");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 5);
+    let spell = t.hand(P0, "Day of Black Sun");
+    t.cast(P0, spell).x(3).go();
+    t.resolve_all();
+    // Indestructible was lost before "Destroy those creatures".
+    assert!(!t.on_battlefield(myr));
+    assert!(t.in_graveyard(P1, "Darksteel Myr"));
+    assert!(!t.on_battlefield(dissenter));
+    assert!(
+        t.named_on_battlefield("Zombie Token").is_empty(),
+        "the dies trigger was gone"
+    );
+    assert!(t.on_battlefield(giant), "mana value 4 is more than X");
+    assert_eq!(t.obj_now(giant).chars.abilities.len(), 0);
 }
 
 #[test]
@@ -112,7 +249,10 @@ fn swift_justice_grants_first_strike_and_lifelink_until_end_of_turn() {
 #[test]
 fn mass_diminish_lasts_until_your_next_turn() {
     cr!("611.2a", "611.2c", "613.4b");
-    ruling!("Mass Diminish", "affects only creatures the target player controls at the time it resolves");
+    ruling!(
+        "Mass Diminish",
+        "affects only creatures the target player controls at the time it resolves"
+    );
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
     t.lands(P0, "Island", 2);
@@ -123,7 +263,11 @@ fn mass_diminish_lasts_until_your_next_turn() {
     let later = t.battlefield(P1, "Grizzly Bears");
     assert_eq!(t.pt(later), (2, 2));
     t.advance_to(P1, Step::PrecombatMain);
-    assert_eq!(t.pt(giant), (1, 1), "still in effect during the opponent's turn");
+    assert_eq!(
+        t.pt(giant),
+        (1, 1),
+        "still in effect during the opponent's turn"
+    );
     t.advance_to(P0, Step::Upkeep);
     assert_eq!(t.pt(giant), (3, 3));
 }
@@ -174,7 +318,10 @@ fn quoted_grant_cards_compile() {
 #[test]
 fn supernatural_stamina_returns_the_creature_once() {
     cr!("613.1f", "603.10a", "400.7e");
-    ruling!("Supernatural Stamina", "If that new creature dies, it won't come back a second time");
+    ruling!(
+        "Supernatural Stamina",
+        "If that new creature dies, it won't come back a second time"
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Swamp", 1);
@@ -199,6 +346,29 @@ fn supernatural_stamina_returns_the_creature_once() {
     t.resolve_all();
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn supernatural_stamina_does_nothing_if_the_card_left_the_graveyard() {
+    cr!("400.7", "400.7e");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let crypt = t.battlefield(P0, "Tormod's Crypt");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Mountain", 2);
+    let spell = t.hand(P0, "Supernatural Stamina");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(bears).go();
+    t.resolve();
+    assert_eq!(t.stack_len(), 1, "the granted dies trigger");
+    // In response, the card is exiled from the graveyard: the trigger can't find it.
+    t.activate(P0, crypt, 0, &[P0.into()]).unwrap();
+    t.resolve();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_exile("Grizzly Bears"));
 }
 
 #[test]
@@ -262,6 +432,41 @@ fn cant_stay_away_grants_the_ability_to_the_returned_permanent() {
     t.resolve_all();
     assert!(t.in_exile("Grizzly Bears"));
     assert!(!t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn a_pronoun_for_an_untracked_object_is_not_the_source() {
+    // "You may sacrifice a creature. If you do, return that card ...": "that card" is the
+    // sacrificed creature, not Heart-Shaped Herb (sacrificed as a cost). The compiler
+    // doesn't track it, so the ability stays unsupported rather than returning the Herb.
+    let u = card("Heart-Shaped Herb").unsupported_text().join(" | ");
+    assert!(u.contains("return that card"), "{u}");
+}
+
+#[test]
+fn a_quoted_graveyard_permission_leaves_the_granting_ability_on_the_battlefield() {
+    cr!("113.6", "113.6m", "611.2c");
+    let mut t = TestGame::new(2);
+    let horn = t.custom(
+        P0,
+        artifact(
+            "Test Horn",
+            "{1}: Creature cards in your graveyard gain \"You may cast this card from your graveyard\" until end of turn.",
+        ),
+        Zone::Battlefield,
+    );
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    // The quote moves a card out of the graveyard, but it's the granted ability's text:
+    // the artifact's own ability works on the battlefield.
+    t.activate(P0, horn, 0, &[]).unwrap();
+    t.resolve();
+    let later = t.graveyard(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // A card put into the graveyard after the ability resolved didn't gain it.
+    assert!(t.cast(P0, later).try_go().is_err());
 }
 
 #[test]
@@ -368,7 +573,10 @@ fn predicate_list_cards_compile() {
 #[test]
 fn strength_in_numbers_counts_attackers_as_it_resolves() {
     cr!("608.2h");
-    ruling!("Strength in Numbers", "It won't change later in the turn if the number of attacking creatures changes");
+    ruling!(
+        "Strength in Numbers",
+        "It won't change later in the turn if the number of attacking creatures changes"
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let lions = t.battlefield(P0, "Savannah Lions");
@@ -381,7 +589,8 @@ fn strength_in_numbers_counts_attackers_as_it_resolves() {
     t.resolve();
     assert_eq!(t.pt(bears), (5, 5));
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Trample));
-    t.advance_to(P0, Step::EndOfCombat);
+    t.advance_to(P0, Step::PostcombatMain);
+    // No creature is attacking any more, but X was determined once.
     assert_eq!(t.pt(bears), (5, 5), "X isn't recounted");
     assert_eq!(t.life(P1), 20 - 5 - 2 - 3);
 }
@@ -389,7 +598,10 @@ fn strength_in_numbers_counts_attackers_as_it_resolves() {
 #[test]
 fn xenagos_gives_another_creature_haste_and_doubles_its_power() {
     cr!("608.2h");
-    ruling!("Xenagos, God of Revels", "The value of X is calculated only once, as the ability resolves.");
+    ruling!(
+        "Xenagos, God of Revels",
+        "The value of X is calculated only once, as the ability resolves."
+    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Xenagos, God of Revels");
     let giant = t.battlefield_sick(P0, "Hill Giant");
@@ -397,12 +609,21 @@ fn xenagos_gives_another_creature_haste_and_doubles_its_power() {
     t.resolve_all();
     assert_eq!(t.pt(giant), (6, 6));
     assert!(t.obj_now(giant).has_keyword(KeywordKind::Haste));
+    // X stays 3 when the creature's power changes afterwards.
+    t.lands(P0, "Forest", 1);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(giant).go();
+    t.resolve();
+    assert_eq!(t.pt(giant), (9, 9));
 }
 
 #[test]
 fn square_up_sets_base_pt_under_other_modifications() {
     cr!("613.4b", "613.4c");
-    ruling!("Square Up", "will apply after its base power and toughness are set, regardless of the order");
+    ruling!(
+        "Square Up",
+        "will apply after its base power and toughness are set, regardless of the order"
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Forest", 3);
@@ -453,7 +674,6 @@ fn water_wings_sets_base_pt_and_grants_keywords() {
 #[test]
 fn twisted_image_switches_power_and_toughness() {
     cr!("613.4d", "704.5f");
-    ruling!("Twisted Image", "nonlethal damage dealt to a creature may become lethal");
     let mut t = TestGame::new(2);
     let wall = t.battlefield(P1, "Wall of Stone");
     t.lands(P0, "Island", 1);
@@ -462,13 +682,41 @@ fn twisted_image_switches_power_and_toughness() {
     t.cast(P0, spell).target(wall).go();
     t.resolve();
     assert!(!t.on_battlefield(wall), "an 8/0 is put into the graveyard");
-    assert_eq!(t.hand_size(P0), hand, "drew a card (the spell left the hand)");
+    assert_eq!(
+        t.hand_size(P0),
+        hand,
+        "drew a card (the spell left the hand)"
+    );
+}
+
+#[test]
+fn switching_can_make_marked_damage_lethal() {
+    cr!("613.4d", "704.5g");
+    ruling!(
+        "Twisted Image",
+        "nonlethal damage dealt to a creature may become lethal"
+    );
+    let mut t = TestGame::new(2);
+    let turtle = t.battlefield(P1, "Horned Turtle");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Island", 1);
+    let shock = t.hand(P0, "Shock");
+    t.cast(P0, shock).target(turtle).go();
+    t.resolve();
+    assert!(t.on_battlefield(turtle), "2 damage on a 1/4");
+    let spell = t.hand(P0, "Twisted Image");
+    t.cast(P0, spell).target(turtle).go();
+    t.resolve();
+    assert!(!t.on_battlefield(turtle), "2 damage on a 4/1");
 }
 
 #[test]
 fn switching_applies_after_other_pt_changes() {
     cr!("613.4d");
-    ruling!("Twisted Image", "Effects that switch a creature's power and toughness apply after all other effects");
+    ruling!(
+        "Twisted Image",
+        "Effects that switch a creature's power and toughness apply after all other effects"
+    );
     let mut t = TestGame::new(2);
     let fiend = t.battlefield(P0, "Phantasmal Fiend");
     t.lands(P0, "Island", 2);
@@ -488,11 +736,7 @@ fn switching_applies_after_other_pt_changes() {
 
 #[test]
 fn choice_cards_compile() {
-    assert_supported(&[
-        "Alchemist's Gift",
-        "Endling",
-        "Multiform Wonder",
-    ]);
+    assert_supported(&["Alchemist's Gift", "Endling", "Multiform Wonder"]);
 }
 
 #[test]
@@ -534,22 +778,27 @@ fn endling_gets_the_chosen_pt_change() {
 }
 
 #[test]
-fn liliana_of_the_dark_realms_x_applies_to_either_choice() {
+fn liliana_of_the_dark_realms_x_applies_to_the_chosen_option() {
     cr!("608.2h");
     let mut t = TestGame::new(2);
     let liliana = t.battlefield(P0, "Liliana of the Dark Realms");
     t.lands(P0, "Swamp", 3);
-    let giant = t.battlefield(P1, "Hill Giant");
-    t.activate(P0, liliana, 1, &[giant.into()]).unwrap();
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.activate(P0, liliana, 1, &[angel.into()]).unwrap();
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.resolve();
-    assert!(!t.on_battlefield(giant), "-3/-3 on a 3/3");
+    assert_eq!(t.pt(angel), (1, 1), "-3/-3 with three Swamps");
+    t.lands(P0, "Swamp", 1);
+    assert_eq!(t.pt(angel), (1, 1), "X was determined once");
 }
 
 #[test]
 fn might_of_alara_counts_basic_land_types() {
     cr!("608.2h");
-    ruling!("Might of Alara", "count the number of basic land types among lands you control");
+    ruling!(
+        "Might of Alara",
+        "count the number of basic land types among lands you control"
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Forest", 3);
@@ -563,7 +812,7 @@ fn might_of_alara_counts_basic_land_types() {
 
 #[test]
 fn rabid_elephant_gets_bigger_for_each_blocker() {
-    cr!("509.1h");
+    cr!("509.3c", "608.2h");
     let mut t = TestGame::new(2);
     let elephant = t.battlefield(P0, "Rabid Elephant");
     let b1 = t.battlefield(P1, "Grizzly Bears");
@@ -579,7 +828,7 @@ fn rabid_elephant_gets_bigger_for_each_blocker() {
 
 #[test]
 fn jungle_wurm_shrinks_for_each_blocker_beyond_the_first() {
-    cr!("509.1h");
+    cr!("509.3c");
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P0, "Jungle Wurm");
     let b1 = t.battlefield(P1, "Grizzly Bears");
@@ -592,4 +841,39 @@ fn jungle_wurm_shrinks_for_each_blocker_beyond_the_first() {
     );
     t.resolve_all();
     assert_eq!(t.pt(wurm), (3, 3));
+}
+
+#[test]
+fn paladin_class_counts_attackers_other_than_the_target() {
+    cr!("608.2h");
+    ruling!(
+        "Paladin Class",
+        "you attack with exactly one creature, it won't get a power and toughness bonus"
+    );
+    for attackers in [1usize, 3] {
+        let mut t = TestGame::new(2);
+        let class = t.battlefield(P0, "Paladin Class");
+        t.lands(P0, "Plains", 8);
+        t.activate(P0, class, 0, &[]).unwrap();
+        t.resolve();
+        t.activate(P0, class, 1, &[]).unwrap();
+        t.resolve();
+        assert_eq!(t.obj_now(class).class_level, 3);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let others = [
+            t.battlefield(P0, "Savannah Lions"),
+            t.battlefield(P0, "Hill Giant"),
+        ];
+        let p1 = Entity::Player(P1);
+        let mut attacking = vec![(bears, p1)];
+        attacking.extend(others.iter().take(attackers - 1).map(|&o| (o, p1)));
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        to_blocks(&mut t, &attacking, &[]);
+        t.resolve_all();
+        // Level 2: creatures you control get +1/+1; level 3: +1/+1 for each other
+        // attacking creature, and double strike.
+        let bonus = attackers as i32 - 1;
+        assert_eq!(t.pt(bears), (3 + bonus, 3 + bonus), "{attackers} attackers");
+        assert!(t.obj_now(bears).has_keyword(KeywordKind::DoubleStrike));
+    }
 }
