@@ -57,13 +57,13 @@ fn team_vs_team_options_are_set_before_play() {
     assert_eq!(c.range_of_influence, None);
     let mut t = TestGame::with_config(4, c);
     let a = bear(&mut t, P0);
-    let b = bear(&mut t, P1);
+    let b = bear(&mut t, P0);
     t.set_step(P0, Step::BeginningOfCombat);
     assert_eq!(t.g.combat.as_ref().unwrap().defending_players, vec![P2, P3]);
-    declare(&mut t, &[(a, Entity::Player(P2))]);
-    let _ = b;
+    // P0 attacks both opponents at once.
+    declare(&mut t, &[(a, Entity::Player(P2)), (b, Entity::Player(P3))]);
     go_to(&mut t, Step::EndOfCombat);
-    assert_eq!(t.life(P2), 18);
+    assert_eq!((t.life(P2), t.life(P3)), (18, 18));
     // They may be used if the players want.
     let with = GameConfig {
         deploy_creatures: true,

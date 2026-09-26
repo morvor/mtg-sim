@@ -420,12 +420,7 @@ fn a_replacement_cant_make_a_spell_affect_something_outside_its_range() {
     assert_eq!(t.life(P1), 20);
     assert!(on_bf(&t, victim));
     assert_eq!(t.obj_now(victim).damage, 0);
-    // A Bolt from P3, for whom P2's creature is within range, is redirected to it.
-    t.lands(P3, "Mountain", 1);
-    let bolt = t.hand(P3, "Lightning Bolt");
-    t.cast(P3, bolt).target(P2).go();
-    t.resolve();
-    let _ = bolt;
+    // A Bolt from P2, for whom P2's creature is within range, is redirected to it.
     let bolt = t.hand(P2, "Lightning Bolt");
     t.lands(P2, "Mountain", 1);
     t.cast(P2, bolt).target(P1).go();

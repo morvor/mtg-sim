@@ -380,14 +380,26 @@ fn a_player_who_left_doesnt_pay_costs() {
     t.settle();
     assert_eq!(t.stack_len(), 2);
     // P1 has mana to pay and would pay, but leaves the game before the ability resolves.
+    // Everyone else would also choose to pay if they were asked in P1's place.
     t.g.players[1]
         .mana_pool
         .add_type(mtg_engine::mana::ManaType::C, 1);
-    t.answer_yes(P1, true);
+    for p in [P0, P1, P2] {
+        t.answer_yes(p, true);
+    }
     concede(&mut t, P1);
+    t.script.lock().unwrap().asked.clear();
     let hand = t.hand_size(P0);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1, "the cost wasn't paid, so P0 draws");
+    // No one was asked whether to pay it in P1's place.
+    assert!(
+        !t.asked()
+            .iter()
+            .any(|(_, d)| matches!(d, Decision::YesNo { .. })),
+        "{:?}",
+        t.asked()
+    );
 }
 
 #[test]

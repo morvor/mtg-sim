@@ -117,19 +117,26 @@ fn a_team_wins_and_loses_with_its_emperor() {
 #[test]
 fn a_draw_for_the_emperor_is_a_draw_for_the_team() {
     cr!("809.5c");
-    // Divine Intervention (P4, the emperor): the game is a draw for P4 and the players
-    // within P4's range of influence (P2, P3, P5, P0) — and for P4's whole team.
+    // Divine Intervention (P2, a general with range of influence 1): the game is a draw
+    // for P2 and the players within P2's range of influence, P1 and P3 (CR 801.15). P1 is
+    // an emperor, so it's a draw for P1's whole team — P0 too, though P0 is two seats
+    // from P2.
     let mut t = emperor6();
-    let di = t.battlefield(P4, "Divine Intervention");
+    let di = t.battlefield(P2, "Divine Intervention");
     t.g.objects[di.0 as usize]
         .counters
         .insert("intervention".into(), 1);
-    t.set_step(P3, Step::End);
-    to_step(&mut t, P4, Step::Upkeep);
+    t.set_step(P1, Step::End);
+    to_step(&mut t, P2, Step::Upkeep);
     t.resolve_all();
-    for p in [P3, P4, P5] {
+    assert!(!t.g.players_in_range(P2).contains(&P0));
+    for p in [P0, P1, P2, P3] {
         assert!(t.g.drew_game(p), "{p}");
     }
+    // P3 is only a general: it's not a draw for the rest of P3's team, which keeps
+    // playing — and, the only team left, wins.
+    assert!(!t.g.drew_game(P4) && !t.g.drew_game(P5));
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P4, P5])));
 }
 
 #[test]

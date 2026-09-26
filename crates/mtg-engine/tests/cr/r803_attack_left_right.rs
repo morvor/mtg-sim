@@ -20,14 +20,19 @@ fn sided(n: usize, side: AttackSide) -> TestGame {
 #[test]
 fn some_games_use_the_attack_left_or_attack_right_option() {
     cr!("803.1");
-    // Without the option, P0 may attack any opponent; with either option, only one.
+    // Without the option, P0 may attack any opponent; with either option, only the one on
+    // that side: P1 to the left, P4 to the right.
     let mut free = TestGame::with_config(5, GameConfig::free_for_all());
     let a = bear(&mut free, P0);
     assert_eq!(targets_of(&attack_choices(&mut free, P0), a).len(), 4);
-    for side in [AttackSide::Left, AttackSide::Right] {
+    for (side, only) in [(AttackSide::Left, P1), (AttackSide::Right, P4)] {
         let mut t = sided(5, side);
         let a = bear(&mut t, P0);
-        assert_eq!(targets_of(&attack_choices(&mut t, P0), a).len(), 1);
+        assert_eq!(
+            targets_of(&attack_choices(&mut t, P0), a),
+            vec![Entity::Player(only)],
+            "{side:?}"
+        );
     }
 }
 
