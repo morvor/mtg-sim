@@ -44,8 +44,62 @@ struct LayerState {
     started: HashMap<EffKey, Vec<ObjectId>>,
     /// The ability each static-ability effect comes from.
     abilities: HashMap<EffKey, Ability>,
-    /// Timestamp of the effect that granted an ability to an object (CR 613.7a).
+    /// Timestamp of the effect that granted an ability to an object (CR 613.7a). Also
+    /// kept for keyword abilities granted by effects or keyword counters, and for the
+    /// abilities derived from them, which share their timestamp.
     grants: HashMap<(ObjectId, u64), Timestamp>,
+    /// The abilities keywords stand for (see [`crate::keyword_impls::derived_by_keyword`]),
+    /// memoized by the uids of an object's keyword abilities.
+    derived: HashMap<Vec<u64>, Arc<Vec<(u64, Ability)>>>,
+}
+
+/// The abilities the keywords of an object with characteristics `c` stand for, each with
+/// the uid of its keyword ability (CR 702.1).
+fn keyword_derived(c: &Characteristics, st: &mut LayerState) -> Arc<Vec<(u64, Ability)>> {
+    let kws: Vec<u64> = c
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Keyword(_)))
+        .map(|a| a.uid)
+        .collect();
+    if kws.is_empty() {
+        return Arc::default();
+    }
+    st.derived
+        .entry(kws)
+        .or_insert_with(|| Arc::new(crate::keyword_impls::derived_by_keyword(c)))
+        .clone()
+}
+
+/// The derived static abilities of the object's keywords (CR 702.1) that generate
+/// continuous effects, as its interim characteristics stand. Until the end of layer 6
+/// they aren't among the object's abilities, but they exist as soon as the keyword does
+/// and apply in the layers of their effects (CR 613.1). Each shares the timestamp of its
+/// keyword (CR 613.7a): the object's, or that of the effect or keyword counter that gave
+/// the object the keyword.
+fn derived_statics(g: &Game, id: ObjectId, st: &mut LayerState) -> Vec<Ability> {
+    let derived = keyword_derived(&g.obj(id).chars, st);
+    let mut out = Vec::new();
+    for (kw, a) in derived.iter() {
+        let AbilityKind::Static(s) = &a.kind else {
+            continue;
+        };
+        if !matches!(s.effect, StaticEffect::Continuous { .. }) {
+            continue;
+        }
+        share_keyword_timestamp(st, id, *kw, a.uid);
+        out.push(a.clone());
+    }
+    out
+}
+
+/// A derived ability has the timestamp of the keyword it comes from (CR 613.7a): that of
+/// the effect that granted the keyword, if one did.
+fn share_keyword_timestamp(st: &mut LayerState, id: ObjectId, kw: u64, derived: u64) {
+    match st.grants.get(&(id, kw)).copied() {
+        Some(ts) => st.grants.insert((id, derived), ts),
+        None => st.grants.remove(&(id, derived)),
+    };
 }
 
 /// Counter kinds that grant keyword abilities (CR 122.1b).
@@ -342,11 +396,18 @@ impl Game {
             }
             if layer == Layer::L6Ability {
                 self.apply_cant_have(&live, &mut st);
-                // Keywords bring the abilities they stand for (CR 702).
+                // Keywords bring the abilities they stand for (CR 702.1). Their static
+                // abilities' effects in layers 2–6 have already been applied (see
+                // `derived_statics`); from layer 7 on they're among the object's abilities.
                 for id in &live {
-                    let mut c = std::mem::take(&mut self.objects[id.0 as usize].chars);
-                    crate::keyword_impls::expand_keywords(&mut c);
-                    self.objects[id.0 as usize].chars = c;
+                    let derived = keyword_derived(&self.obj(*id).chars, &mut st);
+                    for (kw, a) in derived.iter() {
+                        share_keyword_timestamp(&mut st, *id, *kw, a.uid);
+                    }
+                    self.objects[id.0 as usize]
+                        .chars
+                        .abilities
+                        .extend(derived.iter().map(|(_, a)| a.clone()));
                 }
             }
         }
@@ -527,8 +588,16 @@ impl Game {
             }
         }
         for id in live {
+            // Static abilities keywords stand for apply in their own layers as soon as the
+            // object has the keyword (CR 613.1, 702.1); from layer 7 on they're among its
+            // abilities.
+            let derived = if layer < Layer::L7aCda {
+                derived_statics(self, *id, st)
+            } else {
+                vec![]
+            };
             let o = self.obj(*id);
-            for a in &o.chars.abilities {
+            for a in o.chars.abilities.iter().chain(derived.iter()) {
                 let AbilityKind::Static(s) = &a.kind else {
                     continue;
                 };
@@ -740,7 +809,7 @@ impl Game {
         e: &LayerEff,
         layer: Layer,
         live: &[ObjectId],
-        st: &LayerState,
+        st: &mut LayerState,
     ) -> (bool, Vec<ObjectId>, Vec<i64>) {
         match &e.key {
             EffKey::Resolved(i) => {
@@ -757,7 +826,7 @@ impl Game {
                 (true, affected, vals)
             }
             EffKey::Static(src, uid) => {
-                let Some(a) = st.abilities.get(&e.key) else {
+                let Some(a) = st.abilities.get(&e.key).cloned() else {
                     return (false, vec![], vec![]);
                 };
                 let AbilityKind::Static(s) = &a.kind else {
@@ -769,10 +838,17 @@ impl Game {
                 // Same context as when the effect is applied (see `apply_effect_in_layer`).
                 let mut ctx = Ctx::for_object(self, *src);
                 ctx.link = a.link;
-                let started = st.started.get(&e.key);
                 let o = self.obj(*src);
+                // An ability a keyword stands for exists as long as the keyword does
+                // (see `derived_statics`).
+                let has_ability = o.chars.abilities.iter().any(|x| x.uid == *uid)
+                    || (layer < Layer::L7aCda
+                        && keyword_derived(&o.chars, st)
+                            .iter()
+                            .any(|(_, x)| x.uid == *uid));
+                let started = st.started.get(&e.key);
                 let exists = started.is_some()
-                    || (o.chars.abilities.iter().any(|x| x.uid == *uid)
+                    || (has_ability
                         && self.ability_functions(o, s.zone, s.is_cda)
                         && s.condition.as_ref().is_none_or(|c| self.eval_cond(c, &ctx)));
                 let aff = match started {
@@ -883,6 +959,11 @@ impl Game {
                     .and_then(|k| keyword_counter(k))
                 {
                     let a = keyword_counter_ability(&kw);
+                    if !trial {
+                        // Abilities the keyword stands for have the counters' timestamp
+                        // (CR 613.7a, 613.7c).
+                        st.grants.insert((*obj, a.uid), e.ts.0);
+                    }
                     self.objects[obj.0 as usize].chars.abilities.push(a);
                 }
             }
@@ -909,7 +990,16 @@ impl Game {
         {
             let before = self.obj(t).chars.abilities.len();
             self.apply_mod_to(t, m, ctx);
-            if !trial && matches!(m, Modification::AddAbility(_)) {
+            // A granted keyword's timestamp is shared by the abilities it stands for
+            // (see `derived_statics`).
+            let grants = matches!(
+                m,
+                Modification::AddAbility(_)
+                    | Modification::AddKeyword(_)
+                    | Modification::AddKeywordX(..)
+                    | Modification::AddKeywordsOf { .. }
+            );
+            if !trial && grants {
                 let after = self.obj(t).chars.abilities.len();
                 for k in before..after {
                     let uid = self.obj(t).chars.abilities[k].uid;
@@ -1004,8 +1094,9 @@ impl Game {
             work.push((affected, e.mods.clone(), ctx));
         }
         for id in live {
+            let derived = derived_statics(self, *id, st);
             let o = self.obj(*id);
-            for a in &o.chars.abilities {
+            for a in o.chars.abilities.iter().chain(derived.iter()) {
                 let AbilityKind::Static(s) = &a.kind else {
                     continue;
                 };
