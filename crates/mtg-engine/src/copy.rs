@@ -37,8 +37,11 @@ pub fn copy_spell(
     copy.prev = None;
     copy.next = None;
     if let Some(si) = copy.stack.as_mut() {
-        // A copy isn't cast (CR 707.10).
+        // A copy isn't cast (CR 707.10), so no mana was spent to cast it (it copies
+        // decisions such as X and additional costs, not the payment).
         si.cast.was_cast = false;
+        si.cast.mana_spent.clear();
+        si.cast.mana_spent_snow = 0;
     }
     let id = ObjectId(g.objects.len() as u32);
     copy.id = id;
