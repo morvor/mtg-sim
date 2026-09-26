@@ -969,6 +969,8 @@ impl Game {
 
     /// Executes a body's effect(s) for the chosen modes.
     pub fn exec_chosen(&mut self, body: &Body, chosen: &[ChosenMode], ctx: &mut Ctx) {
+        // CR 805.9: which active player "the active player" refers to.
+        crate::teams::choose_active_player(self, body, ctx);
         for cm in chosen {
             ctx.targets = cm.targets.clone();
             ctx.divided = cm.divided.clone();

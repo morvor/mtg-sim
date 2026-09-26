@@ -59,9 +59,45 @@ pub fn run_step_start_actions(g: &mut Game) {
 /// Whether a player's turn that's about to begin is skipped ("skip your next turn"). A
 /// skipped turn uses up one skip effect (CR 614.10a).
 pub fn consume_turn_skip(g: &mut Game, p: PlayerId) -> bool {
-    if let Some(i) = g.player(p).skips.iter().position(|k| *k == StepKind::Turn) {
-        g.players[p.idx()].skips.remove(i);
-        return true;
+    consume_skip(g, p, StepKind::Turn)
+}
+
+/// Uses up one "skip your next [step/turn]" of `p` — with shared team turns, of any player
+/// on `p`'s team: if an effect causes a player to skip a step, phase or turn, that
+/// player's team does so (CR 805.8). Returns true if one was used up.
+pub fn consume_skip(g: &mut Game, p: PlayerId, kind: StepKind) -> bool {
+    let holders = if g.uses_shared_team_turns() {
+        let mut v = vec![p];
+        v.extend(g.team_members(p).into_iter().filter(|q| *q != p));
+        v
+    } else {
+        vec![p]
+    };
+    for q in holders {
+        if let Some(i) = g.player(q).skips.iter().position(|k| *k == kind) {
+            g.players[q.idx()].skips.remove(i);
+            return true;
+        }
     }
     false
+}
+
+/// The players an effect that makes players skip something or take an extra turn applies
+/// to: with shared team turns, a single effect causing more than one player on the same
+/// team to add or skip the same step, phase or turn makes that team add or skip it only
+/// once (CR 805.8).
+pub fn once_per_team(g: &Game, players: Vec<PlayerId>) -> Vec<PlayerId> {
+    if !g.uses_shared_team_turns() {
+        return players;
+    }
+    let mut teams: Vec<u8> = Vec::new();
+    players
+        .into_iter()
+        .filter(|p| {
+            let t = g.player(*p).team;
+            let first = !teams.contains(&t);
+            teams.push(t);
+            first
+        })
+        .collect()
 }

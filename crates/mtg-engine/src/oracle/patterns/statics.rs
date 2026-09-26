@@ -2197,6 +2197,23 @@ fn parse_line(
                 })];
                 return Some((body, and_all(conds)));
             }
+            // "~ can't block unless you control more creatures than attacking player": about
+            // the controller of each attacking creature it would block (CR 805.10c).
+            if let Some(pf) = super::statics_conditions::attacking_player_condition(c) {
+                let [Out::Restr(Restriction::CantBlock(f))] = body.outs.as_slice() else {
+                    return None;
+                };
+                let pf = if negate {
+                    pf
+                } else {
+                    PlayerFilter::Not(Box::new(pf))
+                };
+                body.outs = vec![Out::Restr(Restriction::CanBlockOnly {
+                    blocker: f.clone(),
+                    attackers: Filter::ControllerMatches(Box::new(pf)),
+                })];
+                return Some((body, and_all(conds)));
+            }
             if !body.outs.iter().all(|o| matches!(o, Out::Restr(_))) {
                 continue;
             }

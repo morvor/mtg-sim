@@ -443,7 +443,13 @@ impl Game {
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
             base.ability_uid = a.uid;
-            for info in self.trigger_matches_ctx(&t.trigger, &base, ev) {
+            let mut infos = self.trigger_matches_ctx(&t.trigger, &base, ev);
+            // CR 805.4d: "each player's" step abilities about "that player" trigger for
+            // each player on the active team.
+            infos.extend(crate::teams::more_step_trigger_infos(
+                self, t, &base, ev, &infos,
+            ));
+            for info in infos {
                 let mut ctx = Ctx::new(Some(src), ctl);
                 ctx.link = a.link;
                 // Which ability this is (e.g. one of several instances of a keyword,

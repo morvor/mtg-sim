@@ -674,12 +674,8 @@ impl Game {
         if crate::skip::static_skip(self, kind, active) {
             self.players[active.idx()].skips.push(kind);
         }
-        if let Some(i) = self.players[active.idx()]
-            .skips
-            .iter()
-            .position(|k| *k == kind)
-        {
-            self.players[active.idx()].skips.remove(i);
+        // With shared team turns, a skip of any player on the team (CR 805.8).
+        if crate::skip::consume_skip(self, active, kind) {
             if kind == StepKind::Combat {
                 // Skip the whole combat phase (only this one, not additional combat phases
                 // later in the turn).

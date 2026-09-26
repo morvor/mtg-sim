@@ -1372,8 +1372,10 @@ impl Game {
                 crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
             }
             Effect::ExtraTurn { who } => {
-                // CR 500.7: most recently created extra turn is taken first.
-                for p in self.eval_players(who, ctx) {
+                // CR 500.7: most recently created extra turn is taken first. With shared
+                // team turns, the team takes it, once per team (CR 805.8).
+                let who = self.eval_players(who, ctx);
+                for p in crate::skip::once_per_team(self, who) {
                     self.extra_turns.push(p);
                 }
             }
@@ -1397,7 +1399,8 @@ impl Game {
                 }
             }
             Effect::Skip { who, step } => {
-                for p in self.eval_players(who, ctx) {
+                let who = self.eval_players(who, ctx);
+                for p in crate::skip::once_per_team(self, who) {
                     self.players[p.idx()].skips.push(*step);
                 }
             }

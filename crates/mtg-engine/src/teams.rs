@@ -3,8 +3,95 @@
 //! one of its players as `turn.active`; every player on that team is an active player for
 //! the turn-based actions of the turn (untapping, drawing, playing lands, discarding).
 
+use crate::ability::{Body, Var};
+use crate::eval::Ctx;
 use crate::game::Game;
 use crate::types::*;
+
+/// The variable holding which active player "the active player" refers to while an
+/// ability's effect applies with shared team turns (CR 805.9).
+pub const ACTIVE_PLAYER_VAR: Var = u16::MAX - 805;
+
+/// The shared team turns option can be used only if the members of each team sit in
+/// adjacent seats (CR 805.1).
+pub fn teams_seated_together(g: &Game) -> bool {
+    let teams: Vec<u8> = g.players.iter().map(|p| p.team).collect();
+    crate::multiplayer::setup::teams_together(&teams)
+}
+
+/// CR 805.4d: with shared team turns, an ability that triggers at the beginning of "each
+/// player's" or "each opponent's" step or phase triggers once for each appropriate player
+/// on the active team if its trigger condition, effect or intervening "if" clause refers
+/// to "that player" or similar. Given the matches already found for the step (for one
+/// player), the matches for the other players on the active team.
+pub fn more_step_trigger_infos(
+    g: &Game,
+    t: &crate::ability::TriggeredAbility,
+    base: &Ctx,
+    ev: &crate::events::Event,
+    found: &[crate::object::EventInfo],
+) -> Vec<crate::object::EventInfo> {
+    use crate::ability::TriggerCond;
+    let TriggerCond::BeginningOf { whose, .. } = &t.trigger else {
+        return vec![];
+    };
+    if found.is_empty()
+        || !matches!(ev, crate::events::Event::StepBegan { .. })
+        || !g.uses_shared_team_turns()
+    {
+        return vec![];
+    }
+    let refers = |v: serde_json::Result<String>| v.is_ok_and(|j| j.contains("TriggerPlayer"));
+    if !refers(serde_json::to_string(&t.body)) && !refers(serde_json::to_string(&t.intervening_if))
+    {
+        return vec![];
+    }
+    g.active_players()
+        .into_iter()
+        .filter(|p| {
+            g.player(*p).in_game()
+                && g.player_rel_matches(*whose, *p, base)
+                && !found.iter().any(|i| i.player == Some(*p))
+        })
+        .map(|p| crate::object::EventInfo {
+            player: Some(p),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// CR 805.9: an ability that refers to "the active player" refers to one specific active
+/// player; its controller chooses which as its effect is applied.
+pub fn choose_active_player(g: &mut Game, body: &Body, ctx: &mut Ctx) {
+    if !g.uses_shared_team_turns() || ctx.vars.contains_key(&ACTIVE_PLAYER_VAR) {
+        return;
+    }
+    let actives: Vec<PlayerId> = g
+        .active_players()
+        .into_iter()
+        .filter(|p| g.player(*p).in_game())
+        .collect();
+    if actives.len() < 2 {
+        return;
+    }
+    let mentions = serde_json::to_string(body).is_ok_and(|j| j.contains("\"ActivePlayer\""));
+    if !mentions {
+        return;
+    }
+    let chosen = g
+        .ask_entities(
+            ctx.controller,
+            ctx.source,
+            "Choose the active player this refers to",
+            actives.iter().map(|p| Entity::Player(*p)).collect(),
+            1,
+            1,
+        )
+        .first()
+        .and_then(|e| e.player())
+        .unwrap_or(actives[0]);
+    ctx.set_var(ACTIVE_PLAYER_VAR, vec![Entity::Player(chosen)]);
+}
 
 impl Game {
     /// Whether the game uses the shared team turns option (CR 805).

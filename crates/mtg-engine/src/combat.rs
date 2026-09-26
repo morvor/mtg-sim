@@ -542,6 +542,7 @@ impl Game {
 pub fn shared_team_turns(g: &Game) -> bool {
     (g.config.variant == Variant::TwoHeadedGiant || g.config.shared_team_turns)
         && g.config.teams.is_some()
+        && crate::teams::teams_seated_together(g)
 }
 
 /// The attacking player(s) (CR 506.2, 506.2b): the active player, or with shared team
@@ -1580,7 +1581,13 @@ pub fn declare_blockers_step(g: &mut Game) {
     };
     let mut all_blocks: Vec<(ObjectId, ObjectId)> = Vec::new();
     for group in groups {
-        let decider = group[0];
+        // With shared team turns the team's primary player makes the declaration if its
+        // players can't agree (CR 805.2).
+        let decider = if group.len() > 1 {
+            g.primary_player(group[0])
+        } else {
+            group[0]
+        };
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;

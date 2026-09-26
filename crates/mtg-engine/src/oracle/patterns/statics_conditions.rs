@@ -647,6 +647,21 @@ pub(crate) fn defending_player_condition(c: &str) -> Option<PlayerFilter> {
     ))
 }
 
+/// "you control more creatures than attacking player": the attacking player controls
+/// fewer. With several attacking players, the one a blocking creature's ability refers to
+/// is the controller of the attacking creature it would block (CR 805.10c).
+pub(crate) fn attacking_player_condition(c: &str) -> Option<PlayerFilter> {
+    let r = end(c)
+        .strip_prefix("you control more ")?
+        .strip_suffix(" than attacking player")?;
+    let f = color_or_phrase(r)?;
+    Some(PlayerFilter::Controls(
+        Box::new(f.clone()),
+        Cmp::Lt,
+        Box::new(Value::Count(f.you_control())),
+    ))
+}
+
 /// An object phrase, also allowing a leading color choice: "red or white permanent".
 fn color_or_phrase(r: &str) -> Option<Filter> {
     let words: Vec<&str> = r.splitn(4, ' ').collect();

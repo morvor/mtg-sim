@@ -958,6 +958,9 @@ pub enum Filter {
     Copy,
     ControlledBy(PlayerRel),
     OwnedBy(PlayerRel),
+    /// Controlled by a player matching the filter, relative to the source ("attacking
+    /// creatures whose controller controls fewer creatures than you").
+    ControllerMatches(Box<PlayerFilter>),
     /// In the given zone. Filters without a zone apply to the battlefield (for permanents)
     /// or the stack (for spells).
     InZone(ZoneKind),

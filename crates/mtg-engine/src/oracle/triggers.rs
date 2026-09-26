@@ -220,10 +220,12 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             "each player's draw step" => (TriggerStep::Draw, PlayerRel::Any),
             _ => return None,
         };
+        // "That player" is the player whose step it is: the active player, or with shared
+        // team turns each player on the active team the ability triggers for (CR 805.4d).
         return Some((
             TriggerCond::BeginningOf { step, whose },
             Sel::This,
-            PlayerRef::ActivePlayer,
+            PlayerRef::TriggerPlayer,
         ));
     }
     let r = l

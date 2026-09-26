@@ -306,7 +306,13 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
-            PlayerRef::ActivePlayer => vec![self.turn.active],
+            // CR 805.9: with shared team turns, the active player the ability's controller
+            // chose as its effect began to apply.
+            PlayerRef::ActivePlayer => ctx
+                .vars
+                .get(&crate::teams::ACTIVE_PLAYER_VAR)
+                .and_then(|v| v.iter().find_map(|e| e.player()))
+                .map_or_else(|| vec![self.turn.active], |p| vec![p]),
             PlayerRef::DefendingPlayer => self.defending_player_for(ctx).into_iter().collect(),
             PlayerRef::ChosenPlayer(v) | PlayerRef::Var(v) => ctx
                 .vars
@@ -393,6 +399,9 @@ impl Game {
                 self.player_rel_matches(*rel, self.filter_controller(view, id), ctx)
             }
             Filter::OwnedBy(rel) => self.player_rel_matches(*rel, o.owner, ctx),
+            Filter::ControllerMatches(pf) => {
+                self.player_filter_matches(pf, self.filter_controller(view, id), ctx)
+            }
             Filter::InZone(z) => o.zone.kind() == Some(*z),
             // Only permanents have status (CR 110.5d).
             Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
