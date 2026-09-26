@@ -71,6 +71,7 @@ pub mod mana_value;
 pub mod match_play;
 pub mod merge;
 pub mod mill_rules;
+pub mod modal_history;
 pub mod monarch_initiative;
 pub mod mulligan;
 pub mod multiplayer;

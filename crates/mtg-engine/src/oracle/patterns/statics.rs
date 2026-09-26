@@ -1320,6 +1320,20 @@ fn type_words(s: &str) -> Option<TypeWords> {
     Some(tw)
 }
 
+/// The layer modifications of the "is"/"are" type predicate `r` ("a 2/2 Elemental
+/// creature that's still a land"), for one-shot effects that make objects become that
+/// ("target land becomes a 2/2 Elemental creature"): None unless every part is a
+/// modification of the subject objects.
+pub(crate) fn type_predicate_mods(r: &str, subj: &Subject) -> Option<Vec<Modification>> {
+    type_predicate(r, subj)?
+        .into_iter()
+        .map(|o| match o {
+            Out::Mod(m) => Some(m),
+            _ => None,
+        })
+        .collect()
+}
+
 /// "is"/"are" predicates: type, color and P/T changes (CR 205.1, 305.7, 613.1d-e).
 fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     let r = r.trim();

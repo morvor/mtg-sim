@@ -136,12 +136,19 @@ impl Game {
             let max = self.eval_value(&modal.max, ctx).max(min as i64) as u32;
             let modes: Vec<String> = modal.modes.iter().map(|m| m.text.clone()).collect();
             // Only modes with legal targets can be chosen (CR 700.2a... via 601.2c legality).
+            // "Choose one that hasn't been chosen": modes chosen before can't be.
             let available: Vec<usize> = (0..modal.modes.len())
                 .filter(|i| self.targets_possible(&modal.modes[*i].targets, ctx, id))
+                .filter(|i| crate::modal_history::may_choose(self, id, &modal.chooser, *i))
                 .collect();
             let picks: Vec<usize> = if modal.chooser == ModeChooser::Random {
-                let i = self.random_range(0, modal.modes.len() as u32 - 1) as usize;
-                vec![i]
+                // A mode that can't be chosen (no legal targets) can't be chosen at random.
+                if available.is_empty() {
+                    vec![]
+                } else {
+                    let k = self.random_range(0, available.len() as u32 - 1) as usize;
+                    vec![available[k]]
+                }
             } else {
                 let chooser = if modal.chooser == ModeChooser::Opponent {
                     // CR 601.7, 602.3: an opponent chooses the mode when the controller
@@ -196,9 +203,19 @@ impl Game {
             if (picks.len() as u32) < min {
                 return false;
             }
+            // CR 700.2b: a modal triggered ability with no mode chosen is removed from the
+            // stack.
+            let triggered = self.objects[id.0 as usize]
+                .stack
+                .as_ref()
+                .is_some_and(|s| matches!(s.kind, StackKind::Triggered { .. }));
+            if picks.is_empty() && triggered {
+                return false;
+            }
             let mut picks = picks;
             // CR 700.2: modes are performed in the order printed.
             picks.sort_unstable();
+            crate::modal_history::record(self, id, &modal.chooser, &picks);
             for m in picks {
                 let mode = &modal.modes[m];
                 let targets = match self.choose_targets_for(&mode.targets, ctx, id) {

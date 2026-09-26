@@ -525,6 +525,8 @@ pub struct Game {
     pub subgames: crate::subgame::SubgameState,
     /// Shortcuts and loops (CR 732).
     pub shortcuts: crate::shortcuts::ShortcutState,
+    /// Modes chosen for modal abilities ("choose one that hasn't been chosen", CR 700.2).
+    pub modal_history: crate::modal_history::ModalHistory,
 }
 
 impl Game {
@@ -623,6 +625,7 @@ impl Game {
             merges: Default::default(),
             subgames: Default::default(),
             shortcuts: Default::default(),
+            modal_history: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
