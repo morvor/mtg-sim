@@ -229,6 +229,13 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<Vec<EventInfo>> {
         None
     }
+    /// Whether a named [`TriggerCond::Custom`] this implementation defines "looks back in
+    /// time" for the event (CR 603.10), e.g. one that triggers on a player sacrificing a
+    /// permanent (CR 603.10a): whether it triggers is determined from the abilities that
+    /// existed immediately before the event. `None` if it isn't one of its triggers.
+    fn custom_trigger_looks_back(&self, name: &str, ev: &Event) -> Option<bool> {
+        None
+    }
     /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
     /// number of spells cast before a storm spell (CR 702.40a).
     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
@@ -632,6 +639,15 @@ pub fn custom_trigger(
     registry()
         .iter()
         .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
+}
+
+/// Whether a keyword-defined custom trigger looks back in time for the event (see
+/// [`KeywordRules::custom_trigger_looks_back`]).
+pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger_looks_back(name, ev))
+        .unwrap_or(false)
 }
 
 /// A keyword ability's cost that `p` pays, after the effects that modify that keyword's

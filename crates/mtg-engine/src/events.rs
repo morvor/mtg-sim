@@ -283,8 +283,12 @@ pub enum Event {
         player: PlayerId,
         source: Option<ObjectId>,
     },
+    /// `by` exploited `obj` (CR 702.110b): `player`, the controller of `by`'s exploit
+    /// ability, sacrificed `obj` (as it was on the battlefield) as that ability resolved.
     Exploited {
         obj: ObjectId,
+        by: ObjectId,
+        player: PlayerId,
     },
     /// A copy of a spell was put onto the stack (CR 707.10); `player` controls the copy.
     SpellCopied {
