@@ -64,7 +64,7 @@ fn a_keywords_static_ability_applies_in_layer_6_with_the_objects_timestamp() {
     // Dash's haste is an ability-adding effect of the permanent's own static ability: it
     // applies in layer 6 in timestamp order with other ability-adding and -removing
     // effects, with the permanent's timestamp (from when it entered the battlefield).
-    cr!("702.1", "702.109a", "613.1f", "613.7", "613.7a", "613.7d");
+    cr!("702.1", "702.109a", "613.1f", "613.7", "613.7a", "613.7d", "613.9");
     for field_first in [true, false] {
         let mut t = TestGame::new(2);
         let field = || loses_haste("Sluggish Field", Filter::creature());
