@@ -179,6 +179,67 @@ inventory::submit! { ConditionPattern { name: "k702.117/119 surge or emerge cost
 // Crew (CR 702.122)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Partner (CR 702.124)
+// ---------------------------------------------------------------------------
+
+/// The partner abilities written on their own line (CR 702.124a): "Partner with [name]"
+/// (the name may contain commas), "Partner—[text]", "Choose a Background", "Doctor's
+/// companion". The last two aren't the partner keyword (CR 702.124n): they're static
+/// abilities that function before the game (see `kw/partner.rs`).
+fn partner_line(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::partner::{CHOOSE_A_BACKGROUND, DOCTORS_COMPANION};
+    let t = block.trim().trim_end_matches('.');
+    let lower = t.to_lowercase();
+    let custom = |name: &str| {
+        let mut s = StaticAbility::new(StaticEffect::Custom(SmolStr::new(name)));
+        s.zone = FunctionZone::Anywhere;
+        Some(vec![AbilityDef::new(AbilityKind::Static(s), t)])
+    };
+    match lower.as_str() {
+        "choose a background" => return custom(CHOOSE_A_BACKGROUND),
+        "doctor's companion" => return custom(DOCTORS_COMPANION),
+        _ => {}
+    }
+    let named = lower
+        .strip_prefix("partner with ")
+        .is_some_and(|n| !n.trim().is_empty());
+    let text = lower
+        .strip_prefix("partner—")
+        .is_some_and(|x| !x.trim().is_empty() && !x.contains('{'));
+    if !named && !text {
+        return None;
+    }
+    let kw = Keyword::new(KeywordKind::Partner).text(t);
+    Some(crate::oracle::keywords::compile_keyword(kw, t))
+}
+
+inventory::submit! { AbilityPattern { name: "k702.124 partner abilities", priority: 100, parse: partner_line } }
+
+/// "Put your commander into your hand from the command zone" (Command Beacon): with two
+/// commanders there, its owner chooses one (CR 702.124e).
+fn put_your_commander_into_your_hand(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "put your commander into your hand from the command zone" {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::Commander,
+                Filter::OwnedBy(PlayerRel::You),
+                Filter::InZone(ZoneKind::Command),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        to: Destination::zone(ZoneKind::Hand),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.124e put your commander into your hand", priority: 100, parse: put_your_commander_into_your_hand } }
+
 /// "Crew N. Activate only once each turn.": the crew keyword with that restriction (kept
 /// in its text, see `kw/crew.rs`).
 fn crew_once_each_turn(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {

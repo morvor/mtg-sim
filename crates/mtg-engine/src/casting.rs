@@ -292,6 +292,10 @@ impl Game {
         if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
             return true;
         }
+        // CR 903.8: a player may cast a commander they own from the command zone.
+        if !land && crate::kw::partner::castable_commanders(self, p).contains(&card) {
+            return true;
+        }
         // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
         // to cast spells "with certain qualities" only by a player who may look at it
         // (and then only if the resulting spell has those qualities).
@@ -389,7 +393,11 @@ impl Game {
             }
         }
         // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
-        for c in crate::designations::castable_prepared_copies(self, p) {
+        // CR 903.8: a player may cast a commander they own from the command zone.
+        for c in crate::designations::castable_prepared_copies(self, p)
+            .into_iter()
+            .chain(crate::kw::partner::castable_commanders(self, p))
+        {
             if !out.contains(&c) {
                 out.push(c);
             }
@@ -1235,6 +1243,11 @@ impl Game {
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
+        }
+        // CR 903.8: the commander tax (each commander separately, CR 702.124d).
+        let tax = crate::kw::partner::commander_tax(self, p, card);
+        if tax > 0 {
+            add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
         }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
         if let Some(m) = cost.mana.as_mut() {

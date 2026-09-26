@@ -159,6 +159,31 @@ pub fn zone(t: &TestGame, id: ObjectId) -> Zone {
     t.zone(id)
 }
 
+/// A game that hasn't started yet (no opening hands), with the given decks.
+pub fn pregame(
+    config: mtg_engine::game::GameConfig,
+    decks: Vec<Vec<std::sync::Arc<mtg_engine::card::CardDef>>>,
+) -> TestGame {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+    let n = decks.len();
+    let script = Arc::new(Mutex::new(Script {
+        queues: vec![VecDeque::new(); n],
+        asked: vec![],
+    }));
+    let agents: Vec<Box<dyn mtg_engine::decision::Agent>> = (0..n)
+        .map(|i| {
+            Box::new(ScriptedAgent {
+                player: PlayerId(i as u8),
+                script: script.clone(),
+            }) as Box<dyn mtg_engine::decision::Agent>
+        })
+        .collect();
+    let mut g = mtg_engine::game::Game::new(config, decks, agents);
+    g.logging = true;
+    TestGame { g, script }
+}
+
 /// Asserts that a real card's oracle text compiled completely.
 pub fn assert_supported_card(name: &str) {
     let c = mtg_engine::card::card(name);

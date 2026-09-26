@@ -88,6 +88,9 @@ pub enum DeckProblem {
     AnteCard { name: String },
     /// A card in an Attraction deck that isn't an Attraction (CR 717.2).
     NotAnAttraction { name: String },
+    /// Commander: the cards designated as the deck's commander can't be its commanders
+    /// together (CR 702.124, see `kw/partner.rs`).
+    InvalidCommanders { reason: String },
 }
 
 /// Conspiracy cards among `cards` (CR 315.1, 315.3).
