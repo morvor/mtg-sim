@@ -2,9 +2,10 @@
 //! "As an additional cost to cast this spell, you may collect evidence N." and the linked
 //! "if evidence was collected" (CR 701.59c). "Collect evidence N" / "forage" as costs and
 //! instructions are handled by `oracle/costs.rs` and `a701_actions.rs`; "whenever you
-//! collect evidence" / "whenever you forage" by `a701_action_triggers.rs`.
+//! collect evidence" / "whenever you forage" by `a701_action_triggers.rs`. Also "You may
+//! collect evidence N rather than pay the mana cost for spells you cast."
 
-use super::{AbilityPattern, ConditionPattern};
+use super::{AbilityPattern, ConditionPattern, StaticPattern};
 use crate::ability::*;
 use crate::kwa::evidence_forage::EVIDENCE_COST;
 use crate::oracle::phrases::*;
@@ -41,3 +42,20 @@ fn evidence_was_collected(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "a701 evidence was collected", priority: 60, parse: evidence_was_collected } }
+
+/// "You may collect evidence N rather than pay the mana cost for spells you cast."
+fn evidence_instead_of_mana(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l)
+        .strip_prefix("you may collect evidence ")?
+        .strip_suffix(" rather than pay the mana cost for spells you cast")?;
+    let n: u32 = r.trim().parse().ok()?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(SmolStr::new(format!(
+            "{}{n}",
+            crate::kwa::evidence_forage::ALT_COST_PREFIX
+        ))))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "a701 collect evidence rather than pay the mana cost", priority: 60, parse: evidence_instead_of_mana } }

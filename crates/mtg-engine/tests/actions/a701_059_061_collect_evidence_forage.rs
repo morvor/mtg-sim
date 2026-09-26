@@ -1,7 +1,7 @@
 //! CR 701.59: collect evidence; CR 701.61: forage.
 
 use crate::a701_028_071_common::*;
-use mtg_engine::kwa::evidence_forage::{COLLECTED_EVIDENCE, FORAGED};
+use mtg_engine::kwa::evidence_forage::{ALT_COST_METHOD, COLLECTED_EVIDENCE, FORAGED};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
@@ -303,4 +303,65 @@ fn whenever_you_forage() {
     sentries(&mut t);
     assert!(!t.on_battlefield(f));
     assert_eq!(t.counters(cultivator, counters::PLUS1), 1);
+}
+
+fn clues(t: &TestGame) -> usize {
+    t.g.permanents()
+        .filter(|o| o.is_token() && o.chars.has_subtype("Clue"))
+        .count()
+}
+
+#[test]
+fn collecting_evidence_for_an_alternative_cost_isnt_the_linked_additional_cost() {
+    cr!("701.59c");
+    ruling!(
+        "Conspiracy Unraveler",
+        "any additional effects that occur \"if evidence was collected\" will occur only if that additional cost was paid. Using the alternative cost from Conspiracy Unraveler will not cause those additional effects to occur."
+    );
+    ruling!(
+        "Conspiracy Unraveler",
+        "abilities of permanents that trigger \"whenever you collect evidence\" will trigger twice."
+    );
+    supported("Conspiracy Unraveler");
+    supported("Evidence Examiner");
+    // Conspiracy Unraveler: "You may collect evidence 10 rather than pay the mana cost for
+    // spells you cast." Evidence Examiner: "Whenever you collect evidence, investigate."
+    let setup = |t: &mut TestGame| -> ObjectId {
+        t.battlefield(P0, "Conspiracy Unraveler");
+        t.battlefield(P0, "Evidence Examiner");
+        for _ in 0..3 {
+            t.graveyard(P0, "Shivan Dragon");
+        }
+        let target = t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[Entity::Object(target)]);
+        target
+    };
+    // Crimestopper Sprite for the alternative cost only: evidence was collected, but not
+    // as the linked additional cost.
+    let mut t = TestGame::new(2);
+    let target = setup(&mut t);
+    let card = t.hand(P0, "Crimestopper Sprite");
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Alternative(ALT_COST_METHOD))
+        .kicked(false)
+        .go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Crimestopper Sprite").len(), 1);
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert!(t.obj_now(target).tapped);
+    assert_eq!(t.counters(target, counters::STUN), 0);
+    assert_eq!(clues(&t), 1);
+    // Both: two collections, two triggers, and the stun counter.
+    let mut t = TestGame::new(2);
+    let target = setup(&mut t);
+    let card = t.hand(P0, "Crimestopper Sprite");
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Alternative(ALT_COST_METHOD))
+        .kicked(true)
+        .go();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 0);
+    assert_eq!(custom_events(&t, COLLECTED_EVIDENCE).len(), 2);
+    assert_eq!(clues(&t), 2);
+    assert_eq!(t.counters(target, counters::STUN), 1);
 }

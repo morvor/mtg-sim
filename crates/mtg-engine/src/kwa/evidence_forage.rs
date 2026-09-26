@@ -12,6 +12,11 @@
 //!
 //! Both report an event (`Event::Custom`) for "whenever you collect evidence" / "whenever
 //! you forage" triggers.
+//!
+//! "You may collect evidence N rather than pay the mana cost for spells you cast"
+//! ([`ALT_COST_PREFIX`], Conspiracy Unraveler) is an alternative cost for the spells its
+//! controller casts from their hand ([`EvidenceInsteadOfMana`]); paying it isn't the
+//! linked additional cost, so "if evidence was collected" stays false.
 
 use super::*;
 
@@ -21,6 +26,11 @@ pub const COLLECTED_EVIDENCE: &str = "collect evidence";
 pub const FORAGED: &str = "forage";
 /// The name of the optional additional cost "you may collect evidence N" (CR 701.59c).
 pub const EVIDENCE_COST: &str = "collect evidence";
+/// `StaticEffect::Custom` name prefix, followed by N: "You may collect evidence N rather
+/// than pay the mana cost for spells you cast."
+pub const ALT_COST_PREFIX: &str = "collect evidence instead of mana cost:";
+/// The `CastMethod::Alternative` id of that alternative cost.
+pub const ALT_COST_METHOD: u64 = 0x0E1D_E4CE_0701_0059;
 
 fn total_mana_value(g: &Game, cards: &[ObjectId]) -> u32 {
     cards.iter().map(|c| g.mana_value_of(*c)).sum()
@@ -183,3 +193,39 @@ impl KeywordActionRules for Forage {
 }
 
 inventory::submit! { KeywordActionRegistration(&Forage) }
+
+/// Casting spells from hand by collecting evidence rather than paying their mana cost.
+pub struct EvidenceInsteadOfMana;
+
+impl crate::kw::KeywordRules for EvidenceInsteadOfMana {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn global_cast_options(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+    ) -> Vec<crate::casting::CastOption> {
+        if g.obj(card).zone != Zone::Hand(p) {
+            return vec![];
+        }
+        let Some(n) = g
+            .statics
+            .customs
+            .iter()
+            .filter(|(_, ctl, _)| *ctl == p)
+            .filter_map(|(_, _, name)| name.strip_prefix(ALT_COST_PREFIX)?.parse::<u32>().ok())
+            .min()
+        else {
+            return vec![];
+        };
+        let mut opt = crate::casting::CastOption::normal(crate::object::FaceState::Front);
+        opt.method = crate::object::CastMethod::Alternative(ALT_COST_METHOD);
+        opt.alt_cost = Some(Cost::free().with(CostPart::CollectEvidence(n)));
+        vec![opt]
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&EvidenceInsteadOfMana) }
