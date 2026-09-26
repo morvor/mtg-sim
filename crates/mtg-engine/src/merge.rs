@@ -18,7 +18,16 @@ use crate::object::{Characteristics, EventInfo, FaceState, ObjKind, Zone};
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
 use smol_str::SmolStr;
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+/// Bookkeeping for merged permanents, in `Game::merges`.
+#[derive(Clone, Debug, Default)]
+pub struct MergeState {
+    /// The objects a merged permanent became as it left the battlefield (CR 730.3), by the
+    /// first of them (the one `Game::current` follows).
+    pub left_together: BTreeMap<ObjectId, Vec<ObjectId>>,
+}
 
 /// `Event::Custom` name: a spell merged with a creature as a resolving mutating creature
 /// spell (CR 702.140d). `obj` is the mutated permanent.
@@ -62,6 +71,10 @@ fn new_component(g: &mut Game, obj: ObjectId) -> ObjectId {
     };
     let c = &mut g.objects[id.0 as usize];
     c.face_down = o.face_down;
+    // A double-faced component keeps the face it has up; a flipped one stays flipped.
+    if matches!(o.face, FaceState::Back | FaceState::Flipped) && c.kind == ObjKind::Card {
+        c.face = o.face;
+    }
     if o.face == FaceState::Melded {
         c.face = FaceState::Melded;
         c.base = o.base.clone();
@@ -70,12 +83,17 @@ fn new_component(g: &mut Game, obj: ObjectId) -> ObjectId {
     id
 }
 
-/// The characteristics a component contributes (its printed ones, CR 730.2a).
+/// The characteristics a component contributes (its printed ones, CR 730.2a): those of
+/// the face it has up — a double-faced component turned to its other face (CR 730.2i).
 fn component_chars(g: &Game, c: ObjectId) -> Characteristics {
     let o = g.obj(c);
     match &o.card {
         Some(card) if o.kind == ObjKind::Card && o.face != FaceState::Melded => {
-            card.characteristics(FaceState::Front)
+            let face = match o.face {
+                FaceState::Back | FaceState::Flipped => o.face,
+                _ => FaceState::Front,
+            };
+            card.characteristics(face)
         }
         _ => o.base.clone(),
     }
@@ -95,13 +113,159 @@ fn refresh(g: &mut Game, id: ObjectId) {
         .flat_map(|c| component_chars(g, *c).abilities)
         .collect();
     let t = g.obj(top);
-    let (card, kind, face) = (t.card.clone(), t.kind, t.face);
+    let (card, kind, face, face_down) = (t.card.clone(), t.kind, t.face, t.face_down);
     let o = &mut g.objects[id.0 as usize];
     o.base = base;
     o.card = card;
     o.kind = kind;
-    o.face = face;
+    // A merged permanent isn't a double-faced permanent (CR 730.2i): its components'
+    // faces are kept on the components.
+    o.face = match face {
+        FaceState::Melded => face,
+        _ => FaceState::Front,
+    };
+    // CR 730.2e: face up or face down as its topmost component is. A face-down permanent
+    // that becomes face up this way isn't "turned face up".
+    o.face_down = face_down;
     g.dirty = true;
+}
+
+/// Whether `id` contains a component represented by a double-faced card that can
+/// transform (CR 730.2i, 730.2j).
+fn has_double_faced_component(g: &Game, id: ObjectId) -> bool {
+    physical_components(g, id).iter().any(|c| {
+        let o = g.obj(*c);
+        o.kind == ObjKind::Card
+            && o.card.as_ref().is_some_and(|card| {
+                card.layout.is_double_faced()
+                    && card.layout != crate::card::Layout::Meld
+                    && card.faces.len() > 1
+            })
+    })
+}
+
+/// CR 730.2j: a face-up merged permanent that contains a double-faced component can't be
+/// turned face down.
+pub fn cant_turn_face_down(g: &Game, id: ObjectId) -> bool {
+    is_merged(g, id) && !g.obj(id).face_down && has_double_faced_component(g, id)
+}
+
+/// CR 730.2g: a face-down merged permanent that contains an instant or sorcery card can't
+/// be turned face up.
+pub fn cant_turn_face_up(g: &Game, id: ObjectId) -> bool {
+    is_merged(g, id)
+        && physical_components(g, id).iter().any(|c| {
+            let o = g.obj(*c);
+            o.kind == ObjKind::Card
+                && o.card.as_ref().is_some_and(|card| {
+                    let f = card.characteristics(FaceState::Front);
+                    f.is(crate::types::CardType::Instant) || f.is(crate::types::CardType::Sorcery)
+                })
+        })
+}
+
+/// CR 730.2f: a merged permanent turned face down has each of its face-up components
+/// turned face down; turned face up, each face-down component turned face up.
+pub fn turned_face(g: &mut Game, id: ObjectId, face_down: bool) {
+    if !is_merged(g, id) {
+        return;
+    }
+    for c in physical_components(g, id) {
+        g.objects[c.0 as usize].face_down = face_down;
+    }
+    refresh(g, id);
+}
+
+/// CR 730.2i: transforming (or converting) a merged permanent turns each of its
+/// double-faced components that can transform to its other face. Returns true if any
+/// did.
+pub fn transform_merged(g: &mut Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if o.zone != Zone::Battlefield || !g.is_live(id) || o.face_down {
+        return false;
+    }
+    let mut any = false;
+    for c in physical_components(g, id) {
+        let co = g.obj(c);
+        let Some(card) = co.card.clone() else {
+            continue;
+        };
+        if co.kind != ObjKind::Card
+            || !card.layout.is_double_faced()
+            || card.layout == crate::card::Layout::Meld
+            || card.faces.len() < 2
+        {
+            continue;
+        }
+        let (new_face, idx) = match co.face {
+            FaceState::Back => (FaceState::Front, 0),
+            _ => (FaceState::Back, 1),
+        };
+        // CR 701.27d: not into an instant or sorcery face.
+        let types = &card.faces[idx].chars.card_types;
+        if types.contains(crate::types::CardType::Instant)
+            || types.contains(crate::types::CardType::Sorcery)
+        {
+            continue;
+        }
+        g.objects[c.0 as usize].face = new_face;
+        any = true;
+    }
+    if !any {
+        return false;
+    }
+    refresh(g, id);
+    let ts = g.new_timestamp();
+    g.objects[id.0 as usize].timestamp = ts;
+    crate::transform_rules::record(g, id, ts);
+    g.emit(Event::Transformed { obj: id });
+    true
+}
+
+/// [`with_components`] for a selection of entities.
+pub fn with_components_of(g: &Game, sel: Vec<Entity>) -> Vec<Entity> {
+    if g.merges.left_together.is_empty()
+        || !sel
+            .iter()
+            .any(|e| matches!(e, Entity::Object(o) if g.merges.left_together.contains_key(o)))
+    {
+        return sel;
+    }
+    let mut out = Vec::with_capacity(sel.len() + 1);
+    for e in sel {
+        match e {
+            Entity::Object(o) => {
+                for x in with_components(g, vec![o]) {
+                    if !out.contains(&Entity::Object(x)) {
+                        out.push(Entity::Object(x));
+                    }
+                }
+            }
+            p => out.push(p),
+        }
+    }
+    out
+}
+
+/// The objects in `objs`, each followed by the other objects the merged permanent it came
+/// from became as it left the battlefield, if they're still in that zone: an effect that
+/// can find the new object a merged permanent became finds all of them (CR 730.3c).
+pub fn with_components(g: &Game, objs: Vec<ObjectId>) -> Vec<ObjectId> {
+    let mut out = Vec::with_capacity(objs.len());
+    for o in objs {
+        if !out.contains(&o) {
+            out.push(o);
+        }
+        if let Some(sibs) = g.merges.left_together.get(&o) {
+            let zone = g.obj(o).zone;
+            for s in sibs {
+                if !out.contains(s) && g.is_live(*s) && g.obj(*s).zone == zone {
+                    out.push(*s);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// CR 730.2: merges `obj` with the permanent `target`, putting it on top of or under it.
@@ -156,14 +320,19 @@ pub fn incarnation(g: &mut Game, old: ObjectId, new: ObjectId) {
 }
 
 /// CR 730.3: after the merged or melded permanent `old` left the battlefield as `new`,
-/// each of its other components is put into the same zone. If the zone is public and it
-/// had stickers, its owner chooses which of the objects it became keeps them
-/// (CR 123.5c).
+/// each of its other components is put into the same zone: a replacement effect applied
+/// to the permanent applied to all of them (CR 730.3d). If the merged permanent is a
+/// token, a replacement effect that applies only to cards moves its components that are
+/// cards (CR 730.3e). Their owner arranges cards put into a graveyard or library
+/// (CR 730.3a); the player who exiles it orders their timestamps (CR 730.3b). If the zone
+/// is public and it had stickers, its owner chooses which of the objects it became keeps
+/// them (CR 123.5c).
 pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
     let phys = physical_components(g, old);
     if phys.len() < 2 {
         return;
     }
+    let token_permanent = g.obj(old).kind == ObjKind::Token;
     let mut news = vec![new];
     for c in &phys[1..] {
         let owner = g.obj(*c).owner;
@@ -185,9 +354,21 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
             },
             source: m.source,
         };
-        if let Some(n) = g.perform_move(ev, None) {
+        let card = g.obj(*c).kind == ObjKind::Card;
+        let moved = if token_permanent && card {
+            // CR 730.3e: replacement effects that apply to cards (but not tokens) didn't
+            // apply to the token permanent; they apply to its card components.
+            g.move_object_ev(ev)
+        } else {
+            g.perform_move(ev, None)
+        };
+        if let Some(n) = moved {
             news.push(n);
         }
+    }
+    order_components(g, old, &news, m);
+    if news.len() > 1 {
+        g.merges.left_together.insert(new, news.clone());
     }
     if m.to.is_public() && crate::stickers::is_stickered(g, new) && news.len() > 1 {
         let owner = g.obj(old).owner;
@@ -196,6 +377,75 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
         if let Some(to) = news.get(pick).copied().filter(|to| *to != new) {
             crate::stickers::transfer(g, new, to);
         }
+    }
+}
+
+/// CR 730.3a, 730.3b: the owner of a merged permanent put into their graveyard or library
+/// arranges its cards in any order there; the player who exiles one determines the
+/// relative timestamp order of its cards.
+fn order_components(g: &mut Game, old: ObjectId, news: &[ObjectId], m: &MoveEv) {
+    let zone = g.obj(news[0]).zone;
+    let here: Vec<ObjectId> = news
+        .iter()
+        .copied()
+        .filter(|n| g.is_live(*n) && g.obj(*n).zone == zone)
+        .collect();
+    if here.len() < 2 {
+        return;
+    }
+    let names: Vec<String> = here
+        .iter()
+        .map(|n| {
+            g.obj(*n)
+                .card
+                .as_ref()
+                .map_or_else(|| g.describe(*n), |c| c.name.to_string())
+        })
+        .collect();
+    match zone {
+        Zone::Graveyard(p) | Zone::Library(p)
+            if !matches!(
+                m.pos,
+                LibraryPosition::Shuffled | LibraryPosition::BottomRandom
+            ) =>
+        {
+            let order = g.ask_order(
+                p,
+                "Arrange the cards of the merged permanent (in the order they're put there)",
+                names,
+            );
+            let Some(list) = g.zone_list_mut(zone) else {
+                return;
+            };
+            let mut slots: Vec<usize> = list
+                .iter()
+                .enumerate()
+                .filter(|(_, x)| here.contains(x))
+                .map(|(i, _)| i)
+                .collect();
+            slots.sort_unstable();
+            for (k, slot) in slots.into_iter().enumerate() {
+                list[slot] = here[order[k]];
+            }
+        }
+        Zone::Exile => {
+            // The player who exiled it: the one responsible for the move, or the
+            // controller of the effect that exiled it.
+            let who =
+                m.by.or_else(|| m.source.map(|s| g.obj(s).controller))
+                    .unwrap_or_else(|| g.obj(old).controller);
+            let order = g.ask_order(
+                who,
+                "Choose the timestamp order of the exiled cards (earliest first)",
+                names,
+            );
+            let mut stamps: Vec<Timestamp> = here.iter().map(|n| g.obj(*n).timestamp).collect();
+            stamps.sort_unstable();
+            for (k, ts) in stamps.into_iter().enumerate() {
+                g.objects[here[order[k]].0 as usize].timestamp = ts;
+            }
+        }
+        _ => {}
     }
 }
 

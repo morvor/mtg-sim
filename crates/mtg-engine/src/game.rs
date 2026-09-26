@@ -519,6 +519,8 @@ pub struct Game {
     pub transforms: crate::transform_rules::TransformState,
     /// Players controlling other players (CR 723).
     pub player_control: crate::player_control::PlayerControlState,
+    /// Merged permanents that left the battlefield (CR 730.3).
+    pub merges: crate::merge::MergeState,
 }
 
 impl Game {
@@ -614,6 +616,7 @@ impl Game {
             searches: Default::default(),
             transforms: Default::default(),
             player_control: Default::default(),
+            merges: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

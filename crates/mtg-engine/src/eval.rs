@@ -686,7 +686,11 @@ impl Game {
             Sel::This => ctx.source.map(Entity::Object).into_iter().collect(),
             Sel::Target(slot) => ctx.targets.get(*slot as usize).cloned().unwrap_or_default(),
             Sel::AllTargets => ctx.targets.iter().flatten().copied().collect(),
-            Sel::Var(v) => ctx.vars.get(v).cloned().unwrap_or_default(),
+            // CR 730.3c: an effect that finds the new object a merged permanent became
+            // finds all of them.
+            Sel::Var(v) => {
+                crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
+            }
             // CR 603.6: an ability can't find an object that went to a zone hidden from its
             // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
