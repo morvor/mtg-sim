@@ -141,8 +141,15 @@ pub fn hone_bonus(g: &Game, creature: ObjectId) -> i32 {
 /// precombat main phase, if that player has one or more rad counters, that player mills a
 /// number of cards equal to the number of rad counters they have. For each nonland card
 /// milled this way, that player loses 1 life and removes one rad counter from themselves."
+/// With shared team turns, it's each active player's precombat main phase: the ability
+/// triggers for each of them that has rad counters.
 pub fn rad_trigger(g: &mut Game) {
-    let p = g.turn.active;
+    for p in g.active_players() {
+        rad_trigger_for(g, p);
+    }
+}
+
+fn rad_trigger_for(g: &mut Game, p: PlayerId) {
     if g.player(p).counter(counters::RAD) == 0 {
         return;
     }
@@ -166,10 +173,8 @@ pub fn rad_trigger(g: &mut Game) {
                     Filter::not(Filter::Type(CardType::Land)),
                 ),
                 then: Box::new(Effect::seq(vec![
-                    Effect::LoseLife {
-                        who: PlayerRef::TriggerPlayer,
-                        n: Value::c(1),
-                    },
+                    // Life lost "from radiation" (CR 728.1a).
+                    crate::radiation::lose_life_from_radiation(),
                     Effect::RemoveCounters {
                         what: Sel::Players(PlayerRef::TriggerPlayer),
                         kind: Some(counters::RAD.into()),

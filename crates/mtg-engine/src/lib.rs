@@ -83,6 +83,7 @@ pub mod oracle_ext;
 pub mod piles;
 pub mod planechase;
 pub mod prevention;
+pub mod radiation;
 pub mod replacement;
 pub mod resolve;
 pub mod restart;
