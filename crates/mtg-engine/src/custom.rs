@@ -34,6 +34,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::discard_rules::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "transformed permanent" (CR 701.27g).
+    if let Some(b) = crate::transform_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),

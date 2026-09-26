@@ -854,7 +854,11 @@ impl Game {
             }
             Effect::Transform { what } => {
                 for o in self.resolve_objects(what, ctx) {
-                    crate::dfc::transform(self, o);
+                    // CR 701.27f: not if it transformed since its ability was put onto the
+                    // stack (or, for a delayed triggered ability, created).
+                    if crate::transform_rules::ability_may_transform(self, o, ctx) {
+                        crate::dfc::transform(self, o);
+                    }
                 }
             }
             Effect::Regenerate { what } => {
@@ -1392,7 +1396,7 @@ impl Game {
                     trigger: trigger.clone(),
                     body: (**body).clone(),
                     once: *once,
-                    ctx: ctx.clone(),
+                    ctx: crate::transform_rules::delayed_ctx(self, ctx),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     for_rest_of_game: false,

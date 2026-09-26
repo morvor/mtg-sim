@@ -506,6 +506,8 @@ pub struct Game {
     pub reveals: crate::reveal::RevealState,
     /// Library searches in progress (CR 701.23h).
     pub searches: crate::search_rules::SearchState,
+    /// When permanents last transformed (CR 701.27f).
+    pub transforms: crate::transform_rules::TransformState,
 }
 
 impl Game {
@@ -597,6 +599,7 @@ impl Game {
             zones: Default::default(),
             reveals: Default::default(),
             searches: Default::default(),
+            transforms: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

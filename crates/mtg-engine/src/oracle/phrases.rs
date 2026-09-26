@@ -198,6 +198,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "modified" => Filter::Modified,
         // CR 700.16.
         "worthy" => crate::game_terms::worthy_filter(),
+        // CR 701.27g.
+        "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
         _ => return None,
     })
 }
