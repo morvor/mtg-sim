@@ -66,9 +66,23 @@ pub trait KeywordRules: Sync + Send {
     fn spell_optional_costs(&self, g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
         vec![]
     }
-    /// Adjust the targets/effect of a spell being cast (e.g. overload).
+    /// Adjust the targets/effect of a spell being cast.
     fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
         body
+    }
+    /// A text-changing effect (CR 612) this keyword makes on the spell `spell` that has
+    /// it, cast paying the costs named `paid` (`CastInfo::paid`), applied to its
+    /// characteristics `chars` in layer 3 (CR 613.1c), e.g. overload's "target" → "each"
+    /// (CR 702.96c). Also applied to the characteristics a card would have as a spell cast
+    /// a given way (CR 601.3e). `g.obj(spell).chars` isn't meaningful meanwhile.
+    fn spell_text_change(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+        paid: &[SmolStr],
+        chars: &mut Characteristics,
+    ) {
     }
     /// Reduce/modify the total cost of a spell being cast.
     fn cost_reduction(
@@ -364,6 +378,43 @@ pub fn adjust_spell_body(g: &Game, spell: ObjectId, mut body: Body) -> Body {
         }
     }
     body
+}
+
+/// Layer 3: the text-changing effects keywords make on the spells that have them (see
+/// [`KeywordRules::spell_text_change`]).
+pub fn spell_text_changes(g: &mut Game, live: &[ObjectId]) {
+    let spells: Vec<ObjectId> = g
+        .stack
+        .iter()
+        .copied()
+        .filter(|id| live.contains(id) && g.obj(*id).is_spell())
+        .collect();
+    for id in spells {
+        let paid = g
+            .obj(id)
+            .stack
+            .as_deref()
+            .map(|si| si.cast.paid.clone())
+            .unwrap_or_default();
+        let mut c = std::mem::take(&mut g.objects[id.0 as usize].chars);
+        apply_spell_text_changes(g, id, &paid, &mut c);
+        g.objects[id.0 as usize].chars = c;
+    }
+}
+
+/// The text-changing effects the keywords of `chars` make on a spell cast paying the costs
+/// named `paid` (see [`KeywordRules::spell_text_change`]).
+pub fn apply_spell_text_changes(
+    g: &Game,
+    spell: ObjectId,
+    paid: &[SmolStr],
+    chars: &mut Characteristics,
+) {
+    for kw in &distinct_kinds(chars) {
+        for r in impls_for(kw.kind) {
+            r.spell_text_change(g, spell, kw, paid, chars);
+        }
+    }
 }
 
 pub fn cost_reductions(

@@ -304,6 +304,10 @@ impl Game {
                 self.apply_pt_counters(&live);
             }
             self.apply_layer(layer, &live, &mut st);
+            if layer == Layer::L3Text {
+                // Text changes keywords make on their own spells (overload, CR 702.96c).
+                crate::kw::spell_text_changes(self, &live);
+            }
             if layer == Layer::L2Control {
                 // CR 313.5, 314.5, 315.6: vanguards, schemes and conspiracies are
                 // controlled by their owners.
