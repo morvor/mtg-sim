@@ -1127,7 +1127,7 @@ impl Game {
         // CR 608.2n: put into owner's graveyard (or wherever a replacement sends it).
         if self.is_live(id) && self.obj(id).zone == Zone::Stack {
             let dest = crate::keyword_impls::resolved_spell_destination(self, id);
-            self.move_object_ev(MoveEv {
+            let moved = self.move_object_ev(MoveEv {
                 obj: id,
                 to: dest.0,
                 pos: dest.1,
@@ -1136,6 +1136,9 @@ impl Game {
                 etb: EtbInfo::default(),
                 source: None,
             });
+            if let Some(new) = moved {
+                crate::keyword_impls::after_spell_resolved(self, id, new);
+            }
         }
         self.emit(Event::SpellResolved { spell: id });
     }

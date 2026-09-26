@@ -514,7 +514,12 @@ impl Game {
             // {2}, CR 708.4).
             return crate::facedown::face_down_spell_characteristics(k);
         }
-        self.face_characteristics(card, opt.face)
+        let mut c = self.face_characteristics(card, opt.face);
+        // Text changes the way it's cast makes (e.g. overload, CR 702.96c).
+        if let Some(tag) = opt.tag {
+            crate::kw::apply_spell_text_changes(self, card, &[tag.into()], &mut c);
+        }
+        c
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).

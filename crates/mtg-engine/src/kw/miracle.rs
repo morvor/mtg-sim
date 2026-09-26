@@ -31,7 +31,16 @@ impl KeywordRules for Miracle {
     }
 
     fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
-        if nth != 1 || g.obj(card).zone != Zone::Hand(p) || miracle_cost(g, card).is_none() {
+        if nth != 1 {
+            return;
+        }
+        // The card's characteristics in its owner's hand, including miracle abilities
+        // effects give cards there ("Each instant and sorcery card in your hand has
+        // miracle {2}").
+        if g.dirty {
+            g.recompute();
+        }
+        if g.obj(card).zone != Zone::Hand(p) || miracle_cost(g, card).is_none() {
             return;
         }
         // CR 121.9: the card is already in the player's hand, so they can look at it
@@ -40,8 +49,9 @@ impl KeywordRules for Miracle {
         if !g.ask_yes_no(p, Some(card), &format!("Reveal {name} (miracle)?"), true) {
             return;
         }
-        g.log(|_| format!("{p} reveals {name} as they draw it"));
-        // CR 701.20a: it stays revealed until the triggered ability leaves the stack.
+        // CR 702.94b: they play with it revealed until it leaves their hand or the linked
+        // triggered ability resolves or otherwise leaves the stack (CR 701.20a: a card
+        // whose revealing made an ability trigger stays revealed until then).
         crate::reveal::reveal(g, p, &[card], None);
         // "When you reveal this card this way, ...": it triggers now and is put on the
         // stack the next time a player would receive priority.

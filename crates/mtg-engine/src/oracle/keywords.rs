@@ -33,6 +33,8 @@ fn names() -> &'static [(String, KeywordKind)] {
             KeywordKind::Trample,
         ));
         v.push(("hexproof from".into(), KeywordKind::Hexproof));
+        // CR 702.89b: older cards printed "totem armor"; it's now umbra armor.
+        v.push(("totem armor".into(), KeywordKind::UmbraArmor));
         v.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
         v
     })
