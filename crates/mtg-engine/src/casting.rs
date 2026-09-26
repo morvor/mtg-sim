@@ -404,6 +404,11 @@ impl Game {
                     if o.chars.has_keyword(KeywordKind::Fuse) && in_hand {
                         let mut f = CastOption::normal(FaceState::Fused);
                         f.method = CastMethod::Keyword(KeywordKind::Fuse);
+                        // Cast from hand without paying its mana cost, both halves can be
+                        // cast that way (CR 702.102a, 702.102c).
+                        if grant_free {
+                            f.alt_cost = Some(Cost::free());
+                        }
                         out.push(f);
                     }
                 }
