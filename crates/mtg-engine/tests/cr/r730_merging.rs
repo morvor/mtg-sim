@@ -376,3 +376,33 @@ fn replacement_effects_that_apply_only_to_cards_and_token_components() {
     assert!(t.in_exile("Dreamtail Heron"));
     assert_eq!(t.graveyard_size(P0), 0);
 }
+
+#[test]
+fn a_flipped_merged_permanent_uses_its_flip_components_alternative_characteristics() {
+    cr!("730.2h");
+    // Akki Lavarunner (Haste; "Whenever this creature deals damage to an opponent, flip
+    // it.") // Tok-Tok, Volcano Born (2/2; protection from red).
+    let mut t = TestGame::new(2);
+    let lavarunner = t.battlefield(P0, "Akki Lavarunner");
+    mutate_gemrazer(&mut t, P0, lavarunner, false);
+    assert_eq!(t.g.obj(lavarunner).chars.name, "Akki Lavarunner");
+    t.attack(&[(lavarunner, Entity::Player(P1))], &[]);
+    // It dealt damage to P1 and flipped: the topmost component's alternative
+    // characteristics, and Gemrazer's abilities.
+    assert_eq!(t.g.obj(lavarunner).chars.name, "Tok-Tok, Volcano Born");
+    assert_eq!(t.pt(lavarunner), (2, 2));
+    assert!(t.g.obj(lavarunner).has_keyword(KeywordKind::Protection));
+    assert!(!t.g.obj(lavarunner).has_keyword(KeywordKind::Haste));
+    assert!(t.g.obj(lavarunner).has_keyword(KeywordKind::Reach));
+    // The flip card under another component: its alternative abilities are used.
+    let mut t = TestGame::new(2);
+    let lavarunner = t.battlefield(P0, "Akki Lavarunner");
+    mutate_gemrazer(&mut t, P0, lavarunner, true);
+    assert!(t.g.obj(lavarunner).has_keyword(KeywordKind::Haste));
+    t.attack(&[(lavarunner, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.g.obj(lavarunner).chars.name, "Gemrazer");
+    assert_eq!(t.pt(lavarunner), (4, 4));
+    assert!(t.g.obj(lavarunner).has_keyword(KeywordKind::Protection));
+    assert!(!t.g.obj(lavarunner).has_keyword(KeywordKind::Haste));
+}

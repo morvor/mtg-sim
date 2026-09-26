@@ -120,8 +120,10 @@ fn refresh(g: &mut Game, id: ObjectId) {
     o.kind = kind;
     // A merged permanent isn't a double-faced permanent (CR 730.2i): its components'
     // faces are kept on the components.
-    o.face = match face {
-        FaceState::Melded => face,
+    o.face = match (face, o.face) {
+        (FaceState::Melded, _) => face,
+        // A flipped merged permanent stays flipped (CR 730.2h).
+        (_, FaceState::Flipped) => FaceState::Flipped,
         _ => FaceState::Front,
     };
     // CR 730.2e: face up or face down as its topmost component is. A face-down permanent
@@ -142,6 +144,52 @@ fn has_double_faced_component(g: &Game, id: ObjectId) -> bool {
                     && card.faces.len() > 1
             })
     })
+}
+
+/// `Effect::Custom` name: "flip [this permanent]" (CR 710).
+pub const FLIP: &str = "flip this permanent";
+
+/// Whether the component or object `c` is represented by a flip card (CR 710.1).
+fn is_flip_card(g: &Game, c: ObjectId) -> bool {
+    let o = g.obj(c);
+    o.kind == ObjKind::Card
+        && o.card
+            .as_ref()
+            .is_some_and(|card| card.layout == crate::card::Layout::Flip && card.faces.len() > 1)
+}
+
+/// Flips a permanent (CR 710.2): its alternative characteristics apply from now on;
+/// flipping is a one-way process (CR 710.4). A merged permanent that's flipped uses the
+/// alternative characteristics of each of its flip-card components (CR 730.2h). Returns
+/// true if it flipped.
+pub fn flip(g: &mut Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if !g.is_live(id) || o.zone != Zone::Battlefield || o.face_down || o.face == FaceState::Flipped
+    {
+        return false;
+    }
+    if is_merged(g, id) {
+        let comps: Vec<ObjectId> = physical_components(g, id)
+            .into_iter()
+            .filter(|c| is_flip_card(g, *c))
+            .collect();
+        for c in &comps {
+            g.objects[c.0 as usize].face = FaceState::Flipped;
+        }
+        refresh(g, id);
+        g.objects[id.0 as usize].face = FaceState::Flipped;
+        return !comps.is_empty();
+    }
+    if !is_flip_card(g, id) {
+        return false;
+    }
+    let card = g.obj(id).card.clone().unwrap();
+    let o = &mut g.objects[id.0 as usize];
+    o.face = FaceState::Flipped;
+    o.base = card.characteristics(FaceState::Flipped);
+    g.dirty = true;
+    g.log(|g| format!("{} flips", g.describe(id)));
+    true
 }
 
 /// CR 730.2j: a face-up merged permanent that contains a double-faced component can't be
@@ -277,6 +325,11 @@ pub fn merge(g: &mut Game, obj: ObjectId, target: ObjectId, on_top: bool) {
     if t.merged_with.is_empty() || t.face == FaceState::Melded {
         let own = new_component(g, target);
         g.objects[target.0 as usize].merged_with = vec![own];
+    }
+    // CR 730.2h: a flip card merged into a flipped permanent uses its alternative
+    // characteristics.
+    if g.obj(target).face == FaceState::Flipped && is_flip_card(g, comp) {
+        g.objects[comp.0 as usize].face = FaceState::Flipped;
     }
     let list = &mut g.objects[target.0 as usize].merged_with;
     if on_top {
@@ -625,8 +678,14 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     })
 }
 
-/// Custom effects for melding. Returns true if handled.
+/// Custom effects for melding and flipping. Returns true if handled.
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &Ctx) -> bool {
+    if name == FLIP {
+        if let Some(src) = ctx.source {
+            flip(g, src);
+        }
+        return true;
+    }
     match name.strip_prefix(MELD_EFFECT) {
         Some(result) => {
             meld_effect(g, result, ctx);
