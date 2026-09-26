@@ -666,22 +666,23 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let f = Filter::Custom(crate::custom::HAS_NONMANA_ACTIVATED_ABILITY.into());
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
-    if !negate {
-        if let Some(r) = rest
-            .strip_prefix("a ")
-            .or_else(|| rest.strip_prefix("one or more "))
+    // "with a +1/+1 counter on it", "without a +1/+1 counter on it" (Arcus Acolyte).
+    if let Some(r) = rest.strip_prefix("a ").or_else(|| {
+        (!negate)
+            .then(|| rest.strip_prefix("one or more "))
+            .flatten()
+    }) {
+        let (kind, r2) = split_word(r);
+        if let Some(tail) = r2
+            .strip_prefix("counter on it")
+            .or_else(|| r2.strip_prefix("counters on it"))
         {
-            let (kind, r2) = split_word(r);
-            if let Some(tail) = r2
-                .strip_prefix("counter on it")
-                .or_else(|| r2.strip_prefix("counters on it"))
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || kind.chars().all(|c| c.is_alphabetic())
             {
-                if kind.starts_with('+')
-                    || kind.starts_with('-')
-                    || kind.chars().all(|c| c.is_alphabetic())
-                {
-                    return Some((Filter::HasCounter(Some(kind.into())), tail));
-                }
+                let f = Filter::HasCounter(Some(kind.into()));
+                return Some((if negate { Filter::not(f) } else { f }, tail));
             }
         }
     }
