@@ -77,6 +77,16 @@ inventory::submit! { TriggerPattern { name: "a701 object keyword action triggers
 /// opponent blights", ...
 fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let r = end(r);
+    if r == "the ring tempts you" {
+        return Some((
+            TriggerCond::PlayerAction {
+                name: SmolStr::new(crate::kwa::ring::RING_TEMPTS),
+                who: PlayerRel::You,
+            },
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     let (who, rest) = if let Some(x) = r.strip_prefix("you ") {
         (PlayerRel::You, x)
     } else if let Some(x) = r.strip_prefix("an opponent ") {
@@ -86,6 +96,16 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     } else {
         return None;
     };
+    if matches!(rest, "choose a creature as your ring-bearer") {
+        return Some((
+            TriggerCond::PlayerAction {
+                name: SmolStr::new(crate::kwa::ring::RING_BEARER_CHOSEN),
+                who,
+            },
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     if matches!(rest, "manifest dread" | "manifests dread") {
         return Some((
             TriggerCond::PlayerAction {
@@ -198,6 +218,28 @@ fn designation_condition(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "a701 designations", priority: 60, parse: designation_condition } }
+
+/// Conditions about Ring-bearers (CR 701.54e): "~ is your Ring-bearer", "you chose a
+/// creature other than ~ as your Ring-bearer", "you don't control a Ring-bearer".
+fn ring_bearer_condition(c: &str) -> Option<Condition> {
+    let rb = || Filter::Custom(SmolStr::new(crate::kwa::ring::RING_BEARER));
+    Some(match end(c) {
+        "~ is your ring-bearer" | "it's your ring-bearer" => Condition::SelMatches(Sel::This, rb()),
+        "~ isn't your ring-bearer" => Condition::Not(Box::new(Condition::SelMatches(Sel::This, rb()))),
+        "you chose a creature other than ~ as your ring-bearer" => Condition::And(vec![
+            Condition::SelNonEmpty(Sel::TriggerObject),
+            Condition::Not(Box::new(Condition::SelMatches(
+                Sel::TriggerObject,
+                Filter::Source,
+            ))),
+        ]),
+        "you don't control a ring-bearer" => Condition::Not(Box::new(Condition::Exists(rb()))),
+        "you control a ring-bearer" => Condition::Exists(rb()),
+        _ => return None,
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "a701 ring-bearers", priority: 60, parse: ring_bearer_condition } }
 
 /// "As long as ~ is monstrous, it has [abilities]": "it" is the permanent itself.
 fn designation_static(l: &str, _text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {

@@ -218,27 +218,50 @@ fn amass_then(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// Objects keyword actions define for the instructions that follow them: "the Army you
 /// amassed" (CR 701.47c), "the discovered card" (CR 701.57c), "the blighted creature"
-/// (CR 701.68c).
-const ACTION_REFERENTS: [(&str, Var); 4] = [
-    ("the army you amassed", kvars::AMASSED),
-    ("the amassed army", kvars::AMASSED),
-    ("the discovered card", kvars::DISCOVERED),
-    ("the blighted creature", kvars::BLIGHTED),
-];
+/// (CR 701.68c), and "your Ring-bearer" (CR 701.54e).
+fn action_referent(l: &str) -> Option<(&'static str, Sel)> {
+    let vars: [(&str, Var); 4] = [
+        ("the army you amassed", kvars::AMASSED),
+        ("the amassed army", kvars::AMASSED),
+        ("the discovered card", kvars::DISCOVERED),
+        ("the blighted creature", kvars::BLIGHTED),
+    ];
+    if let Some((p, v)) = vars.iter().find(|(p, _)| l.contains(p)) {
+        return Some((p, Sel::Var(*v)));
+    }
+    l.contains("your ring-bearer").then(|| {
+        (
+            "your ring-bearer",
+            Sel::All(Filter::Custom(SmolStr::new(crate::kwa::ring::RING_BEARER))),
+        )
+    })
+}
 
-/// Parses a clause that mentions one of the [`ACTION_REFERENTS`]: the phrase becomes a
-/// pronoun for the variable the keyword action set. None if the clause doesn't mention
-/// one.
+/// Parses a clause that mentions one of the [`action_referent`]s: the phrase becomes a
+/// pronoun for the object(s) the keyword action defined. None if the clause doesn't
+/// mention one.
 fn with_action_referent(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (phrase, var) = ACTION_REFERENTS.iter().find(|(p, _)| l.contains(p))?;
+    let (phrase, sel) = action_referent(l)?;
     let text = l
         .replace(&format!("{phrase}'s"), "its")
         .replace(phrase, "it");
     let saved = b.it.clone();
-    b.it = Sel::Var(*var);
+    b.it = sel;
     let e = crate::oracle::effects::parse_clause(&text, b);
     b.it = saved;
     e
+}
+
+/// "The Ring tempts you" (CR 701.54).
+fn ring_tempts(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "the ring tempts you").then(|| {
+        keyword_action(
+            KeywordAction::TheRingTemptsYou,
+            PlayerRef::You,
+            Sel::None,
+            Value::c(1),
+        )
+    })
 }
 
 fn action_referents(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -430,6 +453,7 @@ inventory::submit! { EffectPattern { name: "a701 harness", priority: 60, parse: 
 inventory::submit! { EffectPattern { name: "a701 suspect / detain", priority: 60, parse: suspect_detain } }
 inventory::submit! { EffectPattern { name: "a701 no longer suspected", priority: 60, parse: no_longer_suspected } }
 inventory::submit! { EffectPattern { name: "a701 manifest / cloak", priority: 60, parse: manifest_cloak } }
+inventory::submit! { EffectPattern { name: "a701 the ring tempts you", priority: 60, parse: ring_tempts } }
 inventory::submit! { EffectPattern { name: "a701 attach to the new permanent", priority: 60, parse: attach_to_new_permanent } }
 inventory::submit! { EffectPattern { name: "a701 forage / collect evidence", priority: 60, parse: forage_evidence } }
 
