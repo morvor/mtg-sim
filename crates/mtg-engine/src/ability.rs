@@ -428,6 +428,16 @@ pub enum CostPart {
         filter: Filter,
         count: Value,
     },
+    /// "Tap any number of [untapped creatures you control] with total power N or greater"
+    /// (crew, CR 702.122a). `keyword` is the ability the creatures are tapped for: effects
+    /// may change which creatures can be tapped for it and how much power they count
+    /// ("can't crew Vehicles", "crews Vehicles as though its power were 2 greater"; see
+    /// `kw/crew.rs`).
+    TapTotalPower {
+        filter: Filter,
+        power: Value,
+        keyword: KeywordKind,
+    },
     UntapTapped {
         filter: Filter,
         count: Value,

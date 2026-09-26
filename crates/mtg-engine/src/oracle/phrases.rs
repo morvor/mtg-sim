@@ -547,6 +547,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::game_terms::ACTIVATED_THIS_TURN.into()),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("that crewed it this turn") {
+            // CR 702.122c.
+            (
+                Filter::Custom(crate::kw::crew::CREWED_IT_THIS_TURN.into()),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("crewed by ~ this turn") {
+            (
+                Filter::Custom(crate::kw::crew::CREWED_BY_IT_THIS_TURN.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
         } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {

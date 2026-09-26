@@ -2023,6 +2023,12 @@ impl Game {
                     .count()
                     >= n
             }
+            // Crew (CR 702.122a): see `kw/crew.rs`.
+            CostPart::TapTotalPower {
+                filter,
+                power,
+                keyword,
+            } => crate::kw::crew::total_power_payable(self, p, src, filter, power, *keyword, ctx),
             CostPart::PayEnergy(v) => {
                 self.player(p).counter(counters::ENERGY) as i64 >= self.eval_value(v, ctx)
             }
@@ -2367,6 +2373,16 @@ impl Game {
                     paid.objects.push(o);
                     self.tap(o);
                 }
+            }
+            // Crew (CR 702.122a): see `kw/crew.rs`.
+            CostPart::TapTotalPower {
+                filter,
+                power,
+                keyword,
+            } => {
+                let tapped =
+                    crate::kw::crew::pay_total_power(self, p, src, filter, power, *keyword, ctx)?;
+                paid.objects.extend(tapped);
             }
             CostPart::UntapTapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;

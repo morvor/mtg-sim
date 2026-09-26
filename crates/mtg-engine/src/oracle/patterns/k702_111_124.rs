@@ -4,9 +4,15 @@
 //!   "when ~ becomes renowned", "whenever a creature you control becomes renowned";
 //! * surge and emerge (CR 702.117a, 702.119a): "if its surge cost was paid", "if ~'s
 //!   emerge cost was paid";
-//! * "Emerge from [quality] [cost]" (CR 702.119b).
+//! * "Emerge from [quality] [cost]" (CR 702.119b);
+//! * crew (CR 702.122): "Crew N. Activate only once each turn.", "whenever ~ becomes
+//!   crewed", "whenever ~ crews a Vehicle", "if it was crewed by exactly two creatures",
+//!   "~ crews Vehicles as though its power were N greater", "enchanted creature can't
+//!   attack, block, or crew Vehicles".
 
-use super::{AbilityPattern, ConditionPattern, FollowupPattern, StaticPattern, TriggerPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
+};
 use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
@@ -83,6 +89,12 @@ inventory::submit! { FollowupPattern { name: "k702.112 if it's renowned", priori
 /// renowned (the [`RENOWNED`] event).
 fn becomes_renowned(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let subj = end(r).strip_suffix(" becomes renowned")?;
+    // "It" is the permanent itself, or the one that became renowned.
+    let it = if subj == "~" {
+        Sel::This
+    } else {
+        Sel::TriggerObject
+    };
     let f = if subj == "~" {
         Filter::Source
     } else {
@@ -108,7 +120,7 @@ fn becomes_renowned(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             }),
             cond: Condition::SelMatches(Sel::TriggerObject, f),
         },
-        Sel::TriggerObject,
+        it,
         PlayerRef::TriggerPlayer,
     ))
 }
@@ -162,3 +174,174 @@ fn alt_cost_paid(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.117/119 surge or emerge cost was paid", priority: 100, parse: alt_cost_paid } }
+
+// ---------------------------------------------------------------------------
+// Crew (CR 702.122)
+// ---------------------------------------------------------------------------
+
+/// "Crew N. Activate only once each turn.": the crew keyword with that restriction (kept
+/// in its text, see `kw/crew.rs`).
+fn crew_once_each_turn(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let lower = t.to_lowercase();
+    let n = lower
+        .strip_prefix("crew ")?
+        .strip_suffix(". activate only once each turn")?;
+    let n: i32 = n.trim().parse().ok()?;
+    let kw = Keyword::with_n(KeywordKind::Crew, n).text(t);
+    Some(crate::oracle::keywords::compile_keyword(kw, t))
+}
+
+inventory::submit! { AbilityPattern { name: "k702.122 crew N, activate only once each turn", priority: 100, parse: crew_once_each_turn } }
+
+/// "~ becomes crewed [for the first time each turn]" (CR 702.122e): a crew ability of the
+/// Vehicle resolved. "~ crews a Vehicle" (CR 702.122b): it was tapped to pay for a
+/// Vehicle's crew ability; "that Vehicle" is the trigger object.
+fn crew_triggers(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    use crate::kw::crew::{CREWED, CREWS_A_VEHICLE};
+    let r = end(r);
+    if r == "~ crews a vehicle" {
+        return Some((
+            TriggerCond::Custom(SmolStr::new(CREWS_A_VEHICLE)),
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
+    let (first_time, subj) = match r.strip_suffix(" becomes crewed for the first time each turn")
+    {
+        Some(s) => (true, s),
+        None => (false, r.strip_suffix(" becomes crewed")?),
+    };
+    if subj != "~" {
+        return None;
+    }
+    let cond = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::PlayerAction {
+            name: SmolStr::new(CREWED),
+            who: PlayerRel::Any,
+        }),
+        cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+    };
+    // "It" is the Vehicle itself.
+    Some((
+        if first_time {
+            TriggerCond::FirstTimeEachTurn(Box::new(cond))
+        } else {
+            cond
+        },
+        Sel::This,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "k702.122 becomes crewed, crews a vehicle", priority: 100, parse: crew_triggers } }
+
+/// "[Vehicle] becomes an artifact creature until end of turn": what a crew ability does
+/// (CR 702.122a), as an instruction of its own ("Whenever ~ becomes crewed, up to one other
+/// target Vehicle you control becomes an artifact creature until end of turn.").
+fn becomes_artifact_creature(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subj = end(l).strip_suffix(" becomes an artifact creature until end of turn")?;
+    let saved = b.targets.len();
+    let (what, rest) = crate::oracle::effects::object_ref(subj, b)?;
+    if !end(&rest).is_empty() {
+        b.targets.truncate(saved);
+        return None;
+    }
+    Some(Effect::Modify {
+        what,
+        mods: vec![Modification::AddTypes(vec![
+            crate::types::CardType::Artifact,
+            crate::types::CardType::Creature,
+        ])],
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.122 becomes an artifact creature until end of turn", priority: 100, parse: becomes_artifact_creature } }
+
+/// "it was crewed by exactly two creatures", "it was crewed by two or more creatures": the
+/// creatures tapped to pay for the crew ability whose resolution triggered the ability
+/// (CR 702.122e), the event's amount.
+fn crewed_by_n(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("it was crewed by ")
+        .or_else(|| end(c).strip_prefix("~ was crewed by "))?;
+    let (exactly, r) = match r.strip_prefix("exactly ") {
+        Some(x) => (true, x),
+        None => (false, r),
+    };
+    let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+    let cmp = match (exactly, end(rest)) {
+        (true, "creatures" | "creature") => Cmp::Eq,
+        (false, "or more creatures") => Cmp::Ge,
+        _ => return None,
+    };
+    Some(Condition::Compare(Value::EventAmount, cmp, n))
+}
+
+inventory::submit! { ConditionPattern { name: "k702.122e it was crewed by N creatures", priority: 100, parse: crewed_by_n } }
+
+/// "~ crews Vehicles as though its power were N greater", "~ saddles Mounts and crews
+/// Vehicles as though its power were N greater", "~ crews Vehicles using its toughness
+/// rather than its power" (see `kw/crew.rs`).
+fn crews_vehicles_as_though(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::crew::{power_bonus, uses_toughness};
+    let r = end(l).strip_prefix("~ ")?;
+    let (kinds, rest): (&[KeywordKind], &str) =
+        if let Some(x) = r.strip_prefix("saddles mounts and crews vehicles ") {
+            (&[KeywordKind::Saddle, KeywordKind::Crew], x)
+        } else if let Some(x) = r.strip_prefix("crews vehicles ") {
+            (&[KeywordKind::Crew], x)
+        } else {
+            return None;
+        };
+    let names: Vec<SmolStr> = if rest == "using its toughness rather than its power" {
+        kinds.iter().map(|k| uses_toughness(*k)).collect()
+    } else {
+        let n = rest
+            .strip_prefix("as though its power were ")?
+            .strip_suffix(" greater")?;
+        let (n, tail) = crate::oracle::phrases::parse_number(n)?;
+        let n = n.as_const()?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        kinds.iter().map(|k| power_bonus(*k, n)).collect()
+    };
+    Some(
+        names
+            .into_iter()
+            .map(|n| {
+                AbilityDef::new(
+                    AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(n))),
+                    text,
+                )
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { StaticPattern { name: "k702.122 crews vehicles as though", priority: 100, parse: crews_vehicles_as_though } }
+
+/// "Enchanted creature can't attack, block, or crew Vehicles[, and its activated abilities
+/// ...]" (CR 702.122d): the rest is an ordinary static ability.
+fn cant_crew_vehicles(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (subject, rest) = l.split_once(" can't attack, block, or crew vehicles")?;
+    if !subject.starts_with("enchanted ") {
+        return None;
+    }
+    let mut out = crate::oracle::statics::parse_static(
+        &format!("{subject} can't attack or block{rest}"),
+        ctx,
+    )?;
+    out.push(AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+            crate::kw::crew::cant_tap_for(KeywordKind::Crew),
+        ))),
+        text,
+    ));
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "k702.122d can't crew vehicles", priority: 100, parse: cant_crew_vehicles } }

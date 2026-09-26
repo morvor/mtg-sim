@@ -355,6 +355,11 @@ pub struct TurnHistory {
     /// the damage (e.g. for prowl, CR 702.76a). Recorded by `kw/prowl.rs`.
     #[serde(default)]
     pub combat_damage_to_players: Vec<crate::kw::prowl::CombatDamageRecord>,
+    /// (Vehicle, creature) pairs: creatures tapped this turn to pay the cost of a
+    /// Vehicle's crew ability, which "crewed" it (CR 702.122b–c). Recorded by
+    /// `kw/crew.rs`.
+    #[serde(default)]
+    pub crewed: Vec<(ObjectId, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

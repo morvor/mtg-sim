@@ -422,6 +422,8 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "the creature",
         "that token",
         "this token",
+        // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b).
+        "that vehicle",
     ] {
         if let Some(rest) = s.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
