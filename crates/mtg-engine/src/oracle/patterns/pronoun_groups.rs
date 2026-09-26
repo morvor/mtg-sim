@@ -15,6 +15,18 @@
 //! put just before it and makes the builder's `it` the variable. [`finish`] drops the
 //! stores again if nothing referred to the group, so the compiled ability is unchanged
 //! for texts without such a pronoun.
+//!
+//! Also here, for the effect parser's pronoun handling:
+//! - plural pronouns never refer to the source itself or to a single object a trigger is
+//!   about ([`plural_referent`]); singular "it" after a group keeps its earlier referent
+//!   ([`singular_it`]);
+//! - "those creatures" after "whenever you cast a spell that targets one or more
+//!   creatures" are the spell's targets ([`Filter::TargetOf`]);
+//! - "they" in a "one or more (objects) attack/become blocked/..." trigger are the
+//!   batch's objects ([`batch_referent`], [`Sel::TriggerObjects`]);
+//! - "~ deals 1 damage to them" in a trigger about a player is that player
+//!   ([`them_player`]);
+//! - "creatures blocking it" where "it" isn't the source ([`blocking_it`]).
 
 use crate::ability::*;
 use crate::oracle::effects::Builder;
@@ -34,7 +46,7 @@ pub struct GroupRef {
 
 /// The group an instruction affected without moving it to another zone: the objects of
 /// a tap, untap, continuous effect, control change, counters, goad, or removal from
-/// combat described as "all/each [objects]" or "[objects] you control". (Zone changes
+/// combat described as "all/each (objects)" or "(objects) you control". (Zone changes
 /// make new objects, CR 400.7; the parsers for those record the new objects themselves.)
 pub fn affected_group(e: &Effect) -> Option<&Sel> {
     let what = match e {
@@ -245,7 +257,7 @@ pub fn singular_it(b: &Builder) -> Sel {
     }
 }
 
-/// What "they" refers to in a "one or more [objects] [event]" trigger: the objects of the
+/// What "they" refers to in a "one or more (objects) (event)" trigger: the objects of the
 /// batch, for events after which they're still the same permanents (attacking, becoming
 /// blocked, tapped or untapped, entering). Objects that left the battlefield would need
 /// their last known information, so those batches have no such referent.
@@ -310,7 +322,7 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
     }
 }
 
-/// "[creature] blocking it" / "[creature] that's blocking it" after an object phrase,
+/// "(creature) blocking it" / "(creature) that's blocking it" after an object phrase,
 /// where "it" is the object the ability is about: the source ("Whenever ~ becomes
 /// blocked, it deals 1 damage to each creature blocking it"), the creature a trigger is
 /// about ("Whenever a Beast becomes blocked, it gets +1/+1 until end of turn for each
