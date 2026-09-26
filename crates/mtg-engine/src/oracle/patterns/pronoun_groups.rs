@@ -11,10 +11,12 @@
 //! CR 608.2c, 611.2c) into [`GROUP`], and the pronouns read that variable.
 //!
 //! The effect parser calls [`note`] after each instruction (a sentence, or either half
-//! of "X and Y"): if the instruction affected a group, it returns a [`Effect::Store`] to
-//! put just before it and makes the builder's `it` the variable. [`finish`] drops the
-//! stores again if nothing referred to the group, so the compiled ability is unchanged
-//! for texts without such a pronoun.
+//! of "X and Y"): if the instruction affected a group, it puts an [`Effect::Store`] just
+//! before it and makes the builder's `it` the variable. An instruction that might not
+//! happen ("If this spell was kicked, untap all Forests ... They become 3/3 ...", "you
+//! may ...") records the group only if it does. [`finish`] drops the stores again if
+//! nothing referred to the group, so the compiled ability is unchanged for texts without
+//! such a pronoun.
 //!
 //! Also here, for the effect parser's pronoun handling:
 //! - plural pronouns never refer to the source itself or to a single object a trigger is
@@ -51,8 +53,9 @@ pub struct GroupRef {
 pub fn affected_group(e: &Effect) -> Option<&Sel> {
     let what = match e {
         Effect::Seq(v) => return v.last().and_then(affected_group),
-        // "If ~ was kicked, put a +1/+1 counter on each creature you control. They gain
-        // trample until end of turn.": the pronoun names the group either way.
+        // "If this spell was kicked, untap all Forests put onto the battlefield this way.
+        // They become 3/3 green creatures with haste that are still lands.": the group,
+        // if the instruction happened (see [`place_store`]).
         Effect::If {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => return affected_group(then),
@@ -98,12 +101,12 @@ fn is_group_store(e: &Effect) -> bool {
 }
 
 /// After an instruction has been parsed: if it affected a group, later plural pronouns
-/// refer to the group's members. Returns the store to execute just before the
-/// instruction.
-pub fn note(e: &Effect, b: &mut Builder) -> Option<Effect> {
+/// refer to the group's members. Records the members just before the group instruction
+/// (inside `e` if that's part of it) and returns what to execute before `e`, if anything.
+pub fn note(e: &mut Effect, b: &mut Builder) -> Option<Effect> {
     // Already recorded by the clause parser ("untap all creatures and gain control of
     // them").
-    if let Effect::Seq(v) = e {
+    if let Effect::Seq(v) = &*e {
         if v.iter().any(is_group_store) {
             return None;
         }
@@ -120,7 +123,57 @@ pub fn note(e: &Effect, b: &mut Builder) -> Option<Effect> {
         sel: sel.clone(),
         it_before,
     });
-    Some(Effect::Store { var: GROUP, sel })
+    let store = Effect::Store { var: GROUP, sel };
+    match place_store(e, &store) {
+        None => Some(store),
+        Some(false) => None,
+        // The instruction might not happen: until it does, "they" are nothing (not the
+        // members of an earlier group).
+        Some(true) => Some(Effect::Store {
+            var: GROUP,
+            sel: Sel::None,
+        }),
+    }
+}
+
+/// Puts `store` just before the group instruction [`affected_group`] found in `e`, when
+/// that's part of `e`: `None` if `e` is the instruction itself (the store goes before
+/// it), otherwise whether the instruction is conditional. "If this spell was kicked,
+/// untap all Forests put onto the battlefield this way. They become 3/3 ...": they become
+/// creatures only if the spell was kicked, so the group is recorded only then.
+fn place_store(e: &mut Effect, store: &Effect) -> Option<bool> {
+    let branch = match e {
+        Effect::Seq(v) => {
+            let n = v.len();
+            return match place_store(v.last_mut()?, store) {
+                None => {
+                    v.insert(n - 1, store.clone());
+                    Some(false)
+                }
+                r => r,
+            };
+        }
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => then,
+        Effect::May { effect, .. } => effect,
+        _ => return None,
+    };
+    if place_store(branch, store).is_none() {
+        let inner = std::mem::replace(&mut **branch, Effect::Noop);
+        **branch = Effect::seq(vec![store.clone(), inner]);
+    }
+    Some(true)
+}
+
+/// A text failed to parse: forgets the groups it recorded, as [`finish`] does.
+pub fn abandon(b: &mut Builder, outer: Option<GroupRef>) {
+    if let Some(g) = b.group.take() {
+        if matches!(b.it, Sel::Var(GROUP)) {
+            b.it = g.it_before;
+        }
+    }
+    b.group = outer;
 }
 
 /// Whether an effect reads the group variable.
@@ -286,7 +339,15 @@ pub fn plural_object_ref(s: &str, b: &Builder) -> Option<Option<(Sel, String)>> 
         let Some(noun) = s.strip_prefix("those ") else {
             return Some(None);
         };
-        let f = match &noun[..noun.len() - rest.len()] {
+        let noun = &noun[..noun.len() - rest.len()];
+        // Only the objects the trigger names without qualification: "those creatures"
+        // after "targets one or more creatures you control" would be only the targets
+        // you control.
+        let named = format!("targets one or more {noun},");
+        if !crate::oracle::raw_text().to_lowercase().contains(&named) {
+            return Some(None);
+        }
+        let f = match noun {
             "creatures" => Filter::creature(),
             "permanents" => Filter::Permanent,
             _ => return Some(None),

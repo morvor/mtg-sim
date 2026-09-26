@@ -4,10 +4,16 @@
 //! or the targets of a triggering spell; "them" meaning a player; and "it" after a group
 //! instruction, which still means what it meant before.
 
+use mtg_engine::card::{CardDef, Layout};
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::{Characteristics, Zone};
+use mtg_engine::oracle::{self, CompileContext};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::*;
 use mtg_engine::*;
+use smol_str::SmolStr;
+use std::sync::Arc;
 
 fn assert_supported(names: &[&str]) {
     for n in names {
@@ -27,6 +33,37 @@ fn tapped(t: &TestGame, id: ObjectId) -> bool {
 fn tap(t: &mut TestGame, id: ObjectId) {
     t.g.tap(id);
     t.g.flush_events();
+}
+
+/// A card compiled from oracle text with the real compiler; `Err` holds the text it
+/// doesn't understand.
+fn compile_card(name: &str, type_line: &str, cost: &str, text: &str) -> Result<CardDef, Vec<String>> {
+    let tl = TypeLine::parse(type_line);
+    let keywords = ["Kicker".to_string()];
+    let ctx = CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &keywords,
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    if !compiled.unsupported.is_empty() {
+        return Err(compiled.unsupported);
+    }
+    let m = mtg_engine::mana::ManaCost::parse(cost);
+    Ok(CardDef::custom(Characteristics {
+        name: SmolStr::new(name),
+        colors: m.as_ref().map_or(ColorSet::NONE, |m| m.colors()),
+        mana_cost: m,
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: Arc::from(text),
+        ..Default::default()
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +284,7 @@ fn double_the_power_of_each_then_those_creatures_gain_vigilance() {
 
 #[test]
 fn counters_on_each_then_they_gain_vigilance() {
-    cr!("611.2c", "122.1");
+    cr!("611.2c", "122.1a");
     assert_supported(&[
         "Now for Wrath, Now for Ruin!",
         "Ardbert, Warrior of Darkness",
@@ -262,6 +299,7 @@ fn counters_on_each_then_they_gain_vigilance() {
     t.cast(P0, spell).go();
     t.resolve_all();
     assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.pt(bears), (3, 3));
     assert!(has(&t, bears, KeywordKind::Vigilance));
     assert_eq!(t.counters(theirs, "+1/+1"), 0);
     assert!(!has(&t, theirs, KeywordKind::Vigilance));
@@ -280,6 +318,55 @@ fn they_gain_haste_after_returning_them_to_the_battlefield() {
     // The permanent the card became (CR 400.7).
     assert!(t.on_battlefield(thopter));
     assert!(has(&t, thopter, KeywordKind::Haste));
+}
+
+#[test]
+fn they_are_the_group_only_if_the_conditional_instruction_happened() {
+    cr!("608.2c", "702.33d");
+    // As Hunting Wilds: "If this spell was kicked, untap all Forests put onto the
+    // battlefield this way. They become 3/3 green creatures with haste that are still
+    // lands." (ruling: "If the Hunting Wilds is kicked, the Forests become creatures").
+    let def = compile_card(
+        "Rally the Flock",
+        "Sorcery",
+        "{G}",
+        "Kicker {1}\nIf this spell was kicked, untap all creatures you control. They gain flying until end of turn.",
+    )
+    .expect("compiles");
+    for kicked in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        tap(&mut t, bears);
+        let spell = t.custom(P0, def.clone(), Zone::Hand(P0));
+        t.cast(P0, spell).kicked(kicked).go();
+        t.resolve_all();
+        assert_eq!(tapped(&t, bears), !kicked, "kicked: {kicked}");
+        assert_eq!(has(&t, bears, KeywordKind::Flying), kicked, "kicked: {kicked}");
+    }
+}
+
+#[test]
+fn those_creatures_after_a_qualified_spell_target_is_not_accepted() {
+    cr!("115.1a", "603.2");
+    // "Those creatures" are the targets that are creatures you control, which "the
+    // creatures the spell targets" isn't: the compiler must not accept the text rather
+    // than give flying to an opponent's targeted creature too.
+    let r = compile_card(
+        "Wind Guide",
+        "Enchantment",
+        "{U}",
+        "Whenever you cast a spell that targets one or more creatures you control, those creatures gain flying until end of turn.",
+    );
+    assert!(r.is_err());
+    // Unqualified, it's supported (as Storm, Windrider).
+    compile_card(
+        "Wind Guide",
+        "Enchantment",
+        "{U}",
+        "Whenever you cast a spell that targets one or more creatures, those creatures gain flying until end of turn.",
+    )
+    .expect("compiles");
 }
 
 // ---------------------------------------------------------------------------

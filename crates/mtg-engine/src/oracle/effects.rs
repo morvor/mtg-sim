@@ -272,9 +272,12 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 continue;
             }
         }
-        let e = parse_sentence(&s, b)?;
+        let Some(mut e) = parse_sentence(&s, b) else {
+            groups::abandon(b, outer_group);
+            return None;
+        };
         // "Untap all creatures you control. They gain haste until end of turn."
-        effects.extend(groups::note(&e, b));
+        effects.extend(groups::note(&mut e, b));
         effects.push(e);
         b.sentences += 1;
     }
@@ -366,7 +369,7 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             if let Some(mut ea) = parse_simple(a, b) {
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
-                let store = super::patterns::pronoun_groups::note(&ea, b);
+                let store = super::patterns::pronoun_groups::note(&mut ea, b);
                 // The second half may modify the first ("exile it, then return it").
                 if matches!(sep, ", then " | " and then ")
                     && crate::oracle_ext::apply_followup_ext(c, &mut ea, b)

@@ -22,7 +22,7 @@ fn has(t: &TestGame, id: ObjectId, k: KeywordKind) -> bool {
 
 #[test]
 fn they_are_the_creatures_that_attacked() {
-    cr!("603.2c", "508.1", "611.2c");
+    cr!("603.2c", "508.1m", "611.2c");
     assert_supported(&["Angelic Guardian"]);
     let mut t = TestGame::new(2);
     let guardian = t.battlefield(P0, "Angelic Guardian");
@@ -50,7 +50,7 @@ fn they_are_the_creatures_that_attacked() {
 
 #[test]
 fn those_creatures_are_the_ones_attacking_you() {
-    cr!("603.2c", "508.1");
+    cr!("603.2c", "508.1m");
     assert_supported(&["Sabotage Strategist"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sabotage Strategist");
@@ -87,6 +87,7 @@ fn each_of_those_creatures_is_one_that_dealt_combat_damage() {
         &[],
     );
     assert_eq!(t.counters(drake, "+1/+1"), 1);
+    assert_eq!(t.pt(drake), (3, 3));
     assert_eq!(t.counters(other, "+1/+1"), 1);
     // Without flying: not one of those creatures.
     assert_eq!(t.counters(bears, "+1/+1"), 0);
