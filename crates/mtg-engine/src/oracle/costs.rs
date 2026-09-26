@@ -265,7 +265,10 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     if p == "forage" {
         return Some(CostPart::Forage);
     }
-    None
+    // Cost parts registered in `oracle/patterns/`.
+    crate::oracle::patterns::cost_patterns()
+        .iter()
+        .find_map(|c| (c.parse)(p))
 }
 
 /// "+1/+1 counter", "loyalty counter", "charge counters".

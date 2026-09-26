@@ -488,6 +488,11 @@ pub struct Game {
     /// While tokens are being created "attached to" an object or player: what they enter
     /// attached to (`Some(None)`: an undefined object or player), CR 303.4f–i, 301.5e.
     pub token_attach: Option<Option<Entity>>,
+    /// While tokens are being created that "enter with" counters (incubate, CR 701.53a):
+    /// the counters each of them enters with (CR 122.6).
+    pub token_counters: Vec<(CounterKind, u32)>,
+    /// State kept by keyword actions (CR 701): see `kwa/`.
+    pub kwa: crate::kwa::KwaState,
     /// Continuous effects on permanent spells that keep applying to the permanents they
     /// become (CR 611.3d).
     pub carried_effects: Vec<u32>,
@@ -587,6 +592,8 @@ impl Game {
             step_start_actions: vec![],
             entering: vec![],
             token_attach: None,
+            token_counters: vec![],
+            kwa: Default::default(),
             carried_effects: vec![],
             stickers: vec![],
             end: Default::default(),

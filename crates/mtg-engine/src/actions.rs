@@ -1613,6 +1613,7 @@ impl Game {
             controller: Some(controller),
             attach_to: self.token_attach.flatten(),
             attach_specified: self.token_attach.is_some(),
+            counters: self.token_counters.clone(),
             ..Default::default()
         };
         if let Some(src) = spec.copy_of {

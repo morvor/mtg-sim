@@ -69,6 +69,24 @@ pub struct AbilityPattern {
 }
 inventory::collect!(AbilityPattern);
 
+/// Parses one part of a cost (lowercase, e.g. "blight 1", "waterbend {2}") that the core
+/// cost parser doesn't understand.
+pub struct CostPattern {
+    pub name: &'static str,
+    pub priority: i32,
+    pub parse: fn(&str) -> Option<CostPart>,
+}
+inventory::collect!(CostPattern);
+
+pub fn cost_patterns() -> &'static [&'static CostPattern] {
+    static P: OnceLock<Vec<&'static CostPattern>> = OnceLock::new();
+    P.get_or_init(|| {
+        sorted(inventory::iter::<CostPattern>.into_iter(), |p| {
+            (p.priority, p.name)
+        })
+    })
+}
+
 /// Regroups the text's ability blocks before they're parsed, for abilities printed over
 /// several lines (e.g. a leveler's level symbol, P/T box, and abilities in one striation).
 /// Grouped lines are joined with newlines into one block.

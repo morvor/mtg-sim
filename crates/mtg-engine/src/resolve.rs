@@ -1566,6 +1566,7 @@ impl Game {
             } => {
                 crate::keyword_actions::perform(self, *action, who, what, n, ctx);
             }
+            Effect::KeywordActionEx(spec) => crate::kwa::perform_spec(self, spec, ctx),
             Effect::ChangeText {
                 what,
                 words,

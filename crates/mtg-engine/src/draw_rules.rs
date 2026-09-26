@@ -84,6 +84,10 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                     .all(|p| draws_left(g, p).is_none_or(|left| n <= left))
         }
         Effect::Seq(v) => v.iter().all(|x| can_choose(g, x, ctx)),
+        // Keyword actions a player is unable to perform (e.g. CR 701.68b).
+        Effect::KeywordAction { .. } | Effect::KeywordActionEx(_) => {
+            crate::kwa::can_choose(g, e, ctx).unwrap_or(true)
+        }
         _ => true,
     }
 }

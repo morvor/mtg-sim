@@ -13,6 +13,10 @@ pub fn perform(
     n: &Value,
     ctx: &mut Ctx,
 ) {
+    // Keyword actions implemented in the `kwa/` registry.
+    if crate::kwa::perform(g, action, who, what, n, ctx) {
+        return;
+    }
     let players = g.eval_players(who, ctx);
     let objs = g.resolve_objects(what, ctx);
     let k = g.eval_value(n, ctx).max(0) as u32;

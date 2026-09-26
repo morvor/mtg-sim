@@ -3033,6 +3033,9 @@ pub enum Effect {
         what: Sel,
         n: Value,
     },
+    /// Keyword actions with parameters beyond who/what/N (amass's Army subtype, the
+    /// options of a villainous choice or a vote), implemented in the `kwa/` registry.
+    KeywordActionEx(Box<crate::kwa::Spec>),
     /// "Change the text of [objects] by replacing all instances of one [kind of word] with
     /// another" (CR 612): the words are chosen as it resolves; a layer 3 effect results.
     ChangeText {

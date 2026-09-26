@@ -39,6 +39,12 @@ fn main() {
         "pub ",
     );
     gen(
+        &root.join("src/kwa"),
+        &["mod"],
+        &out.join("kwa_mods.rs"),
+        "pub ",
+    );
+    gen(
         &root.join("src/oracle/patterns"),
         &["mod"],
         &out.join("oracle_pattern_mods.rs"),
