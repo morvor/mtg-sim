@@ -196,3 +196,51 @@ fn spells_have_rebound(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "instant and sorcery spells you control have rebound", priority: 100, parse: spells_have_rebound } }
+
+/// "As long as ~ is paired with another creature, each of those creatures gets +1/+1."
+/// (Trusted Forcemage), "..., both creatures have flying." (Wingcrafter), "..., each of
+/// those creatures has "[ability]"." (Doom Weaver): the soulbond creature and the creature
+/// it's paired with (CR 702.95b).
+fn while_paired(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const HEAD: &str = "as long as ~ is paired with another creature, ";
+    let r = l.strip_prefix(HEAD)?;
+    // Quoted abilities keep their original case.
+    let orig = text.get(HEAD.len()..).filter(|o| o.to_lowercase().starts_with(r))?;
+    let clause = if let Some(x) = orig.strip_prefix("each of those creatures ") {
+        x.to_string()
+    } else if let Some(x) = r.strip_prefix("both creatures ") {
+        if let Some(y) = x.strip_prefix("have ") {
+            format!("has {y}")
+        } else {
+            format!("gets {}", x.strip_prefix("get ")?)
+        }
+    } else {
+        return None;
+    };
+    let parsed = crate::oracle::statics::parse_static(&format!("~ {clause}"), ctx)?;
+    let mut out = Vec::new();
+    for a in parsed {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods,
+        } = &s.effect
+        else {
+            return None;
+        };
+        if s.condition.is_some() {
+            return None;
+        }
+        let mut ns = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Custom(crate::kw::soulbond::THE_PAIR.into()),
+            mods: mods.clone(),
+        });
+        ns.condition = Some(Condition::Custom(crate::kw::soulbond::IS_PAIRED.into()));
+        out.push(AbilityDef::with_link(AbilityKind::Static(ns), text, a.link));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+inventory::submit! { StaticPattern { name: "as long as ~ is paired with another creature", priority: 100, parse: while_paired } }

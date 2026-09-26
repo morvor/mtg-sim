@@ -373,12 +373,14 @@ impl Game {
         } else {
             vec![]
         };
+        let mut control_changed: Vec<ObjectId> = Vec::new();
         for (id, prev) in prev_controllers {
             if !self.is_live(id) {
                 continue;
             }
             let now = self.obj(id).controller;
             if now != prev {
+                control_changed.push(id);
                 // CR 302.6: a control change resets summoning sickness; CR 506.4: removed from combat.
                 self.objects[id.0 as usize].summoning_sick = true;
                 let ts = self.new_timestamp();
@@ -394,6 +396,11 @@ impl Game {
         let _ = turn;
         // CR 506.4: type changes can remove permanents from combat.
         crate::combat::update_combat_membership(self);
+        // CR 702.95e: control and type changes can unpair soulbond pairs; abilities that
+        // apply only while paired then stop applying.
+        if side_effects && crate::kw::soulbond::update_pairs(self, &control_changed) {
+            return self.compute_characteristics(true);
+        }
         // CR 704.5k: how long each permanent has had the world supertype (a card in another
         // zone isn't a permanent; a new object starts counting afresh). Hypothetical
         // computations don't start the clock.
