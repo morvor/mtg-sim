@@ -92,6 +92,7 @@ pub mod search_rules;
 pub mod shuffle_rules;
 pub mod skip;
 pub mod special_actions;
+pub mod spell_costs;
 pub mod splice;
 pub mod stack;
 pub mod start;

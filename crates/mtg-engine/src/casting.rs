@@ -426,7 +426,11 @@ impl Game {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
-                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c)) => {
+                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c))
+                                if crate::spell_costs::alternative_cost_allowed(
+                                    self, p, card, s,
+                                ) =>
+                            {
                                 let mut opt = CastOption::normal(FaceState::Front);
                                 opt.method = CastMethod::Alternative(a.uid);
                                 opt.alt_cost = Some(c.clone());
@@ -1178,6 +1182,10 @@ impl Game {
                 if let StaticEffect::CostModifier(cm) = &s.effect {
                     if let CostTarget::ThisSpell = cm.applies_to {
                         let ctx = Ctx::new(Some(card), p);
+                        // "This spell costs {2} less to cast if ..." (CR 601.2f).
+                        if !crate::spell_costs::own_change_applies(self, card, s, cm, &ctx) {
+                            continue;
+                        }
                         match &cm.change {
                             CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
                             CostChange::IncreaseGeneric(v) => {
@@ -1194,7 +1202,10 @@ impl Game {
                                 let n = self.eval_value(v, &ctx).max(0);
                                 if let Some(m) = cost.mana.as_mut() {
                                     for _ in 0..n {
-                                        m.reduce_colored(*c);
+                                        // CR 118.7b–c: beyond that color, generic mana.
+                                        if !m.reduce_colored(*c) {
+                                            m.reduce_generic(1);
+                                        }
                                     }
                                 }
                             }
