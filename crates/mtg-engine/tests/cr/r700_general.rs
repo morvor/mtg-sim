@@ -186,28 +186,24 @@ fn changing_a_modal_spells_target_cant_change_its_mode() {
 fn a_copy_of_a_modal_spell_copies_its_modes() {
     cr!("700.2g");
     supported("Boros Charm");
+    supported("Twincast");
     let mut t = TestGame::new(2);
     lands_rw(&mut t);
+    t.lands(P1, "Island", 2);
     let charm = t.hand(P0, "Boros Charm");
     let s = t.cast(P0, charm).modes(&[0]).target(P1).go();
-    // The copy's controller can't choose a different mode.
+    // P1 copies it with Twincast and chooses a new target; the copy's controller can't
+    // choose a different mode.
+    let twincast = t.hand(P1, "Twincast");
+    t.cast(P1, twincast).target(s).go();
     t.answer(P1, DecisionKind::Modes, Answer::Indices(vec![1]));
     t.answer_yes(P1, true);
     t.answer_targets(P1, &[Entity::Player(P0)]);
-    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
-    ctx.targets = vec![vec![Entity::Object(s)]];
-    t.g.exec(
-        &Effect::CopySpell {
-            what: Sel::Target(0),
-            count: Value::c(1),
-            new_targets: true,
-        },
-        &mut ctx,
-    );
-    t.g.flush_events();
+    t.resolve();
     let copy = top(&t);
     assert_ne!(copy, s);
     assert_eq!(modes_of(&t, copy), vec![0]);
+    assert_eq!(targets_of(&t, copy), vec![Entity::Player(P0)]);
     t.resolve_all();
     assert_eq!(t.life(P0), 16);
     assert_eq!(t.life(P1), 16);
