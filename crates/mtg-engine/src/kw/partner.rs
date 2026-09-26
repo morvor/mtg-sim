@@ -46,9 +46,14 @@ pub const COMMANDER_CASTS: &str = "commander:times cast from the command zone";
 /// it's later countered.
 pub fn times_cast_commanders(g: &Game, p: PlayerId) -> u32 {
     let pl = g.player(p);
+    // Casts are keyed by the card's full name (see `commander_key`); a double-faced
+    // commander is designated by its front face's name.
     pl.commander_casts
         .iter()
-        .filter(|(k, _)| pl.commander_names.iter().any(|n| n == *k))
+        .filter(|(k, _)| {
+            let front = k.split(" // ").next().unwrap_or(k);
+            pl.commander_names.iter().any(|n| n == *k || n == front)
+        })
         .map(|(_, n)| *n)
         .sum()
 }
@@ -213,8 +218,22 @@ pub fn can_be_commander(card: &CardDef, brawl: bool) -> bool {
     legendary(c)
         && (c.is(CardType::Creature)
             || c.has_subtype("Vehicle")
-            || (c.has_subtype("Spacecraft") && c.power.is_some() && c.toughness.is_some())
+            || (c.has_subtype("Spacecraft") && has_pt_box(c))
             || (brawl && c.is(CardType::Planeswalker)))
+}
+
+/// Whether a card has a power/toughness box. A station card's box belongs to a station
+/// symbol (CR 721.2b): the card has no power or toughness of its own, but a static
+/// ability making it a creature with that base power and toughness.
+fn has_pt_box(c: &Characteristics) -> bool {
+    (c.power.is_some() && c.toughness.is_some())
+        || c.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Static(s)
+                if matches!(&s.effect, StaticEffect::Continuous { mods, .. }
+                    if mods.iter().any(|m| matches!(m, Modification::SetPT(Some(_), Some(_))))
+                        && mods.iter().any(|m| matches!(m, Modification::AddTypes(t)
+                            if t.contains(&CardType::Creature)))))
+        })
 }
 
 /// Why one of the cards can't be a commander at all (CR 903.3, 903.3a, 903.12c): each

@@ -151,8 +151,12 @@ pub fn ignores_zero_life(g: &Game, p: PlayerId) -> bool {
 }
 
 /// Whether a Two-Headed Giant team doesn't lose for its life total being 0 or less
-/// (CR 810.8c): each player's life total is the team's (CR 810.9), and the team loses if
-/// either player does (CR 810.8a), so every member must be unaffected.
+/// (CR 704.6a, 810.8c). Players win and lose only as a team (CR 810.8a) and each player's
+/// life total is the team's (CR 810.9), so the team losing for having 0 or less life is
+/// each member losing for it: if any member doesn't lose for having 0 or less life, the
+/// team doesn't either — as with "can't lose the game" (CR 810.8a) and Rules Lawyer's
+/// ruling ("Your Two-Headed Giant team can no longer lose because you have 0 or less
+/// life").
 pub fn team_ignores_zero_life(g: &Game, members: &[PlayerId]) -> bool {
-    !members.is_empty() && members.iter().all(|p| ignores_zero_life(g, *p))
+    members.iter().any(|p| ignores_zero_life(g, *p))
 }

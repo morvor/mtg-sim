@@ -71,8 +71,13 @@ fn a_commander_is_a_legendary_creature_vehicle_or_spacecraft_card() {
         false
     )));
     // Nor can a legendary noncreature card without such an ability.
-    let sol_ring_like = card("Mox Amber");
-    assert!(!can_be_commander(&sol_ring_like, false));
+    let mox = card("Mox Amber");
+    assert!(!can_be_commander(&mox, false));
+    // A Vehicle must be legendary too.
+    assert!(!can_be_commander(&card("Smuggler's Copter"), false));
+    // A legendary Spacecraft card only with a power/toughness box.
+    assert!(can_be_commander(&card("The Seriema"), false));
+    assert!(!can_be_commander(&card("The Eternity Elevator"), false));
 }
 
 #[test]
@@ -106,7 +111,7 @@ fn pregame(config: GameConfig, decks: Vec<Vec<Arc<CardDef>>>) -> TestGame {
 
 #[test]
 fn the_planeswalker_commander_starts_in_the_command_zone() {
-    cr!("903.3a", "903.6");
+    cr!("903.6");
     let freyalise = card("Freyalise, Llanowar's Fury");
     let mut t = pregame(
         GameConfig {
@@ -125,7 +130,7 @@ fn the_planeswalker_commander_starts_in_the_command_zone() {
 
 #[test]
 fn the_planeswalker_commander_is_cast_from_the_command_zone() {
-    cr!("903.3a", "903.8");
+    cr!("903.8");
     let mut t = TestGame::with_config(
         2,
         GameConfig {

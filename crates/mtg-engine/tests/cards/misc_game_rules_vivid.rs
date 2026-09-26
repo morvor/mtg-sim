@@ -50,7 +50,7 @@ fn gets_plus_one_for_each_color_among_a_kind_of_permanent() {
     t.battlefield(P0, "Serra Angel");
     t.settle();
     assert_eq!(t.pt(ally), (1, 2));
-    // A blue-red Ally adds two colors.
+    // A red Ally and a blue Ally add two colors.
     t.battlefield(P0, "Zada, Hedron Grinder");
     t.battlefield(P0, "Umara Raptor");
     t.settle();
@@ -118,7 +118,7 @@ fn spell_costs_one_less_for_each_color() {
 
 #[test]
 fn activate_only_if_there_are_five_colors_among_permanents() {
-    cr!("105.2", "602.5b");
+    cr!("105.2", "602.5");
     compiles("Puca's Eye");
     let mut t = TestGame::new(2);
     let eye = t.battlefield(P0, "Puca's Eye");

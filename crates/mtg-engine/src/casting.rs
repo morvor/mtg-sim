@@ -1199,6 +1199,9 @@ impl Game {
                 .commander_casts
                 .entry(key)
                 .or_insert(0) += 1;
+            // "For each time you've cast your commander from the command zone" statics
+            // change as it becomes cast (CR 611.3a).
+            self.dirty = true;
         }
         // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
         // this is loses the designation now (CR 722.3c).

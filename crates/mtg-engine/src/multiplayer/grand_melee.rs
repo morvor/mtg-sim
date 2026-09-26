@@ -355,8 +355,12 @@ pub fn turn_ended(g: &mut Game) -> bool {
         .map(|(_, m)| m.holder)
         .collect();
     let queued = std::mem::take(&mut g.extra_turns);
+    // What happens as a queued extra turn begins is keyed by its place in the queue
+    // (`skip::queue_extra_turn`): it follows the turns kept in the queue, and is dropped
+    // for the others rather than left to be given to a later turn at that place.
+    let mut actions = std::mem::take(&mut g.extra_turn_actions);
     let mut own_extra = false;
-    for p in queued {
+    for (k, p) in queued.into_iter().enumerate() {
         if !g.player(p).in_game() {
             continue;
         }
@@ -364,6 +368,9 @@ pub fn turn_ended(g: &mut Game) -> bool {
             own_extra = true;
         } else if others_taking.contains(&p) {
             g.extra_turns.push(p);
+            if let Some(a) = actions.remove(&k) {
+                g.extra_turn_actions.insert(g.extra_turns.len() - 1, a);
+            }
         } else {
             gm_mut(g).extra_before_next.push(p);
         }

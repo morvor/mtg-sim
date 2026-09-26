@@ -132,3 +132,49 @@ fn creates_a_token_for_each_commander_cast() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Forest Dryad Token").len(), 2);
 }
+
+#[test]
+fn a_double_faced_commander_is_counted_too() {
+    cr!("903.8", "611.3a");
+    ruling!(
+        "Commander's Insignia",
+        "counts each time you\u{2019}ve cast your commander, even the times it was countered or when your commander spell is still on the stack"
+    );
+    let mut t = commander_game();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Commander's Insignia");
+    // A modal double-faced commander, designated by its front face's name (as
+    // `Game::designate_commander` does).
+    let esika = commander(&mut t, P0, "Esika, God of the Tree");
+    assert_eq!(t.g.obj(esika).chars.name, "Esika, God of the Tree");
+    // {1}{G}{G}
+    t.lands(P0, "Forest", 3);
+    t.cast(P0, esika).go();
+    // Counted as soon as it's cast, while the spell is still on the stack.
+    t.settle();
+    assert_eq!(t.pt(bears), (3, 3));
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 3));
+}
+
+#[test]
+fn the_spell_is_copied_even_if_countered_before_the_trigger_resolves() {
+    cr!("903.8", "707.10");
+    ruling!(
+        "Empyrial Storm",
+        "can copy the Storm spell even if that spell is countered before that ability resolves"
+    );
+    let mut t = commander_game();
+    let isamaru = commander(&mut t, P0, "Isamaru, Hound of Konda");
+    cast_and_return(&mut t, isamaru, 0);
+    t.lands(P0, "Plains", 6);
+    let storm = t.hand(P0, "Empyrial Storm");
+    let spell = t.cast(P0, storm).go();
+    t.settle();
+    // In response to the trigger, the spell itself is countered.
+    assert!(t.g.counter(spell, None));
+    assert!(t.in_graveyard(P0, "Empyrial Storm"));
+    t.resolve_all();
+    // Only the copy resolves.
+    assert_eq!(t.named_on_battlefield("Angel Token").len(), 1);
+}

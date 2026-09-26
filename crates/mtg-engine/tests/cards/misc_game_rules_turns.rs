@@ -74,9 +74,15 @@ fn only_opponents_skip_their_extra_turns() {
     let mut t = TestGame::new(2);
     // P0's own Stranglehold doesn't affect P0.
     t.battlefield(P0, "Stranglehold");
-    cast_extra_turn_spell(&mut t, "Last Chance", "Mountain", 2);
+    cast_extra_turn_spell(&mut t, "Savor the Moment", "Island", 3);
+    let turn = t.g.turn.number;
     t.advance_to(P0, Step::Upkeep);
     assert!(t.g.turn.extra);
+    assert_eq!(t.g.turn.number, turn + 1);
+    // Its opponent's regular turn isn't an extra turn, so it isn't skipped.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.g.turn.extra);
+    assert_eq!(t.g.turn.number, turn + 2);
 }
 
 #[test]
