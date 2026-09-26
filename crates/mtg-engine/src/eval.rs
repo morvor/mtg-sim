@@ -38,6 +38,10 @@ pub struct Ctx {
     pub link: u16,
     /// Source characteristics as last known (for abilities whose source left).
     pub source_lki: Option<Box<Characteristics>>,
+    /// Filters are evaluated without regard to ranges of influence: the caller applies
+    /// the limited range of influence option itself (CR 801.13b).
+    #[serde(default)]
+    pub ignore_range: bool,
     /// Chosen opponent ("choose an opponent").
     pub chosen_player: Option<PlayerId>,
     /// Set while an "as this enters" replacement effect is being applied: modifications
@@ -181,7 +185,8 @@ impl Game {
 
     pub fn player_filter_matches(&self, f: &PlayerFilter, p: PlayerId, ctx: &Ctx) -> bool {
         // CR 801.10, 801.11: not players outside the controller's range of influence.
-        if crate::multiplayer::range::option_used(self)
+        if !ctx.ignore_range
+            && crate::multiplayer::range::option_used(self)
             && !crate::multiplayer::range::sees_player(self, ctx.controller, ctx.source, p)
         {
             return false;
@@ -246,7 +251,8 @@ impl Game {
         v
     }
 
-    fn eval_players_unranged(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
+    /// [`Game::eval_players`] regardless of ranges of influence.
+    pub(crate) fn eval_players_unranged(&self, r: &PlayerRef, ctx: &Ctx) -> Vec<PlayerId> {
         let apnap = self.apnap();
         match r {
             PlayerRef::Player(p) => {
@@ -335,7 +341,8 @@ impl Game {
     /// its controller's range (CR 801.10, 801.11).
     pub fn matches(&self, id: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
         self.matches_view(&Current, id, f, ctx)
-            && (!crate::multiplayer::range::option_used(self)
+            && (ctx.ignore_range
+                || !crate::multiplayer::range::option_used(self)
                 || crate::multiplayer::range::sees_object(self, ctx.controller, ctx.source, id))
     }
 

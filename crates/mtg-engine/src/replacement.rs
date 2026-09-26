@@ -246,16 +246,9 @@ impl Game {
             }
         }
         let mut results = self.apply_replacement(&cand, ev, &applied);
-        // CR 801.13a: the parts of the modified event affecting objects or players outside
-        // the effect's controller's range of influence do nothing.
-        results.retain(|r| {
-            crate::multiplayer::range::replaced_event_in_range(
-                self,
-                cand.controller,
-                cand.source,
-                r,
-            )
-        });
+        // CR 801.13a: the parts of the modified event that would have a spell or ability
+        // affect objects or players outside its controller's range of influence do nothing.
+        results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
         let mut out = Vec::new();
         for r in results {
             out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only));
@@ -688,6 +681,17 @@ impl Game {
         ev: &ReplEvent,
         locked: Option<&[ObjectId]>,
     ) -> bool {
+        // Ranges of influence are applied to the candidates afterwards (CR 801.13).
+        let unranged;
+        let ctx = if crate::multiplayer::range::option_used(self) {
+            unranged = Ctx {
+                ignore_range: true,
+                ..ctx.clone()
+            };
+            &unranged
+        } else {
+            ctx
+        };
         let locked_ok = |o: ObjectId| locked.is_none_or(|v| v.contains(&o));
         match (pat, ev) {
             (ReplacementEvent::EntersBattlefield(f), ReplEvent::Move(m)) => {

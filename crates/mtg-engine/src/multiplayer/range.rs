@@ -369,27 +369,46 @@ fn repl_event_entities(g: &Game, ev: &crate::replacement::ReplEvent) -> Vec<Enti
     .collect()
 }
 
-/// CR 801.13a: if a replacement effect controlled by `controller` would make an event
-/// affect an object or player outside that player's range of influence, that portion of
-/// the event does nothing. Whether the modified event `ev` may still happen.
-pub fn replaced_event_in_range(
-    g: &Game,
-    controller: PlayerId,
-    source: Option<ObjectId>,
-    ev: &crate::replacement::ReplEvent,
-) -> bool {
-    if !option_used(g) || exempt_source(g, source) {
+/// CR 801.13a: if a replacement effect tries to cause a spell or ability to affect an
+/// object or player outside that spell or ability's controller's range of influence, that
+/// portion of the event does nothing. Whether the modified event `ev` may still happen:
+/// damage is dealt by its source, and a zone change caused by a spell or ability is that
+/// spell or ability's doing.
+pub fn replaced_event_in_range(g: &Game, ev: &crate::replacement::ReplEvent) -> bool {
+    use crate::replacement::ReplEvent;
+    if !option_used(g) {
         return true;
     }
-    use crate::replacement::ReplEvent;
-    // The recipient of redirected damage, the player who'd draw, gain or lose life, get
-    // tokens or counters.
-    let affected = match ev {
-        ReplEvent::Damage { target, .. } => vec![*target],
-        other => repl_event_entities(g, other),
+    let (cause, affected) = match ev {
+        ReplEvent::Damage { source, target, .. } => (Some(*source), *target),
+        ReplEvent::Move(m) => (m.source, Entity::Object(m.obj)),
+        _ => return true,
     };
-    affected.into_iter().all(|e| match e {
+    let Some(cause) = cause.filter(|c| g.try_obj(*c).is_some()) else {
+        return true;
+    };
+    if exempt_source(g, Some(cause)) {
+        return true;
+    }
+    let controller = g.obj(cause).controller;
+    match affected {
         Entity::Player(p) => player_in_range(g, controller, p),
-        Entity::Object(o) => object_in_range(g, controller, o),
-    })
+        Entity::Object(o) => g.try_obj(o).is_none() || object_in_range(g, controller, o),
+    }
+}
+
+/// CR 801.5c: if an effect requires a choice and no player who can make it is within its
+/// controller's range of influence, the closest appropriate player to the controller's
+/// left makes it. The player `who` would name if ranges didn't matter, closest to the
+/// left.
+pub fn closest_chooser(
+    g: &Game,
+    who: &crate::ability::PlayerRef,
+    ctx: &crate::eval::Ctx,
+) -> Option<PlayerId> {
+    if !option_used(g) {
+        return None;
+    }
+    let all = g.eval_players_unranged(who, ctx);
+    closest_to_left(g, ctx.controller, |q| all.contains(&q))
 }
