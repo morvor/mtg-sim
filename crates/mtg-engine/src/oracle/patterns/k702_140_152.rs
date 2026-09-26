@@ -98,6 +98,45 @@ fn boast_twice(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability
 
 inventory::submit! { StaticPattern { name: "creatures you control can boast twice", priority: 100, parse: boast_twice } }
 
+/// "Creature spells you cast have demonstrate." (Silverquill Lecturer), "Artifact spells
+/// you cast have demonstrate." (The Sixth Seraph): the spells have demonstrate as they're
+/// cast, so it triggers (CR 702.144a).
+fn spells_have_demonstrate(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_suffix(" have demonstrate")?;
+    let subject = match r {
+        "spells you cast" => None,
+        _ => Some(r.strip_suffix(" spells you cast")?),
+    };
+    let mut parts: Vec<Filter> = Vec::new();
+    if let Some(subject) = subject {
+        let mut alts = Vec::new();
+        for word in subject.split(" and ") {
+            let phrase = format!("{word} card");
+            let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(&phrase)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            alts.push(f);
+        }
+        parts.push(if alts.len() == 1 {
+            alts.pop()?
+        } else {
+            Filter::Or(alts)
+        });
+    }
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(parts),
+        mods: vec![Modification::AddKeyword(
+            crate::keywords::Keyword::new(KeywordKind::Demonstrate).text("demonstrate"),
+        )],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "[quality] spells you cast have demonstrate", priority: 100, parse: spells_have_demonstrate } }
+
 /// "Whenever ~ trains" (Savior of Ollenbock; CR 702.149c).
 fn trains(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     (r == "~ trains").then(|| {
