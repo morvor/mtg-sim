@@ -92,6 +92,26 @@ fn the_bonus_is_determined_as_melee_resolves() {
 }
 
 #[test]
+fn creatures_put_onto_the_battlefield_attacking_dont_count() {
+    cr!("702.121a");
+    ruling!(
+        "Wings of the Guard",
+        "Creatures that enter the battlefield attacking were never declared as attackers, so they won’t count toward melee’s effect."
+    );
+    let mut t = TestGame::new(4);
+    let wings = t.battlefield(P0, "Wings of the Guard");
+    // Warchief Giant's myriad puts tokens onto the battlefield attacking P2 and P3.
+    let giant = t.battlefield(P0, "Warchief Giant");
+    declare_attack(
+        &mut t,
+        &[(wings, Entity::Player(P1)), (giant, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P0).len(), 2);
+    assert_eq!(t.pt(wings), (2, 2));
+}
+
+#[test]
 fn each_instance_of_melee_triggers_separately() {
     cr!("702.121b");
     let mut t = TestGame::new(3);
