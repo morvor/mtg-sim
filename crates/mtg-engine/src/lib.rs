@@ -85,6 +85,7 @@ pub mod reveal;
 pub mod rooms;
 pub mod saga;
 pub mod sba;
+pub mod search_rules;
 pub mod skip;
 pub mod special_actions;
 pub mod splice;

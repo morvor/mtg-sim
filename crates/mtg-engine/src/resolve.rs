@@ -1190,30 +1190,54 @@ impl Game {
                 reveal,
                 shuffle,
             } => {
-                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                let owner = self.eval_player(whose, ctx).unwrap_or(p);
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                let found = crate::library::search(self, p, owner, filter, n, ctx);
-                let _ = reveal;
-                let res = if *shuffle
-                    && to.zone == ZoneKind::Library
-                    && matches!(to.position, LibraryPosition::Top)
-                {
-                    // "Then shuffle and put that card on top" (CR 701.24b): the found
-                    // cards stay in the library but aren't shuffled, then go on top (no
-                    // zone change).
-                    self.shuffle_library(owner);
-                    crate::library::put_on_top(self, owner, &found);
-                    found
-                } else {
-                    let res = self.move_to_destination(found, to, ctx);
-                    if *shuffle {
+                let mut searchers = self.eval_players(who, ctx);
+                if searchers.is_empty() {
+                    searchers.push(ctx.controller);
+                }
+                // CR 701.23i: several players searching at once look at the cards at the
+                // same time and choose in APNAP order; then the found cards move.
+                let mut founds: Vec<(PlayerId, PlayerId, Vec<ObjectId>)> = Vec::new();
+                for p in searchers {
+                    let mut c = ctx.clone();
+                    c.iter_player = Some(p);
+                    let owner = self.eval_player(whose, &c).unwrap_or(p);
+                    let found = crate::library::search(self, p, owner, filter, n, &c);
+                    founds.push((p, owner, found));
+                }
+                let mut all = Vec::new();
+                for (p, owner, found) in founds {
+                    let mut c = ctx.clone();
+                    c.iter_player = Some(p);
+                    let res = if *shuffle
+                        && to.zone == ZoneKind::Library
+                        && matches!(to.position, LibraryPosition::Top)
+                    {
+                        // "Then shuffle and put that card on top" (CR 701.24b): the found
+                        // cards stay in the library but aren't shuffled, then go on top
+                        // (no zone change).
                         self.shuffle_library(owner);
-                    }
-                    res
-                };
-                ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
-                ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
+                        crate::library::put_on_top(self, owner, &found);
+                        // CR 701.23e: revealed only if the effect says so.
+                        if *reveal {
+                            crate::reveal::reveal_in(self, p, &found, Some(&c));
+                        }
+                        found
+                    } else {
+                        // CR 701.23e: revealed only if the effect says so.
+                        if *reveal {
+                            crate::reveal::reveal_in(self, p, &found, Some(&c));
+                        }
+                        let res = self.move_to_destination(found, to, &mut c);
+                        if *shuffle {
+                            self.shuffle_library(owner);
+                        }
+                        res
+                    };
+                    all.extend(res);
+                }
+                ctx.prev_affected = all.iter().map(|o| Entity::Object(*o)).collect();
+                ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {

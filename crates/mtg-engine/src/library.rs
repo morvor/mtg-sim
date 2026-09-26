@@ -140,31 +140,65 @@ pub fn search(
     if g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_))) {
         return vec![];
     }
+    // CR 701.23f: an effect may replace searching the library with searching its top
+    // cards.
+    let portion = crate::search_rules::portion(g, searcher, owner).unwrap_or(usize::MAX);
     let cands: Vec<ObjectId> = g
         .player(owner)
         .library
         .iter()
         .rev()
+        .take(portion)
         .copied()
         .filter(|c| g.matches(*c, filter, ctx))
         .collect();
     let n = n.min(cands.len() as u32);
-    let found = g.ask_objects(searcher, ctx.source, "Search: choose cards", cands, 0, n);
-    // Default answers choose none; for automated agents prefer finding cards.
-    let found = if found.is_empty() && n > 0 && g.search_finds_by_default {
-        let cands: Vec<ObjectId> = g
-            .player(owner)
-            .library
-            .iter()
-            .rev()
-            .copied()
-            .filter(|c| g.matches(*c, filter, ctx))
-            .collect();
-        cands.into_iter().take(n as usize).collect()
+    // CR 701.23b, 701.23d: cards with a stated quality needn't be found; a quantity of
+    // cards must be.
+    let min = if crate::search_rules::quantity_only(filter) {
+        n
     } else {
-        found
+        0
     };
-    g.emit(Event::Searched { player: searcher });
+    let found: Vec<ObjectId> = if cands.is_empty() || n == 0 {
+        vec![]
+    } else {
+        let ans = g.ask(
+            searcher,
+            Decision::ChooseEntities {
+                source: ctx.source,
+                prompt: "Search: choose cards".into(),
+                candidates: cands.iter().map(|c| Entity::Object(*c)).collect(),
+                min,
+                max: n,
+            },
+        );
+        let chosen: Option<Vec<ObjectId>> = match ans {
+            Answer::Entities(v) => {
+                let objs: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();
+                let mut uniq = objs.clone();
+                uniq.sort();
+                uniq.dedup();
+                (objs.len() == v.len()
+                    && uniq.len() == objs.len()
+                    && objs.len() as u32 >= min
+                    && objs.len() as u32 <= n
+                    && objs.iter().all(|o| cands.contains(o)))
+                .then_some(objs)
+            }
+            _ => None,
+        };
+        match chosen {
+            Some(v) => v,
+            // Default (or invalid) answers: automated agents prefer finding cards.
+            None if g.search_finds_by_default => cands.iter().copied().take(n as usize).collect(),
+            None => cands.iter().copied().take(min as usize).collect(),
+        }
+    };
+    // CR 701.23h: searching a library again before it's shuffled is the same search.
+    if crate::search_rules::begin(g, searcher, owner, ctx) {
+        g.emit(Event::Searched { player: searcher });
+    }
     found
 }
 

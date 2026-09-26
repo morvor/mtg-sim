@@ -504,6 +504,8 @@ pub struct Game {
     pub zones: crate::zones::ZoneState,
     /// Cards currently revealed and for how long (CR 701.20).
     pub reveals: crate::reveal::RevealState,
+    /// Library searches in progress (CR 701.23h).
+    pub searches: crate::search_rules::SearchState,
 }
 
 impl Game {
@@ -594,6 +596,7 @@ impl Game {
             dice: Default::default(),
             zones: Default::default(),
             reveals: Default::default(),
+            searches: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -1076,6 +1079,8 @@ impl Game {
         crate::zones::library_shuffled(self, p);
         // CR 701.20d: revealed cards that are reordered stop being revealed.
         crate::reveal::library_reordered(self, p);
+        // CR 701.23h: a search of this library is over.
+        crate::search_rules::library_shuffled(self, p);
         self.emit(Event::Shuffled { player: p });
     }
 
