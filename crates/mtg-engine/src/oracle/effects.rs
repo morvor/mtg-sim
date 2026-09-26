@@ -392,10 +392,16 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 3] = [
+    let pairs: [(&str, Sel); 7] = [
         ("~", Sel::This),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
+        // Auras with "enchant permanent/land/artifact/...": the object it's attached to
+        // (CR 303.4).
+        ("enchanted permanent", Sel::AttachedTo),
+        ("enchanted land", Sel::AttachedTo),
+        ("enchanted artifact", Sel::AttachedTo),
+        ("enchanted planeswalker", Sel::AttachedTo),
     ];
     for (p, sel) in pairs {
         if let Some(rest) = s.strip_prefix(p) {
@@ -424,6 +430,8 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "this token",
         // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b).
         "that vehicle",
+        "that artifact",
+        "that land",
     ] {
         if let Some(rest) = s.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {

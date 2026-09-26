@@ -7,8 +7,10 @@
 //! * `rulings-coverage [--write PATH] [--check] [--card NAME] [--text SUBSTR]` — which
 //!   Scryfall rulings are cited by tests (via `ruling!(...)`) or exempted
 //!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status.
-//! * `unsupported [--limit N] [--filter TEXT] [--card NAME]` — dump unsupported ability texts
-//!   with counts (`--card`: only that card's texts, by exact name, case-insensitive).
+//! * `unsupported [--limit N] [--filter TEXT] [--card NAME] [--paper] [--single]` — dump
+//!   unsupported ability texts with counts (`--card`: only that card's texts, by exact name,
+//!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
+//!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks).
 
 use mtg_data::rules::RuleKind;
 use regex::Regex;
@@ -367,9 +369,13 @@ fn unsupported(args: &[String]) {
     let mut limit = 100usize;
     let mut filter: Option<String> = None;
     let mut card: Option<String> = None;
+    let mut paper = false;
+    let mut single = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--paper" => paper = true,
+            "--single" => single = true,
             "--limit" => {
                 limit = args[i + 1].parse().unwrap();
                 i += 1;
@@ -394,8 +400,15 @@ fn unsupported(args: &[String]) {
         if card.as_ref().is_some_and(|n| c.name.to_lowercase() != *n) {
             continue;
         }
+        if paper && c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+            continue;
+        }
         let def = CardDef::from_scryfall(c);
-        for u in def.unsupported_text() {
+        let texts = def.unsupported_text();
+        if single && texts.len() != 1 {
+            continue;
+        }
+        for u in texts {
             if filter
                 .as_ref()
                 .is_some_and(|f| !u.to_lowercase().contains(f))
@@ -432,11 +445,39 @@ pub fn ruling_citations() -> Vec<(String, String, String)> {
             .display()
             .to_string();
         for m in re.captures_iter(&text) {
-            out.push((
-                m[1].replace("\\\"", "\""),
-                m[2].replace("\\\"", "\""),
-                rel.clone(),
-            ));
+            out.push((unescape(&m[1]), unescape(&m[2]), rel.clone()));
+        }
+    }
+    out
+}
+
+/// The value of a Rust string literal's contents: `\"`, `\\`, `\n`, `\u{201c}`, and line
+/// continuations, as the `ruling!` macro sees them.
+fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match it.next() {
+            Some('u') if it.peek() == Some(&'{') => {
+                it.next();
+                let hex: String = it.by_ref().take_while(|&c| c != '}').collect();
+                if let Some(ch) = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+                    out.push(ch);
+                }
+            }
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('\n') => {
+                while it.peek().is_some_and(|c| c.is_whitespace()) {
+                    it.next();
+                }
+            }
+            Some(o) => out.push(o),
+            None => out.push('\\'),
         }
     }
     out
