@@ -234,6 +234,90 @@ fn x_is(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "x is [value]", priority: 100, apply: x_is } }
 
+/// "Whenever you foretell a card" (Dream Devourer; CR 702.143c).
+fn you_foretell(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (r == "you foretell a card").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::foretell::YOU_FORETELL.into()),
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "you foretell a card", priority: 100, parse: you_foretell } }
+
+/// "if this spell was foretold" (Poison the Cup; CR 702.143c).
+fn was_foretold(l: &str) -> Option<Condition> {
+    matches!(end(l), "~ was foretold" | "this spell was foretold")
+        .then(|| Condition::Custom(crate::kw::foretell::WAS_FORETOLD.into()))
+}
+
+inventory::submit! { ConditionPattern { name: "~ was foretold", priority: 100, parse: was_foretold } }
+
+/// "exile it face down" (The Foretold Soldier), "exile a card from your hand face down"
+/// (Ethereal Valkyrie): face-down exiled cards (CR 406.3), "it" afterward.
+fn exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
+    let what = match end(l).strip_prefix("exile ")?.strip_suffix(" face down")? {
+        "it" => b.it.clone(),
+        "~" => Sel::This,
+        "a card from your hand" => Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::And(vec![
+                Filter::Card,
+                Filter::InZone(ZoneKind::Hand),
+                Filter::OwnedBy(PlayerRel::You),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        _ => return None,
+    };
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Exile {
+        what,
+        face_down: true,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exile it / a card from your hand face down", priority: 100, parse: exile_face_down } }
+
+/// "It becomes foretold." after exiling a card face down (The Foretold Soldier, Ethereal
+/// Valkyrie; CR 702.143d).
+fn becomes_foretold(l: &str, _b: &mut Builder) -> Option<Effect> {
+    matches!(end(l), "it becomes foretold" | "they become foretold")
+        .then(|| Effect::Custom(crate::kw::foretell::BECOMES_FORETOLD.into()))
+}
+
+inventory::submit! { EffectPattern { name: "it becomes foretold", priority: 100, parse: becomes_foretold } }
+
+/// "Its foretell cost is its mana cost reduced by {2}." after "It becomes foretold."
+/// (Ethereal Valkyrie; CR 702.143d): the effect gives the card a foretell cost.
+fn foretell_cost_reduced(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(n) = end(s)
+        .strip_prefix("its foretell cost is its mana cost reduced by {")
+        .and_then(|r| r.strip_suffix('}'))
+        .and_then(|n| n.parse::<u32>().ok())
+    else {
+        return false;
+    };
+    fn set(e: &mut Effect, n: u32) -> bool {
+        match e {
+            Effect::Custom(c) if c.as_str() == crate::kw::foretell::BECOMES_FORETOLD => {
+                *c = format!("{}{n}", crate::kw::foretell::BECOMES_FORETOLD_REDUCED).into();
+                true
+            }
+            Effect::Seq(v) => v.last_mut().is_some_and(|l| set(l, n)),
+            _ => false,
+        }
+    }
+    set(prev, n)
+}
+
+inventory::submit! { FollowupPattern { name: "its foretell cost is its mana cost reduced by {N}", priority: 100, apply: foretell_cost_reduced } }
+
 /// "Whenever ~ trains" (Savior of Ollenbock; CR 702.149c).
 fn trains(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     (r == "~ trains").then(|| {
