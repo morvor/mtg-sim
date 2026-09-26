@@ -1312,12 +1312,11 @@ pub fn apply_mod(
             c.subtypes = subtypes.iter().cloned().collect::<SmallVec<[Subtype; 3]>>();
         }
         Modification::AllCreatureTypes => {
-            // Represented by adding the Changeling marker ability semantics: we add all
-            // creature types explicitly (CR 205.3m, 702.73a).
+            // Every creature type, added explicitly (CR 205.3m, 702.73a).
+            let have: std::collections::HashSet<SmolStr> = c.subtypes.iter().cloned().collect();
             for s in &subtype_lists().creature {
-                let s = SmolStr::new(s);
-                if !c.subtypes.contains(&s) {
-                    c.subtypes.push(s);
+                if !have.contains(s.as_str()) {
+                    c.subtypes.push(SmolStr::new(s));
                 }
             }
         }

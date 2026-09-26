@@ -501,5 +501,12 @@ pub fn compile_keyword(kw: Keyword, text: &str) -> Vec<Ability> {
             "Devoid (colorless)",
         ));
     }
+    if kw.kind == KeywordKind::Changeling {
+        // CR 702.73a: this object is every creature type (CDA, layer 4).
+        out.push(AbilityDef::new(
+            AbilityKind::Static(crate::kw::changeling::changeling_cda()),
+            "Changeling (every creature type)",
+        ));
+    }
     out
 }
