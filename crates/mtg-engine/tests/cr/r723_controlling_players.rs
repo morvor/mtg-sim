@@ -350,3 +350,119 @@ fn emrakul_controls_the_opponents_next_turn_then_they_take_an_extra_turn() {
     assert!(t.g.turn.extra);
     assert_eq!(decider(&t.g, P1), P1);
 }
+
+/// P0 casts Word of Command targeting P1, choosing `chosen` from P1's hand.
+fn word_of_command(t: &mut TestGame, chosen: ObjectId) {
+    t.lands(P0, "Swamp", 2);
+    let woc = t.hand(P0, "Word of Command");
+    t.answer_choose(P0, &[Entity::Object(chosen)]);
+    t.cast(P0, woc).target(Entity::Player(P1)).go();
+    t.g.turn.passes = 0;
+    t.g.pass_priority(P0);
+    t.g.pass_priority(P1);
+}
+
+#[test]
+fn word_of_command_makes_the_player_play_the_card_with_lands_mana_only() {
+    cr!("723.7", "723.2");
+    ruling!(
+        "Word of Command",
+        "You must order your opponent to play the chosen card if it is possible to do so."
+    );
+    // P1's only untapped mana source isn't a land: they can't play Mind Stone.
+    let mut t = TestGame::new(2);
+    let sol_ring = t.battlefield(P1, "Sol Ring");
+    let stone = t.hand(P1, "Mind Stone");
+    word_of_command(&mut t, stone);
+    assert!(t.in_hand(P1, "Mind Stone"));
+    assert!(!t.g.obj(sol_ring).tapped);
+    assert!(t.in_graveyard(P0, "Word of Command"));
+    // With lands, P1 must play it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sol Ring");
+    let lands = t.lands(P1, "Wastes", 2);
+    let stone = t.hand(P1, "Mind Stone");
+    word_of_command(&mut t, stone);
+    assert_eq!(t.g.stack.len(), 1);
+    assert_eq!(t.obj_now(stone).controller, P1);
+    assert!(lands.iter().all(|l| t.g.obj(*l).tapped));
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Mind Stone").len(), 1);
+    // The control lasted only until Word of Command finished resolving.
+    assert_eq!(decider(&t.g, P1), P1);
+}
+
+/// An agent that makes another player discard the last cards offered.
+struct LastPicker {
+    inner: ScriptedAgent,
+    log: Log,
+}
+
+impl Agent for LastPicker {
+    fn name(&self) -> &str {
+        "last picker"
+    }
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
+        self.log
+            .lock()
+            .unwrap()
+            .push((g.turn.number, self.inner.player, p, d.clone()));
+        match d {
+            Decision::ChooseEntities {
+                prompt,
+                candidates,
+                min,
+                ..
+            } if p != self.inner.player && prompt.to_lowercase().contains("discard") => {
+                Answer::Entities(candidates[candidates.len() - *min as usize..].to_vec())
+            }
+            _ => self.inner.decide(g, p, d),
+        }
+    }
+}
+
+#[test]
+fn word_of_command_controls_the_player_while_the_chosen_spell_resolves() {
+    cr!("723.2", "723.7");
+    ruling!(
+        "Word of Command",
+        "During the resolution of this spell, that player plays the chosen card."
+    );
+    let (mut t, log) = recorded(2);
+    t.g.set_agent(
+        P0,
+        Box::new(LastPicker {
+            inner: ScriptedAgent {
+                player: P0,
+                script: t.script.clone(),
+            },
+            log: log.clone(),
+        }),
+    );
+    // "Draw two cards, then discard two cards."
+    let study = t.hand(P1, "Careful Study");
+    t.hand(P1, "Grizzly Bears");
+    t.library_top(P1, "Hill Giant");
+    t.library_top(P1, "Savannah Lions");
+    t.lands(P1, "Island", 1);
+    word_of_command(&mut t, study);
+    // P1 cast Careful Study during Word of Command's resolution; now P1 decides again.
+    assert_eq!(t.g.stack.len(), 1);
+    assert_eq!(decider(&t.g, P1), P1);
+    t.resolve_all();
+    // While Careful Study resolved, P0 made P1's discard choice: the two cards drawn.
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.in_graveyard(P1, "Savannah Lions"));
+    let discards: Vec<PlayerId> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, _, p, d)| {
+            *p == P1
+                && matches!(d, Decision::ChooseEntities { prompt, .. } if prompt.to_lowercase().contains("discard"))
+        })
+        .map(|(_, a, _, _)| *a)
+        .collect();
+    assert_eq!(discards, vec![P0]);
+}

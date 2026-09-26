@@ -14,6 +14,9 @@
 //!   and lasts until the beginning of the following turn (CR 723.1, 723.1b); effects
 //!   affecting the same player overwrite each other (CR 723.1a). An effect may give a
 //!   player control of themselves (CR 723.9).
+//! * Word of Command controls a player for a limited duration (CR 723.2), specifies an
+//!   action they must take and restricts the mana abilities they may activate meanwhile
+//!   (CR 723.7).
 
 use crate::ability::*;
 use crate::decision::{Action, Answer, Decision};
@@ -33,6 +36,10 @@ pub enum ControlSpan {
     NextTurn,
     /// "During their next combat phase".
     NextCombatPhase,
+    /// "Until [this spell] finishes resolving": while that object is on the stack.
+    UntilResolved(ObjectId),
+    /// "While that spell is resolving".
+    WhileResolving(ObjectId),
 }
 
 /// A player-controlling effect.
@@ -62,6 +69,9 @@ pub struct PlayerControlState {
     /// The player searching their own library right now (for "while they're searching
     /// their libraries").
     pub searching: Vec<PlayerId>,
+    /// A player who may activate only mana abilities of lands they control right now
+    /// (Word of Command, CR 723.7).
+    pub lands_only_mana: Option<PlayerId>,
 }
 
 /// `StaticEffect::Custom` name: "You control your opponents while they're searching
@@ -72,13 +82,25 @@ pub const CONTROL_EFFECT: &str = "player control:";
 /// `Condition::Custom` name: "this spell's additional cost was paid" (an optional
 /// additional cost of the spell whose ability this is was paid).
 pub const ADDITIONAL_COST_PAID: &str = "this spell's additional cost was paid";
+/// `Effect::Custom` prefix of Word of Command's instructions:
+/// "word of command:<choose|control|play|play-lands|spell>:<target slot>".
+pub const WORD_OF_COMMAND: &str = "word of command:";
+/// The card chosen from the controlled player's hand.
+pub const CHOSEN: Var = vars::USER + 723;
+/// The spell the controlled player cast by playing that card.
+pub const PLAYED_SPELL: Var = vars::USER + 724;
 
-/// The effect "you control the players in target slot `slot` during their next turn (or
-/// combat phase)".
+/// One of Word of Command's instructions for the player in target slot `slot`.
+pub fn word_of_command(step: &str, slot: u8) -> Effect {
+    Effect::Custom(SmolStr::new(format!("{WORD_OF_COMMAND}{step}:{slot}")))
+}
+
+/// The effect "you control the players in target slot `slot` during their next turn (or,
+/// with `NextCombatPhase`, combat phase)".
 pub fn control_effect(span: ControlSpan, slot: u8, extra_turn_after: bool) -> Effect {
     let span = match span {
-        ControlSpan::NextTurn => "turn",
         ControlSpan::NextCombatPhase => "combat",
+        _ => "turn",
     };
     let extra = if extra_turn_after { ":extra" } else { "" };
     Effect::Custom(SmolStr::new(format!(
@@ -198,6 +220,17 @@ fn search_controller(g: &Game, p: PlayerId) -> Option<PlayerId> {
         .map(|(_, c, _)| *c)
 }
 
+/// Whether an active control effect applies now.
+fn applies(g: &Game, e: &ControlEffect) -> bool {
+    match e.span {
+        ControlSpan::NextTurn | ControlSpan::NextCombatPhase => true,
+        ControlSpan::UntilResolved(o) => g.is_live(o) && g.obj(o).zone == Zone::Stack,
+        ControlSpan::WhileResolving(o) => {
+            g.stack.last() == Some(&o) && g.turn.priority.is_none() && g.is_live(o)
+        }
+    }
+}
+
 /// The player who makes `p`'s decisions: the player controlling `p` (CR 723.5), or `p`.
 pub fn decider(g: &Game, p: PlayerId) -> PlayerId {
     if g.player_control.own_decisions > 0 {
@@ -210,10 +243,106 @@ pub fn decider(g: &Game, p: PlayerId) -> PlayerId {
     g.player_control
         .active
         .iter()
-        .filter(|e| e.player == p && g.player(e.controller).in_game())
+        .filter(|e| e.player == p && g.player(e.controller).in_game() && applies(g, e))
         .max_by_key(|e| e.timestamp)
         .map(|e| e.controller)
         .unwrap_or(p)
+}
+
+/// Whether `p` may activate the mana abilities of `source` now: while a player is
+/// restricted to mana abilities of lands they control (Word of Command, CR 723.7), other
+/// sources can't be used.
+pub fn mana_source_allowed(g: &Game, p: PlayerId, source: ObjectId) -> bool {
+    match g.player_control.lands_only_mana {
+        Some(q) if q == p => {
+            let o = g.obj(source);
+            o.is(CardType::Land) && o.controller == p
+        }
+        _ => true,
+    }
+}
+
+/// `controller` controls `player` for a limited duration, starting now.
+fn control_now(g: &mut Game, controller: PlayerId, player: PlayerId, span: ControlSpan) {
+    let timestamp = g.new_timestamp();
+    g.player_control.active.push(ControlEffect {
+        controller,
+        player,
+        timestamp,
+        span,
+        extra_turn_after: false,
+    });
+}
+
+/// Word of Command's instructions (CR 723.2, 723.7): "Look at target opponent's hand and
+/// choose a card from it. You control that player until Word of Command finishes
+/// resolving. The player plays that card if able. While doing so, the player can activate
+/// mana abilities only if they're from lands that player controls [...]. If the chosen
+/// card is cast as a spell, you control the player while that spell is resolving."
+fn word_of_command_step(g: &mut Game, step: &str, slot: u8, ctx: &mut Ctx) {
+    let Some(p) = ctx
+        .targets
+        .get(slot as usize)
+        .and_then(|v| v.iter().find_map(|e| e.player()))
+    else {
+        return;
+    };
+    match step {
+        "choose" => {
+            let hand = g.player(p).hand.clone();
+            let chosen = g.ask_objects(
+                ctx.controller,
+                ctx.source,
+                "Choose a card from that player's hand",
+                hand,
+                1,
+                1,
+            );
+            ctx.set_var(CHOSEN, chosen.into_iter().map(Entity::Object).collect());
+        }
+        "control" => {
+            if let Some(me) = ctx.stack_obj {
+                control_now(g, ctx.controller, p, ControlSpan::UntilResolved(me));
+            }
+        }
+        "play" | "play-lands" => {
+            let before = g.player_control.lands_only_mana;
+            if step == "play-lands" {
+                g.player_control.lands_only_mana = Some(p);
+            }
+            let play = Effect::PlayCard {
+                who: PlayerRef::Player(p),
+                what: Sel::Var(CHOSEN),
+                free: false,
+                optional: false,
+            };
+            g.exec(&play, ctx);
+            g.player_control.lands_only_mana = before;
+            // The spell it was cast as, if it was.
+            let chosen: Vec<ObjectId> = ctx
+                .vars
+                .get(&CHOSEN)
+                .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                .unwrap_or_default();
+            let spell = chosen
+                .iter()
+                .map(|c| g.current(*c))
+                .find(|s| g.is_live(*s) && g.obj(*s).zone == Zone::Stack);
+            if let Some(s) = spell {
+                ctx.set_var(PLAYED_SPELL, vec![Entity::Object(s)]);
+            }
+        }
+        "spell" => {
+            let spell = ctx
+                .vars
+                .get(&PLAYED_SPELL)
+                .and_then(|v| v.iter().find_map(|e| e.object()));
+            if let Some(s) = spell {
+                control_now(g, ctx.controller, p, ControlSpan::WhileResolving(s));
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Whether `p` is controlled by another player.
@@ -317,6 +446,14 @@ impl KeywordRules for PlayerControlRules {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if let Some(rest) = name.strip_prefix(WORD_OF_COMMAND) {
+            if let Some((step, slot)) = rest.split_once(':') {
+                if let Ok(slot) = slot.parse::<u8>() {
+                    word_of_command_step(g, step, slot, ctx);
+                }
+            }
+            return true;
+        }
         let Some((span, slot, extra)) = parse_control_effect(name) else {
             return false;
         };
