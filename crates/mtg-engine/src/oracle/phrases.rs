@@ -551,6 +551,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_originally_printed_suffix(t) {
             (f, r)
+        } else if let Some((f, r)) = parse_inset_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -570,6 +572,21 @@ pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &s
     }
     if let Some(r) = t.strip_prefix("target opponent controls") {
         return Some((PlayerFilter::Opponent, "target opponent", r));
+    }
+    None
+}
+
+/// "that has an Adventure" (CR 715.2a), "that has an Omen" (CR 720.2a).
+fn parse_inset_suffix(t: &str) -> Option<(Filter, &str)> {
+    for (p, name) in [
+        ("that has an adventure", crate::adventure::HAS_ADVENTURE),
+        ("that have an adventure", crate::adventure::HAS_ADVENTURE),
+        ("that has an omen", crate::adventure::HAS_OMEN),
+        ("that have an omen", crate::adventure::HAS_OMEN),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            return Some((Filter::Custom(name.into()), r));
+        }
     }
     None
 }

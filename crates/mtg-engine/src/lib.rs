@@ -21,6 +21,7 @@
 
 pub mod ability;
 pub mod actions;
+pub mod adventure;
 pub mod agents;
 pub mod ante;
 pub mod apnap;

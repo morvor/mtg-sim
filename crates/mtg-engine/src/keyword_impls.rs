@@ -159,6 +159,10 @@ pub fn cost_reductions_from_keywords(
 /// effects tied to how it was cast.
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
+    // A spell cast as an Adventure or an Omen (CR 715.3d, 720.3d).
+    if let Some(d) = crate::adventure::resolved_destination(g, id) {
+        return d;
+    }
     // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
     crate::kw::resolved_destination(g, id)
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
@@ -167,6 +171,7 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
 /// After a resolved instant/sorcery was put where it goes (`new`), e.g. rebound's delayed
 /// triggered ability (CR 702.88a).
 pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {
+    crate::adventure::after_resolved(g, id, new);
     crate::kw::after_spell_resolved(g, id, new);
 }
 

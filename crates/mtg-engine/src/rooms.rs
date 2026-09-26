@@ -7,7 +7,7 @@
 //! when a door is unlocked (CR 709.5h) or a Room is fully unlocked (CR 709.5i).
 //!
 //! The halves and the static abilities of the shared type line are part of the copiable
-//! values (CR 709.5, 709.5b): [`Characteristics::room`] carries the halves, and the locks
+//! values (CR 709.5, 709.5b): [`Characteristics::printed`] carries the halves, and the locks
 //! apply after copy effects according to each permanent's own designations.
 
 use crate::card::{CardDef, Layout};
@@ -40,16 +40,13 @@ pub struct RoomState {
     pub unlocked: BTreeMap<ObjectId, [bool; 2]>,
 }
 
-/// The split card with a shared type line whose halves a set of characteristics
-/// represents ([`Characteristics::room`]): part of the copiable values (CR 709.5,
-/// 709.5b).
-#[derive(Clone)]
-pub struct RoomCard(pub Arc<CardDef>);
-
-impl std::fmt::Debug for RoomCard {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RoomCard({})", self.0.name)
-    }
+/// The split card with a shared type line whose halves the characteristics `c` represent
+/// ([`Characteristics::printed`], part of the copiable values, CR 709.5b).
+fn room_of(c: &Characteristics) -> Option<Arc<CardDef>> {
+    c.printed
+        .as_ref()
+        .map(|p| p.0.clone())
+        .filter(|card| is_room_card(card))
 }
 
 /// Whether a card is a split card with a shared type line: a permanent card with two
@@ -66,7 +63,7 @@ pub fn is_room_card(card: &CardDef) -> bool {
 /// The split card with a shared type line whose halves the object `id` has as part of its
 /// copiable values: its own card, or the Room it's a copy of (CR 709.5b).
 pub fn room_card(g: &Game, id: ObjectId) -> Option<Arc<CardDef>> {
-    g.obj(id).copiable.room.as_ref().map(|r| r.0.clone())
+    room_of(&g.obj(id).copiable)
 }
 
 /// Whether `id` is a face-up permanent with a shared type line.
@@ -158,22 +155,6 @@ fn remove_locked_halves(c: &mut Characteristics, card: &CardDef, u: [bool; 2]) {
     );
 }
 
-/// Layer 0: the characteristics of a card with a shared type line (a Room card, a half
-/// of it cast as a spell, and the permanent it becomes) include its two halves
-/// (CR 709.5b).
-pub fn mark_rooms(g: &mut Game, live: &[ObjectId]) {
-    for id in live {
-        let o = &g.objects[id.0 as usize];
-        if o.face_down || !matches!(o.face, FaceState::Front | FaceState::Half(_)) {
-            continue;
-        }
-        let Some(card) = o.card.clone().filter(|c| is_room_card(c)) else {
-            continue;
-        };
-        g.objects[id.0 as usize].chars.room = Some(RoomCard(card));
-    }
-}
-
 /// The shared type line's static abilities remove the name, mana cost and rules text of
 /// each locked half of a Room permanent (CR 709.5). They're part of its copiable values,
 /// so they apply to a copy of a Room according to the copy's own unlocked designations
@@ -184,7 +165,7 @@ pub fn apply_locks(g: &mut Game, live: &[ObjectId]) {
         if o.zone != Zone::Battlefield || o.face_down {
             continue;
         }
-        let Some(card) = o.chars.room.as_ref().map(|r| r.0.clone()) else {
+        let Some(card) = room_of(&o.chars) else {
             continue;
         };
         let u = unlocked(g, *id);

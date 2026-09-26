@@ -87,6 +87,30 @@ impl Layout {
     }
 }
 
+/// The card a set of characteristics comes from ([`Characteristics::printed`]): its halves,
+/// faces and alternative characteristics are part of the copiable values (CR 709.5b,
+/// 715.2b, 720.2b, 722.2b).
+#[derive(Clone)]
+pub struct PrintedCard(pub Arc<CardDef>);
+
+impl std::fmt::Debug for PrintedCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PrintedCard({})", self.0.name)
+    }
+}
+
+/// Layer 0: characteristics include the card they come from (see [`PrintedCard`]), except
+/// a face-down object's (CR 708.2).
+pub fn mark_printed(g: &mut crate::game::Game, live: &[ObjectId]) {
+    for id in live {
+        let o = &mut g.objects[id.0 as usize];
+        if o.face_down {
+            continue;
+        }
+        o.chars.printed = o.card.clone().map(PrintedCard);
+    }
+}
+
 /// One face (or half) of a card.
 #[derive(Clone, Debug)]
 pub struct FaceDef {
@@ -253,7 +277,7 @@ impl CardDef {
                     all_creature_names: false,
                     interchangeable_names: Default::default(),
                     all_creature_types: false,
-                    room: None,
+                    printed: None,
                 },
                 unsupported: compiled.unsupported,
                 star_power,
