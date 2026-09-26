@@ -200,6 +200,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "worthy" => crate::game_terms::worthy_filter(),
         // CR 701.27g.
         "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
+        // A prepared permanent (CR 722.3a); a spell cast as a prepare spell (CR 722.3d).
+        "prepared" => Filter::Prepared,
         _ => return None,
     })
 }

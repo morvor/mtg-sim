@@ -199,6 +199,22 @@ fn a_copy_of_an_adventure_spell_is_an_adventure() {
         .all(|id| t.obj(*id).kind != ObjKind::SpellCopy));
     t.resolve_all();
     assert_eq!(humans(&t), 2);
+    // Lucky Clover: "Whenever you cast an Adventure instant or sorcery spell, copy it."
+    supported("Lucky Clover");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Lucky Clover");
+    t.lands(P0, "Forest", 1);
+    let beast = t.hand(P0, BEAST);
+    cast_half(&mut t, P0, beast, 1);
+    t.settle();
+    t.resolve();
+    let copy = t.g.stack[1];
+    assert_eq!(adventure::on_stack_as(&t.g, copy), Some(Inset::Adventure));
+    t.resolve_all();
+    assert_eq!(humans(&t), 2);
+    // Only the card went on an adventure (the copy ceased to exist).
+    assert_eq!(t.g.find_in_zone(Zone::Exile, "Lovestruck Beast").len(), 1);
 }
 
 #[test]

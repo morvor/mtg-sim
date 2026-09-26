@@ -1187,6 +1187,7 @@ impl Game {
         // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
         // this is loses the designation now (CR 722.3c).
         if from == Zone::Exile && self.obj(card).kind == ObjKind::CardCopy {
+            crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
         self.log(|g| format!("{p} casts {}", g.describe(id)));

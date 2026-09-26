@@ -27,6 +27,21 @@ fn copy_target_spell(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "copy target spell", priority: 100, parse: copy_target_spell } }
 
+/// "copy it" / "copy that spell" in an ability that triggers on casting a spell ("Whenever
+/// you cast an Adventure instant or sorcery spell, copy it."): the spell that was cast.
+fn copy_trigger_spell(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(end(l), "copy it" | "copy that spell") || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    Some(Effect::CopySpell {
+        what: Sel::TriggerSpell,
+        count: Value::c(1),
+        new_targets: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy the triggering spell", priority: 100, parse: copy_trigger_spell } }
+
 /// "You may choose new targets for the copy." after copying a spell (CR 707.10c).
 fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = s.to_lowercase();

@@ -552,7 +552,12 @@ impl Game {
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_name.as_ref())
                 .is_some_and(|n| c.has_name(n)),
-            Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
+            // A prepared permanent (CR 722.3a), or a spell cast as a prepare spell or a
+            // copy of one (CR 722.3d).
+            Filter::Prepared => {
+                (o.zone == Zone::Battlefield && o.prepared.is_some())
+                    || crate::designations::is_prepare_spell(self, id)
+            }
             Filter::ChosenCardType => self
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_type)
