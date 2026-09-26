@@ -66,6 +66,21 @@ pub trait KeywordRules: Sync + Send {
     fn spell_optional_costs(&self, g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
         vec![]
     }
+    /// Choices that casting `spell` with `method` calls for as it's proposed (CR 601.2b),
+    /// e.g. the permanent to sacrifice for emerge (CR 702.119c), adding any costs they
+    /// entail to `extra` (paid with the rest of the total cost, CR 601.2h). Called once
+    /// per keyword kind the spell has, after its optional additional costs are announced.
+    fn announce(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        method: &CastMethod,
+        extra: &mut Cost,
+    ) -> Result<(), Illegal> {
+        Ok(())
+    }
     /// Adjust the targets/effect of a spell being cast.
     fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
         body
@@ -386,6 +401,22 @@ pub fn optional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
         out.extend(r.spell_optional_costs(g, spell));
     }
     out
+}
+
+/// See [`KeywordRules::announce`].
+pub fn announce(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    method: &CastMethod,
+    extra: &mut Cost,
+) -> Result<(), Illegal> {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.announce(g, p, spell, kw, method, extra)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn adjust_spell_body(g: &Game, spell: ObjectId, mut body: Body) -> Body {

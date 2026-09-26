@@ -1023,6 +1023,8 @@ impl Game {
         // CR 601.2b: the spell's own optional additional costs and choices between
         // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
         crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
+        // CR 601.2b: choices the way it's cast calls for (e.g. emerge's sacrifice).
+        crate::kw::announce(self, p, id, &opt.method, &mut extra)?;
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
         // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
         crate::kw::kicker::record_kicked(&mut cast_info.paid);

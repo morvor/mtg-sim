@@ -44,8 +44,14 @@ pub fn run(t: &mut TestGame, p: PlayerId, effect: Effect) {
 }
 
 /// Declares attackers for the active player and advances to the declare attackers step
-/// with priority (attack triggers are on the stack, unresolved).
+/// with priority (attack triggers are on the stack, unresolved). Attackers are followed
+/// across zone changes.
 pub fn declare_attack(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
+    let attackers: Vec<(ObjectId, Entity)> = attackers
+        .iter()
+        .map(|(a, e)| (t.g.current(*a), *e))
+        .collect();
+    let attackers = attackers.as_slice();
     let ap = t.g.turn.active;
     if t.g.turn.step != Step::BeginningOfCombat {
         t.set_step(ap, Step::BeginningOfCombat);

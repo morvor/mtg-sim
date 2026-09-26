@@ -203,6 +203,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,
+        // CR 702.112b.
+        "renowned" => Filter::Custom(crate::kw::renown::RENOWNED.into()),
         // CR 700.16.
         "worthy" => crate::game_terms::worthy_filter(),
         // CR 701.27g.
