@@ -50,7 +50,10 @@ pub fn range_of(g: &Game, p: PlayerId) -> Option<u32> {
         return Some(n);
     }
     match g.config.variant {
-        Variant::Emperor => Some(if g.is_emperor(p) { 2 } else { 1 }),
+        Variant::Emperor => {
+            let teams: Vec<u8> = g.players.iter().map(|q| q.team).collect();
+            Some(super::setup::emperor_variant_range(&teams, p.idx()))
+        }
         Variant::GrandMelee => Some(1),
         _ => None,
     }

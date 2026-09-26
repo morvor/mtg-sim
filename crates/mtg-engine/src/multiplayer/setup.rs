@@ -49,6 +49,9 @@ pub enum SetupError {
     TeammatesSeatedTogether,
     /// The shared team turns option is only for games between teams (CR 805.1).
     SharedTeamTurnsWithoutTeams,
+    /// An emperor would begin the game within the range of influence of another emperor
+    /// (CR 809.6a).
+    EmperorsInRange,
 }
 
 impl GameConfig {
@@ -194,6 +197,26 @@ impl GameConfig {
                 if !self.deploy_creatures {
                     errors.push(SetupError::DeployRequired);
                 }
+                // CR 809.6a: no emperor begins the game within another emperor's range.
+                if self.range_of_influence.is_none() && self.player_ranges.is_empty() {
+                    let emperors = emperor_seats(&teams);
+                    let all: Vec<PlayerId> = (0..players).map(|i| PlayerId(i as u8)).collect();
+                    let close = emperors.iter().any(|a| {
+                        let r = emperor_variant_range(&teams, *a);
+                        emperors.iter().any(|b| {
+                            a != b
+                                && super::range::seat_distance(
+                                    &all,
+                                    PlayerId(*a as u8),
+                                    PlayerId(*b as u8),
+                                )
+                                .is_some_and(|d| d <= r)
+                        })
+                    });
+                    if close {
+                        errors.push(SetupError::EmperorsInRange);
+                    }
+                }
             }
             Variant::TwoHeadedGiant => {
                 // Two teams of two players (CR 810.1), or equally sized larger teams
@@ -264,6 +287,46 @@ pub fn teams_together(teams: &[u8]) -> bool {
     } else {
         changes == distinct
     }
+}
+
+/// The seats of the emperors in an Emperor game seated as `teams` (seat → team): the
+/// middle seat of each team (CR 809.2).
+pub fn emperor_seats(teams: &[u8]) -> Vec<usize> {
+    let n = teams.len();
+    let mut out = Vec::new();
+    for start in 0..n {
+        // The first seat of each team: its right-hand neighbor isn't a teammate.
+        if n > 1 && teams[(start + n - 1) % n] == teams[start] {
+            continue;
+        }
+        let len = (0..n)
+            .take_while(|i| teams[(start + i) % n] == teams[start])
+            .count();
+        out.push((start + (len.max(1) - 1) / 2) % n);
+    }
+    out
+}
+
+/// A player's range of influence in the Emperor variant (CR 809.3a, 809.6a): each
+/// general's is the smallest that lets one general of an opposing team begin the game
+/// within it, and each emperor's the smallest that lets two do. With teams of three that's
+/// 1 for generals and 2 for emperors.
+pub fn emperor_variant_range(teams: &[u8], seat: usize) -> u32 {
+    let n = teams.len();
+    let emperors = emperor_seats(teams);
+    let all: Vec<PlayerId> = (0..n).map(|i| PlayerId(i as u8)).collect();
+    let me = PlayerId(seat as u8);
+    let mut d: Vec<u32> = (0..n)
+        .filter(|q| teams[*q] != teams.get(seat).copied().unwrap_or(0) && !emperors.contains(q))
+        .filter_map(|q| super::range::seat_distance(&all, me, PlayerId(q as u8)))
+        .collect();
+    d.sort_unstable();
+    let emperor = emperors.contains(&seat);
+    let want = if emperor { 2 } else { 1 };
+    d.get(want - 1)
+        .or(d.last())
+        .copied()
+        .unwrap_or(if emperor { 2 } else { 1 })
 }
 
 /// Whether no one sits next to a teammate and the teams are equally spaced out
