@@ -491,23 +491,11 @@ fn landwalk_filter(stem: &str) -> Option<Filter> {
     })
 }
 
-/// Turns a keyword into its ability entries. CDA keywords (changeling, devoid) also get
-/// the characteristic-defining static they imply.
+/// Turns a keyword into its ability entries. A printed changeling also gets the
+/// characteristic-defining static it implies (see `kw/changeling.rs`); devoid's is the
+/// static ability the keyword stands for (`kw/devoid.rs`).
 pub fn compile_keyword(kw: Keyword, text: &str) -> Vec<Ability> {
     let mut out = vec![AbilityDef::new(AbilityKind::Keyword(kw.clone()), text)];
-    if kw.kind == KeywordKind::Devoid {
-        // CR 702.114a: this object is colorless (CDA, layer 5).
-        let mut s = StaticAbility::new(StaticEffect::Continuous {
-            affected: Filter::Source,
-            mods: vec![Modification::SetColors(ColorSet::NONE)],
-        });
-        s.is_cda = true;
-        s.zone = FunctionZone::Anywhere;
-        out.push(AbilityDef::new(
-            AbilityKind::Static(s),
-            "Devoid (colorless)",
-        ));
-    }
     if kw.kind == KeywordKind::Changeling {
         // CR 702.73a: this object is every creature type (CDA, layer 4).
         out.push(AbilityDef::new(
