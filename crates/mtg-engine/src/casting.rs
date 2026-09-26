@@ -523,10 +523,12 @@ impl Game {
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
-        // Lands can't be cast (CR 305.9).
+        // Lands can't be cast (CR 305.9); nor can a card in a way a keyword's rule
+        // prohibits, whatever choices its proposal would make (e.g. aftermath,
+        // CR 702.127a).
         out.retain(|opt| {
             let chars = self.option_characteristics(card, opt);
-            !chars.is_land()
+            !chars.is_land() && !crate::kw::cast_prohibited(self, p, card, &chars)
         });
         out
     }
@@ -718,6 +720,10 @@ impl Game {
         chars: &Characteristics,
     ) -> bool {
         if self.legendary_spell_prohibited(p, chars) {
+            return true;
+        }
+        // Rules keywords define (e.g. aftermath, CR 702.127a).
+        if crate::kw::cast_prohibited(self, p, card, chars) {
             return true;
         }
         let spells_cast = self

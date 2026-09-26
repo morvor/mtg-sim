@@ -44,6 +44,14 @@ pub trait KeywordRules: Sync + Send {
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
     }
+    /// Whether a rule this keyword defines prohibits `p` from casting `card` as a spell
+    /// with the characteristics `chars` (CR 601.3), e.g. "this half of this split card
+    /// can't be cast from any zone other than a graveyard" (aftermath, CR 702.127a).
+    /// `card` may be the spell already on the stack as its proposal is checked
+    /// (CR 601.2e). Called for every registered implementation.
+    fn cast_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+        false
+    }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
     /// Called for every registered implementation.
@@ -387,6 +395,13 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         }
     }
     out
+}
+
+/// See [`KeywordRules::cast_prohibited`].
+pub fn cast_prohibited(g: &Game, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.cast_prohibited(g, p, card, chars))
 }
 
 pub fn optional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
