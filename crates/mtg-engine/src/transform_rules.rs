@@ -46,8 +46,18 @@ fn transforming_layout(l: Layout) -> bool {
 
 /// Whether the permanent `id` can transform now (CR 701.27a, 701.27c, 701.27d).
 pub fn can_transform(g: &Game, id: ObjectId) -> bool {
+    can_transform_by(g, id, false)
+}
+
+/// [`can_transform`], for a transformation caused by the permanent's own daybound or
+/// nightbound ability when `day_night` is set: a permanent with daybound or nightbound
+/// can't transform any other way (CR 702.145b, 702.145e).
+pub fn can_transform_by(g: &Game, id: ObjectId, day_night: bool) -> bool {
     let o = g.obj(id);
     if o.zone != Zone::Battlefield || !g.is_live(id) || o.face_down {
+        return false;
+    }
+    if !day_night && crate::kw::daybound::transforms_only_by_day_night(g, id) {
         return false;
     }
     // "Can't transform" (and so can't convert, CR 701.28f).

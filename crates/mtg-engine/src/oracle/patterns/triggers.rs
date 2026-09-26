@@ -865,6 +865,19 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
     Some((c, spell(), tp()))
 }
 
+/// A spell being cast is on the stack (CR 601.2a): a zone in the object phrase ("an
+/// instant or sorcery spell from your hand") is the zone it was cast from.
+fn cast_from_zone(f: Filter) -> Filter {
+    match f {
+        Filter::InZone(z) if !matches!(z, ZoneKind::Stack | ZoneKind::Battlefield) => {
+            Filter::CastFrom(z)
+        }
+        Filter::And(v) => Filter::And(v.into_iter().map(cast_from_zone).collect()),
+        Filter::Or(v) => Filter::Or(v.into_iter().map(cast_from_zone).collect()),
+        other => other,
+    }
+}
+
 /// "[adjectives] spell [with …] [that targets …] [from …] [during …]" → (filter on the
 /// spell, condition on the moment of casting).
 pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
@@ -881,7 +894,7 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
     if !mentions_spell(&f) {
         return None;
     }
-    parts.push(f);
+    parts.push(cast_from_zone(f));
     let mut cond = None;
     loop {
         let t = rest.trim_start();

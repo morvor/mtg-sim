@@ -292,6 +292,10 @@ impl Game {
         if !land && crate::designations::castable_prepared_copies(self, p).contains(&card) {
             return true;
         }
+        // CR 903.8: a player may cast a commander they own from the command zone.
+        if !land && crate::kw::partner::castable_commanders(self, p).contains(&card) {
+            return true;
+        }
         // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
         // to cast spells "with certain qualities" only by a player who may look at it
         // (and then only if the resulting spell has those qualities).
@@ -389,7 +393,11 @@ impl Game {
             }
         }
         // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
-        for c in crate::designations::castable_prepared_copies(self, p) {
+        // CR 903.8: a player may cast a commander they own from the command zone.
+        for c in crate::designations::castable_prepared_copies(self, p)
+            .into_iter()
+            .chain(crate::kw::partner::castable_commanders(self, p))
+        {
             if !out.contains(&c) {
                 out.push(c);
             }
@@ -1023,6 +1031,8 @@ impl Game {
         // CR 601.2b: the spell's own optional additional costs and choices between
         // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
         crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
+        // CR 601.2b: choices the way it's cast calls for (e.g. emerge's sacrifice).
+        crate::kw::announce(self, p, id, &opt.method, &mut extra)?;
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
         // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
         crate::kw::kicker::record_kicked(&mut cast_info.paid);
@@ -1184,9 +1194,10 @@ impl Game {
             }
         }
         if matches!(from, Zone::Command) && self.obj(id).is_commander {
+            let key = crate::kw::partner::commander_key(self, id);
             *self.players[p.idx()]
                 .commander_casts
-                .entry(chars.name.clone())
+                .entry(key)
                 .or_insert(0) += 1;
         }
         // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy
@@ -1233,6 +1244,11 @@ impl Game {
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
+        }
+        // CR 903.8: the commander tax (each commander separately, CR 702.124d).
+        let tax = crate::kw::partner::commander_tax(self, p, card);
+        if tax > 0 {
+            add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
         }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
         if let Some(m) = cost.mana.as_mut() {
@@ -2025,6 +2041,12 @@ impl Game {
                     .count()
                     >= n
             }
+            // Crew (CR 702.122a): see `kw/crew.rs`.
+            CostPart::TapTotalPower {
+                filter,
+                power,
+                keyword,
+            } => crate::kw::crew::total_power_payable(self, p, src, filter, power, *keyword, ctx),
             CostPart::PayEnergy(v) => {
                 self.player(p).counter(counters::ENERGY) as i64 >= self.eval_value(v, ctx)
             }
@@ -2369,6 +2391,16 @@ impl Game {
                     paid.objects.push(o);
                     self.tap(o);
                 }
+            }
+            // Crew (CR 702.122a): see `kw/crew.rs`.
+            CostPart::TapTotalPower {
+                filter,
+                power,
+                keyword,
+            } => {
+                let tapped =
+                    crate::kw::crew::pay_total_power(self, p, src, filter, power, *keyword, ctx)?;
+                paid.objects.extend(tapped);
             }
             CostPart::UntapTapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;

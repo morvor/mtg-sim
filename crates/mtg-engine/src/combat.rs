@@ -496,7 +496,7 @@ impl Game {
     pub fn min_blockers(&self, attacker: ObjectId) -> u32 {
         let mut n = 1;
         if self.obj(attacker).has_keyword(KeywordKind::Menace) {
-            n = 2; // CR 702.110b
+            n = 2; // CR 702.111b
         }
         for (s, c, r, _) in self.all_restrictions() {
             if let Restriction::MinBlockers { attacker: af, n: k } = &r {
@@ -1352,7 +1352,7 @@ fn block_restrictions_ok(
             }
         }
     }
-    // Menace / minimum blockers (CR 702.110b).
+    // Menace / minimum blockers (CR 702.111b).
     for (a, n) in &per_attacker {
         if *n < rules.min_blockers.get(a).copied().unwrap_or(1) {
             return false;

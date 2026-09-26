@@ -203,6 +203,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,
+        // CR 702.112b.
+        "renowned" => Filter::Custom(crate::kw::renown::RENOWNED.into()),
         // CR 700.16.
         "worthy" => crate::game_terms::worthy_filter(),
         // CR 701.27g.
@@ -543,6 +545,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // CR 700.10.
             (
                 Filter::Custom(crate::game_terms::ACTIVATED_THIS_TURN.into()),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("that crewed it this turn") {
+            // CR 702.122c.
+            (
+                Filter::Custom(crate::kw::crew::CREWED_IT_THIS_TURN.into()),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("crewed by ~ this turn") {
+            (
+                Filter::Custom(crate::kw::crew::CREWED_BY_IT_THIS_TURN.into()),
                 r,
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {

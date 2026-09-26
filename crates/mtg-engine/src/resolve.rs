@@ -302,6 +302,9 @@ impl Game {
                     self.link_to_creator(ctx, &res);
                 }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                // "... return it to the battlefield. If you do, ...": whether it moved
+                // (it may not, CR 400.7, 712.14a).
+                ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Tap { what } => {
