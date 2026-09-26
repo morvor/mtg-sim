@@ -489,6 +489,8 @@ pub struct SubtypeLists {
     pub creature_set: HashSet<String>,
     pub plane: HashSet<String>,
     pub battle: HashSet<String>,
+    /// Dungeon types (CR 205.3p).
+    pub dungeon: HashSet<String>,
     pub basic_land: [&'static str; 5],
 }
 
@@ -570,6 +572,7 @@ pub fn subtype_lists() -> &'static SubtypeLists {
             creature,
             plane: set(get("205.3n")),
             battle: set(get("205.3q")),
+            dungeon: set(get("205.3p")),
             basic_land: ["Plains", "Island", "Swamp", "Mountain", "Forest"],
         }
     })
@@ -602,6 +605,8 @@ pub fn subtype_kind(s: &str) -> Option<SubtypeKind> {
         Some(SubtypeKind::Battle)
     } else if l.plane.contains(s) {
         Some(SubtypeKind::Plane)
+    } else if l.dungeon.contains(s) {
+        Some(SubtypeKind::Dungeon)
     } else {
         None
     }

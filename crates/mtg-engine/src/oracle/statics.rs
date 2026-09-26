@@ -543,6 +543,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
                 rest.to_string(),
             ));
         }
+        // "the number of differently named lands you control" (CR 201.2b).
+        if let Some(r) = r.strip_prefix("differently named ") {
+            let (f, _, rest) = parse_object_phrase(r)?;
+            return Some((Value::DistinctNames(f), rest.to_string()));
+        }
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::Count(f), rest.to_string()));
     }

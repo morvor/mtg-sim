@@ -534,6 +534,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::BlockedBySource, r)
         } else if let Some((f, r)) = parse_chosen_suffix(t) {
             (f, r)
+        } else if let Some((f, r)) = parse_originally_printed_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -555,6 +557,13 @@ pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &s
         return Some((PlayerFilter::Opponent, "target opponent", r));
     }
     None
+}
+
+/// "with a name originally printed in the Arabian Nights expansion" (CR 206.3).
+fn parse_originally_printed_suffix(t: &str) -> Option<(Filter, &str)> {
+    let r = t.strip_prefix("with a name originally printed in the ")?;
+    let (set, rest) = r.split_once(" expansion")?;
+    Some((Filter::NameOriginallyPrintedIn(set.trim().into()), rest))
 }
 
 /// References to a choice made for the source (CR 607.2d): "of the chosen type",

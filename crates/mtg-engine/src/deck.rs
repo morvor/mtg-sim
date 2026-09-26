@@ -11,6 +11,38 @@ use std::sync::Arc;
 pub const ANY_NUMBER: &str = "deck:any number";
 /// `StaticEffect::Custom` name prefix of "A deck can have up to N cards named ~".
 pub const UP_TO: &str = "deck:up to ";
+/// `StaticEffect::Custom` name of "As you create your deck, circle two of the colors
+/// below" (Cryptic Spires, CR 207.5).
+pub const CIRCLE_TWO_COLORS: &str = "deck:circle two colors";
+
+/// Circles two colors on a card that says "As you create your deck, circle two of the
+/// colors below" (CR 207.5), as its owner creates their deck. The mana symbol of each
+/// circled color is part of the card's printed rules text from then on ("one mana of
+/// either of the circled colors" reads "{W} or {U}"), so copies of it have them too, and
+/// it affects the card's color identity (CR 903.4) — not its color. Returns `None` if the
+/// card has no such ability or the colors aren't two different colors.
+pub fn circle_colors(card: &CardDef, colors: [Color; 2]) -> Option<CardDef> {
+    let has_ability = card.front().chars.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s)
+            if matches!(&s.effect, StaticEffect::Custom(n) if n.as_str() == CIRCLE_TWO_COLORS))
+    });
+    if !has_ability || colors[0] == colors[1] {
+        return None;
+    }
+    let mut sc = mtg_data::cards().by_oracle_id(&card.oracle_id)?.clone();
+    let text = sc.oracle_text.clone()?;
+    let symbols = format!("{{{}}} or {{{}}}", colors[0].letter(), colors[1].letter());
+    let circled = text.replace("one mana of either of the circled colors", &symbols);
+    if circled == text {
+        return None;
+    }
+    sc.oracle_text = Some(circled);
+    let mut def = CardDef::from_scryfall(&sc);
+    for c in colors {
+        def.color_identity.insert(c);
+    }
+    Some(def)
+}
 
 /// A way a deck breaks the deck construction rules.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -123,6 +155,18 @@ fn is_basic_land(card: &CardDef) -> bool {
     c.supertypes.contains(Supertype::Basic) && c.card_types.contains(CardType::Land)
 }
 
+/// The name a card counts as for deck construction: cards with interchangeable names
+/// have the same name (CR 201.3b), whether the pair is given by `names` or by the card's
+/// own interchangeable names (CR 201.3). The alphabetically first of them stands for all.
+fn deck_name<'a>(c: &'a CardDef, names: &'a NameEquivalence) -> &'a str {
+    let own = &c.front().chars.interchangeable_names;
+    std::iter::once(c.name.as_str())
+        .chain(own.iter().map(|n| n.as_str()))
+        .map(|n| names.key(n))
+        .min()
+        .unwrap_or(c.name.as_str())
+}
+
 /// Copies of each card by deck-construction name (CR 201.3b).
 fn counts<'a>(
     cards: impl IntoIterator<Item = &'a Arc<CardDef>>,
@@ -130,7 +174,7 @@ fn counts<'a>(
 ) -> BTreeMap<&'a str, (usize, &'a Arc<CardDef>)> {
     let mut out: BTreeMap<&str, (usize, &Arc<CardDef>)> = BTreeMap::new();
     for c in cards {
-        out.entry(names.key(c.name.as_str())).or_insert((0, c)).0 += 1;
+        out.entry(deck_name(c, names)).or_insert((0, c)).0 += 1;
     }
     out
 }

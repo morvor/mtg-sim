@@ -1248,12 +1248,16 @@ pub fn apply_mod(
         Modification::SetController(_) => {}
         Modification::ChangeText { from, to } => crate::text_change::change_text(c, from, to),
         Modification::SetName(n) => {
+            // CR 612.8: the object loses its other names (CR 201.3a included).
             c.name = n.clone();
             c.all_creature_names = false;
+            c.interchangeable_names.clear();
         }
         Modification::AllCreatureNames => c.all_creature_names = true,
         Modification::NameSticker { word, position } => {
             c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
+            // A new name isn't interchangeable with the old one's partners (CR 201.3).
+            c.interchangeable_names.clear();
         }
         // Becomes `SetText` for each object as the effect is created.
         Modification::ExchangeText => {}
@@ -1536,7 +1540,8 @@ fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
         }
         Some(SubtypeKind::Battle) => types.contains(CardType::Battle),
         Some(SubtypeKind::Plane) => types.contains(CardType::Plane),
-        _ => true,
+        Some(SubtypeKind::Dungeon) => types.contains(CardType::Dungeon),
+        None => true,
     }
 }
 

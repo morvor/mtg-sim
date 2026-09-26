@@ -382,6 +382,10 @@ fn excluding(r: &Restriction, ps: &[PlayerId], objs: &[ObjectId]) -> Restriction
         R::CantSearch(f) => R::CantSearch(not_players(f, ps)),
         R::SorcerySpeedOnly(f) => R::SorcerySpeedOnly(not_players(f, ps)),
         R::CantPlayLands(f) => R::CantPlayLands(not_players(f, ps)),
+        R::CantPlayLandCards { who, what } => R::CantPlayLandCards {
+            who: not_players(who, ps),
+            what: what.clone(),
+        },
         R::MaxDrawsPerTurn(f, n) => R::MaxDrawsPerTurn(not_players(f, ps), *n),
         R::MaxSpellsPerTurn(f, n) => R::MaxSpellsPerTurn(not_players(f, ps), *n),
         other => other.clone(),
