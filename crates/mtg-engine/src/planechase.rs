@@ -219,6 +219,8 @@ pub fn planeswalk(g: &mut Game, p: PlayerId) {
     if planar_controller(g) != Some(p) {
         return;
     }
+    // CR 603.10g: "when you planeswalk away from" abilities look back in time.
+    crate::kwa::planeswalk::planeswalking_away(g, p, &face_up_planar_cards(g));
     for id in face_up_planar_cards(g) {
         to_bottom_face_down(g, id);
     }
