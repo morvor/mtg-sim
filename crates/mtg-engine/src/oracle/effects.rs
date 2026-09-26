@@ -31,6 +31,9 @@ pub struct Builder<'c> {
     /// the top card of your library. ~ deals damage equal to that card's mana value to
     /// that creature.").
     pub chosen_creature: Option<(u8, String)>,
+    /// The group ("all creatures you control") an earlier instruction affected, which
+    /// "they" and "those creatures" refer to (see `patterns::pronoun_groups`).
+    pub group: Option<super::patterns::pronoun_groups::GroupRef>,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -43,6 +46,7 @@ impl<'c> Builder<'c> {
             in_trigger: false,
             sentences: 0,
             chosen_creature: None,
+            group: None,
             ctx,
         }
     }
@@ -257,6 +261,8 @@ pub fn split_sentences(t: &str) -> Vec<String> {
 
 /// Parses effect text (one or more sentences).
 pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
+    use super::patterns::pronoun_groups as groups;
+    let outer_group = b.group.take();
     let mut effects = Vec::new();
     for s in split_sentences(t) {
         // Sentences that modify the previous one ("It can't be regenerated.").
@@ -266,10 +272,13 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 continue;
             }
         }
-        effects.push(parse_sentence(&s, b)?);
+        let e = parse_sentence(&s, b)?;
+        // "Untap all creatures you control. They gain haste until end of turn."
+        effects.extend(groups::note(&e, b));
+        effects.push(e);
         b.sentences += 1;
     }
-    Some(Effect::seq(effects))
+    Some(groups::finish(Effect::seq(effects), b, outer_group))
 }
 
 /// Parses one sentence.
@@ -353,20 +362,25 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
         if let Some((a, c)) = l.split_once(sep) {
             let saved_targets = b.targets.len();
             let saved_it = b.it.clone();
+            let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
+                // "untap all creatures and gain control of them": the group the first
+                // half affected.
+                let store = super::patterns::pronoun_groups::note(&ea, b);
                 // The second half may modify the first ("exile it, then return it").
                 if matches!(sep, ", then " | " and then ")
                     && crate::oracle_ext::apply_followup_ext(c, &mut ea, b)
                 {
-                    return Some(ea);
+                    return Some(Effect::seq(store.into_iter().chain([ea]).collect()));
                 }
                 // Second half may omit the subject: "draw a card and lose 1 life".
                 if let Some(ec) = parse_simple(c, b).or_else(|| parse_clause(c, b)) {
-                    return Some(Effect::seq(vec![ea, ec]));
+                    return Some(Effect::seq(store.into_iter().chain([ea, ec]).collect()));
                 }
             }
             b.targets.truncate(saved_targets);
             b.it = saved_it;
+            b.group = saved_group;
         }
     }
     None
@@ -401,19 +415,23 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "that creature",
         "that permanent",
         "that card",
-        "them",
-        "those creatures",
         "that spell",
         "the creature",
         "that token",
-        "those cards",
         "this token",
     ] {
         if let Some(rest) = s.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
-                return Some((b.it.clone(), rest.to_string()));
+                // Not a group an earlier instruction affected: that's "they".
+                let it = super::patterns::pronoun_groups::singular_it(b);
+                return Some((it, rest.to_string()));
             }
         }
+    }
+    // Plural pronouns: the targets, group, or cards an earlier instruction was about
+    // ("Untap all creatures you control. They gain hexproof until end of turn.").
+    if let Some(r) = super::patterns::pronoun_groups::plural_object_ref(s, b) {
+        return r;
     }
     if let Some((spec, rest)) = parse_any_target(s) {
         let text = s[..s.len() - rest.len()].trim().to_string();
@@ -642,6 +660,10 @@ pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
 fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     let (src, rest): (Sel, String) = if let Some(r) = l.strip_prefix("~ deals ") {
         (Sel::This, r.to_string())
+    } else if super::patterns::pronoun_groups::plural_pronoun(l).is_some() {
+        // "They each deal damage equal to their power to ...": several sources, each
+        // dealing its own damage, which a single damage event can't express.
+        return None;
     } else if let Some((sel, r)) = object_ref(l, b) {
         (sel, r.trim_start().strip_prefix("deals ")?.to_string())
     } else {
@@ -752,6 +774,10 @@ fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 rest.to_string(),
             ));
         }
+    }
+    // "Whenever an opponent draws a card, ~ deals 1 damage to them.": a player.
+    if let Some(who) = super::patterns::pronoun_groups::them_player(s, b) {
+        return Some((Sel::Players(who), s["them".len()..].to_string()));
     }
     for (p, sel) in fixed {
         if let Some(rest) = s.strip_prefix(p) {
@@ -1157,10 +1183,8 @@ fn p_counters(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     // "Put a +1/+1 counter on each creature you control. Those creatures gain vigilance
-    // until end of turn.": "those creatures" are the group that got the counters.
-    if matches!(what, Sel::All(_)) {
-        b.it = what.clone();
-    }
+    // until end of turn.": "those creatures" are the group that got the counters (see
+    // `patterns::pronoun_groups`).
     Some(Effect::AddCounters { what, kind, n })
 }
 

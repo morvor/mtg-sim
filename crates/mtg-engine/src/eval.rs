@@ -397,6 +397,21 @@ impl Game {
                     .as_ref()
                     .is_some_and(|cb| cb.blockers_of(id).contains(&s))
             }),
+            Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
+                self.eval_sel_objects(sel, ctx)
+                    .into_iter()
+                    .any(|a| cb.blockers_of(a).contains(&id))
+            }),
+            Filter::TargetOf(sel) => self.eval_sel_objects(sel, ctx).into_iter().any(|s| {
+                self.obj(s).stack.as_ref().is_some_and(|si| {
+                    si.chosen.iter().any(|cm| {
+                        cm.targets
+                            .iter()
+                            .flatten()
+                            .any(|t| *t == Entity::Object(id))
+                    })
+                })
+            }),
             Filter::Power(cmp, v) => c
                 .power
                 .is_some_and(|p| cmp.eval(p as i64, self.eval_value(v, ctx))),

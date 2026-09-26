@@ -968,6 +968,13 @@ pub enum Filter {
     /// "creature blocking it", "creature blocked by it" relative to the source.
     BlockingSource,
     BlockedBySource,
+    /// "creature blocking it" where "it" isn't the source: blocking one of the selected
+    /// creatures.
+    BlockingAnyOf(Box<Sel>),
+    /// A target of one of the selected spells or abilities ("those creatures" after
+    /// "whenever you cast a spell that targets one or more creatures"), as last known
+    /// if the spell has left the stack.
+    TargetOf(Box<Sel>),
     /// "attacking alone" / "blocking alone" (CR 506.5).
     AttackingAlone,
     BlockingAlone,
