@@ -596,6 +596,59 @@ pub fn resolve_add_mana_with_rider(
     }
 }
 
+/// Player modification: "[Players] don't lose unspent mana as steps and phases end"
+/// (all types), or with a type suffix ("... unspent red mana ...": `"keep unspent mana R"`).
+pub const KEEP_UNSPENT_MANA: &str = "keep unspent mana";
+/// Player modification: "If you would lose unspent mana, that mana becomes colorless
+/// instead." with the new type as suffix (`"unspent mana becomes C"`).
+pub const UNSPENT_MANA_BECOMES: &str = "unspent mana becomes";
+
+fn custom_mods(g: &Game, p: PlayerId) -> Vec<smol_str::SmolStr> {
+    g.player(p)
+        .mods
+        .iter()
+        .filter_map(|m| match m {
+            PlayerModification::Custom(n) => Some(n.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Empties `p`'s mana pool as a step or phase ends (CR 500.5): mana kept by an effect
+/// ("don't lose unspent red mana", "until end of turn, you don't lose this mana") stays;
+/// if a replacement effect applies ("that mana becomes colorless instead", CR 614.1a),
+/// the mana that would be lost stays as that type instead.
+pub fn empty_pool(g: &mut Game, p: PlayerId) {
+    let mods = custom_mods(g, p);
+    let keep_all = mods.iter().any(|m| m == KEEP_UNSPENT_MANA);
+    let kept: Vec<ManaType> = ManaType::ALL
+        .into_iter()
+        .filter(|t| {
+            keep_all
+                || mods
+                    .iter()
+                    .any(|m| *m == format!("{KEEP_UNSPENT_MANA} {t:?}"))
+        })
+        .collect();
+    let becomes: Vec<ManaType> = mods
+        .iter()
+        .filter_map(|m| m.strip_prefix(UNSPENT_MANA_BECOMES))
+        .filter_map(|t| ManaType::from_letter(t.trim().chars().next()?))
+        .collect();
+    let pool = &mut g.players[p.idx()].mana_pool;
+    if let Some(t) = becomes.first() {
+        // CR 616.1: with several such effects the player would choose one; the first
+        // applies (each makes the mana stay).
+        for m in pool.mana.iter_mut() {
+            if !m.persistent && !kept.contains(&m.ty) {
+                m.ty = *t;
+            }
+        }
+        return;
+    }
+    pool.mana.retain(|m| m.persistent || kept.contains(&m.ty));
+}
+
 /// Resolves `Effect::PersistentMana` (CR 106.4, 514.2): the mana the inner effect adds
 /// doesn't empty from its pool as steps and phases end until the turn's cleanup step.
 pub fn resolve_persistent_mana(g: &mut Game, inner: &Effect, ctx: &mut Ctx) {

@@ -847,8 +847,13 @@ impl Game {
     }
 
     fn empty_mana_pools(&mut self) {
-        for p in self.players.iter_mut() {
-            p.mana_pool.empty();
+        // CR 500.5, 703.4q; effects that keep unspent mana or change what's lost
+        // (`mana_abilities::empty_pool`).
+        if self.dirty {
+            self.recompute();
+        }
+        for p in self.player_ids() {
+            crate::mana_abilities::empty_pool(self, p);
         }
     }
 
