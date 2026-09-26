@@ -56,6 +56,11 @@ fn player_verb(l: &str, verb: &str, b: &mut Builder) -> Option<(PlayerRef, Strin
         }
     }
     let (who, rest) = player_ref(l, b)?;
+    // "that player" with no player mentioned before it ("The owner of target creature
+    // shuffles it into their library. Then that player discovers X") isn't "you".
+    if l.starts_with("that player") && matches!(who, PlayerRef::You) {
+        return None;
+    }
     let rest = rest.trim_start();
     let after = rest
         .strip_prefix(&format!("{verb}s"))
@@ -418,16 +423,17 @@ fn manifest_cloak(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         keyword_action(verb, who, what, Value::c(1))
     };
-    b.it = Sel::Var(vars::IT);
+    b.it = Sel::Var(kvars::MANIFESTED);
     Some(e)
 }
 
-/// "attach ~ to it" / "attach ~ to that creature" after an instruction that put a new
-/// permanent onto the battlefield ("manifest dread, then attach this Equipment to that
-/// creature").
+/// "attach ~ to it" / "attach ~ to that creature" after an instruction that manifested or
+/// cloaked a card ("manifest dread, then attach this Equipment to that creature").
 fn attach_to_new_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("attach ~ to ")?;
-    if !matches!(r, "it" | "that creature" | "that permanent") || !matches!(b.it, Sel::Var(_)) {
+    if !matches!(r, "it" | "that creature" | "that permanent")
+        || !matches!(b.it, Sel::Var(v) if v == kvars::MANIFESTED)
+    {
         return None;
     }
     Some(Effect::Attach {

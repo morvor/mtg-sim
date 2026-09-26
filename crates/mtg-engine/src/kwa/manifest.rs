@@ -170,7 +170,9 @@ impl KeywordActionRules for Manifest {
             }
         }
         ctx.prev_happened = !out.is_empty();
-        ctx.set_var(vars::IT, out.into_iter().map(Entity::Object).collect());
+        let out: Vec<Entity> = out.into_iter().map(Entity::Object).collect();
+        ctx.set_var(kvars::MANIFESTED, out.clone());
+        ctx.set_var(vars::IT, out);
     }
 }
 
