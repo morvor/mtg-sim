@@ -1,6 +1,7 @@
 //! Amounts of mana (CR 106.1, 107.3): "Add X mana of any one color, where X is ~'s
 //! power", "Add ten mana of any one color", "Add X mana in any combination of colors",
-//! "Add three mana in any combination of {R} and/or {G}", "Add X {G}"; and mana that
+//! "Add three mana in any combination of {R} and/or {G}", "Add X {G}", "Whenever ~ is
+//! dealt damage, add that much {R}"; and mana that
 //! stays in the pool: "Until end of turn, you don't lose this mana as steps and phases
 //! end." (CR 106.4).
 //!
@@ -47,6 +48,10 @@ fn amount(s: &str) -> Option<(Value, &str)> {
     if s.starts_with("a ") || s.starts_with("an ") {
         return None;
     }
+    // "that much": the amount of the triggering event (see `add_amount`).
+    if let Some(r) = s.strip_prefix("that much ") {
+        return Some((Value::EventAmount, r));
+    }
     parse_number(s)
 }
 
@@ -88,8 +93,15 @@ fn production(r: &str) -> Option<ManaProduction> {
 }
 
 /// "add [amount] mana of any one color / in any combination of ...", "add x {g}".
-fn add_amount(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn add_amount(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("add ")?;
+    // "Whenever ~ is dealt damage, add that much {R}": "that much" is the triggering
+    // event's amount (the damage dealt, the number of attackers) only in the first
+    // sentence of a triggered ability; later it may mean something else ("discard any
+    // number of cards. If you do, draw that many cards and add that much {R}").
+    if r.starts_with("that much ") && (!b.in_trigger || b.sentences != 0) {
+        return None;
+    }
     Some(Effect::AddMana {
         who: PlayerRef::You,
         mana: production(r)?,
