@@ -1834,6 +1834,13 @@ pub enum Restriction {
     DamageByToughness(Filter),
     /// "attacks each combat if able".
     MustAttack(Filter),
+    /// "[attackers] attack [defender] (this turn / each combat) if able": a requirement
+    /// that each such creature attacks that player (CR 508.1d), e.g. encore's tokens
+    /// (CR 702.141a).
+    MustAttackPlayer {
+        attackers: Filter,
+        defender: PlayerFilter,
+    },
     /// "blocks each combat if able".
     MustBlock(Filter),
     /// "must be blocked if able" / lure.

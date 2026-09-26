@@ -72,8 +72,12 @@ impl KeywordRules for Blitz {
                 step: TriggerStep::End,
                 whose: PlayerRel::Any,
             },
+            // Only its controller can sacrifice it (CR 701.21a).
             body: Body::effect(Effect::SacrificeObjects {
-                what: Sel::Var(vars::IT),
+                what: Sel::All(Filter::And(vec![
+                    Filter::In(Box::new(Sel::Var(vars::IT))),
+                    Filter::ControlledBy(PlayerRel::You),
+                ])),
             }),
         });
         sac.zone = FunctionZone::Stack;

@@ -642,12 +642,16 @@ pub enum AttackRequirement {
     Attacks(ObjectId),
     /// "[creature] attacks a player other than [players] if able" (goad, CR 701.15b).
     AttacksPlayerOtherThan(ObjectId, Vec<PlayerId>),
+    /// "[creature] attacks [player] if able" (e.g. encore's tokens, CR 702.141a).
+    AttacksPlayer(ObjectId, PlayerId),
 }
 
 impl AttackRequirement {
     pub fn creature(&self) -> ObjectId {
         match self {
-            AttackRequirement::Attacks(c) | AttackRequirement::AttacksPlayerOtherThan(c, _) => *c,
+            AttackRequirement::Attacks(c)
+            | AttackRequirement::AttacksPlayerOtherThan(c, _)
+            | AttackRequirement::AttacksPlayer(c, _) => *c,
         }
     }
     fn obeyed(&self, decl: &[(ObjectId, Entity)]) -> bool {
@@ -656,6 +660,9 @@ impl AttackRequirement {
             AttackRequirement::AttacksPlayerOtherThan(c, ps) => decl
                 .iter()
                 .any(|(a, t)| a == c && matches!(t, Entity::Player(p) if !ps.contains(p))),
+            AttackRequirement::AttacksPlayer(c, p) => {
+                decl.iter().any(|(a, t)| a == c && *t == Entity::Player(*p))
+            }
         }
     }
 }
@@ -706,6 +713,23 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
         });
         for _ in 0..n {
             out.push(AttackRequirement::Attacks(id));
+        }
+        // "[It] attacks [that player] this turn if able".
+        for (s, c, r, locked) in g.all_restrictions() {
+            if let Restriction::MustAttackPlayer {
+                attackers,
+                defender,
+            } = &r
+            {
+                let ctx = Ctx::new(s, c);
+                if g.restriction_applies(id, attackers, &ctx, &locked) {
+                    for p in g.players_in_game() {
+                        if g.player_filter_matches(defender, p, &ctx) {
+                            out.push(AttackRequirement::AttacksPlayer(id, p));
+                        }
+                    }
+                }
+            }
         }
         // CR 701.15b: a goaded creature attacks each combat if able and attacks a player
         // other than the goading player if able.
