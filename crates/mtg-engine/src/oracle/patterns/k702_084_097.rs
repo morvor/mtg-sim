@@ -7,12 +7,19 @@
 //! * "Auras attached to permanents you control have umbra armor." (CR 702.89a);
 //! * "[Quality] spells you cast [from your hand] have cascade." (CR 702.85a) and "As you
 //!   cascade, you may put a land card from among the exiled cards onto the battlefield
-//!   tapped." (CR 702.85b).
+//!   tapped." (CR 702.85b);
+//! * "Instant and sorcery spells you control have rebound." (CR 702.88a);
+//! * abilities that refer to paired creatures (CR 702.95b): "As long as ~ is paired with
+//!   another creature, each of those creatures ...", "~ can't attack or block unless it's
+//!   paired with a creature with soulbond", "If it's paired with a creature, that creature
+//!   also gets +N/+N until end of turn", "Whenever ~ or a creature it's paired with is
+//!   dealt damage".
 
-use super::StaticPattern;
+use super::{FollowupPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::phrases::{end, parse_object_phrase};
+use crate::oracle::effects::Builder;
 use crate::oracle::CompileContext;
 use crate::types::CardType;
 
@@ -244,3 +251,86 @@ fn while_paired(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability
 }
 
 inventory::submit! { StaticPattern { name: "as long as ~ is paired with another creature", priority: 100, parse: while_paired } }
+
+/// "~ can't attack or block unless it's paired with a creature with soulbond." (Flowering
+/// Lumberknot).
+fn cant_attack_unless_paired(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if l != "~ can't attack or block unless it's paired with a creature with soulbond" {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantAttackOrBlock(
+        Filter::Source,
+    )));
+    s.condition = Some(Condition::Not(Box::new(Condition::Custom(
+        crate::kw::soulbond::PAIRED_WITH_SOULBOND.into(),
+    ))));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "~ can't attack or block unless it's paired with a creature with soulbond", priority: 100, parse: cant_attack_unless_paired } }
+
+/// "+N/+N" → (N, N).
+fn pt_mod(s: &str) -> Option<(i32, i32)> {
+    let (p, t) = s.split_once('/')?;
+    let n = |x: &str| -> Option<i32> {
+        match x.strip_prefix('+') {
+            Some(v) => v.parse().ok(),
+            None => x.parse().ok(),
+        }
+    };
+    Some((n(p)?, n(t)?))
+}
+
+/// "If it's paired with a creature, that creature also gets +2/+2 until end of turn."
+/// (Joint Assault), after an effect on a target creature: the creature the target is
+/// paired with as the spell resolves.
+fn that_paired_creature_also_gets(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(pt) = l
+        .strip_prefix("if it's paired with a creature, that creature also gets ")
+        .and_then(|r| r.strip_suffix(" until end of turn"))
+    else {
+        return false;
+    };
+    let Some((p, t)) = pt_mod(pt) else {
+        return false;
+    };
+    let about_target = matches!(prev, Effect::Modify { what: Sel::Target(0), .. });
+    if !about_target {
+        return false;
+    }
+    let extra = Effect::Modify {
+        what: Sel::All(Filter::Custom(
+            crate::kw::soulbond::PAIRED_WITH_TARGET.into(),
+        )),
+        mods: vec![Modification::ModifyPT(Value::c(p), Value::c(t))],
+        duration: Duration::EndOfTurn,
+    };
+    *prev = Effect::Seq(vec![std::mem::take(prev), extra]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if it's paired with a creature, that creature also gets", priority: 100, apply: that_paired_creature_also_gets } }
+
+/// "~ or a creature it's paired with is dealt damage" (Donna Noble): once for each of them
+/// dealt damage at the same time.
+fn this_or_paired_dealt_damage(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if r != "~ or a creature it's paired with is dealt damage" {
+        return None;
+    }
+    Some((
+        TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::IsDealtDamage {
+                filter: Filter::Or(vec![
+                    Filter::Source,
+                    Filter::Custom(crate::kw::soulbond::PAIRED_WITH_THIS.into()),
+                ]),
+                combat_only: false,
+            }),
+            per: BatchPer::Object,
+        },
+        Sel::TriggerObject,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "~ or a creature it's paired with is dealt damage", priority: 100, parse: this_or_paired_dealt_damage } }

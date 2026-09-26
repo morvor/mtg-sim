@@ -320,3 +320,166 @@ fn a_flickered_paired_creature_can_be_paired_again() {
     t.resolve();
     assert!(paired(&t, navigator, back));
 }
+
+fn can_attack(t: &mut TestGame, id: ObjectId) -> bool {
+    t.g.recompute();
+    t.g.can_attack(id)
+}
+
+#[test]
+fn an_ability_can_require_being_paired_with_a_soulbond_creature() {
+    cr!("702.95b");
+    ruling!(
+        "Flowering Lumberknot",
+        "If the creature Flowering Lumberknot is paired with loses soulbond, Flowering Lumberknot will remain paired but won't be able to attack or block."
+    );
+    assert_supported("Flowering Lumberknot");
+    let mut t = TestGame::new(2);
+    let knot = t.battlefield(P0, "Flowering Lumberknot");
+    assert!(!can_attack(&mut t, knot));
+    let wolfir = t.enter(P0, "Wolfir Silverheart");
+    t.settle();
+    t.answer_choose(P0, &[Entity::Object(knot)]);
+    t.resolve();
+    assert!(paired(&t, wolfir, knot));
+    assert!(can_attack(&mut t, knot));
+    // Wolfir Silverheart loses all abilities (soulbond included): still paired, but the
+    // Lumberknot can't attack.
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(wolfir)],
+    );
+    assert!(paired(&t, wolfir, knot));
+    assert!(!can_attack(&mut t, knot));
+}
+
+#[test]
+fn becoming_unpaired_after_attacking_doesnt_remove_it_from_combat() {
+    cr!("702.95b", "506.4a");
+    ruling!(
+        "Flowering Lumberknot",
+        "Whether Flowering Lumberknot is paired is checked only when attackers or blockers are declared. After that point, Flowering Lumberknot becoming unpaired won't cause it to stop attacking or blocking."
+    );
+    let mut t = TestGame::new(2);
+    let knot = t.battlefield(P0, "Flowering Lumberknot");
+    let wolfir = t.enter(P0, "Wolfir Silverheart");
+    t.settle();
+    t.answer_choose(P0, &[Entity::Object(knot)]);
+    t.resolve();
+    crate::common_k702_011_017::attack_with(&mut t, &[(knot, Entity::Player(P1))]);
+    assert!(t.g.is_attacking(knot));
+    destroy(&mut t, wolfir);
+    t.settle();
+    assert!(unpaired(&t, knot));
+    assert!(t.g.is_attacking(knot));
+}
+
+#[test]
+fn an_effect_can_refer_to_the_creature_a_target_is_paired_with() {
+    cr!("702.95b");
+    ruling!(
+        "Joint Assault",
+        "Joint Assault checks whether the target creature is paired only when it resolves. If it becomes unpaired later in the turn, neither creature will lose the bonus."
+    );
+    assert_supported("Joint Assault");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let forcemage = t.enter(P0, "Trusted Forcemage");
+    t.settle();
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.resolve();
+    // Trusted Forcemage: "each of those creatures gets +1/+1".
+    assert_eq!(t.pt(bears), (3, 3));
+    t.lands(P0, "Forest", 1);
+    let assault = t.hand(P0, "Joint Assault");
+    t.cast(P0, assault).target(bears).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.pt(forcemage), (5, 5));
+    assert_eq!(t.pt(elves), (1, 1));
+    // Unpaired later: the +2/+2 bonuses stay.
+    destroy(&mut t, bears);
+    t.settle();
+    assert_eq!(t.pt(forcemage), (4, 4));
+    // An unpaired target gets the bonus alone.
+    t.lands(P0, "Forest", 1);
+    let assault = t.hand(P0, "Joint Assault");
+    t.cast(P0, assault).target(elves).go();
+    t.resolve();
+    assert_eq!(t.pt(elves), (3, 3));
+    assert_eq!(t.pt(forcemage), (4, 4));
+}
+
+#[test]
+fn an_ability_can_trigger_on_the_creature_it_is_paired_with() {
+    cr!("702.95b");
+    ruling!(
+        "Donna Noble",
+        "If Donna is paired with another creature and they are both dealt damage at the same time, the second ability triggers twice."
+    );
+    // (Its "Doctor's companion" deck-building ability is another matter.)
+    assert!(mtg_engine::card::card("Donna Noble")
+        .front()
+        .chars
+        .abilities
+        .iter()
+        .any(|a| a.text.contains("paired with is dealt damage")
+            && matches!(a.kind, AbilityKind::Triggered(_))));
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let donna = t.enter(P0, "Donna Noble");
+    t.settle();
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.resolve();
+    assert!(paired(&t, donna, bears));
+    // 1 damage to each of them at the same time.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![Entity::Object(bears), Entity::Object(donna)]];
+    let pinger = t.battlefield(P1, "Llanowar Elves");
+    ctx.source = Some(pinger);
+    t.g.exec(
+        &Effect::DealDamage {
+            source: Sel::This,
+            amount: Value::c(1),
+            to: Sel::Target(0),
+        },
+        &mut ctx,
+    );
+    t.g.flush_events();
+    t.settle();
+    let donna_triggers = t
+        .g
+        .stack
+        .iter()
+        .filter(|s| {
+            matches!(&t.g.obj(**s).stack.as_ref().unwrap().kind,
+                mtg_engine::object::StackKind::Triggered { source, .. } if *source == donna)
+        })
+        .count();
+    assert_eq!(donna_triggers, 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // An unpaired creature's damage doesn't trigger it.
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let mut ctx = mtg_engine::eval::Ctx::new(Some(pinger), P1);
+    ctx.targets = vec![vec![Entity::Object(elves)]];
+    t.g.exec(
+        &Effect::DealDamage {
+            source: Sel::This,
+            amount: Value::c(1),
+            to: Sel::Target(0),
+        },
+        &mut ctx,
+    );
+    t.g.flush_events();
+    t.settle();
+    assert!(t.g.stack.is_empty());
+}

@@ -43,6 +43,13 @@ pub const IS_PAIRED: &str = "soulbond:this is paired with another creature";
 /// creature it's paired with, while it's paired.
 pub const THE_PAIR: &str = "soulbond:this and the creature it's paired with";
 
+/// `Condition::Custom`: "it's paired with a creature with soulbond" (the source).
+pub const PAIRED_WITH_SOULBOND: &str = "soulbond:this is paired with a creature with soulbond";
+/// `Filter::Custom`: "a creature it's paired with" (the source).
+pub const PAIRED_WITH_THIS: &str = "soulbond:the creature this is paired with";
+/// `Filter::Custom`: "the creature [the first target] is paired with".
+pub const PAIRED_WITH_TARGET: &str = "soulbond:the creature the target is paired with";
+
 /// The creature `id` is paired with, if it's paired (CR 702.95b).
 pub fn partner(g: &Game, id: ObjectId) -> Option<ObjectId> {
     let o = g.obj(id);
@@ -160,21 +167,30 @@ impl KeywordRules for Soulbond {
                 })
             }
             IS_PAIRED => Some(this.is_some_and(|s| partner(g, s).is_some())),
+            PAIRED_WITH_SOULBOND => Some(this.and_then(|s| partner(g, s)).is_some_and(|p| {
+                g.obj(p).has_keyword(KeywordKind::Soulbond)
+            })),
             _ => None,
         }
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-        if name != THE_PAIR {
-            return None;
+        let partner_of = |x: Option<ObjectId>| x.and_then(|x| partner(g, x));
+        match name {
+            THE_PAIR => Some(match ctx.source.zip(partner_of(ctx.source)) {
+                Some((s, p)) => id == s || id == p,
+                None => false,
+            }),
+            PAIRED_WITH_THIS => Some(partner_of(ctx.source) == Some(id)),
+            PAIRED_WITH_TARGET => {
+                let target = ctx
+                    .targets
+                    .first()
+                    .and_then(|v| v.iter().find_map(|e| e.object()));
+                Some(partner_of(target) == Some(id))
+            }
+            _ => None,
         }
-        let Some(s) = ctx.source else {
-            return Some(false);
-        };
-        Some(match partner(g, s) {
-            Some(p) => id == s || id == p,
-            None => false,
-        })
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
