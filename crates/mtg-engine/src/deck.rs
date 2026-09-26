@@ -29,18 +29,23 @@ pub fn circle_colors(card: &CardDef, colors: [Color; 2]) -> Option<CardDef> {
     if !has_ability || colors[0] == colors[1] {
         return None;
     }
-    let mut sc = mtg_data::cards().by_oracle_id(&card.oracle_id)?.clone();
-    let text = sc.oracle_text.clone()?;
+    // Colors are circled once: the card's text must still refer to "the circled colors".
+    let text = card.front().chars.rules_text.to_string();
     let symbols = format!("{{{}}} or {{{}}}", colors[0].letter(), colors[1].letter());
     let circled = text.replace("one mana of either of the circled colors", &symbols);
     if circled == text {
         return None;
     }
+    let mut sc = mtg_data::cards().by_oracle_id(&card.oracle_id)?.clone();
     sc.oracle_text = Some(circled);
     let mut def = CardDef::from_scryfall(&sc);
     for c in colors {
         def.color_identity.insert(c);
     }
+    def.produced_mana = colors
+        .iter()
+        .map(|c| crate::mana::ManaType::from_color(*c))
+        .collect();
     Some(def)
 }
 
