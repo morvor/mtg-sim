@@ -62,7 +62,10 @@ impl KeywordRules for Mutate {
     /// CR 702.140a: an alternative cost, from wherever the card could be cast.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         let o = g.obj(card);
-        if o.zone != Zone::Hand(p) && !g.permitted_cards(p).contains(&card) {
+        if o.zone != Zone::Hand(p)
+            && !g.permitted_cards(p).contains(&card)
+            && !super::cast_using_from_graveyard::allows(g, p, card, KeywordKind::Mutate)
+        {
             return vec![];
         }
         let Some(cost) = kw.cost.clone() else {

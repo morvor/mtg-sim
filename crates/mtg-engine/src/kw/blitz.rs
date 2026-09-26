@@ -118,9 +118,12 @@ impl KeywordRules for Blitz {
         };
         let mut opt = CastOption::normal(FaceState::Front);
         opt.method = CastMethod::Keyword(KeywordKind::Blitz);
-        // Only from a zone the card could be cast from (its owner's hand, or a zone an
-        // effect lets them cast it from).
-        if o.zone != Zone::Hand(p) {
+        // Only from a zone the card could be cast from (its owner's hand, a zone an effect
+        // lets them cast it from, or its owner's graveyard if it says it may be cast from
+        // there using its blitz ability).
+        if o.zone != Zone::Hand(p)
+            && !super::cast_using_from_graveyard::allows(g, p, card, KeywordKind::Blitz)
+        {
             let chars = g.option_characteristics(card, &opt);
             if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
             {

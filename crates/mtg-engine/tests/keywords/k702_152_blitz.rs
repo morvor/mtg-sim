@@ -207,3 +207,41 @@ fn only_one_of_several_blitz_instances_is_used_and_only_it_applies() {
     assert_eq!(t.zone(c), Zone::Graveyard(P0));
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn a_card_may_say_it_can_be_cast_from_the_graveyard_using_its_blitz_ability() {
+    cr!("702.152a");
+    assert_supported("Tenacious Underdog");
+    let mut t = TestGame::new(2);
+    // Tenacious Underdog: Blitz—{2}{B}{B}, Pay 2 life. "You may cast this card from your
+    // graveyard using its blitz ability."
+    let c = t.graveyard(P0, "Tenacious Underdog");
+    add_mana(&mut t, P0, ManaType::B, 4);
+    // Only for its blitz cost, with the normal timing.
+    assert!(!castable(&mut t, P0, c, CastMethod::Normal));
+    assert!(castable(&mut t, P0, c, BLITZ));
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!castable(&mut t, P0, c, BLITZ));
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, c).method(BLITZ).go();
+    assert_eq!(t.life(P0), 18);
+    t.resolve_all();
+    assert!(t.on_battlefield(c));
+    assert!(has_kw(&t, c, KeywordKind::Haste));
+    // Sacrificed at the end step, it draws a card and can be cast again from the
+    // graveyard.
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(t.in_graveyard(P0, "Tenacious Underdog"));
+    // Other cards in the graveyard can't be cast this way.
+    let decoy = t.graveyard(P0, "Riveteers Decoy");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::G, 4);
+    assert!(!castable(&mut t, P0, decoy, BLITZ));
+    let underdog = t.g.current(c);
+    add_mana(&mut t, P0, ManaType::B, 4);
+    assert!(castable(&mut t, P0, underdog, BLITZ));
+}

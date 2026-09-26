@@ -90,6 +90,7 @@ pub fn declare_attackers(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
             || g.turn.number != turn
     });
     assert!(ok && t.g.turn.number == turn, "attackers not declared");
+    t.settle();
 }
 
 /// Advances the current turn to `step` (the active player has priority).

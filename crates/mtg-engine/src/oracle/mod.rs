@@ -352,6 +352,8 @@ pub fn strip_ability_word(text: &str) -> &str {
             && head != "Companion"
             && head != "Forecast"
             && head != "Max speed"
+            // Nor is "Boast — [activated ability]" (CR 702.142a).
+            && head != "Boast"
             // Nor are a Case's "To solve — [Condition]" and "Solved — [Ability]"
             // (CR 719.3).
             && head != "To solve"
