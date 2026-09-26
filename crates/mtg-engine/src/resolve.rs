@@ -612,15 +612,22 @@ impl Game {
                 self.recompute();
             }
             Effect::ExchangeControl { a, b } => {
-                let a = self
+                // CR 701.12a: exactly two permanents, or no part of the exchange occurs
+                // ("two target creatures" select both from one target slot).
+                let mut both: Vec<ObjectId> = Vec::new();
+                for o in self
                     .resolve_objects(a, ctx)
                     .into_iter()
-                    .find(|o| self.is_live(*o));
-                let b = self
-                    .resolve_objects(b, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o));
-                if let (Some(a), Some(b)) = (a, b) {
+                    .chain(self.resolve_objects(b, ctx))
+                {
+                    if !both.contains(&o) {
+                        both.push(o);
+                    }
+                }
+                let on_battlefield =
+                    |g: &Self, o: &ObjectId| g.is_live(*o) && g.obj(*o).zone == Zone::Battlefield;
+                if both.len() == 2 && both.iter().all(|o| on_battlefield(self, o)) {
+                    let (a, b) = (both[0], both[1]);
                     let (ca, cb) = (self.obj(a).controller, self.obj(b).controller);
                     if ca == cb {
                         return;
@@ -1620,6 +1627,7 @@ impl Game {
             }
             Effect::RollDice(spec) => crate::dice::roll(self, spec, ctx),
             Effect::Piles(action) => crate::piles::perform(self, action, ctx),
+            Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }

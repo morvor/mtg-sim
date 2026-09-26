@@ -48,6 +48,7 @@ pub mod dungeons;
 pub mod eval;
 pub mod events;
 pub mod excess_damage;
+pub mod exchange;
 pub mod facedown;
 pub mod game;
 pub mod game_end;

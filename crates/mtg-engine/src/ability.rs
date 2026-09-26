@@ -3082,6 +3082,8 @@ pub enum Effect {
     FlipCoins(Box<crate::dice::CoinFlip>),
     /// Separating objects into two piles, or choosing one of them (CR 700.3).
     Piles(Box<crate::piles::PileAction>),
+    /// Exchanging numerical values or the contents of zones (CR 701.12d, 701.12g).
+    Exchange(Box<crate::exchange::ExchangeSpec>),
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
 }
