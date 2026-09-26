@@ -91,7 +91,13 @@ fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 /// counter on them for each ...": ETB replacement effects on other permanents
 /// (CR 614.1d, 122.6).
 fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if !ctx.is_permanent() {
+    // Also a face-up conspiracy's (Muzzio's Preparations, CR 315.5).
+    if !ctx.is_permanent()
+        && !ctx
+            .type_line
+            .card_types
+            .contains(crate::types::CardType::Conspiracy)
+    {
         return None;
     }
     let l = end(l);

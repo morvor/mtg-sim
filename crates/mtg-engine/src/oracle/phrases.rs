@@ -114,6 +114,13 @@ pub fn subtype_word(w: &str) -> Option<Subtype> {
     if subtype_kind(&cap).is_some() {
         return Some(SmolStr::new(cap));
     }
+    // Hyphenated subtypes: "Assembly-Worker".
+    if sg.contains('-') {
+        let cap = sg.split('-').map(capitalize).collect::<Vec<_>>().join("-");
+        if subtype_kind(&cap).is_some() {
+            return Some(SmolStr::new(cap));
+        }
+    }
     // Plurals the general rule gets wrong: "Horses", "Heroes", "Mice", "Pegasi".
     let irregular = match lower.as_str() {
         "mice" => Some("mouse"),
@@ -615,6 +622,15 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that's the chosen color", Filter::ChosenColor),
         ("that are the chosen color", Filter::ChosenColor),
         ("with the chosen name", Filter::ChosenName),
+        // Double agenda's names (CR 702.106f).
+        (
+            "with one of the chosen names",
+            Filter::Custom(crate::kw::hidden_agenda::ONE_OF_CHOSEN_NAMES.into()),
+        ),
+        (
+            "with the other chosen name",
+            Filter::Custom(crate::kw::hidden_agenda::OTHER_CHOSEN_NAME.into()),
+        ),
         // "Choose a creature type. ... creatures of that type": the choice just made.
         ("of that type", Filter::ChosenType),
         ("of that color", Filter::ChosenColor),
@@ -685,22 +701,23 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let f = Filter::Custom(crate::custom::HAS_NONMANA_ACTIVATED_ABILITY.into());
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
-    if !negate {
-        if let Some(r) = rest
-            .strip_prefix("a ")
-            .or_else(|| rest.strip_prefix("one or more "))
+    // "with a +1/+1 counter on it", "without a +1/+1 counter on it" (Arcus Acolyte).
+    if let Some(r) = rest.strip_prefix("a ").or_else(|| {
+        (!negate)
+            .then(|| rest.strip_prefix("one or more "))
+            .flatten()
+    }) {
+        let (kind, r2) = split_word(r);
+        if let Some(tail) = r2
+            .strip_prefix("counter on it")
+            .or_else(|| r2.strip_prefix("counters on it"))
         {
-            let (kind, r2) = split_word(r);
-            if let Some(tail) = r2
-                .strip_prefix("counter on it")
-                .or_else(|| r2.strip_prefix("counters on it"))
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || kind.chars().all(|c| c.is_alphabetic())
             {
-                if kind.starts_with('+')
-                    || kind.starts_with('-')
-                    || kind.chars().all(|c| c.is_alphabetic())
-                {
-                    return Some((Filter::HasCounter(Some(kind.into())), tail));
-                }
+                let f = Filter::HasCounter(Some(kind.into()));
+                return Some((if negate { Filter::not(f) } else { f }, tail));
             }
         }
     }

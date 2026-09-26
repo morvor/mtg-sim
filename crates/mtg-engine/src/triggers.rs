@@ -85,6 +85,8 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
         ) => true,
         // CR 603.10e: a spell being countered.
         (TriggerCond::SpellCountered(_), Event::Countered { .. }) => true,
+        // Keyword-defined triggers, e.g. exploiting (sacrificing) a creature.
+        (TriggerCond::Custom(name), ev) => crate::kw::custom_trigger_looks_back(name, ev),
         _ => false,
     }
 }
@@ -356,6 +358,7 @@ impl Game {
                 lookback: Some(lb), ..
             } => Some(lb.clone()),
             Event::Sacrificed { obj, .. }
+            | Event::Exploited { obj, .. }
             | Event::Countered { what: obj }
             | Event::Unattached { obj, .. } => recent
                 .iter()

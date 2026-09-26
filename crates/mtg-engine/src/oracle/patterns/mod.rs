@@ -69,6 +69,33 @@ pub struct AbilityPattern {
 }
 inventory::collect!(AbilityPattern);
 
+/// How many modes a modal header lets a player choose, and who chooses them (CR 700.2).
+pub struct ModalHeader {
+    pub min: Value,
+    pub max: Value,
+    pub allow_repeat: bool,
+    pub chooser: ModeChooser,
+}
+
+/// Parses the header line of a modal spell or ability that precedes its bulleted modes
+/// ("choose one or more", "choose one at random"): lowercase, without the trailing dash,
+/// colon or period. The core parser handles the plain "choose one/two/one or both" forms.
+pub struct ModalHeaderPattern {
+    pub name: &'static str,
+    pub priority: i32,
+    pub parse: fn(&str, &CompileContext) -> Option<ModalHeader>,
+}
+inventory::collect!(ModalHeaderPattern);
+
+pub fn modal_header_patterns() -> &'static [&'static ModalHeaderPattern] {
+    static P: OnceLock<Vec<&'static ModalHeaderPattern>> = OnceLock::new();
+    P.get_or_init(|| {
+        sorted(inventory::iter::<ModalHeaderPattern>.into_iter(), |p| {
+            (p.priority, p.name)
+        })
+    })
+}
+
 /// Parses one part of a cost (lowercase, e.g. "blight 1", "waterbend {2}") that the core
 /// cost parser doesn't understand.
 pub struct CostPattern {

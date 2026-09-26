@@ -1049,6 +1049,13 @@ impl Game {
             }
             Value::Min(a, b) => self.eval_value(a, ctx).min(self.eval_value(b, ctx)),
             Value::Max(a, b) => self.eval_value(a, ctx).max(self.eval_value(b, ctx)),
+            Value::If(c, a, b) => {
+                if self.eval_cond(c, ctx) {
+                    self.eval_value(a, ctx)
+                } else {
+                    self.eval_value(b, ctx)
+                }
+            }
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
         }
     }

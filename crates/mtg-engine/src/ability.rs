@@ -139,6 +139,12 @@ pub enum ModeChooser {
     /// The controller chooses modes whose total number of pawprint symbols is at most this
     /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
     Pawprints(u32),
+    /// The controller chooses among the modes that haven't been chosen before for this
+    /// object's ability ("choose one that hasn't been chosen"), or that haven't been chosen
+    /// this turn: see `modal_history`.
+    Unchosen {
+        this_turn: bool,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1209,6 +1215,9 @@ pub enum Value {
     Div(Box<Value>, i32, bool),
     Min(Box<Value>, Box<Value>),
     Max(Box<Value>, Box<Value>),
+    /// The first value if the condition holds, otherwise the second ("choose one. If you
+    /// control a commander as you cast this spell, you may choose both instead").
+    If(Box<Condition>, Box<Value>, Box<Value>),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
 }

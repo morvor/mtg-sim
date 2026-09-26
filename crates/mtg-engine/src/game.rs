@@ -517,6 +517,8 @@ pub struct Game {
     pub searches: crate::search_rules::SearchState,
     /// When permanents last transformed (CR 701.27f).
     pub transforms: crate::transform_rules::TransformState,
+    /// Modes chosen for modal abilities ("choose one that hasn't been chosen", CR 700.2).
+    pub modal_history: crate::modal_history::ModalHistory,
 }
 
 impl Game {
@@ -611,6 +613,7 @@ impl Game {
             reveals: Default::default(),
             searches: Default::default(),
             transforms: Default::default(),
+            modal_history: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

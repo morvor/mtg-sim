@@ -87,12 +87,59 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     }
     let old = std::mem::replace(prev, Effect::Noop);
+    let e = restated_modify(&old, e);
     *prev = Effect::If {
         cond,
         then: Box::new(e),
         otherwise: Box::new(old),
     };
     true
+}
+
+/// "Until end of turn, target artifact or creature becomes an artifact creature with base
+/// power and toughness 4/3. If evidence was collected, it has base power and toughness 1/1
+/// until end of turn instead.": a replacement that restates only some of the
+/// characteristics the previous sentence changes for the same objects (here the base power
+/// and toughness) replaces just those; the rest of that effect still happens.
+fn restated_modify(old: &Effect, new: Effect) -> Effect {
+    let (
+        Effect::Modify {
+            what,
+            mods,
+            duration,
+        },
+        Effect::Modify {
+            what: w2,
+            mods: m2,
+            duration: d2,
+        },
+    ) = (old, &new)
+    else {
+        return new;
+    };
+    let same_what = serde_json::to_string(what).ok() == serde_json::to_string(w2).ok();
+    let same_duration = serde_json::to_string(duration).ok() == serde_json::to_string(d2).ok();
+    if !same_what || !same_duration {
+        return new;
+    }
+    let kinds: Vec<_> = m2.iter().map(std::mem::discriminant).collect();
+    if !kinds
+        .iter()
+        .all(|k| mods.iter().any(|m| std::mem::discriminant(m) == *k))
+    {
+        return new;
+    }
+    let mut merged: Vec<Modification> = mods
+        .iter()
+        .filter(|m| !kinds.contains(&std::mem::discriminant(*m)))
+        .cloned()
+        .collect();
+    merged.extend(m2.iter().cloned());
+    Effect::Modify {
+        what: what.clone(),
+        mods: merged,
+        duration: duration.clone(),
+    }
 }
 
 inventory::submit! { FollowupPattern { name: "damage_removal: if [condition], [effect] instead", priority: 60, apply: f_instead } }

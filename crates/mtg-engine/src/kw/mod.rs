@@ -203,6 +203,17 @@ pub trait KeywordRules: Sync + Send {
     fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
         false
     }
+    /// Just before a resolving permanent spell is put onto the battlefield (CR 608.3):
+    /// e.g. the effect making a bestowed Aura spell an Aura is carried over to the
+    /// permanent, so it enters as an Aura (CR 702.103b, 614.12).
+    fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {}
+    /// Whether an Aura that's unattached or attached to an illegal object or player stays
+    /// on the battlefield instead of being put into its owner's graveyard (an exception to
+    /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
+    /// [`KeywordRules::state_based_actions`] deal with it.
+    fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
+        false
+    }
     /// State-based actions a keyword defines (e.g. space sculptor's sector designations,
     /// CR 704.5u). Returns true if any action was performed.
     fn state_based_actions(&self, g: &mut Game) -> bool {
@@ -227,6 +238,13 @@ pub trait KeywordRules: Sync + Send {
         ctl: PlayerId,
         ev: &Event,
     ) -> Option<Vec<EventInfo>> {
+        None
+    }
+    /// Whether a named [`TriggerCond::Custom`] this implementation defines "looks back in
+    /// time" for the event (CR 603.10), e.g. one that triggers on a player sacrificing a
+    /// permanent (CR 603.10a): whether it triggers is determined from the abilities that
+    /// existed immediately before the event. `None` if it isn't one of its triggers.
+    fn custom_trigger_looks_back(&self, name: &str, ev: &Event) -> Option<bool> {
         None
     }
     /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
@@ -612,6 +630,19 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
     }
 }
 
+/// See [`KeywordRules::before_permanent_enters`].
+pub fn before_permanent_enters(g: &mut Game, spell: ObjectId) {
+    for r in registry() {
+        r.before_permanent_enters(g, spell);
+    }
+}
+
+/// Whether a keyword keeps an unattached or illegally attached Aura from being put into
+/// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
+pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
+    registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     registry()
         .iter()
@@ -632,6 +663,15 @@ pub fn custom_trigger(
     registry()
         .iter()
         .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
+}
+
+/// Whether a keyword-defined custom trigger looks back in time for the event (see
+/// [`KeywordRules::custom_trigger_looks_back`]).
+pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger_looks_back(name, ev))
+        .unwrap_or(false)
 }
 
 /// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
