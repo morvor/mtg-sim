@@ -122,7 +122,8 @@ fn activate_outlast(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 inventory::submit! { TriggerPattern { name: "you activate ~'s outlast ability", priority: 100, parse: activate_outlast } }
 
 /// "When ~ exploits a creature", "Whenever a creature you control exploits a [quality]
-/// creature" (CR 702.110b). "It" is the exploited creature.
+/// creature" (CR 702.110b). "It" is the exploited creature as it last existed on the
+/// battlefield.
 fn exploits(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let (who, what) = r.split_once(" exploits ")?;
     let name = match who {
@@ -145,7 +146,94 @@ fn exploits(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             cond: Condition::SelMatches(Sel::TriggerLki, f),
         };
     }
-    Some((trigger, Sel::TriggerObject, PlayerRef::You))
+    Some((trigger, Sel::TriggerLki, PlayerRef::You))
 }
 
 inventory::submit! { TriggerPattern { name: "[creature] exploits a creature", priority: 100, parse: exploits } }
+
+/// Abilities triggering on exploiting that refer to "the exploited creature", the trigger
+/// object as it last existed on the battlefield (CR 702.110b):
+/// * "When ~ exploits a creature, return to their owners' hands all creatures your
+///   opponents control with toughness less than the exploited creature's toughness."
+///   (Profaner of the Dead);
+/// * "Whenever a creature you control exploits a non-Human creature, draw a card. If the
+///   exploited creature had power 3 or greater, create a Treasure token." (Henry Wu).
+fn the_exploited_creature(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let lower = lower.trim_end_matches('.');
+    let rest = lower
+        .strip_prefix("whenever ")
+        .or_else(|| lower.strip_prefix("when "))?;
+    let (cond, body) = rest.split_once(", ")?;
+    if !cond.contains(" exploits ") || !body.contains("the exploited creature") {
+        return None;
+    }
+    let (trigger, it, it_player) = exploits(cond)?;
+    let exploited = || Box::new(Sel::TriggerLki);
+    let mut b = crate::oracle::effects::Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = it;
+    b.it_player = it_player;
+    let effect = if let Some(who) = body
+        .strip_prefix("return to their owners' hands all ")
+        .and_then(|r| r.strip_suffix(" with toughness less than the exploited creature's toughness"))
+    {
+        let (f, _, tail) = parse_object_phrase(who)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        Effect::Move {
+            what: Sel::All(Filter::and(vec![
+                f,
+                Filter::Toughness(Cmp::Lt, Box::new(Value::ToughnessOf(exploited()))),
+            ])),
+            to: Destination::zone(ZoneKind::Hand),
+        }
+    } else {
+        let (first, second) = body.split_once(". if the exploited creature had power ")?;
+        let (n, then) = second.split_once(" or greater, ")?;
+        let n: i32 = n.parse().ok()?;
+        let first = crate::oracle::effects::parse_effect_text(first, &mut b)?;
+        let then = crate::oracle::effects::parse_effect_text(then, &mut b)?;
+        Effect::Seq(vec![
+            first,
+            Effect::If {
+                cond: Condition::Compare(Value::PowerOf(exploited()), Cmp::Ge, Value::c(n)),
+                then: Box::new(then),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ])
+    };
+    let t = TriggeredAbility::new(trigger, Body::simple(b.targets, effect));
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(t), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "the exploited creature", priority: 100, parse: the_exploited_creature } }
+
+/// "[Effect] if it exploited that creature" (Silumgar Scavenger): the condition moves in
+/// front, "If it exploited that creature, [effect]".
+fn if_it_exploited_that_creature(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let (before, last) = text.trim_end_matches('.').rsplit_once(". ")?;
+    let effect = last.strip_suffix(" if it exploited that creature")?;
+    let effect = match effect.strip_prefix("It ") {
+        Some(r) => format!("~ {r}"),
+        None => effect.to_string(),
+    };
+    crate::oracle::parse_ability(
+        &format!("{before}. If it exploited that creature, {effect}."),
+        ctx,
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "[effect] if it exploited that creature", priority: 100, parse: if_it_exploited_that_creature } }
+
+/// "if it exploited that creature" (Silumgar Scavenger; CR 702.110b): the trigger object
+/// was exploited by the ability's source.
+fn exploited_that_creature(l: &str) -> Option<Condition> {
+    matches!(l, "it exploited that creature" | "~ exploited that creature")
+        .then(|| Condition::Custom(crate::kw::exploit::EXPLOITED_THAT_CREATURE.into()))
+}
+
+inventory::submit! { ConditionPattern { name: "it exploited that creature", priority: 100, parse: exploited_that_creature } }
