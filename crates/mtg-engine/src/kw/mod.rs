@@ -203,6 +203,13 @@ pub trait KeywordRules: Sync + Send {
     fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
         false
     }
+    /// Whether an Aura that's unattached or attached to an illegal object or player stays
+    /// on the battlefield instead of being put into its owner's graveyard (an exception to
+    /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
+    /// [`KeywordRules::state_based_actions`] deal with it.
+    fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
+        false
+    }
     /// State-based actions a keyword defines (e.g. space sculptor's sector designations,
     /// CR 704.5u). Returns true if any action was performed.
     fn state_based_actions(&self, g: &mut Game) -> bool {
@@ -617,6 +624,12 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
             return;
         }
     }
+}
+
+/// Whether a keyword keeps an unattached or illegally attached Aura from being put into
+/// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
+pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
+    registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
 }
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {

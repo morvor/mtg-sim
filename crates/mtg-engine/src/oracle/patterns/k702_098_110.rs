@@ -2,6 +2,7 @@
 //! doesn't handle, and phrases that go with them:
 //!
 //! * "Whenever ~ evolves" (CR 702.100b);
+//! * "You may cast ~ from your graveyard using its bestow ability" (CR 702.103a);
 //! * "if tribute wasn't paid" (CR 702.104b);
 //! * "if it's attacking the player with the most life or tied for most life" (CR 702.105a);
 //! * "Whenever you activate ~'s outlast ability" (CR 702.107a);
@@ -14,6 +15,21 @@ use crate::ability::*;
 use crate::keywords::KeywordKind;
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
+
+/// "You may cast ~ from your graveyard using its bestow ability." (Detective's Phoenix;
+/// CR 702.103a): a static ability functioning in the graveyard.
+fn cast_bestowed_from_graveyard(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if l != "you may cast ~ from your graveyard using its bestow ability" {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Custom(
+        crate::kw::bestow::CAST_BESTOWED_FROM_GRAVEYARD.into(),
+    ));
+    s.zone = FunctionZone::Graveyard;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "you may cast ~ from your graveyard using its bestow ability", priority: 100, parse: cast_bestowed_from_graveyard } }
 
 /// "Whenever ~ evolves" (Renegade Krasis, Watchful Radstag; CR 702.100b).
 fn evolves(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
