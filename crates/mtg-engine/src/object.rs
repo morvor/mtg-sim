@@ -35,6 +35,10 @@ pub struct Characteristics {
     /// Also has the name of each nonlegendary creature card (Spy Kit, CR 612.7).
     #[serde(default)]
     pub all_creature_names: bool,
+    /// Names interchangeable with its name (CR 201.3): for all rules and effects that
+    /// refer to names, the object has these names too (CR 201.3a).
+    #[serde(default)]
+    pub interchangeable_names: SmallVec<[SmolStr; 1]>,
     /// Is every creature type (changeling, CR 702.73a; "is every creature type",
     /// CR 205.3m), in addition to its listed subtypes. Only a creature or kindred object
     /// can have it (CR 205.3d).
@@ -82,20 +86,41 @@ impl Characteristics {
     pub fn keyword_count(&self, k: KeywordKind) -> usize {
         self.keywords().filter(|kw| kw.kind == k).count()
     }
-    /// True if the object has the name `n` (CR 201.2): its own name, or, with "all names
-    /// of nonlegendary creature cards" (CR 612.7), any such card's name.
-    pub fn has_name(&self, n: &str) -> bool {
-        (!self.name.is_empty() && self.name.eq_ignore_ascii_case(n))
-            || (self.all_creature_names && crate::text_change::is_nonlegendary_creature_name(n))
+    /// Each of the object's own names (CR 201.2): a split card's combined name "A // B"
+    /// is two names (CR 709.4a), and names interchangeable with its name are its names
+    /// too (CR 201.3a). (The names of "all nonlegendary creature cards", CR 612.7, aren't
+    /// listed; see [`Characteristics::has_name`].)
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.name
+            .split(" // ")
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .chain(self.interchangeable_names.iter().map(SmolStr::as_str))
     }
-    /// True if the two objects have at least one name in common.
+    /// True if the object has at least one name (CR 201.2a: a face-down permanent, for
+    /// example, has none).
+    pub fn has_a_name(&self) -> bool {
+        self.names().next().is_some() || self.all_creature_names
+    }
+    /// True if the object has the name `n` (CR 201.2): one of its own names, or, with "all
+    /// names of nonlegendary creature cards" (CR 612.7), any such card's name.
+    pub fn has_name(&self, n: &str) -> bool {
+        let n = n.trim();
+        !n.is_empty()
+            && (self.names().any(|x| x.eq_ignore_ascii_case(n))
+                || (self.all_creature_names
+                    && crate::text_change::is_nonlegendary_creature_name(n)))
+    }
+    /// True if the two objects have the same name: at least one name in common, even if
+    /// either has additional names. An object with no name doesn't have the same name as
+    /// any other object, including another object with no name (CR 201.2a).
     pub fn shares_name_with(&self, other: &Characteristics) -> bool {
-        if self.name.is_empty() && !self.all_creature_names {
+        if !self.has_a_name() || !other.has_a_name() {
             return false;
         }
         (self.all_creature_names && other.all_creature_names)
-            || other.has_name(&self.name)
-            || self.has_name(&other.name)
+            || self.names().any(|n| other.has_name(n))
+            || other.names().any(|n| self.has_name(n))
     }
     /// True if the object has no abilities other than those the compiler couldn't parse.
     pub fn has_no_abilities(&self) -> bool {
@@ -405,6 +430,11 @@ pub struct GameObject {
     /// The "prepared" designation (CR 722.3a): the copy of its prepare spell in exile
     /// that its controller may cast (CR 722.3c).
     pub prepared: Option<ObjectId>,
+    /// Base power and toughness (CR 208.4b): its power and toughness after
+    /// characteristic-defining abilities and effects that set power and toughness
+    /// (layers 7a-7b), ignoring effects and counters that modify them without setting them.
+    #[serde(default)]
+    pub base_pt: (Option<i32>, Option<i32>),
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
@@ -499,6 +529,7 @@ impl GameObject {
             sector: None,
             paired_with: None,
             prepared: None,
+            base_pt: (None, None),
         }
     }
 
@@ -529,12 +560,24 @@ impl GameObject {
     pub fn toughness(&self) -> i32 {
         self.chars.toughness.unwrap_or(0)
     }
-    /// Loyalty of a planeswalker permanent = its loyalty counters (CR 306.5b).
+    /// Loyalty: a planeswalker permanent's loyalty is the number of loyalty counters on
+    /// it (CR 306.5b); anywhere else, it's the loyalty number printed on the card
+    /// (CR 209.1).
     pub fn loyalty(&self) -> i32 {
-        self.counter(crate::types::counters::LOYALTY) as i32
+        if self.zone == Zone::Battlefield {
+            self.counter(crate::types::counters::LOYALTY) as i32
+        } else {
+            self.chars.loyalty.unwrap_or(0)
+        }
     }
+    /// Defense: a battle permanent's defense is the number of defense counters on it
+    /// (CR 310.4c); anywhere else, it's the defense number printed on the card (CR 210.1).
     pub fn defense(&self) -> i32 {
-        self.counter(crate::types::counters::DEFENSE) as i32
+        if self.zone == Zone::Battlefield {
+            self.counter(crate::types::counters::DEFENSE) as i32
+        } else {
+            self.chars.defense.unwrap_or(0)
+        }
     }
     pub fn on_battlefield(&self) -> bool {
         self.zone == Zone::Battlefield

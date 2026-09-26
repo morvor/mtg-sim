@@ -175,7 +175,33 @@ impl Game {
                 out.push(c);
             }
         }
+        out.retain(|c| !self.land_play_prohibited(p, *c));
         out
+    }
+
+    /// Whether an effect prohibits `p` from playing this land card ("players can't play
+    /// lands with [a quality]"), judged by the face it would be played with.
+    fn land_play_prohibited(&self, p: PlayerId, card: ObjectId) -> bool {
+        let chars = self.land_face_characteristics(card);
+        let view = WithChars {
+            id: card,
+            chars: &chars,
+        };
+        let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
+            let Restriction::CantPlayLandCards { who, what } = r else {
+                return false;
+            };
+            let ctx = Ctx::new(s, c);
+            self.player_filter_matches(who, p, &ctx) && self.matches_view(&view, card, what, &ctx)
+        };
+        self.statics
+            .restrictions
+            .iter()
+            .any(|(s, c, r)| check(r, Some(*s), *c))
+            || self
+                .rule_effects
+                .iter()
+                .any(|e| check(&e.restriction, e.source, e.controller))
     }
 
     /// Characteristics of the face a card would be played with as a land.
@@ -509,6 +535,9 @@ impl Game {
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
+        if self.legendary_spell_prohibited(p, &chars) {
+            return false;
+        }
         if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
             return false;
         }
@@ -585,6 +614,18 @@ impl Game {
             })
     }
 
+    /// CR 205.4e: a player can't cast a legendary instant or sorcery spell unless they
+    /// control a legendary creature or a legendary planeswalker.
+    fn legendary_spell_prohibited(&self, p: PlayerId, chars: &Characteristics) -> bool {
+        chars.is_legendary()
+            && (chars.is(CardType::Instant) || chars.is(CardType::Sorcery))
+            && !self.permanents().any(|o| {
+                o.controller == p
+                    && o.chars.is_legendary()
+                    && (o.chars.is(CardType::Creature) || o.chars.is(CardType::Planeswalker))
+            })
+    }
+
     pub(crate) fn cast_prohibited(
         &self,
         p: PlayerId,
@@ -604,6 +645,9 @@ impl Game {
         card: ObjectId,
         chars: &Characteristics,
     ) -> bool {
+        if self.legendary_spell_prohibited(p, chars) {
+            return true;
+        }
         let spells_cast = self
             .history
             .spells_cast
@@ -703,6 +747,9 @@ impl Game {
         }
         if !self.is_live(card) || !self.card_has_land_face(card) {
             return Err(Illegal("not a land card".into()));
+        }
+        if self.land_play_prohibited(p, card) {
+            return Err(Illegal("can't play that land".into()));
         }
         self.perform_land_play(p, card);
         Ok(())
