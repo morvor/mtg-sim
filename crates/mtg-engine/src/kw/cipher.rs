@@ -13,7 +13,10 @@
 //! creature (CR 702.99c). Meanwhile the creature has the triggered ability, granted by an
 //! ability-adding effect of the card: a creature that loses it doesn't trigger, but the
 //! card stays encoded. Whoever controls the creature controls the ability, and casts the
-//! copy from exile during its resolution.
+//! copy from exile during its resolution. The effect is created as the card is encoded,
+//! with a timestamp from when it's exiled (as the card's static ability would have,
+//! CR 613.7a, 613.7d), rather than being a static ability the keyword stands for, because
+//! the granted ability refers to the one card that granted it.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;

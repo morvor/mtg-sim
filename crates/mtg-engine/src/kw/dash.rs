@@ -13,7 +13,7 @@
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::casting::CastOption;
-use crate::game::{Affected, ContinuousEffect, Game};
+use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
 use crate::types::*;
@@ -42,40 +42,20 @@ impl KeywordRules for Dash {
             }),
         });
         ret.zone = FunctionZone::Stack;
-        Some(vec![AbilityDef::new(AbilityKind::Static(ret), text)])
-    }
-
-    /// "As long as this permanent's dash cost was paid, it has haste": an ability-adding
-    /// effect (layer 6, CR 613.1f) for the permanent the spell became, as long as it has
-    /// dash (an effect that removes its abilities removes this one too).
-    fn after_permanent_resolves(&self, g: &mut Game, spell: ObjectId, new: ObjectId, _kw: &Keyword) {
-        let dashed = g
-            .obj(spell)
-            .stack
-            .as_deref()
-            .is_some_and(|si| si.cast.paid.iter().any(|p| p == DASH));
-        if !dashed || g.effects.iter().any(|e| e.source == Some(new) && is_dash_haste(e)) {
-            return;
-        }
-        let id = g.new_effect_id();
-        let timestamp = g.obj(new).timestamp;
-        let turn = g.turn.number;
-        let controller = g.obj(new).controller;
-        g.effects.push(ContinuousEffect {
-            id,
-            source: Some(new),
-            controller,
-            timestamp,
-            duration: Duration::WhileSourceOnBattlefield,
-            affected: Affected::Filter(Filter::and(vec![
-                Filter::Objects(vec![new]),
-                Filter::HasKeyword(KeywordKind::Dash),
-            ])),
-            mods: vec![haste()],
-            layer1: None,
-            created_turn: turn,
+        // "As long as this permanent's dash cost was paid, it has haste": the permanent's
+        // own static ability, an ability-adding effect (layer 6, CR 613.1f) with its
+        // timestamp (CR 613.7a). An effect that removes the permanent's abilities removes
+        // this one too, and a copy of the permanent (which wasn't cast for its dash cost)
+        // doesn't have haste.
+        let mut haste = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::AddKeyword(Keyword::new(KeywordKind::Haste))],
         });
-        g.dirty = true;
+        haste.condition = Some(Condition::CostPaid(DASH.into()));
+        Some(vec![
+            AbilityDef::new(AbilityKind::Static(ret), text),
+            AbilityDef::new(AbilityKind::Static(haste), text),
+        ])
     }
 
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
@@ -104,15 +84,6 @@ impl KeywordRules for Dash {
         opt.tag = Some(DASH);
         vec![opt]
     }
-}
-
-fn haste() -> Modification {
-    Modification::AddKeyword(Keyword::new(KeywordKind::Haste))
-}
-
-fn is_dash_haste(e: &ContinuousEffect) -> bool {
-    matches!(&e.affected, Affected::Filter(Filter::And(v))
-        if v.iter().any(|f| matches!(f, Filter::HasKeyword(KeywordKind::Dash))))
 }
 
 inventory::submit! { KeywordRegistration(&Dash) }
