@@ -289,3 +289,38 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
         p => Some(p.clone()),
     }
 }
+
+/// "[creature] blocking it" / "[creature] that's blocking it" after an object phrase,
+/// where "it" is the object the ability is about: the source ("Whenever ~ becomes
+/// blocked, it deals 1 damage to each creature blocking it"), the creature a trigger is
+/// about ("Whenever a Beast becomes blocked, it gets +1/+1 until end of turn for each
+/// creature blocking it"), the permanent the source is attached to, or a single target.
+/// Returns the filter narrowed to such blockers and the rest of the text.
+pub fn blocking_it(f: Filter, rest: &str, b: &Builder) -> Option<(Filter, String)> {
+    let r = rest.trim_start();
+    let r = r.strip_prefix("that's ").unwrap_or(r);
+    let r = r.strip_prefix("blocking it")?;
+    if !(r.is_empty() || r.starts_with(' ') || r.starts_with(',')) {
+        return None;
+    }
+    // Once "it" has left the battlefield (sacrificed as a cost or by an earlier
+    // instruction: "{B}, Sacrifice ~: Destroy target creature blocking it."), the creatures
+    // that were blocking it are known only from its last known information, which combat
+    // doesn't keep.
+    if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
+        return None;
+    }
+    let blocking = match singular_it(b) {
+        Sel::This => Filter::BlockingSource,
+        sel @ (Sel::TriggerObject | Sel::AttachedTo) => Filter::BlockingAnyOf(Box::new(sel)),
+        Sel::Target(slot)
+            if b.targets.get(slot as usize).is_some_and(|t| {
+                t.max.as_const() == Some(1) && matches!(t.what, TargetKind::Object(_))
+            }) =>
+        {
+            Filter::BlockingAnyOf(Box::new(Sel::Target(slot)))
+        }
+        _ => return None,
+    };
+    Some((Filter::and(vec![f, blocking]), r.to_string()))
+}

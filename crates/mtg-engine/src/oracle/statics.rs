@@ -563,6 +563,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::DistinctNames(f), rest.to_string()));
         }
         let (f, _, rest) = parse_object_phrase(r)?;
+        // "the number of creatures blocking it"
+        if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
+            return Some((Value::Count(f), rest));
+        }
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {

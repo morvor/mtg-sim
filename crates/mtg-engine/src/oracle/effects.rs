@@ -433,14 +433,28 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(r) = super::patterns::pronoun_groups::plural_object_ref(s, b) {
         return r;
     }
-    if let Some((spec, rest)) = parse_any_target(s) {
+    if let Some((mut spec, rest)) = parse_any_target(s) {
+        // "target creature blocking it"
+        let mut rest = rest.to_string();
+        if let TargetKind::Object(f) = &spec.what {
+            if let Some((f, r)) = super::patterns::pronoun_groups::blocking_it(f.clone(), &rest, b)
+            {
+                spec.what = TargetKind::Object(f);
+                rest = r;
+            }
+        }
         let text = s[..s.len() - rest.len()].trim().to_string();
         let slot = b.add_target(spec, &text);
-        return Some((Sel::Target(slot), rest.to_string()));
+        return Some((Sel::Target(slot), rest));
     }
     if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
         let (f, _, rest) = parse_object_phrase(r)?;
-        let (f, rest) = bind_target_player(f, rest, b);
+        // "each creature blocking it"
+        let (f, rest) = match super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
+            Some((f, r)) => (f, r),
+            None => (f, rest.to_string()),
+        };
+        let (f, rest) = bind_target_player(f, &rest, b);
         return Some((Sel::All(f), rest));
     }
     // Bare plural noun phrases ("creatures you control") mean all such objects.
