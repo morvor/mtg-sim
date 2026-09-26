@@ -1205,6 +1205,9 @@ pub enum Value {
     /// Number of different color pairs (CR 105.5) among matching objects that are
     /// exactly two colors.
     ColorPairsAmong(Filter),
+    /// "the number of colors among [objects]": how many of the five colors at least one
+    /// matching object is (CR 105.2; colorless isn't a color, CR 105.2c).
+    ColorsAmong(Filter),
     /// The source permanent's class level (CR 716.2d: a permanent without a level is
     /// treated as level 1).
     ClassLevel,

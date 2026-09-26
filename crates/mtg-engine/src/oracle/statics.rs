@@ -557,6 +557,17 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
                 rest.to_string(),
             ));
         }
+        // "the number of colors among permanents you control" (Vivid, CR 105.2).
+        // Also "for each color among ..." read as "the number of color among ...".
+        if let Some(r) = r
+            .strip_prefix("colors among ")
+            .or_else(|| r.strip_prefix("color among "))
+        {
+            let (f, true, rest) = parse_object_phrase(r)? else {
+                return None;
+            };
+            return Some((Value::ColorsAmong(f), rest.to_string()));
+        }
         // "the number of differently named lands you control" (CR 201.2b).
         if let Some(r) = r.strip_prefix("differently named ") {
             let (f, _, rest) = parse_object_phrase(r)?;

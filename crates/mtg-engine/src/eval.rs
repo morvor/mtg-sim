@@ -1016,6 +1016,13 @@ impl Game {
                 }
                 pairs.len() as i64
             }
+            Value::ColorsAmong(f) => {
+                let mut set = ColorSet::NONE;
+                for o in self.objects_matching(f, ctx) {
+                    set = set.union(self.obj(o).chars.colors);
+                }
+                set.count() as i64
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()

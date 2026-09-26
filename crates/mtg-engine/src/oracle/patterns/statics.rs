@@ -846,6 +846,13 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         };
         return Some(Value::Custom(format!("colors_of:{which}").into()));
     }
+    // "color among permanents you control" (Vivid, CR 105.2).
+    if let Some(r) = s.strip_prefix("color among ") {
+        let (f, true) = whole_object_phrase(r)? else {
+            return None;
+        };
+        return Some(Value::ColorsAmong(f));
+    }
     // "other creature on the battlefield that shares a creature type with it": other
     // than it (not other than the source).
     if let (Some(sel), Some(r)) = (it, s.strip_prefix("other ")) {
