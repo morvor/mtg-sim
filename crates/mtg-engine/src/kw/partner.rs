@@ -280,7 +280,9 @@ pub fn check_commander_deck(
     // CR 702.124c: the combined color identity.
     let mut combined = (**first).clone();
     for c in commanders.iter().skip(1) {
-        combined.color_identity = combined.color_identity.union(c.color_identity);
+        combined.color_identity = combined
+            .color_identity
+            .union(crate::commander_rules::color_identity(c));
     }
     problems.extend(crate::deck::check_commander_cards(
         deck, &combined, sideboard, brawl,

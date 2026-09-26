@@ -86,6 +86,14 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::spell_costs::custom_value(g, name, ctx) {
         return v;
     }
+    // "Your commander's mana value" (CR 903.3e).
+    if let Some(v) = crate::commander_rules::custom_value(g, name, ctx) {
+        return v;
+    }
+    // Information noted during the draft (CR 905.2b).
+    if let Some(v) = crate::draft::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.
@@ -466,7 +474,12 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // The planeswalking ability (CR 901.8, 701.31).
     if name == crate::planechase::PLANESWALK_EFFECT {
-        crate::planechase::planeswalk(g, ctx.controller);
+        crate::planechase::planeswalking_ability_resolves(g, ctx.controller);
+        return;
+    }
+    // "Simultaneously planeswalk to [N plane cards]" (CR 901.11c).
+    if let Some(n) = name.strip_prefix(crate::planechase::PLANESWALK_TO_PLANES) {
+        crate::planechase::planeswalk_to(g, ctx.controller, n.parse().unwrap_or(1));
         return;
     }
     if name == crate::planechase::CHAOS_ENSUES_EFFECT {
@@ -482,6 +495,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // "exile them, then meld them into [result]" (CR 701.42a).
     if crate::merge::custom_effect(g, name, ctx) {
+        return;
+    }
+    // A merged or melded commander returning to the command zone (CR 903.9c).
+    if crate::commander_rules::custom_effect(g, name, ctx) {
         return;
     }
     // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).

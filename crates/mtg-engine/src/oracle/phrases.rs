@@ -183,6 +183,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         if rest == "token" {
             return Some(Filter::not(Filter::Token));
         }
+        // CR 903.3d: "noncommander".
+        if rest == "commander" {
+            return Some(Filter::not(Filter::Commander));
+        }
     }
     if let Some(s) = Supertype::from_word(w) {
         return Some(Filter::Supertype(s));

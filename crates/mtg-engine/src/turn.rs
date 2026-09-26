@@ -824,7 +824,7 @@ impl Game {
     fn precombat_main_actions(&mut self) {
         let active = self.turn.active;
         // CR 505.3: archenemy sets a scheme in motion.
-        if self.config.variant == Variant::Archenemy {
+        if crate::life_totals::is_archenemy_game(self) {
             crate::variants::archenemy_main_phase(self, active);
         }
         // CR 505.4 / 714.3b: lore counters on Sagas.

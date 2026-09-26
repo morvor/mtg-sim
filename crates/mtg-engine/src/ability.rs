@@ -1399,6 +1399,12 @@ pub enum Duration {
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
+    /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
+    /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
+    /// end it).
+    UntilPlaneswalk {
+        away_from_plane: bool,
+    },
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).

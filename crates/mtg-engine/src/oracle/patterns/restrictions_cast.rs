@@ -14,7 +14,11 @@ use crate::oracle::phrases::end;
 fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let (dur, main) = duration_suffix(l);
-    if !matches!(dur, Duration::EndOfTurn | Duration::UntilYourNextTurn) {
+    // "until a player planeswalks" (CR 901.11, Eloren Wilds).
+    if !matches!(
+        dur,
+        Duration::EndOfTurn | Duration::UntilYourNextTurn | Duration::UntilPlaneswalk { .. }
+    ) {
         return None;
     }
     let (who, rest) = if let Some(r) = main.strip_prefix("players ") {
