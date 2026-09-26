@@ -275,6 +275,34 @@ pub fn outside_game_move_forbidden(g: &Game, mv: &MoveEv) -> bool {
     in_starting_deck || owned_in_game || outside_identity
 }
 
+/// Whether `card` (outside the game) may be put into `to` in a Commander game by a rule or
+/// special action (a companion, CR 702.139a): see [`outside_game_move_forbidden`].
+pub fn may_bring_in(g: &Game, card: ObjectId, to: Zone) -> bool {
+    !outside_game_move_forbidden(
+        g,
+        &MoveEv {
+            obj: card,
+            to,
+            pos: LibraryPosition::Top,
+            cause: crate::events::MoveCause::Effect,
+            by: None,
+            etb: Default::default(),
+            source: None,
+        },
+    )
+}
+
+/// The commander a source of combat damage is, for counting commander damage
+/// (CR 903.10a): the card that is the commander — the commander component of a merged or
+/// melded commander (CR 903.3b, 903.3c) — whatever the permanent's name is now.
+pub fn commander_damage_key(g: &Game, id: ObjectId) -> smol_str::SmolStr {
+    crate::merge::physical_components(g, id)
+        .into_iter()
+        .find(|c| g.obj(*c).is_commander)
+        .map(|c| crate::kw::partner::commander_key(g, c))
+        .unwrap_or_else(|| crate::kw::partner::commander_key(g, id))
+}
+
 // --- "Your commander" (CR 903.3d, 903.3e) --------------------------------------------
 
 /// The commanders `p` owns, in any zone (CR 903.3e: including the library and hand).
