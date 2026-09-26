@@ -1,0 +1,7 @@
+710.3	Physical play: players mark flipped permanents with coins or dice; the engine keeps the flipped status on the object (tested under 710.4)
+712.2a	Physical card presentation: the front-face symbol printed on nonmodal double-faced cards has no game effect
+712.2b	Physical card presentation: the back-face symbol printed on nonmodal double-faced cards has no game effect
+712.3a	Physical card presentation: the front-face symbol printed on modal double-faced cards has no game effect
+712.3b	Physical card presentation: the back-face symbol printed on modal double-faced cards has no game effect
+712.6	Information access: an agent allowed to look at a card sees its whole card definition, both faces included; there is no partial view to test
+712.7	Physical play: opaque sleeves or substitute cards keep double-faced cards in hidden zones indistinguishable; engine objects in hidden zones are never shown to players who can't look at them

@@ -214,6 +214,35 @@ fn a_modal_double_faced_spell_or_permanent_has_the_face_that_is_up() {
 }
 
 #[test]
+fn a_permanent_doesnt_transform_or_convert_into_an_instant_or_sorcery_face() {
+    cr!("712.10");
+    let mut t = TestGame::new(2);
+    // Invasion of Kylem's back face, Valor's Reach Tag Team, is a sorcery.
+    let kylem = t.battlefield(P0, "Invasion of Kylem // Valor's Reach Tag Team");
+    transform(&mut t, kylem);
+    assert_eq!(t.obj(kylem).face, FaceState::Front);
+    assert_eq!(t.obj(kylem).chars.name, "Invasion of Kylem");
+    run_effect(
+        &mut t,
+        P0,
+        None,
+        &[Entity::Object(kylem)],
+        Effect::KeywordAction {
+            action: KeywordAction::Convert,
+            who: PlayerRef::You,
+            what: Sel::Target(0),
+            n: Value::c(1),
+        },
+    );
+    assert_eq!(t.obj(kylem).face, FaceState::Front);
+    assert_eq!(t.zone(kylem), Zone::Battlefield);
+    // A creature back face: it transforms.
+    let prowler = t.battlefield(P0, PROWLER);
+    transform(&mut t, prowler);
+    assert_eq!(t.obj(prowler).face, FaceState::Back);
+}
+
+#[test]
 fn a_double_faced_spell_is_cast_with_its_front_face_up_by_default() {
     cr!("712.11", "712.13");
     let mut t = TestGame::new(2);
