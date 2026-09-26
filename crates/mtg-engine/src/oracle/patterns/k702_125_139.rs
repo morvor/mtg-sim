@@ -9,7 +9,8 @@
 //! * companion conditions (CR 702.139a) the general companion pattern doesn't read: different
 //!   names, even or odd mana values, activated abilities, a shared card type, a minimum
 //!   deck size, and repeated mana symbols;
-//! * granted keywords: "[Quality] spells you cast have improvise", "The next spell you
+//! * granted keywords: "Each instant and sorcery card in your graveyard that's exactly two
+//!   colors has jump-start", "[Quality] spells you cast have improvise", "The next spell you
 //!   cast this turn has improvise", "... gains embalm until end of turn. The embalm cost is
 //!   equal to its mana cost.", "... gains escape until end of turn. The escape cost is
 //!   equal to its mana cost plus [cost].";
@@ -547,3 +548,49 @@ fn activate_embalm_or_eternalize(r: &str) -> Option<(TriggerCond, Sel, PlayerRef
 }
 
 inventory::submit! { TriggerPattern { name: "k702.128 you activate an eternalize or embalm ability", priority: 100, parse: activate_embalm_or_eternalize } }
+
+/// "Each instant and sorcery card in your graveyard that's exactly two colors has
+/// jump-start." (Niv-Mizzet, Supreme): each of those cards has a jump-start ability
+/// (CR 702.133a).
+fn graveyard_cards_have_jump_start(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("each ")?;
+    let (subject, colors) = match r.strip_suffix(" card in your graveyard has jump-start") {
+        Some(s) => (s, false),
+        None => (
+            r.strip_suffix(" card in your graveyard that's exactly two colors has jump-start")?,
+            true,
+        ),
+    };
+    let phrase = format!("{subject} card");
+    let (f, _, tail) = parse_object_phrase(&phrase)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let mut parts = vec![
+        f,
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::You),
+    ];
+    if colors {
+        parts.push(Filter::Or(
+            crate::types::ColorSet::color_pairs()
+                .into_iter()
+                .map(Filter::ExactColors)
+                .collect(),
+        ));
+    }
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(parts),
+        mods: vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::JumpStart,
+        ))],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.133 each card in your graveyard has jump-start", priority: 100, parse: graveyard_cards_have_jump_start } }

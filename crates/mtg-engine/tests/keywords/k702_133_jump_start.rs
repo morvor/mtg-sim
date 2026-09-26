@@ -109,3 +109,29 @@ fn jump_start_follows_normal_timing() {
     assert_eq!(t.life(P1), 18);
     assert!(t.in_exile("Direct Current"));
 }
+
+#[test]
+fn a_card_in_the_graveyard_can_be_given_jump_start() {
+    cr!("702.133a");
+    assert_line_supported("Niv-Mizzet, Supreme", "jump-start");
+    let mut t = TestGame::new(2);
+    // Niv-Mizzet, Supreme: "Each instant and sorcery card in your graveyard that's exactly
+    // two colors has jump-start."
+    t.battlefield(P0, "Niv-Mizzet, Supreme");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Mountain", 1);
+    let terminate = t.graveyard(P0, "Terminate");
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.hand(P0, "Grizzly Bears");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    assert!(castable(&mut t, P0, terminate, JUMP_START));
+    assert!(!castable(&mut t, P0, bolt, JUMP_START), "one color");
+    t.cast(P0, terminate)
+        .method(JUMP_START)
+        .target(Entity::Object(bears))
+        .go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    // The spell kept jump-start as it was cast from the graveyard: it's exiled.
+    assert!(t.in_exile("Terminate"));
+}
