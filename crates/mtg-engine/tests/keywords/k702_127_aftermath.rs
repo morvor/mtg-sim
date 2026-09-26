@@ -140,3 +140,20 @@ fn the_aftermath_half_cant_be_cast_from_another_zone() {
     assert!(t.cast(P0, card).method(SECOND_HALF).try_go().is_err());
     assert_eq!(t.zone(card), Zone::Exile);
 }
+
+#[test]
+fn an_effect_casting_the_card_from_elsewhere_can_only_cast_the_other_half() {
+    cr!("702.127a");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let card = t.exile(P0, "Cut // Ribbons");
+    // Cast during the resolution of an effect, without paying its mana cost: only Cut
+    // may be chosen.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let spell =
+        mtg_engine::casting::cast_during_resolution(&mut t.g, P0, card, CastMethod::Free).unwrap();
+    assert_eq!(t.g.obj(spell).chars.name, "Cut");
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+}

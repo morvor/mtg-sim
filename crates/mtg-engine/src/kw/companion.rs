@@ -50,7 +50,7 @@ fn has_activated_ability(g: &Game, id: ObjectId) -> bool {
 }
 
 fn companion_cost() -> Cost {
-    Cost::mana(crate::mana::ManaCost::parse("{3}").expect("mana"))
+    Cost::mana(crate::mana::ManaCost::generic(3))
 }
 
 /// Records `card` (outside the game, with companion) as `p`'s companion (CR 103.2b). A

@@ -116,7 +116,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
 fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
-    let faces = castable_faces(g, card);
+    let mut faces = castable_faces(g, card);
+    // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
+    // CR 702.127a).
+    let allowed: Vec<FaceState> = faces
+        .iter()
+        .copied()
+        .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
+        .collect();
+    if !allowed.is_empty() {
+        faces = allowed;
+    }
     match faces.len() {
         0 => FaceState::Front,
         1 => faces[0],
