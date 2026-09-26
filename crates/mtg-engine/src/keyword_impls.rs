@@ -99,6 +99,28 @@ pub fn derived_by_keyword(chars: &Characteristics) -> Vec<(u64, Ability)> {
     out
 }
 
+/// Whether a keyword among `abilities` stands for a static ability that functions in
+/// every zone, such as devoid's characteristic-defining ability (CR 604.3, 702.114a).
+/// Cached per keyword ability.
+pub fn derives_ability_functioning_everywhere(abilities: &[Ability]) -> bool {
+    static C: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
+    abilities.iter().any(|a| {
+        let AbilityKind::Keyword(k) = &a.kind else {
+            return false;
+        };
+        let cache = C.get_or_init(Default::default);
+        if let Some(b) = cache.lock().unwrap().get(&a.uid) {
+            return *b;
+        }
+        let b = derived_abilities(k).iter().any(|d| {
+            matches!(&d.kind, AbilityKind::Static(s)
+                if s.is_cda || s.zone == FunctionZone::Anywhere)
+        });
+        cache.lock().unwrap().insert(a.uid, b);
+        b
+    })
+}
+
 /// If the ability is derived from a keyword, which one.
 pub fn ability_from_keyword(a: &AbilityDef) -> Option<KeywordKind> {
     KeywordKind::ALL

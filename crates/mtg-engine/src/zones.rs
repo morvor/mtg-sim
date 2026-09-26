@@ -367,10 +367,21 @@ pub fn outside_game_characteristics(g: &mut Game) {
     for id in outside {
         let o = g.obj(id);
         let mut c = o.base.clone();
+        // Including those its keywords stand for (devoid's, CR 702.114a).
+        let derived: Vec<Ability> =
+            if crate::keyword_impls::derives_ability_functioning_everywhere(&o.base.abilities) {
+                crate::keyword_impls::derived_by_keyword(&o.base)
+                    .into_iter()
+                    .map(|(_, a)| a)
+                    .collect()
+            } else {
+                vec![]
+            };
         let cdas: Vec<Modification> = o
             .base
             .abilities
             .iter()
+            .chain(derived.iter())
             .filter_map(|a| match &a.kind {
                 AbilityKind::Static(s) if s.is_cda => match &s.effect {
                     StaticEffect::Continuous {

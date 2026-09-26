@@ -175,11 +175,13 @@ impl Game {
             // in libraries that have one are recomputed too; so are cards with another
             // static ability that functions everywhere ("if this card would be put into
             // a graveyard from anywhere").
+            // Likewise the abilities keywords stand for (devoid's).
             v.extend(p.library.iter().copied().filter(|id| {
-                self.obj(*id).base.abilities.iter().any(|a| {
+                let base = &self.obj(*id).base.abilities;
+                base.iter().any(|a| {
                     matches!(&a.kind, AbilityKind::Static(s)
                         if s.is_cda || s.zone == FunctionZone::Anywhere)
-                })
+                }) || crate::keyword_impls::derives_ability_functioning_everywhere(base)
             }));
         }
         v
