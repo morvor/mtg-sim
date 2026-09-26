@@ -233,3 +233,30 @@ fn cost_increases_apply_to_the_miracle_cost() {
     assert_eq!(t.g.obj(spell).chars.mana_value(), 7);
     assert!(islands.iter().all(|l| t.g.obj(*l).tapped));
 }
+
+#[test]
+fn miracle_given_to_cards_in_hand_works_as_they_are_drawn() {
+    cr!("702.94a");
+    ruling!(
+        "Lorehold, the Historian",
+        "You can reveal and cast a card with miracle on any turn, not just your own, if it's the first card you've drawn that turn."
+    );
+    assert_supported("Lorehold, the Historian");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lorehold, the Historian");
+    // Lightning Bolt has miracle {2} while it's in P0's hand.
+    t.library_top(P0, "Lightning Bolt");
+    t.lands(P0, "Wastes", 2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.set_step(P1, Step::Upkeep);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(stack_triggers(&t, "Miracle").len(), 1);
+    t.resolve();
+    let spell = *t.g.stack.last().unwrap();
+    assert_eq!(t.g.obj(spell).stack.as_ref().unwrap().cast.method, MIRACLE);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}

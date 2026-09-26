@@ -15,7 +15,7 @@
 //!   also gets +N/+N until end of turn", "Whenever ~ or a creature it's paired with is
 //!   dealt damage".
 
-use super::{FollowupPattern, StaticPattern, TriggerPattern};
+use super::{EffectPattern, FollowupPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::phrases::{end, parse_object_phrase};
@@ -334,3 +334,70 @@ fn this_or_paired_dealt_damage(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
 }
 
 inventory::submit! { TriggerPattern { name: "~ or a creature it's paired with is dealt damage", priority: 100, parse: this_or_paired_dealt_damage } }
+
+/// "Each instant and sorcery card in your hand has miracle {2}." (Lorehold, the Historian):
+/// the cards have miracle as they're drawn (CR 702.94a).
+fn hand_cards_have_miracle(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = l.strip_prefix("each ")?;
+    let (subject, cost) = r.split_once(" card in your hand has miracle ")?;
+    if cost.is_empty() {
+        return None;
+    }
+    let at = text.to_lowercase().find(" has miracle ")? + " has miracle ".len();
+    let cost = crate::oracle::keywords::parse_keyword_cost(&text[at..])?;
+    let mut alts = Vec::new();
+    for word in subject.split(" and ") {
+        let phrase = format!("{word} card");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        alts.push(f);
+    }
+    let quality = if alts.len() == 1 {
+        alts.pop()?
+    } else {
+        Filter::Or(alts)
+    };
+    let affected = Filter::and(vec![
+        quality,
+        Filter::Card,
+        Filter::InZone(ZoneKind::Hand),
+        Filter::OwnedBy(PlayerRel::You),
+    ]);
+    Some(grant(
+        affected,
+        Keyword::with_cost(KeywordKind::Miracle, cost).text("miracle"),
+        text,
+    ))
+}
+
+inventory::submit! { StaticPattern { name: "each [quality] card in your hand has miracle", priority: 100, parse: hand_cards_have_miracle } }
+
+/// "The next [quality] spell you cast this turn has cascade." (Dark Apostle, Sloppity
+/// Bilepiper): the spell has cascade as it's cast (CR 611.2f), so it triggers.
+fn next_spell_has_cascade(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = l
+        .strip_prefix("the next ")?
+        .strip_suffix(" you cast this turn has cascade")?;
+    let subject = r.strip_suffix("spell")?.trim();
+    let mut parts = Vec::new();
+    if !subject.is_empty() {
+        let phrase = format!("{subject} card");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        parts.push(f);
+    }
+    parts.push(Filter::Spell);
+    Some(Effect::NextSpell {
+        filter: Filter::and(parts),
+        mods: vec![Modification::AddKeyword(
+            Keyword::new(KeywordKind::Cascade).text("cascade"),
+        )],
+        expires: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "the next spell you cast this turn has cascade", priority: 100, parse: next_spell_has_cascade } }

@@ -354,3 +354,36 @@ fn spells_given_cascade_by_an_effect_cascade() {
     t.settle();
     assert_eq!(triggers_on_stack(&t, "Cascade"), 0);
 }
+
+#[test]
+fn the_next_spell_given_cascade_cascades() {
+    cr!("702.85a");
+    assert_supported("Dark Apostle");
+    let mut t = TestGame::new(2);
+    let apostle = t.battlefield(P0, "Dark Apostle");
+    t.lands(P0, "Wastes", 3);
+    // "{3}, {T}: The next noncreature spell you cast this turn has cascade."
+    let text = t
+        .obj_now(apostle)
+        .chars
+        .abilities
+        .iter()
+        .find(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .unwrap()
+        .text
+        .clone();
+    crate::common_k702_027_037::activate_named(&mut t, P0, apostle, &text, 0).expect("activate");
+    t.resolve();
+    stack_library(&mut t, P0, &["Grizzly Bears", "Shock"]);
+    // A creature spell doesn't get cascade.
+    cast_from_hand(&mut t, P0, "Hill Giant");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Cascade"), 0);
+    t.resolve_all();
+    // The next noncreature spell does: Divination (3) cascades into Grizzly Bears (2).
+    cast_from_hand(&mut t, P0, "Divination");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Cascade"), 1);
+    t.resolve();
+    assert_eq!(spell_names(&t), vec!["Divination", "Grizzly Bears"]);
+}

@@ -31,7 +31,16 @@ impl KeywordRules for Miracle {
     }
 
     fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
-        if nth != 1 || g.obj(card).zone != Zone::Hand(p) || miracle_cost(g, card).is_none() {
+        if nth != 1 {
+            return;
+        }
+        // The card's characteristics in its owner's hand, including miracle abilities
+        // effects give cards there ("Each instant and sorcery card in your hand has
+        // miracle {2}").
+        if g.dirty {
+            g.recompute();
+        }
+        if g.obj(card).zone != Zone::Hand(p) || miracle_cost(g, card).is_none() {
             return;
         }
         // CR 121.9: the card is already in the player's hand, so they can look at it
