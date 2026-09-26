@@ -233,8 +233,15 @@ impl CardDef {
                     None
                 })
                 .map(|ci| ColorSet::from_letters(ci));
-            let (power, star_power) = parse_pt(f.power.as_deref());
-            let (toughness, star_toughness) = parse_pt(f.toughness.as_deref());
+            let (mut power, star_power) = parse_pt(f.power.as_deref());
+            let (mut toughness, star_toughness) = parse_pt(f.toughness.as_deref());
+            // CR 721.2b, 721.2c: a station card's power/toughness box belongs to its
+            // highest station symbol; elsewhere than the battlefield it has no power or
+            // toughness.
+            if c.keywords.iter().any(|k| k.eq_ignore_ascii_case("station")) {
+                power = None;
+                toughness = None;
+            }
             let (loyalty, _) = parse_pt(f.loyalty.as_deref());
             let (defense, _) = parse_pt(f.defense.as_deref());
             let hand_modifier = c
