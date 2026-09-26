@@ -1232,7 +1232,7 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Whether a filter describes a class of objects by their current qualities only, without
 /// referring to the resolving ability's targets, choices, source, or referenced objects,
 /// so it can be evaluated again later in the effect's duration.
-fn is_class_filter(f: &Filter) -> bool {
+pub(crate) fn is_class_filter(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
         Filter::Not(x) => is_class_filter(x),

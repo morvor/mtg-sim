@@ -1527,7 +1527,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 }
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
-fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
+pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
     let fc = f.clone();
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
