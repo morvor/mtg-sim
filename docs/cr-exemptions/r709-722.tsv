@@ -5,3 +5,5 @@
 712.3b	Physical card presentation: the back-face symbol printed on modal double-faced cards has no game effect
 712.6	Information access: an agent allowed to look at a card sees its whole card definition, both faces included; there is no partial view to test
 712.7	Physical play: opaque sleeves or substitute cards keep double-faced cards in hidden zones indistinguishable; engine objects in hidden zones are never shown to players who can't look at them
+719.1	Physical card presentation: a Case card's illustration and type line placement have no game effect
+719.2	Physical card presentation: the Case frame has no rules meaning by definition; the card's abilities are what the engine compiles

@@ -351,7 +351,11 @@ pub fn strip_ability_word(text: &str) -> &str {
             // [ability]" (CR 702.178a).
             && head != "Companion"
             && head != "Forecast"
-            && head != "Max speed";
+            && head != "Max speed"
+            // Nor are a Case's "To solve — [Condition]" and "Solved — [Ability]"
+            // (CR 719.3).
+            && head != "To solve"
+            && head != "Solved";
         if looks_like_word {
             return rest;
         }

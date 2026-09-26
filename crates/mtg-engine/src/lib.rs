@@ -30,6 +30,7 @@ pub mod attach;
 pub mod battle;
 pub mod behold;
 pub mod card;
+pub mod cases;
 pub mod casting;
 pub mod choices;
 pub mod classes;
