@@ -205,6 +205,8 @@ impl Game {
         // The card's halves, faces and alternative characteristics are part of the
         // copiable values (CR 709.5b, 715.2b, 720.2b, 722.2b).
         crate::card::mark_printed(self, &live);
+        // Prototyped spells and permanents (CR 718.3b).
+        crate::kw::prototype::prototyped_characteristics(self, &live);
 
         // Layer 1a: copy effects (CR 707), in timestamp order.
         let mut copy_effects: Vec<(Timestamp, usize)> = self
