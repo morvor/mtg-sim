@@ -406,6 +406,51 @@ fn trains(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "~ trains", priority: 100, parse: trains } }
 
+/// "if it didn't have decayed" / "if it had flying" in a "dies" trigger (Wilhelt, the
+/// Rotcleaver): the creature as it last existed on the battlefield (CR 603.10a).
+fn it_had_keyword(l: &str) -> Option<Condition> {
+    let l = end(l);
+    let (negated, kw) = if let Some(k) = l.strip_prefix("it didn't have ") {
+        (true, k)
+    } else {
+        (false, l.strip_prefix("it had ")?)
+    };
+    let kind = KeywordKind::from_name(kw)?;
+    let has = Condition::SelMatches(Sel::TriggerLki, Filter::HasKeyword(kind));
+    Some(if negated {
+        Condition::Not(Box::new(has))
+    } else {
+        has
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "it had / didn't have [keyword]", priority: 100, parse: it_had_keyword } }
+
+/// "Whenever another Zombie you control dies, if it didn't have decayed, [effect]": an
+/// intervening "if" clause (CR 603.4) about the trigger object as it last existed.
+fn trigger_if_it_had_keyword(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    if !(lower.starts_with("when") || lower.starts_with("at ")) || t.contains('\n') {
+        return None;
+    }
+    let i = lower.find(", if it ")?;
+    let (cond_s, _) = lower[i + ", if ".len()..].split_once(", ")?;
+    let cond = it_had_keyword(cond_s)?;
+    let without = format!("{}{}", &t[..i], &t[i + ", if ".len() + cond_s.len()..]);
+    let a = crate::oracle::triggers::parse_triggered(&without, ctx)?;
+    let AbilityKind::Triggered(mut tr) = a.kind.clone() else {
+        return None;
+    };
+    tr.intervening_if = Some(match tr.intervening_if.take() {
+        Some(c) => Condition::And(vec![cond, c]),
+        None => cond,
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "trigger: if it had / didn't have [keyword]", priority: 100, parse: trigger_if_it_had_keyword } }
+
 /// "if you control a creature with a +1/+1 counter on it that attacked this turn"
 /// (Warrior's Resolve, which gives creatures training).
 fn creature_with_counter_that_attacked(l: &str) -> Option<Condition> {

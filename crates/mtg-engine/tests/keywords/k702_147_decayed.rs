@@ -137,3 +137,23 @@ fn it_isnt_sacrificed_if_another_player_controls_it_at_end_of_combat() {
     assert!(t.on_battlefield(rakshasa));
     assert_eq!(t.obj_now(rakshasa).controller, P1);
 }
+
+#[test]
+fn an_ability_can_check_whether_a_creature_had_decayed() {
+    cr!("702.147a");
+    assert_supported("Wilhelt, the Rotcleaver");
+    let mut t = TestGame::new(2);
+    // Wilhelt: "Whenever another Zombie you control dies, if it didn't have decayed,
+    // create a 2/2 black Zombie creature token with decayed."
+    t.battlefield(P0, "Wilhelt, the Rotcleaver");
+    let walker = t.battlefield(P0, "Walking Corpse");
+    crate::common_k702_052_066::destroy(&mut t, walker);
+    t.resolve_all();
+    let tokens = creature_tokens(&t, P0);
+    assert_eq!(tokens.len(), 1);
+    assert!(has_kw(&t, tokens[0], KeywordKind::Decayed));
+    // That Zombie had decayed: no new token when it dies.
+    crate::common_k702_052_066::destroy(&mut t, tokens[0]);
+    t.resolve_all();
+    assert!(creature_tokens(&t, P0).is_empty());
+}
