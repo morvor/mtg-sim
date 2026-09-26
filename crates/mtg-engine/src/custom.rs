@@ -90,6 +90,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::commander_rules::custom_value(g, name, ctx) {
         return v;
     }
+    // Information noted during the draft (CR 905.2b).
+    if let Some(v) = crate::draft::custom_value(g, name, ctx) {
+        return v;
+    }
     let _ = (g, ctx);
     // "for each of its colors": the source, the object it's attached to, or the object
     // an effect is being applied to.

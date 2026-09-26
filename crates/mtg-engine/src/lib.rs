@@ -51,6 +51,7 @@ pub mod designations;
 pub mod dfc;
 pub mod dice;
 pub mod discard_rules;
+pub mod draft;
 pub mod draw_rules;
 pub mod dungeons;
 pub mod end_turn;

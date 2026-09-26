@@ -531,6 +531,13 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // CR 905.2b: "the highest number you noted for cards named ~".
+    if let Some(rest) = s.strip_prefix("the highest number you noted for cards named ~") {
+        return Some((
+            Value::Custom(crate::draft::HIGHEST_NOTED.into()),
+            rest.to_string(),
+        ));
+    }
     if let Some(r) = s.strip_prefix("the number of ") {
         // "the number of +1/+1 counters on it", "the number of charge counters on ~",
         // "the number of counters on target permanent".

@@ -371,3 +371,102 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &Ctx) -> bool {
     g.merges.commander_split = None;
     true
 }
+
+// --- Commander Draft (CR 903.13) ------------------------------------------------------
+
+/// Set codes of the draft boosters that give Commander Draft players extra options
+/// (CR 903.13e, 903.13f).
+pub const COMMANDER_LEGENDS: &str = "cmr";
+pub const COMMANDER_MASTERS: &str = "cmm";
+pub const BALDURS_GATE: &str = "clb";
+
+/// Checks a Commander Draft deck (CR 903.13f): the Commander deck construction rules
+/// (CR 903.5) except that the deck must contain at least 60 cards with no maximum, it may
+/// include any number of cards from the player's card pool with the same name, and with
+/// Commander Masters boosters any card that can be a commander by itself and whose color
+/// identity has one or fewer colors is considered to have partner. `deck` includes the
+/// commanders; `pool` is the player's card pool; `sets` are the codes of the draft
+/// boosters used. A player may add up to two cards named The Prismatic Piper (with
+/// Commander Legends or Commander Masters boosters) or Faceless One (with Battle for
+/// Baldur's Gate boosters) to their pool, but only as their commanders (CR 903.13e).
+pub fn check_commander_draft_deck(
+    deck: &[Arc<CardDef>],
+    commanders: &[Arc<CardDef>],
+    pool: &[Arc<CardDef>],
+    sets: &[&str],
+) -> Vec<DeckProblem> {
+    use crate::kw::partner::{can_be_commander, commanders_problem, ineligible_commander};
+    let mut problems = Vec::new();
+    let refs: Vec<&CardDef> = commanders.iter().map(|c| c.as_ref()).collect();
+    let masters_partners = sets.contains(&COMMANDER_MASTERS)
+        && refs.len() == 2
+        && refs
+            .iter()
+            .all(|c| can_be_commander(c, false) && color_identity(c).count() <= 1);
+    if !masters_partners {
+        if let Some(reason) = commanders_problem(&refs) {
+            problems.push(DeckProblem::InvalidCommanders { reason });
+        }
+    }
+    if let Some(reason) = ineligible_commander(&refs, false) {
+        problems.push(DeckProblem::InvalidCommanders { reason });
+    }
+    let cards: Vec<&Arc<CardDef>> = deck
+        .iter()
+        .filter(|c| !crate::variants::is_nontraditional(c))
+        .collect();
+    if cards.len() < 60 {
+        problems.push(DeckProblem::TooFewCards {
+            have: cards.len(),
+            min: 60,
+        });
+    }
+    // The cards must come from the pool (basic lands may be added, CR 100.2b).
+    let extra_allowed = |name: &str| -> usize {
+        let named = |sets_ok: bool, n: &str| {
+            if sets_ok && name == n {
+                commanders.iter().filter(|c| c.name == n).count().min(2)
+            } else {
+                0
+            }
+        };
+        named(
+            sets.contains(&COMMANDER_LEGENDS) || sets.contains(&COMMANDER_MASTERS),
+            "The Prismatic Piper",
+        ) + named(sets.contains(&BALDURS_GATE), "Faceless One")
+    };
+    let mut names: Vec<&str> = cards.iter().map(|c| c.name.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    for name in names {
+        let card = cards.iter().find(|c| c.name == name).expect("named card");
+        if is_basic_land(card) {
+            continue;
+        }
+        let have = cards.iter().filter(|c| c.name == name).count();
+        let available = pool.iter().filter(|c| c.name == name).count() + extra_allowed(name);
+        if have > available {
+            problems.push(DeckProblem::NotInCardPool {
+                name: name.to_string(),
+            });
+        }
+    }
+    // Color identity (CR 903.5c, 903.5d).
+    let Some(first) = commanders.first() else {
+        return problems;
+    };
+    let mut combined = (**first).clone();
+    for c in commanders {
+        combined.color_identity = combined.color_identity.union(color_identity(c));
+    }
+    let identity = color_identity(&combined);
+    for c in &cards {
+        if color_identity(c).union(identity) != identity {
+            problems.push(DeckProblem::OutsideColorIdentity {
+                name: c.name.to_string(),
+            });
+        }
+    }
+    problems.extend(basic_land_type_problems(&cards, &combined, false));
+    problems
+}

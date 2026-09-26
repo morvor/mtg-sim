@@ -41,6 +41,8 @@ pub struct StartState {
     pub sticker_sheets: BTreeMap<PlayerId, Vec<crate::stickers::StickerSheet>>,
     /// The names of the sticker sheets each player revealed (CR 103.2d).
     pub revealed_sticker_sheets: BTreeMap<PlayerId, Vec<SmolStr>>,
+    /// Information noted during the draft before the game (CR 905.2b).
+    pub draft: crate::draft::DraftInfo,
 }
 
 impl Game {
