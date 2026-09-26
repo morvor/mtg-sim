@@ -113,6 +113,12 @@ fn is_planar_card(o: &GameObject) -> bool {
     chars.card_types.contains(CardType::Plane) || chars.card_types.contains(CardType::Phenomenon)
 }
 
+/// Whether an object is a card of type `t` (by its card, whatever its state).
+fn card_is(o: &GameObject, t: CardType) -> bool {
+    let chars = o.card.as_ref().map(|c| &c.front().chars).unwrap_or(&o.base);
+    chars.card_types.contains(t)
+}
+
 /// The next player in turn order after `p` who is still in the game (`p` if they are).
 fn in_game_or_next(g: &Game, p: PlayerId) -> PlayerId {
     if g.player(p).in_game() {
@@ -442,7 +448,7 @@ fn planeswalk_away_and_to(
     let from_plane = away
         .iter()
         .chain(departed.iter())
-        .any(|id| g.obj(*id).chars.is(CardType::Plane));
+        .any(|id| card_is(g.obj(*id), CardType::Plane));
     for id in away {
         to_bottom_face_down(g, *id);
     }
@@ -459,12 +465,7 @@ fn planeswalk_away_and_to(
             if to.len() >= n {
                 break;
             }
-            if g.obj(id).base.is(CardType::Plane)
-                || g.obj(id)
-                    .card
-                    .as_ref()
-                    .is_some_and(|c| c.front().chars.is(CardType::Plane))
-            {
+            if card_is(g.obj(id), CardType::Plane) {
                 to.push(id);
             } else {
                 others.push(id);
@@ -717,7 +718,7 @@ pub fn player_leaving(g: &mut Game, p: PlayerId) -> Departure {
         }
         let from_phenomenon = g
             .try_obj(src)
-            .is_some_and(|o| is_planar_card(o) && o.base.is(CardType::Phenomenon))
+            .is_some_and(|o| card_is(o, CardType::Phenomenon))
             || g.obj(s)
                 .stack
                 .as_deref()
@@ -732,7 +733,7 @@ pub fn player_leaving(g: &mut Game, p: PlayerId) -> Departure {
     }
     for t in g.pending_triggers.iter_mut() {
         let o = &g.objects[t.source.0 as usize];
-        if o.owner == p && is_planar_card(o) && o.base.is(CardType::Phenomenon) {
+        if o.owner == p && card_is(o, CardType::Phenomenon) {
             t.controller = new_pc;
         }
     }
@@ -761,7 +762,7 @@ pub fn player_left(g: &mut Game, p: PlayerId, dep: Departure) {
     let plane_left = dep
         .face_up
         .iter()
-        .any(|(id, _)| g.obj(*id).chars.is(CardType::Plane));
+        .any(|(id, _)| card_is(g.obj(*id), CardType::Plane));
     if plane_left {
         for s in g.stack.clone() {
             let is_pw = matches!(
