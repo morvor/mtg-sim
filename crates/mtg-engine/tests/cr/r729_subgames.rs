@@ -10,6 +10,8 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 /// Leaves `p` owning only `n` cards in their library (the rest cease to exist).
 fn shrink_library(t: &mut TestGame, p: PlayerId, n: usize) {
@@ -184,11 +186,25 @@ fn a_subgame_has_its_own_zones_made_from_the_main_game_libraries() {
     for n in ["Grizzly Bears", "Hill Giant", "Lava Spike", "Shock"] {
         assert!(out.contains(&n.to_string()), "{n} is outside the subgame");
     }
-    // The starting player was determined at random by a randomly chosen player.
-    assert!(s.g.start.chooser.is_some());
     assert_eq!(s.g.turn.number, 1);
     end_subgame(&mut t, s, outside);
     assert_eq!(names(&t.g, &t.g.player(P0).library.clone()), main_lib);
+    // Which player goes first is determined at random.
+    let mut first = std::collections::BTreeSet::new();
+    for seed in 0..12u64 {
+        let mut t = TestGame::with_config(
+            2,
+            GameConfig {
+                skip_mulligans: true,
+                ..Default::default()
+            },
+        );
+        t.g.rng = ChaCha8Rng::seed_from_u64(seed);
+        let (s, outside) = start_subgame(&mut t);
+        first.insert(s.g.turn.starting_player);
+        end_subgame(&mut t, s, outside);
+    }
+    assert_eq!(first.len(), 2);
 }
 
 #[test]
