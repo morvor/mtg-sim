@@ -167,6 +167,25 @@ fn the_chosen_name_belongs_to_that_conspiracys_abilities() {
 }
 
 #[test]
+fn a_chosen_name_replacement_effect_applies_once_face_up() {
+    cr!("702.106c", "702.106d");
+    assert_supported("Muzzio's Preparations");
+    let mut t = TestGame::new(2);
+    // Muzzio's Preparations: "Each creature you control with the chosen name enters with
+    // an additional +1/+1 counter on it."
+    let c = agenda(&mut t, P0, "Muzzio's Preparations", &["Grizzly Bears"]);
+    let first = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(first, types::counters::PLUS1), 0);
+    turn_face_up(&mut t, P0, c);
+    let second = t.enter(P0, "Grizzly Bears");
+    let elves = t.enter(P0, "Llanowar Elves");
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert_eq!(t.counters(second, types::counters::PLUS1), 1);
+    assert_eq!(t.counters(elves, types::counters::PLUS1), 0);
+    assert_eq!(t.counters(theirs, types::counters::PLUS1), 0);
+}
+
+#[test]
 fn face_down_conspiracies_are_revealed_when_their_controller_leaves_the_game() {
     cr!("702.106e");
     let mut t = TestGame::new(3);
