@@ -2437,6 +2437,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
+        Restriction::MustAttackPlayer { attackers, .. } => Some(attackers),
         _ => None,
     }
 }
@@ -2455,6 +2456,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
+        Restriction::MustAttackPlayer { defender, .. } => Some(defender),
         _ => None,
     }
 }

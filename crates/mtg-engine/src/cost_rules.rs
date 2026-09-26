@@ -273,6 +273,9 @@ pub fn choose_payment_ways(g: &mut Game, p: PlayerId, source: Option<ObjectId>, 
     *mana = m;
     if life > 0 {
         cost.parts.push(CostPart::PayLife(Value::c(life)));
+        if let Some(s) = source {
+            crate::kw::compleated::record_phyrexian_life(g, s, (life / 2) as u32);
+        }
     }
 }
 

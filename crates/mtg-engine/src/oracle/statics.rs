@@ -551,6 +551,13 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some(rest) = r.strip_prefix("cards in your graveyard") {
             return Some((Value::GraveyardSize(PlayerRef::You), rest.to_string()));
         }
+        // CR 702.140: "the number of times ~ has mutated".
+        if let Some(rest) = r.strip_prefix("times ~ has mutated") {
+            return Some((
+                Value::Custom(crate::kw::mutate::TIMES_MUTATED.into()),
+                rest.to_string(),
+            ));
+        }
         // CR 700.11: "the number of times you descended this turn".
         if let Some(rest) = r.strip_prefix("times you descended this turn") {
             return Some((

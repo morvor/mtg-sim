@@ -39,6 +39,9 @@ pub struct KeywordMark {
     pub obj: ObjectId,
     pub kind: KeywordKind,
     pub turn: u32,
+    /// A cost the effect that marked it gave it (a foretell cost other than the card's
+    /// printed one, CR 702.143d).
+    pub cost: Option<Cost>,
 }
 
 /// Special-action state kept by the game.
@@ -74,8 +77,18 @@ pub struct SpecialState {
 
 /// Marks `obj` as foretold/plotted/... this turn.
 pub fn mark(g: &mut Game, obj: ObjectId, kind: KeywordKind) {
+    mark_with_cost(g, obj, kind, None);
+}
+
+/// Marks `obj` as foretold/plotted/... this turn, with a cost the marking effect gives it.
+pub fn mark_with_cost(g: &mut Game, obj: ObjectId, kind: KeywordKind, cost: Option<Cost>) {
     let turn = g.turn.number;
-    g.special.marks.push(KeywordMark { obj, kind, turn });
+    g.special.marks.push(KeywordMark {
+        obj,
+        kind,
+        turn,
+        cost,
+    });
 }
 
 /// The turn `obj` was marked with `kind`, if it was (and is still the same object).

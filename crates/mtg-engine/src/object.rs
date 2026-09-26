@@ -269,6 +269,10 @@ pub struct CastInfo {
     /// exile: the cards "exiled with it".
     #[serde(default)]
     pub delved: Vec<ObjectId>,
+    /// How many Phyrexian mana symbols of its cost its caster paid 2 life for rather than
+    /// mana (CR 107.4f; compleated, CR 702.150a).
+    #[serde(default)]
+    pub phyrexian_paid_with_life: u32,
     /// It was cast during its caster's main phase ("if you cast this spell during your
     /// main phase", addendum).
     #[serde(default)]

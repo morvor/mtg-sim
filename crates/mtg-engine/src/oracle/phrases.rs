@@ -209,6 +209,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "modified" => Filter::Modified,
         // CR 702.112b.
         "renowned" => Filter::Custom(crate::kw::renown::RENOWNED.into()),
+        // CR 702.143c–d: a foretold card in exile.
+        "foretold" => Filter::Custom(crate::kw::foretell::FORETOLD_CARD.into()),
         // CR 700.16.
         "worthy" => crate::game_terms::worthy_filter(),
         // CR 701.27g.

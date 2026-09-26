@@ -14,6 +14,22 @@ use crate::types::*;
 
 pub struct Mutate;
 
+/// `Value::Custom`: "the number of times ~ has mutated": the number of mutating creature
+/// spells that merged with the source (CR 702.140c–d).
+pub const TIMES_MUTATED: &str = "mutate:times this has mutated";
+/// `TriggerCond::Custom`: "Whenever a creature you control mutates" (CR 702.140d).
+pub const CREATURE_YOU_CONTROL_MUTATES: &str = "mutate:a creature you control mutates";
+
+/// How many times the permanent `id` has mutated: each mutating spell that merged with it
+/// added a component (a melded permanent's own two cards count as one component).
+fn times_mutated(g: &Game, id: ObjectId) -> i64 {
+    let o = g.obj(id);
+    if o.merged_with.is_empty() || o.face == FaceState::Melded {
+        return 0;
+    }
+    o.merged_with.len() as i64 - 1
+}
+
 /// Whether `spell` is on the stack cast for its mutate cost.
 fn cast_mutating(g: &Game, spell: ObjectId) -> bool {
     let o = g.obj(spell);
@@ -62,7 +78,10 @@ impl KeywordRules for Mutate {
     /// CR 702.140a: an alternative cost, from wherever the card could be cast.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         let o = g.obj(card);
-        if o.zone != Zone::Hand(p) && !g.permitted_cards(p).contains(&card) {
+        if o.zone != Zone::Hand(p)
+            && !g.permitted_cards(p).contains(&card)
+            && !super::cast_using_from_graveyard::allows(g, p, card, KeywordKind::Mutate)
+        {
             return vec![];
         }
         let Some(cost) = kw.cost.clone() else {
@@ -97,6 +116,41 @@ impl KeywordRules for Mutate {
         };
         crate::merge::mutate(g, spell, target);
         true
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+        (name == TIMES_MUTATED).then(|| ctx.source.map_or(0, |s| times_mutated(g, s)))
+    }
+
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        _src: ObjectId,
+        ctl: PlayerId,
+        ev: &crate::events::Event,
+    ) -> Option<Vec<EventInfo>> {
+        if name != CREATURE_YOU_CONTROL_MUTATES {
+            return None;
+        }
+        Some(match ev {
+            crate::events::Event::Custom {
+                name: n,
+                player,
+                obj: Some(o),
+                ..
+            } if n == crate::merge::MUTATES
+                && g.obj(*o).controller == ctl
+                && g.obj(*o).is_creature() =>
+            {
+                vec![EventInfo {
+                    object: Some(*o),
+                    player: *player,
+                    ..Default::default()
+                }]
+            }
+            _ => vec![],
+        })
     }
 }
 

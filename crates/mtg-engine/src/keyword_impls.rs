@@ -121,12 +121,15 @@ pub fn derives_ability_functioning_everywhere(abilities: &[Ability]) -> bool {
     })
 }
 
-/// If the ability is derived from a keyword, which one.
+/// If the ability is derived from a keyword, which one. A keyword that labels the ability
+/// following it ("Boast — [cost]: [effect]", CR 702.142a) is found by that label.
 pub fn ability_from_keyword(a: &AbilityDef) -> Option<KeywordKind> {
-    KeywordKind::ALL
-        .iter()
-        .copied()
-        .find(|k| a.text == k.name())
+    KeywordKind::ALL.iter().copied().find(|k| {
+        a.text == k.name()
+            || a.text
+                .strip_prefix(k.name())
+                .is_some_and(|r| r.starts_with(" — "))
+    })
 }
 
 // ---------------------------------------------------------------------------

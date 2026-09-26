@@ -2,31 +2,82 @@
 //! may pay {2} and exile a card with foretell from their hand face down" — a special
 //! action (CR 116.2h, 702.143b). The card may be cast after the current turn has ended by
 //! paying its foretell cost rather than its mana cost (CR 702.143a).
+//!
+//! Foretelling a card means taking that special action (CR 702.143c): it's reported with
+//! the [`FORETOLD`] event ("Whenever you foretell a card"). A foretold card is one put into
+//! exile by it, or one an effect says becomes foretold (CR 702.143d), possibly giving it a
+//! foretell cost of its own; each is marked with the turn it became foretold and that
+//! cost, in the order they were exiled (CR 702.143e). A spell that was a foretold card
+//! before it was cast "was foretold", whatever cost it was cast for ([`WAS_FORETOLD`]).
+//! Face-down foretold cards are revealed when their owner leaves the game and at the end
+//! of the game (CR 702.143f, see `facedown::reveal_all`).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::casting::{CastOption, Illegal};
 use crate::decision::{Action, SpecialAction};
 use crate::eval::Ctx;
-use crate::events::MoveCause;
+use crate::events::{Event, MoveCause};
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::object::*;
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
+use smol_str::SmolStr;
+
+/// `Event::Custom` name: a player (`player`) foretold a card (`obj`, in exile).
+pub const FORETOLD: &str = "foretold";
+/// `TriggerCond::Custom`: "Whenever you foretell a card".
+pub const YOU_FORETELL: &str = "foretell:you foretell a card";
+/// `Filter::Custom`: "foretold card" — a foretold card in exile (CR 702.143c–d).
+pub const FORETOLD_CARD: &str = "foretell:foretold card";
+/// `Condition::Custom`: "if this spell was foretold" (CR 702.143c).
+pub const WAS_FORETOLD: &str = "foretell:this spell was foretold";
+/// `Effect::Custom`: "[the exiled cards (`vars::IT`)] become foretold" (CR 702.143d).
+pub const BECOMES_FORETOLD: &str = "foretell:it becomes foretold";
+/// `Effect::Custom` prefix, followed by N: "It becomes foretold. Its foretell cost is its
+/// mana cost reduced by {N}."
+pub const BECOMES_FORETOLD_REDUCED: &str = "foretell:it becomes foretold with its mana cost reduced by ";
+
+/// `StaticEffect::Custom`: "Foretelling cards from your hand costs {1} less and can be
+/// done on any player's turn." (Cosmos Charger).
+pub const CHEAPER_ANY_TURN: &str = "foretell:costs {1} less and can be done on any player's turn";
+/// `StaticEffect::Custom`: "The first card you foretell each turn costs {0} to foretell."
+/// (Ranar the Ever-Watchful).
+pub const FIRST_EACH_TURN_FREE: &str = "foretell:the first card you foretell each turn costs {0}";
 
 pub struct Foretell;
 
-/// The cost of foretelling a card (CR 702.143a).
-fn foretell_action_cost() -> Cost {
-    Cost::mana(crate::mana::ManaCost::parse("{2}").expect("mana"))
+/// How many active static abilities named `name` player `p` controls.
+fn statics_of(g: &Game, p: PlayerId, name: &str) -> usize {
+    g.statics
+        .customs
+        .iter()
+        .filter(|(_, ctl, n)| *ctl == p && n.as_str() == name)
+        .count()
+}
+
+/// The cost for `p` of foretelling a card (CR 702.143a): {2}, or {0} for the first card
+/// they foretell each turn with Ranar; {1} less with Cosmos Charger (which can't reduce
+/// it below {0}, and more of them don't reduce it further than that).
+fn foretell_action_cost(g: &Game, p: PlayerId) -> Cost {
+    let foretold_this_turn = g.turn_events.iter().any(|e| {
+        matches!(e, Event::Custom { name, player: Some(q), .. } if name == FORETOLD && *q == p)
+    });
+    let mut n: u32 = if !foretold_this_turn && statics_of(g, p, FIRST_EACH_TURN_FREE) > 0 {
+        0
+    } else {
+        2
+    };
+    n = n.saturating_sub(statics_of(g, p, CHEAPER_ANY_TURN) as u32);
+    Cost::mana(crate::mana::ManaCost::generic(n))
 }
 
 fn can_foretell(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     let o = g.obj(card);
     o.zone == Zone::Hand(p)
         && o.chars.has_keyword(KeywordKind::Foretell)
-        && g.turn.active == p
+        && (g.turn.active == p || statics_of(g, p, CHEAPER_ANY_TURN) > 0)
         && g.has_priority(p)
 }
 
@@ -39,13 +90,62 @@ fn foretell_cost(g: &Game, card: ObjectId) -> Option<Cost> {
         .and_then(|k| k.cost.clone())
 }
 
+/// The foretold marks of `obj` (the most recent first), whether or not it's still the same
+/// object.
+fn foretold_marks(g: &Game, obj: ObjectId) -> impl Iterator<Item = &crate::special_actions::KeywordMark> {
+    g.special
+        .marks
+        .iter()
+        .rev()
+        .filter(move |m| m.obj == obj && m.kind == KeywordKind::Foretell)
+}
+
+/// Whether `card` is a foretold card: in exile, marked foretold as it is now.
+pub fn is_foretold(g: &Game, card: ObjectId) -> bool {
+    g.is_live(card) && g.obj(card).zone == Zone::Exile && foretold_marks(g, card).next().is_some()
+}
+
+/// The face-down foretold cards in exile (owned by `owner`, if given), in the order they
+/// were exiled.
+pub fn face_down_foretold(g: &Game, owner: Option<PlayerId>) -> Vec<ObjectId> {
+    g.exile
+        .iter()
+        .copied()
+        .filter(|c| g.obj(*c).face_down && is_foretold(g, *c))
+        .filter(|c| owner.is_none_or(|p| g.obj(*c).owner == p))
+        .collect()
+}
+
+/// Marks the cards as foretold, giving them `cost` as a foretell cost (CR 702.143d). Their
+/// owner may look at them as long as they remain in exile.
+fn become_foretold(g: &mut Game, cards: &[ObjectId], reduce_by: Option<u32>) {
+    for c in cards.iter().copied() {
+        if !g.is_live(c) || g.obj(c).zone != Zone::Exile {
+            continue;
+        }
+        let cost = reduce_by.map(|n| {
+            let mut m = g
+                .obj(c)
+                .card
+                .as_ref()
+                .and_then(|d| d.characteristics(FaceState::Front).mana_cost)
+                .unwrap_or_default();
+            m.reduce_generic(n);
+            Cost::mana(m)
+        });
+        crate::special_actions::mark_with_cost(g, c, KeywordKind::Foretell, cost);
+        let owner = g.obj(c).owner;
+        crate::zones::allow_look(g, owner, c);
+    }
+}
+
 impl KeywordRules for Foretell {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Foretell]
     }
 
     fn special_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
-        let cost = foretell_action_cost();
+        let cost = foretell_action_cost(g, p);
         g.player(p)
             .hand
             .iter()
@@ -72,7 +172,7 @@ impl KeywordRules for Foretell {
         if !crate::special_actions::pay(
             g,
             p,
-            &foretell_action_cost(),
+            &foretell_action_cost(g, p),
             Some(card),
             &Ctx::new(Some(card), p),
         ) {
@@ -94,6 +194,13 @@ impl KeywordRules for Foretell {
             crate::special_actions::mark(g, new, KeywordKind::Foretell);
             // CR 702.143a, 406.3: the player may look at it as long as it remains exiled.
             crate::zones::allow_look(g, p, new);
+            // CR 702.143c: the player foretold a card.
+            g.emit(Event::Custom {
+                name: SmolStr::new(FORETOLD),
+                player: Some(p),
+                obj: Some(new),
+                amount: 0,
+            });
         }
         Some(Ok(()))
     }
@@ -103,21 +210,94 @@ impl KeywordRules for Foretell {
         if o.zone != Zone::Exile || o.owner != p || !o.face_down {
             return vec![];
         }
-        // After the turn it was foretold has ended.
-        let Some(turn) = crate::special_actions::marked(g, card, KeywordKind::Foretell) else {
+        // After the turn it became foretold has ended.
+        let Some(mark) = foretold_marks(g, card).next() else {
             return vec![];
         };
-        if turn >= g.turn.number {
+        if mark.turn >= g.turn.number || !g.is_live(card) {
             return vec![];
         }
-        let Some(cost) = foretell_cost(g, card) else {
-            return vec![];
+        // Any foretell cost it has: its printed one, and one the effect that made it
+        // foretold gave it (CR 702.143d).
+        let costs: Vec<Cost> = foretell_cost(g, card)
+            .into_iter()
+            .chain(mark.cost.clone())
+            .collect();
+        costs
+            .into_iter()
+            .map(|cost| {
+                let mut opt = CastOption::normal(FaceState::Front);
+                opt.method = CastMethod::Keyword(KeywordKind::Foretell);
+                opt.alt_cost = Some(cost);
+                opt.tag = Some("foretell");
+                opt
+            })
+            .collect()
+    }
+
+    fn custom_trigger(
+        &self,
+        _g: &Game,
+        name: &str,
+        _src: ObjectId,
+        ctl: PlayerId,
+        ev: &Event,
+    ) -> Option<Vec<EventInfo>> {
+        if name != YOU_FORETELL {
+            return None;
+        }
+        Some(match ev {
+            Event::Custom {
+                name: n,
+                player: Some(p),
+                obj,
+                ..
+            } if n == FORETOLD && *p == ctl => vec![EventInfo {
+                object: *obj,
+                player: Some(*p),
+                ..Default::default()
+            }],
+            _ => vec![],
+        })
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        (name == FORETOLD_CARD).then(|| is_foretold(g, id))
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name != WAS_FORETOLD {
+            return None;
+        }
+        // The spell was a foretold card before it was cast (CR 702.143c).
+        let spell = ctx.source?;
+        let o = g.obj(spell);
+        let was = o.kind == ObjKind::Card
+            && o.stack.as_deref().is_some_and(|si| si.cast.was_cast)
+            && o.prev.is_some_and(|prev| {
+                g.obj(prev).zone == Zone::Exile && foretold_marks(g, prev).next().is_some()
+            });
+        Some(was)
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let reduce_by = if name == BECOMES_FORETOLD {
+            None
+        } else if let Some(n) = name.strip_prefix(BECOMES_FORETOLD_REDUCED) {
+            match n.parse::<u32>() {
+                Ok(n) => Some(n),
+                Err(_) => return false,
+            }
+        } else {
+            return false;
         };
-        let mut opt = CastOption::normal(FaceState::Front);
-        opt.method = CastMethod::Keyword(KeywordKind::Foretell);
-        opt.alt_cost = Some(cost);
-        opt.tag = Some("foretell");
-        vec![opt]
+        let cards: Vec<ObjectId> = ctx
+            .vars
+            .get(&vars::IT)
+            .map(|v| v.iter().filter_map(|e| e.object()).collect())
+            .unwrap_or_default();
+        become_foretold(g, &cards, reduce_by);
+        true
     }
 }
 
