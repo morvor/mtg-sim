@@ -309,3 +309,89 @@ fn a_companion_put_into_hand_remains_in_the_game() {
         .iter()
         .all(|s| !matches!(s, SpecialAction::CompanionToHand { .. })));
 }
+
+#[test]
+fn a_minimum_deck_size_condition_depends_on_the_format() {
+    cr!("702.139a");
+    ruling!(
+        "Yorion, Sky Nomad",
+        "Your minimum deck size is forty cards for Limited events (such as Booster Draft and Sealed Deck) and sixty cards for Constructed events (such as Standard or casual freeform play). Certain variants may have other minimums. The Commander variant requires exactly one hundred cards, so Yorion can never be your chosen companion in a Commander game."
+    );
+    let deck = |n: usize| {
+        let mut d = copies("Forest", 24);
+        d.extend(copies("Grizzly Bears", n - 24));
+        d
+    };
+    // Limited: a sixty-card deck is twenty more than the minimum of forty.
+    let limited = GameConfig {
+        limited: true,
+        starting_player: Some(P0),
+        ..Default::default()
+    };
+    let (t, side) = start_with(limited.clone(), deck(60), vec![card("Yorion, Sky Nomad")], Some(0));
+    assert_eq!(t.g.companion_of(P0), Some(side[0]));
+    let (t, _) = start_with(limited, deck(59), vec![card("Yorion, Sky Nomad")], Some(0));
+    assert_eq!(t.g.companion_of(P0), None);
+    // Constructed: sixty cards aren't enough.
+    let (t, _) = start_with(config(), deck(60), vec![card("Yorion, Sky Nomad")], Some(0));
+    assert_eq!(t.g.companion_of(P0), None);
+    // Commander: exactly one hundred cards, never twenty more than the minimum.
+    let mut d = copies("Forest", 60);
+    d.extend(copies("Grizzly Bears", 39));
+    d.push(card("Isamaru, Hound of Konda"));
+    let mut t = pregame(
+        GameConfig {
+            variant: Variant::Commander,
+            starting_player: Some(P0),
+            ..Default::default()
+        },
+        vec![d, copies("Forest", 100)],
+    );
+    assert!(t.g.designate_commander(P0, "Isamaru, Hound of Konda"));
+    let side = t.g.add_to_sideboard(P0, vec![card("Yorion, Sky Nomad")]);
+    t.answer_choose(P0, &[Entity::Object(side[0])]);
+    t.g.start();
+    assert_eq!(t.g.companion_of(P0), None);
+}
+
+#[test]
+fn a_repeated_mana_symbol_condition_compares_exact_symbols() {
+    cr!("702.139a");
+    ruling!(
+        "Jegantha, the Wellspring",
+        "If any one card has the same symbol twice, such as {X}{X}{R} or {(r/g)}{(r/g)}, the companion condition isn't satisfied."
+    );
+    let revealable = |extra: &str| -> bool {
+        let mut d = copies("Forest", 24);
+        d.extend(copies("Grizzly Bears", 35));
+        d.push(card(extra));
+        let (t, side) = start_with(config(), d, vec![card("Jegantha, the Wellspring")], Some(0));
+        t.g.companion_of(P0) == Some(side[0])
+    };
+    // {3}{R}: one generic symbol.
+    assert!(revealable("Hill Giant"));
+    // {X}{X} and {R/W}{R/W}{R/W}.
+    assert!(!revealable("Hangarback Walker"));
+    assert!(!revealable("Boros Reckoner"));
+}
+
+#[test]
+fn a_shared_card_type_condition_needs_one_type_every_card_has() {
+    cr!("702.139a");
+    ruling!(
+        "Umori, the Collector",
+        "For example, if every nonland card is an artifact creature, enchantment creature, or creature, it is satisfied; but if you have an artifact creature, an artifact, and a creature, it is not satisfied"
+    );
+    let revealable = |nonland: &[&str]| -> bool {
+        let mut d = copies("Forest", 24);
+        for n in nonland {
+            d.extend(copies(n, 12));
+        }
+        let (t, side) = start_with(config(), d, vec![card("Umori, the Collector")], Some(0));
+        t.g.companion_of(P0) == Some(side[0])
+    };
+    // Artifact creature and creature: they share creature.
+    assert!(revealable(&["Ornithopter", "Grizzly Bears", "Hill Giant"]));
+    // Artifact creature, artifact, and creature: no one type.
+    assert!(!revealable(&["Ornithopter", "Mind Stone", "Grizzly Bears"]));
+}
