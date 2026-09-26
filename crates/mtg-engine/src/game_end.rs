@@ -333,8 +333,13 @@ impl Game {
         if self.result.is_some() {
             return false;
         }
+        // A decision called for by the tournament rules: a player controlling another
+        // player can't make it for them (CR 723.5b).
         for p in self.apnap() {
-            if !self.ask_yes_no(p, None, "Agree to an intentional draw?", false) {
+            let agree = crate::player_control::own_decisions(self, |g| {
+                g.ask_yes_no(p, None, "Agree to an intentional draw?", false)
+            });
+            if !agree {
                 return false;
             }
         }

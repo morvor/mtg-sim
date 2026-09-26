@@ -82,6 +82,7 @@ pub mod oracle;
 pub mod oracle_ext;
 pub mod piles;
 pub mod planechase;
+pub mod player_control;
 pub mod prevention;
 pub mod radiation;
 pub mod replacement;

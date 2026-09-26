@@ -103,7 +103,9 @@ impl Agent for ScriptedAgent {
         let mut s = self.script.lock().unwrap();
         s.asked.push((p, d.clone()));
         let k = kind_of(d);
-        let q = &mut s.queues[p.idx()];
+        // The answers queued for this agent's player: a player controlling another player
+        // makes that player's decisions (CR 723.5).
+        let q = &mut s.queues[self.player.idx()];
         if let Some(i) = q
             .iter()
             .position(|(kind, _)| *kind == k || *kind == DecisionKind::Any)

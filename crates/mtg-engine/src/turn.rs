@@ -323,6 +323,8 @@ impl Game {
             o.goaded_by.retain(|p| *p != active);
         }
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
+        // CR 723.1: player-controlling effects for this turn start (and last turn's end).
+        crate::player_control::turn_began(self);
         self.emit(Event::TurnBegan {
             active,
             number: self.turn.number,
@@ -359,6 +361,7 @@ impl Game {
         }
         self.expire_effects_at_step_begin(step);
         self.turn.step_log.push(step);
+        crate::player_control::step_began(self, step);
         self.emit(Event::StepBegan { step, active });
         // CR 614.10b: an action a skip effect scheduled is the first thing that happens.
         crate::skip::run_step_start_actions(self);

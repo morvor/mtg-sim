@@ -517,6 +517,8 @@ pub struct Game {
     pub searches: crate::search_rules::SearchState,
     /// When permanents last transformed (CR 701.27f).
     pub transforms: crate::transform_rules::TransformState,
+    /// Players controlling other players (CR 723).
+    pub player_control: crate::player_control::PlayerControlState,
 }
 
 impl Game {
@@ -611,6 +613,7 @@ impl Game {
             reveals: Default::default(),
             searches: Default::default(),
             transforms: Default::default(),
+            player_control: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -928,14 +931,26 @@ impl Game {
             self.recompute();
         }
         self.actions_taken += 1;
+        // CR 723.5: the decisions of a player controlled by another player are made by
+        // that other player.
+        let decider = crate::player_control::decider(self, player);
+        let decision = if decider != player {
+            crate::player_control::for_controller(self, decision)
+        } else {
+            decision
+        };
         let agents = self.agents.clone();
         let mut guard = agents
             .0
             .lock()
             .expect("agent mutex poisoned (re-entrant ask?)");
-        let answer = guard[player.idx()].decide(self, player, &decision);
+        let answer = guard[decider.idx()].decide(self, player, &decision);
         drop(guard);
-        answer
+        if decider != player {
+            crate::player_control::check_answer(answer)
+        } else {
+            answer
+        }
     }
 
     /// Asks a yes/no question; `Default` answers `default`.
