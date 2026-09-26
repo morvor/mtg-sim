@@ -1651,6 +1651,9 @@ pub fn pay_mana(
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;
     }
+    if let (true, Some(spell), true) = (spend.is_spell, spend.source, plan.life > 0) {
+        crate::kw::compleated::record_phyrexian_life(g, spell, plan.life / 2);
+    }
     let mut spent = Vec::new();
     let mut idxs = plan.pool_indices.clone();
     idxs.sort_unstable_by(|a, b| b.cmp(a));
