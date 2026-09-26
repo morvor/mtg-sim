@@ -248,3 +248,40 @@ fn a_permanent_that_left_and_returned_is_a_new_object_unaffected_by_unearth() {
     t.settle();
     assert!(t.in_graveyard(P0, "Dregscape Zombie"));
 }
+
+#[test]
+fn a_card_can_have_several_unearth_abilities_and_use_either() {
+    cr!("702.84a");
+    ruling!(
+        "Sedris, the Traitor King",
+        "Sedris may cause a creature card in your graveyard to have multiple unearth abilities. (For example, a Fatestitcher in your graveyard would have unearth {U} and unearth {2}{B}.) You may activate either of those abilities."
+    );
+    ruling!(
+        "Sedris, the Traitor King",
+        "the unearth abilities that Sedris grants are activated abilities of each individual creature card in your graveyard. They're not activated abilities of Sedris."
+    );
+    assert_supported("Sedris, the Traitor King");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sedris, the Traitor King");
+    let stitcher = t.graveyard(P0, "Fatestitcher");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.g.recompute();
+    let unearths = |t: &TestGame, id: ObjectId| {
+        t.obj_now(id)
+            .chars
+            .keywords()
+            .filter(|k| k.kind == KeywordKind::Unearth)
+            .count()
+    };
+    assert_eq!(unearths(&t, stitcher), 2);
+    assert_eq!(unearths(&t, bears), 1);
+    // The granted {2}{B} one (the second unearth ability of Fatestitcher).
+    t.lands(P0, "Swamp", 3);
+    activate_named(&mut t, P0, stitcher, "Unearth", 1).expect("granted unearth");
+    t.resolve();
+    let now = t.g.current(stitcher);
+    assert!(t.on_battlefield(now));
+    assert!(t.g.obj(now).has_keyword(KeywordKind::Haste));
+    // With no mana left, the Bears can't be unearthed for {2}{B}.
+    assert!(unearth(&mut t, P0, bears).is_err());
+}

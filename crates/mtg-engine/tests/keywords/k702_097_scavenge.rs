@@ -122,3 +122,46 @@ fn scavenge_does_nothing_if_its_target_becomes_illegal() {
     assert_eq!(t.zone(slither), Zone::Exile);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn varolz_gives_creature_cards_scavenge_for_their_mana_cost() {
+    cr!("702.97a");
+    ruling!(
+        "Varolz, the Scar-Striped",
+        "While Varolz, the Scar-Striped is on the battlefield, the scavenge cost of a creature card in your graveyard is equal to its mana cost, including any colored mana requirements."
+    );
+    assert_supported("Varolz, the Scar-Striped");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Varolz, the Scar-Striped");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Hill Giant costs {3}{R}: Forests can't pay for the red.
+    t.lands(P0, "Forest", 4);
+    assert!(scavenge(&mut t, P0, giant, bears).is_err());
+    t.lands(P0, "Mountain", 1);
+    scavenge(&mut t, P0, giant, bears).expect("scavenge for its mana cost");
+    t.resolve();
+    assert_eq!(t.counters(bears, counters::PLUS1), 3);
+}
+
+#[test]
+fn a_card_with_two_scavenge_abilities_can_use_either() {
+    cr!("702.97a");
+    ruling!(
+        "Varolz, the Scar-Striped",
+        "If a creature card has multiple instances of scavenge, you can activate either ability (but not both, as the card will be exiled when you activate one of them)."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Varolz, the Scar-Striped");
+    // Slitherhead: scavenge {0} and (from Varolz) scavenge {B/G}.
+    let slither = t.graveyard(P0, "Slitherhead");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let swamp = t.battlefield(P0, "Swamp");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    activate_named(&mut t, P0, slither, "Scavenge", 1).expect("the granted one");
+    assert!(t.g.obj(swamp).tapped);
+    assert!(t.in_exile("Slitherhead"));
+    // It can't be activated again: the card is gone.
+    t.resolve();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+}
