@@ -126,3 +126,23 @@ pub fn exchange_life_totals(g: &mut Game, a: PlayerId, b: PlayerId) -> bool {
     }
     true
 }
+
+/// `PlayerModification::Custom` name of "You don't lose the game for having 0 or less
+/// life." (Lich, Phyrexian Unlife).
+pub const NO_LOSS_FOR_ZERO_LIFE: &str = "don't lose the game for having 0 or less life";
+
+/// Whether `p` doesn't lose the game for having 0 or less life: the state-based action
+/// of CR 704.5a (CR 104.3b, 119.6) doesn't apply to them. They can still lose for other
+/// reasons (poison, drawing from an empty library, an effect).
+pub fn ignores_zero_life(g: &Game, p: PlayerId) -> bool {
+    g.player(p).has_mod(
+        |m| matches!(m, crate::ability::PlayerModification::Custom(n) if n == NO_LOSS_FOR_ZERO_LIFE),
+    )
+}
+
+/// Whether a Two-Headed Giant team doesn't lose for its life total being 0 or less
+/// (CR 810.8c): each player's life total is the team's (CR 810.9), and the team loses if
+/// either player does (CR 810.8a), so every member must be unaffected.
+pub fn team_ignores_zero_life(g: &Game, members: &[PlayerId]) -> bool {
+    !members.is_empty() && members.iter().all(|p| ignores_zero_life(g, *p))
+}

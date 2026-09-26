@@ -54,7 +54,7 @@ impl Game {
         let mut losers: BTreeSet<PlayerId> = BTreeSet::new();
         for p in self.players_in_game() {
             let pl = self.player(p);
-            if !two_headed && pl.life <= 0 {
+            if !two_headed && pl.life <= 0 && !crate::life_totals::ignores_zero_life(self, p) {
                 losers.insert(p); // 704.5a
             }
             if pl.drew_from_empty_library {
@@ -98,7 +98,9 @@ impl Game {
                     .filter(|p| self.player(*p).team == t)
                     .count() as u32;
                 let lethal_poison = 15 + 5 * team_size.saturating_sub(2);
-                if life <= 0 || poison >= lethal_poison {
+                let life_loss =
+                    life <= 0 && !crate::life_totals::team_ignores_zero_life(self, &members);
+                if life_loss || poison >= lethal_poison {
                     losers.extend(members);
                 }
             }
