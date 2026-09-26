@@ -23,6 +23,74 @@ fn may_choose_not_to_untap(l: &str, text: &str, _ctx: &CompileContext) -> Option
 
 inventory::submit! { StaticPattern { name: "restrictions: may choose not to untap ~", priority: 100, parse: may_choose_not_to_untap } }
 
+/// "Untap ~ during each other player's untap step.", "Untap all creatures and lands you
+/// control during each other player's untap step." (CR 502.3).
+fn untap_during_others_untap_steps(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let what = l
+        .strip_prefix("untap ")?
+        .strip_suffix(" during each other player's untap step")?;
+    let f = if what == "~" {
+        Filter::Source
+    } else {
+        let phrase = what
+            .strip_prefix("all ")
+            .or_else(|| what.strip_prefix("each "))?;
+        // Only the controller's own permanents.
+        if !phrase.contains(" you control") {
+            return None;
+        }
+        let (f, _) = crate::oracle::patterns::statics::whole_object_phrase(phrase)?;
+        f
+    };
+    let s = StaticAbility::new(StaticEffect::Restriction(
+        Restriction::UntapDuringOthersUntapSteps(f),
+    ));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "restrictions: untap during each other player's untap step", priority: 100, parse: untap_during_others_untap_steps } }
+
+/// "You may tap or untap target creature": at resolution, the controller may tap it or
+/// untap it (CR 701.26).
+fn may_tap_or_untap(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    // "you may" is usually split off by the caller, which wraps the rest in `May`.
+    let (may, r) = match l.strip_prefix("you may tap or untap ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("tap or untap ")?),
+    };
+    // "..., then you may tap or untap another target permanent": "another" there means
+    // other than the first target, which isn't modeled; leave such sentences alone.
+    if r.starts_with("another target") && !b.targets.is_empty() {
+        return None;
+    }
+    let (what, tail) = object_ref(r, b)?;
+    if !end(&tail).is_empty() || matches!(what, Sel::None) {
+        return None;
+    }
+    let choice = Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            ("Tap".into(), Effect::Tap { what: what.clone() }),
+            ("Untap".into(), Effect::Untap { what }),
+        ],
+    };
+    Some(if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(choice),
+        }
+    } else {
+        choice
+    })
+}
+
+inventory::submit! { EffectPattern { name: "restrictions: you may tap or untap", priority: 100, parse: may_tap_or_untap } }
+
 /// "It doesn't untap during its controller's untap step for as long as ~ remains tapped",
 /// "that permanent doesn't untap during its controller's untap step for as long as you
 /// control ~": a rule-modifying effect locked onto the objects it names (CR 611.2c) that

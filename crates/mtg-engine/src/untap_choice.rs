@@ -128,4 +128,29 @@ impl Game {
             }
         }
     }
+
+    /// "Untap [permanents you control] during each other player's untap step": those
+    /// permanents untap along with the active player's, with no choice, and effects that
+    /// apply during their controller's own untap step don't stop them (CR 502.3; Seedborn
+    /// Muse and Murkfiend Liege rulings). Several such abilities untap a permanent once.
+    pub(crate) fn untap_during_others_untap_steps(&mut self, to_untap: &mut Vec<ObjectId>) {
+        let actives = self.active_players();
+        let extra: Vec<ObjectId> = self
+            .permanents()
+            .filter(|o| o.tapped && !actives.contains(&o.controller))
+            .map(|o| (o.id, o.controller))
+            .filter(|(id, ctl)| {
+                self.statics.restrictions.iter().any(|(s, c, r)| {
+                    matches!(r, Restriction::UntapDuringOthersUntapSteps(f)
+                        if c == ctl && self.matches(*id, f, &Ctx::new(Some(*s), *c)))
+                })
+            })
+            .map(|(id, _)| id)
+            .collect();
+        for id in extra {
+            if !to_untap.contains(&id) {
+                to_untap.push(id);
+            }
+        }
+    }
 }

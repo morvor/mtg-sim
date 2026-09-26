@@ -252,3 +252,123 @@ fn nothing_to_keep_tapped_untaps_by_default() {
     next_untap(&mut t, P0);
     assert!(tapped(&t, leech));
 }
+
+#[test]
+fn permanents_untap_during_each_other_players_untap_step() {
+    cr!("502.3");
+    ruling!(
+        "Seedborn Muse",
+        "All your permanents untap during each other player's untap step."
+    );
+    compiles("Seedborn Muse");
+    compiles("Prophet of Kruphix");
+    compiles("Drumbellower");
+    compiles("Ivorytusk Fortress");
+    compiles("Urban Burgeoning");
+    let mut t = TestGame::new(2);
+    let muse = t.battlefield(P0, "Seedborn Muse");
+    let forest = t.battlefield(P0, "Forest");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    for id in [muse, forest, theirs] {
+        t.g.tap(id);
+    }
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, muse) && !tapped(&t, forest));
+    assert!(!tapped(&t, theirs));
+    // Without the Muse, nothing of P0's untaps during P1's untap step.
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    t.g.tap(forest);
+    next_untap(&mut t, P1);
+    assert!(tapped(&t, forest));
+}
+
+#[test]
+fn only_the_matching_permanents_untap_and_doesnt_untap_effects_dont_apply() {
+    cr!("502.3");
+    ruling!(
+        "Unwinding Clock",
+        "These effects won’t apply and stop the artifact from untapping during another player’s untap step."
+    );
+    ruling!(
+        "Murkfiend Liege",
+        "effects that would otherwise cause your green and/or blue creatures to stay tapped don't apply"
+    );
+    compiles("Unwinding Clock");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Unwinding Clock");
+    let stone = t.battlefield(P0, "Mind Stone");
+    let colossus = t.battlefield(P0, "Colossus of Sardia");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let tick = t.battlefield(P1, "Rust Tick");
+    t.lands(P1, "Wastes", 1);
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P1, tick, 0, &[stone.into()]).unwrap();
+    t.resolve();
+    t.g.tap(colossus);
+    t.g.tap(bears);
+    // P1's untap step: P1 keeps Rust Tick tapped; P0's artifacts untap anyway, Colossus
+    // of Sardia ("doesn't untap during your untap step") included; the Bears don't.
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(tapped(&t, tick));
+    assert!(!tapped(&t, stone));
+    assert!(!tapped(&t, colossus));
+    assert!(tapped(&t, bears));
+}
+
+#[test]
+fn untap_this_during_each_other_players_untap_step() {
+    cr!("502.3");
+    ruling!(
+        "Bender's Waterskin",
+        "untaps at the same time as the active player's permanents"
+    );
+    compiles("Bender's Waterskin");
+    let mut t = TestGame::new(2);
+    let skin = t.battlefield(P0, "Bender's Waterskin");
+    t.g.tap(skin);
+    next_untap(&mut t, P1);
+    assert!(!tapped(&t, skin));
+    // And during its controller's own untap step, as usual.
+    t.g.tap(skin);
+    next_untap(&mut t, P0);
+    assert!(!tapped(&t, skin));
+}
+
+#[test]
+fn you_may_tap_or_untap_target_permanent() {
+    cr!("701.26a", "701.26b");
+    compiles("Jolt");
+    compiles("Niblis of the Breath");
+    compiles("Teardrop Kami");
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    t.g.tap(forest);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let jolt = t.hand(P0, "Jolt");
+    t.lands(P0, "Island", 3);
+    // Untap P0's land.
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    t.cast(P0, jolt).target(forest).go();
+    t.resolve();
+    assert!(!tapped(&t, forest));
+    // Tap an opponent's creature.
+    let kami = t.battlefield(P0, "Teardrop Kami");
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.activate(P0, kami, 0, &[bears.into()]).unwrap();
+    t.resolve();
+    assert!(tapped(&t, bears));
+    // "Another target" after an earlier target (Hidden Strings) isn't handled.
+    assert!(!card("Hidden Strings").unsupported_text().is_empty());
+}
