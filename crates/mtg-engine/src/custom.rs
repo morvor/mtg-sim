@@ -466,7 +466,12 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // The planeswalking ability (CR 901.8, 701.31).
     if name == crate::planechase::PLANESWALK_EFFECT {
-        crate::planechase::planeswalk(g, ctx.controller);
+        crate::planechase::planeswalking_ability_resolves(g, ctx.controller);
+        return;
+    }
+    // "Simultaneously planeswalk to [N plane cards]" (CR 901.11c).
+    if let Some(n) = name.strip_prefix(crate::planechase::PLANESWALK_TO_PLANES) {
+        crate::planechase::planeswalk_to(g, ctx.controller, n.parse().unwrap_or(1));
         return;
     }
     if name == crate::planechase::CHAOS_ENSUES_EFFECT {

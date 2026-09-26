@@ -530,6 +530,19 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         (" until end of turn", Duration::EndOfTurn),
         (" this turn", Duration::EndOfTurn),
         (" until your next turn", Duration::UntilYourNextTurn),
+        // CR 901.11.
+        (
+            " until a player planeswalks away from a plane",
+            Duration::UntilPlaneswalk {
+                away_from_plane: true,
+            },
+        ),
+        (
+            " until a player planeswalks",
+            Duration::UntilPlaneswalk {
+                away_from_plane: false,
+            },
+        ),
         // CR 500.4: until that step next begins.
         (
             " until your next upkeep",

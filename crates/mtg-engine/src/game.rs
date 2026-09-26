@@ -106,6 +106,15 @@ pub struct GameConfig {
     /// (CR 801.2a: different players may have different ranges of influence).
     #[serde(default)]
     pub player_ranges: Vec<(PlayerId, u32)>,
+    /// The Planechase casual variant played along with another variant: Two-Headed Giant
+    /// Planechase (CR 901.12) or Grand Melee Planechase (CR 901.14). (A game whose variant
+    /// is `Variant::Planechase` is a Planechase game on its own, CR 901.2.)
+    #[serde(default)]
+    pub planechase: bool,
+    /// The Archenemy Commander option (CR 904.13): a Commander game using the Archenemy
+    /// rules.
+    #[serde(default)]
+    pub archenemy: bool,
 }
 
 impl Default for GameConfig {
@@ -133,6 +142,8 @@ impl Default for GameConfig {
             deploy_creatures: false,
             shared_team_turns: false,
             player_ranges: vec![],
+            planechase: false,
+            archenemy: false,
         }
     }
 }
@@ -572,6 +583,7 @@ pub struct Game {
     pub modal_history: crate::modal_history::ModalHistory,
     /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
     pub multiplayer: crate::multiplayer::MultiplayerState,
+    pub planechase: crate::planechase::PlanarState,
 }
 
 impl Game {
@@ -673,6 +685,7 @@ impl Game {
             shortcuts: Default::default(),
             modal_history: Default::default(),
             multiplayer: Default::default(),
+            planechase: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
