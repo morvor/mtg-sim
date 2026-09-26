@@ -200,3 +200,41 @@ pub fn watch<T: Send + 'static>(
     });
     seen
 }
+
+/// Declares attackers for the active player and advances into the declare attackers step
+/// (attackers declared, triggers on the stack, no blocks yet).
+pub fn attack_with(t: &mut TestGame, attackers: &[(ObjectId, Entity)]) {
+    use mtg_engine::decision::Answer;
+    use mtg_engine::turn::{Stage, Step};
+    let ap = t.g.turn.active;
+    if t.g.turn.step != Step::BeginningOfCombat {
+        t.set_step(ap, Step::BeginningOfCombat);
+    }
+    t.answer(
+        ap,
+        DecisionKind::Attackers,
+        Answer::Attackers(attackers.to_vec()),
+    );
+    let turn = t.g.turn.number;
+    let ok = t.g.run_until(10_000, |g| {
+        (g.turn.step == Step::DeclareAttackers
+            && g.turn.stage == Stage::Priority
+            && g.turn.priority == Some(ap))
+            || g.turn.number != turn
+    });
+    assert!(ok && t.g.turn.number == turn, "attackers not declared");
+    t.settle();
+}
+
+/// Finishes combat from the declare attackers step with the given blocks, advancing to
+/// the end of combat step.
+pub fn block_and_finish(t: &mut TestGame, dp: PlayerId, blocks: &[(ObjectId, ObjectId)]) {
+    use mtg_engine::decision::Answer;
+    t.answer(
+        dp,
+        DecisionKind::Blockers,
+        Answer::Blockers(blocks.to_vec()),
+    );
+    let ap = t.g.turn.active;
+    t.advance_to(ap, mtg_engine::turn::Step::EndOfCombat);
+}
