@@ -84,6 +84,8 @@ pub struct KwaState {
     /// Harnessed permanents (CR 701.64b). A permanent that leaves the battlefield becomes
     /// a new object (CR 400.7), which isn't harnessed.
     pub harnessed: Vec<ObjectId>,
+    /// Exerted permanents and the player who exerted each (CR 701.43a).
+    pub exerted_by: Vec<(ObjectId, PlayerId)>,
 }
 
 /// The rules of one or more keyword actions.

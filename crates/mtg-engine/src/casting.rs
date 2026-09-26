@@ -2346,7 +2346,7 @@ impl Game {
             }
             CostPart::ExertSelf => {
                 if let Some(s) = src {
-                    self.objects[s.0 as usize].exerted = true;
+                    crate::kwa::exert::exert(self, s, p);
                 }
             }
             CostPart::CollectEvidence(n) => {

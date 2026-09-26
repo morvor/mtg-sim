@@ -106,6 +106,21 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             PlayerRef::TriggerPlayer,
         ));
     }
+    // "whenever you exert a creature" (CR 701.43).
+    if let Some(obj) = rest.strip_prefix("exert ") {
+        let f = subject_filter(obj)?;
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerAction {
+                    name: SmolStr::new(crate::kwa::exert::EXERTED_EVENT),
+                    who,
+                }),
+                cond: Condition::SelMatches(Sel::TriggerObject, f),
+            },
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     if matches!(rest, "manifest dread" | "manifests dread") {
         return Some((
             TriggerCond::PlayerAction {

@@ -5,7 +5,6 @@
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
-use crate::events::Event;
 use crate::game::{Game, PendingTrigger};
 use crate::keywords::KeywordKind;
 use crate::object::*;
@@ -48,13 +47,7 @@ impl KeywordRules for ExertAsItAttacks {
                     continue;
                 }
                 // CR 701.43a: it won't untap during its controller's next untap step.
-                g.objects[a.0 as usize].exerted = true;
-                g.emit(Event::Custom {
-                    name: EXERTED.into(),
-                    player: Some(ap),
-                    obj: Some(a),
-                    amount: 0,
-                });
+                crate::kwa::exert::exert(g, a, ap);
                 // CR 603.11 / 607.2h: only the triggered abilities linked to this static
                 // ability trigger ("When you do").
                 let linked: Vec<Ability> = g
