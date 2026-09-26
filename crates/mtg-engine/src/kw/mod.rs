@@ -49,7 +49,13 @@ pub trait KeywordRules: Sync + Send {
     /// can't be cast from any zone other than a graveyard" (aftermath, CR 702.127a).
     /// `card` may be the spell already on the stack as its proposal is checked
     /// (CR 601.2e). Called for every registered implementation.
-    fn cast_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+    fn cast_prohibited(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
         false
     }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a

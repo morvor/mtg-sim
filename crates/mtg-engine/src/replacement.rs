@@ -1042,7 +1042,9 @@ impl Game {
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
-                    m.etb.own_copy_exceptions.extend(em.copy_exceptions.iter().cloned());
+                    m.etb
+                        .own_copy_exceptions
+                        .extend(em.copy_exceptions.iter().cloned());
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
                     m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
