@@ -1,0 +1,10 @@
+[package]
+name = "mtg-sim"
+version.workspace = true
+edition.workspace = true
+description = "Command-line game simulator built on mtg-engine"
+
+[dependencies]
+mtg-engine = { path = "../mtg-engine" }
+mtg-data = { path = "../mtg-data" }
+rand.workspace = true
