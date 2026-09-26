@@ -1940,6 +1940,14 @@ pub enum CostChange {
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),
+    /// "As an additional cost to cast this spell, you may [cost]": an optional additional
+    /// cost announced as the spell is cast (CR 601.2b), recorded as `name` in the spell's
+    /// `CastInfo::paid` if it's paid (see `cost_choices.rs`).
+    OptionalAdditionalCost { name: SmolStr, cost: Cost },
+    /// "As an additional cost to cast this spell, [cost] or [cost]": the player chooses
+    /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
+    /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
+    AdditionalCostChoice(Vec<(SmolStr, Cost)>),
 }
 
 /// Static abilities (CR 604) and what they do.

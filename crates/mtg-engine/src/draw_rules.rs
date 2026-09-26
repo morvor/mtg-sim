@@ -84,6 +84,19 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                     .all(|p| draws_left(g, p).is_none_or(|left| n <= left))
         }
         Effect::Seq(v) => v.iter().all(|x| can_choose(g, x, ctx)),
+        // CR 701.4a: beholding needs enough [quality] cards in hand or permanents.
+        Effect::KeywordAction {
+            action: KeywordAction::Behold,
+            who,
+            what,
+            n,
+        } => {
+            let n = g.eval_value(n, ctx).max(1) as u32;
+            let quality = crate::behold::quality(what);
+            g.eval_players(who, ctx)
+                .into_iter()
+                .all(|p| crate::behold::can_behold(g, p, &quality, n, ctx))
+        }
         _ => true,
     }
 }

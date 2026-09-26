@@ -904,6 +904,9 @@ impl Game {
                 }
             }
         }
+        // CR 601.2b: the spell's own optional additional costs and choices between
+        // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
+        crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
         // kicker costs (sticker kicker included, CR 702.33h) has been kicked.
         crate::kw::kicker::record_kicked(&mut cast_info.paid);
@@ -1147,8 +1150,11 @@ impl Game {
                             CostChange::ReduceMana { mana, colored_only } => {
                                 mana_reductions.push((mana.clone(), *colored_only))
                             }
+                            // Announced as the spell is cast (see `cost_choices`).
                             CostChange::AlternativeCost(_)
-                            | CostChange::FlashForAdditionalCost(_) => {}
+                            | CostChange::FlashForAdditionalCost(_)
+                            | CostChange::OptionalAdditionalCost { .. }
+                            | CostChange::AdditionalCostChoice(_) => {}
                         }
                     }
                 }
@@ -1185,7 +1191,10 @@ impl Game {
                     mana_reductions.push((mana.clone(), *colored_only))
                 }
                 CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::AlternativeCost(_) | CostChange::FlashForAdditionalCost(_) => {}
+                CostChange::AlternativeCost(_)
+                | CostChange::FlashForAdditionalCost(_)
+                | CostChange::OptionalAdditionalCost { .. }
+                | CostChange::AdditionalCostChoice(_) => {}
             }
         }
         for (n, color) in reductions {
@@ -2269,6 +2278,8 @@ impl Game {
                     })
                     .collect();
                 let pick = self.ask_objects(p, src, "Choose cards to reveal (cost)", cands, n, n);
+                // CR 701.20a: revealed until the spell or ability leaves the stack.
+                crate::reveal::reveal_in(self, p, &pick, Some(ctx));
                 paid.objects.extend(pick);
             }
             CostPart::ExertSelf => {

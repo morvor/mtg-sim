@@ -502,6 +502,8 @@ pub struct Game {
     /// Zone bookkeeping: face-down exiled cards players may look at, revealed top cards
     /// of libraries (CR 401.5, 401.6, 406.3).
     pub zones: crate::zones::ZoneState,
+    /// Cards currently revealed and for how long (CR 701.20).
+    pub reveals: crate::reveal::RevealState,
 }
 
 impl Game {
@@ -591,6 +593,7 @@ impl Game {
             special: Default::default(),
             dice: Default::default(),
             zones: Default::default(),
+            reveals: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -1071,6 +1074,8 @@ impl Game {
         self.players[p.idx()].library = lib;
         // CR 401.6: a revealed top card stops being revealed.
         crate::zones::library_shuffled(self, p);
+        // CR 701.20d: revealed cards that are reordered stop being revealed.
+        crate::reveal::library_reordered(self, p);
         self.emit(Event::Shuffled { player: p });
     }
 

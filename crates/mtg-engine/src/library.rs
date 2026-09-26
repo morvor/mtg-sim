@@ -175,7 +175,7 @@ pub fn dig(
     g: &mut Game,
     p: PlayerId,
     n: u32,
-    _reveal: bool,
+    reveal: bool,
     filter: &Filter,
     take: u32,
     up_to: bool,
@@ -184,6 +184,10 @@ pub fn dig(
     ctx: &mut Ctx,
 ) {
     let cards = top_cards(g, p, n);
+    if reveal {
+        // CR 701.20a: revealed while the effect needs them.
+        crate::reveal::reveal_in(g, p, &cards, Some(ctx));
+    }
     ctx.set_var(
         vars::REVEALED,
         cards.iter().map(|o| Entity::Object(*o)).collect(),

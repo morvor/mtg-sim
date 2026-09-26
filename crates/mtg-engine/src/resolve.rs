@@ -1297,7 +1297,13 @@ impl Game {
                     ctx,
                 );
             }
-            Effect::RevealHand { .. } => {}
+            // CR 701.20a: the cards are revealed while the rest of the effect needs them.
+            Effect::RevealHand { who } => {
+                for p in self.eval_players(who, ctx) {
+                    let hand = self.player(p).hand.clone();
+                    crate::reveal::reveal_in(self, p, &hand, Some(ctx));
+                }
+            }
             Effect::RevealUntil {
                 who,
                 filter,
