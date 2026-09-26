@@ -210,6 +210,8 @@ impl Game {
         }
         // CR 103.3a: supplementary planar decks are shuffled too.
         crate::planechase::shuffle_planar_decks(self);
+        // CR 717.2, 103.3a: and Attraction decks.
+        crate::attraction_cards::shuffle_attraction_decks(self);
         // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
         crate::variants::begin_game(self);
         // CR 103.4, 119.1: each player's life total becomes their starting life total

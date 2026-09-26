@@ -138,6 +138,9 @@ pub enum ReplKey {
     Player(PlayerId, u64),
 }
 
+/// The key of the rules replacement for Attraction cards (CR 717.6).
+const JUNKYARD_KEY: u64 = u64::MAX - 717;
+
 #[derive(Clone, Debug)]
 struct Candidate {
     key: ReplKey,
@@ -441,6 +444,35 @@ impl Game {
                         )),
                         self_replacement: false,
                         optional: true,
+                    },
+                    instance: None,
+                });
+            }
+        }
+        // Built-in rules replacement: a card with an Astrotorium card back that would be
+        // put into a zone other than the battlefield, exile or the command zone is put
+        // into the command zone instead (CR 717.6). It may apply more than once to the
+        // same event (an exception to CR 614.5).
+        if let ReplEvent::Move(m) = ev {
+            if scope != CandScope::EntryOnly && crate::attraction_cards::goes_to_junkyard(self, m) {
+                out.push(Candidate {
+                    key: ReplKey::Static(m.obj, JUNKYARD_KEY),
+                    source: None,
+                    link: 0,
+                    controller: self.obj(m.obj).owner,
+                    class: 4,
+                    text: "Attraction: put into the command zone instead".into(),
+                    def: ReplacementDef {
+                        event: ReplacementEvent::ZoneChange {
+                            filter: Filter::Any,
+                            from: None,
+                            to: None,
+                        },
+                        action: ReplacementAction::MoveInstead(Destination::zone(
+                            ZoneKind::Command,
+                        )),
+                        self_replacement: false,
+                        optional: false,
                     },
                     instance: None,
                 });

@@ -86,6 +86,8 @@ pub enum DeckProblem {
     /// A card that must be removed from decks and sideboards when not playing for ante
     /// (CR 407.3).
     AnteCard { name: String },
+    /// A card in an Attraction deck that isn't an Attraction (CR 717.2).
+    NotAnAttraction { name: String },
 }
 
 /// Conspiracy cards among `cards` (CR 315.1, 315.3).
