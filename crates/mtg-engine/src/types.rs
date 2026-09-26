@@ -612,6 +612,27 @@ pub fn subtype_kind(s: &str) -> Option<SubtypeKind> {
     }
 }
 
+/// Every kind of subtype `s` is (CR 205.3g-205.3q): a word may be on more than one list
+/// (Spacecraft is both an artifact type and a planar type), and it's correlated with
+/// whichever of those card types the object has (CR 205.3c).
+pub fn subtype_kinds(s: &str) -> Vec<SubtypeKind> {
+    let l = subtype_lists();
+    [
+        (l.creature_set.contains(s), SubtypeKind::Creature),
+        (l.land.contains(s), SubtypeKind::Land),
+        (l.artifact.contains(s), SubtypeKind::Artifact),
+        (l.enchantment.contains(s), SubtypeKind::Enchantment),
+        (l.planeswalker.contains(s), SubtypeKind::Planeswalker),
+        (l.spell.contains(s), SubtypeKind::Spell),
+        (l.battle.contains(s), SubtypeKind::Battle),
+        (l.plane.contains(s), SubtypeKind::Plane),
+        (l.dungeon.contains(s), SubtypeKind::Dungeon),
+    ]
+    .into_iter()
+    .filter_map(|(on, k)| on.then_some(k))
+    .collect()
+}
+
 /// A parsed type line ("Legendary Artifact Creature — Human Wizard").
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeLine {

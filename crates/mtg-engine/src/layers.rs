@@ -1527,22 +1527,24 @@ pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
-    match subtype_kind(s) {
-        Some(SubtypeKind::Creature) => {
-            types.contains(CardType::Creature) || types.contains(CardType::Kindred)
-        }
-        Some(SubtypeKind::Land) => types.contains(CardType::Land),
-        Some(SubtypeKind::Artifact) => types.contains(CardType::Artifact),
-        Some(SubtypeKind::Enchantment) => types.contains(CardType::Enchantment),
-        Some(SubtypeKind::Planeswalker) => types.contains(CardType::Planeswalker),
-        Some(SubtypeKind::Spell) => {
-            types.contains(CardType::Instant) || types.contains(CardType::Sorcery)
-        }
-        Some(SubtypeKind::Battle) => types.contains(CardType::Battle),
-        Some(SubtypeKind::Plane) => types.contains(CardType::Plane),
-        Some(SubtypeKind::Dungeon) => types.contains(CardType::Dungeon),
-        None => true,
-    }
+    let kinds = subtype_kinds(s);
+    // A subtype on several lists (Spacecraft) is valid with any of those card types.
+    kinds.is_empty()
+        || kinds.into_iter().any(|k| match k {
+            SubtypeKind::Creature => {
+                types.contains(CardType::Creature) || types.contains(CardType::Kindred)
+            }
+            SubtypeKind::Land => types.contains(CardType::Land),
+            SubtypeKind::Artifact => types.contains(CardType::Artifact),
+            SubtypeKind::Enchantment => types.contains(CardType::Enchantment),
+            SubtypeKind::Planeswalker => types.contains(CardType::Planeswalker),
+            SubtypeKind::Spell => {
+                types.contains(CardType::Instant) || types.contains(CardType::Sorcery)
+            }
+            SubtypeKind::Battle => types.contains(CardType::Battle),
+            SubtypeKind::Plane => types.contains(CardType::Plane),
+            SubtypeKind::Dungeon => types.contains(CardType::Dungeon),
+        })
 }
 
 /// Convenience used by tests: build an ability granting a keyword.
