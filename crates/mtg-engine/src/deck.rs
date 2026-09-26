@@ -330,10 +330,28 @@ pub fn check_team_pool(
     problems
 }
 
-/// Checks a Commander deck (CR 100.2c, 903.5): exactly 100 cards including the commander
-/// (60 with the Brawl option, CR 903.12d), each nonbasic card only once, every card's color
+/// Checks a Commander deck (CR 100.2c, 903.5): the commander must be able to be a
+/// commander (CR 903.3, 903.3a, 903.12c), exactly 100 cards including the commander (60
+/// with the Brawl option, CR 903.12d), each nonbasic card only once, every card's color
 /// identity within the commander's, and no sideboard.
 pub fn check_commander(
+    deck: &[Arc<CardDef>],
+    commander: &CardDef,
+    sideboard: &[Arc<CardDef>],
+    brawl: bool,
+) -> Vec<DeckProblem> {
+    let mut problems: Vec<DeckProblem> =
+        crate::kw::partner::ineligible_commander(&[commander], brawl)
+            .map(|reason| DeckProblem::InvalidCommanders { reason })
+            .into_iter()
+            .collect();
+    problems.extend(check_commander_cards(deck, commander, sideboard, brawl));
+    problems
+}
+
+/// The deck-content part of [`check_commander`] (size, singleton, color identity,
+/// sideboard), for a commander whose color identity is `commander`'s.
+pub(crate) fn check_commander_cards(
     deck: &[Arc<CardDef>],
     commander: &CardDef,
     sideboard: &[Arc<CardDef>],

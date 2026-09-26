@@ -35,6 +35,8 @@ use std::sync::Arc;
 
 /// `StaticEffect::Custom` name of "Choose a Background" (CR 702.124k).
 pub const CHOOSE_A_BACKGROUND: &str = "partner:choose a background";
+/// `StaticEffect::Custom` name of "[This card] can be your commander." (CR 903.3a).
+pub const CAN_BE_YOUR_COMMANDER: &str = "commander:can be your commander";
 /// `StaticEffect::Custom` name of "Doctor's companion" (CR 702.124m).
 pub const DOCTORS_COMPANION: &str = "partner:doctor's companion";
 
@@ -178,6 +180,50 @@ pub fn commanders_problem(commanders: &[&CardDef]) -> Option<String> {
     }
 }
 
+/// Whether a card may be designated as a commander on its own terms (CR 903.3): a
+/// legendary creature card, Vehicle card, or Spacecraft card with a power/toughness box —
+/// in Brawl also a legendary planeswalker card (CR 903.12c) — or a card whose own ability
+/// says it can be your commander (CR 903.3a; that ability modifies the deck construction
+/// rules, CR 113.6n). A Background is a commander only through a "choose a Background"
+/// partner (CR 702.124k, see [`commanders_problem`]).
+pub fn can_be_commander(card: &CardDef, brawl: bool) -> bool {
+    let c = &card.front().chars;
+    let says_so = c.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s)
+            if matches!(&s.effect, StaticEffect::Custom(n) if n == CAN_BE_YOUR_COMMANDER))
+    });
+    if says_so {
+        return true;
+    }
+    legendary(c)
+        && (c.is(CardType::Creature)
+            || c.has_subtype("Vehicle")
+            || (c.has_subtype("Spacecraft") && c.power.is_some() && c.toughness.is_some())
+            || (brawl && c.is(CardType::Planeswalker)))
+}
+
+/// Why one of the cards can't be a commander at all (CR 903.3, 903.3a, 903.12c): each
+/// must be allowed by [`can_be_commander`], except a Background alongside a commander
+/// with "choose a Background" (CR 702.124k).
+pub fn ineligible_commander(commanders: &[&CardDef], brawl: bool) -> Option<String> {
+    let chooses_background = commanders.iter().any(|c| {
+        partner_abilities(&c.front().chars).contains(&PartnerAbility::ChooseABackground)
+    });
+    commanders
+        .iter()
+        .find(|c| {
+            !can_be_commander(c, brawl)
+                && !(chooses_background && is_background(&c.front().chars))
+        })
+        .map(|c| {
+            format!(
+                "{} can't be a commander: it isn't a legendary creature, Vehicle, or Spacecraft card{}",
+                c.name,
+                if brawl { " or planeswalker card" } else { "" }
+            )
+        })
+}
+
 /// Checks a Commander deck led by one or two commanders (CR 903.5, 702.124b–c): the
 /// designation must be allowed (see [`commanders_problem`]), the deck must contain
 /// exactly 100 cards including its commanders, and each card's color identity must be
@@ -190,8 +236,9 @@ pub fn check_commander_deck(
 ) -> Vec<DeckProblem> {
     let refs: Vec<&CardDef> = commanders.iter().map(|c| c.as_ref()).collect();
     let mut problems: Vec<DeckProblem> = commanders_problem(&refs)
-        .map(|reason| DeckProblem::InvalidCommanders { reason })
         .into_iter()
+        .chain(ineligible_commander(&refs, brawl))
+        .map(|reason| DeckProblem::InvalidCommanders { reason })
         .collect();
     let Some(first) = commanders.first() else {
         return problems;
@@ -201,7 +248,7 @@ pub fn check_commander_deck(
     for c in commanders.iter().skip(1) {
         combined.color_identity = combined.color_identity.union(c.color_identity);
     }
-    problems.extend(crate::deck::check_commander(
+    problems.extend(crate::deck::check_commander_cards(
         deck, &combined, sideboard, brawl,
     ));
     problems
