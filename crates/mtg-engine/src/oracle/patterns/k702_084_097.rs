@@ -14,6 +14,7 @@ use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
+use crate::types::CardType;
 
 /// The filter for "[quality] card" in "Each [quality] card in your graveyard".
 fn graveyard_card_quality(subject: &str) -> Option<Filter> {
@@ -172,3 +173,26 @@ fn spells_have_cascade(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "[quality] spells you cast have cascade", priority: 100, parse: spells_have_cascade } }
+
+/// "Instant and sorcery spells you control have rebound." (Cast Through Time): the spells
+/// have rebound while they're on the stack (CR 702.88a).
+fn spells_have_rebound(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if l != "instant and sorcery spells you control have rebound" {
+        return None;
+    }
+    let affected = Filter::and(vec![
+        Filter::Or(vec![
+            Filter::Type(CardType::Instant),
+            Filter::Type(CardType::Sorcery),
+        ]),
+        Filter::Spell,
+        Filter::ControlledBy(PlayerRel::You),
+    ]);
+    Some(grant(
+        affected,
+        Keyword::new(KeywordKind::Rebound).text("rebound"),
+        text,
+    ))
+}
+
+inventory::submit! { StaticPattern { name: "instant and sorcery spells you control have rebound", priority: 100, parse: spells_have_rebound } }

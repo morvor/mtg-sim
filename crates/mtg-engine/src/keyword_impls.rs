@@ -164,6 +164,12 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }
 
+/// After a resolved instant/sorcery was put where it goes (`new`), e.g. rebound's delayed
+/// triggered ability (CR 702.88a).
+pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {
+    crate::kw::after_spell_resolved(g, id, new);
+}
+
 /// Where a countered spell (or one that fails to resolve) goes.
 pub fn countered_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);

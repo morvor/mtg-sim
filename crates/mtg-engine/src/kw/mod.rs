@@ -90,6 +90,12 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
+    /// After an instant or sorcery spell with this keyword resolved and was put where it
+    /// goes (`new` is the card there, e.g. in exile after
+    /// [`KeywordRules::resolved_destination`] sent it there), e.g. rebound's delayed
+    /// triggered ability (CR 702.88a). Called once per keyword kind the spell had as it
+    /// last existed on the stack.
+    fn after_spell_resolved(&self, g: &mut Game, spell: ObjectId, kw: &Keyword, new: ObjectId) {}
     /// Where a countered spell goes, if the keyword changes it.
     fn countered_destination(
         &self,
@@ -386,6 +392,14 @@ pub fn resolved_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryP
         }
     }
     None
+}
+
+pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.after_spell_resolved(g, spell, kw, new);
+        }
+    }
 }
 
 pub fn countered_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
