@@ -234,6 +234,67 @@ fn x_is(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "x is [value]", priority: 100, apply: x_is } }
 
+/// "Each Sliver creature card in your graveyard has encore {X}, where X is its mana
+/// value." (Sliver Gravemother), "Each artifact creature card in your graveyard has
+/// encore. Its encore cost is equal to its mana cost." (Wire Surgeons): cards in your
+/// graveyard have encore (CR 702.141a) with a cost that depends on each card.
+fn graveyard_cards_have_encore(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("each ")?;
+    let (quality, rest) = r.split_once(" in your graveyard has encore")?;
+    let mod_ = match rest {
+        " {x}, where x is its mana value" => Modification::AddKeywordX(
+            crate::keywords::Keyword::with_cost(
+                KeywordKind::Encore,
+                Cost::mana(crate::mana::ManaCost::parse("{X}")?),
+            ),
+            Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED))),
+        ),
+        ". its encore cost is equal to its mana cost" => {
+            Modification::AddKeyword(crate::keywords::Keyword::with_cost(
+                KeywordKind::Encore,
+                Cost {
+                    mana: None,
+                    parts: vec![CostPart::PayManaCostOf(Box::new(Sel::This))],
+                },
+            ))
+        }
+        _ => return None,
+    };
+    let parse = |q: &str| {
+        let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(q)?;
+        end(tail).is_empty().then_some(f)
+    };
+    // "outlaw creature card", "artifact creature card": the quality, a creature card.
+    let f = parse(quality).or_else(|| {
+        let q = quality.strip_suffix(" creature card")?;
+        let quality = match q {
+            "outlaw" => Filter::Or(
+                ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
+                    .into_iter()
+                    .map(|s| Filter::Subtype(s.into()))
+                    .collect(),
+            ),
+            q => parse(q)?,
+        };
+        Some(Filter::And(vec![
+            quality,
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::Card,
+        ]))
+    })?;
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(vec![
+            f,
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
+        mods: vec![mod_],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "each [quality] card in your graveyard has encore", priority: 100, parse: graveyard_cards_have_encore } }
+
 /// "Whenever a creature you control mutates" (Essence Symbiote; CR 702.140d): "that
 /// creature" is the mutated permanent.
 fn creature_you_control_mutates(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {

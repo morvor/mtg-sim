@@ -228,3 +228,46 @@ fn a_token_another_player_controls_isnt_sacrificed() {
     assert!(t.g.is_live(token));
     assert_eq!(t.obj(token).controller, P1);
 }
+
+#[test]
+fn cards_in_a_graveyard_can_be_given_encore_with_a_cost_of_their_own() {
+    cr!("702.141a");
+    assert_supported("Wire Surgeons");
+    assert_supported("Graywater's Fixer");
+    // Wire Surgeons: "Each artifact creature card in your graveyard has encore. Its encore
+    // cost is equal to its mana cost."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Wire Surgeons");
+    let sable = t.graveyard(P0, "Bronze Sable");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    assert!(has_kw(&t, sable, KeywordKind::Encore));
+    assert!(!has_kw(&t, bears, KeywordKind::Encore));
+    // Bronze Sable's mana cost is {2}.
+    let uid = ability_uid(&mut t, sable, "Encore");
+    add_mana(&mut t, P0, ManaType::C, 1);
+    assert!(!activatable(&mut t, P0, sable, uid));
+    add_mana(&mut t, P0, ManaType::C, 1);
+    activate_uid(&mut t, P0, sable, uid).unwrap();
+    assert_eq!(pool(&t, P0), 0);
+    t.resolve_all();
+    let tokens = creature_tokens(&t, P0);
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(t.obj(tokens[0]).chars.name, "Bronze Sable");
+    // Graywater's Fixer: "Each outlaw creature card in your graveyard has encore {X},
+    // where X is its mana value."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Graywater's Fixer");
+    let pirate = t.graveyard(P0, "Fathom Fleet Swordjack");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    assert!(!has_kw(&t, bears, KeywordKind::Encore));
+    // Its own encore {5}{R} and the granted encore {X} = {4} (its mana value).
+    let costs: Vec<String> = t
+        .obj(pirate)
+        .chars
+        .keywords()
+        .filter(|k| k.kind == KeywordKind::Encore)
+        .map(|k| format!("{:?}", k.cost.as_ref().and_then(|c| c.mana.clone())))
+        .collect();
+    assert_eq!(costs.len(), 2, "{costs:?}");
+    assert!(costs.iter().any(|c| c.contains("{4}")), "{costs:?}");
+}

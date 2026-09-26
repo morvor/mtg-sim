@@ -1056,6 +1056,9 @@ impl Game {
             Modification::SetPT(p, t) | Modification::CdaPT(p, t) => {
                 p.as_ref().is_some_and(computed) || t.as_ref().is_some_and(computed)
             }
+            // "Each creature card in your graveyard has encore {X}, where X is its mana
+            // value": X for each affected object.
+            Modification::AddKeywordX(_, x) => computed(x),
             _ => false,
         };
         let with_target;
