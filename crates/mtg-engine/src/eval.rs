@@ -1222,7 +1222,8 @@ impl Game {
                     .chain(self.events.iter())
                     .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
             }),
-            Condition::CitysBlessing => self.player(ctx.controller).has_citys_blessing,
+            // CR 702.131: including a blessing a permanent's ascend ability gives now.
+            Condition::CitysBlessing => crate::kw::ascend::has_citys_blessing(self, ctx.controller),
             Condition::IsMonarch => self.monarch == Some(ctx.controller),
             Condition::HasInitiative => self.initiative == Some(ctx.controller),
             Condition::IsDay => self.day == Some(true),

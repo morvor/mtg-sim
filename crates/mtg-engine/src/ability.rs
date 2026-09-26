@@ -1459,6 +1459,10 @@ pub enum Modification {
         word: SmolStr,
         position: u32,
     },
+    /// "It has no mana cost": an exception of a copy effect, which becomes part of the
+    /// copy's copiable values (CR 707.9b), e.g. the token an embalm or eternalize ability
+    /// creates (CR 702.128a, 702.129a).
+    NoManaCost,
     // Layer 4
     AddTypes(Vec<CardType>),
     RemoveTypes(Vec<CardType>),
@@ -1534,7 +1538,8 @@ impl Modification {
             | FullTextOf(_)
             | AddText { .. }
             | AllCreatureNames
-            | NameSticker { .. } => Layer::L3Text,
+            | NameSticker { .. }
+            | NoManaCost => Layer::L3Text,
             AddTypes(_)
             | RemoveTypes(_)
             | AddSupertypes(_)

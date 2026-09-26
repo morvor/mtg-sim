@@ -24,6 +24,18 @@ pub enum DeckCondition {
     /// Each card in the starting deck that matches `each` also matches `must` ("Each
     /// permanent card in your starting deck has mana value 2 or less").
     Each { each: Filter, must: Filter },
+    /// Each card in the starting deck that matches `each` has a different name ("Each
+    /// nonland card in your starting deck has a different name").
+    DifferentNames { each: Filter },
+    /// There's a card type every card in the starting deck that matches `each` has ("Each
+    /// nonland card in your starting deck shares a card type").
+    ShareACardType { each: Filter },
+    /// The starting deck contains at least this many cards more than the minimum deck
+    /// size ("... at least twenty cards more than the minimum deck size").
+    MoreThanMinimumSize(u32),
+    /// No card in the starting deck has more than one of the same mana symbol in its mana
+    /// cost.
+    NoRepeatedManaSymbol,
 }
 
 /// What happened while starting the game.
@@ -228,11 +240,63 @@ fn set_aside_sideboards(g: &mut Game) {
 pub fn deck_fulfills(g: &Game, p: PlayerId, cond: &DeckCondition, companion: ObjectId) -> bool {
     let deck = g.start.starting_decks.get(&p).cloned().unwrap_or_default();
     let ctx = Ctx::new(Some(companion), p);
+    let matching = |f: &Filter| -> Vec<ObjectId> {
+        deck.iter()
+            .copied()
+            .filter(|c| g.matches(*c, f, &ctx))
+            .collect()
+    };
     match cond {
-        DeckCondition::Each { each, must } => deck
-            .iter()
-            .filter(|c| g.matches(**c, each, &ctx))
-            .all(|c| g.matches(*c, must, &ctx)),
+        DeckCondition::Each { each, must } => {
+            matching(each).into_iter().all(|c| g.matches(c, must, &ctx))
+        }
+        DeckCondition::DifferentNames { each } => {
+            let mut names: Vec<SmolStr> = matching(each)
+                .into_iter()
+                .map(|c| g.obj(c).chars.name.clone())
+                .collect();
+            let n = names.len();
+            names.sort();
+            names.dedup();
+            names.len() == n
+        }
+        DeckCondition::ShareACardType { each } => {
+            let cards = matching(each);
+            CardType::ALL
+                .iter()
+                .any(|t| cards.iter().all(|c| g.obj(*c).chars.is(*t)))
+        }
+        DeckCondition::MoreThanMinimumSize(n) => deck.len() >= minimum_deck_size(g) + *n as usize,
+        DeckCondition::NoRepeatedManaSymbol => deck.iter().all(|c| {
+            let symbols = g
+                .obj(*c)
+                .chars
+                .mana_cost
+                .as_ref()
+                .map(|m| m.symbols.to_vec())
+                .unwrap_or_default();
+            symbols
+                .iter()
+                .enumerate()
+                .all(|(i, s)| !symbols[i + 1..].contains(s))
+        }),
+    }
+}
+
+/// The minimum deck size of the game's format (CR 100.2a, 100.2b, 903.5a, 903.12): sixty
+/// cards in constructed play, forty in limited play, one hundred in Commander (sixty in
+/// Brawl).
+pub fn minimum_deck_size(g: &Game) -> usize {
+    if g.config.variant == Variant::Commander {
+        if g.config.brawl {
+            60
+        } else {
+            100
+        }
+    } else if g.config.limited {
+        40
+    } else {
+        60
     }
 }
 

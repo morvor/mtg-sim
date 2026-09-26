@@ -1426,6 +1426,7 @@ pub fn apply_mod(
             c.interchangeable_names.clear();
         }
         Modification::AllCreatureNames => c.all_creature_names = true,
+        Modification::NoManaCost => c.mana_cost = None,
         Modification::NameSticker { word, position } => {
             c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
             // A new name isn't interchangeable with the old one's partners (CR 201.3).
