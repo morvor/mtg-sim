@@ -3,6 +3,8 @@
 //! * embalm (CR 702.128b): "You may have ~ enter as a copy of any creature on the
 //!   battlefield, except if ~ was embalmed, the token has no mana cost, it's white, and
 //!   it's a Zombie in addition to its other types.";
+//! * ascend on an instant or sorcery (CR 702.131a): the keyword and its spell ability,
+//!   which comes first;
 //! * mentor (CR 702.134c): "whenever ~ mentors a creature", "whenever equipped creature
 //!   mentors a creature";
 //! * spectacle (CR 702.137a): "if its spectacle cost was paid";
@@ -81,6 +83,8 @@ fn if_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((c, x)) = r.split_once(", instead ") else {
         return false;
     };
+    // "instead only you draw a card": "only" restates who's affected.
+    let x = x.strip_prefix("only ").unwrap_or(x);
     if matches!(prev, Effect::Noop) {
         return false;
     }
@@ -313,3 +317,36 @@ fn enter_as_copy_if_embalmed(block: &str, ctx: &CompileContext) -> Option<Vec<Ab
 }
 
 inventory::submit! { AbilityPattern { name: "k702.128 enter as a copy, except if ~ was embalmed", priority: 90, parse: enter_as_copy_if_embalmed } }
+
+// ---------------------------------------------------------------------------
+// Ascend (CR 702.131)
+// ---------------------------------------------------------------------------
+
+/// "Ascend" on an instant or sorcery: the keyword plus the spell ability it represents
+/// (CR 702.131a), in the keyword's place, so it's performed before the rest of the spell.
+fn ascend_spell(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = block.trim().trim_end_matches('.').to_lowercase();
+    if l != "ascend" {
+        return None;
+    }
+    let tl = &ctx.type_line.card_types;
+    if !tl.contains(crate::types::CardType::Instant)
+        && !tl.contains(crate::types::CardType::Sorcery)
+    {
+        return None;
+    }
+    Some(vec![
+        AbilityDef::new(
+            AbilityKind::Keyword(Keyword::new(KeywordKind::Ascend)),
+            block.trim(),
+        ),
+        AbilityDef::new(
+            AbilityKind::Spell(SpellAbility {
+                body: Body::effect(Effect::Custom(SmolStr::new(crate::kw::ascend::ASCEND))),
+            }),
+            block.trim(),
+        ),
+    ])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.131 ascend on an instant or sorcery", priority: 100, parse: ascend_spell } }

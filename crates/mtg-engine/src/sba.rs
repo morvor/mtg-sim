@@ -50,6 +50,12 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Static abilities that make something happen any time the game is in some state
+        // (e.g. ascend, CR 702.131b), before state-based actions change that state.
+        crate::kw::static_state_checks(self);
+        if self.dirty {
+            self.recompute();
+        }
         let mut performed = false;
 
         // --- Player losses (704.5a–c, 704.6a–c) -----------------------------

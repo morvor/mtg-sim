@@ -243,6 +243,10 @@ pub trait KeywordRules: Sync + Send {
     fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
         false
     }
+    /// What a static ability of this keyword does "any time" the game is in some state,
+    /// such as a player getting the city's blessing from ascend (CR 702.131b). Checked each
+    /// time state-based actions are checked, before them.
+    fn static_state_checks(&self, g: &mut Game) {}
     /// State-based actions a keyword defines (e.g. space sculptor's sector designations,
     /// CR 704.5u). Returns true if any action was performed.
     fn state_based_actions(&self, g: &mut Game) -> bool {
@@ -319,6 +323,13 @@ pub trait KeywordRules: Sync + Send {
         method: &CastMethod,
         cost: &mut Cost,
     ) {
+    }
+}
+
+/// See [`KeywordRules::static_state_checks`].
+pub fn static_state_checks(g: &mut Game) {
+    for r in registry() {
+        r.static_state_checks(g);
     }
 }
 
