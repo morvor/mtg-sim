@@ -1194,9 +1194,10 @@ impl Game {
             }
         }
         if matches!(from, Zone::Command) && self.obj(id).is_commander {
+            let key = crate::kw::partner::commander_key(self, id);
             *self.players[p.idx()]
                 .commander_casts
-                .entry(chars.name.clone())
+                .entry(key)
                 .or_insert(0) += 1;
         }
         // 601.2i: the spell becomes cast. A prepared permanent whose prepare-spell copy

@@ -227,14 +227,23 @@ pub fn commander_tax(g: &Game, p: PlayerId, card: ObjectId) -> u32 {
     if !from_command {
         return 0;
     }
-    // Counted by name as it's cast (see `Game::cast_spell`).
     let casts = g
         .player(p)
         .commander_casts
-        .get(&o.chars.name)
+        .get(&commander_key(g, card))
         .copied()
         .unwrap_or(0);
     2 * casts
+}
+
+/// The key under which casts of the commander `id` from the command zone are counted
+/// (`Player::commander_casts`, see `Game::cast_spell`): the card's name, whichever face
+/// was cast (a modal double-faced commander is one commander, CR 903.8).
+pub fn commander_key(g: &Game, id: ObjectId) -> SmolStr {
+    let o = g.obj(id);
+    o.card
+        .as_ref()
+        .map_or_else(|| o.chars.name.clone(), |c| c.name.clone())
 }
 
 /// The commanders `p` owns in the command zone, which they may cast from there (CR 903.8).

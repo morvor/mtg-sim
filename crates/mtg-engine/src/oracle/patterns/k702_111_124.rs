@@ -362,24 +362,48 @@ fn crewed_by_n(c: &str) -> Option<Condition> {
 
 inventory::submit! { ConditionPattern { name: "k702.122e it was crewed by N creatures", priority: 100, parse: crewed_by_n } }
 
-/// "an Assassin crewed it this turn": a creature with that quality crewed the source this
-/// turn (CR 702.122c).
+/// "an Assassin crewed it this turn": a creature that had that subtype as it crewed the
+/// source crewed it this turn (CR 702.122c), even if it has left the battlefield or lost
+/// the subtype since.
 fn quality_crewed_it(c: &str) -> Option<Condition> {
     let subj = end(c).strip_suffix(" crewed it this turn")?;
     let s = subj
         .strip_prefix("a ")
         .or_else(|| subj.strip_prefix("an "))?;
-    let (f, plural, tail) = parse_object_phrase(s)?;
-    if plural || !end(tail).is_empty() {
+    if s.contains(' ') {
         return None;
     }
-    Some(Condition::Exists(Filter::and(vec![
-        f,
-        Filter::Custom(SmolStr::new(crate::kw::crew::CREWED_IT_THIS_TURN)),
-    ])))
+    let st = crate::oracle::phrases::subtype_word(s)?;
+    Some(Condition::Custom(crate::kw::crew::crewed_by_type(&st)))
 }
 
 inventory::submit! { ConditionPattern { name: "k702.122c a [quality] crewed it this turn", priority: 100, parse: quality_crewed_it } }
+
+/// "[effect] for each creature that crewed it this turn": each creature that crewed the
+/// source this turn counts, including those that have left the battlefield since
+/// (CR 702.122c).
+fn for_each_creature_that_crewed_it(l: &str, b: &mut Builder) -> Option<Effect> {
+    let clause = end(l).strip_suffix(" for each creature that crewed it this turn")?;
+    let mut e = crate::oracle::effects::parse_clause(clause, b)?;
+    let by = Value::Custom(SmolStr::new(crate::kw::crew::CREATURES_THAT_CREWED_IT));
+    let n = match &mut e {
+        Effect::CreateToken { count, .. } => count,
+        Effect::Draw { n, .. }
+        | Effect::GainLife { n, .. }
+        | Effect::LoseLife { n, .. }
+        | Effect::AddCounters { n, .. } => n,
+        Effect::DealDamage { amount, .. } => amount,
+        _ => return None,
+    };
+    *n = match std::mem::replace(n, Value::c(0)) {
+        Value::Const(1) => by,
+        other => Value::Mul(Box::new(other), Box::new(by)),
+    };
+    Some(e)
+}
+
+// Before the general "[effect] for each [thing]" (which counts permanents).
+inventory::submit! { EffectPattern { name: "k702.122c for each creature that crewed it this turn", priority: 60, parse: for_each_creature_that_crewed_it } }
 
 /// "~ crews Vehicles as though its power were N greater", "~ saddles Mounts and crews
 /// Vehicles as though its power were N greater", "~ crews Vehicles using its toughness

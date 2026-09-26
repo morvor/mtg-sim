@@ -226,11 +226,16 @@ fn a_creature_crews_a_vehicle_when_tapped_to_pay_its_crew_cost() {
     t.resolve_all();
     assert!(is_creature(&t, copter));
     assert!(has(&t, copter, KeywordKind::Haste));
-    // Another creature crewing doesn't trigger it.
+    // Another creature crewing doesn't trigger a Speedway Fanatic that didn't crew.
+    let idle = t.battlefield(P0, "Speedway Fanatic");
     let other = t.battlefield(P0, "Smuggler's Copter");
     assert!(crew(&mut t, P0, other, &[bears]));
+    assert!(t.obj(bears).tapped && !t.obj(idle).tapped);
     t.settle();
     assert_eq!(on_stack(&t, "crews a Vehicle"), 0);
+    t.resolve_all();
+    assert!(is_creature(&t, other));
+    assert!(!has(&t, other, KeywordKind::Haste));
 }
 
 #[test]
@@ -257,6 +262,104 @@ fn abilities_can_refer_to_the_creatures_that_crewed_a_vehicle() {
         .filter(|x| t.g.obj(*x).chars.has_subtype("Treasure"))
         .count();
     assert_eq!(treasures, 2);
+}
+
+#[test]
+fn creatures_that_crewed_it_and_left_the_battlefield_still_count() {
+    cr!("702.122c");
+    ruling!(
+        "Luxurious Locomotive",
+        "Luxurious Locomotive's triggered ability counts each creature that crewed it this turn, including creatures that are no longer on the battlefield as the ability resolves."
+    );
+    let mut t = TestGame::new(2);
+    let loco = t.battlefield(P0, "Luxurious Locomotive");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Grizzly Bears");
+    assert!(crew(&mut t, P0, loco, &[a, b]));
+    t.resolve();
+    // One of them is destroyed before the Locomotive attacks.
+    t.g.destroy(a, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    declare_attack(&mut t, &[(loco, Entity::Player(P1))]);
+    t.resolve_all();
+    let treasures = tokens_of(&t, P0)
+        .into_iter()
+        .filter(|x| t.g.obj(*x).chars.has_subtype("Treasure"))
+        .count();
+    assert_eq!(treasures, 2);
+}
+
+/// A Vehicle with "Whenever ~ attacks, if an Assassin crewed it this turn, draw a card."
+/// (Adrestia's second ability, without its last sentence) and crew 1.
+fn assassin_rig(t: &mut TestGame) -> ObjectId {
+    let def = crate::k702_001_010_common::custom_card(
+        "Assassin Rig",
+        "Artifact — Vehicle",
+        "{3}",
+        Some((4, 4)),
+        "Whenever ~ attacks, if an Assassin crewed it this turn, draw a card.\nCrew 1",
+    );
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield)
+}
+
+#[test]
+fn an_assassin_that_crewed_it_counts_even_after_it_leaves() {
+    cr!("702.122c");
+    ruling!(
+        "Adrestia",
+        "Adrestia’s second ability will trigger as long as it was crewed by an Assassin this turn, even if that creature has left the battlefield or stopped being an Assassin since."
+    );
+    let mut t = TestGame::new(2);
+    let rig = assassin_rig(&mut t);
+    // Royal Assassin: a 1/1 Human Assassin.
+    let assassin = t.battlefield(P0, "Royal Assassin");
+    assert!(crew(&mut t, P0, rig, &[assassin]));
+    t.resolve();
+    t.g.destroy(assassin, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Royal Assassin"));
+    let hand = t.hand_size(P0);
+    declare_attack(&mut t, &[(rig, Entity::Player(P1))]);
+    assert_eq!(on_stack(&t, "an Assassin crewed it"), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn a_creature_that_becomes_an_assassin_after_crewing_doesnt_count() {
+    cr!("702.122c");
+    ruling!(
+        "Adrestia",
+        "Adrestia’s second ability will trigger only if it was crewed this turn by a creature that was an Assassin when it was tapped to pay the cost of Adrestia’s crew ability."
+    );
+    let mut t = TestGame::new(2);
+    let rig = assassin_rig(&mut t);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(crew(&mut t, P0, rig, &[bears]));
+    t.resolve();
+    // The Bears become an Assassin after crewing it.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    ctx.targets = vec![vec![Entity::Object(bears)]];
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![mtg_engine::ability::Modification::AddSubtypes(vec![
+                Subtype::new("Assassin"),
+            ])],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t.obj_now(bears).chars.has_subtype("Assassin"));
+    let hand = t.hand_size(P0);
+    declare_attack(&mut t, &[(rig, Entity::Player(P1))]);
+    // The intervening "if" is false: it doesn't trigger.
+    assert_eq!(on_stack(&t, "an Assassin crewed it"), 0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
 }
 
 #[test]
@@ -442,7 +545,7 @@ fn a_countered_crew_ability_doesnt_make_it_crewed() {
     assert_eq!(on_stack(&t, "becomes crewed"), 0);
     // The giant still crewed it (CR 702.122b–c).
     assert!(t.obj(giant).tapped);
-    assert!(t.g.history.crewed.contains(&(mech, giant)));
+    assert!(mtg_engine::kw::crew::crewed_this_turn(&t.g, mech, giant));
 }
 
 #[test]
@@ -468,4 +571,40 @@ fn an_intervening_if_counts_only_the_creatures_that_crewed_it_that_time() {
     assert!(crew(&mut t, P0, servant, &[a, c]));
     t.resolve_all();
     assert_eq!(t.obj_now(servant).chars.abilities.len(), abilities + 1);
+}
+
+#[test]
+fn only_the_creatures_tapped_for_the_crew_ability_that_resolved_count() {
+    cr!("702.122e");
+    ruling!(
+        "Mighty Servant of Leuk-o",
+        "it will trigger only if exactly two creatures were tapped to pay the crew cost of the ability that caused it to become crewed for the first time that turn"
+    );
+    // Crewed by one creature, then (in response) by two: the second ability resolves
+    // first, and exactly two creatures were tapped for it, though three crewed it.
+    let mut t = TestGame::new(2);
+    let servant = t.battlefield(P0, "Mighty Servant of Leuk-o");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let abilities = t.obj(servant).chars.abilities.len();
+    assert!(crew(&mut t, P0, servant, &[wurm]));
+    assert!(crew(&mut t, P0, servant, &[giant, bears]));
+    t.resolve();
+    t.settle();
+    assert_eq!(on_stack(&t, "becomes crewed"), 1);
+    t.resolve_all();
+    assert_eq!(t.obj_now(servant).chars.abilities.len(), abilities + 1);
+    // The other way around: the ability paid for by one creature makes it crewed first,
+    // and the later one doesn't trigger it.
+    let mut t = TestGame::new(2);
+    let servant = t.battlefield(P0, "Mighty Servant of Leuk-o");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(crew(&mut t, P0, servant, &[giant, bears]));
+    assert!(crew(&mut t, P0, servant, &[wurm]));
+    t.resolve_all();
+    assert!(is_creature(&t, servant));
+    assert_eq!(t.obj_now(servant).chars.abilities.len(), abilities);
 }

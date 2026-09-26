@@ -7,9 +7,13 @@
 //!   turn." is the same keyword with that restriction (kept in its text).
 //! * A creature "crews a Vehicle" when it's tapped to pay the cost of the Vehicle's crew
 //!   ability (CR 702.122b); the Vehicle is then "crewed by" it (CR 702.122c). Those
-//!   creatures are recorded for the turn (`TurnHistory::crewed`, "creature that crewed it
-//!   this turn") and are the objects the crew ability's cost tapped (its saved context),
-//!   which [`CREWS_A_VEHICLE`] triggers look at.
+//!   creatures are recorded for the turn with their characteristics as they crewed
+//!   ([`CrewRecord`] in `TurnHistory::crewed`): "creature that crewed it this turn" (on
+//!   the battlefield), "for each creature that crewed it this turn" (counting those that
+//!   have left since, [`CREATURES_THAT_CREWED_IT`]), "if an Assassin crewed it this turn"
+//!   (one that was an Assassin as it crewed, [`crewed_by_type`]). They're also the
+//!   objects the crew ability's cost tapped (its saved context), which
+//!   [`CREWS_A_VEHICLE`] triggers look at.
 //! * "Whenever [this Vehicle] becomes crewed" means "whenever a crew ability of [this
 //!   Vehicle] resolves" (CR 702.122e): the ability reports a [`CREWED`] event as it
 //!   resolves, whose amount is the number of creatures tapped to pay for that ability.
@@ -27,9 +31,28 @@ use crate::eval::Ctx;
 use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
-use crate::object::{EventInfo, StackKind, Zone};
+use crate::object::{Characteristics, EventInfo, StackKind, Zone};
 use crate::types::*;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
+
+/// A creature tapped to pay the cost of a Vehicle's crew ability: it crewed the Vehicle
+/// (CR 702.122b–c).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CrewRecord {
+    pub vehicle: ObjectId,
+    pub creature: ObjectId,
+    /// The creature's characteristics as it was tapped to pay that cost.
+    pub chars: Box<Characteristics>,
+}
+
+/// Whether `creature` crewed `vehicle` this turn (CR 702.122c).
+pub fn crewed_this_turn(g: &Game, vehicle: ObjectId, creature: ObjectId) -> bool {
+    g.history
+        .crewed
+        .iter()
+        .any(|r| r.vehicle == vehicle && r.creature == creature)
+}
 
 /// `Event::Custom` name: a crew ability of the Vehicle (`obj`) resolved — it "becomes
 /// crewed" (CR 702.122e). The amount is the number of creatures that crewed it with that
@@ -46,6 +69,18 @@ pub const CREWED_IT_THIS_TURN: &str = "crew:crewed it this turn";
 /// `Filter::Custom`: "Vehicle crewed by ~ this turn" — a Vehicle the source crewed this
 /// turn (CR 702.122c).
 pub const CREWED_BY_IT_THIS_TURN: &str = "crew:crewed by it this turn";
+/// `Value::Custom`: the number of creatures that crewed the source this turn, including
+/// those that have left the battlefield since.
+pub const CREATURES_THAT_CREWED_IT: &str = "crew:creatures that crewed it this turn";
+/// Prefix of a `Condition::Custom` followed by a subtype ("if an Assassin crewed it this
+/// turn"): a creature that had that subtype as it crewed the source this turn crewed it,
+/// whether or not it's still on the battlefield or still has that subtype.
+pub const CREWED_BY_TYPE: &str = "crew:crewed it this turn, a creature of subtype ";
+
+/// The [`CREWED_BY_TYPE`] condition for `subtype`.
+pub fn crewed_by_type(subtype: &str) -> SmolStr {
+    SmolStr::new(format!("{CREWED_BY_TYPE}{subtype}"))
+}
 
 /// The variable of an activated ability's saved context holding the objects its cost
 /// tapped, sacrificed, etc. (see `Game::activate_ability`).
@@ -177,7 +212,12 @@ pub fn pay_total_power(
     if kw == KeywordKind::Crew {
         if let Some(v) = src {
             for c in &chosen {
-                g.history.crewed.push((v, *c));
+                let chars = Box::new(g.obj(*c).chars.clone());
+                g.history.crewed.push(CrewRecord {
+                    vehicle: v,
+                    creature: *c,
+                    chars,
+                });
             }
             g.log(|g| {
                 let names: Vec<String> = chosen.iter().map(|c| g.describe(*c)).collect();
@@ -262,10 +302,30 @@ impl KeywordRules for Crew {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         let src = ctx.source?;
         match name {
-            CREWED_IT_THIS_TURN => Some(g.history.crewed.contains(&(src, id))),
-            CREWED_BY_IT_THIS_TURN => Some(g.history.crewed.contains(&(id, src))),
+            CREWED_IT_THIS_TURN => Some(crewed_this_turn(g, src, id)),
+            CREWED_BY_IT_THIS_TURN => Some(crewed_this_turn(g, id, src)),
             _ => None,
         }
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != CREATURES_THAT_CREWED_IT {
+            return None;
+        }
+        let mut crew: Vec<ObjectId> = Vec::new();
+        for r in &g.history.crewed {
+            if Some(r.vehicle) == ctx.source && !crew.contains(&r.creature) {
+                crew.push(r.creature);
+            }
+        }
+        Some(crew.len() as i64)
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let subtype = name.strip_prefix(CREWED_BY_TYPE)?;
+        Some(g.history.crewed.iter().any(|r| {
+            Some(r.vehicle) == ctx.source && r.chars.has_subtype(subtype)
+        }))
     }
 
     /// CR 702.122b: "whenever ~ crews a Vehicle": the source was tapped to pay for a

@@ -160,6 +160,35 @@ fn each_commander_has_its_own_commander_tax() {
 }
 
 #[test]
+fn a_commander_is_taxed_for_casts_of_either_of_its_faces() {
+    // The commander tax counts casts of the commander (the card), whichever face of a
+    // modal double-faced card was cast.
+    cr!("903.8");
+    let mut t = commander_game();
+    // Halvar, God of Battle ({2}{W}{W}) // Sword of the Realms ({1}{W}).
+    let halvar = commander(&mut t, P0, "Halvar, God of Battle");
+    t.lands(P0, "Plains", 2);
+    t.cast(P0, halvar)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Sword of the Realms").len(), 1);
+    // The Sword is destroyed and returns to the command zone (CR 903.9a).
+    t.answer_yes(P0, true);
+    t.g.destroy(t.g.current(halvar), None);
+    t.settle();
+    assert_eq!(t.zone(halvar), Zone::Command);
+    // Halvar now costs {2}{W}{W} plus {2}.
+    let halvar = t.g.current(halvar);
+    t.lands(P0, "Plains", 4);
+    assert!(!castable(&mut t, P0, halvar, mtg_engine::object::CastMethod::Normal));
+    t.lands(P0, "Plains", 2);
+    t.cast(P0, halvar).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+}
+
+#[test]
 fn commander_damage_is_counted_for_each_commander_separately() {
     cr!("702.124d");
     ruling!(

@@ -131,7 +131,8 @@ pub struct Player {
     pub commander_names: Vec<SmolStr>,
     /// Combat damage dealt to this player by each commander (by commander name).
     pub commander_damage: BTreeMap<SmolStr, u32>,
-    /// Times this player has cast their commander from the command zone (CR 903.8).
+    /// Times this player has cast each of their commanders from the command zone, by card
+    /// name (CR 903.8; see `kw::partner::commander_key`).
     pub commander_casts: BTreeMap<SmolStr, u32>,
     /// Skip next N of the given step kind.
     pub skips: Vec<StepKind>,
@@ -355,11 +356,10 @@ pub struct TurnHistory {
     /// the damage (e.g. for prowl, CR 702.76a). Recorded by `kw/prowl.rs`.
     #[serde(default)]
     pub combat_damage_to_players: Vec<crate::kw::prowl::CombatDamageRecord>,
-    /// (Vehicle, creature) pairs: creatures tapped this turn to pay the cost of a
-    /// Vehicle's crew ability, which "crewed" it (CR 702.122b–c). Recorded by
-    /// `kw/crew.rs`.
+    /// Creatures tapped this turn to pay the cost of a Vehicle's crew ability, which
+    /// "crewed" it (CR 702.122b–c). Recorded by `kw/crew.rs`.
     #[serde(default)]
-    pub crewed: Vec<(ObjectId, ObjectId)>,
+    pub crewed: Vec<crate::kw::crew::CrewRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
