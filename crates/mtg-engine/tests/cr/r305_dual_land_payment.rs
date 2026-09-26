@@ -57,7 +57,7 @@ fn a_dual_land_pays_with_either_of_its_basic_land_types_mana_abilities() {
 
 #[test]
 fn tapping_a_dual_land_for_mana_activates_one_of_its_abilities() {
-    cr!("106.12", "305.6");
+    cr!("118.3", "305.6");
     // Tapping it for mana is activating one of its {T} mana abilities, chosen by the
     // player; afterwards the other can't be activated (it's tapped).
     let mut t = TestGame::new(2);
@@ -291,7 +291,7 @@ fn a_land_whose_mana_abilities_both_tap_it_pays_with_the_one_that_suffices() {
 
 #[test]
 fn tapped_for_mana_triggers_follow_the_dual_lands_chosen_ability() {
-    cr!("106.12a", "118.3a", "605.4a");
+    cr!("106.12", "106.12a", "118.3a", "605.4a");
     // Wild Growth on a Volcanic Island: tapping it for {R} also adds {G}. Rip-Clan Crasher
     // ({R}{G}) can be cast with that one land.
     let mut t = TestGame::new(2);
@@ -361,4 +361,75 @@ fn a_cost_larger_than_the_mana_the_lands_can_make_cant_be_paid() {
     assert!(can_cast(&mut t, P0, colossus));
     t.cast(P0, colossus).go();
     assert!(lands.iter().all(|l| tapped(&t, *l)));
+}
+
+#[test]
+fn a_doubled_mana_ability_makes_more_of_the_one_type_chosen_for_it() {
+    cr!("106.12b", "601.2g", "601.2h");
+    ruling!(
+        "Mana Reflection",
+        "you'll get four times the original amount and type of mana"
+    );
+    // Mana Reflection: "If you tap a permanent for mana, it produces twice as much of that
+    // mana instead." Shivan Reef's second ability then makes {U}{U} or {R}{R}: one Reef
+    // pays for Lord of Atlantis ({U}{U}) but not Stormchaser Mage ({U}{R}).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mana Reflection");
+    let reef = t.battlefield(P0, "Shivan Reef");
+    let mage = t.hand(P0, "Stormchaser Mage");
+    assert!(!can_cast(&mut t, P0, mage));
+    assert!(t.cast(P0, mage).try_go().is_err());
+    assert!(!tapped(&t, reef));
+    let lord = t.hand(P0, "Lord of Atlantis");
+    assert!(can_cast(&mut t, P0, lord));
+    t.cast(P0, lord).go();
+    assert!(tapped(&t, reef));
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
+    // A Volcanic Island's two abilities make {U}{U} or {R}{R}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mana Reflection");
+    let island = t.battlefield(P0, "Volcanic Island");
+    let mage = t.hand(P0, "Stormchaser Mage");
+    assert!(!can_cast(&mut t, P0, mage));
+    let zealot = t.hand(P0, "Ash Zealot");
+    assert!(can_cast(&mut t, P0, zealot));
+    t.cast(P0, zealot).go();
+    assert!(tapped(&t, island));
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
+    // Birds of Paradise ("one mana of any color") likewise makes two of one color.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mana Reflection");
+    let birds = t.battlefield(P0, "Birds of Paradise");
+    let mage = t.hand(P0, "Stormchaser Mage");
+    assert!(!can_cast(&mut t, P0, mage));
+    let lord = t.hand(P0, "Lord of Atlantis");
+    assert!(can_cast(&mut t, P0, lord));
+    t.cast(P0, lord).go();
+    assert!(tapped(&t, birds));
+}
+
+#[test]
+fn colors_that_only_a_few_lands_make_between_them_are_counted_together() {
+    cr!("118.3", "601.2h");
+    // Progenitus ({W}{W}{U}{U}{B}{B}{R}{R}{G}{G}) with ten Tundras, three Badlands and
+    // four Forests: every color has enough lands on its own, but {B}{B}{R}{R} needs four
+    // Badlands. It can't be cast, and finding that out doesn't try every way of tapping
+    // the Tundras first.
+    let mut t = TestGame::new(2);
+    let mut lands = t.lands(P0, "Tundra", 10);
+    lands.extend(t.lands(P0, "Badlands", 3));
+    lands.extend(t.lands(P0, "Forest", 4));
+    let progenitus = t.hand(P0, "Progenitus");
+    let start = std::time::Instant::now();
+    assert!(!can_cast(&mut t, P0, progenitus));
+    assert!(t.cast(P0, progenitus).try_go().is_err());
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    assert!(lands.iter().all(|l| !tapped(&t, *l)));
+    // With a fourth Badlands it can.
+    let more = t.battlefield(P0, "Badlands");
+    assert!(can_cast(&mut t, P0, progenitus));
+    t.cast(P0, progenitus).go();
+    assert!(tapped(&t, more));
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
 }

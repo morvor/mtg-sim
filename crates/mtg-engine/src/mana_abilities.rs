@@ -368,13 +368,39 @@ fn apply_mana_replacement(d: &ReplacementDef, types: &[ManaType]) -> Vec<ManaTyp
 /// The units of mana `perm` makes when tapped for mana (CR 106.12b), given the units its
 /// ability would make: the replacements are applied in timestamp order, the order a
 /// payment uses when the player doesn't choose another (CR 616.1).
-fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Vec<ManaType>> {
-    produce_mana_replacements(g, perm)
+///
+/// A replacement that multiplies the mana makes more of the type chosen for each unit
+/// ("twice as much of that mana"): a unit that could be {U} or {R} becomes {U}{U} or
+/// {R}{R}, never {U}{R}. So when one applies, each way of choosing the types is returned
+/// as an alternative of its own (an ability that can make only one of them at a time). If
+/// there are too many ways to list, a unit that could be one of several types isn't
+/// multiplied, which underestimates what it makes.
+fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Vec<Vec<ManaType>>> {
+    let reps = produce_mana_replacements(g, perm);
+    if reps.is_empty() {
+        return vec![units];
+    }
+    let multiplies = reps
         .iter()
-        .fold(units, |units, (_, _, d)| match &d.action {
+        .any(|(_, _, d)| matches!(d.action, ReplacementAction::Multiply(_)));
+    let alternatives = if multiplies {
+        each_choice(&units).unwrap_or_else(|| vec![units])
+    } else {
+        vec![units]
+    };
+    let mut out: Vec<Vec<Vec<ManaType>>> = Vec::new();
+    for units in alternatives {
+        let units = reps.iter().fold(units, |units, (_, _, d)| match &d.action {
             ReplacementAction::Multiply(k) => units
-                .iter()
-                .flat_map(|u| std::iter::repeat_n(u.clone(), (*k).max(0) as usize))
+                .into_iter()
+                .flat_map(|u| {
+                    let n = if u.len() == 1 {
+                        (*k).max(0) as usize
+                    } else {
+                        1
+                    };
+                    std::iter::repeat_n(u, n)
+                })
                 .collect(),
             ReplacementAction::Instead(e) => match &**e {
                 Effect::AddMana {
@@ -384,7 +410,39 @@ fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Ve
                 _ => units,
             },
             _ => units,
-        })
+        });
+        if !out.contains(&units) {
+            out.push(units);
+        }
+    }
+    out
+}
+
+/// Each way of choosing one type for every unit that could be one of several types, or
+/// None if there are more than a few.
+fn each_choice(units: &[Vec<ManaType>]) -> Option<Vec<Vec<Vec<ManaType>>>> {
+    const MAX: usize = 16;
+    let mut out: Vec<Vec<Vec<ManaType>>> = vec![Vec::new()];
+    for u in units {
+        if u.len() <= 1 {
+            out.iter_mut().for_each(|alt| alt.push(u.clone()));
+            continue;
+        }
+        if out.len() * u.len() > MAX {
+            return None;
+        }
+        out = out
+            .iter()
+            .flat_map(|alt| {
+                u.iter().map(move |t| {
+                    let mut alt = alt.clone();
+                    alt.push(vec![*t]);
+                    alt
+                })
+            })
+            .collect();
+    }
+    Some(out)
 }
 
 /// Union of the types produced after applying the replacements in every possible order
@@ -956,20 +1014,29 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             }
             let mut ctx = Ctx::new(Some(o.id), p);
             ctx.link = a.link;
-            if let Some(mut units) = production_units(g, &act.body.effect, &ctx) {
-                if act.cost.has_tap() && !units.is_empty() {
+            if let Some(units) = production_units(g, &act.body.effect, &ctx) {
+                let alternatives = if act.cost.has_tap() && !units.is_empty() {
                     // CR 106.12b: replacement effects that apply when it's tapped for mana
                     // change what it makes ("it produces {B} instead").
-                    units = replaced_units(g, o.id, units);
-                    // CR 605.4a: triggered mana abilities that trigger on tapping it for
-                    // mana add their mana right away, so they help pay too.
-                    let extra = triggered_mana_units(g, p, o.id, &units);
-                    units.extend(extra);
+                    replaced_units(g, o.id, units)
+                        .into_iter()
+                        .map(|mut units| {
+                            // CR 605.4a: triggered mana abilities that trigger on tapping
+                            // it for mana add their mana right away, so they help pay too.
+                            let extra = triggered_mana_units(g, p, o.id, &units);
+                            units.extend(extra);
+                            units
+                        })
+                        .collect()
+                } else {
+                    vec![units]
+                };
+                if o.is_creature() {
+                    rank = rank.max(1);
                 }
-                if !units.is_empty() {
-                    if o.is_creature() {
-                        rank = rank.max(1);
-                    }
+                // Alternatives of one ability tap the permanent, so they conflict: only
+                // one of them is used.
+                for units in alternatives.into_iter().filter(|u| !u.is_empty()) {
                     out.push(ManaSource {
                         obj: o.id,
                         ability: a.clone(),
@@ -1027,10 +1094,11 @@ impl ManaSource {
             if a.cost.parts.iter().any(|p| matches!(p, CostPart::SacrificeSelf)))
     }
 
-    /// Whether this ability and `other` (a different ability) can't both be activated for
-    /// one payment: they belong to the same permanent and both tap it, or both sacrifice
-    /// it. A tapped permanent can't be tapped to pay a cost (CR 118.3), so a Volcanic
-    /// Island pays either {U} or {R}, not both.
+    /// Whether this source and `other` (a different source: another ability, or another
+    /// way the same ability's mana can turn out) can't both be used for one payment: they
+    /// belong to the same permanent and both tap it, or both sacrifice it. A tapped
+    /// permanent can't be tapped to pay a cost (CR 118.3), so a Volcanic Island pays either
+    /// {U} or {R}, not both.
     pub fn conflicts_with(&self, other: &ManaSource) -> bool {
         self.obj == other.obj
             && ((self.taps() && other.taps()) || (self.sacrifices() && other.sacrifices()))
@@ -1078,6 +1146,24 @@ impl Req {
             Req::TwoHybrid(_) | Req::Phyrexian(_) | Req::PhyrexianHybrid(..)
         )
     }
+
+    /// The types of mana that can pay the symbol, as a set of [`type_bit`]s, if it can only
+    /// be paid with one unit of mana of particular types.
+    fn type_mask(self) -> Option<u8> {
+        let c = |x: Color| type_bit(ManaType::from_color(x));
+        match self {
+            Req::Colored(x) => Some(c(x)),
+            Req::Colorless => Some(type_bit(ManaType::C)),
+            Req::Hybrid(x, y) => Some(c(x) | c(y)),
+            Req::ColorlessHybrid(x) => Some(type_bit(ManaType::C) | c(x)),
+            _ => None,
+        }
+    }
+}
+
+/// A set of mana types as bits.
+fn type_bit(t: ManaType) -> u8 {
+    1 << (t as u8)
 }
 
 fn expand(cost: &ManaCost) -> Option<Vec<Req>> {
@@ -1362,27 +1448,26 @@ impl<'a> Planner<'a> {
     }
 
     /// Whether the rest of the cost could still be paid, as far as counting units goes:
-    /// enough units overall, and enough of each color, colorless and snow for the symbols
-    /// that need them.
+    /// enough units overall, enough snow units for the snow symbols, and for each set of
+    /// types, enough units that can be one of them for the symbols that only those types
+    /// can pay (Hall's condition). With three lands that make {W} or {U} and a Mountain,
+    /// {W}{W}{U}{U} fails this at once, although each color on its own has enough lands.
     fn enough_units(&self, i: usize) -> bool {
         let rest = &self.reqs[i..];
         let needed = rest.iter().filter(|r| r.needs_one_unit()).count() + self.extra_generic;
         if self.capacity(&|_| true) < needed {
             return false;
         }
-        for c in Color::ALL {
-            let n = rest
-                .iter()
-                .filter(|r| matches!(r, Req::Colored(x) if *x == c))
-                .count();
-            let t = ManaType::from_color(c);
-            if n > 0 && self.capacity(&|u| u.types.contains(&t)) < n {
+        let masks: Vec<u8> = rest.iter().filter_map(|r| r.type_mask()).collect();
+        let all = masks.iter().fold(0, |a, m| a | m);
+        // Each nonempty subset of the types these symbols can be paid with.
+        let mut set = all;
+        while set != 0 {
+            let n = masks.iter().filter(|&&m| m & !set == 0).count();
+            if n > 0 && self.capacity(&|u| u.types.iter().any(|t| type_bit(*t) & set != 0)) < n {
                 return false;
             }
-        }
-        let colorless = rest.iter().filter(|r| matches!(r, Req::Colorless)).count();
-        if colorless > 0 && self.capacity(&|u| u.types.contains(&ManaType::C)) < colorless {
-            return false;
+            set = (set - 1) & all;
         }
         let snow = rest.iter().filter(|r| matches!(r, Req::Snow)).count();
         snow == 0 || self.capacity(&|u| u.snow) >= snow
