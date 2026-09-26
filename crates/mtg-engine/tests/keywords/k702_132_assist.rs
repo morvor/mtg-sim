@@ -141,3 +141,45 @@ fn a_teammate_helps_by_default_and_counts_for_castability() {
     let binox = t.hand(P0, "Charging Binox");
     assert!(!castable(&mut t, P0, binox, CastMethod::Normal));
 }
+
+#[test]
+fn huddle_up_with_help() {
+    cr!("702.132a");
+    assert_supported_card("Huddle Up");
+    ruling!(
+        "Huddle Up",
+        "You can’t target the same player twice to have them draw two cards."
+    );
+    let mut t = TestGame::new(2);
+    // Huddle Up: {2}{U} sorcery, assist, "Two target players each draw a card."
+    let mine = t.lands(P0, "Island", 1);
+    let theirs = t.lands(P1, "Forest", 2);
+    let hu = t.hand(P0, "Huddle Up");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer(P1, DecisionKind::Number, Answer::Number(2));
+    t.cast(P0, hu)
+        .targets(&[Entity::Player(P0), Entity::Player(P1)])
+        .go();
+    assert_eq!(untapped(&t, &mine), 0);
+    assert_eq!(untapped(&t, &theirs), 0);
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), h0 + 1);
+    assert_eq!(t.hand_size(P1), h1 + 1);
+    // The same player can't be both targets: an answer naming P0 twice isn't taken.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    let hu = t.hand(P0, "Huddle Up");
+    let spell = t
+        .cast(P0, hu)
+        .targets(&[Entity::Player(P0), Entity::Player(P0)])
+        .go();
+    let chosen: Vec<Entity> = t.g.obj(spell).stack.as_deref().unwrap().chosen[0]
+        .targets
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+    assert_eq!(chosen.len(), 2);
+    assert_ne!(chosen[0], chosen[1]);
+}

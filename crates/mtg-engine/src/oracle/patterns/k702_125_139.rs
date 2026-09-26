@@ -14,6 +14,8 @@
 //!   cast this turn has improvise", "... gains embalm until end of turn. The embalm cost is
 //!   equal to its mana cost.", "... gains escape until end of turn. The escape cost is
 //!   equal to its mana cost plus [cost].";
+//! * "Two target players each draw a card." (Huddle Up, the assist card whose effect the
+//!   other patterns don't read);
 //! * mentor (CR 702.134c): "whenever ~ mentors a creature", "whenever equipped creature
 //!   mentors a creature";
 //! * spectacle (CR 702.137a): "if its spectacle cost was paid";
@@ -594,3 +596,42 @@ fn graveyard_cards_have_jump_start(
 }
 
 inventory::submit! { StaticPattern { name: "k702.133 each card in your graveyard has jump-start", priority: 100, parse: graveyard_cards_have_jump_start } }
+
+// ---------------------------------------------------------------------------
+// Assist cards (CR 702.132)
+// ---------------------------------------------------------------------------
+
+/// "Two target players each draw a card." / "... each draw N cards": two different target
+/// players (CR 115.3) each draw.
+fn two_target_players_each_draw(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("two target players each draw ")?;
+    let n = match r {
+        "a card" => Value::c(1),
+        _ => {
+            let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+            if end(rest) != "cards" {
+                return None;
+            }
+            n
+        }
+    };
+    let a = b.add_target(
+        TargetSpec::player(PlayerFilter::Any, "target player"),
+        "target player",
+    );
+    let mut second = TargetSpec::player(PlayerFilter::Any, "target player");
+    second.distinct_from = vec![a];
+    let c = b.add_target(second, "another target player");
+    Some(Effect::Seq(vec![
+        Effect::Draw {
+            who: PlayerRef::Target(a),
+            n: n.clone(),
+        },
+        Effect::Draw {
+            who: PlayerRef::Target(c),
+            n,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "k702.132 two target players each draw", priority: 100, parse: two_target_players_each_draw } }
