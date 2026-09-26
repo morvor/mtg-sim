@@ -3080,6 +3080,8 @@ pub enum Effect {
     RollDice(Box<crate::dice::DieRoll>),
     /// "Flip a coin. If you win the flip, ..." (CR 705).
     FlipCoins(Box<crate::dice::CoinFlip>),
+    /// Separating objects into two piles, or choosing one of them (CR 700.3).
+    Piles(Box<crate::piles::PileAction>),
     /// Card-specific behavior implemented in code, by name.
     Custom(SmolStr),
 }

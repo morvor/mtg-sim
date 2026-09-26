@@ -1619,6 +1619,7 @@ impl Game {
                 crate::next_spell::exec_next_spell(self, filter, mods, expires, ctx);
             }
             Effect::RollDice(spec) => crate::dice::roll(self, spec, ctx),
+            Effect::Piles(action) => crate::piles::perform(self, action, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
         }
