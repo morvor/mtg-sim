@@ -40,9 +40,9 @@ fn word<'a>(s: &'a str, p: &str) -> Option<&'a str> {
 }
 
 #[derive(Default)]
-struct Parties {
-    players: Option<PlayerFilter>,
-    objects: Option<Filter>,
+pub(super) struct Parties {
+    pub(super) players: Option<PlayerFilter>,
+    pub(super) objects: Option<Filter>,
 }
 
 impl Parties {
@@ -105,9 +105,9 @@ fn plural_sources(s: &str) -> Option<(Filter, &str)> {
 
 /// Targets named by a one-shot clause ("by target attacking creature with flying"): their
 /// slots continue from `base`. Statics can't have targets (`base` is `None`).
-struct Targets {
-    base: Option<usize>,
-    specs: Vec<(TargetSpec, String)>,
+pub(super) struct Targets {
+    pub(super) base: Option<usize>,
+    pub(super) specs: Vec<(TargetSpec, String)>,
 }
 
 /// One group of damage sources or recipients: "~", "enchanted creature", "creatures you
@@ -214,25 +214,31 @@ fn sources<'a>(s: &'a str, t: &mut Targets) -> Option<(Filter, &'a str)> {
 
 /// Which damage a prevention clause is about.
 #[derive(Clone, Copy)]
-enum Kind {
+pub(super) enum Kind {
     All,
     Combat,
     Noncombat,
 }
 
-struct Clause {
-    kind: Kind,
-    to: Option<Parties>,
-    by: Option<Filter>,
-    this_turn: bool,
-    during_your_turn: bool,
+pub(super) struct Clause {
+    pub(super) kind: Kind,
+    pub(super) to: Option<Parties>,
+    pub(super) by: Option<Filter>,
+    pub(super) this_turn: bool,
+    pub(super) during_your_turn: bool,
 }
 
 /// "prevent all [combat|noncombat] damage that would be dealt [this turn] [to R] [this
 /// turn] [by S] [this turn] [during your turn]" / "prevent all [combat] damage [that] S
 /// would deal [to R] [this turn]".
 fn clause(l: &str, t: &mut Targets) -> Option<Clause> {
-    let r = end(l).strip_prefix("prevent all ")?;
+    damage_clause(end(l).strip_prefix("prevent all ")?, t)
+}
+
+/// "[combat|noncombat] damage that would be dealt [this turn] [to R] [by S] [this turn]"
+/// or "[combat] damage [that] S would deal [to R] [this turn]" (after "prevent all" or
+/// "all").
+pub(super) fn damage_clause(r: &str, t: &mut Targets) -> Option<Clause> {
     let (kind, r) = if let Some(x) = r.strip_prefix("combat damage ") {
         (Kind::Combat, x)
     } else if let Some(x) = r.strip_prefix("noncombat damage ") {
@@ -294,7 +300,7 @@ fn clause(l: &str, t: &mut Targets) -> Option<Clause> {
     Some(c)
 }
 
-fn def(c: &Clause) -> ReplacementDef {
+pub(super) fn def(c: &Clause, action: ReplacementAction) -> ReplacementDef {
     let source = c.by.clone().unwrap_or(Filter::Any);
     let (to_players, to_objects) = match &c.to {
         Some(p) => (p.players.clone(), p.objects.clone()),
@@ -315,7 +321,7 @@ fn def(c: &Clause) -> ReplacementDef {
     };
     ReplacementDef {
         event,
-        action: ReplacementAction::Prevent,
+        action,
         self_replacement: false,
         optional: false,
     }
@@ -325,7 +331,7 @@ fn def(c: &Clause) -> ReplacementDef {
 /// locked in as the effect is created (it's the object the Aura enchants then), so it's
 /// left to other patterns. ("~" is the effect's source object, which a later new object
 /// isn't, CR 400.7; targets are locked by `prevention::lock_def`.)
-fn groups_only(c: &Clause) -> bool {
+pub(super) fn groups_only(c: &Clause) -> bool {
     fn attached(f: &Filter) -> bool {
         match f {
             Filter::AttachedToSource => true,
@@ -359,7 +365,7 @@ fn p_prevent_groups(l: &str, b: &mut Builder) -> Option<Effect> {
         b.add_target(spec, &text);
     }
     Some(Effect::AddReplacement {
-        def: def(&c),
+        def: def(&c, ReplacementAction::Prevent),
         duration: Duration::EndOfTurn,
         uses: None,
     })
@@ -384,7 +390,7 @@ fn s_prevent_groups(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     if c.to.is_none() && c.by.is_none() {
         return None;
     }
-    let mut s = StaticAbility::new(StaticEffect::Replacement(def(&c)));
+    let mut s = StaticAbility::new(StaticEffect::Replacement(def(&c, ReplacementAction::Prevent)));
     if lead || c.during_your_turn {
         s.condition = Some(Condition::YourTurn);
     }
