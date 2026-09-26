@@ -234,6 +234,20 @@ fn x_is(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "x is [value]", priority: 100, apply: x_is } }
 
+/// "Whenever a creature you control mutates" (Essence Symbiote; CR 702.140d): "that
+/// creature" is the mutated permanent.
+fn creature_you_control_mutates(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (r == "a creature you control mutates").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::mutate::CREATURE_YOU_CONTROL_MUTATES.into()),
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "a creature you control mutates", priority: 100, parse: creature_you_control_mutates } }
+
 /// "Whenever you foretell a card" (Dream Devourer; CR 702.143c).
 fn you_foretell(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     (r == "you foretell a card").then(|| {

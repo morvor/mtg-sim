@@ -115,3 +115,52 @@ fn a_card_may_say_it_can_be_cast_from_the_graveyard_using_its_mutate_ability() {
     assert!(t.obj(bears).is(CardType::Creature));
     assert_eq!(t.pt(bears), (6, 6));
 }
+
+/// Casts the card `name` for its mutate cost onto `target` (on top or under), paying with
+/// `mana`, and resolves it.
+fn mutate_onto(t: &mut TestGame, name: &str, target: ObjectId, top: bool, mana: &[(ManaType, u32)]) {
+    let card = t.hand(P0, name);
+    for (ty, n) in mana {
+        add_mana(t, P0, *ty, *n);
+    }
+    t.cast(P0, card).method(MUTATE).target(target).go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(if top { 0 } else { 1 }));
+    t.resolve_all();
+}
+
+#[test]
+fn whenever_a_creature_you_control_mutates() {
+    cr!("702.140d");
+    assert_supported("Essence Symbiote");
+    ruling!("Essence Symbiote", "If Essence Symbiote mutates, its ability triggers.");
+    let mut t = TestGame::new(2);
+    // Essence Symbiote: "Whenever a creature you control mutates, put a +1/+1 counter on
+    // that creature and you gain 2 life."
+    let symbiote = t.battlefield(P0, "Essence Symbiote");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    mutate_onto(&mut t, "Porcuparrot", bears, true, &[(ManaType::R, 1), (ManaType::C, 2)]);
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.life(P0), 22);
+    // Mutating onto the Symbiote itself triggers it too.
+    mutate_onto(&mut t, "Gemrazer", symbiote, false, &[(ManaType::G, 2), (ManaType::C, 1)]);
+    assert_eq!(t.counters(symbiote, "+1/+1"), 1);
+    assert_eq!(t.life(P0), 24);
+}
+
+#[test]
+fn the_number_of_times_a_creature_has_mutated() {
+    cr!("702.140c", "702.140e");
+    assert_supported("Porcuparrot");
+    let mut t = TestGame::new(2);
+    // Porcuparrot: "{T}: This creature deals X damage to any target, where X is the number
+    // of times this creature has mutated." Mutate {2}{R}.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    mutate_onto(&mut t, "Porcuparrot", bears, true, &[(ManaType::R, 1), (ManaType::C, 2)]);
+    mutate_onto(&mut t, "Gemrazer", bears, false, &[(ManaType::G, 2), (ManaType::C, 1)]);
+    // It has mutated twice: the ability from the top card deals 2 damage.
+    let uid = ability_uid(&mut t, bears, "{T}");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_uid(&mut t, P0, bears, uid).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
