@@ -534,6 +534,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::BlockedBySource, r)
         } else if let Some((f, r)) = parse_chosen_suffix(t) {
             (f, r)
+        } else if let Some((f, r)) = parse_originally_printed_suffix(t) {
+            (f, r)
         } else {
             break;
         };
@@ -555,6 +557,17 @@ pub fn target_player_controls(s: &str) -> Option<(PlayerFilter, &'static str, &s
         return Some((PlayerFilter::Opponent, "target opponent", r));
     }
     None
+}
+
+/// "with a name originally printed in the Arabian Nights expansion" (CR 206.3).
+fn parse_originally_printed_suffix(t: &str) -> Option<(Filter, &str)> {
+    let r = t.strip_prefix("with a name originally printed in the ")?;
+    let (set, rest) = r.split_once(" expansion")?;
+    // Only the expansions whose names the Comprehensive Rules list are known (CR 206.3a-c).
+    if !crate::names::has_listed_names(set) {
+        return None;
+    }
+    Some((Filter::NameOriginallyPrintedIn(set.trim().into()), rest))
 }
 
 /// References to a choice made for the source (CR 607.2d): "of the chosen type",
@@ -678,6 +691,16 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".
 fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
+    // "with power greater than its base power" (CR 208.4b).
+    for (p, cmp) in [
+        ("with power greater than its base power", Cmp::Gt),
+        ("each with power greater than its base power", Cmp::Gt),
+        ("with power different from its base power", Cmp::Ne),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            return Some((Filter::PowerVsBase(cmp), r));
+        }
+    }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
     } else if let Some(r) = t.strip_prefix("with toughness ") {

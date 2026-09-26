@@ -600,15 +600,30 @@ fn f_created_pronoun(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     .find_map(|p| l.strip_prefix(p))
     {
         format!("them {r}")
-    } else if l.starts_with("put ") && (l.ends_with(" on it") || l.ends_with(" on each of them"))
-    {
+    } else if l.starts_with("put ") && {
+        // "Put X +1/+1 counters on it, where X is ...": X is defined after the pronoun.
+        let body = l.split_once(", where x is ").map_or(l, |(c, _)| c);
+        body.ends_with(" on it") || body.ends_with(" on each of them")
+    } {
         l.replace(" on each of them", " on them")
     } else {
         return false;
     };
     let saved_it = b.it.clone();
-    b.it = Sel::Var(vars::CREATED);
-    let Some(e) = crate::oracle::effects::parse_simple(&rewritten, b) else {
+    let e = if let Some((clause, value)) = rewritten.split_once(", where x is ") {
+        // X's value keeps the referents it had ("that spell's mana value" is the
+        // triggering spell's); "it" in the instruction names the created tokens.
+        let value = if matches!(saved_it, Sel::None | Sel::This) {
+            value.to_string()
+        } else {
+            super::triggers_referents::that_possessives_to_its(value)
+        };
+        super::r107_numbers::where_x_is_parts(clause, &value, b, Sel::Var(vars::CREATED))
+    } else {
+        b.it = Sel::Var(vars::CREATED);
+        crate::oracle::effects::parse_simple(&rewritten, b)
+    };
+    let Some(e) = e else {
         b.it = saved_it;
         return false;
     };

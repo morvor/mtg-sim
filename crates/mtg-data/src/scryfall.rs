@@ -54,6 +54,10 @@ pub struct ScryfallCard {
     #[serde(default)]
     pub oracle_id: String,
     pub name: String,
+    /// An alternate name printed on this printing, with the Oracle name in a secondary
+    /// title bar (CR 201.6). It has no effect on game play.
+    #[serde(default)]
+    pub flavor_name: Option<String>,
     pub layout: String,
     #[serde(default)]
     pub mana_cost: Option<String>,

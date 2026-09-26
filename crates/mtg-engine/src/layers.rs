@@ -267,11 +267,14 @@ impl Game {
                 // counters and modifications apply to 0 (e.g. an equipped planeswalker
                 // that became a creature, CR 702.6e).
                 for id in &live {
-                    let c = &mut self.objects[id.0 as usize].chars;
-                    if c.is(CardType::Creature) {
-                        c.power.get_or_insert(0);
-                        c.toughness.get_or_insert(0);
+                    let o = &mut self.objects[id.0 as usize];
+                    if o.chars.is(CardType::Creature) {
+                        o.chars.power.get_or_insert(0);
+                        o.chars.toughness.get_or_insert(0);
                     }
+                    // CR 208.4b: base power and toughness are the values after layers
+                    // 7a and 7b, before modifications and counters.
+                    o.base_pt = (o.chars.power, o.chars.toughness);
                 }
                 self.apply_pt_counters(&live);
             }
@@ -1248,12 +1251,16 @@ pub fn apply_mod(
         Modification::SetController(_) => {}
         Modification::ChangeText { from, to } => crate::text_change::change_text(c, from, to),
         Modification::SetName(n) => {
+            // CR 612.8: the object loses its other names (CR 201.3a included).
             c.name = n.clone();
             c.all_creature_names = false;
+            c.interchangeable_names.clear();
         }
         Modification::AllCreatureNames => c.all_creature_names = true,
         Modification::NameSticker { word, position } => {
             c.name = crate::stickers::add_name_word(&c.name, word, *position as usize).into();
+            // A new name isn't interchangeable with the old one's partners (CR 201.3).
+            c.interchangeable_names.clear();
         }
         // Becomes `SetText` for each object as the effect is created.
         Modification::ExchangeText => {}
@@ -1523,21 +1530,24 @@ pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
-    match subtype_kind(s) {
-        Some(SubtypeKind::Creature) => {
-            types.contains(CardType::Creature) || types.contains(CardType::Kindred)
-        }
-        Some(SubtypeKind::Land) => types.contains(CardType::Land),
-        Some(SubtypeKind::Artifact) => types.contains(CardType::Artifact),
-        Some(SubtypeKind::Enchantment) => types.contains(CardType::Enchantment),
-        Some(SubtypeKind::Planeswalker) => types.contains(CardType::Planeswalker),
-        Some(SubtypeKind::Spell) => {
-            types.contains(CardType::Instant) || types.contains(CardType::Sorcery)
-        }
-        Some(SubtypeKind::Battle) => types.contains(CardType::Battle),
-        Some(SubtypeKind::Plane) => types.contains(CardType::Plane),
-        _ => true,
-    }
+    let kinds = subtype_kinds(s);
+    // A subtype on several lists (Spacecraft) is valid with any of those card types.
+    kinds.is_empty()
+        || kinds.into_iter().any(|k| match k {
+            SubtypeKind::Creature => {
+                types.contains(CardType::Creature) || types.contains(CardType::Kindred)
+            }
+            SubtypeKind::Land => types.contains(CardType::Land),
+            SubtypeKind::Artifact => types.contains(CardType::Artifact),
+            SubtypeKind::Enchantment => types.contains(CardType::Enchantment),
+            SubtypeKind::Planeswalker => types.contains(CardType::Planeswalker),
+            SubtypeKind::Spell => {
+                types.contains(CardType::Instant) || types.contains(CardType::Sorcery)
+            }
+            SubtypeKind::Battle => types.contains(CardType::Battle),
+            SubtypeKind::Plane => types.contains(CardType::Plane),
+            SubtypeKind::Dungeon => types.contains(CardType::Dungeon),
+        })
 }
 
 /// Convenience used by tests: build an ability granting a keyword.

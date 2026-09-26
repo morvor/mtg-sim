@@ -404,17 +404,15 @@ impl Game {
             Filter::Toughness(cmp, v) => c
                 .toughness
                 .is_some_and(|t| cmp.eval(t as i64, self.eval_value(v, ctx))),
+            // CR 208.4b: compared with its power after layers 7a-7b only.
+            Filter::PowerVsBase(cmp) => match (c.power, o.base_pt.0) {
+                (Some(p), Some(b)) => cmp.eval(p as i64, b as i64),
+                _ => false,
+            },
             Filter::ManaValue(cmp, v) => {
                 // Uses the viewed characteristics' mana cost (CR 601.3e), with X on the
                 // stack (CR 107.3f) as in `mana_value_of`.
-                let mv = match &c.mana_cost {
-                    None => 0,
-                    Some(mc) if o.zone == Zone::Stack => {
-                        let x = o.stack.as_ref().and_then(|s| s.x).unwrap_or(0).max(0);
-                        mc.mana_value_with_x(x as u32)
-                    }
-                    Some(mc) => mc.mana_value(),
-                };
+                let mv = crate::mana_value::mana_value_with(self, id, c);
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
@@ -424,6 +422,13 @@ impl Game {
                 .iter()
                 .filter_map(|e| e.object())
                 .any(|x| c.shares_name_with(&self.obj(x).chars)),
+            Filter::DifferentNameFrom(sel) => {
+                let others = self.eval_sel_objects(sel, ctx);
+                crate::names::has_different_name(c, others.iter().map(|x| &self.obj(*x).chars))
+            }
+            Filter::NameOriginallyPrintedIn(set) => {
+                crate::names::has_name_originally_printed_in(c, set)
+            }
             Filter::SharesCreatureType(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()
@@ -509,7 +514,7 @@ impl Game {
                 .and_then(|ch| ch.color)
                 .is_some_and(|col| c.colors.contains(col)),
             Filter::ManaValueOfChosenQuality => {
-                let mv = c.mana_cost.as_ref().map_or(0, |m| m.mana_value());
+                let mv = crate::mana_value::mana_value_with(self, id, c);
                 match self
                     .linked_choice(ctx)
                     .and_then(|ch| ch.text.clone())
@@ -539,10 +544,11 @@ impl Game {
                 },
                 None => false,
             },
+            // CR 201.4g, 709.4a: an object has the chosen name if one of its names is it.
             Filter::ChosenName => self
                 .source_choices(ctx)
                 .and_then(|ch| ch.card_name.as_ref())
-                .is_some_and(|n| !n.is_empty() && c.name.eq_ignore_ascii_case(n)),
+                .is_some_and(|n| c.has_name(n)),
             Filter::Prepared => o.zone == Zone::Battlefield && o.prepared.is_some(),
             Filter::ChosenCardType => self
                 .source_choices(ctx)
@@ -591,19 +597,10 @@ impl Game {
         self.obj(s).linked_choices.get(&ctx.link)
     }
 
-    /// Mana value of an object (CR 202.3), accounting for X on the stack (CR 107.3f) and
-    /// face-down status.
+    /// Mana value of an object (CR 202.3), accounting for X on the stack (CR 107.3f),
+    /// face-down status, transformed and melded permanents (CR 202.3a-c).
     pub fn mana_value_of(&self, id: ObjectId) -> u32 {
-        let o = self.obj(id);
-        let Some(mc) = &o.chars.mana_cost else {
-            return 0;
-        };
-        if o.zone == Zone::Stack {
-            let x = o.stack.as_ref().and_then(|s| s.x).unwrap_or(0).max(0) as u32;
-            mc.mana_value_with_x(x)
-        } else {
-            mc.mana_value()
-        }
+        crate::mana_value::mana_value_with(self, id, &self.obj(id).chars)
     }
 
     /// Objects that are attached to the given entity.
@@ -968,6 +965,15 @@ impl Game {
                 .map(|o| self.obj(*o).power() as i64)
                 .max()
                 .unwrap_or(0),
+            Value::BasePowerOf(s) => self
+                .eval_sel_objects(s, ctx)
+                .first()
+                .and_then(|o| self.obj(*o).base_pt.0)
+                .unwrap_or(0) as i64,
+            Value::DistinctNames(f) => {
+                let objs = self.objects_matching(f, ctx);
+                crate::names::distinct_name_count(objs.iter().map(|o| &self.obj(*o).chars)) as i64
+            }
             Value::GreatestManaValue(f) => self
                 .objects_matching(f, ctx)
                 .iter()
