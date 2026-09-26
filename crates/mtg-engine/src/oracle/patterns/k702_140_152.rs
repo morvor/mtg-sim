@@ -406,6 +406,56 @@ fn trains(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "~ trains", priority: 100, parse: trains } }
 
+/// "exile up to one other target creature from the battlefield or creature card from a
+/// graveyard" (Savior of Ollenbock, whose ability triggers when it trains): the cards are
+/// exiled with it (CR 607.2a).
+fn exile_creature_or_creature_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let text = "up to one other target creature from the battlefield or creature card from a graveyard";
+    if end(l).strip_prefix("exile ")? != text {
+        return None;
+    }
+    let creature = || Filter::Type(crate::types::CardType::Creature);
+    let mut spec = TargetSpec::object(
+        Filter::Or(vec![
+            Filter::And(vec![
+                creature(),
+                Filter::InZone(ZoneKind::Battlefield),
+                Filter::Other,
+            ]),
+            Filter::And(vec![
+                creature(),
+                Filter::Card,
+                Filter::InZone(ZoneKind::Graveyard),
+            ]),
+        ]),
+        text,
+    );
+    spec.min = 0;
+    let slot = b.add_target(spec, text);
+    Some(Effect::Exile {
+        what: Sel::Target(slot),
+        face_down: false,
+        link: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exile up to one other target creature or creature card from a graveyard", priority: 100, parse: exile_creature_or_creature_card } }
+
+/// "put the exiled cards onto the battlefield under their owners' control" (Savior of
+/// Ollenbock): the same as returning them there.
+fn put_exiled_cards_onto_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
+    (end(l) == "put the exiled cards onto the battlefield under their owners' control")
+        .then(|| {
+            crate::oracle::effects::parse_clause(
+                "return the exiled cards to the battlefield under their owners' control",
+                b,
+            )
+        })
+        .flatten()
+}
+
+inventory::submit! { EffectPattern { name: "put the exiled cards onto the battlefield under their owners' control", priority: 100, parse: put_exiled_cards_onto_battlefield } }
+
 /// "if it didn't have decayed" / "if it had flying" in a "dies" trigger (Wilhelt, the
 /// Rotcleaver): the creature as it last existed on the battlefield (CR 603.10a).
 fn it_had_keyword(l: &str) -> Option<Condition> {

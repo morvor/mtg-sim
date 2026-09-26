@@ -249,3 +249,41 @@ fn it_doesnt_train_if_no_counter_is_put_on_it() {
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn savior_of_ollenbock_exiles_a_creature_when_it_trains() {
+    cr!("702.149a", "702.149c");
+    assert_supported("Savior of Ollenbock");
+    let mut t = TestGame::new(2);
+    // Savior of Ollenbock: 1/2, training. "Whenever this creature trains, exile up to one
+    // other target creature from the battlefield or creature card from a graveyard. When
+    // this creature leaves the battlefield, put the exiled cards onto the battlefield under
+    // their owners' control."
+    let savior = t.battlefield(P0, "Savior of Ollenbock");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare_attackers(
+        &mut t,
+        &[(savior, Entity::Player(P1)), (giant, Entity::Player(P1))],
+    );
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(p1p1(&t, savior), 1);
+    assert!(t.in_exile("Grizzly Bears"));
+    // When it leaves the battlefield, the exiled card returns under its owner's control.
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Destroy {
+            what: Sel::Target(0),
+            no_regen: false,
+        },
+        &[Entity::Object(savior)],
+    );
+    t.resolve_all();
+    let back = t.g.current(bears);
+    assert!(t.on_battlefield(back));
+    assert_eq!(t.obj(back).controller, P1);
+}
