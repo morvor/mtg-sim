@@ -93,6 +93,12 @@ fn that_turn_followup(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             who: PlayerRef::You,
             step: StepKind::Untap,
         }
+    } else if s == "during that turn, damage can't be prevented" {
+        // Alchemist's Gambit.
+        Effect::AddRestriction {
+            restriction: Restriction::DamageCantBePrevented,
+            duration: Duration::EndOfTurn,
+        }
     } else {
         return false;
     };

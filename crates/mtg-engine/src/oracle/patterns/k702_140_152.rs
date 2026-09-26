@@ -10,9 +10,13 @@
 //! * "You may cast ~ from your graveyard using its blitz ability" (CR 702.152a) and
 //!   "... using its mutate ability" (CR 702.140a).
 
-use super::{AbilityPattern, ConditionPattern, StaticPattern, TriggerPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern,
+    TriggerPattern,
+};
 use crate::ability::*;
 use crate::keywords::KeywordKind;
+use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
 use crate::oracle::CompileContext;
 
@@ -136,6 +140,99 @@ fn spells_have_demonstrate(l: &str, text: &str, _ctx: &CompileContext) -> Option
 }
 
 inventory::submit! { StaticPattern { name: "[quality] spells you cast have demonstrate", priority: 100, parse: spells_have_demonstrate } }
+
+/// An ability of a card with cleave with text in square brackets (CR 702.148a): compiled
+/// with the bracketed words in it; the ability keeps the bracketed text, from which the
+/// cleaved ability (the words removed) is compiled when the spell is cast for its cleave
+/// cost (see `kw/cleave.rs`). Both versions must be understood.
+fn cleave_brackets(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    if !t.contains('[') || !ctx.keywords.iter().any(|k| k == "Cleave") {
+        return None;
+    }
+    let full = crate::kw::cleave::without_brackets(t);
+    let cleaved = crate::kw::cleave::cleaved(t);
+    if !cleaved.is_empty() {
+        crate::oracle::parse_ability(&cleaved, ctx)?;
+    }
+    let abilities = crate::oracle::parse_ability(&full, ctx)?;
+    Some(
+        abilities
+            .into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), t))
+            .collect(),
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "cleave: bracketed text", priority: 50, parse: cleave_brackets } }
+
+/// "Counter target spell that wasn't cast from its owner's hand." (Wash Away): a copy of a
+/// spell was never cast, so it can be countered (Wash Away rulings).
+fn counter_spell_not_cast_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let text = "target spell that wasn't cast from its owner's hand";
+    if end(l).strip_prefix("counter ")? != text {
+        return None;
+    }
+    let spec = TargetSpec::object(
+        Filter::And(vec![
+            Filter::Spell,
+            Filter::Not(Box::new(Filter::CastFrom(ZoneKind::Hand))),
+        ]),
+        text,
+    );
+    let slot = b.add_target(spec, text);
+    Some(Effect::CounterSpell {
+        what: Sel::Target(slot),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counter target spell that wasn't cast from its owner's hand", priority: 100, parse: counter_spell_not_cast_from_hand } }
+
+/// "Your maximum hand size is reduced by three for the rest of the game." (Inspired Idea):
+/// an effect lasting for the rest of the game (CR 402.2).
+fn hand_size_for_rest_of_game(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("your maximum hand size is ")?
+        .strip_suffix(" for the rest of the game")?;
+    let (sign, n) = if let Some(n) = r.strip_prefix("reduced by ") {
+        (-1, n)
+    } else {
+        (1, r.strip_prefix("increased by ")?)
+    };
+    let (n, tail) = crate::oracle::phrases::parse_number(n)?;
+    let Value::Const(n) = n else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::AddPlayerEffect {
+        who: PlayerRef::You,
+        effect: PlayerModification::HandSizeDelta(sign * n),
+        duration: Duration::Permanent,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "your maximum hand size is reduced by N for the rest of the game", priority: 100, parse: hand_size_for_rest_of_game } }
+
+/// "X is the number of creatures you control." after a sentence using X (Lantern Flare):
+/// the value of X for the rest of the resolution.
+fn x_is(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(s).strip_prefix("x is ") else {
+        return false;
+    };
+    let Some((v, rest)) = crate::oracle::statics::parse_value_phrase(r, b) else {
+        return false;
+    };
+    if !end(&rest).is_empty() || !format!("{prev:?}").contains("X") {
+        return false;
+    }
+    let p = std::mem::take(prev);
+    *prev = Effect::Seq(vec![Effect::SetX { value: v }, p]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "x is [value]", priority: 100, apply: x_is } }
 
 /// "Whenever ~ trains" (Savior of Ollenbock; CR 702.149c).
 fn trains(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
