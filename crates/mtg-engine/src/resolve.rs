@@ -1136,7 +1136,9 @@ impl Game {
             Effect::SetLife { who, n } => {
                 // CR 119.5: gaining or losing the difference.
                 let k = self.eval_value(n, ctx) as i32;
-                for p in self.eval_players(who, ctx) {
+                // CR 810.9d: on a team sharing a life total, only one member is affected.
+                let players = self.eval_players(who, ctx);
+                for p in crate::multiplayer::two_headed::life_setters(self, players) {
                     let cur = self.player(p).life;
                     if k > cur {
                         self.gain_life(p, (k - cur) as u32);

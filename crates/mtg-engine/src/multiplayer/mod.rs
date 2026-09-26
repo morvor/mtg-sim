@@ -9,6 +9,7 @@ pub mod deploy;
 pub mod grand_melee;
 pub mod range;
 pub mod setup;
+pub mod two_headed;
 
 use crate::decision::Decision;
 use crate::events::Event;

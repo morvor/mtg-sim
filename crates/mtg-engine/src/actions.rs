@@ -1171,6 +1171,11 @@ impl Game {
         if n == 0 {
             return 0;
         }
+        // "You can't get poison counters" (with shared poison counters, for the team,
+        // CR 810.10c).
+        if crate::multiplayer::two_headed::cant_get_counters(self, target, kind) {
+            return 0;
+        }
         if self.dirty {
             self.recompute();
         }
@@ -1231,6 +1236,12 @@ impl Game {
         n: u32,
         by: Option<PlayerId>,
     ) -> u32 {
+        // CR 810.10b: a player losing poison counters in Two-Headed Giant: the team does.
+        if let Some(k) =
+            crate::multiplayer::two_headed::remove_team_poison(self, target, kind, n, by)
+        {
+            return k;
+        }
         let have = match target {
             Entity::Object(o) => self.obj(o).counter(kind),
             Entity::Player(p) => self.player(p).counter(kind),

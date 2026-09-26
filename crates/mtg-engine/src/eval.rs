@@ -225,12 +225,17 @@ impl Game {
                     .count();
                 cmp.eval(n as i64, self.eval_value(v, ctx))
             }
-            PlayerFilter::Counters(k, cmp, v) => {
-                cmp.eval(self.player(p).counter(k) as i64, self.eval_value(v, ctx))
-            }
+            // CR 810.10a: a Two-Headed Giant team's poison counters.
+            PlayerFilter::Counters(k, cmp, v) => cmp.eval(
+                crate::multiplayer::two_headed::player_counter(self, p, k) as i64,
+                self.eval_value(v, ctx),
+            ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
-            PlayerFilter::Poisoned => self.player(p).poison() > 0,
+            // CR 810.10d: poisoned if the team has a poison counter.
+            PlayerFilter::Poisoned => {
+                crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -948,9 +953,10 @@ impl Game {
                     },
                 })
                 .sum(),
-            Value::PlayerCounters(r, k) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).counter(k) as i64),
+            // CR 810.10a: a Two-Headed Giant team's poison counters.
+            Value::PlayerCounters(r, k) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::two_headed::player_counter(self, p, k) as i64
+            }),
             Value::LifeTotal(r) => self
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
