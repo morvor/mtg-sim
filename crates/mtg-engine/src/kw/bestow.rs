@@ -165,33 +165,37 @@ impl KeywordRules for Bestow {
         true
     }
 
-    /// The permanent a bestowed Aura spell becomes is a bestowed Aura.
-    fn after_permanent_resolves(&self, g: &mut Game, spell: ObjectId, new: ObjectId, _kw: &Keyword) {
+    /// The permanent a bestowed Aura spell becomes is a bestowed Aura (CR 702.103b): the
+    /// effect making the spell an Aura is carried over to the permanent, so it enters as
+    /// an Aura, not a creature. Which replacement effects apply to it as it enters are
+    /// determined with that effect applied (CR 614.12).
+    fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {
         let bestowed = g
             .obj(spell)
             .stack
             .as_deref()
             .is_some_and(|si| si.cast.paid.iter().any(|p| p == BESTOW));
-        if !bestowed || g.obj(new).attached_to.is_none() || is_bestowed(g, new) {
+        if !bestowed || is_bestowed(g, spell) {
             return;
         }
         let id = g.new_effect_id();
-        let timestamp = g.obj(new).timestamp;
-        let controller = g.obj(new).controller;
+        let o = g.obj(spell);
+        let (timestamp, controller) = (o.timestamp, o.controller);
         let turn = g.turn.number;
         g.effects.push(ContinuousEffect {
             id,
-            source: Some(new),
+            source: Some(spell),
             controller,
             timestamp,
             duration: Duration::Permanent,
-            affected: Affected::Objects(vec![new]),
+            affected: Affected::Objects(vec![spell]),
             mods: bestowed_mods(),
             layer1: None,
             created_turn: turn,
         });
+        // It follows the spell to the permanent it becomes (see `Game::perform_move`).
+        g.carried_effects.push(id);
         g.dirty = true;
-        g.recompute();
     }
 
     fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {

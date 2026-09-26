@@ -262,6 +262,61 @@ fn a_noncreature_permanent_is_never_greater() {
     );
     t.resolve_all();
     assert_eq!(t.counters(one, counters::PLUS1), 0);
+    // Even against a creature with a negative power: Cloudfin Raptor (0/1) gets -1/-0.
+    let mut t = TestGame::new(2);
+    let raptor = t.battlefield(P0, "Cloudfin Raptor");
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::ModifyPT(Value::c(-1), Value::c(0))],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(raptor)],
+    );
+    assert_eq!(t.pt(raptor), (-1, 1));
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Evolve"), 1);
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveTypes(vec![types::CardType::Creature])],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(bears)],
+    );
+    t.resolve_all();
+    assert_eq!(t.counters(raptor, counters::PLUS1), 0);
+}
+
+#[test]
+fn a_noncreature_permanent_with_evolve_never_evolves() {
+    cr!("702.100c");
+    let mut t = TestGame::new(2);
+    // Experiment One (1/1, evolve) stops being a creature: no creature is greater than it.
+    let one = t.battlefield(P0, "Experiment One");
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveTypes(vec![types::CardType::Creature])],
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(one)],
+    );
+    t.enter(P0, "Hill Giant");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Evolve"), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(one, counters::PLUS1), 0);
 }
 
 #[test]

@@ -90,11 +90,17 @@ fn a_bestowed_aura_never_enters_as_a_creature() {
     let mut t = TestGame::new(2);
     // Cloudfin Raptor (0/1, evolve) would evolve if a creature entered.
     let raptor = t.battlefield(P0, "Cloudfin Raptor");
+    // Blind Obedience (P1's): "Artifacts and creatures your opponents control enter
+    // tapped."
+    t.battlefield(P1, "Blind Obedience");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    bestow_rollicker(&mut t, bears);
+    let (c, _) = bestow_rollicker(&mut t, bears);
     t.resolve_all();
     assert_eq!(t.pt(raptor), (0, 1));
     assert_eq!(t.pt(bears), (3, 3));
+    let r = t.g.current(c);
+    assert!(is_bestowed(&t.g, r));
+    assert!(!t.obj(r).tapped);
 }
 
 #[test]
@@ -115,6 +121,9 @@ fn a_bestowed_aura_stays_untapped_when_it_becomes_a_creature() {
     assert!(!t.obj(r).tapped);
     destroy(&mut t, bears);
     t.settle();
+    assert!(t.on_battlefield(c));
+    assert_eq!(t.g.current(c), r);
+    assert!(!is_bestowed(&t.g, r));
     assert!(t.obj(r).is_creature());
     assert!(!t.obj(r).tapped);
     assert!(!t.g.is_attacking(r));

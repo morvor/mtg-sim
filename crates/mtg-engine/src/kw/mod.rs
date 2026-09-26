@@ -203,6 +203,10 @@ pub trait KeywordRules: Sync + Send {
     fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
         false
     }
+    /// Just before a resolving permanent spell is put onto the battlefield (CR 608.3):
+    /// e.g. the effect making a bestowed Aura spell an Aura is carried over to the
+    /// permanent, so it enters as an Aura (CR 702.103b, 614.12).
+    fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {}
     /// Whether an Aura that's unattached or attached to an illegal object or player stays
     /// on the battlefield instead of being put into its owner's graveyard (an exception to
     /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
@@ -623,6 +627,13 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
         if r.unbestow(g, spell) {
             return;
         }
+    }
+}
+
+/// See [`KeywordRules::before_permanent_enters`].
+pub fn before_permanent_enters(g: &mut Game, spell: ObjectId) {
+    for r in registry() {
+        r.before_permanent_enters(g, spell);
     }
 }
 
