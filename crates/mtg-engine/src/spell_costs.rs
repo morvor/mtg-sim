@@ -92,6 +92,47 @@ pub fn own_change_applies(
     g.eval_cond(cond, ctx)
 }
 
+/// Whether a filter looks at a spell's targets ("spells that target a creature").
+fn filter_has_targets(f: &Filter) -> bool {
+    match f {
+        Filter::Targets(_) => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(filter_has_targets),
+        Filter::Not(x) => filter_has_targets(x),
+        _ => false,
+    }
+}
+
+/// `f` with its target requirements assumed to be met (`met`) or not.
+fn assume_targets(f: &Filter, met: bool) -> Filter {
+    match f {
+        Filter::Targets(_) if met => Filter::Any,
+        Filter::Targets(_) => Filter::Not(Box::new(Filter::Any)),
+        Filter::And(v) => Filter::And(v.iter().map(|x| assume_targets(x, met)).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(|x| assume_targets(x, met)).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(assume_targets(x, !met))),
+        other => other.clone(),
+    }
+}
+
+/// Whether a cost change from another object's static ability, for the spells `f`
+/// describes ("Spells you cast that target a creature cost {2} less to cast"), applies to
+/// casting `card` (CR 601.2f). A card not yet on the stack has no targets: while checking
+/// whether it could be cast, a change that depends on its targets is assumed to apply if
+/// it's a reduction and not to apply if it's an increase, as for the spell's own changes.
+pub fn spells_change_applies(
+    g: &Game,
+    card: ObjectId,
+    f: &Filter,
+    change: &CostChange,
+    ctx: &Ctx,
+) -> bool {
+    let f = crate::casting::as_spell_filter(f);
+    if g.obj(card).zone != Zone::Stack && filter_has_targets(&f) {
+        return is_reduction(change) && g.matches(card, &assume_targets(&f, true), ctx);
+    }
+    g.matches(card, &f, ctx)
+}
+
 /// Whether an alternative cost with this condition may be chosen for `card` now
 /// ("If you control a Swamp, you may pay 4 life rather than pay this spell's mana cost").
 /// The condition is checked as the spell is proposed (CR 601.2b).

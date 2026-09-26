@@ -262,12 +262,14 @@ fn costs_x_less_where_x_is_devotion() {
     t.set_step(P0, Step::PrecombatMain);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let drag = t.hand(P0, "Drag to the Underworld");
-    t.lands(P0, "Swamp", 2);
+    let swamps = t.lands(P0, "Swamp", 2);
     assert!(!castable(&mut t, P0, drag));
-    // {3}{B}{B}: devotion to black 2, and more doesn't reduce {B}{B}.
+    // Each Gray Merchant ({3}{B}{B}) adds 2 to devotion to black: X is 4, which removes
+    // the {2} but not the {B}{B}.
     t.battlefield(P0, "Gray Merchant of Asphodel");
     t.battlefield(P0, "Gray Merchant of Asphodel");
     t.cast(P0, drag).target(bears).go();
+    assert_eq!(tapped(&t, &swamps), 2);
     t.resolve();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }

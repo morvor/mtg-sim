@@ -32,6 +32,11 @@ fn cost_action(s: &str) -> Option<Cost> {
     };
     let ok = c.mana.is_none()
         && c.parts.len() == 1
+        && match c.parts[0] {
+            // Nothing may follow "life" (the cost parser tolerates trailing words).
+            CostPart::PayLife(Value::Const(_)) => s.ends_with(" life"),
+            _ => true,
+        }
         && matches!(
             c.parts[0],
             CostPart::PayLife(Value::Const(_))

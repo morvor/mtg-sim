@@ -3,6 +3,7 @@
 //! opponents cast that target this creature cost {2} more to cast."
 
 use mtg_engine::ability::Duration;
+use mtg_engine::decision::Action;
 use mtg_engine::object::*;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -20,6 +21,18 @@ fn compiles(name: &str) {
 
 fn tapped(t: &TestGame, lands: &[ObjectId]) -> usize {
     lands.iter().filter(|l| t.obj_now(**l).tapped).count()
+}
+
+/// Whether casting the card is among the player's legal actions now.
+fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    let saved = t.g.turn.priority;
+    t.g.turn.priority = Some(p);
+    let ok =
+        t.g.legal_actions(p)
+            .iter()
+            .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card));
+    t.g.turn.priority = saved;
+    ok
 }
 
 #[test]
@@ -56,11 +69,14 @@ fn strive_costs_more_for_each_target_beyond_the_first() {
     // Three targets: {R}{W} three times.
     let stand2 = t.hand(P0, "Desperate Stand");
     let more = [t.lands(P0, "Mountain", 3), t.lands(P0, "Plains", 3)].concat();
-    t.cast(P0, stand2)
+    let s2 = t
+        .cast(P0, stand2)
         .targets(&[a.into(), b.into(), c.into()])
         .go();
     // Two lands were tapped before; six more now.
     assert_eq!(tapped(&t, &lands) + tapped(&t, &more), 8);
+    // Its mana value doesn't include the extra {R}{W}{R}{W}.
+    assert_eq!(t.obj(s2).chars.mana_value(), 2);
     t.resolve();
     assert_eq!(t.pt(a), (6, 2));
     assert_eq!(t.pt(b), (5, 3));
@@ -159,4 +175,62 @@ fn spells_opponents_cast_that_target_it_cost_more() {
     t.g.turn.priority = Some(P1);
     t.cast(P1, own).target(regent).go();
     assert_eq!(tapped(&t, &p1m), 1);
+}
+
+#[test]
+fn spells_you_cast_that_target_a_creature_cost_less() {
+    cr!("601.2c", "601.2f", "118.7a");
+    ruling!(
+        "Killian, Ink Duelist",
+        "Killian, Ink Duelist can't reduce the colored mana requirement of a spell's mana cost."
+    );
+    compiles("Killian, Ink Duelist");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Killian, Ink Duelist");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let strike = t.hand(P0, "Lightning Strike");
+    // {1}{R} less {2}: the {R} remains.
+    assert!(!castable(&mut t, P0, strike));
+    let m = t.lands(P0, "Mountain", 1);
+    // Its target isn't chosen yet, so the reduction may still apply.
+    assert!(castable(&mut t, P0, strike));
+    // Targeting a player, it costs {1}{R}.
+    assert!(t.cast(P0, strike).target(P1).try_go().is_err());
+    assert!(t.in_hand(P0, "Lightning Strike"));
+    t.clear_answers();
+    t.cast(P0, strike).target(bears).go();
+    assert_eq!(tapped(&t, &m), 1);
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn aura_spells_targeting_it_cost_less_for_you_and_more_for_opponents() {
+    cr!("601.2f", "303.4a");
+    ruling!(
+        "Elderwood Scion",
+        "Elderwood Scion’s cost-reduction ability will affect Aura spells cast targeting it."
+    );
+    compiles("Elderwood Scion");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let scion = t.battlefield(P0, "Elderwood Scion");
+    let pacifism = t.hand(P0, "Pacifism");
+    let plains = t.lands(P0, "Plains", 1);
+    // {1}{W} less {2}: {W}.
+    assert!(castable(&mut t, P0, pacifism));
+    t.cast(P0, pacifism).target(scion).go();
+    assert_eq!(tapped(&t, &plains), 1);
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Pacifism").len(), 1);
+    // An opponent's Pacifism targeting it costs {2} more: {3}{W}.
+    let theirs = t.hand(P1, "Pacifism");
+    let p1 = t.lands(P1, "Plains", 3);
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(t.cast(P1, theirs).target(scion).try_go().is_err());
+    t.clear_answers();
+    let p1_more = t.lands(P1, "Plains", 1);
+    t.cast(P1, theirs).target(scion).go();
+    assert_eq!(tapped(&t, &p1) + tapped(&t, &p1_more), 4);
 }

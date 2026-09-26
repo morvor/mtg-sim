@@ -37,7 +37,8 @@ pub(crate) fn this_spell_cost_ability(
 /// once targets are chosen, CR 601.2c).
 fn targets_condition(c: &str) -> Option<Condition> {
     let r = c.strip_prefix("it targets ")?;
-    let (_, r) = parse_number(r)?;
+    // One matching target ("if it targets two creatures" would need a count).
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let (f, _, tail) = parse_object_phrase(r)?;
     if !end(tail).is_empty() {
         return None;

@@ -124,7 +124,7 @@ fn reveal_a_card_or_pay_mana() {
 
 #[test]
 fn cast_without_paying_its_mana_cost_if_you_control_a_commander() {
-    cr!("118.9", "903.3");
+    cr!("118.9", "903.3d");
     ruling!(
         "Fierce Guardianship",
         "It doesn't matter whose commander you control. Any one will do."
@@ -144,8 +144,11 @@ fn cast_without_paying_its_mana_cost_if_you_control_a_commander() {
             .filter(|m| matches!(m, CastMethod::Alternative(_)))
             .collect()
     };
-    // A non-commander creature doesn't enable it.
+    // A non-commander creature doesn't enable it, and neither does a commander that
+    // isn't a permanent on the battlefield (CR 903.3d).
     let bears = t.battlefield(P0, "Grizzly Bears");
+    let in_command_zone = t.command(P0, "Hill Giant");
+    t.g.objects[in_command_zone.0 as usize].is_commander = true;
     assert!(alts(&t).is_empty());
     // An opponent's commander that P0 controls does.
     t.g.objects[bears.0 as usize].is_commander = true;

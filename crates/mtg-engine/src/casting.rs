@@ -1234,7 +1234,9 @@ impl Game {
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
                     self.player_rel_matches(cm.who, p, &ctx)
-                        && self.matches(card, &as_spell_filter(f), &ctx)
+                        && crate::spell_costs::spells_change_applies(
+                            self, card, f, &cm.change, &ctx,
+                        )
                 }
                 _ => false,
             };
