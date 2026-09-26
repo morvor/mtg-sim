@@ -27,6 +27,37 @@ pub struct MultiplayerState {
     pub range: range::RangeState,
     /// Grand Melee's turn markers and stacks (CR 807.4, 807.5).
     pub grand_melee: Option<grand_melee::GrandMelee>,
+    /// Last known information about players who have left the game (CR 800.4i).
+    pub departed: std::collections::BTreeMap<PlayerId, DepartedPlayer>,
+}
+
+/// What a player's zones held just before they left the game (CR 800.4i).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DepartedPlayer {
+    pub hand: usize,
+    pub library: usize,
+    pub graveyard: usize,
+}
+
+/// The number of cards in a player's hand, library or graveyard: for a player who has
+/// left the game, as they last were before they left (CR 800.4i).
+pub fn zone_size(g: &Game, p: PlayerId, zone: crate::ability::ZoneKind) -> usize {
+    use crate::ability::ZoneKind;
+    if let Some(d) = g.multiplayer.departed.get(&p) {
+        return match zone {
+            ZoneKind::Hand => d.hand,
+            ZoneKind::Library => d.library,
+            ZoneKind::Graveyard => d.graveyard,
+            _ => 0,
+        };
+    }
+    let pl = g.player(p);
+    match zone {
+        ZoneKind::Hand => pl.hand.len(),
+        ZoneKind::Library => pl.library.len(),
+        ZoneKind::Graveyard => pl.graveyard.len(),
+        _ => 0,
+    }
 }
 
 /// Called as a (non-extra or extra) turn of `active` begins, after the turn of
@@ -69,6 +100,14 @@ pub fn left_players_seated_between(g: &Game, after: PlayerId, next: PlayerId) ->
 /// ante zone stay (CR 800.4n). Other effects created by that player's spells and
 /// abilities continue to apply (CR 800.4m).
 pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
+    // CR 800.4i: remember what the player's zones held as they left.
+    let pl = g.player(p);
+    let info = DepartedPlayer {
+        hand: pl.hand.len(),
+        library: pl.library.len(),
+        graveyard: pl.graveyard.len(),
+    };
+    g.multiplayer.departed.insert(p, info);
     // Objects owned by the player leave the game — except in the ante zone (CR 800.4n).
     let owned: Vec<ObjectId> = g
         .objects
@@ -208,8 +247,14 @@ fn decision_source(d: &Decision) -> Option<ObjectId> {
     match d {
         Decision::ChooseModes { source, .. }
         | Decision::ChooseX { source, .. }
+        | Decision::OptionalCost { source, .. }
+        | Decision::Divide { source, .. }
         | Decision::ChooseTargets { source, .. } => Some(*source),
-        Decision::YesNo { source, .. } | Decision::ChooseEntities { source, .. } => *source,
+        Decision::YesNo { source, .. }
+        | Decision::ChooseEntities { source, .. }
+        | Decision::ChooseOption { source, .. }
+        | Decision::ChooseNumber { source, .. }
+        | Decision::NameCard { source, .. } => *source,
         _ => None,
     }
 }

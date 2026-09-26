@@ -946,15 +946,16 @@ impl Game {
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
             Value::StartingLife => self.config.starting_life as i64,
-            Value::HandSize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).hand.len() as i64),
-            Value::LibrarySize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).library.len() as i64),
-            Value::GraveyardSize(r) => self
-                .eval_player(r, ctx)
-                .map_or(0, |p| self.player(p).graveyard.len() as i64),
+            // CR 800.4i: for a player who left the game, as last known.
+            Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64
+            }),
+            Value::LibrarySize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Library) as i64
+            }),
+            Value::GraveyardSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
+                crate::multiplayer::zone_size(self, p, ZoneKind::Graveyard) as i64
+            }),
             Value::CardsInGraveyard(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
                 self.player(p)
                     .graveyard
