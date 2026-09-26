@@ -305,14 +305,23 @@ impl Game {
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
-        for p in self.players.iter_mut() {
-            p.lands_played_this_turn = 0;
-            p.speed_increased_this_turn = false;
-            p.mana_spent_this_turn = 0;
+        // Per-turn records start afresh (in Grand Melee, not those of players taking
+        // another turn at the same time, CR 807.4).
+        for i in 0..self.players.len() {
+            if crate::multiplayer::grand_melee::resets_with_turn(self, PlayerId(i as u8), active) {
+                let p = &mut self.players[i];
+                p.lands_played_this_turn = 0;
+                p.speed_increased_this_turn = false;
+                p.mana_spent_this_turn = 0;
+            }
         }
-        for o in self.objects.iter_mut() {
-            o.activations_this_turn.clear();
-            o.triggers_this_turn.clear();
+        for i in 0..self.objects.len() {
+            let c = self.objects[i].controller;
+            if crate::multiplayer::grand_melee::resets_with_turn(self, c, active) {
+                let o = &mut self.objects[i];
+                o.activations_this_turn.clear();
+                o.triggers_this_turn.clear();
+            }
         }
         // CR 302.6: permanents the active player (with shared team turns, each player on
         // the active team, CR 805.4a) has controlled continuously since the turn began are
@@ -352,6 +361,15 @@ impl Game {
         if self.result.is_some() {
             return;
         }
+        // CR 807.4: in Grand Melee, several turns proceed at once.
+        if crate::multiplayer::grand_melee::advance(self) {
+            return;
+        }
+        self.advance_unit();
+    }
+
+    /// Advances the turn being played by one unit (see [`Game::advance`]).
+    pub(crate) fn advance_unit(&mut self) {
         match self.turn.stage {
             Stage::PreGame => self.start(),
             Stage::Begin => self.begin_step(),
@@ -453,8 +471,8 @@ impl Game {
             self.turn.stage = Stage::End;
             return;
         };
-        if !self.player(p).in_game() {
-            self.turn.priority = Some(self.next_player(p));
+        if !crate::multiplayer::grand_melee::gets_priority(self, p) {
+            self.turn.priority = Some(crate::multiplayer::grand_melee::next_priority(self, p));
             return;
         }
         // The player's choice, with shortcuts and loops (CR 732, 104.4b).
@@ -499,7 +517,8 @@ impl Game {
     pub fn pass_priority(&mut self, p: PlayerId) {
         self.turn.illegal_attempts = 0;
         self.turn.passes += 1;
-        let n = self.players_in_game().len() as u32;
+        // CR 807.5a: in Grand Melee, only the players who get priority for this stack.
+        let n = crate::multiplayer::grand_melee::priority_players(self).len() as u32;
         if self.turn.passes >= n {
             // CR 117.4: all players passed in succession.
             self.turn.passes = 0;
@@ -512,7 +531,7 @@ impl Game {
                 self.turn.priority = Some(self.turn.active);
             }
         } else {
-            self.turn.priority = Some(self.next_player(p));
+            self.turn.priority = Some(crate::multiplayer::grand_melee::next_priority(self, p));
         }
     }
 
@@ -547,6 +566,10 @@ impl Game {
     }
 
     fn next_step(&mut self) {
+        // CR 807.4c: in Grand Melee, turn markers say whose turns come next.
+        if self.turn.schedule.is_empty() && crate::multiplayer::grand_melee::turn_ended(self) {
+            return;
+        }
         if self.turn.schedule.is_empty() {
             // Next turn (CR 500.7: extra turns first). Skipped turns never begin
             // (CR 614.10).

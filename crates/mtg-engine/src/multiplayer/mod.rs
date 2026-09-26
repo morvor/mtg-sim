@@ -72,6 +72,8 @@ pub fn turn_began(g: &mut Game, previous: Option<PlayerId>, active: PlayerId, ex
         }
     }
     range::determine(g);
+    // CR 807.4b: the turn markers are handed out as the first turn begins.
+    grand_melee::ensure(g);
 }
 
 /// Players who have left the game seated after `after` and before `next` in turn order:

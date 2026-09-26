@@ -1881,6 +1881,15 @@ impl Game {
     }
 
     fn put_trigger_on_stack(&mut self, t: PendingTrigger) {
+        // CR 807.5b: in Grand Melee, which turn marker's stack it goes on.
+        let back = crate::multiplayer::grand_melee::trigger_stack(self, t.controller, &t.event);
+        self.put_trigger_on_this_stack(t);
+        if let Some(b) = back {
+            crate::multiplayer::grand_melee::switch_to(self, b);
+        }
+    }
+
+    fn put_trigger_on_this_stack(&mut self, t: PendingTrigger) {
         let body = t.body.clone().unwrap_or_else(|| match &t.ability.kind {
             AbilityKind::Triggered(tr) => tr.body.clone(),
             _ => Body::default(),
