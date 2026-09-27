@@ -493,14 +493,38 @@ impl Game {
                 if objs.is_empty() {
                     return;
                 }
-                let fixed = self.fix_mods(mods, ctx);
+                // CR 608.2h: P/T values are determined once, as the effect is created. One
+                // that depends on each affected object ("becomes an artifact creature with
+                // power and toughness each equal to its mana value") is determined for each
+                // of them (`vars::AFFECTED`, as for static abilities).
+                let per_object = mods.iter().any(|m| {
+                    let computed = |v: &Value| !matches!(v, Value::Const(_));
+                    match m {
+                        Modification::ModifyPT(p, t) => computed(p) || computed(t),
+                        Modification::SetPT(p, t) => {
+                            p.as_ref().is_some_and(computed) || t.as_ref().is_some_and(computed)
+                        }
+                        _ => false,
+                    }
+                });
                 let ts = self.new_timestamp();
-                // CR 612.5: an exchange of text boxes gives each object the other's text.
-                let parts: Vec<(Option<ObjectId>, Vec<Modification>)> =
+                let parts: Vec<(Option<ObjectId>, Vec<Modification>)> = if per_object {
+                    objs.iter()
+                        .map(|o| {
+                            let mut c = ctx.clone();
+                            c.set_var(vars::AFFECTED, vec![Entity::Object(*o)]);
+                            (Some(*o), self.fix_mods(mods, &c))
+                        })
+                        .collect()
+                } else {
+                    let fixed = self.fix_mods(mods, ctx);
+                    // CR 612.5: an exchange of text boxes gives each object the other's
+                    // text.
                     match crate::text_change::exchange_mods(self, &objs, &fixed) {
                         Some(v) => v.into_iter().map(|(o, m)| (Some(o), m)).collect(),
                         None => vec![(None, fixed)],
-                    };
+                    }
+                };
                 for (o, part) in parts {
                     let id = self.new_effect_id();
                     self.effects.push(ContinuousEffect {

@@ -171,6 +171,22 @@ fn vote_condition(c: &str) -> Option<Condition> {
 
 inventory::submit! { ConditionPattern { name: "a701 vote results", priority: 60, parse: vote_condition } }
 
+/// "[word] votes" / "[word] vote" (after "the number of", or "for each" read that way):
+/// how many votes that word got in the vote earlier in the spell or ability ("Put a
+/// +1/+1 counter on ~ for each strength vote", council's dilemma). Returns the value and
+/// the rest of the text.
+pub fn word_votes(r: &str) -> Option<(Value, String)> {
+    let (word, rest) = r.split_once(" vote")?;
+    let rest = rest.strip_prefix('s').unwrap_or(rest);
+    if word.is_empty()
+        || word.split(' ').count() > 3
+        || !(rest.is_empty() || rest.starts_with([' ', ',', '.', ';']))
+    {
+        return None;
+    }
+    Some((Value::Var(word_var(word)), rest.to_string()))
+}
+
 /// "exile each permanent with the most votes or tied for most votes", "for each [word]
 /// vote, [effect]".
 fn vote_results(l: &str, b: &mut Builder) -> Option<Effect> {

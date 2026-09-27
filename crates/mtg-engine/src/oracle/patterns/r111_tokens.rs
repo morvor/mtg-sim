@@ -97,15 +97,34 @@ fn title_case(name: &str) -> String {
 
 /// "create Boo, a legendary 1/1 red Hamster creature token with trample and haste": a
 /// token with the listed characteristics that has the given name (CR 111.9).
-fn legendary_named_token(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn legendary_named_token(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("create ")?;
     let (name, desc) = r.split_once(", a ")?;
+    // "Create Tamiyo's Notebook, ..." (normalized to "~'s notebook"): the name of the
+    // card that creates it, as printed (its short name before a comma).
+    let name = match name.strip_prefix("~'s ") {
+        Some(rest) if !rest.contains('~') => {
+            let short = b.ctx.card_name.split(", ").next()?;
+            format!("{}'s {}", short.to_lowercase(), rest)
+        }
+        _ => name.to_string(),
+    };
     if name.is_empty() || name.contains('~') || name.split(' ').count() > 5 {
         return None;
     }
     let desc = desc.strip_prefix("legendary ")?;
-    let mut spec = parse_token_description(desc)?;
-    spec.name = SmolStr::new(title_case(name));
+    // Descriptions with quoted abilities go to the full description parser.
+    let mut spec = match parse_token_description(desc) {
+        Some(spec) => spec,
+        None => {
+            let d = super::tokens_copies_create::token_desc(desc, b.ctx)?;
+            if d.attacking {
+                return None;
+            }
+            d.spec
+        }
+    };
+    spec.name = SmolStr::new(title_case(&name));
     if !spec.supertypes.contains(&Supertype::Legendary) {
         spec.supertypes.push(Supertype::Legendary);
     }
