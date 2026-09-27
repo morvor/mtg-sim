@@ -157,9 +157,26 @@ pub fn cast_during_resolution(
     let face = choose_face_to_cast(g, p, card);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
+    // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
+    // keep their own method.
+    let mut keyword_way = false;
+    if face == FaceState::Front {
+        let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
+        if !others.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(others.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= others.len() {
+                opt = others.swap_remove(k - 1);
+                keyword_way = true;
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
-        opt.method = CastMethod::Free;
+        if !keyword_way {
+            opt.method = CastMethod::Free;
+        }
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
@@ -170,19 +187,28 @@ pub fn cast_during_resolution(
 /// name it would have. For "cast it without paying its mana cost if the resulting spell's
 /// mana value is N or less" (cascade, CR 702.85a; discover, CR 701.57a). Not a face a
 /// keyword's rule prohibits `p` from casting from where the card is (e.g. aftermath,
-/// CR 702.127a).
+/// CR 702.127a). Ways to cast it that aren't alternative costs are offered too, e.g. as a
+/// prototyped spell (CR 718.3), named with the way ("Blitz Automaton (prototype)").
 pub fn free_cast_options(
     g: &Game,
     p: PlayerId,
     card: ObjectId,
     ok: impl Fn(u32) -> bool,
 ) -> Vec<(smol_str::SmolStr, CastOption)> {
-    castable_faces(g, card)
+    let mut opts = Vec::new();
+    for face in castable_faces(g, card)
         .into_iter()
         .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
-        .filter_map(|face| {
-            let mut opt = CastOption::normal(face);
-            opt.method = CastMethod::Free;
+    {
+        let mut opt = CastOption::normal(face);
+        opt.method = CastMethod::Free;
+        opts.push(opt);
+        if face == FaceState::Front {
+            opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
+        }
+    }
+    opts.into_iter()
+        .filter_map(|mut opt| {
             opt.alt_cost = Some(Cost::free());
             opt.any_time = true;
             let chars = g.option_characteristics(card, &opt);
@@ -190,7 +216,13 @@ pub fn free_cast_options(
                 .mana_cost
                 .as_ref()
                 .map_or(0, |m| m.mana_value_with_x(0));
-            (!chars.is_land() && ok(mv)).then(|| (chars.name.clone(), opt))
+            let name = match opt.tag {
+                Some(way) if opt.method != CastMethod::Free => {
+                    smol_str::SmolStr::new(format!("{} ({way})", chars.name))
+                }
+                _ => chars.name.clone(),
+            };
+            (!chars.is_land() && ok(mv)).then_some((name, opt))
         })
         .collect()
 }
@@ -1144,7 +1176,30 @@ impl Game {
                 .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         let mut x: i64 = 0;
         if base_cost_has_x {
-            let max = self.max_mana_available(p) as i64;
+            let mut max = self.max_mana_available(p) as i64;
+            // "Sacrifice a creature with power X or greater" (casualty X): X can be at
+            // most the greatest power among the creatures to sacrifice, and if no mana is
+            // paid for X, that's the only bound.
+            if extra.parts.iter().any(
+                |c| matches!(c, CostPart::Sacrifice { filter, .. } if filter_mentions_x(filter)),
+            ) {
+                let power = self
+                    .battlefield
+                    .iter()
+                    .filter(|o| self.obj(**o).controller == p && self.obj(**o).is_creature())
+                    .map(|o| self.obj(*o).power() as i64)
+                    .max()
+                    .unwrap_or(0);
+                let mana_x = match &opt.alt_cost {
+                    Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
+                    None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+                } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+                    || opt
+                        .extra_cost
+                        .as_ref()
+                        .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
+                max = if mana_x { max.min(power) } else { power };
+            }
             x = match self.ask(p, Decision::ChooseX { source: id, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => max.max(0),
@@ -2694,8 +2749,9 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
     let is_x = |v: &Value| matches!(v, Value::X);
     match c {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
-        CostPart::Sacrifice { count, .. }
-        | CostPart::Discard { count, .. }
+        // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
+        CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::Discard { count, .. }
         | CostPart::Exile { count, .. }
         | CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
@@ -2703,6 +2759,18 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
+        _ => false,
+    }
+}
+
+/// Whether a filter compares a characteristic with X ("power X or greater").
+fn filter_mentions_x(f: &Filter) -> bool {
+    match f {
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
+            matches!(**v, Value::X)
+        }
+        Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_x),
+        Filter::Not(f) => filter_mentions_x(f),
         _ => false,
     }
 }

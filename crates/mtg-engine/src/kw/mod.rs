@@ -44,6 +44,19 @@ pub trait KeywordRules: Sync + Send {
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
     }
+    /// Ways to cast `card` because it has `kw` that don't involve an alternative cost
+    /// (CR 118.9), so that an effect instructing a player to cast the card (CR 608.2g),
+    /// even "without paying its mana cost", allows them too, e.g. casting a prototype card
+    /// as a prototyped spell (CR 718.3). Without an alternative cost of their own.
+    fn cast_options_with_any_cost(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+    ) -> Vec<CastOption> {
+        vec![]
+    }
     /// Whether a rule this keyword defines prohibits `p` from casting `card` as a spell
     /// with the characteristics `chars` (CR 601.3), e.g. "this half of this split card
     /// can't be cast from any zone other than a graveyard" (aftermath, CR 702.127a).
@@ -415,6 +428,17 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
     for kw in &kws {
         for r in impls_for(kw.kind) {
             out.extend(r.cast_options(g, p, card, kw));
+        }
+    }
+    out
+}
+
+/// See [`KeywordRules::cast_options_with_any_cost`].
+pub fn cast_options_with_any_cost(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let mut out = Vec::new();
+    for kw in &distinct_kinds(&g.obj(card).chars) {
+        for r in impls_for(kw.kind) {
+            out.extend(r.cast_options_with_any_cost(g, p, card, kw));
         }
     }
     out

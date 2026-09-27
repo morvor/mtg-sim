@@ -1,237 +1,59 @@
 //! CR 702.167 Craft: "Craft with [materials] [cost]" means "[Cost], Exile this permanent,
 //! Exile [materials] from among permanents you control and/or cards in your graveyard:
-//! Return this card to the battlefield transformed under its owner's control. Activate
-//! only as a sorcery." (CR 702.167a).
+//! Return this card to the battlefield transformed under its owner's control. Activate only
+//! as a sorcery." (CR 702.167a).
 //!
-//! * The keyword (parsed in `oracle/patterns/craft.rs`) keeps the materials' description in
-//!   `Keyword::filter` and their number in `Keyword::n`: `n` objects, or at least `-n`
-//!   objects when it's negative ("one or more", "four or more").
-//! * A material described with only a card type or subtype ("artifact", "two creatures",
-//!   "Island") is a permanent you control of that type or a card of that type in your
-//!   graveyard (CR 702.167b); one described as a "card" is a card in your graveyard. Some
-//!   may come from each (the source itself isn't one of them).
-//! * The ability's effect returns the card the cost exiled (CR 400.7j). A card that isn't
-//!   a double-faced card stays in exile (CR 712.14a), e.g. a copy of a card with craft.
-//! * "The exiled cards used to craft it" (CR 702.167c) are the cards the cost exiled as
-//!   materials, as long as they remain in exile and the permanent the ability returned
-//!   remains on the battlefield ([`USED_TO_CRAFT`]). Tokens exiled as materials cease to
-//!   exist, so they're never among them.
+//! * The keyword keeps the materials' description in [`Keyword::text`] ("with artifact")
+//!   and the mana cost in [`Keyword::cost`]; [`parse_materials`] reads the description.
+//! * A material described only by a card type or subtype without the word "card" is a
+//!   permanent of that type you control (other than the one being crafted) or a card of
+//!   that type in your graveyard; described as a "card", only a card in your graveyard
+//!   (CR 702.167b).
+//! * The materials are exiled as part of the cost ([`EXILE_MATERIALS`], paid before the
+//!   permanent itself is exiled); the cost can be paid only if they can be.
+//! * The exiled cards used to craft a permanent are linked to the permanent the ability
+//!   returns (its `linked` objects under [`CRAFT_LINK`]): its abilities refer to them as
+//!   "the exiled cards used to craft it" ([`USED_TO_CRAFT`], CR 702.167c), as long as they
+//!   remain in exile and the permanent remains on the battlefield ([`used_to_craft`]).
+//!   Tokens exiled as materials cease to exist, so they're never among them.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::eval::Ctx;
+use crate::events::MoveCause;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
+use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
+use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
 use smol_str::SmolStr;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
-/// The cost part exiling the materials (`CostPart::Effect(Effect::Custom(..))`).
-pub const MATERIALS: &str = "craft:exile the materials";
-/// The effect of the craft ability.
-pub const RETURN: &str = "craft:return this card to the battlefield transformed";
+/// `Effect::Custom` prefix of the cost part "Exile [materials] from among permanents you
+/// control and/or cards in your graveyard"; the materials' description follows.
+pub const EXILE_MATERIALS: &str = "craft:exile materials:";
+/// `Effect::Custom`: "Return this card to the battlefield transformed under its owner's
+/// control."
+pub const RETURN_TRANSFORMED: &str = "craft:return this card transformed";
 /// `Filter::Custom`: an exiled card used to craft the source (CR 702.167c).
 pub const USED_TO_CRAFT: &str = "craft:exiled card used to craft it";
-/// The link under which the materials are recorded: on the source as the craft ability's
-/// cost is paid, then on the permanent it returns as.
-pub const CRAFT_LINK: u16 = 0x7ff0;
-/// The card the craft ability returns, while it's being moved.
-const RETURNING: Var = vars::USER + 170;
-
-pub struct Craft;
-
-/// The materials of the craft keyword: (description, fewest, most).
-fn materials(kw: &Keyword) -> Option<(Filter, u32, u32)> {
-    let f = kw.filter.clone()?;
-    let n = kw.n.unwrap_or(1);
-    Some(if n < 0 {
-        (f, n.unsigned_abs(), u32::MAX)
-    } else {
-        (f, n as u32, n as u32)
-    })
+/// "used to craft it": cards in exile that were exiled to craft the source (CR 702.167c).
+pub fn used_to_craft_filter() -> Filter {
+    Filter::and(vec![
+        Filter::InZone(ZoneKind::Exile),
+        Filter::Custom(USED_TO_CRAFT.into()),
+    ])
 }
 
-/// Whether the description says "card(s)": only cards in the graveyard qualify.
-fn cards_only(f: &Filter) -> bool {
-    match f {
-        Filter::Card => true,
-        Filter::And(v) => v.iter().any(cards_only),
-        _ => false,
-    }
+/// "The exiled card(s) used to craft it": `Sel::All` of [`used_to_craft_filter`].
+pub fn used_to_craft_sel() -> Sel {
+    Sel::All(used_to_craft_filter())
 }
 
-/// The objects `p` could exile as materials for the craft ability of `src` (CR 702.167b).
-fn candidates(g: &Game, p: PlayerId, src: ObjectId, filter: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
-    let mut out = Vec::new();
-    if !cards_only(filter) {
-        out.extend(
-            g.permanents()
-                .filter(|o| o.controller == p && o.id != src && g.matches(o.id, filter, ctx))
-                .map(|o| o.id),
-        );
-    }
-    out.extend(
-        g.player(p)
-            .graveyard
-            .iter()
-            .copied()
-            .filter(|c| *c != src && g.matches(*c, filter, ctx)),
-    );
-    out
-}
-
-/// The craft keyword of `src` (as it is, or as it last existed).
-fn craft_keyword(g: &Game, src: ObjectId) -> Option<Keyword> {
-    g.obj(src)
-        .chars
-        .keywords()
-        .find(|k| k.kind == KeywordKind::Craft)
-        .cloned()
-}
-
-/// Whether `obj` became `src`'s next incarnations (`src` moved and became `obj`).
-fn descends_from(g: &Game, mut obj: ObjectId, src: ObjectId) -> bool {
-    while let Some(p) = g.obj(obj).prev {
-        if p == src {
-            return true;
-        }
-        obj = p;
-    }
-    false
-}
-
-impl KeywordRules for Craft {
-    fn kinds(&self) -> &'static [KeywordKind] {
-        &[KeywordKind::Craft]
-    }
-
-    fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
-        materials(kw)?;
-        let mut cost = kw.cost.clone().unwrap_or_default();
-        cost.parts.push(CostPart::ExileSelf);
-        cost.parts.push(CostPart::Effect(Box::new(Effect::Custom(
-            SmolStr::new(MATERIALS),
-        ))));
-        let mut act = ActivatedAbility::new(
-            cost,
-            Body::effect(Effect::Custom(SmolStr::new(RETURN))),
-        );
-        act.timing = ActivationTiming::Sorcery;
-        let text = kw
-            .text
-            .clone()
-            .unwrap_or_else(|| SmolStr::new(KeywordKind::Craft.name()));
-        Some(vec![AbilityDef::new(AbilityKind::Activated(act), text)])
-    }
-
-    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
-        if name != MATERIALS {
-            return None;
-        }
-        let Some(src) = ctx.source else {
-            return Some(false);
-        };
-        let Some((filter, min, _)) = craft_keyword(g, src).as_ref().and_then(materials) else {
-            return Some(false);
-        };
-        Some(candidates(g, ctx.controller, src, &filter, ctx).len() as u32 >= min)
-    }
-
-    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        match name {
-            MATERIALS => {
-                exile_materials(g, ctx);
-                true
-            }
-            RETURN => {
-                return_crafted(g, ctx);
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-        if name != USED_TO_CRAFT {
-            return None;
-        }
-        Some(used_to_craft(g, ctx.source, id))
-    }
-}
-
-/// Pays the materials part of the cost: `p` exiles the chosen objects, which are recorded
-/// on the source.
-fn exile_materials(g: &mut Game, ctx: &Ctx) {
-    let Some(src) = ctx.source else {
-        return;
-    };
-    let p = ctx.controller;
-    let Some((filter, min, max)) = craft_keyword(g, src).as_ref().and_then(materials) else {
-        return;
-    };
-    let cands = candidates(g, p, src, &filter, ctx);
-    // Checked before paying (`custom_effect_possible`).
-    if (cands.len() as u32) < min {
-        return;
-    }
-    let max = max.min(cands.len() as u32);
-    let chosen = g.ask_objects(p, Some(src), "Choose materials to exile (craft)", cands, min, max);
-    let mut exiled = Vec::new();
-    for c in chosen {
-        if let Some(new) = g.exile_object(c, Some(src)) {
-            exiled.push(new);
-        }
-    }
-    g.objects[src.0 as usize]
-        .linked
-        .insert(CRAFT_LINK, exiled);
-}
-
-/// The craft ability's effect: the card its cost exiled returns transformed under its
-/// owner's control, and the materials become the cards used to craft that permanent.
-fn return_crafted(g: &mut Game, ctx: &mut Ctx) {
-    let Some(src) = ctx.source else {
-        return;
-    };
-    // CR 400.7j: the card the cost exiled, if it's still there.
-    let card = ctx
-        .var_objects(crate::zones::COST_MOVED)
-        .into_iter()
-        .find(|o| descends_from(g, *o, src))
-        .filter(|o| g.is_live(*o) && g.obj(*o).zone == Zone::Exile);
-    let Some(card) = card else {
-        return;
-    };
-    let materials = g
-        .obj(src)
-        .linked
-        .get(&CRAFT_LINK)
-        .cloned()
-        .unwrap_or_default();
-    let mut d = Destination::battlefield();
-    d.transformed = true;
-    d.controller = Some(PlayerRef::Player(g.obj(card).owner));
-    let tmp = RETURNING;
-    let mut c = ctx.clone();
-    c.set_var(tmp, vec![Entity::Object(card)]);
-    g.exec(
-        &Effect::Move {
-            what: Sel::Var(tmp),
-            to: d,
-        },
-        &mut c,
-    );
-    let now = g.current(card);
-    if now != card && g.obj(now).zone == Zone::Battlefield {
-        g.objects[now.0 as usize]
-            .linked
-            .insert(CRAFT_LINK, materials);
-        g.dirty = true;
-    }
-    ctx.set_var(vars::IT, vec![Entity::Object(now)]);
-}
-
-/// Whether `id` is an exiled card used to craft `permanent` (CR 702.167c).
+/// Whether `id` is an exiled card used to craft `permanent` (CR 702.167c): a card the
+/// craft cost exiled, still in exile, while the permanent remains on the battlefield.
 pub fn used_to_craft(g: &Game, permanent: Option<ObjectId>, id: ObjectId) -> bool {
     let Some(src) = permanent else {
         return false;
@@ -241,18 +63,418 @@ pub fn used_to_craft(g: &Game, permanent: Option<ObjectId>, id: ObjectId) -> boo
         return false;
     }
     let o = g.obj(id);
+    // One that left exile is a new object, even if it's exiled again (CR 400.7).
     s.linked.get(&CRAFT_LINK).is_some_and(|v| v.contains(&id))
         && g.is_live(id)
         && o.zone == Zone::Exile
         && o.kind == ObjKind::Card
 }
 
-/// "The exiled card(s) used to craft it": `Sel::All` of [`USED_TO_CRAFT`].
-pub fn used_to_craft_sel() -> Sel {
-    Sel::All(Filter::And(vec![
-        Filter::InZone(ZoneKind::Exile),
-        Filter::Custom(SmolStr::new(USED_TO_CRAFT)),
-    ]))
+/// The link under which a crafted permanent (and, until it returns, the permanent being
+/// crafted) keeps the exiled cards used to craft it.
+pub const CRAFT_LINK: u16 = 0x3fa7;
+
+/// What a craft ability's materials are.
+#[derive(Clone, Debug)]
+pub struct Materials {
+    /// What each material is.
+    pub filter: Filter,
+    pub min: u32,
+    /// `None`: any number ("one or more", "four or more").
+    pub max: Option<u32>,
+    /// "a Dinosaur, a Merfolk, a Pirate, and a Vampire": one distinct material for each.
+    pub slots: Vec<Filter>,
+    /// "two that share a card type".
+    pub share_card_type: bool,
+    /// Described as cards: only cards in the graveyard (CR 702.167b).
+    pub cards_only: bool,
+}
+
+/// Parses a craft ability's materials: "artifact", "Cave", "two creatures", "one or more
+/// creatures", "one or more", "six artifacts", "two that share a card type", "four or more
+/// red instant and/or sorcery cards", "a Dinosaur, a Merfolk, a Pirate, and a Vampire".
+pub fn parse_materials(s: &str) -> Option<Materials> {
+    // Parsed once per description (the rules look at them whenever the ability's cost is
+    // checked).
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Materials>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(m) = cache.lock().unwrap().get(s) {
+        return m.clone();
+    }
+    let m = parse_materials_uncached(s);
+    cache.lock().unwrap().insert(s.to_string(), m.clone());
+    m
+}
+
+fn parse_materials_uncached(s: &str) -> Option<Materials> {
+    let s = end(s.trim()).to_lowercase();
+    let s = s.as_str();
+    let base = |filter: Filter, min: u32, max: Option<u32>| Materials {
+        filter,
+        min,
+        max,
+        slots: vec![],
+        share_card_type: false,
+        cards_only: false,
+    };
+    if s == "one or more" {
+        return Some(base(Filter::Any, 1, None));
+    }
+    if let Some((n, rest)) = parse_number(s) {
+        let n = n.as_const()?.max(0) as u32;
+        if end(rest) == "that share a card type" {
+            let mut m = base(Filter::Any, n, Some(n));
+            m.share_card_type = true;
+            return Some(m);
+        }
+        // "a Dinosaur, a Merfolk, a Pirate, and a Vampire".
+        if s.contains(", ") {
+            let mut slots = Vec::new();
+            for part in s.split(", ") {
+                let part = part.trim_start_matches("and ");
+                let part = part
+                    .strip_prefix("a ")
+                    .or_else(|| part.strip_prefix("an "))?;
+                slots.push(phrase(part)?.0);
+            }
+            let n = slots.len() as u32;
+            let mut m = base(Filter::Any, n, Some(n));
+            m.slots = slots;
+            return Some(m);
+        }
+        if let Some(r) = rest.strip_prefix("or more ") {
+            let (f, cards) = phrase(r)?;
+            let mut m = base(f, n, None);
+            m.cards_only = cards;
+            return Some(m);
+        }
+        let (f, cards) = phrase(rest)?;
+        let mut m = base(f, n, Some(n));
+        m.cards_only = cards;
+        return Some(m);
+    }
+    // A single material: "artifact", "Cave", "creature".
+    let (f, cards) = phrase(s)?;
+    let mut m = base(f, 1, Some(1));
+    m.cards_only = cards;
+    Some(m)
+}
+
+/// `Filter::Custom`: an object with an activated ability (mana abilities included).
+pub const HAS_ACTIVATED_ABILITY: &str = "craft:has an activated ability";
+
+/// An object phrase of a material, and whether it describes cards.
+fn phrase(s: &str) -> Option<(Filter, bool)> {
+    // "nonlands with activated abilities" (The Enigma Jewel): nonland permanents and/or
+    // nonland cards (CR 702.167b), including those with only mana abilities.
+    if let Some(rest) = s
+        .strip_prefix("nonlands ")
+        .or_else(|| s.strip_prefix("nonland "))
+    {
+        let q = end(rest);
+        if q == "with activated abilities" || q == "with an activated ability" {
+            return Some((
+                Filter::and(vec![
+                    Filter::not(Filter::Type(CardType::Land)),
+                    Filter::Custom(HAS_ACTIVATED_ABILITY.into()),
+                ]),
+                false,
+            ));
+        }
+    }
+    let (f, _, tail) = parse_object_phrase(s)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let cards = s.split_whitespace().any(|w| matches!(w, "card" | "cards"));
+    Some((f, cards))
+}
+
+/// The materials' description of a craft keyword ("with artifact" → "artifact").
+fn materials_of(kw: &Keyword) -> Option<Materials> {
+    let t = kw.text.as_deref()?;
+    parse_materials(t.trim().strip_prefix("with ").unwrap_or(t))
+}
+
+/// The objects that could be exiled as materials for crafting `src`: permanents `p`
+/// controls other than it and cards in `p`'s graveyard (CR 702.167a–b).
+pub fn candidates(g: &Game, p: PlayerId, src: ObjectId, m: &Materials) -> Vec<ObjectId> {
+    let ctx = Ctx::new(Some(src), p);
+    let src_now = g.current(src);
+    let mut out = Vec::new();
+    if !m.cards_only {
+        out.extend(
+            g.permanents()
+                .filter(|o| o.controller == p && o.id != src && o.id != src_now)
+                .map(|o| o.id)
+                .filter(|id| fits_any(g, *id, m, &ctx)),
+        );
+    }
+    // Cards in the graveyard: not a token that's there until state-based actions.
+    out.extend(
+        g.player(p)
+            .graveyard
+            .iter()
+            .copied()
+            .filter(|id| !g.obj(*id).is_token() && fits_any(g, *id, m, &ctx)),
+    );
+    out
+}
+
+fn fits_any(g: &Game, id: ObjectId, m: &Materials, ctx: &Ctx) -> bool {
+    if m.slots.is_empty() {
+        g.matches(id, &m.filter, ctx)
+    } else {
+        m.slots.iter().any(|f| g.matches(id, f, ctx))
+    }
+}
+
+/// Whether `chosen` is a legal set of materials.
+fn valid(g: &Game, chosen: &[ObjectId], m: &Materials, ctx: &Ctx) -> bool {
+    let n = chosen.len() as u32;
+    if n < m.min || m.max.is_some_and(|max| n > max) {
+        return false;
+    }
+    if !chosen.iter().all(|c| fits_any(g, *c, m, ctx)) {
+        return false;
+    }
+    if m.share_card_type {
+        let shared = chosen
+            .iter()
+            .map(|c| g.obj(*c).chars.card_types)
+            .reduce(|a, b| CardTypeSet(a.0 & b.0));
+        if shared.is_none_or(|s| s.is_empty()) {
+            return false;
+        }
+    }
+    if !m.slots.is_empty() {
+        return assign_slots(g, chosen, &m.slots, ctx);
+    }
+    true
+}
+
+/// Whether each slot can be filled by a distinct chosen object.
+fn assign_slots(g: &Game, chosen: &[ObjectId], slots: &[Filter], ctx: &Ctx) -> bool {
+    fn go(
+        g: &Game,
+        chosen: &[ObjectId],
+        slots: &[Filter],
+        used: &mut Vec<bool>,
+        ctx: &Ctx,
+    ) -> bool {
+        let Some((first, rest)) = slots.split_first() else {
+            return true;
+        };
+        for i in 0..chosen.len() {
+            if !used[i] && g.matches(chosen[i], first, ctx) {
+                used[i] = true;
+                if go(g, chosen, rest, used, ctx) {
+                    return true;
+                }
+                used[i] = false;
+            }
+        }
+        false
+    }
+    chosen.len() == slots.len() && go(g, chosen, slots, &mut vec![false; chosen.len()], ctx)
+}
+
+/// A legal set of materials among `cands`, if there is one.
+fn default_choice(g: &Game, cands: &[ObjectId], m: &Materials, ctx: &Ctx) -> Option<Vec<ObjectId>> {
+    if !m.slots.is_empty() {
+        // A distinct object for each slot, by search.
+        fn go(
+            g: &Game,
+            cands: &[ObjectId],
+            slots: &[Filter],
+            picked: &mut Vec<ObjectId>,
+            ctx: &Ctx,
+        ) -> bool {
+            let Some((first, rest)) = slots.split_first() else {
+                return true;
+            };
+            for c in cands {
+                if !picked.contains(c) && g.matches(*c, first, ctx) {
+                    picked.push(*c);
+                    if go(g, cands, rest, picked, ctx) {
+                        return true;
+                    }
+                    picked.pop();
+                }
+            }
+            false
+        }
+        let mut picked = Vec::new();
+        return go(g, cands, &m.slots, &mut picked, ctx).then_some(picked);
+    }
+    let n = m.min as usize;
+    if m.share_card_type {
+        for ty in CardType::ALL {
+            let with: Vec<ObjectId> = cands
+                .iter()
+                .copied()
+                .filter(|c| g.obj(*c).chars.card_types.contains(ty))
+                .collect();
+            if with.len() >= n {
+                return Some(with.into_iter().take(n).collect());
+            }
+        }
+        return None;
+    }
+    (cands.len() >= n).then(|| cands.iter().copied().take(n).collect())
+}
+
+/// Whether `p` could exile materials to craft `src`.
+pub fn materials_available(g: &Game, p: PlayerId, src: ObjectId, m: &Materials) -> bool {
+    let ctx = Ctx::new(Some(src), p);
+    let cands = candidates(g, p, src, m);
+    default_choice(g, &cands, m, &ctx).is_some()
+}
+
+pub struct Craft;
+
+impl KeywordRules for Craft {
+    fn kinds(&self) -> &'static [KeywordKind] {
+        &[KeywordKind::Craft]
+    }
+
+    fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
+        let text = kw.text.as_deref()?;
+        materials_of(kw)?;
+        let desc = text.trim().strip_prefix("with ").unwrap_or(text);
+        let mut cost = kw.cost.clone().unwrap_or_default();
+        // The materials first, while the permanent is still on the battlefield; then the
+        // permanent itself.
+        cost.parts
+            .push(CostPart::Effect(Box::new(Effect::Custom(SmolStr::new(
+                format!("{EXILE_MATERIALS}{desc}"),
+            )))));
+        cost.parts.push(CostPart::ExileSelf);
+        let mut act = ActivatedAbility::new(
+            cost,
+            Body::effect(Effect::Custom(RETURN_TRANSFORMED.into())),
+        );
+        act.timing = ActivationTiming::Sorcery;
+        Some(vec![AbilityDef::new(
+            AbilityKind::Activated(act),
+            KeywordKind::Craft.name(),
+        )])
+    }
+
+    /// The cost can be paid only if there are materials to exile (checked as the ability
+    /// is activated and again as the cost is paid, after any mana abilities).
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let desc = name.strip_prefix(EXILE_MATERIALS)?;
+        Some(match (parse_materials(desc), ctx.source) {
+            (Some(m), Some(src)) => materials_available(g, ctx.controller, src, &m),
+            _ => false,
+        })
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if let Some(desc) = name.strip_prefix(EXILE_MATERIALS) {
+            let (Some(m), Some(src)) = (parse_materials(desc), ctx.source) else {
+                return true;
+            };
+            let p = ctx.controller;
+            let cands = candidates(g, p, src, &m);
+            let Some(default) = default_choice(g, &cands, &m, ctx) else {
+                return true;
+            };
+            let max = m.max.unwrap_or(cands.len() as u32);
+            let chosen = g.ask_objects(
+                p,
+                Some(src),
+                &format!("Craft: exile materials to craft it ({desc})"),
+                cands,
+                m.min,
+                max,
+            );
+            let chosen = if valid(g, &chosen, &m, ctx) {
+                chosen
+            } else {
+                default
+            };
+            let moves: Vec<MoveEv> = chosen
+                .iter()
+                .map(|o| MoveEv {
+                    obj: *o,
+                    to: Zone::Exile,
+                    pos: LibraryPosition::Top,
+                    cause: MoveCause::Cost,
+                    by: Some(p),
+                    etb: EtbInfo::default(),
+                    source: Some(src),
+                })
+                .collect();
+            let exiled: Vec<ObjectId> = g
+                .move_objects(moves)
+                .into_iter()
+                .flatten()
+                .filter(|o| g.obj(*o).zone == Zone::Exile)
+                .collect();
+            g.objects[src.0 as usize].linked.insert(CRAFT_LINK, exiled);
+            return true;
+        }
+        if name != RETURN_TRANSFORMED {
+            return false;
+        }
+        let Some(src) = ctx.source else {
+            return true;
+        };
+        let card = g.current(src);
+        let o = g.obj(card);
+        // Only the card exiled by the cost, still in exile; only a double-faced card can
+        // be put onto the battlefield transformed (CR 712.14a).
+        if o.zone != Zone::Exile || o.card.as_ref().and_then(|d| d.back()).is_none() {
+            return true;
+        }
+        let owner = o.owner;
+        let materials: Vec<ObjectId> = g
+            .obj(src)
+            .linked
+            .get(&CRAFT_LINK)
+            .cloned()
+            .unwrap_or_default();
+        let new = g.move_object_ev(MoveEv {
+            obj: card,
+            to: Zone::Battlefield,
+            pos: LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(ctx.controller),
+            etb: EtbInfo {
+                controller: Some(owner),
+                transformed: true,
+                ..Default::default()
+            },
+            source: ctx.source,
+        });
+        if let Some(new) = new.filter(|n| g.obj(*n).zone == Zone::Battlefield) {
+            // CR 702.167c: the cards exiled to pay the cost are the exiled cards used to
+            // craft it.
+            g.objects[new.0 as usize]
+                .linked
+                .insert(CRAFT_LINK, materials);
+            g.dirty = true;
+        }
+        true
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == HAS_ACTIVATED_ABILITY {
+            return Some(
+                g.obj(id)
+                    .chars
+                    .abilities
+                    .iter()
+                    .any(|a| matches!(a.kind, AbilityKind::Activated(_))),
+            );
+        }
+        if name != USED_TO_CRAFT {
+            return None;
+        }
+        Some(used_to_craft(g, ctx.source, id))
+    }
 }
 
 inventory::submit! { KeywordRegistration(&Craft) }
