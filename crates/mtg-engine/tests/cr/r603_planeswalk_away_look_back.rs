@@ -57,7 +57,7 @@ fn planeswalking_away_triggers_from_the_plane_as_it_was_before_it_turned_face_do
 
 #[test]
 fn planeswalking_away_uses_the_planes_appearance_just_before_the_event() {
-    cr!("603.10", "603.10g");
+    cr!("603.10", "603.10g", "608.2h");
     // (Its chaos ability isn't supported; the one under test is.)
     let keralia = card("Mount Keralia");
     let unsupported = keralia.unsupported_text();
@@ -71,6 +71,7 @@ fn planeswalking_away_uses_the_planes_appearance_just_before_the_event() {
     let deck = add_planar_deck(&mut t, P0, &["Mount Keralia", "Goldmeadow"]);
     planechase::set_starting_plane(&mut t.g);
     t.g.add_counters(Entity::Object(deck[0]), "pressure", 3, None);
+    assert_eq!(t.counters(deck[0], "pressure"), 3);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
     let wurm = t.battlefield(P1, "Craw Wurm");
@@ -78,6 +79,7 @@ fn planeswalking_away_uses_the_planes_appearance_just_before_the_event() {
     // Turned face down, it's a new object with no counters; the ability uses the plane
     // as it last existed face up, with three pressure counters.
     assert_eq!(t.counters(t.g.current(deck[0]), "pressure"), 0);
+    assert_eq!(triggers_from(&t, deck[0]), 1);
     t.settle();
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
@@ -111,7 +113,10 @@ fn planeswalking_away_from_a_plane_that_leaves_the_game_with_its_owner() {
     assert!(!t.g.is_live(theirs[0]));
     assert_eq!(face_up_names(&t), vec!["Goldmeadow"]);
     assert_eq!(triggers_from(&t, theirs[0]), 1);
+    // P0, who planeswalked away from it, controls the trigger.
     t.settle();
+    assert!(t.g.stack.iter().any(|s| t.g.ability_source_of(*s) == theirs[0]
+        && t.obj(*s).controller == P0));
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
     assert!(!t.on_battlefield(giant));

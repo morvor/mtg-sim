@@ -2,7 +2,7 @@
 //! object representing it merges with the permanent it's targeting (CR 730).
 
 use crate::r703_common::supported;
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::merge;
@@ -100,40 +100,63 @@ fn a_copy_of_a_mutating_spell_merges_with_the_same_target() {
         "Lithoform Engine",
         "If a permanent spell is copied, new targets can't be chosen for it, if it has any (perhaps because it's an Aura or a mutating creature spell)."
     );
+    // (Its first ability, copying an ability, isn't supported; the one under test is.)
+    let lithoform = mtg_engine::card::card("Lithoform Engine");
+    let unsupported = lithoform.unsupported_text();
+    assert!(
+        unsupported.iter().all(|a| !a.contains("permanent spell")),
+        "{unsupported:?}"
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let engine = t.battlefield(P0, "Lithoform Engine");
     let bears = t.battlefield(P0, "Grizzly Bears");
+    // Another non-Human creature P0 owns: a legal target for a mutating spell of theirs.
+    let elves = t.battlefield(P0, "Llanowar Elves");
     t.lands(P0, "Wastes", 4);
     let spell = cast_mutating_gemrazer(&mut t, P0, bears);
     // "{4}, {T}: Copy target permanent spell you control. (The copy becomes a token.)"
     t.activate(P0, engine, 1, &[Entity::Object(spell)]).unwrap();
+    // If P0 were offered new targets for the copy, they'd move it to the Elves.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
     t.resolve();
     let copy = *t.g.stack.last().unwrap();
     assert_ne!(copy, spell);
+    assert!(
+        !t.asked().iter().any(|(_, d)| matches!(d, Decision::YesNo { .. })),
+        "new targets were offered for a copy of a permanent spell"
+    );
+    t.clear_answers();
     let permanents = t.g.battlefield.len();
     // The copy resolves first: it becomes a token as it merges with the Bears (put under
-    // them) — it doesn't enter as a token creature of its own.
+    // them) — it doesn't enter as a token creature of its own, nor merge with the Elves.
     put_on_top(&mut t, P0, false);
     t.resolve();
     assert_eq!(t.g.battlefield.len(), permanents);
+    assert!(merge::physical_components(&t.g, elves).is_empty());
     let comps = merge::physical_components(&t.g, bears);
     assert_eq!(comps.len(), 2);
     assert_eq!(t.obj(comps[0]).chars.name, "Grizzly Bears");
     assert!(t.obj(comps[1]).is_token());
     assert_eq!(t.obj(comps[1]).chars.name, "Gemrazer");
     assert!(!t.obj(bears).is_token());
-    // Then the original merges with the same creature, on top.
+    // Then the original merges with the same creature, on top. (Gemrazer's "whenever this
+    // creature mutates" trigger has no legal target: P1 controls no artifact or enchantment.)
     t.settle();
     t.clear_answers();
-    while t.g.stack.last() != Some(&spell) {
+    for _ in 0..10 {
+        if t.g.stack.last() == Some(&spell) {
+            break;
+        }
         t.resolve();
-        t.settle();
     }
+    assert_eq!(t.g.stack.last(), Some(&spell));
     put_on_top(&mut t, P0, true);
     t.resolve();
     assert_eq!(t.g.battlefield.len(), permanents);
     assert_eq!(t.g.current(spell), bears);
     assert_eq!(merge::physical_components(&t.g, bears).len(), 3);
+    assert!(merge::physical_components(&t.g, elves).is_empty());
     assert_eq!(t.obj(bears).chars.name, "Gemrazer");
 }
