@@ -217,3 +217,34 @@ fn targets_needed_only_if_bargained_are_chosen_only_if_it_was() {
     pay_optional(&mut t, P0, false);
     assert!(t.cast(P0, spell).try_go().is_ok());
 }
+
+#[test]
+fn a_bargained_spell_has_its_additional_effect() {
+    cr!("702.166b", "702.166c");
+    assert_supported("Archon's Glory");
+    // Archon's Glory: "Target creature gets +2/+2 until end of turn. If this spell was
+    // bargained, that creature also gains flying and lifelink until end of turn."
+    for bargain in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.lands(P0, "Plains", 1);
+        let spell = t.hand(P0, "Archon's Glory");
+        if bargain {
+            let treasure = make_token(&mut t, P0, "Treasure");
+            pay_with(&mut t, P0, &[treasure]);
+        } else {
+            pay_optional(&mut t, P0, false);
+        }
+        t.cast(P0, spell).target(bears).go();
+        t.resolve_all();
+        assert_eq!(t.pt(bears), (4, 4));
+        assert_eq!(
+            has_kw(&t, bears, mtg_engine::keywords::KeywordKind::Flying),
+            bargain
+        );
+        assert_eq!(
+            has_kw(&t, bears, mtg_engine::keywords::KeywordKind::Lifelink),
+            bargain
+        );
+    }
+}
