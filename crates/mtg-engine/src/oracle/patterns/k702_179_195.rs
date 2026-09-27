@@ -16,6 +16,8 @@
 //! * "Power-up — [cost]: [effect]" (CR 702.193a), "Each power-up ability of permanents
 //!   you control can be activated an additional time", "Power-up abilities of other
 //!   creatures you control cost {N} less to activate";
+//! * "if this spell was cast using teamwork", "You may cast ~ as though it had flash if
+//!   it's cast using teamwork" (CR 702.194b);
 
 use super::{
     AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
@@ -258,12 +260,21 @@ inventory::submit! { StaticPattern { name: "k702.185 cast from graveyard using w
 fn keyword_cost_paid(c: &str) -> Option<Condition> {
     let c = end(c);
     // "~ was cast using web-slinging", "they were cast using web-slinging".
-    if let Some(kw) = ["~ was cast using ", "it was cast using ", "they were cast using ", "he was cast using ", "she was cast using ", "this spell was cast using "]
+    if let Some(kw) = [
+        "~ was cast using ",
+        "it was cast using ",
+        "it's cast using ",
+        "they were cast using ",
+        "he was cast using ",
+        "she was cast using ",
+        "this spell was cast using ",
+    ]
         .iter()
         .find_map(|p| c.strip_prefix(p))
     {
         let name = match kw {
             "web-slinging" => crate::kw::web_slinging::WEB_SLINGING,
+            "teamwork" => crate::kw::teamwork::TEAMWORK,
             _ => return None,
         };
         return Some(Condition::CostPaid(name.into()));
@@ -349,3 +360,18 @@ fn power_up_statics(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
 }
 
 inventory::submit! { StaticPattern { name: "k702.193 power-up statics", priority: 50, parse: power_up_statics } }
+
+/// "You may cast ~ as though it had flash if it's cast using teamwork." (see
+/// `kw/teamwork.rs`): functions wherever the card could be cast from.
+fn flash_with_teamwork(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if end(l) != "you may cast ~ as though it had flash if it's cast using teamwork" {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Custom(
+        crate::kw::teamwork::FLASH_WITH_TEAMWORK.into(),
+    ));
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.194 flash if cast using teamwork", priority: 50, parse: flash_with_teamwork } }
