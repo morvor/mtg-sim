@@ -1,7 +1,9 @@
 //! Oracle text of the keywords of CR 702.153–702.167 that the generic keyword parser
 //! doesn't handle, and phrases that go with them:
 //!
-//! * "Each [quality] spell you cast has casualty N" (CR 702.153a);
+//! * "Each [quality] spell you cast has casualty N" (CR 702.153a), and "The first
+//!   [quality] spell you cast each turn has [keyword]" (casualty and other keywords of
+//!   spells, see `kw/first_spell_each_turn.rs`);
 //! * "Whenever ~ enlists a creature", "if it enlisted a creature this combat" (and
 //!   "the creature that attacked") (CR 702.154c);
 //! * "[action on] each creature in the sector of your choice" (CR 702.158d) and
@@ -288,3 +290,43 @@ fn craft_references(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "k702.167 exiled cards used to craft it", priority: 100, parse: craft_references } }
+
+/// "The first [quality] spell you cast each turn has [keyword]" (Anhelo, the Painter:
+/// "... has casualty 2"; Maelstrom Nexus: "The first spell you cast each turn has
+/// cascade."): the spell has the keyword as it's cast.
+fn first_spell_each_turn_has(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("the first ")?;
+    let (subject, kw_text) = r.split_once("spell you cast each turn has ")?;
+    let subject = subject.trim();
+    let mut parts = if subject.is_empty() {
+        vec![]
+    } else {
+        let phrase = format!("{subject} spell");
+        let (f, _, tail) = parse_object_phrase(&phrase)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        vec![f]
+    };
+    let mut kws = Vec::new();
+    for a in crate::oracle::keywords::parse_keyword_line(kw_text, ctx)? {
+        if let AbilityKind::Keyword(k) = &a.kind {
+            kws.push(k.clone());
+        }
+    }
+    if kws.is_empty() {
+        return None;
+    }
+    parts.push(Filter::Spell);
+    parts.push(Filter::ControlledBy(PlayerRel::You));
+    parts.push(Filter::Custom(
+        crate::kw::first_spell_each_turn::FIRST_THIS_TURN.into(),
+    ));
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::And(parts),
+        mods: kws.into_iter().map(Modification::AddKeyword).collect(),
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "the first [quality] spell you cast each turn has [keyword]", priority: 100, parse: first_spell_each_turn_has } }

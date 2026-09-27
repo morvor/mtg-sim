@@ -133,3 +133,51 @@ fn each_instance_of_casualty_is_paid_separately_and_triggers_for_its_own_payment
         assert_eq!(named(&t, P0, "Raging Goblin").is_empty(), pay1);
     }
 }
+
+#[test]
+fn the_first_instant_or_sorcery_spell_each_turn_has_casualty() {
+    cr!("702.153a");
+    ruling!(
+        "Anhelo, the Painter",
+        "The copy of the spell is created on the stack, so it’s not “cast.”"
+    );
+    assert_supported("Anhelo, the Painter");
+    // Anhelo: "The first instant or sorcery spell you cast each turn has casualty 2."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Anhelo, the Painter");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    let b2 = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Forest", 1);
+    // A creature spell first: it isn't an instant or sorcery.
+    let elves = t.hand(P0, "Llanowar Elves");
+    let s = t.cast(P0, elves).go();
+    assert_eq!(t.g.obj(s).chars.keyword_count(KeywordKind::Casualty), 0);
+    t.resolve_all();
+    // The first instant: casualty 2.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    pay_with(&mut t, P0, &[giant]);
+    let s = t.cast(P0, bolt).target(b1).go();
+    assert_eq!(t.g.obj(s).chars.keyword_count(KeywordKind::Casualty), 1);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Casualty").len(), 1);
+    // The copy (not cast) doesn't have casualty itself.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(b2)]);
+    t.resolve();
+    let copy = t
+        .g
+        .stack
+        .iter()
+        .copied()
+        .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::SpellCopy)
+        .expect("a copy");
+    assert_eq!(t.g.obj(copy).chars.keyword_count(KeywordKind::Casualty), 0);
+    t.resolve_all();
+    assert!(!t.on_battlefield(b1) && !t.on_battlefield(b2));
+    // The second one this turn doesn't.
+    let bolt2 = t.hand(P0, "Lightning Bolt");
+    let s = t.cast(P0, bolt2).target(P1).go();
+    assert_eq!(t.g.obj(s).chars.keyword_count(KeywordKind::Casualty), 0);
+}
