@@ -254,3 +254,64 @@ fn cards_milled_into_exile_instead_are_still_milled_this_way() {
     }
     assert_eq!(t.graveyard_size(P0), 0);
 }
+
+#[test]
+fn only_card_types_count_not_supertypes_or_subtypes() {
+    cr!("205.2a", "205.4a", "701.17c", "513.1");
+    ruling!(
+        "Demonic Covenant",
+        "The card types in Magic include artifact, battle, creature, enchantment, instant, kindred, land, planeswalker, and sorcery. Legendary, basic, and snow are supertypes, not card types; Horror and Room are subtypes, not card types."
+    );
+    supported("Demonic Covenant");
+    // Demonic Covenant: "At the beginning of your end step, create a 5/5 black Demon
+    // creature token with flying, then mill two cards. If two cards that share all their
+    // card types were milled this way, sacrifice this enchantment."
+    for (top, second, sacrificed) in [
+        // Legendary is a supertype: both are just creatures.
+        ("Isamaru, Hound of Konda", "Grizzly Bears", true),
+        // Basic and snow are supertypes: both are lands.
+        ("Snow-Covered Forest", "Mutavault", true),
+        // Room and Aura are subtypes: both are enchantments.
+        ("Bottomless Pool // Locker Room", "Rancor", true),
+        // Kindred is a card type: a kindred instant and an instant differ.
+        ("Crib Swap", "Lightning Bolt", false),
+        // An artifact creature and a creature differ.
+        ("Ornithopter", "Grizzly Bears", false),
+    ] {
+        let mut t = TestGame::new(2);
+        let covenant = t.battlefield(P0, "Demonic Covenant");
+        stack_library(&mut t, P0, &[top, second]);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        assert_eq!(t.graveyard_size(P0), if sacrificed { 3 } else { 2 }, "{top}");
+        assert_eq!(t.on_battlefield(covenant), !sacrificed, "{top}");
+        assert_eq!(with_subtype(&t, P0, "Demon").len(), if sacrificed { 1 } else { 2 });
+    }
+}
+
+#[test]
+fn two_milled_cards_that_share_a_card_type() {
+    cr!("701.17c", "205.2a");
+    // The condition The Tale of Tamiyo's chapters use: "If two cards that share a card
+    // type were milled this way, ..."
+    let spell = custom_card(
+        "Shared Milling",
+        "Sorcery",
+        "{0}",
+        None,
+        "Mill two cards. If two cards that share a card type were milled this way, draw a card.",
+    );
+    for (top, second, draws) in [
+        ("Ornithopter", "Grizzly Bears", true),
+        ("Crib Swap", "Lightning Bolt", true),
+        ("Forest", "Grizzly Bears", false),
+    ] {
+        let mut t = TestGame::new(2);
+        stack_library(&mut t, P0, &[top, second]);
+        let card = t.custom(P0, spell.clone(), Zone::Hand(P0));
+        let hand = t.hand_size(P0);
+        t.cast(P0, card).go();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand - 1 + usize::from(draws), "{top}");
+    }
+}
