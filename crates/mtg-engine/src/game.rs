@@ -559,6 +559,10 @@ pub struct Game {
     pub named_exiles: Vec<(PlayerId, SmolStr, ObjectId)>,
     /// Hint of which mana types an automatic payment needs (for "any color" choices).
     pub mana_hint: Option<Vec<crate::mana::ManaType>>,
+    /// The object whose cost an automatic mana payment is for: the mana abilities it
+    /// activates don't sacrifice it to pay their own costs (a Food's own ability can't
+    /// also be paid for by sacrificing that Food to Gilded Goose).
+    pub mana_reserve: Option<ObjectId>,
     /// Commanders that moved to graveyard/exile since the last SBA check (CR 704.6d).
     pub commander_moved_since_last_sba: BTreeSet<ObjectId>,
     /// When a search's decision is answered with the default, find the first matches.
@@ -695,6 +699,7 @@ impl Game {
             losing_simultaneously: false,
             named_exiles: vec![],
             mana_hint: None,
+            mana_reserve: None,
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
             untils: vec![],

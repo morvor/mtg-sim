@@ -2391,6 +2391,9 @@ impl Game {
                     .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
+                    // A mana ability activated to pay another cost doesn't sacrifice the
+                    // object that cost is for (see `Game::mana_reserve`).
+                    .filter(|o| Some(*o) != self.mana_reserve)
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough to sacrifice");

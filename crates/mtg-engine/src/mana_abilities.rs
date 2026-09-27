@@ -21,6 +21,10 @@ pub struct ManaSource {
     pub units: Vec<Vec<ManaType>>,
     /// Lower is preferred (tapping lands before sacrificing Treasures, etc.).
     pub cost_rank: u8,
+    /// For an ability that costs sacrificing other permanents ("{T}, Sacrifice a Food:
+    /// Add one mana of any color"): the permanents it could sacrifice, and how many.
+    pub sac_pool: Vec<ObjectId>,
+    pub sac_count: usize,
 }
 
 const ALL_COLORS: [ManaType; 5] = [
@@ -1026,6 +1030,8 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             // Only plan with abilities whose costs are simple to pay automatically.
             let mut rank = 0u8;
             let mut ok = true;
+            let mut sac_pool = Vec::new();
+            let mut sac_count = 0;
             for part in &act.cost.parts {
                 match part {
                     CostPart::Tap => {
@@ -1038,6 +1044,25 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         }
                     }
                     CostPart::SacrificeSelf => rank = rank.max(3),
+                    // "Sacrifice a Food", "Sacrifice a creature": other permanents the
+                    // player controls, never the object the payment is for.
+                    CostPart::Sacrifice { filter, count } if sac_pool.is_empty() => {
+                        let ctx = Ctx::new(Some(o.id), p);
+                        sac_count = g.eval_value(count, &ctx).max(0) as usize;
+                        sac_pool = g
+                            .objects_matching(filter, &ctx)
+                            .into_iter()
+                            .filter(|x| {
+                                Some(*x) != reserve
+                                    && g.obj(*x).controller == p
+                                    && !g.cant_be_sacrificed(*x)
+                            })
+                            .collect();
+                        if sac_count == 0 || sac_pool.len() < sac_count {
+                            ok = false;
+                        }
+                        rank = rank.max(4);
+                    }
                     CostPart::PayLife(_) => rank = rank.max(2),
                     CostPart::RemoveCounters { kind, count } => {
                         let n = g.eval_value(count, &Ctx::new(Some(o.id), p)).max(0) as u32;
@@ -1100,6 +1125,8 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         ability: a.clone(),
                         units,
                         cost_rank: rank,
+                        sac_pool: sac_pool.clone(),
+                        sac_count,
                     });
                 }
             }
@@ -1158,8 +1185,20 @@ impl ManaSource {
     /// permanent can't be tapped to pay a cost (CR 118.3), so a Volcanic Island pays either
     /// {U} or {R}, not both.
     pub fn conflicts_with(&self, other: &ManaSource) -> bool {
-        self.obj == other.obj
-            && ((self.taps() && other.taps()) || (self.sacrifices() && other.sacrifices()))
+        (self.obj == other.obj
+            && ((self.taps() && other.taps()) || (self.sacrifices() && other.sacrifices())))
+            || self.sacrifices_too_much_with(other)
+    }
+
+    /// Whether this source and `other` both sacrifice other permanents and there aren't
+    /// enough of them for both: one permanent pays only one cost.
+    fn sacrifices_too_much_with(&self, other: &ManaSource) -> bool {
+        if self.sac_count == 0 || other.sac_count == 0 {
+            return false;
+        }
+        let mut both = self.sac_pool.clone();
+        both.extend(other.sac_pool.iter().filter(|o| !self.sac_pool.contains(o)));
+        both.len() < self.sac_count + other.sac_count
     }
 }
 
@@ -1698,7 +1737,9 @@ pub fn pay_mana(
                 continue;
             }
             g.mana_hint = Some(types);
+            let prev_reserve = std::mem::replace(&mut g.mana_reserve, reserve);
             let r = g.activate_ability(p, src.obj, src.ability.uid);
+            g.mana_reserve = prev_reserve;
             g.mana_hint = None;
             if r.is_err() {
                 return None;
