@@ -79,6 +79,17 @@ fn mentions_it(e: &Effect) -> bool {
 }
 
 fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    // "[effect] instead if [condition]" is "if [condition], [effect] instead" ("Put three
+    // +1/+1 counters on that creature instead if there are four or more card types among
+    // cards in your graveyard.").
+    let reordered;
+    let l = match l.split_once(" instead if ") {
+        Some((x, c)) if !l.starts_with("if ") && !c.contains(", ") => {
+            reordered = format!("if {c}, {x} instead");
+            reordered.as_str()
+        }
+        _ => l,
+    };
     let Some(r) = l.strip_prefix("if ") else {
         return false;
     };
