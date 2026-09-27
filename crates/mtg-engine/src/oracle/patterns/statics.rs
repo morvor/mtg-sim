@@ -1609,6 +1609,9 @@ pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restricti
         | "assign combat damage equal to their toughness rather than their power" => {
             return Some(vec![Restriction::DamageByToughness(fc)])
         }
+        "assigns no combat damage" | "assign no combat damage" => {
+            return Some(vec![Restriction::AssignsNoCombatDamage(fc)])
+        }
         "attack or block each combat if able" | "attacks or blocks each combat if able" => {
             return Some(vec![
                 Restriction::MustAttack(fc.clone()),
@@ -2078,6 +2081,18 @@ fn parse_body(
         let mut outs = Vec::new();
         let mut ok = true;
         let used_x = std::cell::Cell::new(false);
+        // "is an enchantment and loses all other card types": setting an object's card
+        // types replaces the old ones anyway (CR 205.1a); the clause only says so.
+        let (rest, loses_other_types) = match [
+            " and loses all other card types",
+            " and it loses all other card types",
+        ]
+        .into_iter()
+        .find_map(|tail| rest.strip_suffix(tail))
+        {
+            Some(r) => (r, true),
+            None => (rest, false),
+        };
         for p in split_predicates(rest) {
             match parse_predicate(p, &subject, x.as_ref(), &used_x, quotes, text, ctx) {
                 Some(v) => outs.extend(v),
@@ -2089,6 +2104,13 @@ fn parse_body(
         }
         // A "where X is ..." that nothing used means X appeared somewhere we don't bind.
         if x.is_some() && !used_x.get() {
+            ok = false;
+        }
+        if loses_other_types
+            && !outs
+                .iter()
+                .any(|o| matches!(o, Out::Mod(Modification::SetTypes { .. })))
+        {
             ok = false;
         }
         if ok && !outs.is_empty() {

@@ -61,7 +61,9 @@ pub fn draws_cards(e: &Effect) -> bool {
         Effect::If {
             then, otherwise, ..
         } => draws_cards(then) || draws_cards(otherwise),
-        Effect::May { effect, .. } | Effect::Repeat { effect, .. } => draws_cards(effect),
+        Effect::May { effect, .. }
+        | Effect::Repeat { effect, .. }
+        | Effect::AsPlayer { effect, .. } => draws_cards(effect),
         Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
             draws_cards(effect)
         }

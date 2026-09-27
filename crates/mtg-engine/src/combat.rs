@@ -1821,6 +1821,13 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
 }
 
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
+    // "assigns no combat damage this turn" (CR 510.1a).
+    if g.restricted_obj(id, |r| match r {
+        Restriction::AssignsNoCombatDamage(f) => Some(f),
+        _ => None,
+    }) {
+        return 0;
+    }
     // "assigns combat damage equal to its toughness rather than its power".
     if g.restricted_obj(id, |r| match r {
         Restriction::DamageByToughness(f) => Some(f),
