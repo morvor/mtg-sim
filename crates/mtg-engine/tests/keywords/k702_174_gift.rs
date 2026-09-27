@@ -191,7 +191,7 @@ fn gift_a_food() {
 
 #[test]
 fn gift_an_extra_turn() {
-    cr!("702.174g");
+    cr!("702.174g", "500.7");
     let mut def = custom_card(
         "Generous Offer",
         "Instant",
@@ -204,8 +204,8 @@ fn gift_an_extra_turn() {
     let card = t.custom(P0, def, Zone::Hand(P0));
     cast_gift(&mut t, card, true, &[]);
     t.resolve_all();
-    // The opponent takes an extra turn after this one, then P0's turn would normally come
-    // after theirs: P1 takes two turns in a row.
+    // The opponent's extra turn is added directly after this one; then the turn order
+    // resumes from this turn, whose next turn is P1's: P1 takes two turns in a row.
     assert_eq!(t.g.extra_turns, vec![P1]);
     let turn = t.g.turn.number;
     t.advance_to(P1, Step::Upkeep);
@@ -398,8 +398,14 @@ fn the_gift_is_promised_to_one_chosen_opponent() {
         "As an additional cost to cast a spell with gift, you can promise the listed gift to an opponent. That opponent is chosen as part of that additional cost."
     );
     ruling!("Wear Down", "You can’t pay a gift cost more than once.");
-    ruling!("Blooming Blast", "You can't pay a gift cost more than once.");
-    ruling!("Bilbo's Gambit", "You can't pay a gift cost more than once.");
+    ruling!(
+        "Blooming Blast",
+        "You can't pay a gift cost more than once."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "You can't pay a gift cost more than once."
+    );
     ruling!(
         "Blooming Blast",
         "As an additional cost to cast a spell with gift, you can promise the listed gift to an opponent. That opponent is chosen as part of that additional cost. The gift isn't given at this time; rather, it's given at a later time based on whether or not the spell is a permanent spell."
@@ -557,8 +563,16 @@ fn each_kind_of_gift() {
     let anthem = t.battlefield(P1, "Glorious Anthem");
     let hand = t.hand_size(P1);
     for (name, mana, targets) in [
-        ("Crumb and Get It", ManaType::W, vec![vec![Entity::Object(bears)]]),
-        ("Blooming Blast", ManaType::R, vec![vec![Entity::Object(wall)]]),
+        (
+            "Crumb and Get It",
+            ManaType::W,
+            vec![vec![Entity::Object(bears)]],
+        ),
+        (
+            "Blooming Blast",
+            ManaType::R,
+            vec![vec![Entity::Object(wall)]],
+        ),
         (
             "Wear Down",
             ManaType::G,

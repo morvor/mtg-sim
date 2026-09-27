@@ -39,9 +39,7 @@ fn case_of_the_gateway_express_is_solved_if_three_creatures_attacked() {
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let case = t.battlefield(P0, "Case of the Gateway Express");
-    let bears: Vec<_> = (0..3)
-        .map(|_| t.battlefield(P0, "Grizzly Bears"))
-        .collect();
+    let bears: Vec<_> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
     // Two attackers: not solved.
     let two: Vec<_> = bears[..2]
         .iter()
@@ -111,7 +109,7 @@ fn case_of_the_gorgons_kiss_counts_creature_cards_put_into_graveyards() {
 
 #[test]
 fn case_of_the_burning_masks_counts_each_source_you_controlled_once() {
-    cr!("702.169d", "719.3a");
+    cr!("719.3a");
     ruling!(
         "Case of the Burning Masks",
         "A single creature that deals combat damage multiple times in a turn (due to double strike or additional combats) still counts as only one source."
@@ -219,7 +217,7 @@ fn case_of_the_burning_masks_lets_you_play_the_chosen_card_this_turn() {
 
 #[test]
 fn case_of_the_ransacked_lab_counts_the_spells_you_cast_this_turn() {
-    cr!("702.169c", "719.3a");
+    cr!("719.3a");
     assert_supported("Case of the Ransacked Lab");
     // "To solve — You've cast four or more instant and sorcery spells this turn."
     for spells in [3, 4] {
@@ -258,10 +256,9 @@ fn case_of_the_locked_hothouse_lets_you_play_from_the_top_of_your_library() {
         t.g.recompute();
         let forest = t.library_top(P0, "Forest");
         t.g.turn.priority = Some(P0);
-        let can_play = t
-            .g
-            .legal_actions(P0)
-            .contains(&Action::PlayLand { card: forest });
+        let can_play =
+            t.g.legal_actions(P0)
+                .contains(&Action::PlayLand { card: forest });
         assert_eq!(can_play, solved);
         if solved {
             t.play_land(P0, forest).unwrap();

@@ -72,7 +72,7 @@ fn faerie_snoop_puts_one_card_into_your_hand_and_the_other_into_your_graveyard()
 
 #[test]
 fn experiment_twelve_puts_counters_equal_to_power_on_creatures_turned_face_up() {
-    cr!("702.168d", "708.8");
+    cr!("702.168d");
     assert_supported("Experiment Twelve");
     // Experiment Twelve: 4/4 trample, disguise {4}{G}, "Whenever this creature or another
     // creature you control is turned face up, put +1/+1 counters on that creature equal to
@@ -93,7 +93,7 @@ fn experiment_twelve_puts_counters_equal_to_power_on_creatures_turned_face_up() 
 
 #[test]
 fn printlifter_ooze_creates_an_ooze_that_enters_with_counters() {
-    cr!("702.168d", "122.6");
+    cr!("702.168d");
     assert_supported("Printlifter Ooze");
     // Printlifter Ooze: "Whenever this creature or another creature you control is turned
     // face up, create a 0/0 green Ooze creature token with trample. The token enters with X
@@ -110,10 +110,7 @@ fn printlifter_ooze_creates_an_ooze_that_enters_with_counters() {
     // The Printlifter Ooze and the Moroii.
     assert_eq!(t.counters(oozes[0], "+1/+1"), 2);
     assert_eq!(t.pt(oozes[0]), (2, 2));
-    assert!(t
-        .obj(oozes[0])
-        .chars
-        .has_keyword(KeywordKind::Trample));
+    assert!(t.obj(oozes[0]).chars.has_keyword(KeywordKind::Trample));
 }
 
 #[test]

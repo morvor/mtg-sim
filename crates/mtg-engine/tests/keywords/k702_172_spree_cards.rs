@@ -3,7 +3,7 @@
 
 use crate::common_k702_011_017::assert_supported;
 use crate::common_k702_140_152::*;
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Agent, Answer, Decision, PassiveAgent};
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -55,9 +55,12 @@ fn smugglers_surprise_returns_milled_creature_and_land_cards() {
     let spell = t.hand(P0, "Smuggler's Surprise");
     add_mana(&mut t, P0, ManaType::G, 3);
     t.cast(P0, spell).modes(&[0]).go();
+    // The milled cards are new objects (CR 400.7): P0 takes as many of the offered ones
+    // as it may.
+    take_all_offered(&mut t, P0);
+    let hand = t.hand_size(P0);
     t.resolve_all();
-    // The player chooses up to two among the milled creature and land cards (none by
-    // default).
+    // The player chose up to two among the milled creature and land cards.
     let offered = t
         .asked()
         .into_iter()
@@ -68,16 +71,53 @@ fn smugglers_surprise_returns_milled_creature_and_land_cards() {
             _ => None,
         })
         .expect("chose among the milled cards");
-    let mut want = vec![
-        Entity::Object(t.g.current(giant)),
-        Entity::Object(t.g.current(forest)),
+    // The milled Hill Giant and Forest, as they were in the graveyard.
+    let mut got: Vec<(String, bool)> = offered
+        .0
+        .iter()
+        .filter_map(|e| e.object())
+        .map(|o| {
+            let ob = t.g.obj(o);
+            (
+                ob.chars.name.to_string(),
+                ob.zone == mtg_engine::object::Zone::Graveyard(P0),
+            )
+        })
+        .collect();
+    got.sort();
+    let want = vec![
+        ("Forest".to_string(), true),
+        ("Hill Giant".to_string(), true),
     ];
-    let mut got = offered.0.clone();
-    want.sort_by_key(|e| format!("{e:?}"));
-    got.sort_by_key(|e| format!("{e:?}"));
     assert_eq!((got, offered.1), (want, 2));
+    for c in [giant, forest] {
+        assert_eq!(t.zone(t.g.current(c)), mtg_engine::object::Zone::Hand(P0));
+    }
+    // Both went to the hand; the other milled cards stay in the graveyard.
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert!(t.in_hand(P0, "Hill Giant") && t.in_hand(P0, "Forest"));
     assert!(t.in_graveyard(P0, "Divination") && t.in_graveyard(P0, "Lightning Bolt"));
     assert!(t.in_graveyard(P0, "Craw Wurm"));
+}
+
+/// Makes `p` choose as many of the offered entities as it may whenever it's asked to choose
+/// entities (other decisions are still the scripted agent's).
+fn take_all_offered(t: &mut TestGame, p: PlayerId) {
+    struct TakeAll(Box<dyn Agent>);
+    impl Agent for TakeAll {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            let answer = self.0.decide(g, p, d);
+            match d {
+                Decision::ChooseEntities {
+                    candidates, max, ..
+                } => Answer::Entities(candidates.iter().take(*max as usize).copied().collect()),
+                _ => answer,
+            }
+        }
+    }
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(&mut agents[p.idx()], Box::new(PassiveAgent));
+    agents[p.idx()] = Box::new(TakeAll(inner));
 }
 
 #[test]

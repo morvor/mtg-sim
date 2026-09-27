@@ -166,8 +166,11 @@ fn coiling_rebirth_copies_a_nonlegendary_creature_if_the_gift_was_promised() {
         let card = t.graveyard(P0, name);
         let spell = t.hand(P0, "Coiling Rebirth");
         add_mana(&mut t, P0, ManaType::B, 5);
+        let hand = t.hand_size(P1);
         cast_gift(&mut t, spell, promise, &[Entity::Object(card)]);
         t.resolve_all();
+        // The gift: the opponent draws a card.
+        assert_eq!(t.hand_size(P1), hand + promise as usize);
         let all = t.named_on_battlefield(name);
         assert_eq!(all.len(), 1 + copies, "{name} {promise}");
         let tokens: Vec<_> = all.iter().filter(|o| t.g.obj(**o).is_token()).collect();
@@ -197,10 +200,13 @@ fn cruelclaws_heist_lets_you_cast_the_exiled_card_if_the_gift_was_promised() {
         t.hand(P1, "Mountain");
         let spell = t.hand(P0, "Cruelclaw's Heist");
         add_mana(&mut t, P0, ManaType::B, 2);
+        let hand = t.hand_size(P1);
         cast_gift(&mut t, spell, promise, &[Entity::Player(P1)]);
         t.resolve_all();
         assert!(t.in_exile("Lightning Bolt"));
         assert!(t.in_hand(P1, "Mountain"));
+        // The gift (a card, drawn before the rest) and the exiled Bolt.
+        assert_eq!(t.hand_size(P1), hand + promise as usize - 1);
         let exiled = t.g.current(bolt);
         assert_eq!(t.zone(exiled), Zone::Exile);
         // Green mana can pay for {R}.
@@ -240,12 +246,26 @@ fn consumed_by_greed_edict_and_return_if_the_gift_was_promised() {
         if promise {
             targets.push(Entity::Object(wurm));
         }
-        cast_gift(&mut t, spell, promise, &targets);
+        let hand = t.hand_size(P1);
+        let cast = cast_gift(&mut t, spell, promise, &targets);
+        // The graveyard card is targeted only if the gift was promised (CR 702.174m).
+        let chosen: usize = t
+            .obj(cast)
+            .stack
+            .as_ref()
+            .unwrap()
+            .chosen
+            .iter()
+            .flat_map(|c| c.targets.iter())
+            .map(Vec::len)
+            .sum();
+        assert_eq!(chosen, targets.len(), "promised: {promise}");
         // The opponent chooses between the two tied Hill Giants.
         t.answer_choose(P1, &[Entity::Object(other_giant)]);
         t.resolve_all();
         assert!(t.on_battlefield(bears) && t.on_battlefield(giant));
         assert!(!t.on_battlefield(other_giant));
         assert_eq!(t.in_hand(P0, "Craw Wurm"), promise);
+        assert_eq!(t.hand_size(P1), hand + promise as usize);
     }
 }
