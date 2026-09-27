@@ -566,6 +566,8 @@ pub struct Game {
     pub token_counters: Vec<(CounterKind, u32)>,
     /// State kept by keyword actions (CR 701): see `kwa/`.
     pub kwa: crate::kwa::KwaState,
+    /// State kept by keyword abilities' rules (CR 702): see `kw/keyword_state.rs`.
+    pub kw_state: crate::kw::keyword_state::KeywordState,
     /// Continuous effects on permanent spells that keep applying to the permanents they
     /// become (CR 611.3d).
     pub carried_effects: Vec<u32>,
@@ -687,6 +689,7 @@ impl Game {
             token_attach: None,
             token_counters: vec![],
             kwa: Default::default(),
+            kw_state: Default::default(),
             carried_effects: vec![],
             stickers: vec![],
             end: Default::default(),

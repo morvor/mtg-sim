@@ -236,6 +236,22 @@ pub trait KeywordRules: Sync + Send {
     /// e.g. the effect making a bestowed Aura spell an Aura is carried over to the
     /// permanent, so it enters as an Aura (CR 702.103b, 614.12).
     fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {}
+    /// How the permanent a resolving permanent spell becomes enters the battlefield
+    /// (CR 608.3), if a keyword of the spell changes it: e.g. a spell whose sneak cost was
+    /// paid enters tapped and attacking (CR 702.190b). Called for every registered
+    /// implementation, after [`KeywordRules::before_permanent_enters`].
+    fn permanent_spell_etb(
+        &self,
+        g: &mut Game,
+        spell: ObjectId,
+        etb: &mut crate::replacement::EtbInfo,
+    ) {
+    }
+    /// Called for each event as triggered abilities are detected (CR 603.2): for
+    /// triggered abilities a keyword's rules define that have no source (e.g. the
+    /// inherent ability of a player with speed, CR 702.179d), and for records a keyword's
+    /// rules keep about the game.
+    fn on_event(&self, g: &mut Game, ev: &Event) {}
     /// Whether an Aura that's unattached or attached to an illegal object or player stays
     /// on the battlefield instead of being put into its owner's graveyard (an exception to
     /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
@@ -697,6 +713,20 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
 pub fn before_permanent_enters(g: &mut Game, spell: ObjectId) {
     for r in registry() {
         r.before_permanent_enters(g, spell);
+    }
+}
+
+/// See [`KeywordRules::permanent_spell_etb`].
+pub fn permanent_spell_etb(g: &mut Game, spell: ObjectId, etb: &mut crate::replacement::EtbInfo) {
+    for r in registry() {
+        r.permanent_spell_etb(g, spell, etb);
+    }
+}
+
+/// See [`KeywordRules::on_event`].
+pub fn on_event(g: &mut Game, ev: &Event) {
+    for r in registry() {
+        r.on_event(g, ev);
     }
 }
 

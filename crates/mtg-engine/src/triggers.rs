@@ -464,6 +464,8 @@ impl Game {
         // The monarch's and the initiative's inherent triggered abilities (CR 725.2,
         // 726.2).
         crate::monarch_initiative::detect(self, ev);
+        // Keywords' sourceless triggered abilities (e.g. speed's, CR 702.179d).
+        crate::kw::on_event(self, ev);
         let mut found: Vec<PendingTrigger> = Vec::new();
         for (src, ctl, a) in sources {
             let AbilityKind::Triggered(t) = &a.kind else {

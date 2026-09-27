@@ -679,6 +679,8 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         ("that much", Value::EventAmount),
         ("the damage dealt this way", Value::Prev),
         ("your life total", Value::LifeTotal(PlayerRef::You)),
+        // CR 702.179f: 0 for a player who has no speed.
+        ("your speed", Value::Speed(PlayerRef::You)),
         ("x", Value::X),
     ] {
         if let Some(rest) = s.strip_prefix(p) {

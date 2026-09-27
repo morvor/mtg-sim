@@ -1108,6 +1108,7 @@ impl Game {
                 return;
             }
             crate::kw::before_permanent_enters(self, id);
+            crate::kw::permanent_spell_etb(self, id, &mut etb);
             let copy = o.kind == ObjKind::SpellCopy || o.kind == ObjKind::CardCopy;
             if copy {
                 // CR 608.3f: a copy of a permanent spell becomes a token.
