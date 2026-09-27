@@ -1023,7 +1023,12 @@ impl Game {
             Value::Var(v) => ctx.nums.get(v).copied().unwrap_or(0),
             Value::Devotion(colors) => {
                 let mut n = 0i64;
-                for o in self.permanents().filter(|o| o.controller == ctx.controller) {
+                // An object about to enter is on the battlefield only hypothetically (CR
+                // 614.12): it isn't a permanent yet, so its mana cost doesn't count.
+                for o in self
+                    .permanents()
+                    .filter(|o| o.controller == ctx.controller && !self.entering.contains(&o.id))
+                {
                     if let Some(mc) = &o.chars.mana_cost {
                         n += mc
                             .symbols
