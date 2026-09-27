@@ -290,6 +290,29 @@ pub fn double_faced_copy_face(g: &Game, src: ObjectId) -> Option<FaceState> {
         .then_some(face)
 }
 
+/// The objects "create a token that's a copy of [it / that creature / this creature]"
+/// copies. A permanent the ability refers to that has since left the battlefield is copied
+/// as it last existed there, from its last known information (CR 608.2h, 707.2) — not as
+/// the card it became in its new zone ("you may exile it. If you do, create a token that's
+/// a copy of that creature": a dead Clone that was copying Hill Giant makes a Hill Giant).
+pub fn token_copy_sources(g: &mut Game, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
+    if matches!(sel, Sel::TriggerLki | Sel::This) {
+        let lki: Vec<ObjectId> = g
+            .eval_sel(sel, ctx)
+            .into_iter()
+            .filter_map(|e| e.object())
+            .collect();
+        if !lki.is_empty()
+            && lki
+                .iter()
+                .all(|o| !g.is_live(*o) && g.obj(*o).zone == Zone::Battlefield)
+        {
+            return lki;
+        }
+    }
+    g.resolve_objects(sel, ctx)
+}
+
 /// Creates a copy of a card as an object of kind `CardCopy` in `zone`.
 pub(crate) fn new_card_copy(
     g: &mut Game,
