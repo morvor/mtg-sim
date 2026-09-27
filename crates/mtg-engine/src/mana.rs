@@ -536,6 +536,11 @@ pub struct Mana {
     /// Doesn't empty from the pool at end of steps/phases (e.g. Upwelling-style effects
     /// or "until end of turn" mana).
     pub persistent: bool,
+    /// "Until end of combat, you don't lose this mana as steps and phases end"
+    /// (firebending, CR 702.189a): it doesn't empty from the pool as combat steps end, and
+    /// is lost as the combat phase ends.
+    #[serde(default)]
+    pub until_end_of_combat: bool,
     /// "When that mana is spent to cast ..." (CR 106.6).
     #[serde(default)]
     pub rider: Option<Box<ManaRider>>,
@@ -549,6 +554,7 @@ impl Mana {
             source: None,
             restriction: None,
             persistent: false,
+            until_end_of_combat: false,
             rider: None,
         }
     }

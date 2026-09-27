@@ -717,18 +717,23 @@ pub fn empty_pool(g: &mut Game, p: PlayerId) {
         .filter_map(|m| m.strip_prefix(UNSPENT_MANA_BECOMES))
         .filter_map(|t| ManaType::from_letter(t.trim().chars().next()?))
         .collect();
+    // Mana kept until end of combat stays as the steps of combat end, but not as its end
+    // of combat step (and so the combat phase) ends (CR 702.189a).
+    let step = g.turn.step;
+    let in_combat = step.is_combat() && step != crate::turn::Step::EndOfCombat;
     let pool = &mut g.players[p.idx()].mana_pool;
+    let stays = |m: &crate::mana::Mana| m.persistent || (in_combat && m.until_end_of_combat);
     if let Some(t) = becomes.first() {
         // CR 616.1: with several such effects the player would choose one; the first
         // applies (each makes the mana stay).
         for m in pool.mana.iter_mut() {
-            if !m.persistent && !kept.contains(&m.ty) {
+            if !stays(m) && !kept.contains(&m.ty) {
                 m.ty = *t;
             }
         }
         return;
     }
-    pool.mana.retain(|m| m.persistent || kept.contains(&m.ty));
+    pool.mana.retain(|m| stays(m) || kept.contains(&m.ty));
 }
 
 /// Resolves `Effect::PersistentMana` (CR 106.4, 514.2): the mana the inner effect adds
@@ -797,6 +802,7 @@ fn add_mana_with(
             source: ctx.source,
             restriction: restriction.clone(),
             persistent: false,
+            until_end_of_combat: false,
             // A separate delayed triggered ability for each mana (CR 106.6a).
             rider: rider.as_ref().map(|r| {
                 Box::new(ManaRider {

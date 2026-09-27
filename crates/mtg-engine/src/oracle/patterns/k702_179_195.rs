@@ -12,8 +12,11 @@
 //!   turn or a spell was warped this turn", "You may cast ~ from your graveyard using its
 //!   warp ability";
 //! * "if ~'s mayhem cost was paid" and the like (CR 702.185, 702.187);
+//! * "whenever you firebend" (CR 702.189b);
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
+};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::Builder;
@@ -274,3 +277,24 @@ fn keyword_cost_paid(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.185-190 keyword cost was paid", priority: 50, parse: keyword_cost_paid } }
+
+/// "whenever you firebend", "whenever an opponent firebends", "whenever a player
+/// firebends": whenever a firebending ability they control resolves (CR 702.189b).
+fn firebend_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let who = match end(r) {
+        "you firebend" => PlayerRel::You,
+        "an opponent firebends" => PlayerRel::Opponent,
+        "a player firebends" => PlayerRel::Any,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::PlayerAction {
+            name: crate::kw::firebending::FIREBENT_EVENT.into(),
+            who,
+        },
+        Sel::TriggerObject,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "k702.189b whenever you firebend", priority: 50, parse: firebend_trigger } }
