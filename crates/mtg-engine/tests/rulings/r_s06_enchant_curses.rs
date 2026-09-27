@@ -135,3 +135,27 @@ fn curse_of_the_forsaken_doesnt_trigger_for_attacks_on_planeswalkers() {
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn witchbane_orb_refers_to_curses() {
+    cr!("205.3h", "303.4");
+    ruling!(
+        "Curse of Predation",
+        "The Curse subtype has no inherent rules meaning, but two cards in the Innistrad set (Bitterheart Witch and Witchbane Orb) refer to Curses."
+    );
+    supported("Witchbane Orb");
+    // Witchbane Orb: "When this artifact enters, destroy all Curses attached to you."
+    let mut t = TestGame::new(2);
+    attach_new(&mut t, P1, "Curse of Predation", Entity::Player(P0));
+    attach_new(&mut t, P0, "Curse of the Forsaken", Entity::Player(P0));
+    let on_p1 = attach_new(&mut t, P0, "Curse of Predation", Entity::Player(P1));
+    t.enter(P0, "Witchbane Orb");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Curse of Predation"));
+    assert!(t.in_graveyard(P0, "Curse of the Forsaken"));
+    // The Curse attached to the other player stays.
+    assert!(t.on_battlefield(on_p1));
+    assert_eq!(t.named_on_battlefield("Curse of Predation"), vec![on_p1]);
+}

@@ -10,6 +10,7 @@ use crate::r_s04_common::*;
 use crate::r_s05_common::move_to;
 use crate::r_s06_common::*;
 use mtg_engine::decision::Decision;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -437,4 +438,43 @@ fn protection_from_a_color_prevents_only_what_it_says() {
     t.cast(P0, damnation).go();
     t.resolve();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+// ---------------------------------------------------------------------------------------
+// "as long as an Equipment named ... is attached to a creature you control"
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn brides_gown_you_is_the_controller_of_the_equipment() {
+    cr!("301.5d", "611.3a", "613.2");
+    ruling!(
+        "Bride's Gown",
+        "In the phrase “as long as an Equipment named . . . is attached to a creature you control,” the “you” is the controller of the Equipment, not the controller of the creature it's attached to."
+    );
+    supported("Bride's Gown");
+    supported("Groom's Finery");
+    // Bride's Gown: "Equipped creature gets +2/+0. It gets an additional +0/+2 and has
+    // first strike as long as an Equipment named Groom's Finery is attached to a creature
+    // you control." Groom's Finery: the same with deathtouch and Bride's Gown.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    attach_new(&mut t, P1, "Bride's Gown", a);
+    assert_eq!(t.pt(a), (4, 2));
+    assert!(!has_kw(&t, a, KeywordKind::FirstStrike));
+    attach_new(&mut t, P1, "Groom's Finery", b);
+    assert_eq!(t.pt(a), (4, 4));
+    assert!(has_kw(&t, a, KeywordKind::FirstStrike));
+    assert_eq!(t.pt(b), (4, 4));
+    assert!(has_kw(&t, b, KeywordKind::Deathtouch));
+    // P0 gains control of the creature wearing Bride's Gown, but not of the Gown.
+    give_control(&mut t, a, P0);
+    assert_eq!(t.obj_now(a).controller, P0);
+    // Groom's Finery is still attached to a creature the Gown's controller controls: the
+    // creature P0 took gets all the bonuses. Bride's Gown is no longer attached to a
+    // creature the Finery's controller controls: P1's creature only gets +2/+0.
+    assert_eq!(t.pt(a), (4, 4));
+    assert!(has_kw(&t, a, KeywordKind::FirstStrike));
+    assert_eq!(t.pt(b), (4, 2));
+    assert!(!has_kw(&t, b, KeywordKind::Deathtouch));
 }
