@@ -836,7 +836,12 @@ fn stat_condition(c: &str, it: Option<&Sel>) -> Option<Condition> {
 /// [`stat_condition`] and the object it's about.
 fn stat_condition_sel(c: &str, it: Option<&Sel>) -> Option<(Condition, Sel)> {
     let c = end(c);
-    let (sel, r) = if let Some(r) = c.strip_prefix("~'s ") {
+    // ("his power", "her power": a named character's own.)
+    let (sel, r) = if let Some(r) = c
+        .strip_prefix("~'s ")
+        .or_else(|| c.strip_prefix("his "))
+        .or_else(|| c.strip_prefix("her "))
+    {
         (Sel::This, r)
     } else if let Some(r) = c.strip_prefix("its ") {
         (it?.clone(), r)

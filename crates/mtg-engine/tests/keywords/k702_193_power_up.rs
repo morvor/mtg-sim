@@ -186,3 +186,50 @@ fn power_up_abilities_of_other_creatures_cost_less() {
     let b = old(&mut t, BRAWLER);
     assert_eq!(power_up(&mut t, b, 0), Some(5));
 }
+
+#[test]
+fn power_up_abilities_of_named_characters() {
+    cr!("702.193a");
+    // Abomination, Terrifying Titan ({3}{R/G} 4/4): "Power-up — {5}{R/G}{R/G}: Put a
+    // +1/+1 counter on Abomination. He fights up to one target creature an opponent
+    // controls."; Donald Blake, Guise of Thor ({1}{W} 1/3): "Power-up — {4}{W}{W}: Put two
+    // +1/+1 counters and a flying counter on Donald Blake. He becomes a God Warrior Hero.";
+    // Quicksilver, Brash Blur ({R} 1/1): "Power-up — {4}{R}: Put a +1/+1 counter and a
+    // double strike counter on Quicksilver."
+    const ABOMINATION: &str = "Abomination, Terrifying Titan";
+    const BLAKE: &str = "Donald Blake, Guise of Thor";
+    const QUICKSILVER: &str = "Quicksilver, Brash Blur";
+    assert_supported(&[
+        ABOMINATION,
+        BLAKE,
+        QUICKSILVER,
+        "Captain Marvel, Earth's Protector",
+    ]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 7);
+    let a = old(&mut t, ABOMINATION);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    assert_eq!(power_up(&mut t, a, 0), Some(7));
+    // A 5/5 fights the 6/4.
+    assert!(!t.on_battlefield(wurm));
+    assert!(!t.on_battlefield(a));
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 6);
+    let b = old(&mut t, BLAKE);
+    assert_eq!(power_up(&mut t, b, 0), Some(6));
+    assert_eq!(t.pt(b), (3, 5));
+    let o = t.obj(b);
+    assert!(o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(o.chars.has_subtype("God") && o.chars.has_subtype("Hero"));
+    assert!(!o.chars.has_subtype("Human") && !o.chars.has_subtype("Doctor"));
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    let q = old(&mut t, QUICKSILVER);
+    assert_eq!(power_up(&mut t, q, 0), Some(5));
+    assert_eq!(t.counters(q, "double strike"), 1);
+    assert!(t
+        .obj(q)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike));
+}

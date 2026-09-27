@@ -80,7 +80,7 @@ fn subject(text: &str, b: &Builder) -> Subject {
     };
     let text_words = referent.as_deref().unwrap_or(text);
     let words: Vec<&str> = text_words.split([' ', ',']).collect();
-    let this = matches!(text, "~" | "it" | "him" | "her") && matches!(b.it, Sel::This);
+    let this = matches!(text, "~" | "it" | "him" | "her" | "he" | "she") && matches!(b.it, Sel::This);
     let this_is = |t: CardType| this && b.ctx.type_line.card_types.contains(t);
     let lands = this_is(CardType::Land)
         || words.iter().any(|w| {

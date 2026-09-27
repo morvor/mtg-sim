@@ -60,7 +60,10 @@ fn opening_hand(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
     let lower = t.to_lowercase();
     for this in ["this card", "~"] {
-        if lower == format!("if {this} is in your opening hand, you may begin the game with it on the battlefield.") {
+        // ("with him on the battlefield": a named character's pronoun.)
+        if ["it", "him", "her"].iter().any(|it| {
+            lower == format!("if {this} is in your opening hand, you may begin the game with {it} on the battlefield.")
+        }) {
             return Some(opening_hand_ability(
                 StaticEffect::OpeningHand { delayed: None },
                 t,

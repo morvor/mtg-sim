@@ -699,6 +699,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         // CR 208.4b
         ("its base power", Value::BasePowerOf(Box::new(b.it.clone()))),
         ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
+        // A named character's possessive pronouns ("equal to his power").
+        ("his power", Value::PowerOf(Box::new(b.it.clone()))),
+        ("her power", Value::PowerOf(Box::new(b.it.clone()))),
+        ("his toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
+        ("her toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
         ("~'s power", Value::PowerOf(Box::new(Sel::This))),
         ("~'s toughness", Value::ToughnessOf(Box::new(Sel::This))),
         ("its mana value", Value::ManaValueOf(Box::new(b.it.clone()))),
