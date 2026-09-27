@@ -269,3 +269,35 @@ fn casualty_x_needs_a_creature_with_power_x_or_greater() {
     t.resolve_all();
     assert_eq!(named(&t, P0, "Ob Nixilis, the Adversary").len(), 2);
 }
+
+#[test]
+fn the_copy_has_the_same_x_as_the_original_spell() {
+    cr!("702.153a", "707.10");
+    ruling!(
+        "Cut of the Profits",
+        "X will be the same for both the original spell and the copy you create with the casualty ability."
+    );
+    assert_supported("Cut of the Profits");
+    // Cut of the Profits ({X}{B}{B}, casualty 3): "You draw X cards and you lose X life."
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    for _ in 0..10 {
+        t.library_top(P0, "Swamp");
+    }
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "Cut of the Profits");
+    pay_with(&mut t, P0, &[giant]);
+    t.cast(P0, spell).x(2).go();
+    let hand = t.hand_size(P0);
+    t.settle();
+    assert_eq!(triggers_named(&t, "Casualty").len(), 1);
+    t.resolve();
+    assert_eq!(spell_copies_on_stack(&t, "Cut of the Profits"), 1);
+    // The copy: X is 2.
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P0), 18);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 4);
+    assert_eq!(t.life(P0), 16);
+}

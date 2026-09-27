@@ -152,3 +152,48 @@ fn several_instances_of_read_ahead_are_redundant() {
     t.resolve_all();
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn barbara_wright_gives_sagas_read_ahead_as_they_enter() {
+    cr!("702.155b", "702.155c", "614.12");
+    ruling!(
+        "Barbara Wright",
+        "Having multiple instances of read ahead doesn't cause anything unusual to happen."
+    );
+    assert_supported("Barbara Wright");
+    // Barbara Wright: "Sagas you control have read ahead." History of Benalia (I, II:
+    // create a 2/2 Knight with vigilance) has no read ahead of its own: it gets it as it
+    // enters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Barbara Wright");
+    t.lands(P0, "Plains", 3);
+    let card = t.hand(P0, "History of Benalia");
+    t.cast(P0, card).go();
+    t.answer(P0, DecisionKind::Number, Answer::Number(2));
+    t.resolve();
+    let saga = named(&t, P0, "History of Benalia")[0];
+    assert_eq!(read_ahead_questions(&t), vec![(1, 3)]);
+    assert_eq!(lore(&t, saga), 2);
+    // Only chapter II triggers.
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(tokens(&t, P0).len(), 1);
+
+    // The Elder Dragon War has read ahead and gets a second instance: still one choice.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Barbara Wright");
+    t.lands(P0, "Mountain", 4);
+    let card = t.hand(P0, WAR);
+    t.cast(P0, card).go();
+    t.answer(P0, DecisionKind::Number, Answer::Number(3));
+    t.resolve();
+    let saga = named(&t, P0, WAR)[0];
+    assert_eq!(kw_count(&t, saga, KeywordKind::ReadAhead), 2);
+    assert_eq!(read_ahead_questions(&t), vec![(1, 3)]);
+    assert_eq!(lore(&t, saga), 3);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(dragons(&t), 1);
+}
