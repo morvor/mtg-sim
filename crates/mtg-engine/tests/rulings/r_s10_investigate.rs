@@ -302,6 +302,18 @@ fn the_clue_token_is_named_clue_token() {
     assert!(o.is(CardType::Artifact));
     assert!(!o.is(CardType::Creature));
     assert!(!is_creature_type("Clue"));
+    // Xenograft ("As this enchantment enters, choose a creature type.") doesn't offer it.
+    let from = t.asked().len();
+    enter(&mut t, P0, "Xenograft");
+    let options: Vec<String> = t.asked()[from..]
+        .iter()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption { options, .. } => Some(options.clone()),
+            _ => None,
+        })
+        .expect("a creature type was chosen");
+    assert!(options.iter().any(|o| o == "Crab"));
+    assert!(!options.iter().any(|o| o == "Clue"));
 }
 
 #[test]
