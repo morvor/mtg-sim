@@ -291,7 +291,7 @@ pub fn double_faced_copy_face(g: &Game, src: ObjectId) -> Option<FaceState> {
 }
 
 /// Creates a copy of a card as an object of kind `CardCopy` in `zone`.
-fn new_card_copy(
+pub(crate) fn new_card_copy(
     g: &mut Game,
     card: Option<std::sync::Arc<crate::card::CardDef>>,
     chars: Characteristics,
