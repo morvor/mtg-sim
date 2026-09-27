@@ -33,6 +33,10 @@ fn time(t: &TestGame, id: ObjectId) -> u32 {
 fn an_impending_permanent_enters_with_time_counters_and_isnt_a_creature() {
     cr!("702.176", "702.176a");
     assert_supported(FLOODPITS);
+    ruling!(
+        "Overlord of the Floodpits",
+        "\"Impending N–[cost]\" is a keyword that represents multiple abilities. The official rules are as follows: (a) You may choose to pay [cost] rather than pay this spell's mana cost. (b) If you chose to pay this spell's impending cost, it enters the battlefield with N time counters on it. (c) As long as this permanent has a time counter on it, if it was cast for its impending cost, it's not a creature. (d) At the beginning of your end step, if this permanent was cast for its impending cost, remove a time counter from it."
+    );
     // Overlord of the Floodpits: {3}{U}{U} 5/3 flying, impending 4—{1}{U}{U}, "Whenever
     // this permanent enters or attacks, draw two cards, then discard a card."
     let mut t = TestGame::new(2);

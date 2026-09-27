@@ -28,6 +28,10 @@ fn saddle_taps_other_creatures_with_enough_power_as_a_sorcery() {
         "Brightfield Mustang",
         "“Saddle N” means “Tap any number of other untapped creatures you control with total power N or greater: This permanent becomes saddled until end of turn. Activate only as a sorcery.”"
     );
+    ruling!(
+        "Archmage's Newt",
+        "\"Saddle N\" means \"Tap any number of other untapped creatures you control with total power N or greater: This permanent becomes saddled until end of turn. Activate only as a sorcery.\""
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     // Giant Beaver: Saddle 3.
@@ -73,8 +77,16 @@ fn a_saddled_mount_may_be_saddled_again_and_mounts_attack_normally() {
         "You may activate a permanent’s saddle ability even if that permanent is already saddled."
     );
     ruling!(
+        "Archmage's Newt",
+        "You may activate a permanent's saddle ability even if that permanent is already saddled."
+    );
+    ruling!(
         "Brightfield Mustang",
         "Creatures with saddle can attack or block as normal even if they aren’t saddled."
+    );
+    ruling!(
+        "Archmage's Newt",
+        "Creatures with saddle can attack or block as normal even if they aren't saddled."
     );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -102,6 +114,10 @@ fn saddled_lasts_until_end_of_turn_or_until_it_leaves_the_battlefield() {
     ruling!(
         "Giant Beaver",
         "“Saddled” isn’t an ability that a creature has. It’s just something true about that creature. It won’t stop being saddled until the turn ends or it leaves the battlefield."
+    );
+    ruling!(
+        "Archmage's Newt",
+        "\"Saddled\" isn't an ability that a creature has. It's just something true about that creature. It won't stop being saddled until the turn ends or it leaves the battlefield."
     );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -142,6 +158,10 @@ fn a_copy_of_a_saddled_mount_isnt_saddled() {
         "Brightfield Mustang",
         "If a permanent becomes a copy of a saddled Mount, the copy won’t be saddled."
     );
+    ruling!(
+        "Archmage's Newt",
+        "If a permanent becomes a copy of a saddled Mount, the copy won't be saddled."
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let mustang = t.battlefield(P0, "Brightfield Mustang");
@@ -171,6 +191,10 @@ fn attacks_while_saddled_triggers_only_if_saddled_as_it_attacks() {
     ruling!(
         "Brightfield Mustang",
         "An ability that triggers when a creature “attacks while saddled” will trigger only if that creature was saddled when it was declared as an attacker."
+    );
+    ruling!(
+        "Archmage's Newt",
+        "An ability that triggers when a creature \"attacks while saddled\" will trigger only if that creature was saddled when it was declared as an attacker."
     );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
