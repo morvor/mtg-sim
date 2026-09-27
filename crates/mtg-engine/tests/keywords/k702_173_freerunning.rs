@@ -142,3 +142,41 @@ fn a_freerunning_cost_may_be_a_non_mana_cost() {
     t.resolve_all();
     assert!(t.in_hand(P1, "Hill Giant"));
 }
+
+#[test]
+fn if_this_spells_freerunning_cost_was_paid() {
+    cr!("702.173a");
+    assert_supported("Monastery Raid");
+    // Monastery Raid: {2}{R} sorcery, "Freerunning {X}{R}", "Exile the top two cards of
+    // your library. If this spell's freerunning cost was paid, exile the top X cards of
+    // your library instead. You may play the exiled cards until the end of your next
+    // turn."
+    for freerunning in [false, true] {
+        let mut t = TestGame::new(2);
+        let raid = t.hand(P0, "Monastery Raid");
+        let assassin = t.battlefield(P0, "Royal Assassin");
+        let top: Vec<ObjectId> = (0..4).map(|_| t.library_top(P0, "Mountain")).collect();
+        attack_then_main(&mut t, &[assassin], &[]);
+        if freerunning {
+            // X = 4: {4}{R}.
+            add_mana(&mut t, P0, ManaType::R, 5);
+            t.cast(P0, raid).method(FREERUNNING).x(4).go();
+        } else {
+            add_mana(&mut t, P0, ManaType::R, 3);
+            t.cast(P0, raid).go();
+        }
+        assert_eq!(pool(&t, P0), 0);
+        t.resolve_all();
+        let exiled: Vec<ObjectId> = top
+            .iter()
+            .map(|c| t.g.current(*c))
+            .filter(|c| t.zone(*c) == mtg_engine::object::Zone::Exile)
+            .collect();
+        assert_eq!(exiled.len(), if freerunning { 4 } else { 2 });
+        // They may be played until the end of the next turn.
+        t.g.turn.priority = Some(P0);
+        assert!(t.g.legal_actions(P0).contains(
+            &mtg_engine::decision::Action::PlayLand { card: exiled[0] }
+        ));
+    }
+}

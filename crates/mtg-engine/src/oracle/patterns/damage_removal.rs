@@ -1120,6 +1120,10 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
             r = x.trim_start();
         } else if let Some(x) = r.strip_prefix("under your control") {
             r = x.trim_start();
+        } else if let Some(x) = r.strip_prefix("with ") {
+            // "with a +1/+1 counter on it" (Parting Gust).
+            d.with_counters = super::levels_classes_sagas_transformed::with_counters_on_it(x)?;
+            r = "";
         } else {
             break;
         }

@@ -34,6 +34,10 @@ pub struct Builder<'c> {
     /// The group ("all creatures you control") an earlier instruction affected, which
     /// "they" and "those creatures" refer to (see `patterns::pronoun_groups`).
     pub group: Option<super::patterns::pronoun_groups::GroupRef>,
+    /// Phrases that name objects the text chose earlier, and what they select ("Choose
+    /// target creature you control and target creature you don't control. Put a +1/+1
+    /// counter on the creature you control."; see `patterns::choose_two_targets`).
+    pub named: Vec<(String, Sel)>,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -56,6 +60,7 @@ impl<'c> Builder<'c> {
             sentences: 0,
             chosen_creature: None,
             group: None,
+            named: vec![],
             ctx,
         }
     }
@@ -459,6 +464,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 b.it = Sel::AttachedTo;
             }
             return Some((sel, rest.to_string()));
+        }
+    }
+    for (p, sel) in &b.named {
+        if let Some(rest) = s.strip_prefix(p.as_str()) {
+            if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
+                let sel = sel.clone();
+                if matches!(sel, Sel::Target(_)) {
+                    b.it = sel.clone();
+                }
+                return Some((sel, rest.to_string()));
+            }
         }
     }
     if let Some((slot, text)) = &b.chosen_creature {

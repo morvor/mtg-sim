@@ -1,0 +1,153 @@
+//! "If [condition], [sentence that continues the previous one]": a sentence that only
+//! makes sense after the previous one (it refers to what that one did: "return that card
+//! to the battlefield ... at the beginning of the next end step" after an exile, "you may
+//! play the exiled cards until ..." after exiling cards) happens only if the condition
+//! holds: "Exile target nontoken creature. If the gift wasn't promised, return that card
+//! to the battlefield under its owner's control with a +1/+1 counter on it at the
+//! beginning of the next end step." (Parting Gust). The continuation is understood by the
+//! follow-up patterns; what it adds after the previous effect is wrapped in the
+//! condition. Targets it adds are chosen only if an optional cost the condition names was
+//! paid (CR 601.2c).
+//!
+//! Also "[instruction] if [condition]" with the condition last ("Put a +1/+1 counter on
+//! the creature you control if the gift was promised.", Longstalk Brawl), read as "If
+//! [condition], [instruction]", for conditions that don't refer back to anything.
+
+use super::{EffectPattern, FollowupPattern};
+use crate::ability::*;
+use crate::oracle::effects::Builder;
+
+/// The instructions of an effect, in order.
+fn parts(e: &Effect) -> Vec<Effect> {
+    match e {
+        Effect::Seq(v) => v.clone(),
+        Effect::Noop => vec![],
+        other => vec![other.clone()],
+    }
+}
+
+fn same(a: &Effect, b: &Effect) -> bool {
+    serde_json::to_string(a).ok() == serde_json::to_string(b).ok()
+}
+
+fn if_condition_continuation(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    // "If ..., [effect] instead" replaces the previous effect (other patterns).
+    if x.ends_with(" instead") || x.starts_with("instead ") || matches!(prev, Effect::Noop) {
+        return false;
+    }
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let before = parts(prev);
+    let first_new_target = b.targets.len();
+    let mut trial = prev.clone();
+    if !crate::oracle_ext::apply_followup_ext(x, &mut trial, b) {
+        return false;
+    }
+    let after = parts(&trial);
+    if after.len() <= before.len() || !before.iter().zip(&after).all(|(p, q)| same(p, q)) {
+        return false;
+    }
+    targets_only_if_paid(&cond, b, first_new_target);
+    let added = Effect::seq(after[before.len()..].to_vec());
+    let mut v = before;
+    v.push(Effect::If {
+        cond,
+        then: Box::new(added),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if [condition], [continuation of the previous sentence]", priority: 200, apply: if_condition_continuation } }
+
+/// Whether a condition refers to nothing named earlier (no pronouns).
+fn pronoun_free(c: &str) -> bool {
+    !c.split(' ').any(|w| {
+        matches!(
+            w,
+            "it" | "its" | "it's" | "that" | "they" | "their" | "them" | "those" | "he" | "she"
+        )
+    })
+}
+
+/// Marks targets from `first_new` on as chosen only if the optional cost `cond` names was
+/// (or wasn't) paid (CR 601.2c).
+fn targets_only_if_paid(cond: &Condition, b: &mut Builder, first_new: usize) {
+    let cast_time = match cond {
+        Condition::CostPaid(_) => true,
+        Condition::Not(inner) => matches!(**inner, Condition::CostPaid(_)),
+        _ => false,
+    };
+    if cast_time {
+        for spec in &mut b.targets[first_new..] {
+            spec.condition = Some(cond.clone());
+        }
+    }
+}
+
+fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (x, c) = crate::oracle::phrases::end(l).rsplit_once(" if ")?;
+    if x.is_empty() || x.starts_with("if ") || !pronoun_free(c) || c.contains(',') {
+        return None;
+    }
+    let cond = crate::oracle::statics::parse_condition(c, b.ctx)?;
+    let first_new = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(x, b)?;
+    targets_only_if_paid(&cond, b, first_new);
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "[instruction] if [condition]", priority: 250, parse: trailing_if } }
+
+/// "that creature isn't legendary", "it's legendary": whether the object named earlier is
+/// legendary.
+fn legendary_condition(c: &str, b: &mut Builder) -> Option<Condition> {
+    let saved = b.targets.len();
+    let (sel, rest) = crate::oracle::effects::object_ref(c, b)?;
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let legendary = Filter::Supertype(crate::types::Supertype::Legendary);
+    match rest.trim() {
+        "isn't legendary" | "is not legendary" => Some(Condition::SelMatches(
+            sel,
+            Filter::Not(Box::new(legendary)),
+        )),
+        "is legendary" => Some(Condition::SelMatches(sel, legendary)),
+        _ => None,
+    }
+}
+
+/// "If the gift was promised and that creature isn't legendary, create a token that's a
+/// copy of that creature, except it's 1/1." (Coiling Rebirth): conditions joined by "and",
+/// some about an object named earlier.
+fn if_and_object_condition(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = crate::oracle::phrases::end(l).strip_prefix("if ")?;
+    let (c, x) = r.split_once(", ")?;
+    let (c1, c2) = c.split_once(" and ")?;
+    let first = crate::oracle::statics::parse_condition(c1, b.ctx)?;
+    let second = legendary_condition(c2, b)?;
+    let first_new = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(x, b)?;
+    targets_only_if_paid(&first, b, first_new);
+    Some(Effect::If {
+        cond: Condition::And(vec![first, second]),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if [condition] and [object] isn't legendary, [instruction]", priority: 250, parse: if_and_object_condition } }
