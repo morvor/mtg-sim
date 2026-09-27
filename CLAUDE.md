@@ -44,7 +44,14 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 | `card.rs` | `CardDef` from Scryfall, `CardDb`, `card("Name")` |
 | `testing.rs` | `TestGame` harness + `ScriptedAgent` |
 | `agents.rs` | `RandomAgent` |
-| Others | `attach.rs`, `battle.rs`, `copy.rs`, `dfc.rs`, `facedown.rs`, `saga.rs`, `tokens*.rs`, `library.rs`, `choices.rs`, `designations.rs`, `multiplayer.rs`, `mulligan.rs`, `variants.rs`, `text_change.rs`, `custom.rs` |
+| `kwa/` | **Keyword action registry** (CR 701): one file per action; see also `keyword_actions*.rs` |
+| `decision.rs`, `events.rs`, `types.rs`, `keywords.rs` | `Agent` trait and `Decision`/`Answer`; game events; basic vocabulary (ids, colors, types); the `Keyword` enum |
+| Rule topics | `zones.rs` (CR 400–408), `target_rules.rs` (115), `special_actions.rs` (116), `cost_rules.rs`, `spell_costs.rs`, `cost_choices.rs`, `next_spell.rs` (118, 601.2), `life_totals.rs` (119), `excess_damage.rs` (120), `draw_rules.rs` (121), `counter_rules.rs` (122), `stickers.rs` (123), `names.rs` (201), `mana_value.rs` (202.3), `game_terms.rs` (700), `piles.rs` (700.3), `apnap.rs` (101.4), `as_though.rs` (609.4), `prevention.rs` (609.7, 615), `until.rs` (610.3), `skip.rs` (614.10), `copy.rs`, `copy_rules.rs` (707), `shortcuts.rs` (732), `modal_history.rs` |
+| Keyword-action rules (CR 701) | `create_rules.rs`, `discard_rules.rs`, `exchange.rs`, `mill_rules.rs`, `reveal.rs`, `scry_rules.rs`, `search_rules.rs`, `shuffle_rules.rs`, `transform_rules.rs`, `behold.rs`; `dice.rs` (coins and dice, 705–706); `splice.rs` (702.47) |
+| Card and permanent kinds | `attach.rs`, `battle.rs` (310), `dfc.rs`, `flip.rs` (710), `adventure.rs` (715, 720), `classes.rs` (716), `attraction_cards.rs` (717), `cases.rs` (719), `rooms.rs` (709.5), `merge.rs` (730), `saga.rs` (714), `dungeons.rs` (309), `facedown.rs` (708), `tokens.rs`, `tokens_predefined.rs` (111, 114), `radiation.rs` (728), `monarch_initiative.rs` (725–726), `designations.rs`, `text_change.rs` |
+| Game flow | `start.rs`, `opening_hand.rs`, `mulligan.rs` (103), `game_end.rs` (104), `restart.rs` (727), `turn_structure.rs` (500–505), `untap_choice.rs`, `untap_limits.rs` (502.3), `end_turn.rs` (724), `player_control.rs` (723), `subgame.rs` (729), `library.rs`, `choices.rs` |
+| Formats and variants | `deck.rs` (100.2), `match_play.rs` (100.6), `ante.rs` (407), `multiplayer/` (800–811), `teams.rs` (805), `casual.rs` (900–905), `planechase.rs` (901), `commander_rules.rs` (903), `draft.rs` (905), `variants.rs` |
+| Extension points | `custom.rs` (named custom behaviors), `oracle_ext.rs` (pattern registry dispatch) |
 
 Key invariants:
 - Every zone change creates a new `ObjectId` (CR 400.7); the old object keeps its last
