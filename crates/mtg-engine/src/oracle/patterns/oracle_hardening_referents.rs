@@ -62,24 +62,109 @@ pub fn note_subject(sentence: &str, b: &mut Builder) {
     }
 }
 
+/// The cards the latest search found (see [`note_introduced`]).
+pub const INTRODUCED: Var = vars::USER + 1101;
+
+/// What "it" referred to before a text being parsed recorded found cards, so that it can
+/// be restored if nothing referred to them (see [`finish_introduced`]).
+#[derive(Default)]
+pub struct Introduced(Option<Sel>);
+
 /// After a sentence has been parsed: if it ended by bringing new objects into play —
 /// creating tokens ("Create a 1/1 white Ally creature token. Put a +1/+1 counter on it
 /// for each ...") or finding cards in a library ("Search your library for a Dinosaur
 /// creature card, put it onto the battlefield, then shuffle. It gains indestructible ...")
-/// — and "it" had no more specific antecedent than the source, later pronouns refer to
-/// those objects (the new objects the instruction recorded, CR 400.7).
-pub fn note_introduced(e: &Effect, b: &mut Builder) {
-    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it)) {
+/// — and "it" had no more specific antecedent than the source (or referred to objects an
+/// earlier sentence brought into play: the latest ones are the antecedent), later
+/// pronouns refer to those objects (the new objects the instruction recorded, CR 400.7).
+///
+/// Tokens are the objects the latest token-creating instruction created
+/// ([`vars::CREATED`], which only such instructions change). The cards a search found are
+/// recorded into [`INTRODUCED`] right after the search (inside the same optional or
+/// conditional part): the variable the search itself sets ("the objects affected by the
+/// most recent effect", [`vars::IT`]) is overwritten by later instructions ("..., then
+/// shuffle. You may behold an Elf. If you do, untap that land.": beholding affects the
+/// Elf).
+pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) {
+    let introduced = matches!(b.it, Sel::Var(v) if v == vars::CREATED || v == INTRODUCED);
+    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it) || introduced) {
         return;
     }
     let mut creates = 0;
     count_creates(e, &mut creates);
-    match last_instruction(e) {
+    let last = last_instruction_mut(e);
+    match last {
         Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
             b.it = Sel::Var(vars::CREATED);
         }
-        Effect::Search { .. } => b.it = Sel::Var(vars::IT),
+        Effect::Search { .. } => {
+            let search = std::mem::replace(last, Effect::Noop);
+            *last = Effect::Seq(vec![
+                search,
+                Effect::Store {
+                    var: INTRODUCED,
+                    sel: Sel::Var(vars::IT),
+                },
+            ]);
+            intro.0.get_or_insert_with(|| b.it.clone());
+            b.it = Sel::Var(INTRODUCED);
+        }
         _ => {}
+    }
+}
+
+/// At the end of a text: keeps the [`INTRODUCED`] stores if something refers to the
+/// found cards, or removes them and restores "it" otherwise (so the compiled
+/// ability is unchanged for texts without such a pronoun).
+pub fn finish_introduced(e: Effect, b: &mut Builder, intro: Introduced) -> Effect {
+    let Some(before) = intro.0 else {
+        return e;
+    };
+    let mentioned = serde_json::to_string(&e)
+        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
+    if mentioned {
+        return e;
+    }
+    abandon_introduced(b, Introduced(Some(before)));
+    strip_introduced(e)
+}
+
+/// A text failed to parse: "it" no longer refers to cards it found.
+pub fn abandon_introduced(b: &mut Builder, intro: Introduced) {
+    if let Some(before) = intro.0 {
+        if matches!(b.it, Sel::Var(v) if v == INTRODUCED) {
+            b.it = before;
+        }
+    }
+}
+
+fn is_introduced_store(e: &Effect) -> bool {
+    matches!(e, Effect::Store { var, .. } if *var == INTRODUCED)
+}
+
+/// Removes the [`INTRODUCED`] stores from an effect.
+fn strip_introduced(e: Effect) -> Effect {
+    match e {
+        Effect::Seq(v) => Effect::seq(
+            v.into_iter()
+                .filter(|x| !is_introduced_store(x))
+                .map(strip_introduced)
+                .collect(),
+        ),
+        Effect::If {
+            cond,
+            then,
+            otherwise,
+        } => Effect::If {
+            cond,
+            then: Box::new(strip_introduced(*then)),
+            otherwise: Box::new(strip_introduced(*otherwise)),
+        },
+        Effect::May { who, effect } => Effect::May {
+            who,
+            effect: Box::new(strip_introduced(*effect)),
+        },
+        e => e,
     }
 }
 
@@ -107,14 +192,24 @@ pub fn note_player_mention(text: &str, b: &mut Builder) {
 }
 
 /// The instruction an effect ends with (looking into sequences and optional parts).
-fn last_instruction(e: &Effect) -> &Effect {
+fn last_instruction_mut(e: &mut Effect) -> &mut Effect {
+    let descend = match &*e {
+        Effect::Seq(v) => !v.is_empty(),
+        Effect::May { .. } => true,
+        Effect::If { otherwise, .. } => matches!(**otherwise, Effect::Noop),
+        _ => false,
+    };
+    if !descend {
+        return e;
+    }
     match e {
-        Effect::Seq(v) => v.last().map_or(e, last_instruction),
-        Effect::May { effect, .. } => last_instruction(effect),
-        Effect::If {
-            then, otherwise, ..
-        } if matches!(**otherwise, Effect::Noop) => last_instruction(then),
-        _ => e,
+        Effect::Seq(v) => {
+            let n = v.len();
+            last_instruction_mut(&mut v[n - 1])
+        }
+        Effect::May { effect, .. } => last_instruction_mut(effect),
+        Effect::If { then, .. } => last_instruction_mut(then),
+        other => other,
     }
 }
 

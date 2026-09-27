@@ -288,6 +288,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let outer_group = b.group.take();
+    let mut introduced = super::patterns::oracle_hardening_referents::Introduced::default();
     let mut effects = Vec::new();
     for s in split_sentences(t) {
         // "~ deals 1 damage to each creature. If it was kicked, it deals 2 damage to each
@@ -302,17 +303,23 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             }
         }
         let Some(mut e) = parse_sentence(&s, b) else {
+            super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
             groups::abandon(b, outer_group);
             return None;
         };
         // "Untap all creatures you control. They gain haste until end of turn."
         effects.extend(groups::note(&mut e, b));
-        super::patterns::oracle_hardening_referents::note_introduced(&e, b);
+        super::patterns::oracle_hardening_referents::note_introduced(&mut e, b, &mut introduced);
         super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
         effects.push(e);
         b.sentences += 1;
     }
-    Some(groups::finish(Effect::seq(effects), b, outer_group))
+    let e = super::patterns::oracle_hardening_referents::finish_introduced(
+        Effect::seq(effects),
+        b,
+        introduced,
+    );
+    Some(groups::finish(e, b, outer_group))
 }
 
 /// Parses one sentence.
@@ -479,6 +486,10 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     ] {
         if let Some(rest) = s.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
+                // "This token" is always the source (normally normalized to "~").
+                if p == "this token" {
+                    return Some((Sel::This, rest.to_string()));
+                }
                 // Not a group an earlier instruction affected: that's "they".
                 let it = super::patterns::pronoun_groups::singular_it(b);
                 // No antecedent (a spell's first mention), or "that creature" meaning the
