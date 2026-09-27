@@ -36,7 +36,11 @@ fn both_halves_of_a_fused_spell_can_target_the_same_creature() {
     t.lands(P0, "Island", 1);
     t.lands(P0, "Wastes", 3);
     let card = t.hand(P0, "Protect // Serve");
-    t.cast(P0, card).method(FUSED).target(wurm).target(wurm).go();
+    t.cast(P0, card)
+        .method(FUSED)
+        .target(wurm)
+        .target(wurm)
+        .go();
     t.resolve_all();
     // 6/4 + 2/4 - 6/0.
     assert_eq!(t.pt(wurm), (2, 8));
@@ -44,7 +48,7 @@ fn both_halves_of_a_fused_spell_can_target_the_same_creature() {
 
 #[test]
 fn a_split_card_has_the_chosen_name_if_either_half_has_it() {
-    cr!("709.4a", "702.102c");
+    cr!("709.4a", "709.4d");
     ruling!(
         "Wear // Tear",
         "If a player names a card, the player may name either half of a split card, but not both. A split card has the chosen name if one of its two names matches the chosen name."
@@ -186,7 +190,12 @@ fn a_fused_spell_with_one_illegal_target_still_resolves_for_the_other() {
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Wastes", 4);
     let card = t.hand(P0, "Armed // Dangerous");
-    let spell = t.cast(P0, card).method(FUSED).target(bears).target(giant).go();
+    let spell = t
+        .cast(P0, card)
+        .method(FUSED)
+        .target(bears)
+        .target(giant)
+        .go();
     destroy(&mut t, bears);
     t.resolve_all();
     assert!(resolved_spell(&t, spell));
@@ -206,7 +215,12 @@ fn a_fused_spell_with_one_illegal_target_still_resolves_for_the_other() {
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Wastes", 4);
     let card = t.hand(P0, "Armed // Dangerous");
-    let spell = t.cast(P0, card).method(FUSED).target(bears).target(giant).go();
+    let spell = t
+        .cast(P0, card)
+        .method(FUSED)
+        .target(bears)
+        .target(giant)
+        .go();
     destroy(&mut t, bears);
     destroy(&mut t, giant);
     t.resolve_all();
@@ -221,7 +235,7 @@ fn resolved_spell(t: &TestGame, spell: ObjectId) -> bool {
 
 #[test]
 fn a_fuse_card_cast_from_outside_the_hand_is_cast_as_one_half() {
-    cr!("702.102a");
+    cr!("702.102a", "702.102c");
     ruling!(
         "Alive // Well",
         "If you’re casting a split card with fuse from any zone other than your hand, you can’t cast both halves. You’ll only be able to cast one half or the other."
@@ -250,6 +264,8 @@ fn a_fuse_card_cast_from_outside_the_hand_is_cast_as_one_half() {
     let card = t.hand(P0, "Alive // Well");
     assert!(can_cast(&mut t, P0, card, FUSED));
     t.cast(P0, card).method(FUSED).go();
+    // The total cost includes both halves' mana costs: {3}{G} + {W}, all five lands.
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
     t.resolve_all();
     assert_eq!(with_subtype(&t, P0, "Centaur").len(), 1);
     assert_eq!(t.life(P0), 22);

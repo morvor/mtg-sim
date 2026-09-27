@@ -116,9 +116,11 @@ fn the_color_is_chosen_as_the_ability_resolves() {
     assert!(ok);
     assert_eq!(t.life(P1), 14);
     let color_asked = |t: &TestGame, from: usize| {
-        count_asked_where(t, from, |d| {
-            matches!(d, Decision::ChooseOption { prompt, .. } if prompt == "Choose a color")
-        })
+        count_asked_where(
+            t,
+            from,
+            |d| matches!(d, Decision::ChooseOption { prompt, .. } if prompt == "Choose a color"),
+        )
     };
     // The trigger is on the stack and every player gets priority: no color yet.
     assert_eq!(color_asked(&t, from), 0);
@@ -606,6 +608,44 @@ fn the_token_copies_the_creature_as_it_last_existed_on_the_battlefield() {
 }
 
 #[test]
+fn a_token_copy_of_that_card_copies_the_card_not_the_creature_it_was() {
+    cr!("707.2", "608.2h", "400.7");
+    ruling!(
+        "Myrkul, Lord of Bones",
+        "The last ability creates a copy of the card as it last existed in the graveyard, not of the creature as it last existed on the battlefield."
+    );
+    // Myrkul's last ability without its exceptions: "Whenever another nontoken creature
+    // you control dies, you may exile it. If you do, create a token that's a copy of that
+    // card." A Clone copying Hill Giant dies: the card is Clone, so the token is a Clone
+    // (which enters as a copy of a creature of its own choosing: Grizzly Bears).
+    let bones = custom_card(
+        "Myrkul's Echo",
+        "Legendary Creature — God",
+        "{2}{W}{B}",
+        Some((5, 5)),
+        "Whenever another nontoken creature you control dies, you may exile it. If you do, create a token that's a copy of that card.",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, bones, Zone::Battlefield);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let clone = t.enter(P0, "Clone");
+    assert_eq!(t.obj_now(clone).chars.name, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    destroy(&mut t, clone);
+    t.resolve_all();
+    assert!(t.in_exile("Clone"));
+    let copies = tokens(&t, P0);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(t.obj(copies[0]).chars.name, "Grizzly Bears");
+    assert_eq!(t.pt(copies[0]), (2, 2));
+}
+
+#[test]
 fn a_creature_spell_that_gains_flying_only_on_the_battlefield_doesnt_cost_less() {
     cr!("601.2f", "702.9a");
     ruling!(
@@ -664,7 +704,11 @@ fn a_wizard_spell_has_the_creature_type_wizard() {
         let mut t = TestGame::new(2);
         t.battlefield(P0, name);
         // Prodigal Sorcerer is a Human Wizard Sorcerer; Lightning Bolt is an instant.
-        assert_eq!(triggers_from_casting(&mut t, "Prodigal Sorcerer"), 1, "{name}");
+        assert_eq!(
+            triggers_from_casting(&mut t, "Prodigal Sorcerer"),
+            1,
+            "{name}"
+        );
         assert_eq!(triggers_from_casting(&mut t, "Lightning Bolt"), 1, "{name}");
         // Relic Amulet (an artifact) and Grizzly Bears (a Bear) aren't Wizard spells.
         assert_eq!(triggers_from_casting(&mut t, "Relic Amulet"), 0, "{name}");
@@ -764,11 +808,7 @@ fn an_aura_spell_has_a_target_and_triggers_a_spell_with_targets_ability() {
     assert_eq!(t.hand_size(P0), hand + 1);
     // Fire with two targets: two cards.
     let fire = t.hand(P0, "Fire // Ice");
-    t.answer(
-        P0,
-        DecisionKind::Divide,
-        Answer::Numbers(vec![1, 1]),
-    );
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1]));
     t.cast(P0, fire)
         .method(CastMethod::Half(0))
         .targets(&[Entity::Player(P1), Entity::Object(bears)])

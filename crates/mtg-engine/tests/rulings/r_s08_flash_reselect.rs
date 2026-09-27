@@ -148,7 +148,7 @@ fn a_trigger_targeting_the_old_defending_players_creature_loses_its_target() {
 
 #[test]
 fn the_trigger_needs_the_declare_attackers_step() {
-    cr!("603.2", "508.7");
+    cr!("603.2");
     // Entering at another time, Portal Mage's ability doesn't trigger.
     let mut t = TestGame::new(2);
     give_mana_for(&mut t, P1, "Portal Mage");

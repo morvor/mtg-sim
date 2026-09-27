@@ -153,11 +153,11 @@ fn token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
         .or_else(|| r.strip_prefix("tokens that are copies of "))?;
     let (of, rest) = if let Some(rest) = r.strip_prefix('~') {
         (Sel::This, rest)
-    } else if let Some(rest) = ["it", "that creature", "that permanent", "that card"]
+    } else if let Some((p, rest)) = ["it", "that creature", "that permanent", "that card"]
         .iter()
-        .find_map(|p| r.strip_prefix(p))
+        .find_map(|p| r.strip_prefix(p).map(|rest| (*p, rest)))
     {
-        (b.it.clone(), rest)
+        (crate::copy_rules::copied_referent(p, &b.it), rest)
     } else {
         let (spec, rest) = parse_target(r)?;
         let text = r[..r.len() - rest.len()].trim().to_string();

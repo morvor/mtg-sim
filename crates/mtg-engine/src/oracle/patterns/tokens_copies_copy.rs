@@ -227,7 +227,8 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
-                return Some((b.it.clone(), rest.to_string()));
+                let of = crate::copy_rules::copied_referent(p, &b.it);
+                return Some((of, rest.to_string()));
             }
         }
     }

@@ -290,6 +290,18 @@ pub fn double_faced_copy_face(g: &Game, src: ObjectId) -> Option<FaceState> {
         .then_some(face)
 }
 
+/// What "a copy of [phrase]" refers to when the phrase names the object the ability
+/// calls "it" (`it`). "That card" is the card that permanent became in its new zone, so
+/// it's copied as the card (Myrkul, Lord of Bones: "create a token that's a copy of that
+/// card" copies the card as it last existed in the graveyard; CR 400.7, 608.2h); "it" and
+/// "that creature" keep referring to the permanent (see [`token_copy_sources`]).
+pub fn copied_referent(phrase: &str, it: &Sel) -> Sel {
+    match (phrase, it) {
+        ("that card", Sel::TriggerLki) => Sel::TriggerObject,
+        _ => it.clone(),
+    }
+}
+
 /// The objects "create a token that's a copy of [it / that creature / this creature]"
 /// copies. A permanent the ability refers to that has since left the battlefield is copied
 /// as it last existed there, from its last known information (CR 608.2h, 707.2) — not as
