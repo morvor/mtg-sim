@@ -108,7 +108,20 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
         Effect::KeywordAction { .. } | Effect::KeywordActionEx(_) => {
             crate::kwa::can_choose(g, e, ctx).unwrap_or(true)
         }
-        // Effects keyword implementations define (e.g. exiling craft materials).
+        // Moving N objects the player chooses ("put two cards your opponents own from exile
+        // into their owners' graveyards") needs N to choose from (CR 118.3 for a cost; a
+        // processor's "you may ..." can't be done with fewer).
+        Effect::Move {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // Named effects a keyword implements (e.g. exiling craft materials, CR 702.167a).
         Effect::Custom(name) => crate::kw::custom_effect_possible(g, name, ctx).unwrap_or(true),
         _ => true,
     }

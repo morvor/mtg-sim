@@ -13,7 +13,9 @@
 //!   permanent itself is exiled); the cost can be paid only if they can be.
 //! * The exiled cards used to craft a permanent are linked to the permanent the ability
 //!   returns (its `linked` objects under [`CRAFT_LINK`]): its abilities refer to them as
-//!   "the exiled cards used to craft it" ([`USED_TO_CRAFT`], CR 702.167c).
+//!   "the exiled cards used to craft it" ([`USED_TO_CRAFT`], CR 702.167c), as long as they
+//!   remain in exile and the permanent remains on the battlefield ([`used_to_craft`]).
+//!   Tokens exiled as materials cease to exist, so they're never among them.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -38,11 +40,34 @@ pub const RETURN_TRANSFORMED: &str = "craft:return this card transformed";
 /// `Filter::Custom`: an exiled card used to craft the source (CR 702.167c).
 pub const USED_TO_CRAFT: &str = "craft:exiled card used to craft it";
 /// "used to craft it": cards in exile that were exiled to craft the source (CR 702.167c).
-pub fn used_to_craft() -> Filter {
+pub fn used_to_craft_filter() -> Filter {
     Filter::and(vec![
         Filter::InZone(ZoneKind::Exile),
         Filter::Custom(USED_TO_CRAFT.into()),
     ])
+}
+
+/// "The exiled card(s) used to craft it": `Sel::All` of [`used_to_craft_filter`].
+pub fn used_to_craft_sel() -> Sel {
+    Sel::All(used_to_craft_filter())
+}
+
+/// Whether `id` is an exiled card used to craft `permanent` (CR 702.167c): a card the
+/// craft cost exiled, still in exile, while the permanent remains on the battlefield.
+pub fn used_to_craft(g: &Game, permanent: Option<ObjectId>, id: ObjectId) -> bool {
+    let Some(src) = permanent else {
+        return false;
+    };
+    let s = g.obj(src);
+    if !g.is_live(src) || s.zone != Zone::Battlefield {
+        return false;
+    }
+    let o = g.obj(id);
+    // One that left exile is a new object, even if it's exiled again (CR 400.7).
+    s.linked.get(&CRAFT_LINK).is_some_and(|v| v.contains(&id))
+        && g.is_live(id)
+        && o.zone == Zone::Exile
+        && o.kind == ObjKind::Card
 }
 
 /// The link under which a crafted permanent (and, until it returns, the permanent being
@@ -360,7 +385,7 @@ impl KeywordRules for Craft {
             let chosen = g.ask_objects(
                 p,
                 Some(src),
-                &format!("Craft: exile materials ({desc})"),
+                &format!("Craft: exile materials to craft it ({desc})"),
                 cands,
                 m.min,
                 max,
@@ -448,18 +473,7 @@ impl KeywordRules for Craft {
         if name != USED_TO_CRAFT {
             return None;
         }
-        let Some(src) = ctx.source else {
-            return Some(false);
-        };
-        // The cards exiled by the cost, as long as they remain in exile: one that left
-        // exile is a new object, even if it's exiled again (CR 400.7).
-        Some(
-            g.is_in_zone(id, Zone::Exile)
-                && g.obj(src)
-                    .linked
-                    .get(&CRAFT_LINK)
-                    .is_some_and(|v| v.contains(&id)),
-        )
+        Some(used_to_craft(g, ctx.source, id))
     }
 }
 

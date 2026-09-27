@@ -285,3 +285,30 @@ fn copies_made_by_skitterbeam_battalion_have_its_prototyped_characteristics() {
         assert!(t.obj(id).chars.colors.is_colorless());
     }
 }
+
+#[test]
+fn a_card_discovered_may_be_cast_prototyped() {
+    cr!("702.160a", "701.57a", "118.9");
+    ruling!(
+        "Goring Warplow",
+        "an alternative cost may be applied to a spell cast this way"
+    );
+    // Trumpeting Carnosaur: "When this creature enters, discover 5." Rootwire Amalgam ({5}
+    // 5/5; prototype {1}{G} — 2/3) is found; casting it without paying its mana cost, P0
+    // chooses to cast it prototyped.
+    for (prototyped, pt) in [(false, (5, 5)), (true, (2, 3))] {
+        let mut t = TestGame::new(2);
+        t.library_top(P0, "Rootwire Amalgam");
+        t.answer_yes(P0, true);
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            Answer::Index(usize::from(prototyped)),
+        );
+        t.enter(P0, "Trumpeting Carnosaur");
+        t.resolve_all();
+        let r = named(&t, P0, "Rootwire Amalgam");
+        assert_eq!(r.len(), 1, "prototyped: {prototyped}");
+        assert_eq!(t.pt(r[0]), pt, "prototyped: {prototyped}");
+    }
+}

@@ -1,11 +1,13 @@
-//! CR 702.161 Living metal: "During your turn, this permanent is an artifact creature in
-//! addition to its other types." (CR 702.161a). A type-changing effect (layer 4) of the
-//! permanent's own static ability, applying only during its controller's turn.
+//! CR 702.161 Living Metal: "Living metal" means "During your turn, this permanent is an
+//! artifact creature in addition to its other types" (CR 702.161a). It's a static ability
+//! of the permanent (layer 4, CR 613.1d): while it applies, the Vehicle is a creature with
+//! its printed power and toughness, and effects that apply only to noncreature permanents
+//! don't apply to it (the dependency is handled by the layer system, CR 613.8).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
-use crate::types::*;
+use crate::types::CardType;
 
 pub struct LivingMetal;
 
@@ -25,7 +27,7 @@ impl KeywordRules for LivingMetal {
         s.condition = Some(Condition::YourTurn);
         Some(vec![AbilityDef::new(
             AbilityKind::Static(s),
-            KeywordKind::LivingMetal.name(),
+            "During your turn, this permanent is an artifact creature in addition to its other types.",
         )])
     }
 }

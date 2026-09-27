@@ -209,14 +209,19 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
         }
         return None;
     }
+    // "Put N [kind] counters on ~" (other "put" costs are left to the registered
+    // patterns, e.g. a processor's "put a card an opponent owns from exile into that
+    // player's graveyard").
     if let Some(r) = strip(p, "put") {
-        let (n, r2) = parse_number(r)?;
-        let (kind, r3) = counter_kind(r2)?;
-        let r3 = strip(r3, "counters").or_else(|| strip(r3, "counter"))?;
-        if end(r3) == "on ~" {
-            return Some(CostPart::AddCounters { kind, count: n });
+        let add_counters = || {
+            let (n, r2) = parse_number(r)?;
+            let (kind, r3) = counter_kind(r2)?;
+            let r3 = strip(r3, "counters").or_else(|| strip(r3, "counter"))?;
+            (end(r3) == "on ~").then_some(CostPart::AddCounters { kind, count: n })
+        };
+        if let Some(c) = add_counters() {
+            return Some(c);
         }
-        return None;
     }
     if let Some(r) = strip(p, "tap") {
         let (n, r2) = parse_number(r).unwrap_or((Value::Const(1), r));

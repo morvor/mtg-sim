@@ -524,6 +524,10 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
 /// Value phrases: "the number of creatures you control", "its power", "X", "twice X".
 pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
+    // CR 702.167c: "the total power of the exiled cards used to craft it".
+    if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
+        return Some(v);
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((
@@ -617,6 +621,19 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             };
             return Some((Value::ColorsAmong(f), rest.to_string()));
         }
+        // Converge (CR 207.2c): "the number of colors of mana spent to cast ~" (also "for
+        // each color of mana spent to cast ~"). A copy wasn't cast: no mana was spent.
+        if let Some(rest) = r
+            .strip_prefix("colors of mana spent to cast ~")
+            .or_else(|| r.strip_prefix("color of mana spent to cast ~"))
+        {
+            return Some((Value::ColorsSpent, rest.to_string()));
+        }
+        // Votes (CR 701.38): "the number of [word] votes" (also "for each [word] vote"),
+        // counted by the vote earlier in the same spell or ability.
+        if let Some(v) = crate::oracle::patterns::a701_choices_votes::word_votes(r) {
+            return Some(v);
+        }
         // "the number of differently named lands you control" (CR 201.2b).
         if let Some(r) = r.strip_prefix("differently named ") {
             let (f, _, rest) = parse_object_phrase(r)?;
@@ -673,6 +690,7 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(rest) = s
         .strip_prefix("the milled card's mana value")
         .or_else(|| s.strip_prefix("the milled cards' total mana value"))
+        .or_else(|| s.strip_prefix("the total mana value of cards milled this way"))
     {
         return Some((
             Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),

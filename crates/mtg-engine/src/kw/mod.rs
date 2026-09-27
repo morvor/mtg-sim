@@ -274,10 +274,9 @@ pub trait KeywordRules: Sync + Send {
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
         false
     }
-    /// Whether the player `ctx.controller` could perform a named [`Effect::Custom`] this
-    /// implementation defines, when it's optional or part of a cost (CR 118.3), e.g.
-    /// exiling a craft ability's materials (CR 702.167a). `None` if it isn't one of its
-    /// effects.
+    /// Whether the player (`ctx.controller`) could perform a named [`Effect::Custom`] this
+    /// implementation defines when it's a cost or an optional action (CR 118.3), e.g.
+    /// exiling a craft ability's materials: `None` if it isn't one of its effects.
     fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
     }

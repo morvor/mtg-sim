@@ -182,6 +182,51 @@ pub fn cast_during_resolution(
     g.cast_with_option(p, card, opt)
 }
 
+/// The ways `card` could be cast without paying its mana cost as a spell whose mana value
+/// satisfies `ok` (X is 0, CR 107.3b): one per face or half it could be cast as, with the
+/// name it would have. For "cast it without paying its mana cost if the resulting spell's
+/// mana value is N or less" (cascade, CR 702.85a; discover, CR 701.57a). Not a face a
+/// keyword's rule prohibits `p` from casting from where the card is (e.g. aftermath,
+/// CR 702.127a). Ways to cast it that aren't alternative costs are offered too, e.g. as a
+/// prototyped spell (CR 718.3), named with the way ("Blitz Automaton (prototype)").
+pub fn free_cast_options(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    ok: impl Fn(u32) -> bool,
+) -> Vec<(smol_str::SmolStr, CastOption)> {
+    let mut opts = Vec::new();
+    for face in castable_faces(g, card)
+        .into_iter()
+        .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
+    {
+        let mut opt = CastOption::normal(face);
+        opt.method = CastMethod::Free;
+        opts.push(opt);
+        if face == FaceState::Front {
+            opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
+        }
+    }
+    opts.into_iter()
+        .filter_map(|mut opt| {
+            opt.alt_cost = Some(Cost::free());
+            opt.any_time = true;
+            let chars = g.option_characteristics(card, &opt);
+            let mv = chars
+                .mana_cost
+                .as_ref()
+                .map_or(0, |m| m.mana_value_with_x(0));
+            let name = match opt.tag {
+                Some(way) if opt.method != CastMethod::Free => {
+                    smol_str::SmolStr::new(format!("{} ({way})", chars.name))
+                }
+                _ => chars.name.clone(),
+            };
+            (!chars.is_land() && ok(mv)).then_some((name, opt))
+        })
+        .collect()
+}
+
 impl Game {
     // ------------------------------------------------------------------
     // Legal actions
@@ -1944,7 +1989,7 @@ impl Game {
         let ctx = Ctx::new(src, p);
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, &ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), &ctx) {
                 return false;
             }
         }
@@ -2007,11 +2052,15 @@ impl Game {
         }
     }
 
+    /// Whether `part` of a cost could be paid. `taps_src`: the cost also has {T}, so the
+    /// source will be tapped and can't be one of the untapped permanents tapped for
+    /// "Tap an untapped [permanent] you control" (CR 118.3).
     fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
         src: Option<ObjectId>,
+        taps_src: bool,
         ctx: &Ctx,
     ) -> bool {
         let so = src.map(|s| self.obj(s));
@@ -2104,18 +2153,14 @@ impl Game {
                 total >= n
             }
             CostPart::AddCounters { .. } => so.is_some(),
+            // Summoning sickness doesn't matter: this isn't {T} (CR 302.6).
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p
-                            && !ob.tapped
-                            && !(ob.is_creature()
-                                && ob.summoning_sick
-                                && !ob.has_keyword(KeywordKind::Haste)
-                                && Some(*o) == src)
+                        ob.controller == p && !ob.tapped && !(taps_src && Some(*o) == src)
                     })
                     .count()
                     >= n
@@ -2253,7 +2298,7 @@ impl Game {
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), ctx) {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
