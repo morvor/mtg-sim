@@ -13,12 +13,11 @@ const CONDITION: &str = "if ~ is in the command zone or on the battlefield, ";
 
 fn eminence(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
-    let lower = t.to_lowercase();
-    if !(lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at "))
-    {
+    if !(t.starts_with("When ") || t.starts_with("Whenever ") || t.starts_with("At ")) {
         return None;
     }
-    let i = lower.find(CONDITION)?;
+    // The clause follows the trigger condition's comma, in lowercase.
+    let i = t.find(CONDITION)?;
     // The rest of the ability without the clause about where ~ is.
     let rest = format!("{}{}", &t[..i], &t[i + CONDITION.len()..]);
     let mut ability = crate::oracle::triggers::parse_triggered(&rest, ctx)?;
