@@ -906,13 +906,19 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Player(PlayerFilter::Any), r)
     } else if let Some(r) = strip(s, "opponents").or_else(|| strip(s, "opponent")) {
         (TargetKind::Player(PlayerFilter::Opponent), r)
-    } else if let Some(r) =
-        strip(s, "spell or ability").or_else(|| strip(s, "activated or triggered ability"))
+    } else if let Some(r) = strip(s, "spell or ability")
+        .or_else(|| strip(s, "spell, activated ability, or triggered ability"))
     {
         (TargetKind::SpellOrAbility(Filter::Any), r)
-    } else if let Some(r) = strip(s, "activated ability").or_else(|| strip(s, "triggered ability"))
-    {
+    } else if let Some(r) = strip(s, "activated or triggered ability") {
+        // An ability on the stack, not a spell (Stifle).
         (TargetKind::Ability(Filter::Any), r)
+    } else if let Some(r) = strip(s, "activated ability") {
+        let f = Filter::Custom(crate::game_terms::ACTIVATED_ABILITY.into());
+        (TargetKind::Ability(f), r)
+    } else if let Some(r) = strip(s, "triggered ability") {
+        let f = Filter::Custom(crate::game_terms::TRIGGERED_ABILITY.into());
+        (TargetKind::Ability(f), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
         // "target planeswalker that was activated this turn or tapped creature": an
