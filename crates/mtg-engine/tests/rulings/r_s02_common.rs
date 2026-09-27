@@ -20,6 +20,16 @@ pub fn can_cast(t: &mut TestGame, p: PlayerId, card: ObjectId, method: CastMetho
         .any(|a| matches!(a, Action::Cast { card: c, method: m } if *c == card && *m == method))
 }
 
+/// Whether `p` could play the land `card` now.
+pub fn can_play_land(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.recompute();
+    let card = t.g.current(card);
+    t.g.legal_actions(p)
+        .iter()
+        .any(|a| matches!(a, Action::PlayLand { card: c } if *c == card))
+}
+
 /// Whether `id` could be declared as an attacker now.
 pub fn can_attack(t: &mut TestGame, id: ObjectId) -> bool {
     t.g.recompute();

@@ -7,6 +7,8 @@
 //! - "~ deals 2 damage to any target. If ~ was kicked, it deals 4 damage instead." (only
 //!   the amount changes; the recipients stay the same)
 //! - "Draw a card. If you control a Wizard, draw two cards instead."
+//! - "Exile the top two cards of your library. If ~'s additional cost was paid, exile the
+//!   top three cards instead." (of the same library)
 //!
 //! Only a previous sentence that is a single effect is replaced, and the replacement
 //! can't introduce targets of its own.
@@ -48,6 +50,29 @@ fn damage_amount(x: &str, prev: &Effect) -> Option<Effect> {
     })
 }
 
+/// "exile the top N cards" of the library the previous effect exiled the top cards of
+/// ("Exile the top two cards of your library. If ..., exile the top three cards
+/// instead.").
+fn top_cards_amount(x: &str, prev: &Effect) -> Option<Effect> {
+    let Effect::Exile {
+        what: Sel::TopOfLibrary(who, _),
+        face_down,
+        link,
+    } = prev
+    else {
+        return None;
+    };
+    let (n, r) = parse_number(x.strip_prefix("exile the top ")?)?;
+    if !matches!(r.trim(), "cards" | "card") {
+        return None;
+    }
+    Some(Effect::Exile {
+        what: Sel::TopOfLibrary(who.clone(), n),
+        face_down: *face_down,
+        link: *link,
+    })
+}
+
 /// Whether an effect refers to the objects the previous instruction produced (`vars::IT`).
 fn mentions_it(e: &Effect) -> bool {
     serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::IT)))
@@ -74,7 +99,7 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Some(e) if b.targets.len() == targets => Some(e),
         _ => {
             b.targets.truncate(targets);
-            damage_amount(x, prev)
+            damage_amount(x, prev).or_else(|| top_cards_amount(x, prev))
         }
     };
     let Some(e) = replacement else {

@@ -2,11 +2,107 @@
 //! creature you control."
 
 use crate::r_s01_common::*;
+use crate::r_s02_common::*;
 use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::game::Game;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::counters;
 use mtg_engine::*;
+
+/// P0 casts Burning Curiosity ("As an additional cost to cast this spell, you may blight
+/// 1. Exile the top two cards of your library. If this spell's additional cost was paid,
+/// exile the top three cards instead. Until the end of your next turn, you may play those
+/// cards."), choosing whether to blight, and resolves it.
+fn burning_curiosity(t: &mut TestGame, blight: bool) {
+    supported("Burning Curiosity");
+    t.lands(P0, "Mountain", 3);
+    let c = t.hand(P0, "Burning Curiosity");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(blight));
+    t.cast(P0, c).go();
+    t.resolve_all();
+}
+
+#[test]
+fn an_optional_blight_cost_exiles_an_extra_card() {
+    cr!("701.68a", "701.68b", "118.8a", "601.2f");
+    // Paid: three cards, and the Bears get a -1/-1 counter.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let top = stack_library(&mut t, P0, &["Forest", "Island", "Swamp", "Plains"]);
+    burning_curiosity(&mut t, true);
+    assert_eq!(t.counters(bears, counters::MINUS1), 1);
+    for (i, c) in top.iter().enumerate() {
+        assert_eq!(t.zone(*c) == Zone::Exile, i < 3, "card {i}");
+    }
+    // Not paid: two cards.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let top = stack_library(&mut t, P0, &["Forest", "Island", "Swamp", "Plains"]);
+    burning_curiosity(&mut t, false);
+    assert_eq!(t.counters(bears, counters::MINUS1), 0);
+    for (i, c) in top.iter().enumerate() {
+        assert_eq!(t.zone(*c) == Zone::Exile, i < 2, "card {i}");
+    }
+    // Without a creature, P0 can't choose to blight: two cards.
+    let mut t = TestGame::new(2);
+    let top = stack_library(&mut t, P0, &["Forest", "Island", "Swamp", "Plains"]);
+    burning_curiosity(&mut t, true);
+    for (i, c) in top.iter().enumerate() {
+        assert_eq!(t.zone(*c) == Zone::Exile, i < 2, "card {i}");
+    }
+}
+
+#[test]
+fn cards_exiled_by_burning_curiosity_are_played_following_the_normal_rules() {
+    cr!("305.1", "305.2", "302.1", "601.2f", "601.3");
+    ruling!(
+        "Burning Curiosity",
+        "You pay all costs and follow all timing rules for cards played this way. For example, if an exiled card is a land card, you may play it only during your main phase while the stack is empty."
+    );
+    let mut t = TestGame::new(2);
+    let top = stack_library(&mut t, P0, &["Forest", "Grizzly Bears", "Lightning Bolt"]);
+    let (forest, bears, bolt) = (top[0], top[1], top[2]);
+    t.battlefield(P0, "Hill Giant");
+    burning_curiosity(&mut t, true);
+    for c in [forest, bears, bolt] {
+        assert_eq!(t.zone(c), Zone::Exile);
+    }
+    // In P0's main phase with an empty stack, the land can be played and the Bears cast
+    // (for their mana cost); without mana they can't be cast.
+    assert!(can_play_land(&mut t, P0, forest));
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 1);
+    assert!(can_cast(&mut t, P0, bears, CastMethod::Normal));
+    // While a spell is on the stack: only the instant.
+    let shock = t.hand(P1, "Shock");
+    t.lands(P1, "Mountain", 1);
+    t.cast(P1, shock).target(P1).go();
+    assert!(!can_play_land(&mut t, P0, forest));
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    t.resolve_all();
+    // In combat: no land, no creature.
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!can_play_land(&mut t, P0, forest));
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    // Back in a main phase, having already played a land this turn: not the Forest.
+    t.set_step(P0, Step::PostcombatMain);
+    assert!(can_play_land(&mut t, P0, forest));
+    let other = t.hand(P0, "Island");
+    t.play_land(P0, other).unwrap();
+    assert!(!can_play_land(&mut t, P0, forest));
+    // On P1's turn, P0 can't play the land (it's not P0's main phase) but can cast the
+    // instant.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!can_play_land(&mut t, P0, forest));
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal));
+}
 
 #[test]
 fn blighting_a_creature_with_plus_one_counters_annihilates_pairs_of_counters() {
