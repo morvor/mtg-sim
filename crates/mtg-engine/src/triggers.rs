@@ -1912,6 +1912,17 @@ impl Game {
         ctx.event = Some(t.event.clone());
         ctx.ability_uid = t.ability.uid;
         ctx.link = t.ability.link;
+        // CR 107.3m, 702.37f, 702.168e: an enters (or "turned face up") ability uses the X
+        // of its spell (or of the cost paid to turn it face up), also for its targets ("up
+        // to X target creatures").
+        let etb_cast = if t.saved.is_none() {
+            crate::object::etb_trigger_cast_info(self, &t)
+        } else {
+            None
+        };
+        if let Some(x) = etb_cast.as_ref().and_then(|ci| ci.x) {
+            ctx.x = x;
+        }
         let id = crate::stack::create_stack_ability(
             self,
             t.source,
@@ -1937,7 +1948,7 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
-        } else if let Some(ci) = crate::object::etb_trigger_cast_info(self, &t) {
+        } else if let Some(ci) = etb_cast {
             // CR 107.3m: the permanent's enters ability uses its spell's value of X.
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = ci.x;
