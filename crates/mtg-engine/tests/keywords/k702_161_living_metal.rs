@@ -71,3 +71,29 @@ fn effects_on_noncreature_permanents_apply_only_during_opponents_turns() {
     t.set_step(P1, Step::Upkeep);
     assert!(has_kw(&t, v, KeywordKind::Hexproof));
 }
+
+#[test]
+fn optimus_prime_returns_converted_with_living_metal() {
+    cr!("712.14a", "702.161a");
+    ruling!(
+        "Optimus Prime, Hero // Optimus Prime, Autobot Leader",
+        "The mana value of a converted permanent on the battlefield is equal to the mana value of the card's front face"
+    );
+    // Optimus Prime, Hero: "When Optimus Prime dies, return it to the battlefield
+    // converted under its owner's control."
+    let mut t = TestGame::new(2);
+    let hero = t.battlefield(P0, "Optimus Prime, Hero // Optimus Prime, Autobot Leader");
+    crate::common_k702_052_066::destroy(&mut t, hero);
+    t.settle();
+    t.resolve_all();
+    let leader = named(&t, P0, "Optimus Prime, Autobot Leader");
+    assert_eq!(leader.len(), 1, "it returned with its back face up");
+    let v = leader[0];
+    assert!(has_kw(&t, v, KeywordKind::LivingMetal));
+    assert_eq!(t.g.mana_value_of(v), 6);
+    // Living metal: an artifact creature during its controller's turn only.
+    assert!(t.obj_now(v).is(CardType::Creature));
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!t.obj_now(v).is(CardType::Creature));
+    assert!(t.obj_now(v).is(CardType::Artifact));
+}
