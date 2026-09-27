@@ -78,6 +78,42 @@ fn a_creature_put_onto_the_battlefield_attacking_doesnt_trigger_attack_abilities
 }
 
 #[test]
+fn cards_above_it_in_the_graveyard_are_the_ones_put_there_later() {
+    cr!("404.1", "603.4");
+    ruling!(
+        "Nether Shadow",
+        "A card is \"above\" another card in your graveyard if it was put into that graveyard later."
+    );
+    supported("Nether Shadow");
+    // "At the beginning of your upkeep, if this card is in your graveyard with three or
+    // more creature cards above it, you may put this card onto the battlefield."
+    let mut t = TestGame::new(2);
+    // Three creature cards die before it: they're below it.
+    for _ in 0..3 {
+        let b = t.battlefield(P0, "Grizzly Bears");
+        destroy(&mut t, b);
+    }
+    let shadow = t.battlefield(P0, "Nether Shadow");
+    destroy(&mut t, shadow);
+    let shadow = t.g.current(shadow);
+    assert_eq!(t.zone(shadow), Zone::Graveyard(P0));
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // Three more die after it: now there are three creature cards above it.
+    for _ in 0..3 {
+        let b = t.battlefield(P0, "Hill Giant");
+        destroy(&mut t, b);
+    }
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.on_battlefield(shadow));
+}
+
+#[test]
 fn the_end_step_return_happens_only_if_it_is_still_on_the_battlefield() {
     cr!("603.2", "400.7");
     ruling!(
