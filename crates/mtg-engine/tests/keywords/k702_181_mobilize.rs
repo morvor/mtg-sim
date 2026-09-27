@@ -179,3 +179,44 @@ fn only_tokens_still_controlled_are_sacrificed() {
     assert!(t.on_battlefield(ws[0]));
     assert_eq!(t.obj_now(ws[0]).controller, P1);
 }
+
+#[test]
+fn a_granted_mobilize_x_uses_the_creature_as_its_ability_resolves() {
+    cr!("702.181a");
+    // Infantry Shield: "Equipped creature has menace and mobilize X, where X is its
+    // power."
+    assert_supported(&["Infantry Shield"]);
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let shield = t.battlefield(P0, "Infantry Shield");
+    assert!(t.g.attach(shield, Entity::Object(giant)));
+    t.recompute();
+    assert!(t
+        .obj(giant)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Menace));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(giant, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.settle();
+    // In response, the Giant gets +2/+0: X is 5 as the ability resolves.
+    run(
+        &mut t,
+        P0,
+        None,
+        mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![mtg_engine::ability::Modification::ModifyPT(
+                mtg_engine::ability::Value::c(2),
+                mtg_engine::ability::Value::c(0),
+            )],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &[Entity::Object(giant)],
+    );
+    t.resolve_all();
+    assert_eq!(warriors(&t).len(), 5);
+}

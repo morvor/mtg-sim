@@ -69,6 +69,55 @@ fn keyword_x_where(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "k702.181/189 keyword x, where x is", priority: 50, parse: keyword_x_where } }
 
+/// "Equipped creature has menace and mobilize X, where X is its power." — a granted
+/// mobilize or firebending X whose X is determined as its ability resolves, relative to
+/// the creature that has it (see `KeywordRules::x_determined_on_resolution`).
+fn granted_keyword_x_where(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') || block.contains(':') || block.contains('"') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let (head, value) = end(&lower).split_once(", where x is ")?;
+    let (subject, kws) = head
+        .split_once(" has ")
+        .or_else(|| head.split_once(" have "))?;
+    let (rest, last) = match kws.rsplit_once(" and ") {
+        Some((r, l)) => (Some(r), l),
+        None => (None, kws),
+    };
+    let kind = match last {
+        "mobilize x" => KeywordKind::Mobilize,
+        "firebending x" => KeywordKind::Firebending,
+        _ => return None,
+    };
+    let affected = match subject {
+        "~" => Filter::Source,
+        "equipped creature" | "enchanted creature" => Filter::AttachedToSource,
+        _ => {
+            let (f, _, tail) = parse_object_phrase(subject.strip_prefix("each ").unwrap_or(subject))?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            f
+        }
+    };
+    let mut mods = match rest {
+        Some(r) => crate::oracle::patterns::k702_001_010::keyword_mods(r)?,
+        None => vec![],
+    };
+    let kw = Keyword {
+        x: Some(x_value(value, ctx)?),
+        ..Keyword::new(kind).text(format!("{} X", kind.name()))
+    };
+    mods.push(Modification::AddKeyword(kw));
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous { affected, mods })),
+        block.trim(),
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.181/189 has keyword x, where x is", priority: 40, parse: granted_keyword_x_where } }
+
 /// "Tiered" followed by "• [Name] — [cost] — [effect]" modes (CR 702.183a): "Choose one.
 /// As an additional cost to cast this spell, pay the cost associated with that mode."
 /// Compiles to the tiered keyword and a modal spell ability whose modes carry their
