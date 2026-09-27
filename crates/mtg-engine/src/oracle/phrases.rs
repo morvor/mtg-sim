@@ -683,6 +683,14 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
             "with the other chosen name",
             Filter::Custom(crate::kw::hidden_agenda::OTHER_CHOSEN_NAME.into()),
         ),
+        // A sector chosen by the resolving ability (CR 702.158d).
+        (
+            "in the chosen sector",
+            Filter::Custom(crate::kw::space_sculptor::IN_CHOSEN_SECTOR.into()),
+        ),
+        // "the exiled cards used to craft it" (CR 702.167c).
+        ("used to craft it", crate::kw::craft::used_to_craft_filter()),
+        ("used to craft ~", crate::kw::craft::used_to_craft_filter()),
         // "Choose a creature type. ... creatures of that type": the choice just made.
         ("of that type", Filter::ChosenType),
         ("of that color", Filter::ChosenColor),

@@ -58,7 +58,11 @@ fn transformed_destination(s: &str, what: &Sel, b: &mut Builder) -> Option<Desti
             d.tapped = true;
             d.transformed = true;
             t = x.trim_start();
-        } else if let Some(x) = t.strip_prefix("transformed") {
+        } else if let Some(x) = t
+            .strip_prefix("transformed")
+            // CR 712.14a: "converted" also means with its back face up.
+            .or_else(|| t.strip_prefix("converted"))
+        {
             d.transformed = true;
             t = x.trim_start();
         } else if let Some(x) = t.strip_prefix("tapped") {

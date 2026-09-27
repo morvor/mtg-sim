@@ -104,7 +104,11 @@ fn player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         return None;
     }
-    let (n, r) = parse_number(rest)?;
+    // "that player gets an additional poison counter" (Necrogen Rotpriest): one more.
+    let (n, r) = match rest.strip_prefix("an additional ") {
+        Some(r) => (Value::c(1), r),
+        None => parse_number(rest)?,
+    };
     let (kind, r) = r.trim_start().split_once(' ')?;
     if !matches!(kind, "poison" | "experience" | "rad" | "ticket") {
         return None;

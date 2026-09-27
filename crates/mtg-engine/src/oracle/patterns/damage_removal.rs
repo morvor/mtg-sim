@@ -1108,7 +1108,11 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
         if let Some(x) = r.strip_prefix("tapped") {
             d.tapped = true;
             r = x.trim_start();
-        } else if let Some(x) = r.strip_prefix("transformed") {
+        } else if let Some(x) = r
+            .strip_prefix("transformed")
+            // CR 712.14a: "converted" also means with its back face up.
+            .or_else(|| r.strip_prefix("converted"))
+        {
             d.transformed = true;
             r = x.trim_start();
         } else if let Some(x) = r
