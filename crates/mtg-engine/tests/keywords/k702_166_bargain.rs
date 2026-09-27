@@ -252,3 +252,50 @@ fn a_bargained_spell_has_its_additional_effect() {
         );
     }
 }
+
+#[test]
+fn farsight_ritual_looks_at_more_cards_if_bargained() {
+    cr!("702.166b", "702.166c");
+    ruling!(
+        "Farsight Ritual",
+        "You still put only two of the cards into your hand if you bargain this spell."
+    );
+    assert_supported("Farsight Ritual");
+    // Farsight Ritual: "Look at the top four cards of your library. If this spell was
+    // bargained, look at the top eight cards of your library instead. Put two of them into
+    // your hand and the rest on the bottom of your library in a random order."
+    for bargain in [false, true] {
+        let mut t = TestGame::new(2);
+        // Two Forests under eight Islands.
+        for name in ["Forest", "Forest"].into_iter().chain(["Island"; 8]) {
+            t.library_top(P0, name);
+        }
+        t.lands(P0, "Island", 4);
+        let spell = t.hand(P0, "Farsight Ritual");
+        if bargain {
+            let treasure = make_token(&mut t, P0, "Treasure");
+            pay_with(&mut t, P0, &[treasure]);
+        } else {
+            pay_optional(&mut t, P0, false);
+        }
+        t.cast(P0, spell).go();
+        let hand = t.hand_size(P0);
+        let library = t.library_size(P0);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + 2);
+        assert_eq!(t.library_size(P0), library - 2);
+        // Looking at eight: every Island was looked at, and the six not taken went to
+        // the bottom, under the Forests.
+        let top = mtg_engine::library::top_cards(&t.g, P0, 2);
+        let top: Vec<String> = top
+            .iter()
+            .map(|id| t.g.obj(*id).chars.name.to_string())
+            .collect();
+        let expected = if bargain {
+            ["Forest", "Forest"]
+        } else {
+            ["Island", "Island"]
+        };
+        assert_eq!(top, expected, "bargained: {bargain}");
+    }
+}
