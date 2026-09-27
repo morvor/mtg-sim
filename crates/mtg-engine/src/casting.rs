@@ -1635,6 +1635,8 @@ impl Game {
                 _ => {}
             }
         }
+        // Keyword rules that change the cost (power-up, CR 702.193a).
+        crate::kw::activation_cost(self, p, src, a, &mut cost);
         // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
         let loyalty: Vec<i32> = cost
             .parts

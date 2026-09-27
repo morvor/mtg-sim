@@ -179,6 +179,10 @@ pub trait KeywordRules: Sync + Send {
     fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
         true
     }
+    /// Changes a keyword's rules make to the total cost of activating the ability `a` of
+    /// `src` (CR 601.2f, 602.2b), after cost-modifying effects: e.g. a power-up ability's
+    /// cost is reduced by its permanent's mana cost the turn it entered (CR 702.193a).
+    fn activation_cost(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability, cost: &mut Cost) {}
     fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
         true
     }
@@ -605,6 +609,13 @@ pub fn block_allowed(g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
     registry()
         .iter()
         .all(|r| r.block_allowed(g, blocker, attacker))
+}
+
+/// See [`KeywordRules::activation_cost`].
+pub fn activation_cost(g: &Game, p: PlayerId, src: ObjectId, a: &Ability, cost: &mut Cost) {
+    for r in registry() {
+        r.activation_cost(g, p, src, a, cost);
+    }
 }
 
 pub fn activation_allowed(g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {

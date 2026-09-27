@@ -15,4 +15,7 @@ pub struct KeywordState {
     /// "if this is the first time a spell you control with this spell's name has resolved
     /// this game" (paradigm, CR 702.192a).
     pub resolved_spell_names: BTreeMap<PlayerId, BTreeSet<SmolStr>>,
+    /// How many times each power-up ability (the permanent, the ability's uid) has been
+    /// activated (CR 702.193a: "Activate this ability only once").
+    pub power_up_activations: BTreeMap<(ObjectId, u64), u32>,
 }

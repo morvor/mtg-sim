@@ -13,6 +13,9 @@
 //!   warp ability";
 //! * "if ~'s mayhem cost was paid" and the like (CR 702.185, 702.187);
 //! * "whenever you firebend" (CR 702.189b);
+//! * "Power-up — [cost]: [effect]" (CR 702.193a), "Each power-up ability of permanents
+//!   you control can be activated an additional time", "Power-up abilities of other
+//!   creatures you control cost {N} less to activate";
 
 use super::{
     AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
@@ -299,3 +302,50 @@ fn firebend_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "k702.189b whenever you firebend", priority: 50, parse: firebend_trigger } }
+
+/// "Power-up — [cost]: [effect]" (CR 702.193a): the activated ability, keeping its full
+/// text, which identifies it as a power-up ability (see `kw/power_up.rs`).
+fn power_up(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let rest = text.strip_prefix("Power-up — ")?;
+    let inner = crate::oracle::parse_ability(rest, ctx)?;
+    let [a] = inner.as_slice() else {
+        return None;
+    };
+    if !matches!(a.kind, AbilityKind::Activated(_)) {
+        return None;
+    }
+    let mut def = (**a).clone();
+    def.text = text.to_string();
+    Some(vec![std::sync::Arc::new(def)])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.193 power-up", priority: 50, parse: power_up } }
+
+/// "Each power-up ability of permanents you control can be activated an additional time."
+/// and "Power-up abilities of other creatures you control cost {N} less to activate."
+fn power_up_statics(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    if l == "each power-up ability of permanents you control can be activated an additional time" {
+        return Some(vec![AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+                crate::kw::power_up::ADDITIONAL_TIME.into(),
+            ))),
+            text,
+        )]);
+    }
+    // "Power-up abilities of other creatures you control cost {N} less to activate."
+    let n = l
+        .strip_prefix("power-up abilities of other creatures you control cost {")?
+        .strip_suffix("} less to activate")?
+        .parse::<u32>()
+        .ok()?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+            crate::kw::power_up::others_cost_less(n),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "k702.193 power-up statics", priority: 50, parse: power_up_statics } }
