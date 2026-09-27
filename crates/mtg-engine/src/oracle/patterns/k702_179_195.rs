@@ -552,3 +552,23 @@ fn tokens_enter_attacking_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bo
 inventory::submit! {
     FollowupPattern { name: "k702.190 tokens enter tapped and attacking if sneak cost was paid", priority: 50, apply: tokens_enter_attacking_if }
 }
+
+/// "if it was cast from your graveyard" (Rocket-Powered Goblin Glider, cast with mayhem,
+/// CR 702.187b), "if ~ was cast from a graveyard", "if ~ was cast from exile" (warp, CR
+/// 702.185a), "if ~ was cast from anywhere other than your hand".
+fn cast_from_zone(c: &str) -> Option<Condition> {
+    let r = ["~ was cast from ", "it was cast from ", "this spell was cast from "]
+        .iter()
+        .find_map(|p| end(c).strip_prefix(p))?;
+    Some(match r {
+        "your graveyard" | "a graveyard" => Condition::CastFrom(ZoneKind::Graveyard),
+        "exile" => Condition::CastFrom(ZoneKind::Exile),
+        "anywhere other than your hand" => Condition::And(vec![
+            Condition::WasCast,
+            Condition::Not(Box::new(Condition::CastFrom(ZoneKind::Hand))),
+        ]),
+        _ => return None,
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "k702.187 it was cast from your graveyard", priority: 60, parse: cast_from_zone } }

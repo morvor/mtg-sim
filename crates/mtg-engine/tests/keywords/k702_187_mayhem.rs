@@ -213,3 +213,32 @@ fn mayhem_without_a_cost_lets_a_discarded_land_be_played() {
     let milled = t.graveyard(P0, "Oscorp Industries");
     assert!(t.play_land(P0, milled).is_err());
 }
+
+#[test]
+fn if_it_was_cast_from_your_graveyard() {
+    cr!("702.187a", "702.187b");
+    // Rocket-Powered Goblin Glider ({3} Equipment): "When this Equipment enters, if it was
+    // cast from your graveyard, attach it to target creature you control. Equipped
+    // creature gets +2/+0 and has flying and haste. Equip {2}. Mayhem {2}"
+    const GLIDER: &str = "Rocket-Powered Goblin Glider";
+    assert_supported(&[GLIDER]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let g = t.hand(P0, GLIDER);
+    let g = discard(&mut t, P0, g);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, g).method(MAYHEM).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (4, 2));
+    // Cast from hand: it enters unattached.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let g = t.hand(P0, GLIDER);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, g).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.stack_len(), 0);
+}
