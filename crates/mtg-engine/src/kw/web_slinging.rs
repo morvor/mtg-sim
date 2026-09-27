@@ -6,11 +6,14 @@
 //! paid, after mana abilities are activated (CR 601.2g–h): a creature tapped for mana
 //! while casting the spell may be returned.
 //!
-//! "If [this spell] was cast using web-slinging" is `Condition::CostPaid(WEB_SLINGING)`.
+//! "If [this spell] was cast using web-slinging" is `Condition::CostPaid(WEB_SLINGING)`;
+//! "the mana value of the returned creature" is [`RETURNED_MANA_VALUE`], from the
+//! creature as it last existed on the battlefield.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::casting::CastOption;
+use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
@@ -18,6 +21,9 @@ use crate::types::*;
 
 /// The name recorded in `CastInfo::paid` when a spell is cast using web-slinging.
 pub const WEB_SLINGING: &str = "web-slinging";
+/// `Value::Custom`: the mana value of the creature returned to its owner's hand to pay
+/// the web-slinging cost of the spell (or of the spell the permanent was).
+pub const RETURNED_MANA_VALUE: &str = "web-slinging:mana value of the returned creature";
 
 pub struct WebSlinging;
 
@@ -52,6 +58,22 @@ impl KeywordRules for WebSlinging {
         opt.alt_cost = Some(cost);
         opt.tag = Some(WEB_SLINGING);
         vec![opt]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != RETURNED_MANA_VALUE {
+            return None;
+        }
+        let cast = g.cast_info(ctx)?;
+        if !cast.paid.iter().any(|x| x == WEB_SLINGING) {
+            return Some(0);
+        }
+        Some(
+            cast.cost_objects
+                .iter()
+                .find(|o| g.obj(**o).is_creature())
+                .map_or(0, |o| g.mana_value_of(*o) as i64),
+        )
     }
 }
 

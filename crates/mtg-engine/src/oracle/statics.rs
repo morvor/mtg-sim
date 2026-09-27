@@ -531,6 +531,14 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // CR 702.188a: "the mana value of the returned creature" (returned to pay a
+    // web-slinging cost).
+    if let Some(rest) = s.strip_prefix("the mana value of the returned creature") {
+        return Some((
+            Value::Custom(crate::kw::web_slinging::RETURNED_MANA_VALUE.into()),
+            rest.to_string(),
+        ));
+    }
     // CR 905.2b: "the highest number you noted for cards named ~".
     if let Some(rest) = s.strip_prefix("the highest number you noted for cards named ~") {
         return Some((

@@ -155,3 +155,30 @@ fn if_it_was_cast_using_web_slinging() {
     assert!(named(&t, "Spider Token").is_empty());
     assert_eq!(t.zone(c), Zone::Battlefield);
 }
+
+#[test]
+fn the_mana_value_of_the_returned_creature() {
+    cr!("702.188a");
+    // Scarlet Spider, Ben Reilly ({1}{R}{G} 4/3): "Web-slinging {R}{G}. Sensational Save —
+    // If Scarlet Spider was cast using web-slinging, he enters with X +1/+1 counters on
+    // him, where X is the mana value of the returned creature."
+    assert_supported(&["Scarlet Spider, Ben Reilly"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    tapped(&mut t, P0, "Craw Wurm");
+    let c = t.hand(P0, "Scarlet Spider, Ben Reilly");
+    t.cast(P0, c).method(WEB).go();
+    t.resolve_all();
+    let s = named(&t, "Scarlet Spider, Ben Reilly")[0];
+    assert_eq!(t.counters(s, "+1/+1"), 6);
+    // Cast for its mana cost, no counters.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 1);
+    let c = t.hand(P0, "Scarlet Spider, Ben Reilly");
+    t.cast(P0, c).go();
+    t.resolve_all();
+    let s = named(&t, "Scarlet Spider, Ben Reilly")[0];
+    assert_eq!(t.counters(s, "+1/+1"), 0);
+}
