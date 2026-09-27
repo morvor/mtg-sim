@@ -42,3 +42,17 @@ fn entered_under_your_control(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "entered the battlefield under your control this turn", priority: 100, parse: entered_under_your_control } }
+
+/// "you had [a land] enter the battlefield under your control this turn" (landfall:
+/// Groundswell, Mysteries of the Deep): the same look at past events as
+/// "[a land] entered the battlefield under your control this turn".
+fn you_had_enter_under_your_control(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("you had ")?
+        .strip_suffix(" enter the battlefield under your control this turn")?;
+    entered_under_your_control(&format!(
+        "{r} entered the battlefield under your control this turn"
+    ))
+}
+
+inventory::submit! { ConditionPattern { name: "you had [objects] enter the battlefield under your control this turn", priority: 100, parse: you_had_enter_under_your_control } }
