@@ -111,6 +111,12 @@ fn if_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         b.targets.truncate(targets);
         return false;
     }
+    // A replacement that acts on a target the previous sentence doesn't ("..., instead
+    // return those cards to your hand and exile ~") restates earlier sentences too, so it
+    // can't stand in for the previous sentence alone.
+    if !super::damage_removal_instead::targets_within(&e, prev) {
+        return false;
+    }
     let old = std::mem::replace(prev, Effect::Noop);
     *prev = Effect::If {
         cond,

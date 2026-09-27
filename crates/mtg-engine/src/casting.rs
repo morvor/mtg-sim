@@ -1847,7 +1847,11 @@ impl Game {
                 .any(|c| matches!(c, CostPart::DiscardSelf))
         {
             let card = self.current(src);
-            self.emit(Event::Cycled { player: p, card });
+            self.emit(Event::Cycled {
+                player: p,
+                card,
+                x: x as i32,
+            });
         }
         // 602.2i: becomes activated.
         self.log(|g| format!("{p} activates {}", g.describe(src)));

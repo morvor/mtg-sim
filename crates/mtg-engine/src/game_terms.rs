@@ -309,10 +309,18 @@ pub fn was_activated_this_turn(g: &Game, id: ObjectId) -> bool {
     g.obj(id).activations_this_turn.values().any(|n| *n > 0)
 }
 
+/// `Filter::Custom` name: an activated ability on the stack ("target activated ability").
+pub const ACTIVATED_ABILITY: &str = "stack:activated ability";
+/// `Filter::Custom` name: a triggered ability on the stack ("target triggered ability").
+pub const TRIGGERED_ABILITY: &str = "stack:triggered ability";
+
 /// Filters defined by game terms (`Filter::Custom`).
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+    let stack_kind = || g.obj(id).stack.as_deref().map(|si| &si.kind);
     match name {
         ACTIVATED_THIS_TURN => Some(was_activated_this_turn(g, id)),
+        ACTIVATED_ABILITY => Some(matches!(stack_kind(), Some(StackKind::Activated { .. }))),
+        TRIGGERED_ABILITY => Some(matches!(stack_kind(), Some(StackKind::Triggered { .. }))),
         _ => None,
     }
 }
