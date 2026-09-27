@@ -195,3 +195,61 @@ fn replacement_effects_modify_the_poison_counters_toxic_gives() {
     assert_eq!(t.life(P1), 16);
     assert_eq!(poison(&t, P1), 4);
 }
+
+#[test]
+fn necrogen_rotpriest_gives_an_additional_poison_counter() {
+    cr!("702.164c");
+    assert_supported("Necrogen Rotpriest");
+    // Necrogen Rotpriest (1/5, toxic 2): "Whenever a creature you control with toxic deals
+    // combat damage to a player, that player gets an additional poison counter."
+    let mut t = TestGame::new(2);
+    let priest = t.battlefield(P0, "Necrogen Rotpriest");
+    // Tyrranax Atrocity: toxic 3; Grizzly Bears: no toxic.
+    let dino = t.battlefield(P0, "Tyrranax Atrocity");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.attack(
+        &[
+            (priest, Entity::Player(P1)),
+            (dino, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    t.settle();
+    t.resolve_all();
+    // Toxic 2 + toxic 3, and one more for each of the two creatures with toxic.
+    assert_eq!(poison(&t, P1), 7);
+    assert_eq!(t.life(P1), 20 - 1 - 4 - 2);
+}
+
+#[test]
+fn compleat_devotion_checks_whether_the_creature_has_toxic() {
+    cr!("702.164a");
+    assert_supported("Compleat Devotion");
+    // Compleat Devotion: "Target creature you control gets +2/+2 until end of turn. If
+    // that creature has toxic, draw a card."
+    for (name, draws) in [("Tyrranax Atrocity", 1), ("Grizzly Bears", 0)] {
+        let mut t = TestGame::new(2);
+        let c = t.battlefield(P0, name);
+        t.library_top(P0, "Plains");
+        t.lands(P0, "Plains", 2);
+        let spell = t.hand(P0, "Compleat Devotion");
+        let (p, tough) = t.pt(c);
+        t.cast(P0, spell).target(c).go();
+        let hand = t.hand_size(P0);
+        t.resolve_all();
+        assert_eq!(t.pt(c), (p + 2, tough + 2));
+        assert_eq!(t.hand_size(P0), hand + draws, "{name}");
+    }
+    // A creature that gained toxic counts too.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    gain(&mut t, P0, bears, Keyword::with_n(KeywordKind::Toxic, 1));
+    t.library_top(P0, "Plains");
+    t.lands(P0, "Plains", 2);
+    let spell = t.hand(P0, "Compleat Devotion");
+    t.cast(P0, spell).target(bears).go();
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
