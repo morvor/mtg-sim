@@ -353,8 +353,33 @@ fn apply_mana_replacement(d: &ReplacementDef, types: &[ManaType]) -> Vec<ManaTyp
             } => v.clone(),
             _ => types.to_vec(),
         },
+        // "Plains produce {R} ... instead of any other type": the same amount.
+        ReplacementAction::ManaTypeInstead(t) => vec![*t; types.len()],
         _ => types.to_vec(),
     }
+}
+
+/// The orders in which the mana replacements that apply can be applied, when the order
+/// matters (CR 616.1): several effects that each change the type of the mana ("Plains
+/// produce {R}", "Islands produce {G}" for a land that's both), the last of which decides
+/// its type. Otherwise just the timestamp order.
+fn replacement_orders(reps: &[(ObjectId, PlayerId, ReplacementDef)]) -> Vec<Vec<usize>> {
+    let mut types: Vec<ManaType> = Vec::new();
+    for (_, _, d) in reps {
+        if let ReplacementAction::ManaTypeInstead(t) = d.action {
+            if !types.contains(&t) {
+                types.push(t);
+            }
+        }
+    }
+    let n = reps.len();
+    if types.len() < 2 || n > 4 {
+        return vec![(0..n).collect()];
+    }
+    let mut out: Vec<Vec<usize>> = Vec::new();
+    let mut idx: Vec<usize> = (0..n).collect();
+    permute(&mut idx, 0, &mut |order| out.push(order.to_vec()));
+    out
 }
 
 /// The units of mana `perm` makes when tapped for mana (CR 106.12b), given the units its
@@ -380,31 +405,39 @@ fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Ve
     } else {
         vec![units]
     };
+    let orders = replacement_orders(&reps);
     let mut out: Vec<Vec<Vec<ManaType>>> = Vec::new();
     for units in alternatives {
-        let units = reps.iter().fold(units, |units, (_, _, d)| match &d.action {
-            ReplacementAction::Multiply(k) => units
-                .into_iter()
-                .flat_map(|u| {
-                    let n = if u.len() == 1 {
-                        (*k).max(0) as usize
-                    } else {
-                        1
-                    };
-                    std::iter::repeat_n(u, n)
-                })
-                .collect(),
-            ReplacementAction::Instead(e) => match &**e {
-                Effect::AddMana {
-                    mana: ManaProduction::Fixed(v),
-                    ..
-                } => v.iter().map(|t| vec![*t]).collect(),
-                _ => units,
-            },
-            _ => units,
-        });
-        if !out.contains(&units) {
-            out.push(units);
+        for order in &orders {
+            let units = order
+                .iter()
+                .fold(units.clone(), |units, i| match &reps[*i].2.action {
+                    ReplacementAction::Multiply(k) => units
+                        .into_iter()
+                        .flat_map(|u| {
+                            let n = if u.len() == 1 {
+                                (*k).max(0) as usize
+                            } else {
+                                1
+                            };
+                            std::iter::repeat_n(u, n)
+                        })
+                        .collect(),
+                    ReplacementAction::Instead(e) => match &**e {
+                        Effect::AddMana {
+                            mana: ManaProduction::Fixed(v),
+                            ..
+                        } => v.iter().map(|t| vec![*t]).collect(),
+                        _ => units,
+                    },
+                    ReplacementAction::ManaTypeInstead(t) => {
+                        units.iter().map(|_| vec![*t]).collect()
+                    }
+                    _ => units,
+                });
+            if !out.contains(&units) {
+                out.push(units);
+            }
         }
     }
     out
@@ -764,8 +797,24 @@ fn add_mana_with(
         .filter(|s| Some(*s) == ctx.source && g.obj(*s).zone == Zone::Battlefield);
     if let (Some(perm), false) = (tapped, produced.is_empty()) {
         let mut reps = produce_mana_replacements(g, perm);
+        // Without a choice, an automatic payment gets the types it planned for (the order
+        // that produces them), or the replacements apply in timestamp order.
+        let mut preferred: Vec<usize> = g
+            .mana_hint
+            .as_ref()
+            .and_then(|hint| {
+                replacement_orders(&reps).into_iter().find(|order| {
+                    let mut ts = produced.clone();
+                    for i in order {
+                        ts = apply_mana_replacement(&reps[*i].2, &ts);
+                    }
+                    ts.iter().all(|t| hint.contains(t))
+                })
+            })
+            .unwrap_or_else(|| (0..reps.len()).collect());
         // CR 616.1: the affected player chooses the order.
         while !reps.is_empty() {
+            let default = preferred.first().copied().unwrap_or(0);
             let i = if reps.len() == 1 {
                 0
             } else {
@@ -775,11 +824,18 @@ fn add_mana_with(
                     .collect();
                 match g.ask(p, crate::decision::Decision::ChooseReplacement { options }) {
                     crate::decision::Answer::Index(i) if i < reps.len() => i,
-                    _ => 0,
+                    _ => default,
                 }
             };
             let (_, _, d) = reps.remove(i);
             produced = apply_mana_replacement(&d, &produced);
+            // The remaining replacements keep their places in the preferred order.
+            preferred.retain(|x| *x != i);
+            for x in preferred.iter_mut() {
+                if *x > i {
+                    *x -= 1;
+                }
+            }
         }
     }
     // "of the chosen type": the type chosen for the source (CR 607.2d).
