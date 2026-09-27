@@ -66,3 +66,24 @@ pub fn chosen_modes(t: &TestGame, id: ObjectId) -> Vec<usize> {
         .map(|si| si.chosen.iter().filter_map(|c| c.mode).collect())
         .unwrap_or_default()
 }
+
+/// The methods `p` could cast `card` with right now.
+pub fn cast_methods(
+    t: &mut TestGame,
+    p: PlayerId,
+    card: ObjectId,
+) -> Vec<mtg_engine::object::CastMethod> {
+    t.g.recompute();
+    t.g.turn.priority = Some(p);
+    let card = t.g.current(card);
+    t.g.cast_options(p, card)
+        .into_iter()
+        .filter(|o| t.g.can_begin_cast(p, card, o))
+        .map(|o| o.method)
+        .collect()
+}
+
+/// Puts `n` copies of a real card into `p`'s graveyard.
+pub fn graveyard_n(t: &mut TestGame, p: PlayerId, name: &str, n: usize) -> Vec<ObjectId> {
+    (0..n).map(|_| t.graveyard(p, name)).collect()
+}
