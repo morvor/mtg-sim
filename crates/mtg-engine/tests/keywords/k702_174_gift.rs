@@ -30,6 +30,18 @@ fn treasures(t: &TestGame, p: PlayerId) -> usize {
 fn a_promised_gift_is_given_before_the_spells_other_effects() {
     cr!("702.174", "702.174a", "702.174b", "702.174h", "702.174j");
     assert_supported("Blooming Blast");
+    ruling!(
+        "Blooming Blast",
+        "For instants and sorceries with gift, the gift is given to the appropriate opponent as part of the resolution of the spell. This happens before any of the spell's other effects would take place."
+    );
+    ruling!(
+        "Coiling Rebirth",
+        "For instants and sorceries with gift, the gift is given to the appropriate opponent as part of the resolution of the spell. This happens before any of the spell’s other effects would take place."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "\"Gift a Treasure\" causes the chosen opponent to create a Treasure token."
+    );
     // Blooming Blast: {1}{R} instant, gift a Treasure, "Blooming Blast deals 2 damage to
     // target creature. If the gift was promised, Blooming Blast also deals 3 damage to
     // that creature's controller."
@@ -76,6 +88,10 @@ fn gift_a_card_and_alternative_targets_if_the_gift_was_promised() {
     ruling!(
         "Wear Down",
         "Some instant or sorcery spells require alternative or additional targets if the gift was promised. You ignore these targeting requirements if the gifts aren’t promised for those spells."
+    );
+    ruling!(
+        "Blooming Blast",
+        "Some instant or sorcery spells require alternative or additional targets if the gift was promised. You ignore these targeting requirements if the gifts aren't promised for those spells."
     );
     // Wear Down: {1}{G} sorcery, gift a card, "Destroy target artifact or enchantment. If
     // the gift was promised, instead destroy two target artifacts and/or enchantments."
@@ -203,6 +219,10 @@ fn gift_an_extra_turn() {
 #[test]
 fn a_permanents_gift_is_given_when_it_enters() {
     cr!("702.174b", "702.174i");
+    ruling!(
+        "Blooming Blast",
+        "For permanent spells with gift, an ability triggers when that permanent enters if the gift was promised. When that ability resolves, the gift is given to the appropriate opponent."
+    );
     // Octomancer: gift an Octopus: "When it enters, they create an 8/8 blue Octopus
     // creature token."
     let mut t = TestGame::new(2);
@@ -340,6 +360,14 @@ fn a_countered_spell_gives_no_gift() {
         "Wear Down",
         "If a spell for which the gift was promised is countered, doesn’t resolve (perhaps because all of its targets are illegal), or is otherwise removed from the stack, the gift won’t be given."
     );
+    ruling!(
+        "Blooming Blast",
+        "If a spell for which the gift was promised is countered, doesn't resolve (perhaps because all of its targets are illegal), or is otherwise removed from the stack, the gift won't be given. None of its other effects will happen either."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "If a spell for which the gift was promised is countered, doesn't resolve (perhaps because all of its targets are illegal), or is otherwise removed from the stack, the gift won't be given. None of its other effects will happen either."
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let blast = t.hand(P0, "Blooming Blast");
@@ -370,6 +398,16 @@ fn the_gift_is_promised_to_one_chosen_opponent() {
         "As an additional cost to cast a spell with gift, you can promise the listed gift to an opponent. That opponent is chosen as part of that additional cost."
     );
     ruling!("Wear Down", "You can’t pay a gift cost more than once.");
+    ruling!("Blooming Blast", "You can't pay a gift cost more than once.");
+    ruling!("Bilbo's Gambit", "You can't pay a gift cost more than once.");
+    ruling!(
+        "Blooming Blast",
+        "As an additional cost to cast a spell with gift, you can promise the listed gift to an opponent. That opponent is chosen as part of that additional cost. The gift isn't given at this time; rather, it's given at a later time based on whether or not the spell is a permanent spell."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "As an additional cost to cast a spell with gift, you can promise the listed gift to an opponent. That opponent is chosen as part of that additional cost. The gift isn't given at this time"
+    );
     let mut t = TestGame::new(3);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let blast = t.hand(P0, "Blooming Blast");
@@ -390,6 +428,14 @@ fn a_copy_of_a_permanent_whose_gift_was_promised_has_no_promise() {
     ruling!(
         "Wear Down",
         "If a card or token enters as a copy of a permanent that’s already on the battlefield, the gift isn’t promised for that new permanent, even if it was promised for the original."
+    );
+    ruling!(
+        "Blooming Blast",
+        "If a card or token enters as a copy of a permanent that's already on the battlefield, the gift isn't promised for that new permanent, even if it was promised for the original."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "If a card or token enters as a copy of a permanent that's already on the battlefield, the gift isn't promised for that new permanent, even if it was promised for the original."
     );
     let mut t = TestGame::new(2);
     let scrap = t.hand(P0, "Scrapshooter");
@@ -464,6 +510,14 @@ fn a_copy_of_a_spell_whose_gift_was_promised_gives_the_gift_too() {
         "Wear Down",
         "If you copy a spell for which the gift was promised, the gift was also promised to the same opponent for the copy."
     );
+    ruling!(
+        "Blooming Blast",
+        "If you copy a spell for which the gift was promised, the gift was also promised to the same opponent for the copy."
+    );
+    ruling!(
+        "Bilbo's Gambit",
+        "If you copy a spell for which the gift was promised, the gift was also promised to the same player for the copy."
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
@@ -481,4 +535,59 @@ fn a_copy_of_a_spell_whose_gift_was_promised_gives_the_gift_too() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     // Each of them also dealt 3 damage to its target's controller.
     assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn each_kind_of_gift() {
+    cr!("702.174d", "702.174e", "702.174f", "702.174h", "702.174i");
+    ruling!(
+        "Blooming Blast",
+        "In the main set, there are four different kinds of gifts. \"Gift a Food\" causes the chosen opponent to create a Food token, while \"Gift a Treasure\" causes the chosen opponent to create a Treasure token. \"Gift a card\" causes them to draw a card, and \"Gift a tapped Fish\" causes them to create a tapped 1/1 blue Fish creature token. The Commander decks contain two more kinds of gifts"
+    );
+    ruling!(
+        "Coiling Rebirth",
+        "In the main set, there are four different kinds of gifts."
+    );
+    // Crumb and Get It (a Food), Blooming Blast (a Treasure), Wear Down (a card), Mind
+    // Spiral (a tapped Fish), Octomancer (an Octopus), each cast promising its gift to P1.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    let hand = t.hand_size(P1);
+    for (name, mana, targets) in [
+        ("Crumb and Get It", ManaType::W, vec![vec![Entity::Object(bears)]]),
+        ("Blooming Blast", ManaType::R, vec![vec![Entity::Object(wall)]]),
+        (
+            "Wear Down",
+            ManaType::G,
+            vec![vec![Entity::Object(thopter), Entity::Object(anthem)]],
+        ),
+        (
+            "Mind Spiral",
+            ManaType::U,
+            vec![vec![Entity::Player(P0)], vec![Entity::Object(wall)]],
+        ),
+        ("Octomancer", ManaType::G, vec![]),
+    ] {
+        let card = t.hand(P0, name);
+        add_mana(&mut t, P0, mana, 5);
+        add_mana(&mut t, P0, ManaType::U, 1);
+        pay_optional(&mut t, P0, true);
+        for es in &targets {
+            t.answer_targets(P0, es);
+        }
+        t.cast(P0, card).go();
+        t.resolve_all();
+    }
+    assert_eq!(tokens_of_subtype(&t, P1, "Food").len(), 1);
+    assert_eq!(treasures(&t, P1), 1);
+    assert_eq!(t.hand_size(P1), hand + 1);
+    let fish = tokens_of_subtype(&t, P1, "Fish");
+    assert_eq!(fish.len(), 1);
+    assert!(t.obj(fish[0]).tapped);
+    let octopus = tokens_of_subtype(&t, P1, "Octopus");
+    assert_eq!(octopus.len(), 1);
+    assert_eq!(t.pt(octopus[0]), (8, 8));
 }

@@ -28,6 +28,25 @@ pub fn cost_name(i: usize) -> SmolStr {
     SmolStr::new(format!("offspring#{}", i + 1))
 }
 
+/// Which of `source`'s offspring triggered abilities (counting from 0) the ability `uid`
+/// is. It's the instance that triggered, even if the permanent no longer has it as the
+/// ability resolves (it became a copy of something else, or lost its abilities): its
+/// offspring cost was paid all the same, so the printed instances are consulted then.
+fn instance_index(g: &Game, source: ObjectId, uid: u64) -> Option<usize> {
+    let position = |abilities: &mut dyn Iterator<Item = &Ability>| {
+        abilities
+            .filter(|a| {
+                matches!(a.kind, AbilityKind::Triggered(_)) && a.text == KeywordKind::Offspring.name()
+            })
+            .position(|a| a.uid == uid)
+    };
+    let o = g.obj(source);
+    position(&mut o.chars.abilities.iter()).or_else(|| {
+        let printed = crate::keyword_impls::derived_by_keyword(&o.base);
+        position(&mut printed.iter().map(|(_, a)| a))
+    })
+}
+
 pub struct Offspring;
 
 impl KeywordRules for Offspring {
@@ -72,19 +91,7 @@ impl KeywordRules for Offspring {
         if name != PAID {
             return None;
         }
-        // Which of the permanent's offspring triggered abilities this is.
-        let index = ctx.source.and_then(|s| {
-            g.obj(s)
-                .chars
-                .abilities
-                .iter()
-                .filter(|a| {
-                    matches!(a.kind, AbilityKind::Triggered(_))
-                        && a.text == KeywordKind::Offspring.name()
-                })
-                .position(|a| a.uid == ctx.ability_uid)
-        });
-        let Some(i) = index else {
+        let Some(i) = ctx.source.and_then(|s| instance_index(g, s, ctx.ability_uid)) else {
             return Some(false);
         };
         let paid = cost_name(i);
