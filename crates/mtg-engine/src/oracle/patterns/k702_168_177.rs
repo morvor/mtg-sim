@@ -364,6 +364,48 @@ fn also(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "k702.174 [subject] also [effect]", priority: 150, parse: also } }
 
 // ---------------------------------------------------------------------------
+// Disguise (CR 702.168)
+// ---------------------------------------------------------------------------
+
+/// "exile up to X other target creatures from the battlefield and/or creature cards from
+/// graveyards" (Aurelia's Vindicator, whose X is its disguise cost's, CR 702.168e; Angel
+/// of Serenity): each target is either a creature or a creature card in a graveyard, and
+/// the cards are exiled with the source (CR 607.2a, "the exiled cards").
+fn exile_creatures_and_or_graveyard_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("exile up to ")?;
+    let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+    let text = "other target creatures from the battlefield and/or creature cards from graveyards";
+    if end(rest.trim()) != text {
+        return None;
+    }
+    let filter = Filter::Or(vec![
+        Filter::and(vec![
+            Filter::creature(),
+            Filter::InZone(ZoneKind::Battlefield),
+            Filter::Other,
+        ]),
+        Filter::and(vec![
+            Filter::Card,
+            Filter::Type(CardType::Creature),
+            Filter::InZone(ZoneKind::Graveyard),
+        ]),
+    ]);
+    let spec = TargetSpec {
+        min: 0,
+        max: n,
+        ..TargetSpec::object(filter, text)
+    };
+    let slot = b.add_target(spec, &format!("up to {text}"));
+    Some(Effect::Exile {
+        what: Sel::Target(slot),
+        face_down: false,
+        link: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.168e exile up to N other target creatures and/or creature cards from graveyards", priority: 100, parse: exile_creatures_and_or_graveyard_cards } }
+
+// ---------------------------------------------------------------------------
 // Plot (CR 702.170)
 // ---------------------------------------------------------------------------
 
