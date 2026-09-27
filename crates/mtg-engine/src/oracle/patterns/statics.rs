@@ -384,6 +384,7 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 let stem = word.strip_suffix("walk").unwrap_or("");
                 if k1 != KeywordKind::Landwalk
                     && !stem.is_empty()
+                    && stem != "land"
                     && stem.chars().all(|c| c.is_ascii_lowercase())
                 {
                     parts.pop();
