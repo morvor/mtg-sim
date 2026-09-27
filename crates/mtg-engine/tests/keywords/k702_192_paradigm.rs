@@ -29,6 +29,23 @@ fn next_main(t: &mut TestGame) {
 }
 
 #[test]
+fn paradigm_cards_are_lessons() {
+    cr!("702.192a");
+    ruling!(
+        "Decorum Dissertation",
+        "Each spell with paradigm has the Lesson subtype."
+    );
+    for n in [PRACTICUM, "Decorum Dissertation", "Restoration Seminar"] {
+        let c = mtg_engine::card::card(n);
+        assert!(c.front().chars.has_subtype("Lesson"), "{n}");
+        assert!(c
+            .front()
+            .chars
+            .has_keyword(mtg_engine::keywords::KeywordKind::Paradigm));
+    }
+}
+
+#[test]
 fn paradigm_cards_compile() {
     assert_supported(&[
         PRACTICUM,

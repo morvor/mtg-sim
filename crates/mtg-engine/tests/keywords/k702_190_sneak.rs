@@ -230,7 +230,19 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
     // The Last Ronin's Technique ({3}{W} instant): "Sneak {1}{W}. Create three 1/1 white
     // Ninja Turtle Spirit creature tokens. If this spell's sneak cost was paid, they enter
     // tapped and attacking."
+    ruling!(
+        "The Last Ronin's Technique",
+        "those tokens were never declared as attacking creatures. Abilities that trigger whenever a creature attacks won't trigger when those tokens enter attacking."
+    );
+    let rally = custom_card(
+        "Rally Horn",
+        "{2}",
+        "Artifact",
+        None,
+        "Whenever a creature you control attacks, you gain 1 life.",
+    );
     let mut t = TestGame::new(2);
+    put(&mut t, P0, rally, Zone::Battlefield);
     t.lands(P0, "Plains", 2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P0, "Hill Giant");
@@ -254,6 +266,8 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
         assert!(t.obj(*s).tapped);
         assert_eq!(attacking(&t, *s), Some(Entity::Player(P1)));
     }
+    // Only the two declared attackers triggered the Horn.
+    assert_eq!(t.life(P0), 22);
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 14);
     // Cast for its mana cost, they don't.

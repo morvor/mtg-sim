@@ -163,6 +163,10 @@ fn the_mana_value_of_the_returned_creature() {
     // If Scarlet Spider was cast using web-slinging, he enters with X +1/+1 counters on
     // him, where X is the mana value of the returned creature."
     assert_supported(&["Scarlet Spider, Ben Reilly"]);
+    ruling!(
+        "Scarlet Spider, Ben Reilly",
+        "Use the mana value of the creature as it last existed on the battlefield to determine the value of X. If it had {X} in its mana cost, X is 0 when determining its mana value."
+    );
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 1);
     t.lands(P0, "Forest", 1);
@@ -172,6 +176,19 @@ fn the_mana_value_of_the_returned_creature() {
     t.resolve_all();
     let s = named(&t, "Scarlet Spider, Ben Reilly")[0];
     assert_eq!(t.counters(s, "+1/+1"), 6);
+    // X in the returned creature's mana cost is 0: Endless One ({X}) gives none.
+    let mut t2 = TestGame::new(2);
+    t2.lands(P0, "Mountain", 1);
+    t2.lands(P0, "Forest", 1);
+    let one = tapped(&mut t2, P0, "Endless One");
+    t2.g.objects[one.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 4);
+    let c = t2.hand(P0, "Scarlet Spider, Ben Reilly");
+    t2.cast(P0, c).method(WEB).go();
+    t2.resolve_all();
+    let s2 = named(&t2, "Scarlet Spider, Ben Reilly")[0];
+    assert_eq!(t2.counters(s2, "+1/+1"), 0);
     // Cast for its mana cost, no counters.
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 2);

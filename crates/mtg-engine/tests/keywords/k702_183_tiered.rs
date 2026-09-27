@@ -203,3 +203,41 @@ fn modes_can_choose_values_for_the_spells_text() {
     assert!(t.obj(back[0]).tapped);
     assert_eq!(t.pt(back[0]), (2, 2));
 }
+
+#[test]
+fn a_copy_keeps_the_chosen_mode() {
+    cr!("702.183a");
+    ruling!(
+        "Thunder Magic",
+        "If a spell with tiered is copied, the effect that creates the copy may allow you to choose new targets. You cannot choose a new mode."
+    );
+    ruling!(
+        "Thunder Magic",
+        "You choose the mode as you cast the spell with tiered. Once the mode is chosen, it can't be changed."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 4);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let c = t.hand(P0, "Thunder Magic");
+    // Thundara: 4 damage.
+    let spell = t.cast(P0, c).modes(&[1]).target(wurm).go();
+    // A copy with a new target (the Hill Giant); the mode stays Thundara.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P0,
+        Effect::CopySpell {
+            what: Sel::Target(0),
+            count: Value::c(1),
+            new_targets: true,
+        },
+        &[Entity::Object(spell)],
+    );
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+    assert!(!t.on_battlefield(giant));
+}

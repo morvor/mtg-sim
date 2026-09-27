@@ -49,6 +49,14 @@ fn attacking_adds_red_mana_that_lasts_until_end_of_combat() {
         "Fire Sages",
         "Firebending abilities aren't mana abilities. They use the stack and can be responded to."
     );
+    ruling!(
+        "Fire Sages",
+        "Any other mana you add during combat will still be lost as normal when moving between steps of combat."
+    );
+    ruling!(
+        "Fire Sages",
+        "\"Firebending N\" is a keyword that represents the ability \"Whenever this creature attacks, add N {R}."
+    );
     let mut t = TestGame::new(2);
     // Zuko, Exiled Prince: "Firebending 3".
     let zuko = t.battlefield(P0, "Zuko, Exiled Prince");
@@ -58,9 +66,12 @@ fn attacking_adds_red_mana_that_lasts_until_end_of_combat() {
     assert_eq!(red(&t, P0), 0);
     t.resolve_all();
     assert_eq!(red(&t, P0), 3);
+    // Other mana added during combat is lost as the step ends.
+    add_mana(&mut t, P0, &[ManaType::G]);
     // It stays as combat's steps end.
     t.advance_to(P0, Step::CombatDamage);
     assert_eq!(red(&t, P0), 3);
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::G), 0);
     assert_eq!(t.life(P1), 16);
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(red(&t, P0), 3);
