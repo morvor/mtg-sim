@@ -31,6 +31,7 @@ fn instead_if_cards_compile() {
         "Might Beyond Reason",
         "Traverse the Ulvenwald",
         "Join the Dead",
+        "Cinder Strike",
     ]);
 }
 
@@ -145,4 +146,77 @@ fn precognitive_perception_scries_first_during_the_main_phase() {
         .iter()
         .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::Scry { .. })));
     assert_eq!(t.hand_size(P0), hand - 1 + 3);
+}
+
+#[test]
+fn brimstone_volley_deals_five_damage_instead_with_morbid() {
+    cr!("608.2c", "207.2c");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let volley = t.hand(P0, "Brimstone Volley");
+    t.cast(P0, volley).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    // A creature died this turn: 5 damage instead of 3 (not both).
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.settle();
+    t.lands(P0, "Mountain", 3);
+    let volley = t.hand(P0, "Brimstone Volley");
+    t.cast(P0, volley).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 12);
+}
+
+#[test]
+fn hunger_of_the_howlpack_puts_three_counters_instead_with_morbid() {
+    cr!("608.2c", "207.2c");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    let hunger = t.hand(P0, "Hunger of the Howlpack");
+    t.cast(P0, hunger).target(bears).go();
+    t.resolve();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    // A creature died this turn: three counters instead of one (not four).
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.destroy(giant, None);
+    t.settle();
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 1);
+    let hunger = t.hand(P0, "Hunger of the Howlpack");
+    t.cast(P0, hunger).target(elves).go();
+    t.resolve();
+    assert_eq!(t.counters(elves, "+1/+1"), 3);
+}
+
+#[test]
+fn cinder_strike_itself_deals_the_greater_damage_instead() {
+    cr!("608.2c");
+    // "As an additional cost to cast this spell, you may blight 1. Cinder Strike deals 2
+    // damage to target creature. It deals 4 damage to that creature instead if this
+    // spell's additional cost was paid." "It" is Cinder Strike, not the creature: a
+    // lifelinking target doesn't gain its controller life by damaging itself.
+    for blight in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let hawk = t.battlefield(P1, "Vampire Nighthawk");
+        t.lands(P0, "Mountain", 1);
+        let strike = t.hand(P0, "Cinder Strike");
+        t.answer(
+            P0,
+            DecisionKind::OptionalCost,
+            mtg_engine::decision::Answer::Bool(blight),
+        );
+        if blight {
+            t.answer_choose(P0, &[Entity::Object(bears)]);
+        }
+        t.cast(P0, strike).target(hawk).go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 20, "blighted: {blight}");
+        assert_eq!(t.in_graveyard(P1, "Vampire Nighthawk"), blight);
+        if !blight {
+            assert_eq!(t.g.obj(hawk).damage, 2);
+        }
+    }
 }

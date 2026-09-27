@@ -78,6 +78,33 @@ fn mentions_it(e: &Effect) -> bool {
     serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::IT)))
 }
 
+/// The target slots an effect refers to (`Sel::Target(i)`, also inside other selectors
+/// and player references).
+fn targets_mentioned(e: &Effect) -> Vec<usize> {
+    let Ok(s) = serde_json::to_string(e) else {
+        return Vec::new();
+    };
+    s.match_indices("\"Target\":")
+        .filter_map(|(i, m)| {
+            let digits: String = s[i + m.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            digits.parse().ok()
+        })
+        .collect()
+}
+
+/// Whether `replacement` refers only to target slots `prev` refers to: a replacement for
+/// the previous sentence that acts on a target only an earlier sentence acted on restates
+/// that earlier sentence too.
+pub fn targets_within(replacement: &Effect, prev: &Effect) -> bool {
+    let before = targets_mentioned(prev);
+    targets_mentioned(replacement)
+        .iter()
+        .all(|i| before.contains(i))
+}
+
 fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "[effect] instead if [condition]" is "if [condition], [effect] instead" ("Put three
     // +1/+1 counters on that creature instead if there are four or more card types among
@@ -111,9 +138,18 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     // "If ~ was bargained, it deals twice X damage to that permanent instead": the subject
     // "it" is the condition's (the source), not the object the previous sentence affects.
+    // Likewise "~ deals 2 damage to target creature. It deals 4 damage to that creature
+    // instead if ...": "it" is the subject of the damage sentence it replaces, ~.
+    let prev_source_is_this = matches!(
+        prev,
+        Effect::DealDamage {
+            source: Sel::This,
+            ..
+        }
+    );
     let subject_is_source;
     let x = match x.strip_prefix("it ") {
-        Some(r) if c.starts_with("~ ") => {
+        Some(r) if c.starts_with("~ ") || (prev_source_is_this && r.starts_with("deals ")) => {
             subject_is_source = format!("~ {r}");
             subject_is_source.as_str()
         }
@@ -133,6 +169,14 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "... put that card onto the battlefield instead": a replacement that acts on what
     // the previous sentence produced ("it", "that card") can't stand in for it.
     if mentions_it(&e) {
+        b.targets.truncate(targets);
+        return false;
+    }
+    // "Return target card ... to your hand. Put up to one other target card ... on top of
+    // your library. Exile ~. Adamant — If ..., instead return those cards to your hand and
+    // exile ~.": a replacement that acts on a target the previous sentence doesn't restates
+    // earlier sentences too, so it can't stand in for the previous sentence alone.
+    if !targets_within(&e, prev) {
         b.targets.truncate(targets);
         return false;
     }

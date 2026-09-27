@@ -71,4 +71,14 @@ fn stifle_counters_an_ability_but_cant_counter_a_spell() {
     assert!(t.in_hand(P1, "Stifle"));
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+    // An activated ability on the stack can be targeted, and countering it means none of
+    // its effects happen.
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)]).unwrap();
+    let ability = *t.g.stack.last().unwrap();
+    t.cast(P1, stifle).target(ability).go();
+    t.resolve();
+    assert!(t.g.stack.is_empty());
+    assert!(t.in_graveyard(P1, "Stifle"));
+    assert_eq!(t.life(P1), 17);
 }

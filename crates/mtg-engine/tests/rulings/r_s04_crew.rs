@@ -29,7 +29,7 @@ fn has_creature_type(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn a_vehicle_must_be_crewed_by_the_beginning_of_combat_to_attack() {
-    cr!("702.122a", "508.1", "508.1a", "117.3b", "117.3c");
+    cr!("702.122a", "508.1", "508.1a");
     ruling!(
         "Cultivator's Caravan",
         "For a Vehicle to be able to attack, it must be a creature as the declare attackers step begins, so the latest you can activate its crew ability to attack with it is during the beginning of combat step."
