@@ -154,7 +154,10 @@ fn a_discover_spell_whose_targets_are_all_illegal_doesnt_discover() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Daring Discovery"));
     assert!(t.g.exile.is_empty());
-    assert_eq!(t.g.library_top(P0).map(|c| t.obj(c).chars.name.to_string()), Some("Hill Giant".into()));
+    assert_eq!(
+        t.g.library_top(P0).map(|c| t.obj(c).chars.name.to_string()),
+        Some("Hill Giant".into())
+    );
     assert!(!t.in_hand(P0, "Hill Giant"));
 }
 

@@ -203,7 +203,12 @@ fn a_processor_cost_needs_a_card_an_opponent_owns_in_exile() {
     let wurm = t.battlefield(P1, "Craw Wurm");
     give_mana_for(&mut t, P0, "Processor Assault");
     let assault = t.hand(P0, "Processor Assault");
-    assert!(!can_cast(&mut t, P0, assault, mtg_engine::object::CastMethod::Normal));
+    assert!(!can_cast(
+        &mut t,
+        P0,
+        assault,
+        mtg_engine::object::CastMethod::Normal
+    ));
     t.exile(P1, "Grizzly Bears");
     t.cast(P0, assault).target(wurm).go();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));

@@ -45,7 +45,10 @@ fn a_cast_trigger_resolves_first_even_if_the_spell_is_countered() {
     t.settle();
     assert_eq!(
         stack_items(&t),
-        vec!["Wretched Gryff".to_string(), "ability: When you cast ~, draw a card".to_string()]
+        vec![
+            "Wretched Gryff".to_string(),
+            "ability: When you cast ~, draw a card".to_string()
+        ]
     );
     // Countered in response: the trigger still resolves.
     let hand = t.hand_size(P0);
@@ -135,14 +138,22 @@ fn nothing_can_be_done_while_an_emerge_spell_is_being_cast() {
         }),
     );
     t.answer_choose(P0, &[Entity::Object(bears)]);
-    assert!(t.g.run_until(100, |g| g
-        .stack
-        .iter()
-        .any(|s| g.obj(*s).chars.name.as_str() == "Wretched Gryff")));
-    t.resolve_all();
+    // Through the priority loop until the Gryff has resolved.
+    assert!(t.g.run_until(1000, |g| g.battlefield.iter().any(|o| g
+        .obj(*o)
+        .chars
+        .name
+        .as_str()
+        == "Wretched Gryff")));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert_eq!(t.named_on_battlefield("Wretched Gryff").len(), 1);
-    for (bears_out, stack) in seen.lock().unwrap().iter() {
+    let seen = seen.lock().unwrap();
+    // P1 was asked (for priority with the Gryff on the stack), but only once the Bears
+    // was gone.
+    assert!(seen
+        .iter()
+        .any(|(bears_out, stack)| !*bears_out && *stack > 0));
+    for (bears_out, stack) in seen.iter() {
         assert!(!(*bears_out && *stack > 0), "P1 was asked mid-cast");
     }
 }
@@ -200,7 +211,7 @@ fn only_printed_mana_symbols_count_toward_the_sacrificed_creatures_mana_value() 
 
 #[test]
 fn a_transformed_permanent_has_its_front_faces_mana_value_and_a_copy_of_it_has_0() {
-    cr!("202.3b", "712.8e", "702.119a");
+    cr!("202.3b", "202.3c", "712.8e", "702.119a");
     ruling!(
         "Wretched Gryff",
         "The mana value of the back face of a double-faced card is the mana value of its front face. The mana value of a melded permanent is the sum of the mana values of its front faces. A creature that’s a copy of either has a mana value of 0."
@@ -244,6 +255,23 @@ fn a_transformed_permanent_has_its_front_faces_mana_value_and_a_copy_of_it_has_0
     assert_eq!(t.g.mana_value_of(clone), 0);
     assert!(!emerge_gryff(&mut t, clone, 4));
     assert!(t.on_battlefield(clone));
+    // Chittering Host, melded from Graf Rats ({1}{B}) and Midnight Scavengers ({4}{B}), has
+    // mana value 7: sacrificing it reduces {5}{U} to {U}.
+    supported("Graf Rats");
+    supported("Midnight Scavengers");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Graf Rats");
+    t.battlefield(P0, "Midnight Scavengers");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.advance_to_step(mtg_engine::turn::Step::BeginningOfCombat);
+    t.settle();
+    t.resolve_all();
+    let host = t.named_on_battlefield("Chittering Host")[0];
+    assert_eq!(t.g.mana_value_of(host), 7);
+    t.set_step(P0, mtg_engine::turn::Step::PostcombatMain);
+    assert!(emerge_gryff(&mut t, host, 0));
+    assert!(!t.on_battlefield(host));
+    assert_eq!(untapped_lands(&t, P0), 0);
 }
 
 #[test]

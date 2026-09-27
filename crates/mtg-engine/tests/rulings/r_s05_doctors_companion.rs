@@ -53,10 +53,11 @@ fn a_doctor_and_companion_deck_uses_their_combined_color_identity() {
     // A black card is outside it.
     deck.pop();
     deck.push(card("Swamp"));
-    assert!(check_commander_deck(&deck, &pair, &[], false)
-        .contains(&DeckProblem::OutsideColorIdentity {
+    assert!(check_commander_deck(&deck, &pair, &[], false).contains(
+        &DeckProblem::OutsideColorIdentity {
             name: "Swamp".into()
-        }));
+        }
+    ));
 }
 
 #[test]

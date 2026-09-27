@@ -224,9 +224,7 @@ fn combat_damage_is_assigned_before_it_is_doubled() {
     let assigned: Vec<(u32, Vec<u32>)> = t.asked()[from..]
         .iter()
         .filter_map(|(_, d)| match d {
-            Decision::AssignCombatDamage { amount, lethal, .. } => {
-                Some((*amount, lethal.clone()))
-            }
+            Decision::AssignCombatDamage { amount, lethal, .. } => Some((*amount, lethal.clone())),
             _ => None,
         })
         .collect();
@@ -257,7 +255,8 @@ fn doubling_each_kind_of_counter_with_a_replacement_effect() {
     t.battlefield(P0, "Branching Evolution");
     add_mana(&mut t, P0, ManaType::G, 1);
     add_mana(&mut t, P0, ManaType::U, 1);
-    t.activate(P0, zimone, 0, &[Entity::Object(ballista)]).unwrap();
+    t.activate(P0, zimone, 0, &[Entity::Object(ballista)])
+        .unwrap();
     t.resolve_all();
     assert_eq!(t.counters(ballista, counters::PLUS1), 6);
     assert_eq!(t.counters(ballista, "charge"), 2);

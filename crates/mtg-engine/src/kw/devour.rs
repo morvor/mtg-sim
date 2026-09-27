@@ -92,8 +92,9 @@ impl KeywordRules for Devour {
         };
         let this = ctx.source;
         let p = ctx.controller;
-        // Not itself, nothing entering at the same time, and nothing another object
-        // entering at the same time devours.
+        // Not itself, nothing entering at the same time, nothing another object entering
+        // at the same time devours, and nothing that can't be sacrificed (the permanents
+        // chosen are sacrificed later, all together, and each one chosen counts).
         let cands: Vec<ObjectId> = ctx
             .var_objects(CANDIDATES)
             .into_iter()
@@ -101,6 +102,7 @@ impl KeywordRules for Devour {
                 Some(*c) != this
                     && !g.entering.contains(c)
                     && !g.zones.entry_sacrifices.iter().any(|(o, _)| o == c)
+                    && !g.cant_be_sacrificed(*c)
             })
             .collect();
         let chosen = if cands.is_empty() {

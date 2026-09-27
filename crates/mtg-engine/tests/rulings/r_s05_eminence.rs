@@ -66,7 +66,6 @@ fn eminence_triggers_from_the_command_zone_and_the_battlefield_only() {
         assert_eq!(t.zone(arahbo), zone);
         t.advance_to(P0, Step::BeginningOfCombat);
         t.settle();
-    t.settle();
         assert_eq!(t.stack_len(), 0, "triggered from {zone:?}");
         assert_eq!(t.pt(lions), (2, 1));
     }

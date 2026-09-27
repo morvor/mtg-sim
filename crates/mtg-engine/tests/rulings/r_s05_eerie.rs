@@ -29,11 +29,7 @@ fn an_eerie_permanent_entering_with_enchantments_triggers_for_each_of_them() {
             what: Sel::AllTargets,
             to: Destination::battlefield(),
         },
-        &[
-            Entity::Object(leech),
-            Entity::Object(a),
-            Entity::Object(b),
-        ],
+        &[Entity::Object(leech), Entity::Object(a), Entity::Object(b)],
     );
     assert_eq!(t.named_on_battlefield("Glorious Anthem").len(), 2);
     // Two triggers: one for each enchantment.

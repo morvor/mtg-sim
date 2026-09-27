@@ -29,7 +29,11 @@ fn nothing_happens_between_choosing_to_dredge_and_finishing_it() {
             .hand
             .iter()
             .any(|c| g.obj(*c).chars.name.as_str() == "Golgari Thug");
-        (thug_in_hand, g.player(P0).library.len(), g.player(P0).graveyard.len())
+        (
+            thug_in_hand,
+            g.player(P0).library.len(),
+            g.player(P0).graveyard.len(),
+        )
     };
     let is_priority = |d: &Decision| matches!(d, Decision::Priority { .. });
     let seen0 = watch(&mut t, P0, is_priority, snapshot);

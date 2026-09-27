@@ -45,9 +45,8 @@ fn can_turn_up(t: &mut TestGame, p: PlayerId, obj: ObjectId) -> bool {
 /// `p` turns `obj` face up (the special action). Whether it was legal.
 fn turn_up(t: &mut TestGame, p: PlayerId, obj: ObjectId) -> bool {
     t.g.turn.priority = Some(p);
-    let r = t
-        .g
-        .perform_action(p, Action::Special(SpecialAction::TurnFaceUp { obj }));
+    let r =
+        t.g.perform_action(p, Action::Special(SpecialAction::TurnFaceUp { obj }));
     t.g.flush_events();
     r.is_ok()
 }

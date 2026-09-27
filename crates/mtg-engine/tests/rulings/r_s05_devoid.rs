@@ -42,7 +42,7 @@ fn a_card_with_devoid_is_only_colorless() {
 
 #[test]
 fn a_card_that_loses_devoid_is_still_colorless() {
-    cr!("702.114a", "613.1e", "613.1f", "613.3");
+    cr!("702.114a", "613.1e", "613.1f");
     ruling!(
         "Eldrazi Skyspawner",
         "If a card loses devoid, it will still be colorless. This is because effects that change an object's color (like the one created by devoid) are considered before the object loses devoid."
@@ -106,7 +106,7 @@ fn skyspawner_scion(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn eldrazi_scions_are_1_1() {
-    cr!("111.1", "111.4");
+    cr!("111.1");
     ruling!(
         "Eldrazi Skyspawner",
         "Eldrazi Scions are similar to Eldrazi Spawn, seen in the Zendikar block. Note that Eldrazi Scions are 1/1, not 0/1."

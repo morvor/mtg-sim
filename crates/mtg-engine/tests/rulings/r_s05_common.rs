@@ -32,9 +32,8 @@ pub fn tokens_with_subtype(t: &TestGame, p: PlayerId, subtype: &str) -> Vec<Obje
 /// settles.
 pub fn move_to(t: &mut TestGame, id: ObjectId, zone: Zone) -> Option<ObjectId> {
     let id = t.g.current(id);
-    let new = t
-        .g
-        .move_object(id, zone, mtg_engine::events::MoveCause::Effect, None);
+    let new =
+        t.g.move_object(id, zone, mtg_engine::events::MoveCause::Effect, None);
     t.g.flush_events();
     t.settle();
     new
