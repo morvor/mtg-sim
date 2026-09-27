@@ -8,25 +8,39 @@ use crate::casting::Illegal;
 use crate::decision::{Action, Answer, Decision, SpecialAction};
 use crate::eval::Ctx;
 use crate::game::Game;
-use crate::keywords::KeywordKind;
+use crate::keywords::{Keyword, KeywordKind};
 use crate::object::Zone;
 use crate::types::*;
 
 pub struct MorphFaceUp;
 
 /// The morph, megamorph, or disguise ability among `abilities`: (kind, is megamorph,
-/// cost).
-fn face_up_keyword(abilities: &[Ability]) -> Option<(KeywordKind, bool, Cost)> {
+/// cost, what its cost is reduced by {1} for each of).
+fn face_up_keyword(abilities: &[Ability]) -> Option<(KeywordKind, bool, Cost, Option<Filter>)> {
     abilities.iter().find_map(|a| match &a.kind {
         AbilityKind::Keyword(k) if matches!(k.kind, KeywordKind::Morph | KeywordKind::Disguise) => {
             let megamorph = k
                 .text
                 .as_deref()
                 .is_some_and(|t| t.to_lowercase().starts_with("megamorph"));
-            k.cost.clone().map(|c| (k.kind, megamorph, c))
+            k.cost
+                .clone()
+                .map(|c| (k.kind, megamorph, c, k.filter.clone()))
         }
         _ => None,
     })
+}
+
+/// A disguise keyword whose cost "is reduced by {1} for each [quality]" (Fugitive
+/// Codebreaker: "Disguise {5}{R}. This cost is reduced by {1} for each instant and
+/// sorcery card in your graveyard."): the objects counted are kept as its filter.
+pub fn disguise_reduced_for_each(cost: Cost, each: Filter, text: &str) -> Keyword {
+    Keyword {
+        cost: Some(cost),
+        filter: Some(each),
+        text: Some(text.into()),
+        ..Keyword::new(KeywordKind::Disguise)
+    }
 }
 
 /// Whether any continuous effect or static ability in the game could change an object's
@@ -60,7 +74,7 @@ pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
         return None;
     }
     let card = o.card.as_ref()?;
-    let (kind, megamorph, cost) = if effects_could_change_abilities(g) {
+    let (kind, megamorph, cost, each) = if effects_could_change_abilities(g) {
         // The characteristics it would have face up, with the effects that would apply
         // (including copy effects: a face-down permanent that became a copy of another
         // has that permanent's copiable values face up, CR 707.3, 708.10).
@@ -73,11 +87,18 @@ pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
         face_up_keyword(&card.front().chars.abilities)?
     };
     // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
-    let cost = if kind == KeywordKind::Morph {
+    let mut cost = if kind == KeywordKind::Morph {
         super::modified_keyword_cost(g, o.controller, KeywordKind::Morph, &cost)
     } else {
         cost
     };
+    // "This cost is reduced by {1} for each [quality]" (generic mana only).
+    if let (Some(each), Some(m)) = (each, cost.mana.as_mut()) {
+        let n = g
+            .objects_matching(&each, &Ctx::new(Some(id), o.controller))
+            .len();
+        m.reduce_generic(n as u32);
+    }
     Some((megamorph, cost))
 }
 

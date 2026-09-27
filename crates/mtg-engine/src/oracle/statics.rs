@@ -675,6 +675,17 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::GreatestManaValue(f), rest.to_string()));
     }
+    // "the total power of creatures you control", "the total power of the exiled cards
+    // used to craft it" (CR 702.167c), "the mana value of the card used to craft it": the
+    // objects a description matches, their values summed (CR 607.3).
+    if let Some(r) = s.strip_prefix("the total power of ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the mana value of ") {
+        let (f, _, rest) = parse_object_phrase(r.strip_prefix("the ").unwrap_or(r))?;
+        return Some((Value::ManaValueOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
     // CR 701.17c–d: "the milled card's mana value" (each milled card's, summed).
     if let Some(rest) = s
         .strip_prefix("the milled card's mana value")

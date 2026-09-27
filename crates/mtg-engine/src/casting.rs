@@ -157,9 +157,26 @@ pub fn cast_during_resolution(
     let face = choose_face_to_cast(g, p, card);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
+    // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
+    // keep their own method.
+    let mut keyword_way = false;
+    if face == FaceState::Front {
+        let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
+        if !others.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(others.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= others.len() {
+                opt = others.swap_remove(k - 1);
+                keyword_way = true;
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
-        opt.method = CastMethod::Free;
+        if !keyword_way {
+            opt.method = CastMethod::Free;
+        }
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
@@ -170,19 +187,28 @@ pub fn cast_during_resolution(
 /// name it would have. For "cast it without paying its mana cost if the resulting spell's
 /// mana value is N or less" (cascade, CR 702.85a; discover, CR 701.57a). Not a face a
 /// keyword's rule prohibits `p` from casting from where the card is (e.g. aftermath,
-/// CR 702.127a).
+/// CR 702.127a). Ways to cast it that aren't alternative costs are offered too, e.g. as a
+/// prototyped spell (CR 718.3), named with the way ("Blitz Automaton (prototype)").
 pub fn free_cast_options(
     g: &Game,
     p: PlayerId,
     card: ObjectId,
     ok: impl Fn(u32) -> bool,
 ) -> Vec<(smol_str::SmolStr, CastOption)> {
-    castable_faces(g, card)
+    let mut opts = Vec::new();
+    for face in castable_faces(g, card)
         .into_iter()
         .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
-        .filter_map(|face| {
-            let mut opt = CastOption::normal(face);
-            opt.method = CastMethod::Free;
+    {
+        let mut opt = CastOption::normal(face);
+        opt.method = CastMethod::Free;
+        opts.push(opt);
+        if face == FaceState::Front {
+            opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
+        }
+    }
+    opts.into_iter()
+        .filter_map(|mut opt| {
             opt.alt_cost = Some(Cost::free());
             opt.any_time = true;
             let chars = g.option_characteristics(card, &opt);
@@ -190,7 +216,13 @@ pub fn free_cast_options(
                 .mana_cost
                 .as_ref()
                 .map_or(0, |m| m.mana_value_with_x(0));
-            (!chars.is_land() && ok(mv)).then(|| (chars.name.clone(), opt))
+            let name = match opt.tag {
+                Some(way) if opt.method != CastMethod::Free => {
+                    smol_str::SmolStr::new(format!("{} ({way})", chars.name))
+                }
+                _ => chars.name.clone(),
+            };
+            (!chars.is_land() && ok(mv)).then_some((name, opt))
         })
         .collect()
 }
@@ -1100,6 +1132,8 @@ impl Game {
         // CR 601.2b: the spell's own optional additional costs and choices between
         // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
         crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
+        // CR 601.2b: choices keywords record with the costs (e.g. promising a gift).
+        crate::kw::announce_choices(self, p, id, &mut cast_info.paid);
         // CR 601.2b: choices the way it's cast calls for (e.g. emerge's sacrifice).
         crate::kw::announce(self, p, id, &opt.method, &mut extra)?;
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
@@ -1144,7 +1178,30 @@ impl Game {
                 .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         let mut x: i64 = 0;
         if base_cost_has_x {
-            let max = self.max_mana_available(p) as i64;
+            let mut max = self.max_mana_available(p) as i64;
+            // "Sacrifice a creature with power X or greater" (casualty X): X can be at
+            // most the greatest power among the creatures to sacrifice, and if no mana is
+            // paid for X, that's the only bound.
+            if extra.parts.iter().any(
+                |c| matches!(c, CostPart::Sacrifice { filter, .. } if filter_mentions_x(filter)),
+            ) {
+                let power = self
+                    .battlefield
+                    .iter()
+                    .filter(|o| self.obj(**o).controller == p && self.obj(**o).is_creature())
+                    .map(|o| self.obj(*o).power() as i64)
+                    .max()
+                    .unwrap_or(0);
+                let mana_x = match &opt.alt_cost {
+                    Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
+                    None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+                } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+                    || opt
+                        .extra_cost
+                        .as_ref()
+                        .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
+                max = if mana_x { max.min(power) } else { power };
+            }
             x = match self.ask(p, Decision::ChooseX { source: id, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => max.max(0),
@@ -1625,6 +1682,11 @@ impl Game {
                     self.player_rel_matches(cm.who, p, &ctx)
                         && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
                 }
+                CostTarget::KeywordAbilitiesOf(k, f) => {
+                    self.player_rel_matches(cm.who, p, &ctx)
+                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
+                        && self.matches(src, f, &ctx)
+                }
                 // CR 606.4: the cost of a loyalty ability may be modified by other effects.
                 CostTarget::LoyaltyAbilities(f) => {
                     act.is_loyalty
@@ -1726,6 +1788,8 @@ impl Game {
         act: &ActivatedAbility,
     ) -> Result<Option<ObjectId>, Illegal> {
         let src_chars = self.obj(src).chars.clone();
+        // CR 602.2: `p` began to activate it (undone with the rest if it's reversed).
+        self.history.activations_begun.push((p, src, a.uid));
         // CR 602.2a: an ability activated from a hidden zone reveals the card.
         if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
             self.emit(Event::Custom {
@@ -1764,10 +1828,7 @@ impl Game {
                 ..Default::default()
             };
             self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
-            *self.objects[src.0 as usize]
-                .activations_this_turn
-                .entry(a.uid)
-                .or_insert(0) += 1;
+            self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
                 source: src,
@@ -1858,10 +1919,7 @@ impl Game {
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
-        *self.objects[src.0 as usize]
-            .activations_this_turn
-            .entry(a.uid)
-            .or_insert(0) += 1;
+        self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
         if a.text == "Cycling"
             && act
@@ -1889,6 +1947,15 @@ impl Game {
         Ok(Some(id))
     }
 
+    /// Records that `p` activated the ability `uid` of `src` (CR 602.2i): this turn, and
+    /// over the object's existence ("Activate only once", CR 702.177a).
+    fn record_activation(&mut self, p: PlayerId, src: ObjectId, uid: u64) {
+        let o = &mut self.objects[src.0 as usize];
+        *o.activations_this_turn.entry(uid).or_insert(0) += 1;
+        *o.activations.entry(uid).or_insert(0) += 1;
+        self.history.activated.push((p, src, uid));
+    }
+
     /// Mana types `p` may spend as though they were mana of any color to pay for the
     /// spell `src` (`ability == false`) or the activated abilities of `src` (CR 602.1e).
     pub fn any_color_mana(&self, p: PlayerId, src: ObjectId, ability: bool) -> Vec<ManaType> {
@@ -1905,7 +1972,9 @@ impl Game {
                 CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
                 CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
                 CostTarget::ThisSpell => !ability && src == *s,
-                CostTarget::Keyword(_) | CostTarget::LoyaltyAbilities(_) => false,
+                CostTarget::Keyword(_)
+                | CostTarget::KeywordAbilitiesOf(..)
+                | CostTarget::LoyaltyAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {
@@ -2694,8 +2763,9 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
     let is_x = |v: &Value| matches!(v, Value::X);
     match c {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
-        CostPart::Sacrifice { count, .. }
-        | CostPart::Discard { count, .. }
+        // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
+        CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::Discard { count, .. }
         | CostPart::Exile { count, .. }
         | CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
@@ -2703,6 +2773,18 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
+        _ => false,
+    }
+}
+
+/// Whether a filter compares a characteristic with X ("power X or greater").
+fn filter_mentions_x(f: &Filter) -> bool {
+    match f {
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
+            matches!(**v, Value::X)
+        }
+        Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_x),
+        Filter::Not(f) => filter_mentions_x(f),
         _ => false,
     }
 }

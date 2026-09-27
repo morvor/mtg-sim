@@ -44,6 +44,19 @@ pub trait KeywordRules: Sync + Send {
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
         vec![]
     }
+    /// Ways to cast `card` because it has `kw` that don't involve an alternative cost
+    /// (CR 118.9), so that an effect instructing a player to cast the card (CR 608.2g),
+    /// even "without paying its mana cost", allows them too, e.g. casting a prototype card
+    /// as a prototyped spell (CR 718.3). Without an alternative cost of their own.
+    fn cast_options_with_any_cost(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+    ) -> Vec<CastOption> {
+        vec![]
+    }
     /// Whether a rule this keyword defines prohibits `p` from casting `card` as a spell
     /// with the characteristics `chars` (CR 601.3), e.g. "this half of this split card
     /// can't be cast from any zone other than a graveyard" (aftermath, CR 702.127a).
@@ -95,6 +108,19 @@ pub trait KeywordRules: Sync + Send {
     ) -> Result<(), Illegal> {
         Ok(())
     }
+    /// Choices announced as `spell` is proposed (CR 601.2b) that are recorded by name in
+    /// its `CastInfo::paid` (`paid`), such as promising a gift to an opponent
+    /// (CR 702.174a, 702.174k). Called once per keyword kind the spell has, after its
+    /// optional additional costs are announced.
+    fn announce_choices(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        paid: &mut Vec<SmolStr>,
+    ) {
+    }
     /// Adjust the targets/effect of a spell being cast.
     fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
         body
@@ -139,6 +165,20 @@ pub trait KeywordRules: Sync + Send {
     /// triggered ability (CR 702.88a). Called once per keyword kind the spell had as it
     /// last existed on the stack.
     fn after_spell_resolved(&self, g: &mut Game, spell: ObjectId, kw: &Keyword, new: ObjectId) {}
+    /// Where a resolved instant/sorcery goes because of something other than its keywords
+    /// (an effect that applies to that spell: "exile that spell instead of putting it into
+    /// your graveyard as it resolves"). Called for every registered implementation, after
+    /// the keywords' [`KeywordRules::resolved_destination`].
+    fn global_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// After any instant or sorcery spell resolved and was put where it goes (`new`).
+    /// Called for every registered implementation.
+    fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {}
     /// Where a countered spell goes, if the keyword changes it.
     fn countered_destination(
         &self,
@@ -411,10 +451,28 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         .iter()
         .flat_map(|r| r.global_cast_options(g, p, card))
         .collect();
-    let kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
+    let mut kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
+    // Keywords static abilities make it gain as it's cast ("Assassin spells you cast have
+    // freerunning {B}{B}", CR 610.5).
+    for k in crate::next_spell::cast_grant_keywords(g, p, card) {
+        if !kws.iter().any(|x| format!("{x:?}") == format!("{k:?}")) {
+            kws.push(k);
+        }
+    }
     for kw in &kws {
         for r in impls_for(kw.kind) {
             out.extend(r.cast_options(g, p, card, kw));
+        }
+    }
+    out
+}
+
+/// See [`KeywordRules::cast_options_with_any_cost`].
+pub fn cast_options_with_any_cost(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let mut out = Vec::new();
+    for kw in &distinct_kinds(&g.obj(card).chars) {
+        for r in impls_for(kw.kind) {
+            out.extend(r.cast_options_with_any_cost(g, p, card, kw));
         }
     }
     out
@@ -455,6 +513,15 @@ pub fn announce(
         }
     }
     Ok(())
+}
+
+/// See [`KeywordRules::announce_choices`].
+pub fn announce_choices(g: &mut Game, p: PlayerId, spell: ObjectId, paid: &mut Vec<SmolStr>) {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.announce_choices(g, p, spell, kw, paid);
+        }
+    }
 }
 
 pub fn adjust_spell_body(g: &Game, spell: ObjectId, mut body: Body) -> Body {
@@ -529,10 +596,15 @@ pub fn resolved_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryP
             }
         }
     }
-    None
+    registry()
+        .iter()
+        .find_map(|r| r.global_resolved_destination(g, spell))
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
+    for r in registry() {
+        r.global_after_spell_resolved(g, spell, new);
+    }
     for kw in &distinct_kinds(&g.obj(spell).chars) {
         for r in impls_for(kw.kind) {
             r.after_spell_resolved(g, spell, kw, new);

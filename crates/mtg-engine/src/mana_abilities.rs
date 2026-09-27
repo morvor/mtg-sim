@@ -1057,6 +1057,10 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                     ok = false;
                 }
             }
+            // Restrictions keywords add ("Activate only once", CR 702.177a).
+            if !crate::kw::activation_allowed(g, p, o.id, a) {
+                ok = false;
+            }
             if !ok {
                 continue;
             }
