@@ -393,6 +393,10 @@ pub struct TurnHistory {
     pub tokens_created: BTreeMap<PlayerId, u32>,
     pub cards_left_graveyard: BTreeMap<PlayerId, u32>,
     pub sacrificed: Vec<(PlayerId, ObjectId)>,
+    /// Activated abilities activated this turn: (player, source, ability uid), e.g. for
+    /// "as long as you haven't activated an exhaust ability this turn" (CR 702.177b).
+    #[serde(default)]
+    pub activated: Vec<(PlayerId, ObjectId, u64)>,
     pub crimes: BTreeMap<PlayerId, u32>,
     pub counters_put: u32,
     pub descended: BTreeMap<PlayerId, u32>,

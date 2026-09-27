@@ -419,6 +419,11 @@ pub struct GameObject {
     pub entered_turn: u32,
     /// Times each activated ability (by uid) has been activated this turn.
     pub activations_this_turn: BTreeMap<u64, u32>,
+    /// Times each activated ability (by uid) has been activated since this object came
+    /// into existence ("Activate only once", CR 702.177a): a new object after a zone
+    /// change starts afresh (CR 400.7).
+    #[serde(default)]
+    pub activations: BTreeMap<u64, u32>,
     /// Times each triggered ability (by uid) has triggered/resolved this turn.
     pub triggers_this_turn: BTreeMap<u64, u32>,
     /// Timestamp when this permanent gained the world supertype (CR 704.5k).
@@ -529,6 +534,7 @@ impl GameObject {
             next: None,
             entered_turn: 0,
             activations_this_turn: BTreeMap::new(),
+            activations: BTreeMap::new(),
             triggers_this_turn: BTreeMap::new(),
             world_since: None,
             merged_with: vec![],
