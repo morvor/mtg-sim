@@ -203,3 +203,25 @@ fn x_in_a_disguise_cost_is_the_x_other_abilities_refer_to() {
     assert!(t.in_hand(P1, "Hill Giant"));
     assert!(t.in_hand(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn a_disguise_cost_can_be_reduced() {
+    cr!("702.168d");
+    assert_supported("Fugitive Codebreaker");
+    // Fugitive Codebreaker: "Disguise {5}{R}. This cost is reduced by {1} for each instant
+    // and sorcery card in your graveyard." "When this creature is turned face up, discard
+    // your hand, then draw three cards."
+    let mut t = TestGame::new(2);
+    let fd = disguised(&mut t, "Fugitive Codebreaker");
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Divination");
+    t.graveyard(P0, "Grizzly Bears");
+    // {5}{R} reduced by {2}: {3}{R}.
+    add_mana(&mut t, P0, ManaType::R, 3);
+    assert!(!can_turn_up(&mut t, P0, fd));
+    add_mana(&mut t, P0, ManaType::R, 1);
+    assert!(can_turn_up(&mut t, P0, fd));
+    take_special(&mut t, P0, SpecialAction::TurnFaceUp { obj: fd }).unwrap();
+    assert_eq!(pool(&t, P0), 0);
+    assert_eq!(t.obj(fd).chars.name, "Fugitive Codebreaker");
+}

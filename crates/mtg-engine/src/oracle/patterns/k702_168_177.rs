@@ -440,6 +440,34 @@ fn exile_creatures_and_or_graveyard_cards(l: &str, b: &mut Builder) -> Option<Ef
 
 inventory::submit! { EffectPattern { name: "k702.168e exile up to N other target creatures and/or creature cards from graveyards", priority: 100, parse: exile_creatures_and_or_graveyard_cards } }
 
+/// "Disguise {5}{R}. This cost is reduced by {1} for each instant and sorcery card in your
+/// graveyard." (Fugitive Codebreaker): the disguise cost paid to turn it face up
+/// (CR 702.168d) is reduced (see `kw/morph_face_up.rs`).
+fn disguise_cost_reduced(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let (kw, rest) = t.split_once(". ")?;
+    let cost = kw.strip_prefix("Disguise ")?;
+    let cost = crate::oracle::keywords::parse_keyword_cost(cost)?;
+    let each = rest
+        .to_lowercase()
+        .strip_prefix("this cost is reduced by {1} for each ")?
+        .to_string();
+    let filter = match crate::oracle::patterns::statics::parse_for_each(&each, None)? {
+        Value::CardsInGraveyard(PlayerRef::You, f) => Filter::and(vec![
+            f,
+            Filter::Card,
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
+        Value::Count(f) => f,
+        _ => return None,
+    };
+    let kw = crate::kw::morph_face_up::disguise_reduced_for_each(cost, filter, kw);
+    Some(vec![AbilityDef::new(AbilityKind::Keyword(kw), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.168 disguise cost reduced for each", priority: 100, parse: disguise_cost_reduced } }
+
 // ---------------------------------------------------------------------------
 // Plot (CR 702.170)
 // ---------------------------------------------------------------------------
