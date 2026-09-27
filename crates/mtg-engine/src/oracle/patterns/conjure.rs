@@ -59,6 +59,11 @@ fn conjure(l: &str, b: &mut Builder) -> Option<Effect> {
     if count == 0 || names.iter().any(|n| mtg_data::cards().by_name(n).is_none()) {
         return None;
     }
+    // Where in the library a conjured card goes is specified only by "then shuffle" (the
+    // cards are put on top, then shuffled); other placements aren't supported.
+    if zone == ConjureZone::Library && !shuffle {
+        return None;
+    }
     let e = Effect::Custom(effect_name(count, zone, how, &names).into());
     Some(if shuffle {
         Effect::Seq(vec![

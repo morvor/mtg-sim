@@ -68,7 +68,12 @@ fn converting_turns_the_permanent_over_to_its_other_face() {
     // discarding a nonland card: a third counter makes it 5/8, so it converts.
     let mut t = TestGame::new(2);
     let cy = t.battlefield(P0, CYCLONUS);
-    t.g.add_counters(Entity::Object(cy), mtg_engine::types::counters::PLUS1, 2, None);
+    t.g.add_counters(
+        Entity::Object(cy),
+        mtg_engine::types::counters::PLUS1,
+        2,
+        None,
+    );
     stack_library(&mut t, P0, &["Grizzly Bears"]);
     t.hand(P0, "Lightning Bolt");
     t.answer_choose(P0, &[]);

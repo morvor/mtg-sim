@@ -219,7 +219,7 @@ fn destroy_permanent(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn a_countered_cipher_spell_goes_to_the_graveyard_unencoded() {
-    cr!("702.99a", "701.6a", "608.2b");
+    cr!("702.99a", "701.6a");
     ruling!(
         "Last Thoughts",
         "If the spell with cipher doesn’t resolve, none of its effects will happen, including cipher. The card will go to its owner’s graveyard and won’t be encoded on a creature."

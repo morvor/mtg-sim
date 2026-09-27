@@ -7,10 +7,10 @@ use crate::r_s01_common::*;
 use crate::r_s02_common::{can_activate, create_token};
 use crate::r_s03_common::{choice_candidates, run_effect};
 use mtg_engine::ability::{Destination, Effect, Filter, Modification, PlayerRef, Sel};
-use mtg_engine::types::{Color, ColorSet};
 use mtg_engine::object::{FaceState, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::{Color, ColorSet};
 use mtg_engine::*;
 
 const VISAGE: &str = "Visage of Dread // Dread Osseosaur";

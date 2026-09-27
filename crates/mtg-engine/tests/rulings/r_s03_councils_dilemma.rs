@@ -59,7 +59,7 @@ fn lieutenants(votes: [usize; 3]) -> (TestGame, ObjectId) {
 
 #[test]
 fn votes_are_cast_in_turn_order_after_the_previous_votes_are_known() {
-    cr!("701.38a", "101.4");
+    cr!("701.38a");
     ruling!(
         "Lieutenants of the Guard",
         "Because the votes are made in turn order, each player will know the votes of players who voted beforehand."
@@ -162,7 +162,9 @@ fn nobody_can_act_between_the_vote_and_the_end_of_the_resolution() {
     vote(&mut t, P0, 0);
     vote(&mut t, P1, 1);
     vote(&mut t, P2, 1);
-    assert!(t.g.run_until(10_000, |g| g.turn.step == Step::BeginningOfCombat));
+    assert!(t
+        .g
+        .run_until(10_000, |g| g.turn.step == Step::BeginningOfCombat));
     assert_eq!(tokens(&t, P0).len(), 2);
     // The three votes were asked one after another, with no priority in between, and
     // every time a player had priority the ability had either not begun resolving or
@@ -171,7 +173,9 @@ fn nobody_can_act_between_the_vote_and_the_end_of_the_resolution() {
     let votes: Vec<usize> = asked
         .iter()
         .enumerate()
-        .filter(|(_, (_, d))| matches!(d, Decision::ChooseOption { prompt, .. } if prompt == "Vote"))
+        .filter(
+            |(_, (_, d))| matches!(d, Decision::ChooseOption { prompt, .. } if prompt == "Vote"),
+        )
         .map(|(i, _)| i)
         .collect();
     assert_eq!(votes.len(), 3);
@@ -189,7 +193,7 @@ fn nobody_can_act_between_the_vote_and_the_end_of_the_resolution() {
 
 #[test]
 fn players_can_vote_for_counters_on_a_creature_that_has_left_the_battlefield() {
-    cr!("701.38a", "608.2h");
+    cr!("701.38a", "400.7");
     ruling!(
         "Lieutenants of the Guard",
         "If a creature with an enters-the-battlefield council’s dilemma ability leaves the battlefield before that ability resolves, players can still vote for any option that would put +1/+1 counters on that creature, even though—or perhaps especially because—those votes won’t generate an effect."
@@ -203,7 +207,10 @@ fn players_can_vote_for_counters_on_a_creature_that_has_left_the_battlefield() {
     let asked = votes_asked(&t);
     assert_eq!(asked.len(), 3);
     for (_, options) in &asked {
-        assert_eq!(options, &vec!["strength".to_string(), "numbers".to_string()]);
+        assert_eq!(
+            options,
+            &vec!["strength".to_string(), "numbers".to_string()]
+        );
     }
     // The strength votes did nothing; the numbers vote made a Soldier.
     assert_eq!(tokens(&t, P0).len(), 1);
@@ -271,7 +278,11 @@ fn fateful_tempest_votes_in_turn_order_and_adds_up_each_vote() {
     // card of your library for each present vote. Until the end of your next turn, you
     // may play the exiled cards."
     let mut t = TestGame::new(3);
-    stack_library(&mut t, P0, &["Hill Giant", "Grizzly Bears", "Lightning Bolt"]);
+    stack_library(
+        &mut t,
+        P0,
+        &["Hill Giant", "Grizzly Bears", "Lightning Bolt"],
+    );
     let seen: Vec<_> = [P0, P1, P2]
         .into_iter()
         .map(|p| {

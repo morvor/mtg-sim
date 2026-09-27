@@ -215,7 +215,7 @@ fn a_card_with_companion_in_the_starting_deck_is_an_ordinary_card() {
 
 #[test]
 fn a_companions_other_abilities_work_only_on_the_battlefield() {
-    cr!("702.139a", "113.6", "400.1");
+    cr!("702.139a", "113.6");
     ruling!(
         "Kaheera, the Orphanguard",
         "The companion's other abilities apply only if the creature is on the battlefield. They have no effect while the companion is outside the game."

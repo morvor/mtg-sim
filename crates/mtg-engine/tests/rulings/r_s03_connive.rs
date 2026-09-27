@@ -66,7 +66,7 @@ fn nobody_can_act_while_a_connive_ability_resolves() {
 
 #[test]
 fn a_creature_that_left_the_battlefield_still_connives_and_triggers_connive_abilities() {
-    cr!("701.50a", "701.50b", "701.50f", "603.10a");
+    cr!("701.50a", "701.50b", "701.50f");
     ruling!(
         "Doc Ock's Henchmen",
         "If a resolving spell or ability instructs a specific creature to connive but that creature has left the battlefield, the creature still connives. If you discard a nonland card this way, you won't put a +1/+1 counter on anything. Abilities that trigger \"when [that creature] connives\" will trigger."

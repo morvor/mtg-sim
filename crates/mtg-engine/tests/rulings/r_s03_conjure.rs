@@ -56,14 +56,14 @@ fn a_conjured_card_is_owned_by_the_player_instructed_to_conjure_it() {
 
 #[test]
 fn conjured_cards_needn_t_come_from_the_deck_or_obey_deck_building_limits() {
-    cr!("100.2a", "108.3");
+    cr!("108.3");
     ruling!(
         "Toralf's Disciple",
         "You do not need to own an actual copy of a card in order to conjure it, and a conjured card does not need to obey format legality or deckbuilding restrictions."
     );
     supported(DISCIPLE);
     // P0's library already holds four Lightning Bolts (the most a constructed deck may
-    // have, CR 100.2a). The Disciple conjures four more.
+    // have). The Disciple conjures four more.
     let mut t = TestGame::new(2);
     for _ in 0..4 {
         t.library_top(P0, "Lightning Bolt");
@@ -119,8 +119,13 @@ fn conjured_cards_arent_tokens_and_move_between_zones_like_other_cards() {
     let artist = artist[0];
     assert!(!t.obj(artist).is_token());
     assert_eq!(t.obj(artist).owner, P0);
-    // The Blood token is a token; the Blood Artist works like the card it is.
-    assert_eq!(tokens(&t, P0).len(), 1);
+    // The Blood token is a token (destroyed, it ceases to exist, CR 704.5d); the Blood
+    // Artist works like the card it is.
+    let blood = tokens(&t, P0);
+    assert_eq!(blood.len(), 1);
+    destroy(&mut t, blood[0]);
+    assert!(tokens(&t, P0).is_empty());
+    assert_eq!(t.graveyard_size(P0), 0);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer_targets(P0, &[Entity::Player(P1)]);
     destroy(&mut t, bears);

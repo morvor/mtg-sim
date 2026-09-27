@@ -148,7 +148,7 @@ fn you_cant_pay_more_mana_or_ignore_a_cost_reduction_to_spend_more_colors() {
 
 #[test]
 fn colors_of_mana_spent_on_additional_costs_count() {
-    cr!("207.2c", "601.2f", "118.8");
+    cr!("207.2c", "601.2f");
     ruling!(
         "Sweep the Skies",
         "If there are any alternative or additional costs to cast a spell with a converge ability, the colors of mana spent to pay those costs will count."

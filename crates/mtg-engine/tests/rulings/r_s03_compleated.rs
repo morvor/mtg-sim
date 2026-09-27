@@ -94,7 +94,10 @@ fn tamiyos_notebook_is_a_named_legendary_token() {
     let o = t.obj_now(book[0]);
     assert_eq!(o.chars.name, "Tamiyo's Notebook");
     assert!(o.chars.has_subtype("Book"));
-    assert!(o.chars.supertypes.contains(mtg_engine::types::Supertype::Legendary));
+    assert!(o
+        .chars
+        .supertypes
+        .contains(mtg_engine::types::Supertype::Legendary));
     assert!(o.is(mtg_engine::types::CardType::Artifact));
     assert_eq!(o.chars.colors, ColorSet::NONE);
     // "{T}: Draw a card."
