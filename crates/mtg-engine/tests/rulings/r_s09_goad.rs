@@ -159,7 +159,7 @@ fn an_aura_goaded_creature_follows_the_same_exceptions() {
 
 #[test]
 fn a_goaded_creature_attacks_again_in_an_additional_combat_and_for_a_new_controller() {
-    cr!("701.15a", "701.15b", "506.1");
+    cr!("701.15a", "701.15b", "500.8");
     ruling!(
         "Disrupt Decorum",
         "Attacking with a goaded creature doesn't cause it to stop being goaded. If there is an additional combat phase that turn, or if another player gains control of it before it stops being goaded, it must attack again if able."
@@ -196,7 +196,7 @@ fn a_goaded_creature_attacks_again_in_an_additional_combat_and_for_a_new_control
 
 #[test]
 fn an_aura_goaded_creature_attacks_again_for_its_new_controller() {
-    cr!("701.15b", "506.1");
+    cr!("701.15b", "500.8");
     ruling!(
         "Acquired Mutation",
         "Attacking with a goaded creature doesn’t cause it to stop being goaded."

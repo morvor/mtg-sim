@@ -52,11 +52,18 @@ pub fn parse_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if let Some(r) = l.strip_prefix("as long as ") {
         let parsed = r.split_once(", ").and_then(|(c, rest)| {
             let cond = parse_condition(c, ctx)?;
+            // "As long as ~ is in your graveyard, ...": it functions from the graveyard
+            // (CR 113.6b).
+            let from_graveyard =
+                super::patterns::graveyard_order::requires_source_in_graveyard(&cond);
             let mut abilities = parse_static_inner(rest, text, ctx)?;
             for a in abilities.iter_mut() {
                 if let AbilityKind::Static(s) = &a.kind {
                     let mut s2 = s.clone();
                     s2.condition = Some(cond.clone());
+                    if from_graveyard {
+                        s2.zone = FunctionZone::Graveyard;
+                    }
                     *a = AbilityDef::new(AbilityKind::Static(s2), text);
                 }
             }

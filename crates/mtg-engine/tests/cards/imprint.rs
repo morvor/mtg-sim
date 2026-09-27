@@ -65,15 +65,40 @@ fn isochron_scepter_copies_the_exiled_instant_and_casts_the_copy() {
 }
 
 #[test]
-fn isochron_scepter_cant_imprint_a_card_with_greater_mana_value() {
+fn a_scepter_copies_only_the_card_it_exiled_itself() {
     cr!("607.2a");
     let mut t = TestGame::new(2);
+    // The first Scepter exiles Lightning Bolt.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    let first = t.enter(P0, "Isochron Scepter");
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    // The second one can't exile Dissolve (mana value 3): it exiles nothing.
     let div = t.hand(P0, "Dissolve");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(div)]);
-    t.enter(P0, "Isochron Scepter");
+    let second = t.enter(P0, "Isochron Scepter");
     t.resolve_all();
     assert_eq!(t.zone(div), Zone::Hand(P0));
+    // The second Scepter's "the exiled card" isn't the Bolt the first one exiled.
+    t.lands(P0, "Wastes", 4);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate(&mut t, P0, second, "{2}");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.g.history.spells_cast.is_empty());
+    // The first one's is.
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate(&mut t, P0, first, "{2}");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.g.history.spells_cast.len(), 1);
 }
 
 #[test]
@@ -138,4 +163,21 @@ fn mimic_vat_keeps_one_card_and_its_token_is_hasty_and_exiled_at_end_of_turn() {
     assert!(t.named_on_battlefield("Hill Giant").is_empty());
     // The card stays exiled with the Vat.
     assert!(t.in_exile("Hill Giant"));
+}
+
+#[test]
+fn mimic_vat_with_no_card_exiled_with_it_creates_no_token() {
+    cr!("111.12", "607.2a");
+    let mut t = TestGame::new(2);
+    let vat = t.battlefield(P0, "Mimic Vat");
+    // A creature card exiled by something else isn't exiled with the Vat.
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.g.move_object(bears, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.flush_events();
+    assert!(t.in_exile("Grizzly Bears"));
+    t.lands(P0, "Wastes", 3);
+    activate(&mut t, P0, vat, "{3}");
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.g.permanents().all(|o| !o.is_token()));
 }

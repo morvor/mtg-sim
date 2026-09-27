@@ -26,12 +26,14 @@ fn horsemanship_doesnt_interact_with_flying_or_reach() {
     assert!(t.g.can_block(lu_xun, scout));
     block_and_finish(&mut t, P1, &[(angel, scout), (spider, scout)]);
     assert_eq!(t.life(P1), 19);
-    // A creature with horsemanship can't block a flyer.
+    // A creature with horsemanship can't block a flyer (a creature with reach can).
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Serra Angel");
     let lu_xun = t.battlefield(P1, "Lu Xun, Scholar General");
+    let spider = t.battlefield(P1, "Giant Spider");
     attack_with(&mut t, &[(angel, Entity::Player(P1))]);
     assert!(!t.g.can_block(lu_xun, angel));
+    assert!(t.g.can_block(spider, angel));
     block_and_finish(&mut t, P1, &[(lu_xun, angel)]);
     assert_eq!(t.life(P1), 16);
 }

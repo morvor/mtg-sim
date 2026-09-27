@@ -149,7 +149,7 @@ fn blood_operative_returns_when_you_surveil() {
 
 #[test]
 fn glory_is_activated_from_the_graveyard() {
-    cr!("113.6", "602.5b");
+    cr!("113.6", "602.1b", "602.5");
     assert_supported("Glory");
     let mut t = TestGame::new(2);
     let on_bf = t.battlefield(P0, "Glory");
@@ -198,7 +198,7 @@ fn nether_shadow_needs_three_creature_cards_above_it() {
 
 #[test]
 fn ashen_ghoul_is_activated_during_upkeep_with_three_creature_cards_above_it() {
-    cr!("404.1", "602.5b");
+    cr!("404.1", "602.1b", "602.5");
     assert_supported("Ashen Ghoul");
     // "{B}: Return this card from your graveyard to the battlefield. Activate only during
     // your upkeep and only if three or more creature cards are above this card."
@@ -271,4 +271,26 @@ fn krovikan_horror_needs_a_creature_card_directly_above_it() {
     t.resolve_all();
     assert_eq!(t.zone(horror2), Zone::Hand(P0));
     let _ = horror;
+}
+
+#[test]
+fn riftstone_portal_grants_its_mana_ability_only_from_the_graveyard() {
+    cr!("113.6", "604.2");
+    assert_supported("Riftstone Portal");
+    // "As long as this card is in your graveyard, lands you control have "{T}: Add {G} or
+    // {W}.""
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Riftstone Portal");
+    t.lands(P0, "Wastes", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").len() == 1);
+    // On the battlefield, it gives lands nothing: the Wastes can't pay {G}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Riftstone Portal");
+    t.lands(P0, "Wastes", 1);
+    let elves = t.hand(P0, "Llanowar Elves");
+    assert!(t.cast(P0, elves).try_go().is_err());
+    assert_eq!(t.zone(elves), Zone::Hand(P0));
 }

@@ -141,7 +141,7 @@ fn the_end_step_return_happens_only_if_it_is_still_on_the_battlefield() {
 
 #[test]
 fn ball_lightning_is_sacrificed_at_the_end_of_every_turn_it_is_on_the_battlefield() {
-    cr!("603.2", "513.1");
+    cr!("603.2");
     ruling!(
         "Ball Lightning",
         "The creature is sacrificed at the end of every turn in which it is on the battlefield. There is no choice about what turn to sacrifice it."

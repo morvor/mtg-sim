@@ -86,7 +86,7 @@ fn a_tapped_artifacts_abilities_keep_applying() {
 
 #[test]
 fn equipment_and_the_equipped_creature_tap_independently() {
-    cr!("702.126a", "301.5");
+    cr!("702.126a", "110.5c", "301.5a");
     ruling!(
         "Reverse Engineer",
         "Equipment attached to a creature doesn't become tapped when that creature becomes tapped, and tapping that Equipment doesn't cause the creature to become tapped."
@@ -119,7 +119,7 @@ fn equipment_and_the_equipped_creature_tap_independently() {
 
 #[test]
 fn tapped_equipment_still_applies_battle_at_the_bridge() {
-    cr!("702.126a", "301.5");
+    cr!("702.126a", "110.5c", "301.5a");
     ruling!(
         "Battle at the Bridge",
         "Tapping an artifact won’t cause its abilities to stop applying unless those abilities say so."
