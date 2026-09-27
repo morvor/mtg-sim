@@ -18,6 +18,7 @@
 //!   creatures you control cost {N} less to activate";
 //! * "if this spell was cast using teamwork", "You may cast ~ as though it had flash if
 //!   it's cast using teamwork" (CR 702.194b);
+//! * "you have an enduring story" (CR 702.195b);
 
 use super::{
     AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
@@ -375,3 +376,18 @@ fn flash_with_teamwork(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "k702.194 flash if cast using teamwork", priority: 50, parse: flash_with_teamwork } }
+
+/// "you have an enduring story" (CR 702.195b).
+fn enduring_story(c: &str) -> Option<Condition> {
+    match end(c) {
+        "you have an enduring story" => Some(Condition::Custom(
+            crate::kw::storied::HAS_ENDURING_STORY.into(),
+        )),
+        "you don't have an enduring story" => Some(Condition::Not(Box::new(Condition::Custom(
+            crate::kw::storied::HAS_ENDURING_STORY.into(),
+        )))),
+        _ => None,
+    }
+}
+
+inventory::submit! { ConditionPattern { name: "k702.195 you have an enduring story", priority: 50, parse: enduring_story } }
