@@ -469,6 +469,93 @@ fn disguise_cost_reduced(block: &str, _ctx: &CompileContext) -> Option<Vec<Abili
 inventory::submit! { AbilityPattern { name: "k702.168 disguise cost reduced for each", priority: 100, parse: disguise_cost_reduced } }
 
 // ---------------------------------------------------------------------------
+// Solved (CR 702.169): what Cases are solved by
+// ---------------------------------------------------------------------------
+
+/// "N or more" / "no": a count condition on `v`.
+fn at_least(r: &str, v: Value) -> Option<(Condition, &str)> {
+    if let Some(rest) = r.strip_prefix("no ") {
+        return Some((Condition::Compare(v, Cmp::Eq, Value::c(0)), rest));
+    }
+    let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+    let rest = rest.trim_start().strip_prefix("or more ")?;
+    Some((Condition::Compare(v, Cmp::Ge, n), rest))
+}
+
+/// Conditions about what happened this turn, as Cases are solved by (CR 719.3a; see
+/// `kw/solved.rs`): "three or more creatures attacked this turn" (Case of the Gateway
+/// Express), "no creatures attacked this turn"; "three or more creature cards were put
+/// into graveyards from anywhere this turn" (Case of the Gorgon's Kiss); "three or more
+/// sources you controlled dealt damage this turn" (Case of the Burning Masks); "you've
+/// cast four or more instant and sorcery spells this turn" (Case of the Ransacked Lab,
+/// Arclight Phoenix).
+fn this_turn_counts(c: &str) -> Option<Condition> {
+    use crate::kw::solved::*;
+    let c = end(c);
+    let custom = |n: &str| Value::Custom(SmolStr::new(n));
+    if let Some(r) = c.strip_prefix("you've cast ") {
+        let r = r.strip_suffix(" this turn")?;
+        let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+        let spells = rest.trim_start().strip_prefix("or more ")?;
+        let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(spells)?;
+        if !plural || !end(tail).is_empty() || !spells.ends_with("spells") {
+            return None;
+        }
+        return Some(Condition::Compare(
+            Value::SpellsCastThisTurn(PlayerRef::You, f),
+            Cmp::Ge,
+            n,
+        ));
+    }
+    for (what, value) in [
+        ("creatures attacked this turn", CREATURES_ATTACKED),
+        (
+            "creature cards were put into graveyards from anywhere this turn",
+            CREATURE_CARDS_TO_GRAVEYARDS,
+        ),
+        (
+            "sources you controlled dealt damage this turn",
+            SOURCES_YOU_CONTROLLED_DEALT_DAMAGE,
+        ),
+    ] {
+        if let Some(r) = c.strip_suffix(what) {
+            let r = format!("{r} ");
+            let (cond, rest) = at_least(&r, custom(value))?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            return Some(cond);
+        }
+    }
+    None
+}
+
+inventory::submit! { ConditionPattern { name: "k702.169 counts of what happened this turn", priority: 100, parse: this_turn_counts } }
+
+/// "You may look at the top card of your library any time, and you may play lands [and
+/// cast creature and enchantment spells] from the top of your library." (Case of the
+/// Locked Hothouse, Radha, Heart of Keld): two static abilities in one sentence.
+fn look_at_top_and_play(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let rest = end(l)
+        .strip_prefix("you may look at the top card of your library any time, and you may ")?;
+    let mut out = crate::oracle::statics::parse_static(
+        "You may look at the top card of your library any time.",
+        ctx,
+    )?;
+    out.extend(crate::oracle::statics::parse_static(
+        &format!("You may {rest}."),
+        ctx,
+    )?);
+    Some(
+        out.into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), text))
+            .collect(),
+    )
+}
+
+inventory::submit! { StaticPattern { name: "k702.169 look at the top card any time, and play from the top", priority: 100, parse: look_at_top_and_play } }
+
+// ---------------------------------------------------------------------------
 // Plot (CR 702.170)
 // ---------------------------------------------------------------------------
 

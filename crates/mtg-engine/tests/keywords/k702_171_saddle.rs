@@ -354,3 +354,41 @@ fn pending_targets(t: &TestGame) -> Vec<Entity> {
         })
         .unwrap_or_default()
 }
+
+#[test]
+fn whenever_a_saddled_creature_you_control_attacks() {
+    cr!("702.171a", "702.171b");
+    assert_supported("Jandor, Fortuned Traveler");
+    // Jandor, Fortuned Traveler: "Each Beast, Camel, Horse, Elephant, and Wolf creature you
+    // control is a Mount in addition to its other types and has saddle 2." "Whenever a
+    // saddled creature you control attacks, it gets +2/+2 until end of turn. Draw a card.
+    // Create a Food token."
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Jandor, Fortuned Traveler");
+    // Trained Armodon: a 3/3 Elephant.
+    let armodon = t.battlefield(P0, "Trained Armodon");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.g.recompute();
+    assert!(t.obj(armodon).chars.has_subtype("Mount"));
+    assert!(t.obj(armodon).chars.has_keyword(KeywordKind::Saddle));
+    saddle(&mut t, armodon, &[bears]);
+    assert!(is_saddled(&t.g, armodon));
+    // The saddled Armodon and the unsaddled Elves attack: one trigger.
+    t.g.untap(elves);
+    let hand = t.hand_size(P0);
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare_attackers(
+        &mut t,
+        &[
+            (armodon, Entity::Player(P1)),
+            (elves, Entity::Player(P1)),
+        ],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(armodon), (5, 5));
+    assert_eq!(t.pt(elves), (1, 1));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(tokens_of_subtype(&t, P0, "Food").len(), 1);
+}

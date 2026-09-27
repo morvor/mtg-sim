@@ -408,6 +408,11 @@ pub struct TurnHistory {
     pub objects_dealt_damage: BTreeSet<ObjectId>,
     /// (source, object) pairs: objects dealt damage this turn and by what.
     pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
+    /// Sources that dealt damage this turn (each object once, CR 400.7), with the player
+    /// who controlled each as it dealt damage ("three or more sources you controlled dealt
+    /// damage this turn"). Recorded by `kw/solved.rs`.
+    #[serde(default)]
+    pub damage_sources: Vec<(ObjectId, PlayerId)>,
     pub lands_played: BTreeMap<PlayerId, u32>,
     pub tokens_created: BTreeMap<PlayerId, u32>,
     pub cards_left_graveyard: BTreeMap<PlayerId, u32>,

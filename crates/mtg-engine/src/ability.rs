@@ -1206,6 +1206,10 @@ pub enum Value {
     /// have changed since ("two or more nonland permanents entered the battlefield under
     /// your control this turn").
     PermanentsEnteredThisTurn(PlayerRef, Filter),
+    /// Number of spells the player cast this turn matching the filter as they were on the
+    /// stack, whether or not they're still there ("you've cast four or more instant and
+    /// sorcery spells this turn"). Copies of spells weren't cast.
+    SpellsCastThisTurn(PlayerRef, Filter),
     /// Number of times this ability has resolved this turn.
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
@@ -1803,6 +1807,10 @@ pub enum ReplacementAction {
     Multiply(i32),
     /// Add N to the amount.
     Add(Value),
+    /// "those tokens plus [N] [token] are created instead" (CR 614.1a): the token creation
+    /// event also creates `count` of these tokens under the same player's control
+    /// (`Value::EventAmount` is how many tokens the event creates, "that many").
+    PlusTokens { spec: TokenSpec, count: Value },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.

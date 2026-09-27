@@ -217,6 +217,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
         // A prepared permanent (CR 722.3a); a spell cast as a prepare spell (CR 722.3d).
         "prepared" => Filter::Prepared,
+        // CR 701.60b: a suspected permanent.
+        "suspected" => Filter::Custom(crate::kwa::suspect_detain::SUSPECTED.into()),
+        // CR 702.171b: a saddled permanent.
+        "saddled" => Filter::Custom(crate::kw::saddle::SADDLED.into()),
         _ => return None,
     })
 }
