@@ -75,6 +75,17 @@ fn multiply(e: Effect, count: Value) -> Option<Effect> {
 
 /// "the number of [thing]" for "for each [thing]".
 fn count_of(s: &str, b: &mut Builder) -> Option<Value> {
+    // "for each of those creatures": the objects an earlier instruction named (Bounding
+    // Felidar).
+    if let Some(r) = s.strip_prefix("of those ") {
+        let saved = b.targets.len();
+        let (sel, rest) = crate::oracle::effects::object_ref(&format!("those {r}"), b)?;
+        if !end(&rest).trim().is_empty() || b.targets.len() != saved {
+            b.targets.truncate(saved);
+            return None;
+        }
+        return Some(Value::CountSel(Box::new(sel)));
+    }
     let (v, rest) = parse_value_phrase(&format!("the number of {s}"), b)?;
     if !end(&rest).trim().is_empty() {
         return None;

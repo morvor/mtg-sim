@@ -212,6 +212,140 @@ fn becomes_saddled(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "k702.171 becomes saddled until end of turn", priority: 100, parse: becomes_saddled } }
 
+/// Whether a filter is about the creatures that saddled the source this turn.
+fn about_saddlers(f: &Filter) -> bool {
+    match f {
+        Filter::Custom(n) => n.as_str() == crate::kw::saddle::SADDLED_IT_THIS_TURN,
+        Filter::And(v) => v.iter().any(about_saddlers),
+        _ => false,
+    }
+}
+
+/// "any number of creatures that saddled it this turn", "up to one creature that saddled
+/// it this turn", "a creature that saddled it this turn": chosen as the effect happens
+/// (CR 702.171c).
+fn saddlers(s: &str) -> Option<(Sel, String)> {
+    let (count, up_to, r) = if let Some(r) = s.strip_prefix("any number of ") {
+        (Value::c(99), true, r)
+    } else if let Some(r) = s.strip_prefix("up to one ") {
+        (Value::c(1), true, r)
+    } else if let Some(r) = s.strip_prefix("a ") {
+        (Value::c(1), false, r)
+    } else {
+        return None;
+    };
+    let (f, _, rest) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if !about_saddlers(&f) {
+        return None;
+    }
+    Some((
+        Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count,
+            up_to,
+            store: None,
+        },
+        rest.to_string(),
+    ))
+}
+
+/// "return any number of creatures that saddled it this turn to their owner's hand"
+/// (Rambling Possum).
+fn return_saddlers(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let (what, rest) = saddlers(end(l).strip_prefix("return ")?)?;
+    if !matches!(
+        rest.trim(),
+        "to their owner's hand" | "to their owners' hands" | "to its owner's hand"
+    ) {
+        return None;
+    }
+    Some(Effect::Move {
+        what,
+        to: Destination::zone(ZoneKind::Hand),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.171c return creatures that saddled it", priority: 100, parse: return_saddlers } }
+
+/// "at end of combat, exile it and up to one creature that saddled it this turn, then
+/// return those cards to the battlefield under their owner's control" (Fortune, Loyal
+/// Steed): a delayed triggered ability (CR 603.7) that exiles the Mount (as the ability
+/// that created it knew it) and a creature that saddled it chosen then, and returns them
+/// as new objects (CR 400.7).
+fn flicker_with_saddler_at_end_of_combat(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("at end of combat, exile ")?;
+    let (it, r) = crate::oracle::effects::object_ref(r, b)?;
+    if !matches!(it, Sel::This) {
+        return None;
+    }
+    let r = r.trim().strip_prefix("and ")?;
+    let (who, rest) = r.split_once(", then return those cards to the battlefield")?;
+    if !matches!(
+        rest,
+        " under their owner's control" | " under their owners' control"
+    ) {
+        return None;
+    }
+    let (chosen, tail) = saddlers(who)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    const MOUNT: Var = vars::USER + 1718;
+    let mut to = Destination::battlefield();
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(vars::IT))));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: MOUNT,
+            sel: Sel::This,
+        },
+        Effect::AtNext {
+            step: TriggerStep::EndOfCombat,
+            effect: Box::new(Effect::seq(vec![
+                Effect::Exile {
+                    what: Sel::Union(vec![Sel::Var(MOUNT), chosen]),
+                    face_down: false,
+                    link: false,
+                },
+                Effect::Move {
+                    what: Sel::Var(vars::IT),
+                    to,
+                },
+            ])),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "k702.171c at end of combat, exile it and a creature that saddled it", priority: 100, parse: flicker_with_saddler_at_end_of_combat } }
+
+/// "choose a nonlegendary creature that saddled it this turn and create a tapped and
+/// attacking token that's a copy of it" (Calamity, Galloping Inferno): the chosen creature
+/// is what "it" refers to afterward.
+fn choose_saddler_and(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (who, rest) = r.split_once(" and ")?;
+    let (chosen, tail) = saddlers(who)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    const CHOSEN: Var = vars::USER + 1719;
+    let saved = b.it.clone();
+    b.it = Sel::Var(CHOSEN);
+    let Some(e) = crate::oracle::effects::parse_clause(rest, b) else {
+        b.it = saved;
+        return None;
+    };
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN,
+            sel: chosen,
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "k702.171c choose a creature that saddled it and ...", priority: 100, parse: choose_saddler_and } }
+
 // ---------------------------------------------------------------------------
 // Freerunning (CR 702.173)
 // ---------------------------------------------------------------------------

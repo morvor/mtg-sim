@@ -151,3 +151,71 @@ fn if_and_object_condition(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "if [condition] and [object] isn't legendary, [instruction]", priority: 250, parse: if_and_object_condition } }
+
+/// "Otherwise, [instruction]." after a conditional instruction ("You lose life equal to
+/// that card's mana value if ~ isn't saddled. Otherwise, each opponent loses that much
+/// life.", Caustic Bronco): what happens if the condition doesn't hold.
+fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = crate::oracle::phrases::end(l).strip_prefix("otherwise, ") else {
+        return false;
+    };
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        other => Some(other),
+    };
+    let Some(Effect::If {
+        then, otherwise, ..
+    }) = last
+    else {
+        return false;
+    };
+    if !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    // "that much life": the amount of life the instruction the condition governs would
+    // have gained or lost.
+    let much = r.contains("that much life");
+    let amount = match &**then {
+        Effect::LoseLife { n, .. } | Effect::GainLife { n, .. } => Some(n.clone()),
+        _ => None,
+    };
+    if much && amount.is_none() {
+        return false;
+    }
+    let text = r.replace("that much life", "1 life");
+    let first_new = b.targets.len();
+    let Some(mut e) = crate::oracle::effects::parse_clause(&text, b) else {
+        b.targets.truncate(first_new);
+        return false;
+    };
+    if much {
+        match &mut e {
+            Effect::LoseLife { n, .. } | Effect::GainLife { n, .. } => {
+                *n = amount.unwrap_or(Value::c(0))
+            }
+            _ => {
+                b.targets.truncate(first_new);
+                return false;
+            }
+        }
+    }
+    **otherwise = e;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "otherwise, [instruction]", priority: 200, apply: otherwise } }
+
+/// "[instruction] instead if [condition]" ("That card gains flashback {0} until end of turn
+/// instead if ~ is saddled.", Archmage's Newt): the same as "If [condition], [instruction]
+/// instead."
+fn instead_if(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some((x, c)) = crate::oracle::phrases::end(l).rsplit_once(" instead if ") else {
+        return false;
+    };
+    if x.is_empty() || x.starts_with("if ") || c.contains(',') {
+        return false;
+    }
+    crate::oracle_ext::apply_followup_ext(&format!("if {c}, {x} instead"), prev, b)
+}
+
+inventory::submit! { FollowupPattern { name: "[instruction] instead if [condition]", priority: 200, apply: instead_if } }
