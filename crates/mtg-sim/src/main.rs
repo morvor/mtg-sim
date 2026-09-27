@@ -2,7 +2,7 @@
 //!
 //! Usage: mtg-sim [--games N] [--seed S] [--deck FILE]... [--players N] [--random-decks]
 //!                [--only G] [--max-turns N] [--max-actions N] [--slow SECS]
-//!                [--timeout SECS] [--log]
+//!                [--timeout SECS] [--check N] [--log]
 //!
 //! A deck file lists "4 Lightning Bolt" lines; the cards after a "Sideboard" line are the
 //! player's sideboard, from which a companion may be revealed as the game starts.
@@ -14,9 +14,15 @@
 //! (random agents can pile up effects) is stopped and reported as slow. A game in which no
 //! decision was made for `--timeout` seconds is reported as a hang and ends the run with
 //! status 2.
+//!
+//! `--check N` checks every Nth priority decision that no state-based action was pending
+//! when the player got priority (CR 117.5); a violation is reported like a panic. Fuzzing
+//! checks every 4th decision unless told otherwise (`--check 0` turns it off).
 
+mod checks;
 mod decks;
 
+use checks::{CheckingAgent, Violation};
 use decks::{default_deck, load_deck, random_deck, DeckList};
 use mtg_engine::agents::RandomAgent;
 use mtg_engine::turn::Stage;
@@ -55,10 +61,13 @@ fn play(
     decks: Vec<DeckList>,
     agent_seed: u64,
     logging: bool,
+    check: u32,
     slow: Duration,
     timeout: Duration,
-) -> Option<Outcome> {
+) -> Option<(Outcome, Vec<Violation>)> {
     let (tx, rx) = mpsc::channel();
+    let violations: Arc<Mutex<Vec<Violation>>> = Arc::default();
+    let violations2 = violations.clone();
     let progress = Arc::new(AtomicU64::new(0));
     let stop = Arc::new(AtomicBool::new(false));
     let (progress2, stop2) = (progress.clone(), stop.clone());
@@ -69,8 +78,13 @@ fn play(
             let r = panic::catch_unwind(AssertUnwindSafe(|| {
                 let agents: Vec<Box<dyn Agent>> = (0..decks.len())
                     .map(|p| {
-                        Box::new(RandomAgent::new(agent_seed.wrapping_add(p as u64)))
-                            as Box<dyn Agent>
+                        let a = RandomAgent::new(agent_seed.wrapping_add(p as u64));
+                        if check > 0 {
+                            Box::new(CheckingAgent::new(a, check, violations2.clone()))
+                                as Box<dyn Agent>
+                        } else {
+                            Box::new(a) as Box<dyn Agent>
+                        }
                     })
                     .collect();
                 let g = game.insert(Game::new(
@@ -134,7 +148,10 @@ fn play(
     let (mut seen, mut since) = (0, Instant::now());
     loop {
         match rx.recv_timeout(Duration::from_millis(200)) {
-            Ok(outcome) => return Some(outcome),
+            Ok(outcome) => {
+                let v = std::mem::take(&mut *violations.lock().unwrap_or_else(|e| e.into_inner()));
+                return Some((outcome, v));
+            }
             Err(RecvTimeoutError::Disconnected) => return None,
             Err(RecvTimeoutError::Timeout) => {
                 let now = progress.load(Ordering::Relaxed);
@@ -174,6 +191,7 @@ fn main() {
     let mut max_actions = GameConfig::default().max_actions;
     let mut slow = 60u64;
     let mut timeout = 60u64;
+    let mut check: Option<u32> = None;
     let mut log = false;
     let mut i = 1;
     let value = |i: usize, what: &str| -> String {
@@ -192,6 +210,7 @@ fn main() {
             "--max-actions" => {
                 max_actions = value(i, "--max-actions").parse().expect("--max-actions N")
             }
+            "--check" => check = Some(value(i, "--check").parse().expect("--check N")),
             "--slow" => slow = value(i, "--slow").parse().expect("--slow SECS"),
             "--timeout" => timeout = value(i, "--timeout").parse().expect("--timeout SECS"),
             "--random-decks" => {
@@ -207,6 +226,7 @@ fn main() {
         i += 2;
     }
     let players = players.max(deck_files.len()).max(2);
+    let check = check.unwrap_or(if random { 4 } else { 0 });
     let fixed: Vec<DeckList> = deck_files.iter().map(|f| load_deck(f)).collect();
     panic::set_hook(Box::new(|info| {
         *LAST_PANIC.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.to_string());
@@ -216,6 +236,7 @@ fn main() {
     let mut wins = vec![0u64; players];
     let (mut played, mut draws, mut turns, mut finished) = (0u64, 0u64, 0u64, 0u64);
     let mut slow_games: Vec<u64> = Vec::new();
+    let mut violations: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     let mut panics: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     let range = match only {
         Some(g) => g..g + 1,
@@ -252,6 +273,7 @@ fn main() {
             decks.clone(),
             s.wrapping_mul(7),
             logging,
+            check,
             Duration::from_secs(slow),
             Duration::from_secs(timeout),
         ) else {
@@ -259,7 +281,24 @@ fn main() {
             report(&decks, &repro, &[], 0);
             std::process::exit(2);
         };
+        let (outcome, found) = outcome;
         played += 1;
+        if let Some(first) = found.first() {
+            println!(
+                "RULES: game {gi} (seed {s}): {} violation(s); first on turn {}: {}",
+                found.len(),
+                first.turn,
+                first.what
+            );
+            report(&decks, &repro, &[], 0);
+            // Group by the kind of violation, without object numbers.
+            let kind: String = first
+                .what
+                .split(|c: char| c.is_ascii_digit())
+                .collect::<Vec<_>>()
+                .join("N");
+            violations.entry(kind).or_default().push(gi);
+        }
         match outcome {
             Outcome::Finished {
                 result,
@@ -322,7 +361,17 @@ fn main() {
             slow_games
         );
     }
-    if !panics.is_empty() {
+    if !violations.is_empty() {
+        println!(
+            "  rules violations: {} games, {} kinds",
+            violations.values().map(Vec::len).sum::<usize>(),
+            violations.len()
+        );
+        for (kind, gs) in &violations {
+            println!("    {} x {kind} (games {:?})", gs.len(), gs);
+        }
+    }
+    if !panics.is_empty() || !violations.is_empty() {
         println!(
             "  panics: {} games, {} places",
             panics.values().map(Vec::len).sum::<usize>(),
