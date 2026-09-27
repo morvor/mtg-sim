@@ -112,17 +112,52 @@ fn that_player_life(c: &str, b: &Builder) -> Option<Condition> {
     ))
 }
 
+/// "no other creature has greater power" (Getaway Glamer): no creature other than the
+/// object named earlier has greater power than it.
+fn no_other_greater_power(c: &str, b: &Builder) -> Option<Condition> {
+    if c != "no other creature has greater power" {
+        return None;
+    }
+    let it = b.it.clone();
+    if !matches!(it, Sel::Target(_)) {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![
+            Filter::creature(),
+            Filter::Not(Box::new(Filter::In(Box::new(it.clone())))),
+            Filter::Power(Cmp::Gt, Box::new(Value::PowerOf(Box::new(it)))),
+        ])),
+        Cmp::Eq,
+        Value::c(0),
+    ))
+}
+
 fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     let (x, c) = crate::oracle::phrases::end(l).rsplit_once(" if ")?;
     if x.is_empty() || x.starts_with("if ") || c.contains(',') {
         return None;
+    }
+    let first_new = b.targets.len();
+    // "Destroy target creature if no other creature has greater power.": the condition is
+    // about the target the instruction names.
+    if c == "no other creature has greater power" {
+        let e = crate::oracle::effects::parse_clause(x, b)?;
+        let Some(cond) = no_other_greater_power(c, b) else {
+            b.targets.truncate(first_new);
+            return None;
+        };
+        return Some(Effect::If {
+            cond,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        });
     }
     let cond = match that_player_life(c, b) {
         Some(c) => c,
         None if pronoun_free(c) => crate::oracle::statics::parse_condition(c, b.ctx)?,
         None => return None,
     };
-    let first_new = b.targets.len();
     let e = crate::oracle::effects::parse_clause(x, b)?;
     targets_only_if_paid(&cond, b, first_new);
     Some(Effect::If {
