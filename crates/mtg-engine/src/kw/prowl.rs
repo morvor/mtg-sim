@@ -32,6 +32,12 @@ pub struct CombatDamageRecord {
     pub every_creature_type: bool,
     /// The player dealt damage.
     pub player: PlayerId,
+    /// The source was a creature at the time (e.g. for freerunning, CR 702.173a).
+    #[serde(default)]
+    pub creature: bool,
+    /// The source was a commander at the time (CR 702.173a).
+    #[serde(default)]
+    pub commander: bool,
 }
 
 /// The creature types of an object with these characteristics, and whether it has every
@@ -93,12 +99,7 @@ fn prowl_option(g: &Game, p: PlayerId, card: ObjectId, cost: &Cost) -> Option<Ca
     if !prowl_condition(g, p, &chars) {
         return None;
     }
-    opt.alt_cost = Some(super::modified_keyword_cost(
-        g,
-        p,
-        KeywordKind::Prowl,
-        cost,
-    ));
+    opt.alt_cost = Some(super::modified_keyword_cost(g, p, KeywordKind::Prowl, cost));
     opt.tag = Some(PROWL);
     Some(opt)
 }
@@ -156,15 +157,17 @@ impl KeywordRules for Prowl {
         let o = g.obj(source);
         let (creature_types, every_creature_type) = creature_types(&o.chars);
         let controller = o.controller;
-        g.history
-            .combat_damage_to_players
-            .push(CombatDamageRecord {
-                source,
-                controller,
-                creature_types,
-                every_creature_type,
-                player,
-            });
+        let creature = o.is_creature();
+        let commander = o.is_commander;
+        g.history.combat_damage_to_players.push(CombatDamageRecord {
+            source,
+            controller,
+            creature_types,
+            every_creature_type,
+            player,
+            creature,
+            commander,
+        });
     }
 }
 

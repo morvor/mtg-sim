@@ -1132,6 +1132,8 @@ impl Game {
         // CR 601.2b: the spell's own optional additional costs and choices between
         // additional costs ("you may behold a Dragon", "behold a Kithkin or pay {2}").
         crate::cost_choices::announce(self, p, id, &chars, &mut extra, &mut cast_info.paid);
+        // CR 601.2b: choices keywords record with the costs (e.g. promising a gift).
+        crate::kw::announce_choices(self, p, id, &mut cast_info.paid);
         // CR 601.2b: choices the way it's cast calls for (e.g. emerge's sacrifice).
         crate::kw::announce(self, p, id, &opt.method, &mut extra)?;
         // CR 702.33d: a spell whose controller declared the intention to pay any of its
@@ -1680,6 +1682,11 @@ impl Game {
                     self.player_rel_matches(cm.who, p, &ctx)
                         && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
                 }
+                CostTarget::KeywordAbilitiesOf(k, f) => {
+                    self.player_rel_matches(cm.who, p, &ctx)
+                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
+                        && self.matches(src, f, &ctx)
+                }
                 // CR 606.4: the cost of a loyalty ability may be modified by other effects.
                 CostTarget::LoyaltyAbilities(f) => {
                     act.is_loyalty
@@ -1781,6 +1788,8 @@ impl Game {
         act: &ActivatedAbility,
     ) -> Result<Option<ObjectId>, Illegal> {
         let src_chars = self.obj(src).chars.clone();
+        // CR 602.2: `p` began to activate it (undone with the rest if it's reversed).
+        self.history.activations_begun.push((p, src, a.uid));
         // CR 602.2a: an ability activated from a hidden zone reveals the card.
         if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
             self.emit(Event::Custom {
@@ -1819,10 +1828,7 @@ impl Game {
                 ..Default::default()
             };
             self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
-            *self.objects[src.0 as usize]
-                .activations_this_turn
-                .entry(a.uid)
-                .or_insert(0) += 1;
+            self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
                 source: src,
@@ -1913,10 +1919,7 @@ impl Game {
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
         self.saved_ctx.insert(id, ctx.clone());
-        *self.objects[src.0 as usize]
-            .activations_this_turn
-            .entry(a.uid)
-            .or_insert(0) += 1;
+        self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
         if a.text == "Cycling"
             && act
@@ -1944,6 +1947,15 @@ impl Game {
         Ok(Some(id))
     }
 
+    /// Records that `p` activated the ability `uid` of `src` (CR 602.2i): this turn, and
+    /// over the object's existence ("Activate only once", CR 702.177a).
+    fn record_activation(&mut self, p: PlayerId, src: ObjectId, uid: u64) {
+        let o = &mut self.objects[src.0 as usize];
+        *o.activations_this_turn.entry(uid).or_insert(0) += 1;
+        *o.activations.entry(uid).or_insert(0) += 1;
+        self.history.activated.push((p, src, uid));
+    }
+
     /// Mana types `p` may spend as though they were mana of any color to pay for the
     /// spell `src` (`ability == false`) or the activated abilities of `src` (CR 602.1e).
     pub fn any_color_mana(&self, p: PlayerId, src: ObjectId, ability: bool) -> Vec<ManaType> {
@@ -1960,7 +1972,9 @@ impl Game {
                 CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
                 CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
                 CostTarget::ThisSpell => !ability && src == *s,
-                CostTarget::Keyword(_) | CostTarget::LoyaltyAbilities(_) => false,
+                CostTarget::Keyword(_)
+                | CostTarget::KeywordAbilitiesOf(..)
+                | CostTarget::LoyaltyAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {

@@ -217,6 +217,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "transformed" => Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
         // A prepared permanent (CR 722.3a); a spell cast as a prepare spell (CR 722.3d).
         "prepared" => Filter::Prepared,
+        // CR 701.60b: a suspected permanent.
+        "suspected" => Filter::Custom(crate::kwa::suspect_detain::SUSPECTED.into()),
+        // CR 702.171b: a saddled permanent.
+        "saddled" => Filter::Custom(crate::kw::saddle::SADDLED.into()),
         _ => return None,
     })
 }
@@ -512,6 +516,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 ]),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("with a basic land type") {
+            // "a land card with a basic land type" (Nervous Gardener).
+            (
+                Filter::Or(
+                    ["Plains", "Island", "Swamp", "Mountain", "Forest"]
+                        .iter()
+                        .map(|n| Filter::Subtype((*n).into()))
+                        .collect(),
+                ),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("other than ~") {
+            // "each Mount and/or Vehicle you control other than ~" (Spire Mechcycle).
+            (Filter::Other, r)
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
@@ -532,6 +550,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some((f, r)) = parse_stat_suffix(t) {
             (f, r)
         } else if let Some((f, r)) = parse_with_suffix(t) {
+            (f, r)
+        } else if let Some((f, r)) = t.strip_prefix("that has ").and_then(|x| {
+            // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
+            let with = format!("with {x}");
+            let (f, rest) = parse_with_suffix(&with)?;
+            let n = rest.len();
+            Some((f, &t[t.len() - n..]))
+        }) {
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
@@ -558,6 +584,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // CR 702.122c.
             (
                 Filter::Custom(crate::kw::crew::CREWED_IT_THIS_TURN.into()),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("that saddled it this turn") {
+            // CR 702.171c.
+            (
+                Filter::Custom(crate::kw::saddle::SADDLED_IT_THIS_TURN.into()),
                 r,
             )
         } else if let Some(r) = t.strip_prefix("crewed by ~ this turn") {
@@ -779,6 +811,15 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
         if let Some(r) = t.strip_prefix(p) {
             return Some((Filter::PowerVsBase(cmp), r));
         }
+    }
+    // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
+    if let Some(r) = t.strip_prefix("with base power ") {
+        let (n, r) = parse_number(r)?;
+        let n = n.as_const()?;
+        return Some((
+            Filter::Custom(format!("{}{n}", crate::kw::offspring::BASE_POWER).into()),
+            r,
+        ));
     }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
