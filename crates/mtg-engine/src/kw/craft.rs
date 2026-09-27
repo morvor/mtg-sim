@@ -10,7 +10,7 @@
 //!   that type in your graveyard; described as a "card", only a card in your graveyard
 //!   (CR 702.167b).
 //! * The materials are exiled as part of the cost ([`EXILE_MATERIALS`], paid before the
-//!   permanent itself is exiled); the ability can be activated only if they can be.
+//!   permanent itself is exiled); the cost can be paid only if they can be.
 //! * The exiled cards used to craft a permanent are linked to the permanent the ability
 //!   returns (its `linked` objects under [`CRAFT_LINK`]): its abilities refer to them as
 //!   "the exiled cards used to craft it" ([`USED_TO_CRAFT`], CR 702.167c).
@@ -150,12 +150,13 @@ pub fn candidates(g: &Game, p: PlayerId, src: ObjectId, m: &Materials) -> Vec<Ob
                 .filter(|id| fits_any(g, *id, m, &ctx)),
         );
     }
+    // Cards in the graveyard: not a token that's there until state-based actions.
     out.extend(
         g.player(p)
             .graveyard
             .iter()
             .copied()
-            .filter(|id| fits_any(g, *id, m, &ctx)),
+            .filter(|id| !g.obj(*id).is_token() && fits_any(g, *id, m, &ctx)),
     );
     out
 }
@@ -264,20 +265,6 @@ pub fn materials_available(g: &Game, p: PlayerId, src: ObjectId, m: &Materials) 
     default_choice(g, &cands, m, &ctx).is_some()
 }
 
-/// The materials of a craft ability, from its cost.
-fn ability_materials(a: &Ability) -> Option<Materials> {
-    let AbilityKind::Activated(act) = &a.kind else {
-        return None;
-    };
-    act.cost.parts.iter().find_map(|p| match p {
-        CostPart::Effect(e) => match &**e {
-            Effect::Custom(n) => parse_materials(n.strip_prefix(EXILE_MATERIALS)?),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
 pub struct Craft;
 
 impl KeywordRules for Craft {
@@ -307,12 +294,14 @@ impl KeywordRules for Craft {
         )])
     }
 
-    /// The materials must be available to pay the cost.
-    fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
-        match ability_materials(a) {
-            Some(m) => materials_available(g, p, src, &m),
-            None => true,
-        }
+    /// The cost can be paid only if there are materials to exile (checked as the ability
+    /// is activated and again as the cost is paid, after any mana abilities).
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let desc = name.strip_prefix(EXILE_MATERIALS)?;
+        Some(match (parse_materials(desc), ctx.source) {
+            (Some(m), Some(src)) => materials_available(g, ctx.controller, src, &m),
+            _ => false,
+        })
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {

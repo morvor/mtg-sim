@@ -301,3 +301,24 @@ fn a_copy_that_isnt_a_double_faced_card_stays_in_exile() {
     assert_eq!(t.zone(meta), Zone::Exile);
     assert!(t.on_battlefield(landmark));
 }
+
+#[test]
+fn materials_used_up_while_paying_the_cost_cant_be_exiled() {
+    cr!("702.167a");
+    // The Treasure is the only other artifact, and its mana is needed to pay {2}{W}:
+    // sacrificing it for mana leaves no material, so the ability can't be activated.
+    let mut t = TestGame::new(2);
+    let landmark = t.battlefield(P0, LANDMARK);
+    let treasure = make_token(&mut t, P0, "Treasure");
+    t.lands(P0, "Plains", 2);
+    let craft = ability_uid(&mut t, landmark, "Craft");
+    assert!(activate_uid(&mut t, P0, landmark, craft).is_err());
+    assert!(t.on_battlefield(landmark));
+    assert!(t.on_battlefield(treasure));
+    // With another land, the Treasure is exiled as the material.
+    t.lands(P0, "Plains", 1);
+    materials(&mut t, P0, &[treasure]);
+    activate_uid(&mut t, P0, landmark, craft).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(landmark).chars.name, "Oteclan Levitator");
+}

@@ -261,6 +261,13 @@ pub trait KeywordRules: Sync + Send {
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
         false
     }
+    /// Whether the player `ctx.controller` could perform a named [`Effect::Custom`] this
+    /// implementation defines, when it's optional or part of a cost (CR 118.3), e.g.
+    /// exiling a craft ability's materials (CR 702.167a). `None` if it isn't one of its
+    /// effects.
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        None
+    }
     /// Matches a named [`TriggerCond::Custom`] this implementation defines against an
     /// event, for the triggered ability of `src` controlled by `ctl`.
     fn custom_trigger(
@@ -714,6 +721,13 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
 
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
     registry().iter().any(|r| r.custom_effect(g, name, ctx))
+}
+
+/// See [`KeywordRules::custom_effect_possible`].
+pub fn custom_effect_possible(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_effect_possible(g, name, ctx))
 }
 
 pub fn custom_trigger(
