@@ -819,6 +819,19 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
         let v = Value::ManaValueOf(Box::new(Sel::TriggerSpell));
         return Some((Filter::ManaValue(Cmp::Eq, Box::new(v)), r));
     }
+    // "with power less than ~'s [power]" (Mirko, Obsessive Theorist; Radha's Firebrand):
+    // compared with the source's power (its last known information if it's gone).
+    for (p, cmp) in [
+        ("with power less than or equal to ~'s", Cmp::Le),
+        ("with power less than ~'s", Cmp::Lt),
+        ("with power greater than ~'s", Cmp::Gt),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            let r = r.strip_prefix(" power").unwrap_or(r);
+            let v = Value::PowerOf(Box::new(Sel::This));
+            return Some((Filter::Power(cmp, Box::new(v)), r));
+        }
+    }
     // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
     if let Some(r) = t.strip_prefix("with base power ") {
         let (n, r) = parse_number(r)?;

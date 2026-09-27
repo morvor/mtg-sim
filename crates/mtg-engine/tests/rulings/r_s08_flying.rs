@@ -776,3 +776,44 @@ fn an_aura_spell_has_a_target_and_triggers_a_spell_with_targets_ability() {
     assert_eq!(t.hand_size(P0), hand + 3);
     assert_eq!(t.life(P1), 19);
 }
+
+#[test]
+fn finality_counters_work_on_any_permanent() {
+    cr!("122.1h", "614.1a");
+    ruling!(
+        "Mirko, Obsessive Theorist",
+        "Finality counters work on any permanent, not only creatures. If a permanent with a finality counter on it would go to a graveyard from the battlefield, exile it instead."
+    );
+    supported("Mirko, Obsessive Theorist");
+    // Mirko (1/3): "At the beginning of your end step, you may return target creature card
+    // with power less than Mirko's from your graveyard to the battlefield with a finality
+    // counter on it." With two +1/+1 counters it's 3/5: Grizzly Bears (2) can come back,
+    // Hill Giant (3) can't.
+    let mut t = TestGame::new(2);
+    let mirko = t.battlefield(P0, "Mirko, Obsessive Theorist");
+    t.g.add_counters(Entity::Object(mirko), "+1/+1", 2, None);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    let from = t.asked().len();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let cands = target_candidates(&t, P0, from);
+    assert_eq!(cands.len(), 1);
+    assert!(cands[0].contains(&Entity::Object(bears)));
+    assert!(!cands[0].contains(&Entity::Object(giant)));
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.counters(back[0], "finality"), 1);
+    // It would die: it's exiled instead.
+    destroy(&mut t, back[0]);
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(!t.in_graveyard(P0, "Grizzly Bears"));
+    // A noncreature permanent with a finality counter is exiled too.
+    let millstone = t.battlefield(P1, "Millstone");
+    t.g.add_counters(Entity::Object(millstone), "finality", 1, None);
+    destroy(&mut t, millstone);
+    assert!(t.in_exile("Millstone"));
+    assert!(!t.in_graveyard(P1, "Millstone"));
+}
