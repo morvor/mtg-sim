@@ -2579,6 +2579,12 @@ pub enum Effect {
         who: PlayerRef,
         effect: Box<Effect>,
     },
+    /// "[player] does the same": the player performs the effect in place of its
+    /// controller, so "you" in it is that player (none if `who` names no player).
+    AsPlayer {
+        who: PlayerRef,
+        effect: Box<Effect>,
+    },
     Repeat {
         times: Value,
         effect: Box<Effect>,

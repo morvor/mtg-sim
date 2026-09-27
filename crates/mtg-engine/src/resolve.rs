@@ -141,6 +141,14 @@ impl Game {
                 }
                 ctx.iter_player = saved;
             }
+            Effect::AsPlayer { who, effect } => {
+                if let Some(p) = self.eval_player(who, ctx) {
+                    let saved = ctx.controller;
+                    ctx.controller = p;
+                    self.exec(effect, ctx);
+                    ctx.controller = saved;
+                }
+            }
             Effect::Repeat { times, effect } => {
                 let n = self.eval_value(times, ctx).max(0);
                 for _ in 0..n {
