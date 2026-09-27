@@ -175,6 +175,66 @@ fn tiered(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "k702.183 tiered modes", priority: 50, parse: tiered } }
 
+/// A tiered spell whose modes choose values for its text (Vincent's Limit Break): "[effect
+/// with] the chosen base power and toughness" followed by "• [Name] — [cost] — [P/T]."
+/// modes. Each mode is the effect with that base power and toughness, and carries its
+/// additional cost (CR 702.183a).
+fn tiered_chosen_pt(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() {
+        return None;
+    }
+    let mut lines = block.lines();
+    let template = lines.next()?.trim();
+    const CHOSEN: &str = "the chosen base power and toughness";
+    if !template.contains(CHOSEN) {
+        return None;
+    }
+    let mut modes = Vec::new();
+    for line in lines {
+        let l = line.trim().strip_prefix('•')?.trim();
+        let (_name, rest) = l.split_once(" — ")?;
+        let (cost, pt) = rest.split_once(" — ")?;
+        let pt = pt.trim().trim_end_matches('.');
+        let (p, t) = pt.split_once('/')?;
+        if p.parse::<i32>().is_err() || t.parse::<i32>().is_err() {
+            return None;
+        }
+        let (cost, _) = crate::oracle::costs::parse_cost(cost)?;
+        let text = template.replace(CHOSEN, &format!("base power and toughness {pt}"));
+        let mut b = Builder::new(ctx);
+        let effect = crate::oracle::effects::parse_effect_text(&text, &mut b)?;
+        modes.push(Mode {
+            text: l.to_string(),
+            targets: b.targets,
+            effect,
+            cost: Some(cost),
+        });
+    }
+    if modes.len() < 2 {
+        return None;
+    }
+    let modal = Modal {
+        min: Value::c(1),
+        max: Value::c(1),
+        allow_repeat: false,
+        modes,
+        per_mode_cost: true,
+        chooser: ModeChooser::Controller,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Spell(SpellAbility {
+            body: Body {
+                targets: vec![],
+                effect: Effect::Noop,
+                modal: Some(modal),
+            },
+        }),
+        block.trim(),
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.183 tiered modes choosing base power and toughness", priority: 50, parse: tiered_chosen_pt } }
+
 /// Whether the effect grants the keyword `kind` without a cost of its own ("gains
 /// harmonize until end of turn").
 fn grants_costless(e: &Effect, kind: KeywordKind) -> bool {

@@ -160,3 +160,46 @@ fn a_mode_can_be_chosen_only_if_its_targets_are_available() {
     assert!(!t.on_battlefield(bears));
     assert!(!t.on_battlefield(elves));
 }
+
+#[test]
+fn modes_can_choose_values_for_the_spells_text() {
+    cr!("702.183a");
+    ruling!(
+        "Vincent's Limit Break",
+        "Vincent's Limit Break will overwrite any previous effects that set the creature's power and toughness to specific numbers."
+    );
+    // Vincent's Limit Break ({1}{B} instant): "Tiered. Until end of turn, target creature
+    // you control gains "When this creature dies, return it to the battlefield tapped
+    // under its owner's control" and has the chosen base power and toughness.
+    // • Galian Beast — {0} — 3/2. • Death Gigas — {1} — 5/2. • Hellmasker — {3} — 7/2."
+    assert_supported(&["Vincent's Limit Break"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // A +1/+1 counter still applies on top of the new base.
+    t.g.objects[bears.0 as usize]
+        .counters
+        .insert(mtg_engine::types::counters::PLUS1.into(), 1);
+    let c = t.hand(P0, "Vincent's Limit Break");
+    t.cast(P0, c).modes(&[1]).target(bears).go();
+    // {1}{B} plus {1}.
+    assert_eq!(untapped_lands(&t), 0);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (6, 3));
+    // It dies and returns tapped.
+    crate::common_k702_052_066::run_effect(
+        &mut t,
+        None,
+        P1,
+        Effect::Destroy {
+            what: Sel::Target(0),
+            no_regen: false,
+        },
+        &[Entity::Object(bears)],
+    );
+    t.resolve_all();
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1);
+    assert!(t.obj(back[0]).tapped);
+    assert_eq!(t.pt(back[0]), (2, 2));
+}
