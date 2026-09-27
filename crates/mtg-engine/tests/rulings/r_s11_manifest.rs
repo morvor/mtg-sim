@@ -655,3 +655,119 @@ fn target_and_all_other_objects_with_the_same_name_as_that_object() {
     assert_eq!(t.zone(t.g.current(b)), Zone::Exile);
     assert!(t.on_battlefield(c));
 }
+
+/// P0 casts Ghastly Conscription ("Exile all creature cards from target player's graveyard
+/// in a face-down pile, shuffle that pile, then manifest those cards.") targeting P1, whose
+/// graveyard holds three creature cards and Lightning Bolt. Returns the manifested
+/// permanents.
+fn ghastly_conscription(t: &mut TestGame) -> Vec<ObjectId> {
+    supported("Ghastly Conscription");
+    let cards: Vec<ObjectId> = ["Hill Giant", "Grizzly Bears", "Colossal Dreadmaw"]
+        .iter()
+        .map(|n| t.graveyard(P1, n))
+        .collect();
+    t.graveyard(P1, "Lightning Bolt");
+    let spell = in_hand_with_mana(t, P0, "Ghastly Conscription");
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    cards.iter().map(|c| t.g.current(*c)).collect()
+}
+
+#[test]
+fn a_shuffled_face_down_pile_is_manifested_and_its_controller_can_look_at_them() {
+    cr!("701.40a", "406.3", "708.5");
+    ruling!(
+        "Ghastly Conscription",
+        "The pile is shuffled to disguise from your opponents which manifested creature is which. After you manifest the cards, you can look at them."
+    );
+    let mut t = TestGame::new(2);
+    let manifested = ghastly_conscription(&mut t);
+    for m in &manifested {
+        let o = t.obj(*m);
+        assert!(t.on_battlefield(*m) && o.face_down);
+        assert_eq!((o.controller, o.owner), (P0, P1));
+        assert!(is_plain_face_down_2_2(&t, *m));
+        // Its controller can look at it; its owner, an opponent, can't.
+        assert!(facedown::can_look_at(&t.g, P0, *m));
+        assert!(!facedown::can_look_at(&t.g, P1, *m));
+    }
+    // Each went from the graveyard to exile face down, then onto the battlefield.
+    let from_exile = t
+        .g
+        .turn_events
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                Event::ZoneChange {
+                    from: Zone::Exile,
+                    to: Zone::Battlefield,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(from_exile, 3);
+    // They're manifested creature cards: the Hill Giant turns face up for {3}{R}.
+    t.lands(P0, "Mountain", 4);
+    assert!(turn_face_up(&mut t, P0, manifested[0]));
+    assert_eq!(t.obj(manifested[0]).chars.name.as_str(), "Hill Giant");
+}
+
+#[test]
+fn manifested_cards_an_opponent_owns_are_exiled_when_you_leave_the_game() {
+    cr!("800.4a", "708.9");
+    ruling!(
+        "Ghastly Conscription",
+        "If you manifest a card owned by an opponent and you leave the game, that card is exiled."
+    );
+    ruling!(
+        "Jeskai Infiltrator",
+        "If you manifest a card owned by an opponent and you leave the game, that card is exiled."
+    );
+    let mut t = TestGame::new(3);
+    let manifested = ghastly_conscription(&mut t);
+    let mine = manifest_card(&mut t, P0, "Hill Giant");
+    t.g.player_loses(P0);
+    t.settle();
+    for m in &manifested {
+        let now = t.g.current(*m);
+        assert_eq!(t.zone(now), Zone::Exile);
+        assert_eq!(t.obj(now).owner, P1);
+        assert!(!t.obj(now).face_down);
+    }
+    // The card P0 owns left the game with them.
+    assert!(!t.on_battlefield(mine));
+    assert_ne!(t.zone(t.g.current(mine)), Zone::Exile);
+}
+
+#[test]
+fn jeskai_infiltrator_manifests_itself_and_the_top_card_of_your_library() {
+    cr!("701.40a", "406.3");
+    ruling!(
+        "Jeskai Infiltrator",
+        "After you manifest the cards, you can look at them."
+    );
+    supported("Jeskai Infiltrator");
+    // Jeskai Infiltrator: "When this creature deals combat damage to a player, exile it
+    // and the top card of your library in a face-down pile, shuffle that pile, then
+    // manifest those cards."
+    let mut t = TestGame::new(2);
+    let infiltrator = t.battlefield(P0, "Jeskai Infiltrator");
+    let top = t.library_top(P0, "Hill Giant");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(&[(infiltrator, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    let (a, b) = (t.g.current(infiltrator), t.g.current(top));
+    for m in [a, b] {
+        assert!(t.on_battlefield(m) && t.obj(m).face_down);
+        assert!(facedown::can_look_at(&t.g, P0, m));
+        assert!(!facedown::can_look_at(&t.g, P1, m));
+    }
+    // The Infiltrator ({2}{U}) turns face up for its mana cost.
+    t.lands(P0, "Island", 3);
+    assert!(turn_face_up(&mut t, P0, a));
+    assert_eq!(t.obj(a).chars.name.as_str(), "Jeskai Infiltrator");
+}

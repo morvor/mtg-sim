@@ -750,15 +750,23 @@ inventory::submit! { EffectPattern { name: "damage_removal: exile until", priori
 
 /// Graveyard exile: "exile target player's graveyard", "exile all graveyards", "exile
 /// each opponent's graveyard", "exile your graveyard", "exile all cards from target
-/// player's graveyard".
+/// player's graveyard", "exile all creature cards from target player's graveyard".
 fn p_exile_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
-    let r = r.strip_prefix("all cards from ").unwrap_or(r);
+    // "all [kind] cards from [graveyard]": only the cards of that kind.
+    let (kind, r) = match r.strip_prefix("all ").and_then(|x| x.split_once(" from ")) {
+        Some(("cards", gy)) => (None, gy),
+        Some((kind, gy)) if kind.ends_with(" cards") => {
+            (Some(super::card_flow_search::card_filter(kind, b)?), gy)
+        }
+        _ => (None, r),
+    };
     let gy = |rel: Option<PlayerRel>| {
         let mut v = vec![Filter::InZone(ZoneKind::Graveyard)];
         if let Some(rel) = rel {
             v.push(Filter::OwnedBy(rel));
         }
+        v.extend(kind.clone());
         Filter::and(v)
     };
     let filter = match r {

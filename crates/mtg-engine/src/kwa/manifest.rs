@@ -163,7 +163,22 @@ impl KeywordActionRules for Manifest {
                 }
                 (_, Sel::None) => out.extend(from_top(g, p, n, kind, ctx.source)),
                 (_, what) => {
-                    for c in g.resolve_objects(what, ctx) {
+                    let mut cards = g.resolve_objects(what, ctx);
+                    // A face-down pile of exiled cards no one may look at ("exile ... in a
+                    // face-down pile, shuffle that pile, then manifest those cards"): which
+                    // is manifested when isn't known to anyone (CR 406.3).
+                    if cards.len() > 1
+                        && cards.iter().all(|c| {
+                            let o = g.obj(*c);
+                            o.zone == Zone::Exile
+                                && o.face_down
+                                && !crate::zones::may_look(g, p, *c)
+                        })
+                    {
+                        use rand::seq::SliceRandom;
+                        cards.shuffle(&mut g.rng);
+                    }
+                    for c in cards {
                         out.extend(put_face_down(g, c, p, kind, ctx.source));
                     }
                 }
