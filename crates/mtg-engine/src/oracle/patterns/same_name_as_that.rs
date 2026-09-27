@@ -8,10 +8,12 @@
 //!   (Sever the Bloodline)
 //! * "Target creature and all other creatures with the same name as that creature get
 //!   -3/-3 until end of turn." (Bile Blight)
+//! * "Return target creature card and all other cards with the same name as that card from
+//!   your graveyard to your hand." (Echoing Return)
 //!
 //! The instruction is parsed as if it named only the target; the group is the target plus
-//! the other objects of the kind that share a name with it as the instruction is carried
-//! out. An object with no name (a face-down permanent) shares a name with nothing
+//! the other objects of the kind, in the target's zone, that share a name with it as the
+//! instruction is carried out. An object with no name (a face-down permanent) shares a name with nothing
 //! (CR 201.2a, 708.2), so only the target itself is affected.
 
 use super::EffectPattern;
@@ -50,13 +52,26 @@ fn same_name_group(l: &str, b: &mut Builder) -> Option<Effect> {
     let effect = crate::oracle::effects::parse_clause(&rewritten, b);
     let target = Sel::Target(slot as u8);
     let replaced = effect.filter(|_| b.targets.len() == slot + 1).and_then(|e| {
-        let group = Sel::Union(vec![
-            target.clone(),
-            Sel::All(Filter::and(vec![
-                kind,
-                Filter::SameNameAs(Box::new(target.clone())),
-            ])),
-        ]);
+        // The other objects are in the zone the target is in ("target creature card and
+        // all other cards with the same name as that card from your graveyard"): the
+        // target's zone and whose zone it is, the battlefield by default.
+        let mut group_filter = vec![kind, Filter::SameNameAs(Box::new(target.clone()))];
+        if let TargetKind::Object(f) = &b.targets[slot].what {
+            if let Some(zone) = f.zone().filter(|z| *z != ZoneKind::Battlefield) {
+                group_filter.push(Filter::InZone(zone));
+                let parts = match f {
+                    Filter::And(v) => v.as_slice(),
+                    other => std::slice::from_ref(other),
+                };
+                group_filter.extend(
+                    parts
+                        .iter()
+                        .filter(|p| matches!(p, Filter::OwnedBy(_)))
+                        .cloned(),
+                );
+            }
+        }
+        let group = Sel::Union(vec![target.clone(), Sel::All(Filter::and(group_filter))]);
         // The target must be named exactly once, as what the instruction affects.
         let json = serde_json::to_string(&e).ok()?;
         let needle = serde_json::to_string(&target).ok()?;

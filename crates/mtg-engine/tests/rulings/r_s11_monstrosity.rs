@@ -154,7 +154,7 @@ fn an_already_monstrous_creature_cant_become_monstrous_again() {
 
 #[test]
 fn becomes_monstrous_doesnt_trigger_if_the_creature_left_before_monstrosity_resolved() {
-    cr!("701.37a", "608.2b");
+    cr!("701.37a", "701.37b");
     ruling!(
         "Kalemne's Captain",
         "An ability that triggers when a creature becomes monstrous won’t trigger if that creature isn’t on the battlefield when its monstrosity ability resolves."

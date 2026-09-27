@@ -133,7 +133,7 @@ fn a_manifested_double_faced_card_cant_transform_and_turns_up_front_face_up() {
 
 #[test]
 fn a_manifested_double_faced_card_on_the_battlefield_cant_be_turned_face_down_again() {
-    cr!("712.15a", "712.16", "708.2b");
+    cr!("712.15a", "712.16");
     ruling!(
         "Cloudform",
         "Some previous Magic sets feature double-faced cards, which have a Magic card face on each side rather than a Magic card face on one side and a Magic card back on the other. If a double-faced card is manifested, it will be put onto the battlefield face down. While face down, it can't transform. If the front face of the card is a creature card, you can turn it face up by paying its mana cost. If you do, its front face will be up. Although a double-faced card can enter the battlefield face down, one already on the battlefield can't be turned face down."
@@ -471,7 +471,7 @@ fn a_form_keeps_enchanting_the_creature_once_its_turned_face_up() {
 
 #[test]
 fn a_form_still_manifests_if_it_left_the_battlefield_before_its_ability_resolved() {
-    cr!("603.6a", "701.40a", "608.2h");
+    cr!("603.6a", "701.40a", "113.7a");
     ruling!(
         "Cloudform",
         "You'll still manifest the top card of your library even if the \"Form\" isn't on the battlefield as its enters-the-battlefield ability resolves."
@@ -606,7 +606,7 @@ fn a_manifested_creature_can_be_turned_up_after_losing_its_abilities_unlike_a_mo
 
 #[test]
 fn target_and_all_other_objects_with_the_same_name_as_that_object() {
-    cr!("201.2", "201.2a", "608.2c");
+    cr!("201.2a");
     supported("Bile Blight");
     supported("Echoing Truth");
     supported("Sever the Bloodline");
@@ -656,6 +656,54 @@ fn target_and_all_other_objects_with_the_same_name_as_that_object() {
     assert!(t.on_battlefield(c));
 }
 
+#[test]
+fn the_other_cards_with_the_same_name_are_in_the_targets_zone() {
+    cr!("201.2a", "608.2b");
+    ruling!(
+        "Echoing Return",
+        "If the target is illegal as Echoing Return tries to resolve (most likely because it is no longer in your graveyard), it will be removed from the stack and do nothing, even if there are cards with the same name in your graveyard."
+    );
+    supported("Echoing Return");
+    // Echoing Return: "Return target creature card and all other cards with the same name
+    // as that card from your graveyard to your hand." The other cards are those in your
+    // graveyard: not a permanent with that name, nor a card in another graveyard.
+    let mut t = TestGame::new(2);
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P0, "Grizzly Bears");
+    let theirs = t.graveyard(P1, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let permanent = t.battlefield(P0, "Grizzly Bears");
+    let spell = in_hand_with_mana(&mut t, P0, "Echoing Return");
+    t.cast(P0, spell).target(a).go();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(a)), Zone::Hand(P0));
+    assert_eq!(t.zone(t.g.current(b)), Zone::Hand(P0));
+    assert_eq!(t.zone(t.g.current(theirs)), Zone::Graveyard(P1));
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Graveyard(P0));
+    assert!(t.on_battlefield(permanent));
+    // The target leaves the graveyard in response: the spell does nothing, even with
+    // another Grizzly Bears there.
+    let mut t = TestGame::new(2);
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P0, "Grizzly Bears");
+    let spell = in_hand_with_mana(&mut t, P0, "Echoing Return");
+    t.cast(P0, spell).target(a).go();
+    run_with(
+        &mut t,
+        P1,
+        Effect::Exile {
+            what: Sel::Target(0),
+            face_down: false,
+            link: false,
+        },
+        &[Entity::Object(a)],
+    );
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(a)), Zone::Exile);
+    assert_eq!(t.zone(t.g.current(b)), Zone::Graveyard(P0));
+    assert!(!t.in_hand(P0, "Grizzly Bears"));
+}
+
 /// P0 casts Ghastly Conscription ("Exile all creature cards from target player's graveyard
 /// in a face-down pile, shuffle that pile, then manifest those cards.") targeting P1, whose
 /// graveyard holds three creature cards and Lightning Bolt. Returns the manifested
@@ -693,22 +741,22 @@ fn a_shuffled_face_down_pile_is_manifested_and_its_controller_can_look_at_them()
         assert!(!facedown::can_look_at(&t.g, P1, *m));
     }
     // Each went from the graveyard to exile face down, then onto the battlefield.
-    let from_exile = t
+    let from_exile: Vec<ObjectId> = t
         .g
         .turn_events
         .iter()
-        .filter(|e| {
-            matches!(
-                e,
-                Event::ZoneChange {
-                    from: Zone::Exile,
-                    to: Zone::Battlefield,
-                    ..
-                }
-            )
+        .filter_map(|e| match e {
+            Event::ZoneChange {
+                old,
+                from: Zone::Exile,
+                to: Zone::Battlefield,
+                ..
+            } => Some(*old),
+            _ => None,
         })
-        .count();
-    assert_eq!(from_exile, 3);
+        .collect();
+    assert_eq!(from_exile.len(), 3);
+    assert!(from_exile.iter().all(|o| t.obj(*o).face_down));
     // They're manifested creature cards: the Hill Giant turns face up for {3}{R}.
     t.lands(P0, "Mountain", 4);
     assert!(turn_face_up(&mut t, P0, manifested[0]));
@@ -790,11 +838,21 @@ fn you_can_look_at_your_face_down_permanents_and_an_effect_may_turn_one_face_up(
     assert!(!t.obj(m).face_down);
     assert_eq!(t.obj(m).chars.name.as_str(), "Hill Giant");
     assert!(facedown::can_look_at(&t.g, P1, m));
+    // The attackers' powers add up: two 3/3 Hill Giants are enough.
+    let mut t = TestGame::new(2);
+    let (mastery, m) = ugins_mastery_manifests(&mut t);
+    let g1 = t.battlefield(P0, "Hill Giant");
+    let g2 = t.battlefield(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(g1, Entity::Player(P1)), (g2, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(triggered_from(&t, mastery), 2);
+    assert!(!t.obj(m).face_down);
 }
 
 #[test]
 fn jeskai_infiltrator_manifests_itself_and_the_top_card_of_your_library() {
-    cr!("701.40a", "406.3");
+    cr!("701.40a", "406.3", "708.5");
     ruling!(
         "Jeskai Infiltrator",
         "After you manifest the cards, you can look at them."
@@ -813,6 +871,17 @@ fn jeskai_infiltrator_manifests_itself_and_the_top_card_of_your_library() {
     let (a, b) = (t.g.current(infiltrator), t.g.current(top));
     for m in [a, b] {
         assert!(t.on_battlefield(m) && t.obj(m).face_down);
+        // It was in exile face down before it was manifested (CR 406.3).
+        let exiled = t.g.turn_events.iter().find_map(|e| match e {
+            Event::ZoneChange {
+                old,
+                new,
+                from: Zone::Exile,
+                ..
+            } if *new == m => Some(*old),
+            _ => None,
+        });
+        assert!(exiled.is_some_and(|o| t.obj(o).face_down));
         assert!(facedown::can_look_at(&t.g, P0, m));
         assert!(!facedown::can_look_at(&t.g, P1, m));
     }
