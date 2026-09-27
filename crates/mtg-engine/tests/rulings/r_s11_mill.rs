@@ -257,7 +257,7 @@ fn cards_milled_into_exile_instead_are_still_milled_this_way() {
 
 #[test]
 fn only_card_types_count_not_supertypes_or_subtypes() {
-    cr!("205.2a", "205.4a", "701.17c", "513.1");
+    cr!("205.2a", "205.4a", "701.17a", "701.17c");
     ruling!(
         "Demonic Covenant",
         "The card types in Magic include artifact, battle, creature, enchantment, instant, kindred, land, planeswalker, and sorcery. Legendary, basic, and snow are supertypes, not card types; Horror and Room are subtypes, not card types."

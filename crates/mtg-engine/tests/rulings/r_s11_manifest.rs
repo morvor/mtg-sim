@@ -340,7 +340,7 @@ fn a_face_down_creature_returned_after_leaving_comes_back_face_up() {
 
 #[test]
 fn a_manifested_creature_card_turns_face_up_ignoring_type_changing_effects() {
-    cr!("701.40b", "116.2b", "708.12");
+    cr!("701.40b", "116.2b");
     ruling!(
         "Cloudform",
         "Any time you have priority, you may turn a manifested creature face up by revealing that it's a creature card (ignoring any type-changing effects that might be applying to it) and paying its mana cost. This is a special action. It doesn't use the stack and can't be responded to."

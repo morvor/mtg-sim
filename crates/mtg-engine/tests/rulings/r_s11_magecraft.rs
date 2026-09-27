@@ -19,7 +19,7 @@ fn is_8_8(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn a_copy_of_an_instant_or_sorcery_spell_triggers_magecraft() {
-    cr!("707.10", "701.6a", "603.2");
+    cr!("707.10", "603.2");
     ruling!(
         "Archmage Emeritus",
         "If an effect creates a copy of an instant or sorcery spell, this will also cause the magecraft ability to trigger."

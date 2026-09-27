@@ -70,7 +70,7 @@ fn a_second_mentor_trigger_does_nothing_once_the_target_isnt_smaller() {
 
 #[test]
 fn mentor_compares_power_when_put_on_the_stack_and_when_it_resolves() {
-    cr!("702.134a", "603.3d", "608.2b", "507.1");
+    cr!("702.134a", "603.3d", "608.2b", "507.2");
     ruling!(
         "Legion Warboss",
         "Mentor compares the power of the creature with mentor with that of the target creature at two different times: once as the triggered ability is put onto the stack, and once as the triggered ability resolves. If you wish to raise a creature's power so its mentor ability can target a bigger creature, the last chance you have to do so is during the beginning of combat step."

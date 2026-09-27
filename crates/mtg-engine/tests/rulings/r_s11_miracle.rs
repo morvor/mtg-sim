@@ -16,7 +16,7 @@ const MIRACLE: CastMethod = CastMethod::Keyword(KeywordKind::Miracle);
 
 #[test]
 fn a_card_put_into_your_hand_without_drawing_it_wasnt_drawn() {
-    cr!("702.94a", "121.1", "121.2");
+    cr!("702.94a", "121.1");
     ruling!(
         "Terminus",
         "If an effect puts a card into your hand without using the word \"draw,\" the card wasn't drawn."
