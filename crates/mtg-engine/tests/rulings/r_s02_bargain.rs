@@ -454,3 +454,37 @@ fn bargain_only_targets_are_chosen_only_if_bargained() {
     let champion = t.named_on_battlefield("Agatha's Champion")[0];
     assert_eq!(t.obj_now(champion).damage, 2);
 }
+
+#[test]
+fn an_instead_clause_about_what_the_spell_deals_keeps_the_spell_as_the_source() {
+    cr!("702.33d", "608.2c");
+    ruling!(
+        "Firebending Lesson",
+        "If a spell's kicker cost was paid, the spell is \"kicked.\""
+    );
+    // Firebending Lesson: "Kicker {4}. Firebending Lesson deals 2 damage to target
+    // creature. If this spell was kicked, it deals 5 damage to that creature instead."
+    // ("It" is the spell, as in Stonesplitter Bolt: a lifelinking target that dealt the
+    // damage to itself would gain its controller life.)
+    supported("Firebending Lesson");
+    for kicked in [false, true] {
+        let mut t = TestGame::new(2);
+        let nighthawk = t.battlefield(P1, "Vampire Nighthawk");
+        t.lands(P0, "Mountain", 5);
+        let c = t.hand(P0, "Firebending Lesson");
+        let spell = t.cast(P0, c).target(nighthawk).kicked(kicked).go();
+        t.resolve_all();
+        let damage: Vec<(ObjectId, u32)> = t
+            .g
+            .turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage { source, amount, .. } => Some((*source, *amount)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(damage, vec![(spell, if kicked { 5 } else { 2 })]);
+        assert_eq!(t.on_battlefield(nighthawk), !kicked, "kicked: {kicked}");
+        assert_eq!(t.life(P1), 20);
+    }
+}
