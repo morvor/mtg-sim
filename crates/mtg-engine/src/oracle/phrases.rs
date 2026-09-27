@@ -656,6 +656,9 @@ fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
             "in the chosen sector",
             Filter::Custom(crate::kw::space_sculptor::IN_CHOSEN_SECTOR.into()),
         ),
+        // "the exiled cards used to craft it" (CR 702.167c).
+        ("used to craft it", crate::kw::craft::used_to_craft()),
+        ("used to craft ~", crate::kw::craft::used_to_craft()),
         // "Choose a creature type. ... creatures of that type": the choice just made.
         ("of that type", Filter::ChosenType),
         ("of that color", Filter::ChosenColor),

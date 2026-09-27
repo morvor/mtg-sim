@@ -10,7 +10,9 @@
 //! * an Attraction's "Prize — [effect]" paragraph, "claim the prize", and "Whenever you
 //!   claim the prize of an Attraction" (CR 702.159b);
 //! * "if this spell was bargained", "if it was bargained", "if it's bargained"
-//!   (CR 702.166b–c).
+//!   (CR 702.166b–c);
+//! * "Craft with [materials] [cost]" (CR 702.167a), and "the exiled cards used to craft
+//!   it" (CR 702.167c).
 
 use super::{
     AbilityPattern, BlockGroupPattern, ConditionPattern, EffectPattern, StaticPattern,
@@ -239,3 +241,50 @@ fn you_claim_the_prize(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "k702.159 you claim the prize", priority: 100, parse: you_claim_the_prize } }
+
+/// "Craft with [materials] [cost]" (CR 702.167a): the keyword, with the materials'
+/// description kept in its text (see `kw/craft.rs`).
+fn craft(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let rest = t.strip_prefix("Craft with ")?;
+    let i = rest.find(" {")?;
+    let (materials, cost) = (rest[..i].trim(), rest[i..].trim());
+    crate::kw::craft::parse_materials(materials)?;
+    let cost = crate::oracle::keywords::parse_keyword_cost(cost)?;
+    let mut kw = Keyword::with_cost(KeywordKind::Craft, cost);
+    kw.text = Some(format!("with {}", materials.to_lowercase()).into());
+    Some(crate::oracle::keywords::compile_keyword(kw, t))
+}
+
+inventory::submit! { AbilityPattern { name: "k702.167 craft", priority: 100, parse: craft } }
+
+/// Abilities that refer to "the exiled cards used to craft it" (CR 702.167c): "exiled" is
+/// part of what "used to craft it" means (cards in exile that were exiled to pay the craft
+/// cost, see `kw/craft.rs`), so the phrase is read as "cards used to craft it".
+fn craft_references(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !block.contains(" used to craft ") || !block.contains("exiled ") {
+        return None;
+    }
+    let mut text = block.to_string();
+    for (from, to) in [
+        ("the exiled cards used to craft", "cards used to craft"),
+        ("the exiled card used to craft", "the card used to craft"),
+        ("an exiled card used to craft", "a card used to craft"),
+        ("exiled creature card used to craft", "creature card used to craft"),
+        ("exiled cards used to craft", "cards used to craft"),
+    ] {
+        text = text.replace(from, to);
+    }
+    if text == block || text.contains("exiled card") {
+        return None;
+    }
+    let abilities = crate::oracle::parse_ability(&text, ctx)?;
+    Some(
+        abilities
+            .into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), block.trim(), a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "k702.167 exiled cards used to craft it", priority: 100, parse: craft_references } }
