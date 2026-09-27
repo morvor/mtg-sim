@@ -270,7 +270,15 @@ pub fn reveal_until(
         revealed.push(c);
     }
     if let Some(f) = found {
-        let moved = g.move_to_destination(vec![f], found_to, ctx);
+        // A library position "from the top" leaves the card where it is: a later
+        // instruction says what happens to "that card".
+        let in_place = found_to.zone == ZoneKind::Library
+            && matches!(found_to.position, LibraryPosition::FromTop(_));
+        let moved = if in_place {
+            vec![f]
+        } else {
+            g.move_to_destination(vec![f], found_to, ctx)
+        };
         ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     }
     place_rest(g, p, revealed, rest_to, ctx);

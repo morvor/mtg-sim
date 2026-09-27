@@ -50,6 +50,34 @@ fn tokens_entering_attacking_dont_trigger_attack_abilities_or_pay_attack_costs()
 }
 
 #[test]
+fn a_creature_put_onto_the_battlefield_attacking_doesnt_trigger_attack_abilities() {
+    cr!("508.3a", "508.4");
+    ruling!(
+        "Raph & Mikey, Troublemakers",
+        "Although the creature you put onto the battlefield is attacking, it was never declared as an attacking creature. Abilities that trigger whenever a creature attacks won't trigger when that creature enters attacking."
+    );
+    supported("Raph & Mikey, Troublemakers");
+    supported("Hero of Bladehold");
+    let mut t = TestGame::new(2);
+    // "Whenever Raph & Mikey attack, reveal cards from the top of your library until you
+    // reveal a creature card. Put that card onto the battlefield tapped and attacking and
+    // the rest on the bottom of your library in a random order."
+    stack_library(&mut t, P0, &["Lightning Bolt", "Hero of Bladehold"]);
+    let rm = t.battlefield(P0, "Raph & Mikey, Troublemakers");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(rm, Entity::Player(P1))], &[]);
+    let hero = t.named_on_battlefield("Hero of Bladehold");
+    assert_eq!(hero.len(), 1);
+    assert!(t.obj_now(hero[0]).tapped);
+    // The Hero attacked, but its attack abilities (battle cry, two attacking Soldiers)
+    // didn't trigger, and neither did Raph & Mikey's again.
+    assert!(with_subtype(&t, P0, "Soldier").is_empty());
+    assert_eq!(t.named_on_battlefield("Hero of Bladehold").len(), 1);
+    // Raph & Mikey 7 + Hero of Bladehold 3.
+    assert_eq!(t.life(P1), 10);
+}
+
+#[test]
 fn the_end_step_return_happens_only_if_it_is_still_on_the_battlefield() {
     cr!("603.2", "400.7");
     ruling!(
