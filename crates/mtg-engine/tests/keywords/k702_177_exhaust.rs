@@ -229,3 +229,20 @@ fn an_effect_may_allow_exhaust_abilities_again_if_none_was_activated_this_turn()
     assert_eq!(t.counters(elf, "+1/+1"), 1);
     assert!(!activatable(&mut t, P0, elf, elf_exhaust));
 }
+
+#[test]
+fn an_exhaust_ability_can_give_a_keyword_counter() {
+    cr!("702.177a", "122.1b");
+    assert_supported("Mai, Jaded Edge");
+    // Mai, Jaded Edge: "Exhaust — {3}: Put a double strike counter on Mai."
+    let mut t = TestGame::new(2);
+    let mai = t.battlefield(P0, "Mai, Jaded Edge");
+    let exhaust = ability_uid(&mut t, mai, "Exhaust");
+    add_mana(&mut t, P0, ManaType::C, 3);
+    activate_uid(&mut t, P0, mai, exhaust).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(mai, "double strike"), 1);
+    assert!(t.obj(mai).chars.has_keyword(KeywordKind::DoubleStrike));
+    add_mana(&mut t, P0, ManaType::C, 3);
+    assert!(!activatable(&mut t, P0, mai, exhaust));
+}

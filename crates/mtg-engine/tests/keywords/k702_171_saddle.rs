@@ -284,6 +284,33 @@ fn an_effect_can_make_a_mount_saddled() {
     assert_eq!(t.counters(mustang, "+1/+1"), 1);
 }
 
+#[test]
+fn when_it_enters_and_whenever_it_attacks_while_saddled() {
+    cr!("702.171a", "702.171b");
+    assert_supported("Autarch Mammoth");
+    // Autarch Mammoth: "When this creature enters and whenever it attacks while saddled,
+    // create a 3/3 green Elephant creature token." Saddle 5.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let mammoth = t.enter(P0, "Autarch Mammoth");
+    t.resolve_all();
+    assert_eq!(creature_tokens(&t, P0).len(), 1);
+    t.g.objects[mammoth.0 as usize].summoning_sick = false;
+    // Attacking unsaddled: no token.
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(mammoth, Entity::Player(P1))], &[]);
+    assert_eq!(creature_tokens(&t, P0).len(), 1);
+    // Saddled by the Elephant (3) and a Hill Giant (3): a token.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    let elephant = creature_tokens(&t, P0)[0];
+    let giant = t.battlefield(P0, "Hill Giant");
+    saddle(&mut t, mammoth, &[elephant, giant]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(mammoth, Entity::Player(P1))], &[]);
+    assert_eq!(creature_tokens(&t, P0).len(), 2);
+}
+
 /// Runs `effect` with `target` in target slot 0.
 fn run_effect_on(t: &mut TestGame, target: ObjectId, effect: Effect) {
     let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
