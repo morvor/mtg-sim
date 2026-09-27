@@ -456,3 +456,29 @@ fn a_promised_gift_can_add_to_the_effect() {
         );
     }
 }
+
+#[test]
+fn a_copy_of_a_spell_whose_gift_was_promised_gives_the_gift_too() {
+    cr!("702.174a", "707.10");
+    ruling!(
+        "Wear Down",
+        "If you copy a spell for which the gift was promised, the gift was also promised to the same opponent for the copy."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let blast = t.hand(P0, "Blooming Blast");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let spell = cast_gift(&mut t, blast, true, &[Entity::Object(bears)]);
+    let twincast = t.hand(P0, "Twincast");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    t.cast(P0, twincast).target(spell).go();
+    // The copy gets a new target: the Hill Giant.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert_eq!(treasures(&t, P1), 2);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // Each of them also dealt 3 damage to its target's controller.
+    assert_eq!(t.life(P1), 14);
+}
