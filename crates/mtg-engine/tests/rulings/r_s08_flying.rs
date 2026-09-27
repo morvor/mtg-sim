@@ -697,3 +697,37 @@ fn a_trigger_condition_with_a_comma_list_is_read_whole() {
     assert_eq!(triggers_from_casting(&mut t, "Prodigal Sorcerer"), 2);
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn a_kirin_uses_the_value_of_x_on_the_stack_for_the_spells_mana_value() {
+    cr!("202.3e", "115.1d");
+    ruling!(
+        "Skyfire Kirin",
+        "If the Spirit or Arcane spell has {X} in the mana cost, then you use the value of {X} on the stack. For example, Shining Shoal costs {X}{W}{W}. If you choose X = 2, then Shining Shoal's mana value is 4."
+    );
+    supported("Skyfire Kirin");
+    // Skyfire Kirin: "Whenever you cast a Spirit or Arcane spell, you may gain control of
+    // target creature with that spell's mana value until end of turn." Swallowing Plague
+    // ({X}{B}{B} Sorcery — Arcane) with X = 2 has mana value 4: Hill Giant ({3}{R}) can be
+    // targeted, Grizzly Bears ({1}{G}) can't.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Skyfire Kirin");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Swamp", 4);
+    let plague = t.hand(P0, "Swallowing Plague");
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    let from = t.asked().len();
+    t.cast(P0, plague).x(2).go();
+    t.settle();
+    let cands = target_candidates(&t, P0, from);
+    assert_eq!(cands.len(), 2, "{cands:?}");
+    assert!(cands[1].contains(&Entity::Object(giant)));
+    assert!(!cands[1].contains(&Entity::Object(bears)));
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).controller, P0);
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+}

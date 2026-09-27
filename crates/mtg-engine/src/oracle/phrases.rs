@@ -812,6 +812,13 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::PowerVsBase(cmp), r));
         }
     }
+    // "with that spell's mana value" (the Kirins: "Whenever you cast a Spirit or Arcane
+    // spell, ... target creature with that spell's mana value"): the spell that triggered
+    // the ability, with X its value on the stack (CR 202.3e).
+    if let Some(r) = t.strip_prefix("with that spell's mana value") {
+        let v = Value::ManaValueOf(Box::new(Sel::TriggerSpell));
+        return Some((Filter::ManaValue(Cmp::Eq, Box::new(v)), r));
+    }
     // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
     if let Some(r) = t.strip_prefix("with base power ") {
         let (n, r) = parse_number(r)?;
