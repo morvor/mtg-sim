@@ -173,6 +173,21 @@ impl Game {
     /// Detects "whenever one or more …" triggers for a batch of simultaneous events
     /// (CR 603.2c): each such ability triggers once per batch (or once per player involved).
     fn check_batch_triggers(&mut self, batch: &[Event]) {
+        // Permanents whose entering triggers nothing (Torpor Orb) aren't part of it.
+        let kept: Vec<Event>;
+        let batch = if batch
+            .iter()
+            .any(|e| crate::kw::torpor::entering_triggers_nothing(self, e))
+        {
+            kept = batch
+                .iter()
+                .filter(|e| !crate::kw::torpor::entering_triggers_nothing(self, e))
+                .cloned()
+                .collect();
+            &kept[..]
+        } else {
+            batch
+        };
         if batch.is_empty() {
             return;
         }
@@ -388,6 +403,10 @@ impl Game {
         ev: &Event,
         recent: &[(ObjectId, Arc<LookbackSnapshot>)],
     ) -> Vec<(u32, EventInfo)> {
+        // "Creatures entering don't cause abilities to trigger" (Torpor Orb).
+        if crate::kw::torpor::entering_triggers_nothing(self, ev) {
+            return vec![];
+        }
         let lookback: Option<Arc<LookbackSnapshot>> = match ev {
             Event::ZoneChange {
                 lookback: Some(lb), ..
