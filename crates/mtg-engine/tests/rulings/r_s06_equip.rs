@@ -248,7 +248,7 @@ fn the_equipment_stays_when_the_phyrexian_germ_is_destroyed() {
 
 #[test]
 fn kindred_equipment_has_a_creature_type_and_the_equipment_type() {
-    cr!("205.3d", "205.3g", "308.3", "301.5");
+    cr!("205.3d", "205.3g", "308.1", "308.2", "301.5");
     ruling!(
         "Thornbite Staff",
         "Each of these Equipment has two subtypes listed on its type line. The first one is a creature type, which in this case is also a subtype of kindred. The second one is Equipment, which is a subtype of artifact."
@@ -350,7 +350,7 @@ fn a_kindred_equipment_can_attach_itself_to_an_opponents_creature() {
 
 #[test]
 fn the_equipment_manifests_dread_even_if_it_left_the_battlefield() {
-    cr!("701.62a", "608.2b", "603.3");
+    cr!("701.62a", "113.7a");
     ruling!(
         "Cursed Windbreaker",
         "You'll still manifest dread even if this Equipment isn't on the battlefield when its first ability resolves."
@@ -446,7 +446,7 @@ fn protection_from_a_color_prevents_only_what_it_says() {
 
 #[test]
 fn brides_gown_you_is_the_controller_of_the_equipment() {
-    cr!("301.5d", "611.3a", "613.2");
+    cr!("301.5d", "611.3a", "613.1b");
     ruling!(
         "Bride's Gown",
         "In the phrase “as long as an Equipment named . . . is attached to a creature you control,” the “you” is the controller of the Equipment, not the controller of the creature it's attached to."

@@ -119,7 +119,7 @@ fn aura_fizzles(name: &str) {
 
 #[test]
 fn a_rune_whose_target_is_illegal_doesnt_resolve_or_draw() {
-    cr!("608.2b", "303.4d");
+    cr!("608.2b", "608.3b");
     ruling!(
         "Rune of Might",
         "If the target of an Aura spell is an illegal target as that spell tries to resolve, it won't resolve, it won't enter the battlefield, and none of its enters-the-battlefield triggered abilities will trigger."
@@ -130,7 +130,7 @@ fn a_rune_whose_target_is_illegal_doesnt_resolve_or_draw() {
 
 #[test]
 fn a_cartouche_whose_target_is_illegal_doesnt_resolve() {
-    cr!("608.2b", "303.4d");
+    cr!("608.2b", "608.3b");
     ruling!(
         "Cartouche of Knowledge",
         "If the target creature becomes an illegal target before a Cartouche spell resolves, the spell doesn't resolve. It doesn't enter the battlefield."
@@ -141,7 +141,7 @@ fn a_cartouche_whose_target_is_illegal_doesnt_resolve() {
 
 #[test]
 fn an_aura_whose_target_is_illegal_doesnt_let_you_draw() {
-    cr!("608.2b", "303.4d");
+    cr!("608.2b", "608.3b");
     ruling!(
         "Chosen by Heliod",
         "If the target of an Aura is illegal when it tries to resolve, the Aura won't resolve. The Aura doesn't enter the battlefield, so you won't get to draw a card."
@@ -284,11 +284,11 @@ fn bound_in_gold_stops_equip_and_loyalty_abilities_but_not_mana_abilities() {
     supported("Bound in Gold");
     let mut t = TestGame::new(2);
     t.lands(P0, "Wastes", 2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    // A creature for Bonesplitter's equip ability to target.
+    t.battlefield(P0, "Grizzly Bears");
     let blade = t.battlefield(P0, "Bonesplitter");
     let lili = t.battlefield(P0, "Liliana of the Veil");
     let elves = t.battlefield(P0, "Llanowar Elves");
-    let _ = bears;
     assert!(!activatable(&mut t, P0, blade).is_empty());
     assert!(!activatable(&mut t, P0, lili).is_empty());
     assert!(!activatable(&mut t, P0, elves).is_empty());
@@ -394,7 +394,7 @@ fn hold_for_questioning_doesnt_stop_untap_effects() {
 
 #[test]
 fn pendrell_flux_the_payment_is_chosen_on_resolution() {
-    cr!("603.2", "608.2", "118.12", "701.21a");
+    cr!("603.2", "608.2", "118.12a", "701.21a");
     ruling!(
         "Pendrell Flux",
         "You choose whether to pay or not on resolution. If not, then you sacrifice the creature. You can choose to not pay if you no longer control the creature on resolution."
@@ -576,7 +576,7 @@ fn eaten_by_piranhas_keeps_pt_modifications() {
 
 #[test]
 fn goblin_caves_works_on_an_opponents_mountain() {
-    cr!("303.4a", "613.4c");
+    cr!("303.4e", "613.4c");
     ruling!(
         "Goblin Caves",
         "Works even if placed on one of your opponent's Mountains."
@@ -593,7 +593,7 @@ fn goblin_caves_works_on_an_opponents_mountain() {
 
 #[test]
 fn goblin_shrine_works_on_an_opponents_mountain() {
-    cr!("303.4a", "613.4c");
+    cr!("303.4e", "613.4c");
     ruling!(
         "Goblin Shrine",
         "Works even if placed on one of your opponent's Mountains."
@@ -727,8 +727,6 @@ fn multiple_instances_of_infect_are_redundant() {
     let giant = t.battlefield(P0, "Hill Giant");
     attach_new(&mut t, P0, "Phyresis", giant);
     attach_new(&mut t, P0, "Phyresis", giant);
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    let _ = bears;
     t.attack(&[(giant, Entity::Player(P1))], &[]);
     assert_eq!(t.g.player(P1).poison(), 3);
     assert_eq!(t.life(P1), 20);
@@ -762,7 +760,7 @@ fn multiple_instances_of_infect_are_redundant() {
 
 #[test]
 fn gaining_control_of_a_permanent_doesnt_give_control_of_what_is_attached_to_it() {
-    cr!("303.4e", "301.5d", "613.2");
+    cr!("303.4e", "301.5d", "613.1b");
     ruling!(
         "Confiscate",
         "Gaining control of a permanent doesn't cause you to gain control of any Auras or Equipment attached to it."

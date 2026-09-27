@@ -15,7 +15,7 @@ use mtg_engine::*;
 
 #[test]
 fn a_curse_can_enchant_the_player_who_cast_it() {
-    cr!("303.4a", "303.4d", "115.1");
+    cr!("303.4a", "702.5a", "115.1");
     ruling!(
         "Curse of the Forsaken",
         "Each of the Curses can be attached to any player, including the player who cast the Curse."
@@ -62,7 +62,7 @@ fn curse_is_an_enchantment_type_not_a_creature_type() {
 
 #[test]
 fn a_curse_targets_its_player_and_falls_off_if_that_player_gains_protection_from_it() {
-    cr!("303.4d", "702.16c", "702.16k", "704.5m");
+    cr!("303.4a", "303.4c", "702.16a", "702.16b", "702.16c", "704.5m");
     ruling!(
         "Curse of Predation",
         "A Curse spell targets the player it will enchant like any other Aura spell, and a Curse stays on the battlefield like any other Aura. If the enchanted player gains protection from the Curse’s color (or any other characteristic the Curse has), the Curse will be put into its owner’s graveyard."
