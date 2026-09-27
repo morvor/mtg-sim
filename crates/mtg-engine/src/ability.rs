@@ -1824,6 +1824,9 @@ pub enum ReplacementAction {
     /// below N brings it to N. A player who already has less than N life loses life
     /// normally.
     LifeFloor(Value),
+    /// "[A permanent tapped for mana] produces [type] instead of any other type"
+    /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
+    ManaTypeInstead(crate::mana::ManaType),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
