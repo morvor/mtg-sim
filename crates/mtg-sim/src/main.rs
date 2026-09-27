@@ -1,7 +1,8 @@
 //! Command-line simulator: runs games between decks with built-in agents.
 //!
 //! Usage: mtg-sim [--games N] [--seed S] [--deck FILE]... [--players N] [--random-decks]
-//!                [--only G] [--max-turns N] [--max-actions N] [--timeout SECS] [--log]
+//!                [--only G] [--max-turns N] [--max-actions N] [--slow SECS]
+//!                [--timeout SECS] [--log]
 //!
 //! A deck file lists "4 Lightning Bolt" lines; the cards after a "Sideboard" line are the
 //! player's sideboard, from which a companion may be revealed as the game starts.
@@ -9,20 +10,24 @@
 //! `--random-decks` fuzzes the engine: each game gets new random decks of fully supported
 //! cards for the players without a `--deck`. A panic doesn't stop the run: the game is
 //! reported with the command that reproduces it (`--only G` replays game G of a run), and
-//! the process exits with status 1 at the end. A game still running after `--timeout`
-//! seconds is reported as a hang and ends the run with status 2.
+//! the process exits with status 1 at the end. A game still going after `--slow` seconds
+//! (random agents can pile up effects) is stopped and reported as slow. A game in which no
+//! decision was made for `--timeout` seconds is reported as a hang and ends the run with
+//! status 2.
 
 mod decks;
 
 use decks::{default_deck, load_deck, random_deck, DeckList};
 use mtg_engine::agents::RandomAgent;
+use mtg_engine::turn::Stage;
 use mtg_engine::*;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// The message and location of the latest panic, recorded by the panic hook.
@@ -34,6 +39,8 @@ enum Outcome {
         turns: u32,
         log: Vec<String>,
     },
+    /// Stopped after the `--slow` limit.
+    Slow { turn: u32, log: Vec<String> },
     Panicked {
         message: String,
         turn: u32,
@@ -41,15 +48,20 @@ enum Outcome {
     },
 }
 
-/// Plays one game on its own thread (with a large stack) and catches a panic.
+/// Plays one game on its own thread (with a large stack), catching a panic. Returns
+/// `None` if no decision was made for `timeout` (the game thread is left running).
 fn play(
     config: GameConfig,
     decks: Vec<DeckList>,
     agent_seed: u64,
     logging: bool,
+    slow: Duration,
     timeout: Duration,
 ) -> Option<Outcome> {
     let (tx, rx) = mpsc::channel();
+    let progress = Arc::new(AtomicU64::new(0));
+    let stop = Arc::new(AtomicBool::new(false));
+    let (progress2, stop2) = (progress.clone(), stop.clone());
     std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(move || {
@@ -73,7 +85,23 @@ fn play(
                     }
                 }
                 g.logging = logging;
-                g.run()
+                // `Game::run`, one unit at a time so the watchdog sees progress and can
+                // stop a slow game.
+                if g.turn.stage == Stage::PreGame {
+                    g.start();
+                }
+                while g.result.is_none() {
+                    if stop2.load(Ordering::Relaxed) {
+                        return None;
+                    }
+                    g.advance();
+                    if g.turn.number > g.config.max_turns || g.actions_taken > g.config.max_actions
+                    {
+                        g.draw_game();
+                    }
+                    progress2.store(g.actions_taken, Ordering::Relaxed);
+                }
+                g.result.clone()
             }));
             let turn = game.as_ref().map_or(0, |g| g.turn.number);
             let log: Vec<String> = game.as_ref().map_or(Vec::new(), |g| {
@@ -83,11 +111,12 @@ fn play(
                     .collect()
             });
             let outcome = match r {
-                Ok(result) => Outcome::Finished {
+                Ok(Some(result)) => Outcome::Finished {
                     result,
                     turns: turn,
                     log,
                 },
+                Ok(None) => Outcome::Slow { turn, log },
                 Err(_) => Outcome::Panicked {
                     message: LAST_PANIC
                         .lock()
@@ -101,7 +130,36 @@ fn play(
             let _ = tx.send(outcome);
         })
         .expect("spawn game thread");
-    rx.recv_timeout(timeout).ok()
+    let start = Instant::now();
+    let (mut seen, mut since) = (0, Instant::now());
+    loop {
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(outcome) => return Some(outcome),
+            Err(RecvTimeoutError::Disconnected) => return None,
+            Err(RecvTimeoutError::Timeout) => {
+                let now = progress.load(Ordering::Relaxed);
+                if now != seen {
+                    (seen, since) = (now, Instant::now());
+                } else if since.elapsed() > timeout {
+                    return None;
+                }
+                if start.elapsed() > slow {
+                    stop.store(true, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+}
+
+/// Prints the decks, the command that replays the game and the tail of its log.
+fn report(decks: &[DeckList], repro: &str, log: &[String], tail: usize) {
+    for (p, d) in decks.iter().enumerate() {
+        println!("  deck {}: {}", p + 1, d.summary());
+    }
+    println!("  reproduce: {repro}");
+    for l in &log[log.len().saturating_sub(tail)..] {
+        println!("    {l}");
+    }
 }
 
 fn main() {
@@ -114,7 +172,8 @@ fn main() {
     let mut only: Option<u64> = None;
     let mut max_turns = 100u32;
     let mut max_actions = GameConfig::default().max_actions;
-    let mut timeout = 120u64;
+    let mut slow = 60u64;
+    let mut timeout = 60u64;
     let mut log = false;
     let mut i = 1;
     let value = |i: usize, what: &str| -> String {
@@ -133,6 +192,7 @@ fn main() {
             "--max-actions" => {
                 max_actions = value(i, "--max-actions").parse().expect("--max-actions N")
             }
+            "--slow" => slow = value(i, "--slow").parse().expect("--slow SECS"),
             "--timeout" => timeout = value(i, "--timeout").parse().expect("--timeout SECS"),
             "--random-decks" => {
                 random = true;
@@ -154,7 +214,8 @@ fn main() {
 
     let start = Instant::now();
     let mut wins = vec![0u64; players];
-    let (mut played, mut draws, mut turns) = (0u64, 0u64, 0u64);
+    let (mut played, mut draws, mut turns, mut finished) = (0u64, 0u64, 0u64, 0u64);
+    let mut slow_games: Vec<u64> = Vec::new();
     let mut panics: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     let range = match only {
         Some(g) => g..g + 1,
@@ -191,13 +252,11 @@ fn main() {
             decks.clone(),
             s.wrapping_mul(7),
             logging,
+            Duration::from_secs(slow),
             Duration::from_secs(timeout),
         ) else {
-            println!("HANG: game {gi} (seed {s}) still running after {timeout}s");
-            for (p, d) in decks.iter().enumerate() {
-                println!("  deck {}: {}", p + 1, d.summary());
-            }
-            println!("  reproduce: {repro}");
+            println!("HANG: game {gi} (seed {s}): no decision for {timeout}s");
+            report(&decks, &repro, &[], 0);
             std::process::exit(2);
         };
         played += 1;
@@ -207,6 +266,7 @@ fn main() {
                 turns: t,
                 log: lines,
             } => {
+                finished += 1;
                 turns += t as u64;
                 match result {
                     GameResult::Win(ws) => {
@@ -222,20 +282,18 @@ fn main() {
                     }
                 }
             }
+            Outcome::Slow { turn, log: lines } => {
+                println!("SLOW: game {gi} (seed {s}) stopped after {slow}s, on turn {turn}");
+                report(&decks, &repro, &lines, if log { lines.len() } else { 8 });
+                slow_games.push(gi);
+            }
             Outcome::Panicked {
                 message,
                 turn,
                 log: lines,
             } => {
                 println!("PANIC: game {gi} (seed {s}), turn {turn}: {message}");
-                for (p, d) in decks.iter().enumerate() {
-                    println!("  deck {}: {}", p + 1, d.summary());
-                }
-                println!("  reproduce: {repro}");
-                let tail = if log { lines.len() } else { 12 };
-                for l in &lines[lines.len().saturating_sub(tail)..] {
-                    println!("    {l}");
-                }
+                report(&decks, &repro, &lines, if log { lines.len() } else { 12 });
                 let place = message.lines().next().unwrap_or("").to_string();
                 panics.entry(place).or_default().push(gi);
             }
@@ -256,10 +314,14 @@ fn main() {
         );
     }
     println!("  draws: {draws}");
-    println!(
-        "  avg turns: {:.1}",
-        turns as f64 / (played - panics.values().map(Vec::len).sum::<usize>() as u64).max(1) as f64
-    );
+    println!("  avg turns: {:.1}", turns as f64 / finished.max(1) as f64);
+    if !slow_games.is_empty() {
+        println!(
+            "  slow (stopped): {} games {:?}",
+            slow_games.len(),
+            slow_games
+        );
+    }
     if !panics.is_empty() {
         println!(
             "  panics: {} games, {} places",

@@ -15,9 +15,11 @@ pub struct RandomAgent {
     /// Probability of passing when other actions are available.
     pub pass_bias: f64,
     /// The turn and step of the latest priority decision, and the actions taken in that
-    /// step. Each action makes passing more likely, so a repeatable free ability (e.g.
-    /// "{0}: ... until end of turn") doesn't keep the agent busy for hundreds of actions.
-    acted: (u32, Step, u32),
+    /// step. Each action makes passing more likely, and an action already taken this step
+    /// is seldom taken again, so a repeatable free ability (e.g. "{0}: ~ becomes an
+    /// enchantment") doesn't keep the agent busy for hundreds of actions, each adding an
+    /// effect that slows every later one.
+    acted: (u32, Step, Vec<Action>),
 }
 
 impl RandomAgent {
@@ -25,7 +27,7 @@ impl RandomAgent {
         RandomAgent {
             rng: ChaCha8Rng::seed_from_u64(seed),
             pass_bias: 0.2,
-            acted: (0, Step::Untap, 0),
+            acted: (0, Step::Untap, Vec::new()),
         }
     }
 }
@@ -43,23 +45,33 @@ impl Agent for RandomAgent {
                     .filter(|a| !matches!(a, Action::Pass | Action::Concede))
                     .collect();
                 if (self.acted.0, self.acted.1) != (g.turn.number, g.turn.step) {
-                    self.acted = (g.turn.number, g.turn.step, 0);
+                    self.acted = (g.turn.number, g.turn.step, Vec::new());
                 }
-                let pass = self
-                    .pass_bias
-                    .max(1.0 - 0.85f64.powi(self.acted.2.min(1000) as i32));
+                let taken = self.acted.2.len().min(1000) as i32;
+                let pass = self.pass_bias.max(1.0 - 0.85f64.powi(taken));
                 if non_pass.is_empty() || self.rng.gen_bool(pass) {
                     return Answer::Action(Action::Pass);
                 }
-                self.acted.2 += 1;
                 // Prefer land drops.
-                if let Some(l) = non_pass
+                let fresh: Vec<&Action> = non_pass
+                    .iter()
+                    .copied()
+                    .filter(|a| !self.acted.2.contains(a))
+                    .collect();
+                let action = if let Some(l) = non_pass
                     .iter()
                     .find(|a| matches!(a, Action::PlayLand { .. }))
                 {
-                    return Answer::Action((*l).clone());
-                }
-                Answer::Action((*non_pass.choose(&mut self.rng).unwrap()).clone())
+                    (*l).clone()
+                } else if !fresh.is_empty() && !self.rng.gen_bool(0.1) {
+                    (*fresh.choose(&mut self.rng).unwrap()).clone()
+                } else if self.rng.gen_bool(0.1) {
+                    (*non_pass.choose(&mut self.rng).unwrap()).clone()
+                } else {
+                    return Answer::Action(Action::Pass);
+                };
+                self.acted.2.push(action.clone());
+                Answer::Action(action)
             }
             Decision::Mulligan { .. } => Answer::Bool(false),
             Decision::DeclareAttackers { options } => {
