@@ -69,4 +69,22 @@ fn extort_is_paid_at_most_once_per_trigger_as_it_resolves() {
     assert_eq!(untapped_lands(&t, P0), 3);
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.life(P0), 21);
+    // Two permanents with extort: each triggers separately, and each is paid once.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Syndicate Heavy");
+    t.battlefield(P0, "Basilica Screecher");
+    t.lands(P0, "Plains", 4);
+    let from = t.asked().len();
+    let memnite = t.hand(P0, "Memnite");
+    t.cast(P0, memnite).go();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Extort"), 2);
+    for _ in 0..4 {
+        t.answer_yes(P0, true);
+    }
+    t.resolve_all();
+    assert_eq!(pay_questions(&t, from), 2);
+    assert_eq!(untapped_lands(&t, P0), 2);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
 }

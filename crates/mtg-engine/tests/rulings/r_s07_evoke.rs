@@ -251,6 +251,53 @@ fn a_creature_that_changed_controllers_is_still_sacrificed() {
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
 
+#[test]
+fn a_creature_spell_that_changed_controllers_is_still_sacrificed() {
+    cr!("608.3a", "603.3a", "702.74a");
+    ruling!(
+        "Reveillark",
+        "If a creature spell cast with evoke changes controllers before it enters, it will still be sacrificed when it enters."
+    );
+    let mut t = TestGame::new(2);
+    let spell = evoke_reveillark(&mut t);
+    let p1_bears = t.g.player(P1).graveyard[0];
+    // P1 gains control of the Reveillark spell while it's on the stack.
+    run_from(
+        &mut t,
+        P1,
+        None,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &[Entity::Object(spell)],
+    );
+    assert_eq!(t.g.obj(spell).controller, P1);
+    // It enters under P1's control; P0 paid its evoke cost, so the evoke ability still
+    // triggers (controlled by P1).
+    t.resolve();
+    let lark = t.g.current(spell);
+    assert!(t.on_battlefield(lark));
+    assert_eq!(t.obj_now(lark).controller, P1);
+    assert_eq!(on_stack(&t, "Evoke"), 1);
+    // It's sacrificed; P1 controlled it as it left, so P1 controls its leaves-the-
+    // battlefield ability: it can return P1's Bears, not P0's.
+    let from = t.asked().len();
+    t.answer_targets(P1, &[Entity::Object(p1_bears)]);
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Reveillark"));
+    assert_eq!(
+        target_candidates(&t, P1, from),
+        vec![vec![Entity::Object(p1_bears)]]
+    );
+    t.resolve_all();
+    let bears = named_of(&t, P1, "Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    assert_eq!(t.obj(bears[0]).owner, P1);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
 /// Whether Night Incarnate is on the battlefield with an ability on the stack.
 fn incarnate_waiting(g: &Game) -> bool {
     !g.find_in_zone(mtg_engine::object::Zone::Battlefield, "Night Incarnate")
@@ -300,7 +347,7 @@ fn the_creatures_own_abilities_can_resolve_before_the_evoke_ability() {
     // cast it, exile target artifact or enchantment an opponent controls." and "When this
     // creature enters, if {U}{U} was spent to cast it, draw two cards, then discard a
     // card."; evoke {G/U}{G/U}. Evoked with two Forests: only the first ability triggers.
-    let mut tested = 0;
+    let (mut tested, mut evoke_first) = (0, 0);
     for order in [vec![0, 1], vec![1, 0]] {
         let mut t = TestGame::new(2);
         let stone = t.battlefield(P1, "Millstone");
@@ -313,6 +360,14 @@ fn the_creatures_own_abilities_can_resolve_before_the_evoke_ability() {
         t.resolve();
         assert_eq!(t.stack_len(), 2);
         if stack_items(&t).last().unwrap().contains("Evoke") {
+            // The other order: Wistfulness is sacrificed first. Its exile ability still
+            // resolves ({G}{G} was spent to cast it).
+            evoke_first += 1;
+            t.resolve();
+            assert!(t.in_graveyard(P0, "Wistfulness"));
+            assert!(t.on_battlefield(stone));
+            t.resolve_all();
+            assert!(!t.on_battlefield(stone));
             continue;
         }
         tested += 1;
@@ -333,7 +388,7 @@ fn the_creatures_own_abilities_can_resolve_before_the_evoke_ability() {
         // No blue mana was spent: no cards were drawn.
         assert_eq!(t.hand_size(P0), hand - 1);
     }
-    assert_eq!(tested, 1);
+    assert_eq!((tested, evoke_first), (1, 1));
 }
 
 #[test]

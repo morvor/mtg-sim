@@ -135,7 +135,9 @@ fn no_other_greater_power(c: &str, b: &Builder) -> Option<Condition> {
 
 fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     let (x, c) = crate::oracle::phrases::end(l).rsplit_once(" if ")?;
-    if x.is_empty() || x.starts_with("if ") || c.contains(',') {
+    // An instruction with a condition of its own ("A if [c1], and B if [c2]", Invert the
+    // Skies) isn't governed as a whole by the last condition.
+    if x.is_empty() || x.starts_with("if ") || x.contains(" if ") || c.contains(',') {
         return None;
     }
     let first_new = b.targets.len();
