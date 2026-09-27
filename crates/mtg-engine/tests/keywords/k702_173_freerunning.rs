@@ -235,3 +235,25 @@ fn ezio_makes_a_player_with_10_or_less_life_lose() {
         assert_eq!(t.has_lost(P1), life - 3 <= 10);
     }
 }
+
+#[test]
+fn mana_spendable_only_on_a_spell_that_has_freerunning() {
+    cr!("702.173a", "106.6");
+    assert_supported("Brotherhood Headquarters");
+    // Brotherhood Headquarters: "{T}: Add {C}." "{T}: Add one mana of any color. Spend this
+    // mana only to cast an Assassin spell or a spell that has freerunning, or to activate an
+    // ability of an Assassin source."
+    for (name, ok) in [
+        ("Merciless Harlequin", true),
+        ("Distract the Guards", true),
+        ("Hill Giant", false),
+        ("Grizzly Bears", false),
+    ] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.lands(P0, "Brotherhood Headquarters", 4);
+        let card = t.hand(P0, name);
+        // Its normal cost ({2}{B}, {1}{W}{W}, {3}{R}) with the Headquarters' mana.
+        assert_eq!(t.cast(P0, card).try_go().is_ok(), ok, "{name}");
+    }
+}

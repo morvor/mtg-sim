@@ -114,6 +114,17 @@ fn spell_alternatives(s: &str) -> Option<Filter> {
         .strip_prefix("a ")
         .or_else(|| s.strip_prefix("an "))
         .unwrap_or(s);
+    // "an Assassin spell or a spell that has freerunning" (Brotherhood Headquarters): two
+    // alternatives, each with its own article.
+    for sep in [" spell or a ", " spell or an "] {
+        if let Some(i) = s.find(sep) {
+            let first = &s[..i + " spell".len()];
+            let second = &s[i + sep.len() - 2..];
+            if let (Some(f), Some(g)) = (spell_alternatives(first), spell_alternatives(second.trim())) {
+                return Some(Filter::Or(vec![f, g]));
+            }
+        }
+    }
     let (f, _, tail) = parse_object_phrase(s)?;
     // "Dragon creature spell": a second narrowing noun.
     let (f, tail) = match tail
