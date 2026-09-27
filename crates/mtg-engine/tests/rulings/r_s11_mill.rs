@@ -315,3 +315,33 @@ fn two_milled_cards_that_share_a_card_type() {
         assert_eq!(t.hand_size(P0), hand - 1 + usize::from(draws), "{top}");
     }
 }
+
+#[test]
+fn an_untargeted_return_from_your_graveyard_is_chosen_as_it_resolves() {
+    cr!("608.2c", "115.10", "400.7");
+    // "Return a creature card from your graveyard to the battlefield. It gains haste until
+    // end of turn.": no target; the card is chosen on resolution, and "it" is the creature
+    // it became.
+    let spell = custom_card(
+        "Chosen Return",
+        "Sorcery",
+        "{0}",
+        None,
+        "Return a creature card from your graveyard to the battlefield. It gains haste until end of turn.",
+    );
+    let mut t = TestGame::new(2);
+    let card = t.custom(P0, spell, Zone::Hand(P0));
+    t.cast(P0, card).go();
+    // A creature card put into the graveyard after it was cast can be chosen.
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Lightning Bolt");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.resolve_all();
+    let giant = t.g.current(giant);
+    assert!(t.on_battlefield(giant));
+    assert!(t
+        .obj(giant)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+}

@@ -46,7 +46,7 @@ fn return_chosen_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
     let mut moves = Vec::new();
     for part in objs.split(" and ") {
         let (count, up_to, desc) = quantity(part)?;
-        if !(desc.ends_with(" card") || desc.ends_with(" cards")) {
+        if !(desc.ends_with("card") || desc.ends_with("cards")) {
             return None;
         }
         let kind = super::card_flow_search::card_filter(desc, b)?;
@@ -68,6 +68,13 @@ fn return_chosen_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
             to: to.clone(),
         });
     }
+    // "It" / "them" afterwards: the returned cards (the new objects, CR 400.7), known only
+    // when they were returned by a single choice.
+    b.it = if moves.len() == 1 {
+        Sel::Var(vars::IT)
+    } else {
+        Sel::None
+    };
     Some(Effect::seq(moves))
 }
 
