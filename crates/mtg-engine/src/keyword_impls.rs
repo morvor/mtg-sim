@@ -78,17 +78,19 @@ pub fn expand_keywords(chars: &mut Characteristics) {
 /// `Game::compute_characteristics`).
 pub fn derived_by_keyword(chars: &Characteristics) -> Vec<(u64, Ability)> {
     let mut out: Vec<(u64, Ability)> = Vec::new();
-    let mut seen: Vec<String> = Vec::new();
+    // Instances of each keyword seen so far (an effect can grant hundreds, e.g. a {0}
+    // ability activated again and again).
+    let mut seen: HashMap<String, usize> = HashMap::new();
     for a in &chars.abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
             let base = format!("{k:?}");
-            let nth = seen.iter().filter(|s| **s == base).count();
-            let key = if nth == 0 {
-                base.clone()
+            let nth = seen.entry(base.clone()).or_default();
+            let key = if *nth == 0 {
+                base
             } else {
                 format!("{base}#{nth}")
             };
-            seen.push(base);
+            *nth += 1;
             out.extend(
                 derived_abilities_keyed(k, key)
                     .into_iter()
