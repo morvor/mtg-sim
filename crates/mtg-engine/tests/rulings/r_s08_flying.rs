@@ -817,3 +817,67 @@ fn finality_counters_work_on_any_permanent() {
     assert!(t.in_exile("Millstone"));
     assert!(!t.in_graveyard(P1, "Millstone"));
 }
+
+fn choose_replacement_containing(d: &Decision, needle: &str) -> Option<Answer> {
+    match d {
+        Decision::ChooseReplacement { options } => options
+            .iter()
+            .position(|o| o.to_lowercase().contains(needle))
+            .map(Answer::Index),
+        _ => None,
+    }
+}
+
+fn doubling_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    choose_replacement_containing(d, "double")
+}
+
+fn prevention_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    choose_replacement_containing(d, "prevent")
+}
+
+#[test]
+fn the_damaged_creatures_controller_orders_replacement_and_prevention_effects() {
+    cr!("616.1", "616.1e", "615.5");
+    ruling!(
+        "Stormwild Capridor",
+        "If multiple replacement or prevention effects try to modify damage that would be dealt to a creature, the controller of the creature chooses the order in which they apply."
+    );
+    supported("Stormwild Capridor");
+    supported("Furnace of Rath");
+    // Stormwild Capridor (1/3): "If noncombat damage would be dealt to this creature,
+    // prevent that damage. Put a +1/+1 counter on this creature for each 1 damage
+    // prevented this way." P1's Furnace of Rath doubles damage. P1 bolts the Capridor:
+    // P0 chooses whether it's doubled first (6 prevented) or prevented first (3).
+    for (f, counters) in [
+        (doubling_first as fn(&_, &_) -> _, 6),
+        (prevention_first as fn(&_, &_) -> _, 3),
+    ] {
+        let mut t = TestGame::new(2);
+        let capridor = t.battlefield(P0, "Stormwild Capridor");
+        t.battlefield(P1, "Furnace of Rath");
+        respond(&mut t, P0, f);
+        t.lands(P1, "Mountain", 1);
+        let bolt = t.hand(P1, "Lightning Bolt");
+        let from = t.asked().len();
+        t.cast(P1, bolt).target(capridor).go();
+        t.resolve_all();
+        let choosers: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::ChooseReplacement { .. }))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(choosers, vec![P0]);
+        assert_eq!(t.obj_now(capridor).damage, 0);
+        assert_eq!(t.counters(capridor, "+1/+1"), counters);
+    }
+    // Combat damage isn't prevented.
+    let mut t = TestGame::new(2);
+    let capridor = t.battlefield(P0, "Stormwild Capridor");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    block_and_finish(&mut t, P0, &[(capridor, bears)]);
+    assert_eq!(t.obj_now(capridor).damage, 2);
+    assert_eq!(t.counters(capridor, "+1/+1"), 0);
+}
