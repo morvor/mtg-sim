@@ -1,25 +1,25 @@
 //! CR 702.166 Bargain: "As an additional cost to cast this spell, you may sacrifice an
-//! artifact, enchantment, or token" (CR 702.166a), an optional additional cost
-//! (CR 601.2b, 601.2f–h).
+//! artifact, enchantment, or token." (CR 702.166a). Paying it follows the rules for
+//! additional costs (CR 601.2b, 601.2f–h): one permanent is sacrificed.
 //!
-//! * A spell whose controller declared the intention to pay its bargain cost has been
-//!   "bargained" (CR 702.166b): [`BARGAIN`] is recorded in its `CastInfo::paid`, which the
-//!   linked "if this spell was bargained" / "if it was bargained" abilities check
-//!   (`Condition::CostPaid`, CR 702.166c); the permanent the spell becomes keeps its cast
-//!   information, so its enters abilities see it too.
-//! * Targets of a part of the spell that has its effect only if it was bargained are chosen
-//!   only if it was (CR 702.166d; `TargetSpec::condition`, see the oracle compiler's
-//!   handling of "if [a cost was paid], ...").
-//! * Several instances of bargain are redundant: only one bargain cost is offered.
+//! A spell whose controller declared the intention to pay its bargain cost has been
+//! "bargained" (CR 702.166b): [`BARGAIN`] is recorded in the spell's `CastInfo::paid`,
+//! which the linked "if this spell was bargained" / "if it was bargained" abilities check
+//! (`Condition::CostPaid`, CR 702.166c; see `oracle/patterns/k702_166_bargain.rs`). A copy
+//! of a bargained spell copies that choice (CR 707.10) and is bargained too; a permanent
+//! that enters as a copy of a bargained permanent wasn't cast, so it isn't.
+//!
+//! Targets of a part of a spell that has its effect only if it was bargained are chosen
+//! only if it was (CR 702.166d; see `TargetSpec::condition`).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::game::Game;
-use crate::keywords::KeywordKind;
+use crate::keywords::{Keyword, KeywordKind};
 use crate::types::*;
 use smol_str::SmolStr;
 
-/// The name recorded in `CastInfo::paid` when a spell's bargain cost is paid.
+/// The optional cost name recorded in `CastInfo::paid`: the spell was bargained.
 pub const BARGAIN: &str = "bargain";
 
 /// "Sacrifice an artifact, enchantment, or token."
@@ -41,11 +41,12 @@ impl KeywordRules for Bargain {
         &[KeywordKind::Bargain]
     }
 
-    /// One bargain cost however many instances the spell has.
-    fn spell_optional_costs(&self, g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
-        if !g.obj(spell).chars.has_keyword(KeywordKind::Bargain) {
-            return vec![];
-        }
+    fn optional_costs(
+        &self,
+        _g: &Game,
+        _spell: ObjectId,
+        _kw: &Keyword,
+    ) -> Vec<(SmolStr, Cost, bool)> {
         vec![(BARGAIN.into(), bargain_cost(), false)]
     }
 }

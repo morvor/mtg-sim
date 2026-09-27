@@ -327,6 +327,26 @@ impl Game {
             Event::CrimeCommitted { player } => {
                 *self.history.crimes.entry(*player).or_insert(0) += 1
             }
+            // What a permanent was as it entered (its characteristics are computed by
+            // now): conditions about permanents that entered this turn look at that, not
+            // at what it is later ("a face-down creature entered ...").
+            Event::ZoneChange {
+                new,
+                to: Zone::Battlefield,
+                ..
+            } => {
+                let o = self.obj(*new);
+                let seen = (Arc::new(o.chars.clone()), o.face_down);
+                if let Some(e) = self
+                    .history
+                    .permanents_entered
+                    .iter_mut()
+                    .rev()
+                    .find(|e| e.id == *new && e.as_entered.is_none())
+                {
+                    e.as_entered = Some(seen);
+                }
+            }
             _ => {}
         }
     }

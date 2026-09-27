@@ -64,6 +64,11 @@ fn exiles_your_top_cards(e: &Effect) -> bool {
             ..
         } => true,
         Effect::Seq(v) => v.last().is_some_and(exiles_your_top_cards),
+        // "Exile the top two cards of your library. If ..., exile the top three cards
+        // instead."
+        Effect::If {
+            then, otherwise, ..
+        } => exiles_your_top_cards(then) && exiles_your_top_cards(otherwise),
         _ => false,
     }
 }

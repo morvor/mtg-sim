@@ -57,10 +57,24 @@ fn spell(name: &str, text: &str) -> CardDef {
     oracle_card(name, "Sorcery", "{0}", None, text)
 }
 
-/// Adorable Kitten enters: "When this creature enters, roll a six-sided die. You gain life
-/// equal to the result."
+/// A creature with Adorable Kitten's text: "When this creature enters, roll a six-sided
+/// die. You gain life equal to the result." (Adorable Kitten itself is an Unstable host,
+/// a mechanic the engine doesn't implement, so its own card is unsupported.) Compiled by
+/// the real oracle compiler, which must understand all of it.
+fn kitten_card() -> CardDef {
+    oracle_card(
+        "Die-Rolling Kitten",
+        "Creature — Cat",
+        "{W}",
+        Some((1, 1)),
+        "When this creature enters, roll a six-sided die. You gain life equal to the result.",
+    )
+}
+
+/// The kitten enters.
 fn kitten(t: &mut TestGame, p: PlayerId) {
-    t.enter(p, "Adorable Kitten");
+    mtg_engine::card::CardDb::global().register(kitten_card());
+    t.enter(p, "Die-Rolling Kitten");
     t.resolve_all();
 }
 
@@ -157,7 +171,7 @@ fn optional_modifiers_can_have_costs() {
         "If you roll multiple dice at the same time, paying {1} will let you reroll any number of those dice."
     );
     supported("Snickering Squirrel");
-    supported("Adorable Kitten");
+    kitten_card();
     let mut t = TestGame::new(2);
     // P1's Squirrel can increase a die P0 rolled: P1 decides and taps it.
     let squirrel = t.battlefield(P1, "Snickering Squirrel");

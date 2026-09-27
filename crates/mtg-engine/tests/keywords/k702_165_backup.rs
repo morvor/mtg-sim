@@ -32,7 +32,7 @@ fn backup_puts_counters_and_grants_the_abilities_printed_below_it() {
     t.answer_targets(P0, &[Entity::Object(bears)]);
     let v = t.enter(P0, "Boon-Bringer Valkyrie");
     t.settle();
-    assert_eq!(triggers_named(&t, "Backup").len(), 1);
+    assert_eq!(triggers_starting(&t, "Backup ").len(), 1);
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 1);
     assert_eq!(t.pt(bears), (3, 3));
@@ -100,7 +100,7 @@ fn a_copy_of_a_backup_creature_keeps_the_order_of_its_printed_abilities() {
     assert_eq!(t.obj(clone).chars.name, "Boon-Bringer Valkyrie");
     t.answer_targets(P0, &[Entity::Object(bears)]);
     t.settle();
-    assert_eq!(triggers_named(&t, "Backup").len(), 1);
+    assert_eq!(triggers_starting(&t, "Backup ").len(), 1);
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 1);
     assert!(has_kw(&t, bears, KeywordKind::Flying));
@@ -143,7 +143,7 @@ fn the_granted_abilities_are_determined_as_the_ability_is_put_on_the_stack() {
     t.answer_targets(P0, &[Entity::Object(bears)]);
     let valk = t.enter(P0, "Boon-Bringer Valkyrie");
     t.settle();
-    assert_eq!(triggers_named(&t, "Backup").len(), 1);
+    assert_eq!(triggers_starting(&t, "Backup ").len(), 1);
     // The Valkyrie loses all its abilities with its backup ability on the stack.
     run_effect(
         &mut t,
@@ -178,7 +178,7 @@ fn each_backup_ability_triggers_separately() {
     }
     t.enter(P0, "Conclave Sledge-Captain");
     t.settle();
-    assert_eq!(triggers_named(&t, "Backup").len(), 3);
+    assert_eq!(triggers_starting(&t, "Backup ").len(), 3);
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 3);
     assert_eq!(kw_count(&t, bears, KeywordKind::Trample), 3);

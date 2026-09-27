@@ -6,11 +6,12 @@
 //!   creatures you control get +1/+1 and gain lifelink."
 //! - A list of predicates about one subject, in any order: "gains trample and gets
 //!   +X/+X, where X is ...", "has base power and toughness 1/1 and gains flying", "loses
-//!   all abilities and has base power and toughness 1/1", "each get +1/+1 and gain
-//!   \"When this creature dies, draw a card.\"". Quoted abilities are compiled
-//!   recursively; "this creature" in them is the object that has the ability, and the
-//!   ability belongs to it (CR 113.6, 613.1f). A quote that names the card itself is
-//!   left unsupported (see `statics::quote_names_card`).
+//!   all abilities and has base power and toughness 1/1", "gets +3/-3 and loses all
+//!   creature types", "each get +1/+1 and gain \"When this creature dies, draw a
+//!   card.\"". Quoted abilities are compiled recursively; "this creature" in them is the
+//!   object that has the ability, and the ability belongs to it (CR 113.6, 613.1f). A
+//!   quote that names the card itself is left unsupported (see
+//!   `statics::quote_names_card`).
 //! - One choice among alternatives, made by the controller as the effect is created:
 //!   "gains your choice of flying, vigilance, or lifelink", "gets +1/-1 or -1/+1".
 //! - "Switch target creature's power and toughness until end of turn" (layer 7d, CR
@@ -162,6 +163,8 @@ enum Verb {
     BasePt,
     /// "loses all abilities"
     LoseAll,
+    /// "loses all creature types" (layer 4, CR 613.1d)
+    LoseCreatureTypes,
 }
 
 /// The verb starting at `s` (a word boundary), and the text after it.
@@ -175,12 +178,16 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
         ("have base power and toughness ", Verb::BasePt),
         ("loses all abilities", Verb::LoseAll),
         ("lose all abilities", Verb::LoseAll),
+        ("loses all creature types", Verb::LoseCreatureTypes),
+        ("lose all creature types", Verb::LoseCreatureTypes),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             if v == Verb::Get && !r.starts_with(['+', '-']) {
                 return None;
             }
-            if v == Verb::LoseAll && !(r.is_empty() || r.starts_with([',', ' '])) {
+            if matches!(v, Verb::LoseAll | Verb::LoseCreatureTypes)
+                && !(r.is_empty() || r.starts_with([',', ' ']))
+            {
                 return None;
             }
             return Some((v, r));
@@ -489,6 +496,12 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                     return None;
                 }
                 mods.push(Modification::RemoveAllAbilities);
+            }
+            Verb::LoseCreatureTypes => {
+                if !body.is_empty() {
+                    return None;
+                }
+                mods.push(Modification::RemoveAllCreatureTypes);
             }
         }
     }
