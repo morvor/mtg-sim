@@ -21,6 +21,10 @@ use smol_str::SmolStr;
 /// `Condition::Custom`: the offspring cost of the resolving (or triggering) offspring
 /// ability's instance was paid.
 pub const PAID: &str = "offspring:its offspring cost was paid";
+/// `Filter::Custom` prefix: "with base power N" (CR 208.4b), N following the prefix
+/// ("other creatures you control with base power 1", Zinnia, Valley's Voice, which
+/// counts the 1/1 offspring tokens).
+pub const BASE_POWER: &str = "base power=";
 
 /// The name recorded in `CastInfo::paid` for the payment of the `i`th (0-based) offspring
 /// cost of a spell.
@@ -85,6 +89,11 @@ impl KeywordRules for Offspring {
             .enumerate()
             .map(|(i, k)| (cost_name(i), k.cost.clone().unwrap_or_default(), false))
             .collect()
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        let n: i32 = name.strip_prefix(BASE_POWER)?.parse().ok()?;
+        Some(g.obj(id).base_pt.0 == Some(n))
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {

@@ -93,12 +93,35 @@ fn targets_only_if_paid(cond: &Condition, b: &mut Builder, first_new: usize) {
     }
 }
 
-fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (x, c) = crate::oracle::phrases::end(l).rsplit_once(" if ")?;
-    if x.is_empty() || x.starts_with("if ") || !pronoun_free(c) || c.contains(',') {
+/// "that player has 10 or less life": the life total of the player named earlier.
+fn that_player_life(c: &str, b: &Builder) -> Option<Condition> {
+    use crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent;
+    let r = c.strip_prefix("that player has ")?.strip_suffix(" life")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let cmp = match r.trim() {
+        "or less" => Cmp::Le,
+        "or more" => Cmp::Ge,
+        _ => return None,
+    };
+    if is_no_player_referent(&b.it_player) || matches!(b.it_player, PlayerRef::You) {
         return None;
     }
-    let cond = crate::oracle::statics::parse_condition(c, b.ctx)?;
+    Some(Condition::PlayerMatches(
+        b.it_player.clone(),
+        PlayerFilter::Life(cmp, Box::new(n)),
+    ))
+}
+
+fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (x, c) = crate::oracle::phrases::end(l).rsplit_once(" if ")?;
+    if x.is_empty() || x.starts_with("if ") || c.contains(',') {
+        return None;
+    }
+    let cond = match that_player_life(c, b) {
+        Some(c) => c,
+        None if pronoun_free(c) => crate::oracle::statics::parse_condition(c, b.ctx)?,
+        None => return None,
+    };
     let first_new = b.targets.len();
     let e = crate::oracle::effects::parse_clause(x, b)?;
     targets_only_if_paid(&cond, b, first_new);

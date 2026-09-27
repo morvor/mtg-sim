@@ -785,6 +785,15 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::PowerVsBase(cmp), r));
         }
     }
+    // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
+    if let Some(r) = t.strip_prefix("with base power ") {
+        let (n, r) = parse_number(r)?;
+        let n = n.as_const()?;
+        return Some((
+            Filter::Custom(format!("{}{n}", crate::kw::offspring::BASE_POWER).into()),
+            r,
+        ));
+    }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
     } else if let Some(r) = t.strip_prefix("with toughness ") {

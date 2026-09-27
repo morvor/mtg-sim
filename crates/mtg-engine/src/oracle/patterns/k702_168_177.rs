@@ -426,6 +426,58 @@ fn freerunning_paid(c: &str) -> Option<Condition> {
 
 inventory::submit! { ConditionPattern { name: "k702.173 freerunning cost was paid", priority: 100, parse: freerunning_paid } }
 
+/// "Assassin spells you cast have freerunning {B}{B}." (Ezio Auditore da Firenze),
+/// "Creature spells you cast gain offspring {2} as you cast them." (Zinnia, Valley's
+/// Voice): the spells gain the keyword as they're cast (CR 610.5; see `next_spell.rs`),
+/// so its cost can be paid as they're cast, and a permanent spell's offspring ability
+/// keeps working on the battlefield (CR 400.7b).
+fn spells_you_cast_gain_cost_keyword(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    use crate::keywords::KeywordKind;
+    let l = end(l);
+    let (subject, rest) = l.split_once(" spells you cast ")?;
+    let kw_text = rest
+        .strip_prefix("have ")
+        .or_else(|| rest.strip_prefix("gain ")?.strip_suffix(" as you cast them"))?;
+    let kws = crate::oracle::keywords::parse_keyword_line(kw_text, ctx)?;
+    let [kw] = kws.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Keyword(k) = &kw.kind else {
+        return None;
+    };
+    if !matches!(k.kind, KeywordKind::Freerunning | KeywordKind::Offspring) || k.cost.is_none() {
+        return None;
+    }
+    let quality = match CardType::from_word(subject) {
+        Some(t) => Filter::Type(t),
+        None => {
+            let mut c = subject.chars();
+            let name: String = c
+                .next()?
+                .to_uppercase()
+                .chain(c)
+                .collect();
+            crate::types::subtype_kind(&name)?;
+            Filter::Subtype(SmolStr::new(name))
+        }
+    };
+    let s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(vec![
+            quality,
+            Filter::Spell,
+            Filter::ControlledBy(PlayerRel::You),
+        ]),
+        mods: vec![Modification::AddKeyword(k.clone())],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.173/175 [quality] spells you cast have freerunning / gain offspring", priority: 100, parse: spells_you_cast_gain_cost_keyword } }
+
 // ---------------------------------------------------------------------------
 // Gift (CR 702.174)
 // ---------------------------------------------------------------------------

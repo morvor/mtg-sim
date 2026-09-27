@@ -379,3 +379,43 @@ fn without_offspring_as_it_enters_the_paid_cost_does_nothing() {
     t.resolve_all();
     assert_eq!(tokens_named(&t, P0, RAMPAGER).len(), 1);
 }
+
+#[test]
+fn creature_spells_you_cast_gain_offspring_as_you_cast_them() {
+    cr!("702.175a", "610.5", "400.7b");
+    assert_supported("Zinnia, Valley's Voice");
+    ruling!(
+        "Zinnia, Valley's Voice",
+        "You can pay an offspring cost only once as you cast a spell with offspring."
+    );
+    // Zinnia, Valley's Voice: 1/3 flying, "Zinnia gets +X/+0, where X is the number of
+    // other creatures you control with base power 1." "Creature spells you cast gain
+    // offspring {2} as you cast them."
+    let mut t = TestGame::new(2);
+    let zinnia = t.battlefield(P0, "Zinnia, Valley's Voice");
+    assert_eq!(t.pt(zinnia), (1, 3));
+    // Grizzly Bears ({1}{G}) with offspring {2}.
+    let bears = cast_with_offspring(&mut t, "Grizzly Bears", true);
+    assert_eq!(optional_costs_asked(&t, P0).len(), 1);
+    assert_eq!(pool(&t, P0), 4);
+    t.resolve_all();
+    let all = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(all.len(), 2);
+    let token = *all.iter().find(|o| t.g.obj(**o).is_token()).unwrap();
+    assert_eq!(t.pt(token), (1, 1));
+    // The permanent the spell became still has offspring (it functions on the
+    // battlefield); the 1/1 token has base power 1.
+    let permanent = t.g.current(bears);
+    assert!(t
+        .obj(permanent)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Offspring));
+    assert_eq!(t.pt(zinnia), (2, 3));
+    // A noncreature spell doesn't gain offspring.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Zinnia, Valley's Voice");
+    let spell = t.hand(P0, "Divination");
+    add_mana(&mut t, P0, ManaType::U, 3);
+    t.cast(P0, spell).go();
+    assert!(optional_costs_asked(&t, P0).is_empty());
+}

@@ -418,7 +418,14 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         .iter()
         .flat_map(|r| r.global_cast_options(g, p, card))
         .collect();
-    let kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
+    let mut kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
+    // Keywords static abilities make it gain as it's cast ("Assassin spells you cast have
+    // freerunning {B}{B}", CR 610.5).
+    for k in crate::next_spell::cast_grant_keywords(g, p, card) {
+        if !kws.iter().any(|x| format!("{x:?}") == format!("{k:?}")) {
+            kws.push(k);
+        }
+    }
     for kw in &kws {
         for r in impls_for(kw.kind) {
             out.extend(r.cast_options(g, p, card, kw));
