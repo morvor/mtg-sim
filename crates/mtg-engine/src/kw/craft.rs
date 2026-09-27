@@ -413,13 +413,14 @@ impl KeywordRules for Craft {
         let Some(src) = ctx.source else {
             return Some(false);
         };
-        let o = g.obj(id);
+        // The cards exiled by the cost, as long as they remain in exile: one that left
+        // exile is a new object, even if it's exiled again (CR 400.7).
         Some(
-            o.zone == Zone::Exile
+            g.is_in_zone(id, Zone::Exile)
                 && g.obj(src)
                     .linked
                     .get(&CRAFT_LINK)
-                    .is_some_and(|v| v.iter().any(|m| g.current(*m) == id)),
+                    .is_some_and(|v| v.contains(&id)),
         )
     }
 }
