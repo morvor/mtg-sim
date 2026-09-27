@@ -9,7 +9,6 @@ use crate::r_s05_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
-use mtg_engine::types::counters;
 use mtg_engine::*;
 
 /// The options offered by each "choose what to cast" decision asked of P0 since `from`.
@@ -134,7 +133,6 @@ fn a_discovered_card_with_x_is_cast_with_x_0() {
     );
     assert!(t.in_graveyard(P0, "Walking Ballista"));
     assert!(t.named_on_battlefield("Walking Ballista").is_empty());
-    let _ = counters::PLUS1;
 }
 
 #[test]
