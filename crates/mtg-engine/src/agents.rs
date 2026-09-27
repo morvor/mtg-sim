@@ -2,6 +2,7 @@
 
 use crate::decision::*;
 use crate::game::Game;
+use crate::turn::Step;
 use crate::types::*;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
@@ -13,6 +14,10 @@ pub struct RandomAgent {
     rng: ChaCha8Rng,
     /// Probability of passing when other actions are available.
     pub pass_bias: f64,
+    /// The turn and step of the latest priority decision, and the actions taken in that
+    /// step. Each action makes passing more likely, so a repeatable free ability (e.g.
+    /// "{0}: ... until end of turn") doesn't keep the agent busy for hundreds of actions.
+    acted: (u32, Step, u32),
 }
 
 impl RandomAgent {
@@ -20,6 +25,7 @@ impl RandomAgent {
         RandomAgent {
             rng: ChaCha8Rng::seed_from_u64(seed),
             pass_bias: 0.2,
+            acted: (0, Step::Untap, 0),
         }
     }
 }
@@ -29,16 +35,23 @@ impl Agent for RandomAgent {
         "random"
     }
 
-    fn decide(&mut self, _g: &Game, _p: PlayerId, d: &Decision) -> Answer {
+    fn decide(&mut self, g: &Game, _p: PlayerId, d: &Decision) -> Answer {
         match d {
             Decision::Priority { actions } => {
                 let non_pass: Vec<&Action> = actions
                     .iter()
                     .filter(|a| !matches!(a, Action::Pass | Action::Concede))
                     .collect();
-                if non_pass.is_empty() || self.rng.gen_bool(self.pass_bias) {
+                if (self.acted.0, self.acted.1) != (g.turn.number, g.turn.step) {
+                    self.acted = (g.turn.number, g.turn.step, 0);
+                }
+                let pass = self
+                    .pass_bias
+                    .max(1.0 - 0.85f64.powi(self.acted.2.min(1000) as i32));
+                if non_pass.is_empty() || self.rng.gen_bool(pass) {
                     return Answer::Action(Action::Pass);
                 }
+                self.acted.2 += 1;
                 // Prefer land drops.
                 if let Some(l) = non_pass
                     .iter()
