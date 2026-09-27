@@ -185,3 +185,77 @@ fn the_first_instant_or_sorcery_spell_each_turn_has_casualty() {
     let s = t.cast(P0, bolt2).target(P1).go();
     assert_eq!(t.g.obj(s).chars.keyword_count(KeywordKind::Casualty), 0);
 }
+
+#[test]
+fn casualty_x_copies_ob_nixilis_as_a_nonlegendary_token_with_starting_loyalty_x() {
+    cr!("702.153a", "707.9", "601.2b");
+    ruling!(
+        "Ob Nixilis, the Adversary",
+        "As you cast a spell with casualty X, you choose whether to pay its casualty cost and what the value of X will be."
+    );
+    ruling!(
+        "Ob Nixilis, the Adversary",
+        "copies exactly what is printed on Ob Nixilis, except its starting loyalty is equal to the chosen value of X and it isn't legendary. The copy becomes a token as it resolves."
+    );
+    ruling!(
+        "Ob Nixilis, the Adversary",
+        "You can control exactly one legendary Ob Nixilis, the Adversary and any number of nonlegendary copies"
+    );
+    let mut t = TestGame::new(2);
+    // Craw Wurm: a 6/4.
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Ob Nixilis, the Adversary");
+    pay_with(&mut t, P0, &[wurm]);
+    t.cast(P0, spell).x(6).go();
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
+    t.settle();
+    assert_eq!(triggers_named(&t, "Casualty").len(), 1);
+    t.resolve_all();
+    let obs = named(&t, P0, "Ob Nixilis, the Adversary");
+    assert_eq!(obs.len(), 2, "the legend rule doesn't apply to the copy");
+    let token = *obs
+        .iter()
+        .find(|id| t.g.obj(**id).kind == mtg_engine::object::ObjKind::Token)
+        .expect("the copy became a token");
+    let card = *obs.iter().find(|id| **id != token).unwrap();
+    assert!(!t.g.obj(token).chars.is_legendary());
+    assert_eq!(t.counters(token, "loyalty"), 6);
+    assert!(t.g.obj(card).chars.is_legendary());
+    assert_eq!(t.counters(card, "loyalty"), 3);
+    // The copy still has the printed loyalty abilities.
+    assert_eq!(
+        t.g.obj(token).chars.abilities.len(),
+        t.g.obj(card).chars.abilities.len()
+    );
+}
+
+#[test]
+fn casualty_x_needs_a_creature_with_power_x_or_greater() {
+    cr!("702.153a");
+    // X is 4 but the only creature has power 3: the cost can't be paid, so casting the
+    // spell that way is illegal and is reversed (CR 601.2).
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Ob Nixilis, the Adversary");
+    pay_with(&mut t, P0, &[giant]);
+    assert!(t.cast(P0, spell).x(4).try_go().is_err());
+    assert!(t.on_battlefield(giant));
+    assert!(t.g.stack.is_empty());
+    assert!(t.in_hand(P0, "Ob Nixilis, the Adversary"));
+    // With X = 3 the same creature can be sacrificed.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Ob Nixilis, the Adversary");
+    pay_with(&mut t, P0, &[giant]);
+    t.cast(P0, spell).x(3).go();
+    assert!(!t.on_battlefield(giant));
+    t.settle();
+    t.resolve_all();
+    assert_eq!(named(&t, P0, "Ob Nixilis, the Adversary").len(), 2);
+}

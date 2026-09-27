@@ -322,3 +322,66 @@ fn materials_used_up_while_paying_the_cost_cant_be_exiled() {
     t.resolve_all();
     assert_eq!(t.obj_now(landmark).chars.name, "Oteclan Levitator");
 }
+
+#[test]
+fn the_enigma_jewel_crafts_with_nonlands_with_activated_abilities() {
+    cr!("702.167a", "702.167b");
+    ruling!(
+        "The Enigma Jewel // Locus of Enlightenment",
+        "You can spend mana from The Enigma Jewel's activated ability to activate its own craft ability"
+    );
+    ruling!(
+        "The Enigma Jewel // Locus of Enlightenment",
+        "Some keyword abilities are activated abilities and will have colons in their reminder text."
+    );
+    let m = parse_materials("four or more nonlands with activated abilities").unwrap();
+    assert_eq!((m.min, m.max), (4, None));
+    assert!(!m.cards_only);
+    let mut t = TestGame::new(2);
+    let jewel = t.battlefield(P0, "The Enigma Jewel");
+    // Nonlands with activated abilities: a mana ability counts, and so does equip (a
+    // keyword that is an activated ability); a card in the graveyard counts too.
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let birds = t.battlefield(P0, "Birds of Paradise");
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    let sorcerer = t.graveyard(P0, "Prodigal Sorcerer");
+    // Not materials: a creature without activated abilities, a land with one, and an
+    // opponent's permanent.
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    // {8}{U}: seven Islands and the Jewel's own {C}{C}.
+    t.lands(P0, "Island", 7);
+    let craft = ability_uid(&mut t, jewel, "Craft");
+    assert!(activatable(&mut t, P0, jewel, craft));
+    materials(&mut t, P0, &[elves, birds, splitter, sorcerer]);
+    activate_uid(&mut t, P0, jewel, craft).unwrap();
+    let offered = offered(&t);
+    for o in [elves, birds, splitter, sorcerer] {
+        assert!(offered.contains(&Entity::Object(o)));
+    }
+    assert!(!offered.contains(&Entity::Object(thopter)));
+    assert!(!offered.contains(&Entity::Object(theirs)));
+    assert!(!offered.contains(&Entity::Object(jewel)));
+    assert!(offered.iter().all(|e| match e {
+        Entity::Object(o) => !t.g.obj(*o).is(CardType::Land),
+        _ => true,
+    }));
+    for o in [elves, birds, splitter, sorcerer] {
+        assert_eq!(t.zone(o), Zone::Exile);
+    }
+    t.resolve_all();
+    let locus = t.g.current(jewel);
+    assert_eq!(t.zone(locus), Zone::Battlefield);
+    assert_eq!(t.obj(locus).chars.name, "Locus of Enlightenment");
+
+    // With only three such nonlands, it can't be activated.
+    let mut t = TestGame::new(2);
+    let jewel = t.battlefield(P0, "The Enigma Jewel");
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Bonesplitter");
+    t.graveyard(P0, "Prodigal Sorcerer");
+    t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Island", 9);
+    let craft = ability_uid(&mut t, jewel, "Craft");
+    assert!(!activatable(&mut t, P0, jewel, craft));
+}

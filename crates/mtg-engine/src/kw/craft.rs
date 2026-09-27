@@ -135,8 +135,28 @@ fn parse_materials_uncached(s: &str) -> Option<Materials> {
     Some(m)
 }
 
+/// `Filter::Custom`: an object with an activated ability (mana abilities included).
+pub const HAS_ACTIVATED_ABILITY: &str = "craft:has an activated ability";
+
 /// An object phrase of a material, and whether it describes cards.
 fn phrase(s: &str) -> Option<(Filter, bool)> {
+    // "nonlands with activated abilities" (The Enigma Jewel): nonland permanents and/or
+    // nonland cards (CR 702.167b), including those with only mana abilities.
+    if let Some(rest) = s
+        .strip_prefix("nonlands ")
+        .or_else(|| s.strip_prefix("nonland "))
+    {
+        let q = end(rest);
+        if q == "with activated abilities" || q == "with an activated ability" {
+            return Some((
+                Filter::and(vec![
+                    Filter::not(Filter::Type(CardType::Land)),
+                    Filter::Custom(HAS_ACTIVATED_ABILITY.into()),
+                ]),
+                false,
+            ));
+        }
+    }
     let (f, _, tail) = parse_object_phrase(s)?;
     if !end(tail).is_empty() {
         return None;
@@ -407,6 +427,15 @@ impl KeywordRules for Craft {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == HAS_ACTIVATED_ABILITY {
+            return Some(
+                g.obj(id)
+                    .chars
+                    .abilities
+                    .iter()
+                    .any(|a| matches!(a.kind, AbilityKind::Activated(_))),
+            );
+        }
         if name != USED_TO_CRAFT {
             return None;
         }
