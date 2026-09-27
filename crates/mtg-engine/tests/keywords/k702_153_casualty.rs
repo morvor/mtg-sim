@@ -210,6 +210,16 @@ fn casualty_x_copies_ob_nixilis_as_a_nonlegendary_token_with_starting_loyalty_x(
     pay_with(&mut t, P0, &[wurm]);
     t.cast(P0, spell).x(6).go();
     assert!(t.in_graveyard(P0, "Craw Wurm"));
+    // X isn't paid with mana: it may be as large as the greatest power to sacrifice.
+    let max = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseX { max, .. } => Some(max),
+            _ => None,
+        })
+        .expect("X was chosen");
+    assert_eq!(max, 6);
     t.settle();
     assert_eq!(triggers_named(&t, "Casualty").len(), 1);
     t.resolve_all();

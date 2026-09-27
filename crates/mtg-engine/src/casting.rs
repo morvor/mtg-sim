@@ -1131,7 +1131,21 @@ impl Game {
                 .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         let mut x: i64 = 0;
         if base_cost_has_x {
-            let max = self.max_mana_available(p) as i64;
+            let mut max = self.max_mana_available(p) as i64;
+            // "Sacrifice a creature with power X or greater" (casualty X): X isn't paid
+            // with mana, so it can be as large as the greatest power to sacrifice.
+            if extra.parts.iter().any(
+                |c| matches!(c, CostPart::Sacrifice { filter, .. } if filter_mentions_x(filter)),
+            ) {
+                let power = self
+                    .battlefield
+                    .iter()
+                    .filter(|o| self.obj(**o).controller == p)
+                    .map(|o| self.obj(*o).power() as i64)
+                    .max()
+                    .unwrap_or(0);
+                max = max.max(power);
+            }
             x = match self.ask(p, Decision::ChooseX { source: id, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => max.max(0),
