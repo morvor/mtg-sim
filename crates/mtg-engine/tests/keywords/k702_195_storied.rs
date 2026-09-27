@@ -187,3 +187,44 @@ fn continuous_effects_are_reapplied_before_triggers_are_checked() {
     // Fíli's own trigger creates a 2/2 Dwarf, a 3/3 as it enters: 2 life.
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn dwarves_triggered_abilities_trigger_twice_with_an_enduring_story() {
+    cr!("702.195a", "702.195b", "702.195c");
+    ruling!(
+        "Bifur, Melodic Rider",
+        "If Bifur entering causes you to have an enduring story, his \"enters or attacks\" ability triggers an additional time."
+    );
+    ruling!(
+        "Bifur, Melodic Rider",
+        "Any choices made as you put the ability onto the stack, such as modes and targets, are made separately for each instance of the ability."
+    );
+    // Bifur, Melodic Rider (legendary Dwarf 4/5): "Storied. Whenever Bifur enters or
+    // attacks, put a +1/+1 counter on target creature. As long as you have an enduring
+    // story, if a triggered ability of a Dwarf you control triggers, that ability triggers
+    // an additional time."
+    const BIFUR: &str = "Bifur, Melodic Rider";
+    assert_supported(&[BIFUR]);
+    // Without an enduring story: once.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    enter(&mut t, P0, BIFUR);
+    t.resolve_all();
+    assert!(!story(&t, P0));
+    assert_eq!(t.counters(bears, mtg_engine::types::counters::PLUS1), 1);
+    // Bifur is the third legendary or artifact permanent: the story comes as he enters,
+    // so his ability triggers twice, each instance with its own target.
+    let mut t = TestGame::new(2);
+    enter(&mut t, P0, "Mind Stone");
+    enter(&mut t, P0, "Mind Stone");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    enter(&mut t, P0, BIFUR);
+    t.resolve_all();
+    assert!(story(&t, P0));
+    assert_eq!(t.counters(bears, mtg_engine::types::counters::PLUS1), 1);
+    assert_eq!(t.counters(elves, mtg_engine::types::counters::PLUS1), 1);
+}
