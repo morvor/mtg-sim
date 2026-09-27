@@ -52,16 +52,44 @@ fn exhaust(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "k702.177 exhaust", priority: 100, parse: exhaust } }
 
-/// "Whenever you activate an exhaust ability" (Rangers' Refueler).
+/// "Whenever you activate an exhaust ability" (Rangers' Refueler); "... that isn't a mana
+/// ability" (Sala, Deck Boss), whose "it" is the ability on the stack ("copy it").
 fn exhaust_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
-    (end(r) == "you activate an exhaust ability").then(|| {
-        (
-            TriggerCond::Custom(SmolStr::new(crate::kw::exhaust::EXHAUST_ACTIVATED)),
+    use crate::kw::exhaust::{EXHAUST_ACTIVATED, EXHAUST_ACTIVATED_NONMANA};
+    match end(r) {
+        "you activate an exhaust ability" => Some((
+            TriggerCond::Custom(SmolStr::new(EXHAUST_ACTIVATED)),
             Sel::TriggerObject,
             PlayerRef::You,
-        )
+        )),
+        "you activate an exhaust ability that isn't a mana ability" => Some((
+            TriggerCond::Custom(SmolStr::new(EXHAUST_ACTIVATED_NONMANA)),
+            Sel::TriggerSpell,
+            PlayerRef::You,
+        )),
+        _ => None,
+    }
+}
+
+/// "When you next activate an exhaust ability that isn't a mana ability this turn, copy
+/// it." (Pit Automaton): a delayed triggered ability that triggers only once, this turn
+/// (CR 603.7b–c).
+fn when_you_next_activate_exhaust(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("when you next ")?;
+    let (event, eff) = r.split_once(" this turn, ")?;
+    let (trigger, it, it_player) = exhaust_activated(&format!("you {event}"))?;
+    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    if body.modal.is_some() || !body.targets.is_empty() {
+        return None;
+    }
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+        body: Box::new(body),
+        once: true,
     })
 }
+
+inventory::submit! { EffectPattern { name: "k702.177 when you next activate an exhaust ability this turn", priority: 100, parse: when_you_next_activate_exhaust } }
 
 inventory::submit! { TriggerPattern { name: "k702.177 you activate an exhaust ability", priority: 100, parse: exhaust_activated } }
 
@@ -106,6 +134,41 @@ fn becomes_artifact_creature(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "k702.177 ~ becomes an artifact creature", priority: 100, parse: becomes_artifact_creature } }
+
+/// "Exhaust abilities of other permanents you control cost {2} less to activate." (Boom
+/// Scholar): a cost modifier for the exhaust abilities of those sources (CR 601.2f, 602.2b).
+fn exhaust_cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("exhaust abilities of ")?;
+    let (sources, rest) = r.split_once(" cost {")?;
+    let (n, rest) = rest.split_once('}')?;
+    let n: i32 = n.parse().ok()?;
+    let change = match rest {
+        " less to activate" => CostChange::ReduceGeneric(Value::c(n)),
+        " more to activate" => CostChange::IncreaseGeneric(Value::c(n)),
+        _ => return None,
+    };
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(sources)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::CostModifier(
+            CostModifier {
+                applies_to: CostTarget::KeywordAbilitiesOf(
+                    crate::keywords::KeywordKind::Exhaust,
+                    f,
+                ),
+                who: PlayerRel::Any,
+                change,
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "k702.177 exhaust abilities of [permanents] cost less", priority: 100, parse: exhaust_cost_modifier } }
 
 // ---------------------------------------------------------------------------
 // Saddle (CR 702.171)

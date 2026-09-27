@@ -516,6 +516,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 ]),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("other than ~") {
+            // "each Mount and/or Vehicle you control other than ~" (Spire Mechcycle).
+            (Filter::Other, r)
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {

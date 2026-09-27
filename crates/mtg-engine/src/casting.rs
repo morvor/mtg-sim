@@ -1597,6 +1597,11 @@ impl Game {
                     self.player_rel_matches(cm.who, p, &ctx)
                         && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
                 }
+                CostTarget::KeywordAbilitiesOf(k, f) => {
+                    self.player_rel_matches(cm.who, p, &ctx)
+                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
+                        && self.matches(src, f, &ctx)
+                }
                 // CR 606.4: the cost of a loyalty ability may be modified by other effects.
                 CostTarget::LoyaltyAbilities(f) => {
                     act.is_loyalty
@@ -1878,7 +1883,9 @@ impl Game {
                 CostTarget::Abilities(f) => ability && self.matches(src, f, &ctx),
                 CostTarget::Spells(f) => !ability && self.matches(src, f, &ctx),
                 CostTarget::ThisSpell => !ability && src == *s,
-                CostTarget::Keyword(_) | CostTarget::LoyaltyAbilities(_) => false,
+                CostTarget::Keyword(_)
+                | CostTarget::KeywordAbilitiesOf(..)
+                | CostTarget::LoyaltyAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {

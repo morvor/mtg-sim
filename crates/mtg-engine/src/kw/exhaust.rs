@@ -34,6 +34,11 @@ pub const AS_THOUGH_NOT_ACTIVATED: &str =
     "exhaust:during your turn, you may activate exhaust abilities as though they haven't been activated";
 /// `TriggerCond::Custom`: "Whenever you activate an exhaust ability".
 pub const EXHAUST_ACTIVATED: &str = "exhaust:you activate an exhaust ability";
+/// `TriggerCond::Custom`: "Whenever you activate an exhaust ability that isn't a mana
+/// ability" (Sala, Deck Boss; Pit Automaton's "When you next ..."): the ability on the
+/// stack is the trigger's spell ("copy it").
+pub const EXHAUST_ACTIVATED_NONMANA: &str =
+    "exhaust:you activate an exhaust ability that isn't a mana ability";
 
 /// Whether `a` is an exhaust ability (CR 702.177a).
 pub fn is_exhaust(a: &AbilityDef) -> bool {
@@ -99,7 +104,7 @@ impl KeywordRules for Exhaust {
         ctl: PlayerId,
         ev: &Event,
     ) -> Option<Vec<EventInfo>> {
-        if name != EXHAUST_ACTIVATED {
+        if name != EXHAUST_ACTIVATED && name != EXHAUST_ACTIVATED_NONMANA {
             return None;
         }
         let Event::AbilityActivated {
@@ -117,6 +122,7 @@ impl KeywordRules for Exhaust {
                 Some(StackKind::Activated { ability, .. }) if is_exhaust(ability)
             ),
             // A mana ability: the one just recorded for that source.
+            None if name == EXHAUST_ACTIVATED_NONMANA => false,
             None => g
                 .history
                 .activated

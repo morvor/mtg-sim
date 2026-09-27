@@ -2039,6 +2039,9 @@ pub enum CostTarget {
     ThisSpell,
     /// Specific: "Equip abilities", "ninjutsu abilities".
     Keyword(KeywordKind),
+    /// "[Keyword] abilities of [sources matching]" ("Exhaust abilities of other permanents
+    /// you control", Boom Scholar).
+    KeywordAbilitiesOf(KeywordKind, Filter),
     /// Loyalty abilities of sources matching (CR 606.4).
     LoyaltyAbilities(Filter),
 }
