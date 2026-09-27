@@ -466,16 +466,22 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((sel, rest.to_string()));
         }
     }
-    for (p, sel) in &b.named {
-        if let Some(rest) = s.strip_prefix(p.as_str()) {
-            if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
-                let sel = sel.clone();
-                if matches!(sel, Sel::Target(_)) {
-                    b.it = sel.clone();
-                }
-                return Some((sel, rest.to_string()));
-            }
+    // The longest phrase that names the object ("the creature an opponent controls"
+    // before "the creature").
+    let named = b
+        .named
+        .iter()
+        .filter_map(|(p, sel)| {
+            let rest = s.strip_prefix(p.as_str())?;
+            (rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\''))
+                .then(|| (p.len(), sel.clone(), rest.to_string()))
+        })
+        .max_by_key(|(len, _, _)| *len);
+    if let Some((_, sel, rest)) = named {
+        if matches!(sel, Sel::Target(_)) {
+            b.it = sel.clone();
         }
+        return Some((sel, rest));
     }
     if let Some((slot, text)) = &b.chosen_creature {
         let still_there = b

@@ -107,10 +107,25 @@ fn printlifter_ooze_creates_an_ooze_that_enters_with_counters() {
     t.resolve_all();
     let oozes: Vec<ObjectId> = tokens_of_subtype(&t, P0, "Ooze");
     assert_eq!(oozes.len(), 1);
-    // The Printlifter Ooze and the Moroii.
+    // The Printlifter Ooze and the Moroii: the creatures other than the token.
     assert_eq!(t.counters(oozes[0], "+1/+1"), 2);
     assert_eq!(t.pt(oozes[0]), (2, 2));
     assert!(t.obj(oozes[0]).chars.has_keyword(KeywordKind::Trample));
+    // The Printlifter Ooze is gone by the time its ability resolves: the Bears and the
+    // Moroii are the creatures other than the token.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let ooze = t.battlefield(P0, "Printlifter Ooze");
+    t.battlefield(P0, "Grizzly Bears");
+    let moroii = disguised(&mut t, "Nightdrinker Moroii");
+    turn_up(&mut t, moroii, &[(ManaType::B, 2)]);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.destroy(ooze, None);
+    t.resolve_all();
+    let oozes: Vec<ObjectId> = tokens_of_subtype(&t, P0, "Ooze");
+    assert_eq!(oozes.len(), 1);
+    assert_eq!(t.counters(oozes[0], "+1/+1"), 2);
 }
 
 #[test]

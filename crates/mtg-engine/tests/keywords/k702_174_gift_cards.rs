@@ -4,6 +4,7 @@
 use crate::common_k702_011_017::assert_supported;
 use crate::common_k702_140_152::*;
 use crate::common_k702_168_177::*;
+use mtg_engine::decision::Decision;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -260,9 +261,22 @@ fn consumed_by_greed_edict_and_return_if_the_gift_was_promised() {
             .map(Vec::len)
             .sum();
         assert_eq!(chosen, targets.len(), "promised: {promise}");
-        // The opponent chooses between the two tied Hill Giants.
+        // The opponent chooses between the two tied Hill Giants: the Bears, with less
+        // power, can't be chosen.
         t.answer_choose(P1, &[Entity::Object(other_giant)]);
         t.resolve_all();
+        let mut offered = t
+            .asked()
+            .into_iter()
+            .find_map(|(p, d)| match d {
+                Decision::ChooseEntities { candidates, .. } if p == P1 => Some(candidates),
+                _ => None,
+            })
+            .expect("the opponent chose a creature to sacrifice");
+        offered.sort();
+        let mut giants = vec![Entity::Object(giant), Entity::Object(other_giant)];
+        giants.sort();
+        assert_eq!(offered, giants);
         assert!(t.on_battlefield(bears) && t.on_battlefield(giant));
         assert!(!t.on_battlefield(other_giant));
         assert_eq!(t.in_hand(P0, "Craw Wurm"), promise);

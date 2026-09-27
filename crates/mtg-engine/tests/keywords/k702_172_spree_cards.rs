@@ -135,9 +135,29 @@ fn final_showdown_chooses_a_creature_as_it_resolves() {
     let spell = t.hand(P0, "Final Showdown");
     add_mana(&mut t, P0, ManaType::W, 7);
     t.answer_choose(P0, &[Entity::Object(bears)]);
-    t.cast(P0, spell).modes(&[1, 2]).go();
+    let cast = t.cast(P0, spell).modes(&[1, 2]).go();
     assert_eq!(pool(&t, P0), 0);
+    // The creature isn't a target: nothing is chosen as the spell is cast, only as it
+    // resolves.
+    let choices = |t: &TestGame| {
+        t.asked()
+            .into_iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::ChooseEntities { .. }))
+            .count()
+    };
+    let targets: usize = t
+        .obj(cast)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .flat_map(|c| c.targets.iter())
+        .map(Vec::len)
+        .sum();
+    assert_eq!((targets, choices(&t)), (0, 0));
     t.resolve_all();
+    assert_eq!(choices(&t), 1);
     // Only the chosen Bears survive.
     assert!(t.on_battlefield(bears));
     assert!(t.in_graveyard(P0, "Hill Giant"));

@@ -33,13 +33,49 @@ fn token_enters_with_counters(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     let saved = b.it.clone();
     b.it = Sel::Var(vars::CREATED);
     let text = format!("put {counters} on it{rest}");
-    let Some(e) = crate::oracle::effects::parse_sentence(&text, b) else {
+    let Some(mut e) = crate::oracle::effects::parse_sentence(&text, b) else {
         b.it = saved;
         return false;
     };
+    // "where X is the number of other creatures you control": other than the token that
+    // enters with them (which is on the battlefield as they're put on it here), whether or
+    // not the source is still there.
+    if let Effect::AddCounters {
+        what: Sel::Var(v),
+        n,
+        ..
+    } = &mut e
+    {
+        if *v == vars::CREATED {
+            let Some(other_than_token) = other_than_created(n) else {
+                b.it = saved;
+                return false;
+            };
+            *n = other_than_token;
+        }
+    }
     let old = std::mem::take(prev);
     *prev = Effect::seq(vec![old, e]);
     true
+}
+
+/// `n` with "other" (than the source) meaning other than the created token.
+fn other_than_created(n: &Value) -> Option<Value> {
+    fn replace(j: &mut serde_json::Value, with: &serde_json::Value) {
+        match j {
+            serde_json::Value::String(s) if s == "Other" => *j = with.clone(),
+            serde_json::Value::Array(v) => v.iter_mut().for_each(|x| replace(x, with)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| replace(x, with)),
+            _ => {}
+        }
+    }
+    let with = serde_json::to_value(Filter::Not(Box::new(Filter::In(Box::new(Sel::Var(
+        vars::CREATED,
+    ))))))
+    .ok()?;
+    let mut j = serde_json::to_value(n).ok()?;
+    replace(&mut j, &with);
+    serde_json::from_value(j).ok()
 }
 
 inventory::submit! { FollowupPattern { name: "tokens: the token enters with N counters on it", priority: 90, apply: token_enters_with_counters } }

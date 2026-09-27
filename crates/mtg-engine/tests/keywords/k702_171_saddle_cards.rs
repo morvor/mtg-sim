@@ -4,6 +4,7 @@
 use crate::common_k702_011_017::assert_supported;
 use crate::common_k702_140_152::*;
 use crate::common_k702_168_177::*;
+use mtg_engine::decision::Decision;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::kw::saddle::is_saddled;
 use mtg_engine::mana::ManaType;
@@ -20,6 +21,18 @@ fn saddle(t: &mut TestGame, mount: ObjectId, saddlers: &[ObjectId]) {
     activate_uid(t, P0, mount, uid).expect("saddle");
     t.resolve_all();
     assert!(is_saddled(&t.g, mount));
+}
+
+/// The candidates of the last choice among objects `P0` was asked to make.
+fn last_choice(t: &TestGame) -> Vec<Entity> {
+    t.asked()
+        .into_iter()
+        .rev()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if p == P0 => Some(candidates),
+            _ => None,
+        })
+        .expect("a choice among objects")
 }
 
 #[test]
@@ -41,6 +54,12 @@ fn rambling_possum_returns_creatures_that_saddled_it() {
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(bears)]);
     t.resolve_all();
+    // Only the creatures that saddled it could be chosen.
+    let mut offered = last_choice(&t);
+    offered.sort();
+    let mut saddlers = vec![Entity::Object(bears), Entity::Object(elves)];
+    saddlers.sort();
+    assert_eq!(offered, saddlers);
     assert_eq!(t.pt(possum), (4, 5));
     assert!(t.in_hand(P0, "Grizzly Bears"));
     assert!(t.on_battlefield(elves) && t.on_battlefield(other));
@@ -163,9 +182,21 @@ fn the_gitrog_sacrifices_a_creature_that_saddled_it() {
             .map(|f| Entity::Object(*f))
             .collect::<Vec<_>>(),
     );
+    let asked = t.asked().len();
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(gitrog, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 14);
+    // The creature to sacrifice was chosen among those that saddled it: the Hill Giant.
+    let offered = t
+        .asked()
+        .into_iter()
+        .skip(asked)
+        .find_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if p == P0 => Some(candidates),
+            _ => None,
+        })
+        .expect("chose a creature to sacrifice");
+    assert_eq!(offered, vec![Entity::Object(giant)]);
     assert!(t.in_graveyard(P0, "Hill Giant"));
     assert!(t.on_battlefield(bears));
     // Drew 3, put 3 Forests onto the battlefield tapped.

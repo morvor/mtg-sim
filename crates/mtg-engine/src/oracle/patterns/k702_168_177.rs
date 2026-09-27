@@ -981,7 +981,8 @@ inventory::submit! { FollowupPattern { name: "k702.170c put the rest into your h
 
 /// "exile a nonland card with mana value 3 or less from your hand" (Kellan Joins Up, Jace
 /// Reawakened): the player chooses such a card in their hand; "it" is the exiled card
-/// afterward ("If you do, it becomes plotted.").
+/// afterward ("If you do, it becomes plotted."). The card is exiled with the source, for
+/// the source's other abilities that refer to "the exiled card" (imprint, CR 607.2a).
 fn exile_card_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l)
         .strip_prefix("exile a ")?
@@ -1005,7 +1006,7 @@ fn exile_card_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
             store: None,
         },
         face_down: false,
-        link: false,
+        link: true,
     })
 }
 
