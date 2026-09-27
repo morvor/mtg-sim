@@ -549,6 +549,16 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some((v, rest)) = super::patterns::chroma::mana_symbols_among_your_permanents(r) {
             return Some((v, rest.to_string()));
         }
+        // "the number of players being attacked" ("for each player being attacked").
+        if let Some(rest) = r
+            .strip_prefix("players being attacked")
+            .or_else(|| r.strip_prefix("player being attacked"))
+        {
+            return Some((
+                Value::Custom(crate::kw::players_being_attacked::PLAYERS_BEING_ATTACKED.into()),
+                rest.to_string(),
+            ));
+        }
         // "the number of cards in your hand"
         if let Some(rest) = r.strip_prefix("cards in your hand") {
             return Some((Value::HandSize(PlayerRef::You), rest.to_string()));

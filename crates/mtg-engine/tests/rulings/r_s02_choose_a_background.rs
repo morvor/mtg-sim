@@ -45,7 +45,7 @@ fn untapped_lands(t: &TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn a_creature_commander_and_its_background_each_have_their_own_commander_tax() {
-    cr!("702.124k", "903.8");
+    cr!("702.124k", "702.124d", "903.8");
     ruling!(
         "Ganax, Astral Hunter",
         "Once the game begins, your two commanders are tracked separately. If you cast one, you won't have to pay an additional {2} the first time you cast the other."
@@ -81,7 +81,7 @@ fn a_creature_commander_and_its_background_each_have_their_own_commander_tax() {
 
 #[test]
 fn combat_damage_from_a_creature_commander_and_its_background_is_counted_separately() {
-    cr!("702.124k", "903.10a");
+    cr!("702.124k", "702.124d", "903.10a");
     ruling!(
         "Ganax, Astral Hunter",
         "A player loses the game after having been dealt 21 combat damage from any one of them, not from both of them combined (although your Background won't usually be a creature anyway)."
@@ -136,4 +136,63 @@ fn combat_damage_from_a_creature_commander_and_its_background_is_counted_separat
     assert!(t.g.run_until(10_000, |g| g.result.is_some()));
     assert!(t.has_lost(P1));
     assert!(t.life(P1) > 0);
+}
+
+#[test]
+fn your_commander_is_the_one_of_your_two_commanders_you_choose() {
+    cr!("702.124k", "702.124e");
+    ruling!(
+        "Amber Gristle O'Maul",
+        "If something refers to your commander while you have two commanders, it refers to one of them of your choice. If you are instructed to perform an action on your commander (e.g. put it from the command zone into your hand due to Command Beacon), you choose one of your commanders at the time the effect happens."
+    );
+    supported("Amber Gristle O'Maul");
+    supported("Command Beacon");
+    for pick_background in [true, false] {
+        let mut t = commander_game();
+        let amber = commander(&mut t, P0, "Amber Gristle O'Maul");
+        let giants = commander(&mut t, P0, "Raised by Giants");
+        // Command Beacon: "{T}, Sacrifice this land: Put your commander into your hand
+        // from the command zone."
+        let beacon = t.battlefield(P0, "Command Beacon");
+        let (chosen, other) = if pick_background {
+            (giants, amber)
+        } else {
+            (amber, giants)
+        };
+        t.answer_choose(P0, &[Entity::Object(chosen)]);
+        // Its owner doesn't put it back into the command zone instead (CR 903.9b).
+        t.answer_yes(P0, false);
+        t.activate(P0, beacon, 1, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.zone(chosen), Zone::Hand(P0));
+        assert_eq!(t.zone(other), Zone::Command);
+    }
+}
+
+#[test]
+fn amber_gristle_draws_a_card_for_each_player_being_attacked() {
+    cr!("508.1b", "506.2");
+    let mut t = TestGame::new(4);
+    // Amber Gristle O'Maul (3/3 haste): "Whenever Amber Gristle O'Maul attacks, you may
+    // discard your hand. If you do, draw a card for each player being attacked."
+    let amber = t.battlefield(P0, "Amber Gristle O'Maul");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let jace = t.battlefield(P3, "Jace Beleren");
+    t.hand(P0, "Island");
+    t.hand(P0, "Island");
+    t.hand(P0, "Island");
+    // P1 and P2 are attacked; P3 isn't (only its planeswalker is).
+    t.answer_yes(P0, true);
+    attack_with(
+        &mut t,
+        &[
+            (amber, Entity::Player(P1)),
+            (bears, Entity::Player(P2)),
+            (giant, Entity::Object(jace)),
+        ],
+    );
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.graveyard_size(P0), 3);
 }
