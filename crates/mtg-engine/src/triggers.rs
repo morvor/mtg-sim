@@ -1418,12 +1418,13 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Cycled { who, filter }, Event::Cycled { player, card }) => {
+            (TriggerCond::Cycled { who, filter }, Event::Cycled { player, card, x }) => {
                 if self.player_rel_matches(*who, *player, &ctx) && self.matches(*card, filter, &ctx)
                 {
                     one(EventInfo {
                         object: Some(*card),
                         player: Some(*player),
+                        amount: *x,
                         ..Default::default()
                     })
                 } else {
@@ -1940,7 +1941,15 @@ impl Game {
         } else {
             None
         };
-        if let Some(x) = etb_cast.as_ref().and_then(|ci| ci.x) {
+        // CR 107.3e: an ability that triggers on cycling a card ("When you cycle this card,
+        // destroy up to X target artifacts") refers to the X of the cycling ability's cost.
+        let cycled_x = match &t.ability.kind {
+            AbilityKind::Triggered(tr) if matches!(tr.trigger, TriggerCond::Cycled { .. }) => {
+                Some(t.event.amount)
+            }
+            _ => None,
+        };
+        if let Some(x) = cycled_x.or_else(|| etb_cast.as_ref().and_then(|ci| ci.x)) {
             ctx.x = x;
         }
         let id = crate::stack::create_stack_ability(
@@ -1968,6 +1977,10 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
+        } else if let Some(x) = cycled_x {
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.x = Some(x);
+            }
         } else if let Some(ci) = etb_cast {
             // CR 107.3m: the permanent's enters ability uses its spell's value of X.
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {

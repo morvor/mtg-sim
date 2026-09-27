@@ -117,6 +117,25 @@ fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         {
             return FunctionZone::Battlefield
         }
+        // Several trigger conditions (CR 603.1b), such as "When you cycle this card and
+        // when this creature dies": one that triggers from wherever the card is combined
+        // with the object's own leaves-the-battlefield conditions, which trigger by
+        // looking back at it on the battlefield (CR 603.10a), functions from anywhere.
+        TriggerCond::AnyOf(conds) => {
+            let zones: Vec<FunctionZone> = conds.iter().map(|c| trigger_zone(c, eff)).collect();
+            let own_ltb = |c: &TriggerCond| {
+                matches!(c, TriggerCond::Dies(f) | TriggerCond::LeavesBattlefield(f)
+                    if mentions_source(f))
+            };
+            if zones.contains(&FunctionZone::Anywhere)
+                && conds
+                    .iter()
+                    .zip(&zones)
+                    .all(|(c, z)| *z == FunctionZone::Anywhere || own_ltb(c))
+            {
+                return FunctionZone::Anywhere;
+            }
+        }
         _ => {}
     }
     if super::without_quotes(eff).contains("~ from your graveyard") {
