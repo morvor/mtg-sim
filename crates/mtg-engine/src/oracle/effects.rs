@@ -403,13 +403,15 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
         if let Some((a, c)) = l.split_once(sep) {
             let saved_targets = b.targets.len();
             let saved_it = b.it.clone();
+            // "That player" may name a player target of the first half (see
+            // `Builder::add_target`), which is dropped below if the split fails.
+            let saved_player = b.it_player.clone();
             let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
                 // "return target permanent to its owner's hand, then that player ..."
-                let saved_player = b.it_player.clone();
                 super::patterns::oracle_hardening_referents::note_player_mention(a, b);
                 // The second half may modify the first ("exile it, then return it").
                 if matches!(sep, ", then " | " and then ")
@@ -421,10 +423,10 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
                 if let Some(ec) = parse_simple(c, b).or_else(|| parse_clause(c, b)) {
                     return Some(Effect::seq(store.into_iter().chain([ea, ec]).collect()));
                 }
-                b.it_player = saved_player;
             }
             b.targets.truncate(saved_targets);
             b.it = saved_it;
+            b.it_player = saved_player;
             b.group = saved_group;
         }
     }

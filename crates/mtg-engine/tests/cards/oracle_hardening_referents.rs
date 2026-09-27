@@ -10,7 +10,7 @@
 
 use mtg_engine::card::{CardDef, Layout};
 use mtg_engine::combat::{block_declaration_legal, block_options};
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{Characteristics, Zone};
 use mtg_engine::oracle::{self, CompileContext};
@@ -38,6 +38,15 @@ fn assert_unsupported(name: &str, text: &str) {
 
 /// Compiles oracle text for a made-up card; `Err` holds the text not understood.
 fn compile(type_line: &str, text: &str) -> Result<(), Vec<String>> {
+    compile_with_keywords(type_line, &[], text)
+}
+
+/// [`compile`] for a card whose Scryfall keywords are `keywords`.
+fn compile_with_keywords(
+    type_line: &str,
+    keywords: &[String],
+    text: &str,
+) -> Result<(), Vec<String>> {
     let tl = TypeLine::parse(type_line);
     let ctx = CompileContext {
         card_name: "Test Card",
@@ -45,7 +54,7 @@ fn compile(type_line: &str, text: &str) -> Result<(), Vec<String>> {
         type_line: &tl,
         layout: Layout::Normal,
         face_index: 0,
-        keywords: &[],
+        keywords,
         power: None,
         toughness: None,
     };
@@ -129,6 +138,22 @@ fn a_spells_pronoun_without_an_antecedent_is_unsupported() {
         "Each creature deals 1 damage to its controller",
     );
     assert_unsupported("Laquatus's Champion", "that player gains 6 life");
+}
+
+#[test]
+fn a_cleaved_texts_pronoun_needs_an_antecedent_too() {
+    // Cast for its cleave cost, the spell loses the bracketed words and is compiled again
+    // from what's left, where "its power" would have no antecedent.
+    let cleave = ["Cleave".to_string()];
+    let full = "Exile target creature. Until end of turn, creatures you control get +X/+0, \
+                where X is its power.";
+    assert_eq!(compile("Sorcery", full), Ok(()));
+    let text = "Cleave {2}\n[Exile target creature. ]Until end of turn, creatures you control \
+                get +X/+0, where X is its power.";
+    let err = compile_with_keywords("Sorcery", &cleave, text).unwrap_err();
+    assert!(err.iter().any(|u| u.contains("where X is its power")), "{err:?}");
+    // Real cards whose cleaved text keeps its antecedents are understood.
+    assert_supported(&["Alchemist's Retrieval", "Dread Fugue", "Dig Up"]);
 }
 
 #[test]
@@ -339,6 +364,68 @@ fn it_is_the_enchanted_creature() {
 }
 
 #[test]
+fn enchanted_creature_is_the_one_it_last_enchanted() {
+    cr!("608.2h");
+    ruling!(
+        "Bind the Monster",
+        "If Bind the Monster is no longer on the battlefield as the enters-the-battlefield ability resolves, use the power of the creature it was last enchanting"
+    );
+    ruling!(
+        "Bind the Monster",
+        "Damage is dealt even if that creature is also not on the battlefield at that time."
+    );
+    // In response to the enters trigger, the Aura is destroyed (Disenchant) or the Giant
+    // returns to its owner's hand (Unsummon).
+    for (response, cost) in [("Disenchant", "Plains"), ("Unsummon", "Island")] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 1);
+        t.lands(P0, cost, 2);
+        let giant = t.battlefield(P1, "Hill Giant");
+        let aura = t.hand(P0, "Bind the Monster");
+        t.cast(P0, aura).target(giant).go();
+        t.resolve();
+        assert_eq!(t.stack_len(), 1);
+        let target = if response == "Disenchant" {
+            t.named_on_battlefield("Bind the Monster")[0]
+        } else {
+            giant
+        };
+        let spell = t.hand(P0, response);
+        t.cast(P0, spell).target(target).go();
+        t.resolve_all();
+        assert!(t.named_on_battlefield("Bind the Monster").is_empty());
+        // The Giant it last enchanted deals damage equal to its last known power, 3.
+        assert_eq!(t.life(P0), 17, "{response}: {}", t.dump_log());
+        assert_eq!(t.life(P1), 20);
+        if response == "Disenchant" {
+            assert!(t.obj_now(giant).tapped);
+        } else {
+            assert!(t.in_hand(P1, "Hill Giant"));
+        }
+    }
+}
+
+#[test]
+fn an_already_tapped_creature_still_deals_the_damage() {
+    cr!("603.2");
+    ruling!(
+        "Bind the Monster",
+        "The enters-the-battlefield ability triggers even if the enchanted creature is already tapped. That creature will still deal damage to you."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.tap(giant);
+    let aura = t.hand(P0, "Bind the Monster");
+    t.cast(P0, aura).target(giant).go();
+    t.resolve();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    t.resolve_all();
+    assert!(t.obj_now(giant).tapped);
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
 fn its_toughness_is_the_sacrificed_creatures() {
     cr!("608.2c", "608.2h");
     ruling!(
@@ -397,7 +484,7 @@ fn x_is_the_amassed_armys_power() {
 
 #[test]
 fn equipped_creature_is_it_after_the_equipment_is_sacrificed() {
-    cr!("608.2c", "603.7c");
+    cr!("608.2c", "603.7c", "701.21a");
     ruling!(
         "Wings of Hubris",
         "you won't be able to sacrifice the creature at the beginning of the next end step"
@@ -450,6 +537,37 @@ fn equipped_creature_is_it_after_the_equipment_is_sacrificed() {
 }
 
 #[test]
+fn a_creature_controlled_until_end_of_turn_is_sacrificed() {
+    cr!("514.2", "701.21a");
+    ruling!(
+        "Wings of Hubris",
+        "If you gain control of a creature \"until end of turn,\" you control it during your end step."
+    );
+    // P0 gains control of P1's Bears until end of turn, equips them, and sacrifices the
+    // Equipment: P0 still controls the Bears as the delayed ability resolves in the end
+    // step (control ends only in the cleanup step), so P0 sacrifices them.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 4);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wings = t.battlefield(P0, "Wings of Hubris");
+    let treason = t.hand(P0, "Act of Treason");
+    t.cast(P0, treason).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // Equip {1}, then "Sacrifice this Equipment: ...".
+    t.activate(P0, wings, 1, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(wings).attached_to, Some(Entity::Object(bears)));
+    t.activate(P0, wings, 0, &[]).unwrap();
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears), "{}", t.dump_log());
+    // Sacrificed: put into its owner's graveyard.
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
 fn that_player_is_the_owner_of_the_returned_permanent() {
     cr!("608.2c", "701.9a");
     ruling!(
@@ -470,6 +588,72 @@ fn that_player_is_the_owner_of_the_returned_permanent() {
 }
 
 #[test]
+fn a_returned_token_cant_be_discarded() {
+    cr!("111.6", "111.7", "701.9a");
+    ruling!(
+        "Dinrova Horror",
+        "A token permanent returned to a player’s hand isn’t a card and can’t be discarded."
+    );
+    // P1 controls two Soldier tokens and has a Hill Giant card in hand. One token returns
+    // to P1's hand; P1 must discard the Giant (the token isn't a card), then the token
+    // ceases to exist.
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Plains", 2);
+    let alarm = t.hand(P1, "Raise the Alarm");
+    t.cast(P1, alarm).go();
+    t.resolve_all();
+    let soldiers = creatures_of(&t, P1, &[]);
+    assert_eq!(soldiers.len(), 2);
+    let giant = t.hand(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(soldiers[0])]);
+    t.enter(P0, "Dinrova Horror");
+    t.resolve_all();
+    // The token in P1's hand wasn't offered as a card to discard.
+    let offered: Vec<Entity> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities {
+                prompt, candidates, ..
+            } if p == P1 && prompt.contains("discard") => Some(candidates),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(offered, vec![Entity::Object(giant)], "{}", t.dump_log());
+    assert_eq!(t.zone(giant), Zone::Graveyard(P1));
+    assert_eq!(t.hand_size(P1), 0);
+    assert!(!t.on_battlefield(soldiers[0]));
+    assert!(t.on_battlefield(soldiers[1]));
+}
+
+#[test]
+fn no_one_discards_if_the_target_is_illegal() {
+    cr!("608.2b");
+    ruling!(
+        "Dinrova Horror",
+        "If the target permanent is an illegal target when Dinrova Horror’s ability tries to resolve, the ability won’t resolve and none of its effects will happen. No player will discard a card."
+    );
+    // In response, P0 returns the targeted Angel to P1's hand itself (Unsummon).
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    t.hand(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.answer_targets(P0, &[Entity::Object(angel)]);
+    t.enter(P0, "Dinrova Horror");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    let unsummon = t.hand(P0, "Unsummon");
+    t.cast(P0, unsummon).target(angel).go();
+    t.resolve_all();
+    // The Angel stays in P1's hand, and P0 keeps its Bears.
+    assert!(t.in_hand(P1, "Serra Angel"), "{}", t.dump_log());
+    assert_eq!(t.hand_size(P1), 1);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t.graveyard_size(P1), 0);
+}
+
+#[test]
 fn that_player_controls_the_targeting_spell() {
     cr!("603.2", "608.2c");
     assert_supported(&["Black Bolt, Inhuman King"]);
@@ -480,8 +664,9 @@ fn that_player_controls_the_targeting_spell() {
     t.lands(P1, "Mountain", 1);
     let shock = t.hand(P1, "Shock");
     t.cast(P1, shock).target(bolt).go();
-    // The trigger's target: a nonland permanent P1 (who cast Shock) controls.
-    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    // The trigger's target must be a nonland permanent P1 (who cast Shock) controls: P0's
+    // own Bears aren't a legal choice, and the only legal one is P1's Bears.
+    t.answer_targets(P0, &[Entity::Object(mine)]);
     t.resolve_all();
     assert!(!t.on_battlefield(theirs), "{}", t.dump_log());
     assert!(t.on_battlefield(mine));
