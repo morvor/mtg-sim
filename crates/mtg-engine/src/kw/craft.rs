@@ -26,6 +26,8 @@ use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
 use smol_str::SmolStr;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 /// `Effect::Custom` prefix of the cost part "Exile [materials] from among permanents you
 /// control and/or cards in your graveyard"; the materials' description follows.
@@ -67,6 +69,19 @@ pub struct Materials {
 /// creatures", "one or more", "six artifacts", "two that share a card type", "four or more
 /// red instant and/or sorcery cards", "a Dinosaur, a Merfolk, a Pirate, and a Vampire".
 pub fn parse_materials(s: &str) -> Option<Materials> {
+    // Parsed once per description (the rules look at them whenever the ability's cost is
+    // checked).
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Materials>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(m) = cache.lock().unwrap().get(s) {
+        return m.clone();
+    }
+    let m = parse_materials_uncached(s);
+    cache.lock().unwrap().insert(s.to_string(), m.clone());
+    m
+}
+
+fn parse_materials_uncached(s: &str) -> Option<Materials> {
     let s = end(s.trim()).to_lowercase();
     let s = s.as_str();
     let base = |filter: Filter, min: u32, max: Option<u32>| Materials {
