@@ -26,10 +26,14 @@ impl KeywordRules for Evoke {
 
     fn derived(&self, _kw: &Keyword) -> Option<Vec<Ability>> {
         // If it has left the battlefield by the time this resolves, "it" (this object)
-        // is gone and nothing is sacrificed.
+        // is gone and nothing is sacrificed. "Its controller sacrifices it": whoever
+        // controls it as this resolves, not necessarily the ability's controller.
         let mut t = TriggeredAbility::new(
             TriggerCond::EntersBattlefield(Filter::Source),
-            Body::effect(Effect::SacrificeObjects { what: Sel::This }),
+            Body::effect(Effect::AsPlayer {
+                who: PlayerRef::ControllerOf(Box::new(Sel::This)),
+                effect: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+            }),
         );
         t.intervening_if = Some(Condition::CostPaid(EVOKE.into()));
         Some(vec![AbilityDef::new(
