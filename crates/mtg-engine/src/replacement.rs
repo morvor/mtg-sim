@@ -1174,6 +1174,44 @@ impl Game {
                 let d = self.eval_value(&v, &ctx).max(0) as u32;
                 vec![scale_event(ev, |n| n + d)]
             }
+            (
+                ReplacementAction::PlusTokens { spec, count },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count: n,
+                    source,
+                },
+            ) => {
+                let original = ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count: n,
+                    source,
+                };
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&original));
+                let more = self.eval_value(&count, &c).max(0) as u32;
+                let plus = TokenCreate {
+                    chars: crate::tokens::token_characteristics(&spec),
+                    card: crate::tokens::predefined_card(&spec),
+                    tapped: false,
+                    attacking: None,
+                    copy_of: None,
+                    copy_exceptions: vec![],
+                };
+                // The same event creates them all (this effect doesn't apply to its own
+                // result again, CR 614.5).
+                vec![
+                    original,
+                    ReplEvent::CreateTokens {
+                        controller,
+                        spec: Box::new(plus),
+                        count: more,
+                        source,
+                    },
+                ]
+            }
             (ReplacementAction::Subtract(v), ev) => {
                 let d = self.eval_value(&v, &ctx).max(0) as u32;
                 let e = scale_event(ev, |n| n.saturating_sub(d));

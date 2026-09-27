@@ -37,21 +37,34 @@ use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
 /// A creature tapped to pay the cost of a Vehicle's crew ability: it crewed the Vehicle
-/// (CR 702.122b–c).
+/// (CR 702.122b–c). A creature tapped to pay the cost of a saddle ability, which saddled
+/// that permanent (CR 702.171c), is recorded the same way, with `keyword` saddle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrewRecord {
     pub vehicle: ObjectId,
     pub creature: ObjectId,
     /// The creature's characteristics as it was tapped to pay that cost.
     pub chars: Box<Characteristics>,
+    /// The ability whose cost it was tapped for: crew, or saddle (CR 702.171c).
+    #[serde(default = "crew_keyword")]
+    pub keyword: KeywordKind,
+}
+
+fn crew_keyword() -> KeywordKind {
+    KeywordKind::Crew
+}
+
+/// The records of creatures that crewed Vehicles this turn (not those that saddled).
+fn crew_records(g: &Game) -> impl Iterator<Item = &CrewRecord> {
+    g.history
+        .crewed
+        .iter()
+        .filter(|r| r.keyword == KeywordKind::Crew)
 }
 
 /// Whether `creature` crewed `vehicle` this turn (CR 702.122c).
 pub fn crewed_this_turn(g: &Game, vehicle: ObjectId, creature: ObjectId) -> bool {
-    g.history
-        .crewed
-        .iter()
-        .any(|r| r.vehicle == vehicle && r.creature == creature)
+    crew_records(g).any(|r| r.vehicle == vehicle && r.creature == creature)
 }
 
 /// `Event::Custom` name: a crew ability of the Vehicle (`obj`) resolved — it "becomes
@@ -209,7 +222,7 @@ pub fn pay_total_power(
     for c in &chosen {
         g.tap(*c);
     }
-    if kw == KeywordKind::Crew {
+    if matches!(kw, KeywordKind::Crew | KeywordKind::Saddle) {
         if let Some(v) = src {
             for c in &chosen {
                 let chars = Box::new(g.obj(*c).chars.clone());
@@ -217,11 +230,17 @@ pub fn pay_total_power(
                     vehicle: v,
                     creature: *c,
                     chars,
+                    keyword: kw,
                 });
             }
             g.log(|g| {
                 let names: Vec<String> = chosen.iter().map(|c| g.describe(*c)).collect();
-                format!("{} crew {}", names.join(", "), g.describe(v))
+                let verb = if kw == KeywordKind::Crew {
+                    "crew"
+                } else {
+                    "saddle"
+                };
+                format!("{} {verb} {}", names.join(", "), g.describe(v))
             });
         }
     }
@@ -313,7 +332,7 @@ impl KeywordRules for Crew {
             return None;
         }
         let mut crew: Vec<ObjectId> = Vec::new();
-        for r in &g.history.crewed {
+        for r in crew_records(g) {
             if Some(r.vehicle) == ctx.source && !crew.contains(&r.creature) {
                 crew.push(r.creature);
             }
@@ -323,9 +342,7 @@ impl KeywordRules for Crew {
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         let subtype = name.strip_prefix(CREWED_BY_TYPE)?;
-        Some(g.history.crewed.iter().any(|r| {
-            Some(r.vehicle) == ctx.source && r.chars.has_subtype(subtype)
-        }))
+        Some(crew_records(g).any(|r| Some(r.vehicle) == ctx.source && r.chars.has_subtype(subtype)))
     }
 
     /// CR 702.122b: "whenever ~ crews a Vehicle": the source was tapped to pay for a

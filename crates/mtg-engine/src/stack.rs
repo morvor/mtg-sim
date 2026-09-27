@@ -322,12 +322,13 @@ impl Game {
         stack_obj: ObjectId,
     ) -> Vec<Entity> {
         let mut out = Vec::new();
-        let obj_zone = |f: &Filter| f.zone().unwrap_or(ZoneKind::Battlefield);
         match &spec.what {
             TargetKind::Object(f) => {
-                for o in self.objects_in_zone_kind(obj_zone(f)) {
-                    if self.is_legal_target(spec, Entity::Object(o), ctx, stack_obj) {
-                        out.push(Entity::Object(o));
+                for z in target_zones(f) {
+                    for o in self.objects_in_zone_kind(z) {
+                        if self.is_legal_target(spec, Entity::Object(o), ctx, stack_obj) {
+                            out.push(Entity::Object(o));
+                        }
                     }
                 }
             }
@@ -410,8 +411,8 @@ impl Game {
                 }
                 let ok = match &spec.what {
                     TargetKind::Object(f) => {
-                        let z = f.zone().unwrap_or(ZoneKind::Battlefield);
-                        ob.zone.kind() == Some(z) && self.matches(o, f, ctx)
+                        ob.zone.kind().is_some_and(|z| target_zones(f).contains(&z))
+                            && self.matches(o, f, ctx)
                     }
                     TargetKind::AnyTarget => {
                         ob.zone == Zone::Battlefield
@@ -1257,4 +1258,24 @@ fn distinct(v: &[Entity]) -> bool {
     let mut s = v.to_vec();
     s.sort();
     s.windows(2).all(|w| w[0] != w[1])
+}
+
+/// The zones the objects a target filter describes are in (the battlefield unless it says
+/// otherwise): each alternative's own zone for "target creatures from the battlefield
+/// and/or creature cards from graveyards".
+fn target_zones(f: &Filter) -> Vec<ZoneKind> {
+    let one = |f: &Filter| f.zone().unwrap_or(ZoneKind::Battlefield);
+    match f {
+        Filter::Or(parts) if !parts.is_empty() && parts.iter().all(|p| p.zone().is_some()) => {
+            let mut zones: Vec<ZoneKind> = Vec::new();
+            for p in parts {
+                let z = one(p);
+                if !zones.contains(&z) {
+                    zones.push(z);
+                }
+            }
+            zones
+        }
+        _ => vec![one(f)],
+    }
 }

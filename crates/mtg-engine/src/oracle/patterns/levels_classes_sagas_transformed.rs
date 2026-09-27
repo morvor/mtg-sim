@@ -28,7 +28,7 @@ use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 
 /// "with three time counters on it", "with a +1/+1 counter on it".
-fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
+pub(crate) fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
     let (n, r) = parse_number(s)?;
     let (kind, r) = crate::oracle::costs::counter_kind(r)?;
     let r = r
@@ -58,7 +58,11 @@ fn transformed_destination(s: &str, what: &Sel, b: &mut Builder) -> Option<Desti
             d.tapped = true;
             d.transformed = true;
             t = x.trim_start();
-        } else if let Some(x) = t.strip_prefix("transformed") {
+        } else if let Some(x) = t
+            .strip_prefix("transformed")
+            // CR 712.14a: "converted" also means with its back face up.
+            .or_else(|| t.strip_prefix("converted"))
+        {
             d.transformed = true;
             t = x.trim_start();
         } else if let Some(x) = t.strip_prefix("tapped") {

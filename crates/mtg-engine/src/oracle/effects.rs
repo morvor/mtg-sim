@@ -34,6 +34,10 @@ pub struct Builder<'c> {
     /// The group ("all creatures you control") an earlier instruction affected, which
     /// "they" and "those creatures" refer to (see `patterns::pronoun_groups`).
     pub group: Option<super::patterns::pronoun_groups::GroupRef>,
+    /// Phrases that name objects the text chose earlier, and what they select ("Choose
+    /// target creature you control and target creature you don't control. Put a +1/+1
+    /// counter on the creature you control."; see `patterns::choose_two_targets`).
+    pub named: Vec<(String, Sel)>,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -56,6 +60,7 @@ impl<'c> Builder<'c> {
             sentences: 0,
             chosen_creature: None,
             group: None,
+            named: vec![],
             ctx,
         }
     }
@@ -461,6 +466,23 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((sel, rest.to_string()));
         }
     }
+    // The longest phrase that names the object ("the creature an opponent controls"
+    // before "the creature").
+    let named = b
+        .named
+        .iter()
+        .filter_map(|(p, sel)| {
+            let rest = s.strip_prefix(p.as_str())?;
+            (rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\''))
+                .then(|| (p.len(), sel.clone(), rest.to_string()))
+        })
+        .max_by_key(|(len, _, _)| *len);
+    if let Some((_, sel, rest)) = named {
+        if matches!(sel, Sel::Target(_)) {
+            b.it = sel.clone();
+        }
+        return Some((sel, rest));
+    }
     if let Some((slot, text)) = &b.chosen_creature {
         let still_there = b
             .targets
@@ -481,8 +503,11 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "the creature",
         "that token",
         "this token",
-        // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b).
+        // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b); "whenever ~
+        // saddles a Mount or crews a Vehicle, that Mount or Vehicle ..." (CR 702.171c).
         "that vehicle",
+        "that mount or vehicle",
+        "that mount",
         "that artifact",
         "that land",
         // "Choose target creature ... Exile the chosen creature." (Turncoat Kunoichi).

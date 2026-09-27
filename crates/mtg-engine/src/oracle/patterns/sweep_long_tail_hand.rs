@@ -34,7 +34,10 @@ fn hand_count<'a>(r: &'a str, who: &PlayerRef) -> Option<(Value, bool, &'a str)>
     }
     if let Some(x) = r.strip_prefix("up to ") {
         let (n, x) = parse_number(x)?;
-        n.as_const()?;
+        // "up to X land cards", X defined by the sentence (The Gitrog, Ravenous Ride).
+        if !matches!(n, Value::X) {
+            n.as_const()?;
+        }
         return Some((n, true, x.trim_start()));
     }
     let x = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;

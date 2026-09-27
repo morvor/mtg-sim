@@ -283,10 +283,12 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
 /// "+1/+1 counter", "loyalty counter", "charge counters".
 pub fn counter_kind(s: &str) -> Option<(CounterKind, &str)> {
     let s = s.trim_start();
-    // Two-word keyword counters (CR 122.1b): "a double strike counter".
-    for k in ["first strike", "double strike"] {
-        if let Some(rest) = s.strip_prefix(k).filter(|r| r.starts_with(' ')) {
-            return Some((k.into(), rest));
+    // Keyword counters named by two words (CR 122.1b): "a double strike counter".
+    for k in crate::layers::KEYWORD_COUNTERS {
+        if let Some(rest) = s.strip_prefix(k).filter(|_| k.contains(' ')) {
+            if rest.starts_with(" counter") {
+                return Some((k.into(), rest));
+            }
         }
     }
     let (w, rest) = split_word(s);

@@ -1935,6 +1935,14 @@ impl Game {
         ctx.event = Some(t.event.clone());
         ctx.ability_uid = t.ability.uid;
         ctx.link = t.ability.link;
+        // CR 107.3m, 702.37f, 702.168e: an enters (or "turned face up") ability uses the X
+        // of its spell (or of the cost paid to turn it face up), also for its targets ("up
+        // to X target creatures").
+        let etb_cast = if t.saved.is_none() {
+            crate::object::etb_trigger_cast_info(self, &t)
+        } else {
+            None
+        };
         // CR 107.3e: an ability that triggers on cycling a card ("When you cycle this card,
         // destroy up to X target artifacts") refers to the X of the cycling ability's cost.
         let cycled_x = match &t.ability.kind {
@@ -1943,7 +1951,7 @@ impl Game {
             }
             _ => None,
         };
-        if let Some(x) = cycled_x {
+        if let Some(x) = cycled_x.or_else(|| etb_cast.as_ref().and_then(|ci| ci.x)) {
             ctx.x = x;
         }
         let id = crate::stack::create_stack_ability(
@@ -1975,7 +1983,7 @@ impl Game {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = Some(x);
             }
-        } else if let Some(ci) = crate::object::etb_trigger_cast_info(self, &t) {
+        } else if let Some(ci) = etb_cast {
             // CR 107.3m: the permanent's enters ability uses its spell's value of X.
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = ci.x;

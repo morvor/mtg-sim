@@ -22,7 +22,11 @@ fn top_cards_of<'a>(s: &'a str) -> Option<(Value, &'a str)> {
         return Some((Value::c(1), r));
     }
     let (n, r) = parse_number(r)?;
-    n.as_const()?;
+    // "the top X cards", X being chosen as the spell is cast (Monastery Raid's freerunning
+    // cost {X}{R}, CR 107.3).
+    if !matches!(n, Value::X) {
+        n.as_const()?;
+    }
     Some((n, r.strip_prefix("cards of ")?))
 }
 

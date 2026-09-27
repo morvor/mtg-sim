@@ -732,6 +732,11 @@ fn play_from_top_of_library(l: &str, text: &str, _ctx: &CompileContext) -> Optio
                 }
                 fs.push(f);
             }
+            // "play lands and cast creature and enchantment spells" (Case of the Locked
+            // Hothouse): the lands as well as the spells.
+            if lands {
+                fs.insert(0, Filter::Type(CardType::Land));
+            }
             if fs.len() == 1 {
                 fs.pop()?
             } else {

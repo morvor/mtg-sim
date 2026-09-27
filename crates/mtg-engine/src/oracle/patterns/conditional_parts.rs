@@ -66,7 +66,14 @@ fn trailing_condition(l: &str, b: &mut Builder) -> Option<Effect> {
         _ => return None,
     };
     // "unless [player] pays ...", "if able", "if you do": not conditions of this kind.
-    if x.is_empty() || x.ends_with(',') || !pronoun_free(c) {
+    // Several conditional instructions joined together ("A if {U} was spent to cast this
+    // spell, and B if {R} was spent to cast this spell") are split first.
+    if x.is_empty()
+        || x.ends_with(',')
+        || x.contains(" if ")
+        || x.contains(" unless ")
+        || !pronoun_free(c)
+    {
         return None;
     }
     let cond = parse_condition(c, b.ctx)?;

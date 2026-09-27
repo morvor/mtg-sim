@@ -154,6 +154,10 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
     for (source, controller, mods) in apply {
         let id = g.new_effect_id();
         let ts = g.new_timestamp();
+        // CR 400.7b: an ability granted to a permanent spell that functions on the
+        // battlefield (offspring's triggered ability) continues to apply to the permanent
+        // the spell becomes.
+        let carry = mods.iter().any(functions_on_battlefield);
         g.effects.push(ContinuousEffect {
             id,
             source,
@@ -165,6 +169,59 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
             layer1: None,
             created_turn: turn,
         });
+        if carry {
+            g.carried_effects.push(id);
+        }
     }
     g.dirty = true;
+}
+
+/// Whether a granted keyword stands for an ability that functions on the battlefield
+/// (CR 400.7b).
+fn functions_on_battlefield(m: &Modification) -> bool {
+    let Modification::AddKeyword(k) = m else {
+        return false;
+    };
+    crate::kw::derived(k).iter().any(|a| match &a.kind {
+        AbilityKind::Triggered(t) => t.zone == FunctionZone::Battlefield,
+        AbilityKind::Static(s) => s.zone == FunctionZone::Battlefield,
+        _ => false,
+    })
+}
+
+/// Keywords the static abilities of objects `p` controls would make `card` gain as `p`
+/// casts it (CR 610.5: "Assassin spells you cast have freerunning {B}{B}"). Those that
+/// offer a way to cast it (an alternative cost, CR 601.2b) must be known before it's cast.
+pub fn cast_grant_keywords(g: &Game, p: PlayerId, card: ObjectId) -> Vec<crate::keywords::Keyword> {
+    let mut out = Vec::new();
+    for id in g.live_objects() {
+        let o = g.obj(id);
+        if o.controller != p {
+            continue;
+        }
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            if !is_cast_grant(s) || !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            let ctx = Ctx::new(Some(id), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            if !g.matches(card, &crate::casting::as_spell_filter(affected), &ctx) {
+                continue;
+            }
+            for m in mods {
+                if let Modification::AddKeyword(k) = m {
+                    out.push(k.clone());
+                }
+            }
+        }
+    }
+    out
 }

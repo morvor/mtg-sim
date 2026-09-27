@@ -364,8 +364,10 @@ pub fn strip_ability_word(text: &str) -> &str {
             && head != "Max speed"
             // Nor is "Power-up — [cost]: [effect]" (CR 702.193a).
             && head != "Power-up"
-            // Nor is "Boast — [activated ability]" (CR 702.142a).
+            // Nor is "Boast — [activated ability]" (CR 702.142a), nor "Exhaust —
+            // [activated ability]" (CR 702.177a).
             && head != "Boast"
+            && head != "Exhaust"
             // Nor are a Case's "To solve — [Condition]" and "Solved — [Ability]"
             // (CR 719.3).
             && head != "To solve"
