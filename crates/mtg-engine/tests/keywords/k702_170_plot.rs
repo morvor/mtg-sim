@@ -35,6 +35,18 @@ fn plotting_is_a_special_action_that_exiles_the_card_from_hand() {
         "Slickshot Show-Off",
         "Exiling a card using its plot ability is a special action. Once you announce you’re taking that action, no other player can respond by trying to remove that card from your hand."
     );
+    ruling!(
+        "Aloe Alchemist",
+        "Exiling a card using its plot ability is a special action. Once you announce you're taking that action, no other player can respond by trying to remove that card from your hand."
+    );
+    ruling!(
+        "Beastbond Outcaster",
+        "Plot abilities are written “Plot [cost],” which means “Any time you have priority during your main phase while the stack is empty, you may pay [cost] and exile this card from your hand. It becomes plotted.”"
+    );
+    ruling!(
+        "Aloe Alchemist",
+        "Plot abilities are written \"Plot [cost],\" which means \"Any time you have priority during your main phase while the stack is empty, you may pay [cost] and exile this card from your hand. It becomes plotted.\""
+    );
     // Djinn of Fool's Fall: {4}{U} 4/3 flying, plot {3}{U}.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -65,6 +77,10 @@ fn an_effect_can_make_a_card_in_exile_plotted() {
     assert_supported("Kellan Joins Up");
     ruling!(
         "Kellan Joins Up",
+        "You can't cast a plotted card on the same turn it became plotted. On any future turn, you may cast that card from exile without paying its mana cost during your main phase while the stack is empty."
+    );
+    ruling!(
+        "Beastbond Outcaster",
         "You can't cast a plotted card on the same turn it became plotted. On any future turn, you may cast that card from exile without paying its mana cost during your main phase while the stack is empty."
     );
     // Kellan Joins Up: "When Kellan Joins Up enters, you may exile a nonland card with mana
@@ -207,4 +223,82 @@ fn an_effect_can_let_plot_function_from_the_top_of_the_library() {
     t.cast(P0, plotted).method(PLOTTED).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}
+
+#[test]
+fn a_plotted_card_is_cast_for_free_with_x_0_but_its_additional_costs_are_paid() {
+    cr!("702.170d");
+    ruling!(
+        "Aloe Alchemist",
+        "If a plotted card has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    ruling!(
+        "Beastbond Outcaster",
+        "If you're casting a plotted card from exile without paying its mana cost, you can't choose to cast it for any other alternative costs. You can, however, pay additional costs, such as kicker costs. If the plotted card has any mandatory additional costs, those must still be paid to cast the spell."
+    );
+    ruling!(
+        "Aloe Alchemist",
+        "If you're casting a plotted card from exile without paying its mana cost, you can't choose to cast it for any other alternative costs. You can, however, pay additional costs, such as kicker costs."
+    );
+    // Blaze ({X}{R}: "Blaze deals X damage to any target."), plotted: X is 0.
+    let mut t = TestGame::new(2);
+    let blaze = t.exile(P0, "Blaze");
+    mtg_engine::kw::plot::make_plotted(&mut t.g, blaze);
+    next_turn_main(&mut t);
+    add_mana(&mut t, P0, ManaType::R, 4);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(3));
+    let spell = t
+        .cast(P0, blaze)
+        .method(PLOTTED)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(t.obj(spell).stack.as_ref().unwrap().x.unwrap_or(0), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(pool(&t, P0), 4);
+    // Burst Lightning ({R}, kicker {4}), plotted: its kicker cost can be paid.
+    let mut t = TestGame::new(2);
+    let burst = t.exile(P0, "Burst Lightning");
+    mtg_engine::kw::plot::make_plotted(&mut t.g, burst);
+    next_turn_main(&mut t);
+    add_mana(&mut t, P0, ManaType::R, 4);
+    t.cast(P0, burst)
+        .method(PLOTTED)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(pool(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    // Bone Splinters ("As an additional cost to cast this spell, sacrifice a creature."),
+    // plotted: the creature must still be sacrificed.
+    let mut t = TestGame::new(2);
+    let splinters = t.exile(P0, "Bone Splinters");
+    mtg_engine::kw::plot::make_plotted(&mut t.g, splinters);
+    next_turn_main(&mut t);
+    let giant = t.battlefield(P1, "Hill Giant");
+    assert!(t
+        .cast(P0, splinters)
+        .method(PLOTTED)
+        .target(giant)
+        .try_go()
+        .is_err());
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, splinters).method(PLOTTED).target(giant).go();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    // A plotted card with other alternative costs is cast from exile only this way: not
+    // face down for its disguise cost, nor for its impending cost.
+    let mut t = TestGame::new(2);
+    let codebreaker = t.exile(P0, "Fugitive Codebreaker");
+    let overlord = t.exile(P0, "Overlord of the Floodpits");
+    mtg_engine::kw::plot::make_plotted(&mut t.g, codebreaker);
+    mtg_engine::kw::plot::make_plotted(&mut t.g, overlord);
+    next_turn_main(&mut t);
+    add_mana(&mut t, P0, ManaType::U, 3);
+    add_mana(&mut t, P0, ManaType::C, 3);
+    assert_eq!(cast_methods_now(&mut t, P0, codebreaker), vec![PLOTTED]);
+    assert_eq!(cast_methods_now(&mut t, P0, overlord), vec![PLOTTED]);
 }
