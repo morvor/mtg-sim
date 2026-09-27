@@ -287,3 +287,40 @@ fn an_emerge_spell_can_be_kicked_but_has_no_other_alternative_cost() {
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.named_on_battlefield("Kicked Emerger").len(), 1);
 }
+
+#[test]
+fn a_mandatory_additional_cost_is_paid_when_casting_for_the_emerge_cost() {
+    cr!("702.119a", "118.8", "601.2b");
+    ruling!(
+        "Wretched Gryff",
+        "If the spell has any mandatory additional costs, those must be paid to cast it."
+    );
+    // A creature with emerge and "As an additional cost to cast this spell, discard a
+    // card" (compiled from its text).
+    let def = custom_card(
+        "Hungry Emerger",
+        "Creature — Eldrazi",
+        "{7}",
+        Some((3, 3)),
+        "Emerge {5}{U}\nAs an additional cost to cast this spell, discard a card.",
+    );
+    // With no other card in hand, it can't be cast for its emerge cost.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 3);
+    let card = t.custom(P0, def.clone(), Zone::Hand(P0));
+    assert!(!can_cast(&mut t, P0, card, EMERGE));
+    // With one, it's discarded as the Bears is sacrificed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 3);
+    let card = t.custom(P0, def, Zone::Hand(P0));
+    t.hand(P0, "Hill Giant");
+    assert!(can_cast(&mut t, P0, card, EMERGE));
+    t.cast(P0, card).method(EMERGE).go();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(untapped_lands(&t, P0), 0);
+}
