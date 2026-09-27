@@ -615,7 +615,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {
-        return sacrificed_value(r);
+        // "... equal to the sacrificed creature's power, then ... equal to its toughness".
+        let v = sacrificed_value(r)?;
+        b.it = Sel::Var(vars::SACRIFICED);
+        return Some(v);
     }
     // "your devotion to black", "your devotion to black and red" (CR 700.5).
     if let Some(r) = s.strip_prefix("your devotion to ") {

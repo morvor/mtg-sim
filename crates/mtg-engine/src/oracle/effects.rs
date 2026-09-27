@@ -39,10 +39,19 @@ pub struct Builder<'c> {
 
 impl<'c> Builder<'c> {
     pub fn new(ctx: &'c CompileContext<'c>) -> Self {
+        // An instant's or sorcery's pronouns never mean the spell itself, and "that player"
+        // never means the controller: until the text gives them an antecedent they have
+        // none (see `patterns::oracle_hardening_referents`). A trigger's body gets them
+        // from the trigger condition.
+        use super::patterns::oracle_hardening_referents as r;
         Builder {
             targets: vec![],
-            it: Sel::This,
-            it_player: PlayerRef::You,
+            it: if ctx.is_spell() {
+                r::no_referent()
+            } else {
+                Sel::This
+            },
+            it_player: r::no_player_referent(),
             in_trigger: false,
             sentences: 0,
             chosen_creature: None,
@@ -69,6 +78,11 @@ impl<'c> Builder<'c> {
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
             self.it = Sel::Target(slot);
+        } else if super::patterns::oracle_hardening_referents::is_no_player_referent(
+            &self.it_player,
+        ) {
+            // "~ deals 3 damage to target opponent. That player discards two cards."
+            self.it_player = PlayerRef::Target(slot);
         }
         if opponents {
             self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
@@ -262,9 +276,18 @@ pub fn split_sentences(t: &str) -> Vec<String> {
 /// Parses effect text (one or more sentences).
 pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
     use super::patterns::pronoun_groups as groups;
+    // No instructions at all ("Whenever you attack with two or more creatures," followed
+    // by a line the compiler can't join to it) isn't an effect that does nothing.
+    if t.trim().trim_end_matches('.').trim().is_empty() {
+        return None;
+    }
     let outer_group = b.group.take();
     let mut effects = Vec::new();
     for s in split_sentences(t) {
+        // "~ deals 1 damage to each creature. If it was kicked, it deals 2 damage to each
+        // creature instead.": a spell that is the subject of an instruction is what a
+        // later "it" refers to, until something else is mentioned.
+        super::patterns::oracle_hardening_referents::note_subject(&s, b);
         // Sentences that modify the previous one ("It can't be regenerated.").
         if let Some(prev) = effects.last_mut() {
             if crate::oracle_ext::apply_followup_ext(&s, prev, b) {
@@ -278,6 +301,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         };
         // "Untap all creatures you control. They gain haste until end of turn."
         effects.extend(groups::note(&mut e, b));
+        super::patterns::oracle_hardening_referents::note_introduced(&e, b);
         effects.push(e);
         b.sentences += 1;
     }
@@ -405,6 +429,15 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     ];
     for (p, sel) in pairs {
         if let Some(rest) = s.strip_prefix(p) {
+            // "Gain control of enchanted permanent. Untap that permanent.": the object
+            // just named is what a later pronoun refers to (unless something more
+            // specific already is).
+            if matches!(sel, Sel::AttachedTo)
+                && (matches!(b.it, Sel::This)
+                    || super::patterns::oracle_hardening_referents::is_no_referent(&b.it))
+            {
+                b.it = Sel::AttachedTo;
+            }
             return Some((sel, rest.to_string()));
         }
     }
@@ -437,6 +470,16 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
                 // Not a group an earlier instruction affected: that's "they".
                 let it = super::patterns::pronoun_groups::singular_it(b);
+                // No antecedent (a spell's first mention), or "that creature" meaning the
+                // source, which oracle text calls "~" (except "that card" for what the
+                // source became in its own trigger: "When ~ dies, return that card ..."):
+                // not understood.
+                let own_card = p == "that card" && b.in_trigger && b.sentences == 0;
+                if super::patterns::oracle_hardening_referents::is_no_referent(&it)
+                    || (p != "it" && !own_card && matches!(it, Sel::This))
+                {
+                    return None;
+                }
                 return Some((it, rest.to_string()));
             }
         }
@@ -499,14 +542,21 @@ pub fn bind_target_player(f: Filter, rest: &str, b: &mut Builder) -> (Filter, St
 }
 
 pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
+    use super::patterns::oracle_hardening_referents::{is_no_player_referent, is_no_referent};
     let s = s.trim();
     if let Some(r) = s.strip_prefix("that player") {
+        if is_no_player_referent(&b.it_player) {
+            return None;
+        }
         return Some((b.it_player.clone(), r.to_string()));
     }
     if let Some(r) = s
         .strip_prefix("its controller")
         .or_else(|| s.strip_prefix("their controller"))
     {
+        if is_no_referent(&b.it) {
+            return None;
+        }
         return Some((
             PlayerRef::ControllerOf(Box::new(b.it.clone())),
             r.to_string(),
@@ -516,6 +566,9 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
         .strip_prefix("its owner")
         .or_else(|| s.strip_prefix("their owner"))
     {
+        if is_no_referent(&b.it) {
+            return None;
+        }
         return Some((PlayerRef::OwnerOf(Box::new(b.it.clone())), r.to_string()));
     }
     let with_space = format!("{s} ");
