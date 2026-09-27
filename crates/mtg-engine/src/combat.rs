@@ -732,11 +732,12 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
             }
         }
         // CR 701.15b: a goaded creature attacks each combat if able and attacks a player
-        // other than the goading player if able.
-        let goaders = g.goaders(id);
-        if !goaders.is_empty() {
+        // other than the goading player if able. Each player who goaded it adds these
+        // requirements (CR 701.15c): goaded by several opponents, it attacks one who didn't
+        // goad it if able, else still one of them rather than a planeswalker or battle.
+        for goader in g.goaders(id) {
             out.push(AttackRequirement::Attacks(id));
-            out.push(AttackRequirement::AttacksPlayerOtherThan(id, goaders));
+            out.push(AttackRequirement::AttacksPlayerOtherThan(id, vec![goader]));
         }
     }
     out
