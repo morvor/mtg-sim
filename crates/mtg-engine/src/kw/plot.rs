@@ -47,6 +47,33 @@ const BECOME_PLOTTED: &str = "plot:becomes plotted";
 /// The variable holding the cards that become plotted (see [`becomes_plotted`]).
 const PLOT_VAR: Var = vars::USER + 1702;
 
+/// `StaticEffect::Custom` of an ability an effect gives a spell: "exile that spell instead
+/// of putting it into your graveyard as it resolves" (Lilah, Undefeated Slickshot).
+pub const EXILE_AS_IT_RESOLVES: &str =
+    "plot:exile this spell instead of putting it into your graveyard as it resolves";
+/// The same, followed by "If you do, it becomes plotted." (CR 702.170c).
+pub const EXILE_AS_IT_RESOLVES_PLOTTED: &str =
+    "plot:exile this spell instead of putting it into your graveyard as it resolves; it becomes plotted";
+
+/// The marker ability [`EXILE_AS_IT_RESOLVES`] (or the plotted variant) given to a spell.
+pub fn exile_as_it_resolves(plotted: bool) -> Modification {
+    let name = if plotted {
+        EXILE_AS_IT_RESOLVES_PLOTTED
+    } else {
+        EXILE_AS_IT_RESOLVES
+    };
+    let mut s = StaticAbility::new(StaticEffect::Custom(SmolStr::new(name)));
+    s.zone = FunctionZone::Stack;
+    Modification::AddAbility(AbilityDef::new(AbilityKind::Static(s), name))
+}
+
+/// Whether the spell has the marker ability `name`.
+fn has_marker(g: &Game, spell: ObjectId, name: &str) -> bool {
+    g.obj(spell).chars.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s) if matches!(&s.effect, StaticEffect::Custom(n) if n == name))
+    })
+}
+
 /// `StaticEffect::Custom` name for "Plotting cards from your hand costs {n} less."
 pub fn from_hand_costs_less(n: u32) -> SmolStr {
     SmolStr::new(format!("{FROM_HAND_COSTS_LESS}{n}"))
@@ -214,6 +241,25 @@ impl KeywordRules for Plot {
     }
 
     /// "It becomes plotted" (CR 702.170c).
+    /// "Exile that spell instead of putting it into your graveyard as it resolves" (a
+    /// replacement effect of where it goes, CR 608.2n, 614.1a).
+    fn global_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+    ) -> Option<(Zone, LibraryPosition)> {
+        (has_marker(g, spell, EXILE_AS_IT_RESOLVES)
+            || has_marker(g, spell, EXILE_AS_IT_RESOLVES_PLOTTED))
+        .then_some((Zone::Exile, LibraryPosition::Top))
+    }
+
+    /// "If you do, it becomes plotted."
+    fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {
+        if has_marker(g, spell, EXILE_AS_IT_RESOLVES_PLOTTED) && g.obj(new).zone == Zone::Exile {
+            make_plotted(g, new);
+        }
+    }
+
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
         if name != BECOME_PLOTTED {
             return false;

@@ -152,6 +152,20 @@ pub trait KeywordRules: Sync + Send {
     /// triggered ability (CR 702.88a). Called once per keyword kind the spell had as it
     /// last existed on the stack.
     fn after_spell_resolved(&self, g: &mut Game, spell: ObjectId, kw: &Keyword, new: ObjectId) {}
+    /// Where a resolved instant/sorcery goes because of something other than its keywords
+    /// (an effect that applies to that spell: "exile that spell instead of putting it into
+    /// your graveyard as it resolves"). Called for every registered implementation, after
+    /// the keywords' [`KeywordRules::resolved_destination`].
+    fn global_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// After any instant or sorcery spell resolved and was put where it goes (`new`).
+    /// Called for every registered implementation.
+    fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {}
     /// Where a countered spell goes, if the keyword changes it.
     fn countered_destination(
         &self,
@@ -552,10 +566,15 @@ pub fn resolved_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryP
             }
         }
     }
-    None
+    registry()
+        .iter()
+        .find_map(|r| r.global_resolved_destination(g, spell))
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
+    for r in registry() {
+        r.global_after_spell_resolved(g, spell, new);
+    }
     for kw in &distinct_kinds(&g.obj(spell).chars) {
         for r in impls_for(kw.kind) {
             r.after_spell_resolved(g, spell, kw, new);

@@ -302,3 +302,85 @@ fn a_plotted_card_is_cast_for_free_with_x_0_but_its_additional_costs_are_paid() 
     assert_eq!(cast_methods_now(&mut t, P0, codebreaker), vec![PLOTTED]);
     assert_eq!(cast_methods_now(&mut t, P0, overlord), vec![PLOTTED]);
 }
+
+#[test]
+fn lilah_exiles_multicolored_spells_as_they_resolve_and_plots_them() {
+    cr!("702.170c", "702.170d");
+    assert_supported("Lilah, Undefeated Slickshot");
+    // Lilah, Undefeated Slickshot: "Whenever you cast a multicolored instant or sorcery
+    // spell from your hand, exile that spell instead of putting it into your graveyard as
+    // it resolves. If you do, it becomes plotted."
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Lilah, Undefeated Slickshot");
+    // Lightning Helix ({R}{W}): multicolored. Lightning Bolt: not.
+    let helix = t.hand(P0, "Lightning Helix");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    t.cast(P0, helix).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    let plotted = exiled(&t, "Lightning Helix");
+    // Cast for free on a later turn, as a sorcery.
+    assert!(!cast_methods_now(&mut t, P0, plotted).contains(&PLOTTED));
+    next_turn_main(&mut t);
+    assert!(cast_methods_now(&mut t, P0, plotted).contains(&PLOTTED));
+    t.cast(P0, plotted)
+        .method(PLOTTED)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+    // Cast from exile, not from hand: it goes to the graveyard this time.
+    assert!(t.in_graveyard(P0, "Lightning Helix"));
+}
+
+#[test]
+fn a_countered_spell_isnt_exiled_by_lilah() {
+    cr!("702.170c");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Lilah, Undefeated Slickshot");
+    let helix = t.hand(P0, "Lightning Helix");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    let spell = t.cast(P0, helix).target(Entity::Player(P1)).go();
+    t.resolve(); // Lilah's trigger.
+    let cancel = t.hand(P1, "Cancel");
+    add_mana(&mut t, P1, ManaType::U, 3);
+    t.cast(P1, cancel).target(Entity::Object(spell)).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Lightning Helix"));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn make_your_own_luck_plots_a_card_from_among_the_top_three() {
+    cr!("702.170c");
+    assert_supported("Make Your Own Luck");
+    // Make Your Own Luck: {3}{G}{U} sorcery, "Look at the top three cards of your library.
+    // You may exile a nonland card from among them. If you do, it becomes plotted. Put the
+    // rest into your hand."
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.library_top(P0, "Forest");
+    let giant = t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Grizzly Bears");
+    let luck = t.hand(P0, "Make Your Own Luck");
+    add_mana(&mut t, P0, ManaType::G, 4);
+    add_mana(&mut t, P0, ManaType::U, 1);
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, luck).go();
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_hand(P0, "Forest") && t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+    let plotted = exiled(&t, "Hill Giant");
+    next_turn_main(&mut t);
+    assert!(cast_methods_now(&mut t, P0, plotted).contains(&PLOTTED));
+}

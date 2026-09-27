@@ -821,6 +821,143 @@ fn becomes_plotted(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "k702.170c it becomes plotted", priority: 100, parse: becomes_plotted } }
 
+/// "Whenever you cast a multicolored instant or sorcery spell from your hand, exile that
+/// spell instead of putting it into your graveyard as it resolves. If you do, it becomes
+/// plotted." (Lilah, Undefeated Slickshot): the spell cast gets a replacement effect of
+/// where it goes as it resolves (see `kw/plot.rs`); if it's countered, it goes to the
+/// graveyard as usual.
+fn exile_that_spell_as_it_resolves(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "exile that spell instead of putting it into your graveyard as it resolves"
+        || !matches!(b.it, Sel::TriggerSpell)
+    {
+        return None;
+    }
+    Some(Effect::Modify {
+        what: Sel::TriggerSpell,
+        mods: vec![crate::kw::plot::exile_as_it_resolves(false)],
+        duration: Duration::Permanent,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.170c exile that spell instead of putting it into your graveyard as it resolves", priority: 100, parse: exile_that_spell_as_it_resolves } }
+
+/// "If you do, it becomes plotted." after that: the card exiled as the spell resolves.
+fn then_plotted_as_it_resolves(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if you do, it becomes plotted" {
+        return false;
+    }
+    let Effect::Modify { mods, .. } = prev else {
+        return false;
+    };
+    let [Modification::AddAbility(a)] = mods.as_slice() else {
+        return false;
+    };
+    if a.text != crate::kw::plot::EXILE_AS_IT_RESOLVES {
+        return false;
+    }
+    *mods = vec![crate::kw::plot::exile_as_it_resolves(true)];
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "k702.170c ... as it resolves. If you do, it becomes plotted.", priority: 100, apply: then_plotted_as_it_resolves } }
+
+/// The looked-at cards of "Look at the top N cards of your library." with nothing decided
+/// yet (see `card_flow_dig.rs`), or with one card exiled from among them.
+fn dig_in_place(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Dig {
+            who: PlayerRef::You,
+            rest_to,
+            ..
+        } if rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::FromTop(0)) =>
+        {
+            Some(e)
+        }
+        Effect::Seq(v) => v.first_mut().and_then(dig_in_place),
+        _ => None,
+    }
+}
+
+/// "Look at the top three cards of your library. You may exile a nonland card from among
+/// them. If you do, it becomes plotted. Put the rest into your hand." (Make Your Own Luck;
+/// CR 702.170c): the exiled card becomes plotted.
+fn exile_from_among_them(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("you may exile a ") else {
+        return false;
+    };
+    let Some(desc) = r.strip_suffix(" from among them") else {
+        return false;
+    };
+    let Some(filter) = super::card_flow_search::card_filter(desc, b) else {
+        return false;
+    };
+    let Some(Effect::Dig {
+        filter: f,
+        take,
+        take_up_to,
+        take_to,
+        ..
+    }) = dig_in_place(prev)
+    else {
+        return false;
+    };
+    if !matches!(take, Value::Const(0)) {
+        return false;
+    }
+    *f = filter;
+    *take = Value::c(1);
+    *take_up_to = true;
+    *take_to = Destination::zone(ZoneKind::Exile);
+    b.it = Sel::Var(vars::IT);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "k702.170c you may exile a card from among them", priority: 100, apply: exile_from_among_them } }
+
+/// "If you do, it becomes plotted." after exiling a card from among the looked-at cards:
+/// the exiled card ("it", none if none was exiled).
+fn if_you_do_it_becomes_plotted(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if you do, it becomes plotted" {
+        return false;
+    }
+    let exiled = matches!(
+        dig_in_place(prev),
+        Some(Effect::Dig { take_to, .. }) if take_to.zone == ZoneKind::Exile
+    );
+    if !exiled || matches!(prev, Effect::Seq(_)) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::Seq(vec![
+        old,
+        crate::kw::plot::becomes_plotted(Sel::Var(vars::IT)),
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "k702.170c if you do, it becomes plotted", priority: 100, apply: if_you_do_it_becomes_plotted } }
+
+/// "Put the rest into your hand." after that.
+fn put_the_rest_into_your_hand(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "put the rest into your hand" || !matches!(prev, Effect::Seq(_)) {
+        return false;
+    }
+    let Some(Effect::Dig {
+        take_to, rest_to, ..
+    }) = dig_in_place(prev)
+    else {
+        return false;
+    };
+    if take_to.zone != ZoneKind::Exile {
+        return false;
+    }
+    *rest_to = Destination::zone(ZoneKind::Hand);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "k702.170c put the rest into your hand", priority: 100, apply: put_the_rest_into_your_hand } }
+
 /// "exile a nonland card with mana value 3 or less from your hand" (Kellan Joins Up, Jace
 /// Reawakened): the player chooses such a card in their hand; "it" is the exiled card
 /// afterward ("If you do, it becomes plotted.").
