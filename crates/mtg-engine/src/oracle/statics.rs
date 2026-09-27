@@ -625,6 +625,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         {
             return Some((Value::ColorsSpent, rest.to_string()));
         }
+        // Votes (CR 701.38): "the number of [word] votes" (also "for each [word] vote"),
+        // counted by the vote earlier in the same spell or ability.
+        if let Some(v) = crate::oracle::patterns::a701_choices_votes::word_votes(r) {
+            return Some(v);
+        }
         // "the number of differently named lands you control" (CR 201.2b).
         if let Some(r) = r.strip_prefix("differently named ") {
             let (f, _, rest) = parse_object_phrase(r)?;
@@ -670,6 +675,7 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(rest) = s
         .strip_prefix("the milled card's mana value")
         .or_else(|| s.strip_prefix("the milled cards' total mana value"))
+        .or_else(|| s.strip_prefix("the total mana value of cards milled this way"))
     {
         return Some((
             Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),
