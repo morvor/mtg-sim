@@ -44,8 +44,14 @@ pub(crate) fn mask_quotes(l: &str) -> Option<(String, Vec<String>)> {
         out.push_str(&rest[..i]);
         let after = &rest[i + 1..];
         let j = after.find('"')?;
-        out.push_str(&format!("\"#{}\"", quotes.len()));
-        quotes.push(after[..j].to_string());
+        // A list's comma inside the closing quote ("has \"... draw a card,\" and is a
+        // Rogue") belongs to the list, not the quoted ability.
+        let (q, comma) = match after[..j].strip_suffix(',') {
+            Some(q) => (q, ","),
+            None => (&after[..j], ""),
+        };
+        out.push_str(&format!("\"#{}\"{comma}", quotes.len()));
+        quotes.push(q.to_string());
         rest = &after[j + 1..];
     }
     out.push_str(rest);
@@ -105,7 +111,7 @@ pub(crate) fn granted_abilities(
 ) -> Option<Vec<Ability>> {
     let orig = quoted_segments(text)
         .into_iter()
-        .find(|q| q.to_lowercase() == quote_lower)?;
+        .find(|q| q.trim_end_matches(',').to_lowercase() == quote_lower)?;
     if quote_names_card(orig, ctx) {
         return None;
     }
@@ -121,7 +127,7 @@ pub(crate) fn granted_abilities(
         power: None,
         toughness: None,
     };
-    let blocks = crate::oracle::split_abilities(orig);
+    let blocks = crate::oracle::split_abilities(orig.trim_end_matches(','));
     if blocks.len() != 1 {
         return None;
     }

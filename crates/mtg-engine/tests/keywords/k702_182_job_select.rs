@@ -117,3 +117,33 @@ fn with_two_heroes_the_equipment_is_attached_to_one() {
         .collect();
     assert_eq!(attached.len(), 1);
 }
+
+#[test]
+fn the_hero_gets_the_equipments_quoted_ability_and_job() {
+    cr!("702.182a");
+    // Thief's Knife ({2}{U} Equipment): "Job select. Equipped creature gets +1/+1, has
+    // "Whenever this creature deals combat damage to a player, draw a card," and is a
+    // Rogue in addition to its other types. Equip {4}"
+    assert_supported(&["Thief's Knife", "White Mage's Staff", "Black Mage's Rod"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let knife = t.hand(P0, "Thief's Knife");
+    t.cast(P0, knife).go();
+    t.resolve_all();
+    let hs = heroes(&t);
+    assert_eq!(hs.len(), 1);
+    let hero = hs[0];
+    assert_eq!(t.pt(hero), (2, 2));
+    assert!(t.obj_now(hero).chars.has_subtype("Rogue"));
+    assert!(t.obj_now(hero).chars.has_subtype("Hero"));
+    // It's been under its controller's control since their most recent turn began.
+    t.g.objects[hero.0 as usize].summoning_sick = false;
+    let hand = t.hand_size(P0);
+    t.attack(&[(hero, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
