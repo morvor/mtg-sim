@@ -202,6 +202,9 @@ pub enum Event {
     Cycled {
         player: PlayerId,
         card: ObjectId,
+        /// The value of X chosen for the cycling ability's cost, which abilities that
+        /// trigger on the cycling refer to (CR 107.3e).
+        x: i32,
     },
     TurnedFaceUp {
         obj: ObjectId,
