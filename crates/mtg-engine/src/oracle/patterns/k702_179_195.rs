@@ -4,8 +4,12 @@
 //! * "your speed increases by N" / "increase your speed by N" (CR 702.179c);
 //! * "[card] gains harmonize until end of turn. Its harmonize cost is equal to its mana
 //!   cost." (CR 702.180a);
+//! * "Tiered" modes (CR 702.183a);
+//! * "Each creature you control [...] stations permanents using its toughness rather than
+//!   its power", "... crews Vehicles and stations permanents as though its power were N
+//!   greater" (CR 702.184c);
 
-use super::{AbilityPattern, EffectPattern, FollowupPattern};
+use super::{AbilityPattern, EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::Builder;
@@ -154,3 +158,57 @@ fn speed_increases(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "k702.179 speed increases", priority: 60, parse: speed_increases } }
+
+/// "[subject] stations permanents using its toughness rather than its power", "[subject]
+/// crews Vehicles and stations permanents as though its power were N greater"
+/// (CR 702.184c): the subject gets the station (and crew) statics of `kw/crew.rs`.
+/// "Each creature you control [...]" gives them to each such creature (see
+/// `kw/station.rs`).
+fn stations_permanents(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::crew::{power_bonus, uses_toughness};
+    let l = end(l);
+    let (subject, kinds, pred): (&str, &[KeywordKind], &str) =
+        if let Some((s, p)) = l.split_once(" crews vehicles and stations permanents ") {
+            (s, &[KeywordKind::Crew, KeywordKind::Station], p)
+        } else if let Some((s, p)) = l.split_once(" stations permanents ") {
+            (s, &[KeywordKind::Station], p)
+        } else {
+            return None;
+        };
+    let names: Vec<smol_str::SmolStr> = if pred == "using its toughness rather than its power" {
+        kinds.iter().map(|k| uses_toughness(*k)).collect()
+    } else {
+        let n = pred
+            .strip_prefix("as though its power were ")?
+            .strip_suffix(" greater")?;
+        let (n, tail) = parse_number(n)?;
+        let n = n.as_const()?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        kinds.iter().map(|k| power_bonus(*k, n)).collect()
+    };
+    let statics: Vec<Ability> = names
+        .into_iter()
+        .map(|n| {
+            AbilityDef::new(
+                AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(n))),
+                text,
+            )
+        })
+        .collect();
+    if subject == "~" {
+        return Some(statics);
+    }
+    let (affected, _) =
+        crate::oracle::patterns::statics::whole_object_phrase(subject.strip_prefix("each ")?)?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected,
+            mods: statics.into_iter().map(Modification::AddAbility).collect(),
+        })),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "k702.184c stations permanents using", priority: 100, parse: stations_permanents } }
