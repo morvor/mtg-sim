@@ -37,13 +37,13 @@ fn a_card_revealed_by_telepathy_can_be_revealed_to_behold() {
     assert!(is_revealed(&t.g, merfolk));
     // "As an additional cost to cast this spell, behold a Merfolk or pay {2}. ... When this
     // creature enters, create a 1/1 white and blue Merfolk creature token."
-    let plains = t.lands(P0, "Island", 2);
+    let islands = t.lands(P0, "Island", 2);
     let mentor = t.hand(P0, "Silvergill Mentor");
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     t.answer_choose(P0, &[Entity::Object(merfolk)]);
     t.cast(P0, mentor).go();
     // Only {1}{U} was paid: the already revealed Merfolk card was revealed again.
-    assert!(plains.iter().all(|l| t.obj(*l).tapped));
+    assert!(islands.iter().all(|l| t.obj(*l).tapped));
     assert_eq!(tapped_lands(&t, P0), 2);
     assert_eq!(t.obj(merfolk).zone, Zone::Hand(P0));
     assert_eq!(behold_candidates(&t), vec![vec![Entity::Object(merfolk)]]);
