@@ -41,15 +41,27 @@ fn refers_back(effect: &str) -> bool {
     })
 }
 
-/// "If [condition], [effect]." as one sentence, with an effect that refers back.
+/// "If [condition], [effect]." as one sentence, with an effect that refers back. An effect
+/// that replaces an earlier instruction refers back by its "instead": "If [condition],
+/// instead [effect].", "If [condition], [effect] instead.", and "[Effect] instead if
+/// [condition]."
 fn is_followup(text: &str) -> bool {
-    let Some(body) = text.strip_prefix("If ").and_then(|t| t.strip_suffix('.')) else {
+    let Some(body) = text.strip_suffix('.') else {
         return false;
     };
+    if body.contains(". ") || body.contains('"') {
+        return false;
+    }
+    if !body.starts_with("If ") {
+        return body.split_once(" instead if ").is_some_and(|(e, c)| {
+            !e.is_empty() && !c.is_empty() && !e.contains(", ") && !c.contains(", ")
+        });
+    }
     let Some((_, effect)) = body.split_once(", ") else {
         return false;
     };
-    !body.contains(". ") && !body.contains('"') && refers_back(&effect.to_lowercase())
+    let effect = effect.to_lowercase();
+    effect.starts_with("instead ") || effect.ends_with(" instead") || refers_back(&effect)
 }
 
 /// A paragraph of plain instructions: no ability word, keyword, cost, trigger, modes, or
