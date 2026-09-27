@@ -25,3 +25,37 @@ pub fn landwalk_ignored(g: &Game, kw: &Keyword) -> bool {
             .is_some_and(|which| which.is_empty() || which == text)
     })
 }
+
+/// Prefix of a `Filter::Custom` name: "with [type]walk", one specific landwalk ability
+/// (e.g. "creatures without flying or islandwalk", Stormtide Leviathan). The rest of the
+/// name is the landwalk's text in lowercase ("islandwalk").
+pub const HAS_LANDWALK: &str = "has landwalk:";
+
+/// Whether the object has the landwalk ability `which` ("islandwalk").
+pub fn has_landwalk(g: &Game, id: crate::types::ObjectId, which: &str) -> bool {
+    g.obj(id).chars.keywords().any(|k| {
+        k.kind == KeywordKind::Landwalk
+            && k.text.as_deref().is_some_and(|t| t.to_lowercase() == which)
+    })
+}
+
+pub struct LandwalkRules;
+
+impl super::KeywordRules for LandwalkRules {
+    fn kinds(&self) -> &'static [KeywordKind] {
+        &[KeywordKind::Landwalk]
+    }
+
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: crate::types::ObjectId,
+        _ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        let which = name.strip_prefix(HAS_LANDWALK)?;
+        Some(has_landwalk(g, id, which))
+    }
+}
+
+inventory::submit! { super::KeywordRegistration(&LandwalkRules) }
