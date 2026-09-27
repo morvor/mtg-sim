@@ -47,6 +47,12 @@ fn sanctified_charge_also_gives_white_creatures_first_strike() {
     assert_eq!(t.pt(lions), (4, 2));
     assert!(!has(&t, bears, KeywordKind::FirstStrike));
     assert!(has(&t, lions, KeywordKind::FirstStrike));
+    // The creatures affected were determined as it resolved: a white creature entering
+    // later gets neither.
+    let later = t.enter(P0, "Savannah Lions");
+    t.settle();
+    assert_eq!(t.pt(later), (2, 1));
+    assert!(!has(&t, later, KeywordKind::FirstStrike));
 }
 
 #[test]

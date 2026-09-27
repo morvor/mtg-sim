@@ -111,6 +111,12 @@ fn creatures_a_player_controls_lose_all_creature_types() {
     assert!(!is_a(&t, changeling, "Shapeshifter"));
     assert!(!is_a(&t, changeling, "Elf"));
     assert!(is_a(&t, mine, "Wurm"));
+    // The creatures it affects were determined as it resolved: a creature P1 gets later
+    // keeps its types and power.
+    let later = t.enter(P1, "Craw Wurm");
+    t.settle();
+    assert!(is_a(&t, later, "Wurm"));
+    assert_eq!(t.pt(later), (6, 4));
     // Until end of turn.
     t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
     assert!(is_a(&t, wurm, "Wurm"));
