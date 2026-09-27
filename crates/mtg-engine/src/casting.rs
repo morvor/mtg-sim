@@ -165,6 +165,36 @@ pub fn cast_during_resolution(
     g.cast_with_option(p, card, opt)
 }
 
+/// The ways `card` could be cast without paying its mana cost as a spell whose mana value
+/// satisfies `ok` (X is 0, CR 107.3b): one per face or half it could be cast as, with the
+/// name it would have. For "cast it without paying its mana cost if the resulting spell's
+/// mana value is N or less" (cascade, CR 702.85a; discover, CR 701.57a). Not a face a
+/// keyword's rule prohibits `p` from casting from where the card is (e.g. aftermath,
+/// CR 702.127a).
+pub fn free_cast_options(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    ok: impl Fn(u32) -> bool,
+) -> Vec<(smol_str::SmolStr, CastOption)> {
+    castable_faces(g, card)
+        .into_iter()
+        .filter(|f| !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, *f)))
+        .filter_map(|face| {
+            let mut opt = CastOption::normal(face);
+            opt.method = CastMethod::Free;
+            opt.alt_cost = Some(Cost::free());
+            opt.any_time = true;
+            let chars = g.option_characteristics(card, &opt);
+            let mv = chars
+                .mana_cost
+                .as_ref()
+                .map_or(0, |m| m.mana_value_with_x(0));
+            (!chars.is_land() && ok(mv)).then(|| (chars.name.clone(), opt))
+        })
+        .collect()
+}
+
 impl Game {
     // ------------------------------------------------------------------
     // Legal actions

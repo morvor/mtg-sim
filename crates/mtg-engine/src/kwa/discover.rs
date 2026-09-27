@@ -4,8 +4,10 @@
 //!   card with mana value N or less. You may cast that card without paying its mana cost
 //!   if the resulting spell's mana value is N or less; if you don't cast it, put it into
 //!   your hand. Put the remaining exiled cards on the bottom of your library in a random
-//!   order (CR 701.57a). The card's mana value is that of the spell it would become when
-//!   cast from exile without paying its mana cost (any X is 0).
+//!   order (CR 701.57a). Each face or half the card could be cast as is judged by the
+//!   mana value of the spell it would become cast without paying its mana cost (any X is
+//!   0): a split card is found by its combined mana value, but only a half with mana value
+//!   N or less can be cast.
 //! * A player has "discovered" once the process is complete, even if some or all of it
 //!   was impossible (CR 701.57b): a `"discover"` event (`Event::Custom`) is reported.
 //! * The final card exiled, if its mana value is N or less, is "the discovered card"
@@ -14,7 +16,6 @@
 
 use super::*;
 use crate::events::MoveCause;
-use crate::object::CastMethod;
 use crate::replacement::{EtbInfo, MoveEv};
 
 /// `Event::Custom` name reported when a player discovers; the amount is N.
@@ -43,17 +44,29 @@ pub fn discover(g: &mut Game, p: PlayerId, n: u32, ctx: &mut Ctx) -> Option<Obje
     let mut discovered = hit;
     if let Some(card) = hit {
         g.log(|g| format!("{p} discovers {}", g.describe(card)));
-        let cast = g.ask_yes_no(
-            p,
-            Some(card),
-            "Discover: cast it without paying its mana cost?",
-            true,
-        ) && g.mana_value_of(card) <= n;
-        let spell = if cast {
-            crate::casting::cast_during_resolution(g, p, card, CastMethod::Free).ok()
-        } else {
+        // It may be cast as any face or half whose spell would have mana value N or less
+        // (X is 0): a split card's halves, an adventurer card's creature or Adventure, a
+        // modal double-faced card's faces, each judged on its own (never fused).
+        let mut options = crate::casting::free_cast_options(g, p, card, |mv| mv <= n);
+        let choice = if options.is_empty()
+            || g.split_second_on_stack()
+            || !g.ask_yes_no(
+                p,
+                Some(card),
+                "Discover: cast it without paying its mana cost?",
+                true,
+            ) {
             None
+        } else if options.len() == 1 {
+            Some(0)
+        } else {
+            let labels = options.iter().map(|(name, _)| format!("Cast {name}")).collect();
+            Some(g.ask_option(p, Some(card), "Choose what to cast", labels))
         };
+        let spell = choice.and_then(|i| {
+            let (_, opt) = options.swap_remove(i.min(options.len() - 1));
+            g.cast_with_option(p, card, opt).ok()
+        });
         discovered = match spell {
             Some(s) => Some(s),
             None if g.is_live(card) && g.obj(card).zone == Zone::Exile => {

@@ -65,31 +65,18 @@ impl KeywordRules for Cascade {
 /// The ways `card` could be cast as a spell with mana value less than `mv` (CR 702.85a:
 /// "if the resulting spell's mana value is less"), without paying its mana cost: one per
 /// face or half it could be cast as, with a description.
-fn cheaper_options(g: &Game, card: ObjectId, mv: u32) -> Vec<(String, CastOption)> {
-    let layout = g.obj(card).card.as_ref().map(|d| d.layout);
-    let faces: Vec<FaceState> = match layout {
-        Some(crate::card::Layout::Split) => vec![FaceState::Half(0), FaceState::Half(1)],
-        Some(crate::card::Layout::Adventure) => vec![FaceState::Front, FaceState::Half(1)],
-        Some(crate::card::Layout::ModalDfc) => vec![FaceState::Front, FaceState::Back],
-        _ => vec![FaceState::Front],
-    };
-    let mut out = Vec::new();
-    for face in faces {
-        let mut opt = CastOption::normal(face);
-        opt.method = CastMethod::Free;
-        opt.alt_cost = Some(Cost::free());
-        opt.any_time = true;
-        let chars = g.option_characteristics(card, &opt);
-        if chars.is_land() {
-            continue;
-        }
-        // Cast without paying its mana cost, X is 0 (CR 107.3b).
-        let spell_mv = chars.mana_cost.as_ref().map_or(0, |m| m.mana_value_with_x(0));
-        if spell_mv < mv {
-            out.push((format!("Cast {} (mana value {spell_mv})", chars.name), opt));
-        }
-    }
-    out
+fn cheaper_options(g: &Game, p: PlayerId, card: ObjectId, mv: u32) -> Vec<(String, CastOption)> {
+    crate::casting::free_cast_options(g, p, card, |v| v < mv)
+        .into_iter()
+        .map(|(name, opt)| {
+            let spell_mv = g
+                .option_characteristics(card, &opt)
+                .mana_cost
+                .as_ref()
+                .map_or(0, |m| m.mana_value_with_x(0));
+            (format!("Cast {name} (mana value {spell_mv})"), opt)
+        })
+        .collect()
 }
 
 fn cascade(g: &mut Game, ctx: &mut Ctx) {
@@ -126,7 +113,7 @@ fn cascade(g: &mut Game, ctx: &mut Ctx) {
     // CR 702.85b: actions taken "as you cascade".
     as_you_cascade(g, p, &exiled);
     if let Some(card) = hit.filter(|c| g.is_live(*c) && g.obj(*c).zone == Zone::Exile) {
-        let mut options = cheaper_options(g, card, mv);
+        let mut options = cheaper_options(g, p, card, mv);
         if !options.is_empty() {
             let mut labels: Vec<String> = options.iter().map(|(l, _)| l.clone()).collect();
             labels.push("Don't cast it".into());

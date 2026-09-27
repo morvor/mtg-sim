@@ -69,6 +69,7 @@ impl Game {
                 .map(|m| m.obj)
                 .collect(),
         );
+        let prev_entry_sacrifices = std::mem::take(&mut self.zones.entry_sacrifices);
         // CR 616.1: when several players choose among replacement effects for
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
@@ -119,6 +120,12 @@ impl Game {
                 };
                 finals.push((i, e));
             }
+        }
+        // Permanents sacrificed as these objects enter (devour) are sacrificed at the same
+        // time, before any of them enters (CR 702.82a).
+        let sacrifices = std::mem::replace(&mut self.zones.entry_sacrifices, prev_entry_sacrifices);
+        if !sacrifices.is_empty() {
+            self.sacrifice_simultaneously(&sacrifices);
         }
         // CR 613.7m: objects entering the battlefield simultaneously get timestamps in
         // APNAP order.
