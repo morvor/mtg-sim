@@ -881,3 +881,64 @@ fn the_damaged_creatures_controller_orders_replacement_and_prevention_effects() 
     assert_eq!(t.obj_now(capridor).damage, 2);
     assert_eq!(t.counters(capridor, "+1/+1"), 0);
 }
+
+/// Chooses the card named Blaze when it's among the candidates of an entity choice.
+fn choose_blaze(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    match d {
+        Decision::ChooseEntities { candidates, .. } => candidates
+            .iter()
+            .find(|e| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Blaze"))
+            .map(|e| Answer::Entities(vec![*e])),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_spell_cast_without_paying_its_mana_cost_has_x_zero() {
+    cr!("107.3b", "118.9a", "608.2g");
+    ruling!(
+        "Jace's Mindseeker",
+        "If a card has {X} in its mana cost, you must choose 0 as its value."
+    );
+    supported("Jace's Mindseeker");
+    supported("Blaze");
+    // Jace's Mindseeker: "When this creature enters, target opponent mills five cards. You
+    // may cast an instant or sorcery spell from among them without paying its mana cost."
+    // P1 mills Blaze ({X}{R}: "Blaze deals X damage to any target."); P0 casts it: X is 0.
+    let mut t = TestGame::new(2);
+    let five = stack_library(
+        &mut t,
+        P1,
+        &[
+            "Grizzly Bears",
+            "Blaze",
+            "Hill Giant",
+            "Island",
+            "Lightning Bolt",
+        ],
+    );
+    let blaze = five[1];
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    enter(&mut t, P0, "Jace's Mindseeker");
+    let _ = blaze;
+    respond(&mut t, P0, choose_blaze);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let from = t.asked().len();
+    t.resolve();
+    // Blaze is on the stack, cast without paying its mana cost, with X = 0.
+    assert_eq!(t.stack_len(), 1);
+    let spell = top_of_stack(&t);
+    assert_eq!(t.obj(spell).chars.name, "Blaze");
+    assert_eq!(
+        t.obj(spell).stack.as_ref().unwrap().cast.method,
+        CastMethod::Free
+    );
+    assert_eq!(mana_value(&t, spell), 1);
+    assert_eq!(
+        count_asked_where(&t, from, |d| matches!(d, Decision::ChooseX { .. })),
+        0
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P1, "Blaze"));
+}
