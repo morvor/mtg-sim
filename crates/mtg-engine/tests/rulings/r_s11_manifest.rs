@@ -742,6 +742,56 @@ fn manifested_cards_an_opponent_owns_are_exiled_when_you_leave_the_game() {
     assert_ne!(t.zone(t.g.current(mine)), Zone::Exile);
 }
 
+/// P0 controls Ugin's Mastery ("Whenever you cast a colorless creature spell, manifest the
+/// top card of your library." "Whenever you attack with creatures with total power 6 or
+/// greater, you may turn a face-down creature you control face up.") and casts
+/// Ornithopter with Hill Giant on top of their library. Returns the Mastery and the
+/// manifested Giant.
+fn ugins_mastery_manifests(t: &mut TestGame) -> (ObjectId, ObjectId) {
+    supported("Ugin's Mastery");
+    supported("Ornithopter");
+    let mastery = t.battlefield(P0, "Ugin's Mastery");
+    let top = t.library_top(P0, "Hill Giant");
+    let thopter = t.hand(P0, "Ornithopter");
+    t.cast(P0, thopter).go();
+    t.resolve_all();
+    let m = t.g.current(top);
+    assert!(t.on_battlefield(m) && t.obj(m).face_down);
+    (mastery, m)
+}
+
+#[test]
+fn you_can_look_at_your_face_down_permanents_and_an_effect_may_turn_one_face_up() {
+    cr!("708.5", "708.8", "701.40a", "508.1");
+    ruling!(
+        "Ugin's Mastery",
+        "You can look at a face-down permanent you control any time. You can't look at face-down permanents you don't control unless an effect allows you to or instructs you to."
+    );
+    let mut t = TestGame::new(2);
+    let (mastery, m) = ugins_mastery_manifests(&mut t);
+    assert!(facedown::can_look_at(&t.g, P0, m));
+    assert!(!facedown::can_look_at(&t.g, P1, m));
+    // Attacking with total power 4 (the face-down 2/2 and Grizzly Bears): no trigger.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.objects[m.0 as usize].summoning_sick = false;
+    attack_with(&mut t, &[(m, Entity::Player(P1)), (bears, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(triggered_from(&t, mastery), 1);
+    assert!(t.obj(m).face_down);
+    // Attacking with total power 6 (Colossal Dreadmaw): P0 turns the Giant face up for
+    // free.
+    let mut t = TestGame::new(2);
+    let (mastery, m) = ugins_mastery_manifests(&mut t);
+    let wurm = t.battlefield(P0, "Colossal Dreadmaw");
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(wurm, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(triggered_from(&t, mastery), 2);
+    assert!(!t.obj(m).face_down);
+    assert_eq!(t.obj(m).chars.name.as_str(), "Hill Giant");
+    assert!(facedown::can_look_at(&t.g, P1, m));
+}
+
 #[test]
 fn jeskai_infiltrator_manifests_itself_and_the_top_card_of_your_library() {
     cr!("701.40a", "406.3");
