@@ -4,12 +4,16 @@
 //! * "Each [quality] spell you cast has casualty N" (CR 702.153a);
 //! * "Whenever ~ enlists a creature", "if it enlisted a creature this combat" (and
 //!   "the creature that attacked") (CR 702.154c);
+//! * "[action on] each creature in the sector of your choice" (CR 702.158d) and
+//!   "Creatures in each sector can be blocked this turn only by creatures in the same
+//!   sector" (CR 702.158e);
 //! * "if this spell was bargained", "if it was bargained", "if it's bargained"
 //!   (CR 702.166b–c).
 
-use super::{AbilityPattern, ConditionPattern, StaticPattern, TriggerPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
+use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
 
@@ -145,3 +149,31 @@ fn enlisted_attacker_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ab
 }
 
 inventory::submit! { AbilityPattern { name: "k702.154 the creature that attacked", priority: 100, parse: enlisted_attacker_trigger } }
+
+/// "[action on] each creature in the sector of your choice", "destroy all creatures in the
+/// sector of your choice" (Space Beleren; CR 702.158d): choose one of the three sector
+/// designations, then perform the action on each creature with it.
+fn in_sector_of_your_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    const PHRASE: &str = " in the sector of your choice";
+    if !l.contains(PHRASE) {
+        return None;
+    }
+    let rewritten = l.replacen(PHRASE, " in the chosen sector", 1);
+    let e = crate::oracle::effects::parse_clause(&rewritten, b)?;
+    Some(Effect::Seq(vec![
+        Effect::Custom(crate::kw::space_sculptor::CHOOSE_SECTOR.into()),
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "k702.158 in the sector of your choice", priority: 100, parse: in_sector_of_your_choice } }
+
+/// "Creatures in each sector can be blocked this turn only by creatures in the same
+/// sector." (Space Beleren; CR 702.158e).
+fn same_sector_blocking(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l)
+        == "creatures in each sector can be blocked this turn only by creatures in the same sector")
+        .then(|| Effect::Custom(crate::kw::space_sculptor::SAME_SECTOR_BLOCKING.into()))
+}
+
+inventory::submit! { EffectPattern { name: "k702.158 blocked only by creatures in the same sector", priority: 100, parse: same_sector_blocking } }
