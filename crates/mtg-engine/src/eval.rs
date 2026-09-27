@@ -273,6 +273,7 @@ impl Game {
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
+            PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),

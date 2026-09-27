@@ -11,8 +11,10 @@
 //! The granted ability keeps the zones it functions from (CR 702.178b): "Max speed —
 //! {3}, Exile this card from your graveyard: Draw a card." works from the graveyard.
 
-use super::AbilityPattern;
+use super::{AbilityPattern, EffectPattern};
 use crate::ability::*;
+use crate::oracle::effects::{parse_clause, Builder};
+use crate::oracle::phrases::end;
 use crate::oracle::CompileContext;
 use std::sync::Arc;
 
@@ -57,3 +59,45 @@ fn max_speed(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "k702.178 max speed", priority: 50, parse: max_speed } }
+
+/// "each player who doesn't have max speed", "each opponent who has max speed" (CR
+/// 702.179e: a player has max speed if their speed is 4): the instruction for "each
+/// player" / "each opponent", for just those players ("It deals 2 damage to each player
+/// who doesn't have max speed.").
+fn players_with_max_speed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    for (who, all, base) in [
+        ("each player", PlayerRef::EachPlayer, PlayerFilter::Any),
+        ("each opponent", PlayerRef::EachOpponent, PlayerFilter::Opponent),
+    ] {
+        for (has, negate) in [(" who has max speed", false), (" who doesn't have max speed", true)] {
+            let phrase = format!("{who}{has}");
+            let Some(i) = l.find(&phrase) else {
+                continue;
+            };
+            // Only one such group, and no other mention of the same players.
+            let plain = format!("{}{who}{}", &l[..i], &l[i + phrase.len()..]);
+            if plain.matches(who).count() != 1 {
+                return None;
+            }
+            let e = parse_clause(&plain, b)?;
+            let fast = if negate {
+                PlayerFilter::Not(Box::new(PlayerFilter::MaxSpeed))
+            } else {
+                PlayerFilter::MaxSpeed
+            };
+            let group = PlayerRef::Each(PlayerFilter::And(vec![base, fast]));
+            // Those players stand in for "each player" wherever the instruction names them.
+            let from = serde_json::to_string(&all).ok()?;
+            let to = serde_json::to_string(&group).ok()?;
+            let json = serde_json::to_string(&e).ok()?;
+            if json.matches(&from).count() != 1 {
+                return None;
+            }
+            return serde_json::from_str(&json.replace(&from, &to)).ok();
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "k702.179e each player who has max speed", priority: 200, parse: players_with_max_speed } }

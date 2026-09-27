@@ -276,3 +276,45 @@ fn a_player_without_speed_has_speed_0_for_effects() {
     assert_eq!(t.life(P1), 20);
     assert_eq!(speed(&t, P1), None);
 }
+
+#[test]
+fn spells_cost_x_less_where_x_is_your_speed() {
+    cr!("702.179f");
+    // Samut, the Driving Force: "Start your engines! ... Noncreature spells you cast cost
+    // {X} less to cast, where X is your speed."
+    assert_supported(&["Samut, the Driving Force"]);
+    for (s, castable) in [(1, false), (2, true)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 1);
+        t.battlefield(P0, "Samut, the Driving Force");
+        t.settle();
+        assert_eq!(speed(&t, P0), Some(1));
+        set_speed(&mut t, P0, Some(s));
+        for _ in 0..3 {
+            t.library_top(P0, "Island");
+        }
+        // Divination ({2}{U}) for {U} at speed 2 or more.
+        let c = t.hand(P0, "Divination");
+        assert_eq!(t.cast(P0, c).try_go().is_ok(), castable, "speed {s}");
+    }
+}
+
+#[test]
+fn damage_to_each_player_who_doesnt_have_max_speed() {
+    cr!("702.179e");
+    // Outpace Oblivion: "{2}, Sacrifice this enchantment: It deals 2 damage to each player
+    // who doesn't have max speed."
+    assert_supported(&["Outpace Oblivion"]);
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Mountain", 2);
+    let o = t.battlefield(P0, "Outpace Oblivion");
+    t.settle();
+    set_speed(&mut t, P0, Some(4));
+    set_speed(&mut t, P1, Some(3));
+    t.activate(P0, o, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 18);
+    // A player with no speed doesn't have max speed.
+    assert_eq!(t.life(P2), 18);
+}

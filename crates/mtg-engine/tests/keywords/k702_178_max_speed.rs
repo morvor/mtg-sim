@@ -117,3 +117,41 @@ fn a_granted_ability_functions_from_the_zone_it_states() {
     assert!(t.in_exile("Goblin Surveyor"));
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn max_speed_draw_replacement_doubles_each_draw() {
+    cr!("702.178a");
+    ruling!(
+        "Vnwxt, Verbose Host",
+        "If a spell or ability causes you to draw multiple cards, this creature’s last ability doubles each card draw."
+    );
+    ruling!(
+        "Vnwxt, Verbose Host",
+        "The effects of multiple such effects are cumulative."
+    );
+    // Vnwxt, Verbose Host: "Max speed — If you would draw a card, draw two cards
+    // instead."; Thought Reflection: "If you would draw a card, draw two cards instead."
+    assert_supported(&["Vnwxt, Verbose Host", "Thought Reflection"]);
+    let draw = |speed: u32, reflection: bool, n: i32| {
+        let mut t = TestGame::new(2);
+        for _ in 0..12 {
+            t.library_top(P0, "Island");
+        }
+        t.battlefield(P0, "Vnwxt, Verbose Host");
+        if reflection {
+            t.battlefield(P0, "Thought Reflection");
+        }
+        set_speed(&mut t, P0, speed);
+        let before = t.hand_size(P0);
+        t.g.draw_cards(P0, n as u32);
+        t.settle();
+        t.hand_size(P0) - before
+    };
+    assert_eq!(draw(3, false, 1), 1);
+    assert_eq!(draw(4, false, 1), 2);
+    // Drawing three cards: each of the three draws is doubled.
+    assert_eq!(draw(4, false, 3), 6);
+    // With Thought Reflection too: four times the original number.
+    assert_eq!(draw(4, true, 1), 4);
+    assert_eq!(draw(3, true, 1), 2);
+}

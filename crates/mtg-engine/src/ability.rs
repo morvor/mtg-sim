@@ -818,6 +818,8 @@ pub enum PlayerFilter {
     Active,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
+    /// A player who has max speed: their speed is 4 (CR 702.179e).
+    MaxSpeed,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
