@@ -83,6 +83,29 @@ pub fn note_introduced(e: &Effect, b: &mut Builder) {
     }
 }
 
+/// After an instruction that named a player as "its owner" or "its controller" ("Return
+/// target permanent to its owner's hand, then that player discards a card.", "Counter
+/// target spell unless its controller pays {1}. That player discards a card."): if
+/// "that player" had no antecedent yet, it's that player now.
+pub fn note_player_mention(text: &str, b: &mut Builder) {
+    if !is_no_player_referent(&b.it_player) || is_no_referent(&b.it) {
+        return;
+    }
+    let l = text.to_lowercase();
+    let owner = l.contains("its owner");
+    let controller = l.contains("its controller");
+    // Neither, or both (ambiguous).
+    if owner == controller {
+        return;
+    }
+    let it = Box::new(b.it.clone());
+    b.it_player = if owner {
+        PlayerRef::OwnerOf(it)
+    } else {
+        PlayerRef::ControllerOf(it)
+    };
+}
+
 /// The instruction an effect ends with (looking into sequences and optional parts).
 fn last_instruction(e: &Effect) -> &Effect {
     match e {

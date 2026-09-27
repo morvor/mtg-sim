@@ -139,6 +139,12 @@ pub fn parse_trigger_body(
     it_player: PlayerRef,
 ) -> Option<Body> {
     let t = text.trim();
+    // A trigger whose "that player" would be you has no "that player": oracle text says
+    // "you" for you.
+    let it_player = match it_player {
+        PlayerRef::You => super::patterns::oracle_hardening_referents::no_player_referent(),
+        p => p,
+    };
     if let Some(modal) = parse_modal(t, ctx, Some((&it, &it_player))) {
         return Some(Body {
             targets: vec![],
@@ -302,6 +308,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         // "Untap all creatures you control. They gain haste until end of turn."
         effects.extend(groups::note(&mut e, b));
         super::patterns::oracle_hardening_referents::note_introduced(&e, b);
+        super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
         effects.push(e);
         b.sentences += 1;
     }
@@ -394,6 +401,9 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
+                // "return target permanent to its owner's hand, then that player ..."
+                let saved_player = b.it_player.clone();
+                super::patterns::oracle_hardening_referents::note_player_mention(a, b);
                 // The second half may modify the first ("exile it, then return it").
                 if matches!(sep, ", then " | " and then ")
                     && crate::oracle_ext::apply_followup_ext(c, &mut ea, b)
@@ -404,6 +414,7 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
                 if let Some(ec) = parse_simple(c, b).or_else(|| parse_clause(c, b)) {
                     return Some(Effect::seq(store.into_iter().chain([ea, ec]).collect()));
                 }
+                b.it_player = saved_player;
             }
             b.targets.truncate(saved_targets);
             b.it = saved_it;
