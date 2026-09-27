@@ -59,6 +59,10 @@ fn a_read_ahead_saga_enters_with_the_chosen_number_of_lore_counters() {
         "The Cruelty of Gix",
         "Neither choosing the number nor putting the counters on the Saga use the stack, and neither can be responded to."
     );
+    ruling!(
+        "The Elder Dragon War",
+        "As a Saga with read ahead enters the battlefield, its controller chooses a number from one to that Saga's greatest chapter number."
+    );
     assert_supported(WAR);
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 4);

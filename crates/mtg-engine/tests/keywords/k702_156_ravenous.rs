@@ -69,6 +69,38 @@ fn the_draw_checks_the_chosen_x_not_the_counters_it_entered_with() {
 }
 
 #[test]
+fn a_copy_of_a_ravenous_spell_has_the_same_x() {
+    cr!("702.156a");
+    ruling!(
+        "Tervigon",
+        "If a permanent spell with ravenous is copied, the copy will have the same value for X"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 7);
+    let card = t.hand(P0, "Tervigon");
+    let spell = t.cast(P0, card).x(5).go();
+    run_effect(
+        &mut t,
+        None,
+        P0,
+        mtg_engine::ability::Effect::CopySpell {
+            what: mtg_engine::ability::Sel::Target(0),
+            count: mtg_engine::ability::Value::c(1),
+            new_targets: false,
+        },
+        &[Entity::Object(spell)],
+    );
+    t.resolve_all();
+    let all = named(&t, P0, "Tervigon");
+    assert_eq!(all.len(), 2);
+    for id in &all {
+        assert_eq!(plus1(&t, *id), 5);
+    }
+    // Both drew a card (X is 5).
+    assert_eq!(t.hand_size(P0), 2);
+}
+
+#[test]
 fn a_ravenous_permanent_that_wasnt_cast_has_x_of_zero() {
     cr!("702.156a");
     ruling!(

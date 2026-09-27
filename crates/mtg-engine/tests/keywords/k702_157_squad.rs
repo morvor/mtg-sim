@@ -17,6 +17,10 @@ fn squad_creates_a_token_copy_for_each_time_its_cost_was_paid() {
         "Wasteland Raider",
         "The tokens created by the squad ability aren’t “cast,” so any abilities that trigger when a spell is cast won’t trigger for the copies."
     );
+    ruling!(
+        "Galadhrim Brigade",
+        "The tokens created by the squad ability aren't \"cast,\" so any abilities that trigger when a spell is cast won't trigger for the copies."
+    );
     assert_supported("Galadhrim Brigade");
     // Galadhrim Brigade {2}{G}: squad {1}{G}; other Elves you control get +1/+1.
     let mut t = TestGame::new(2);
@@ -68,6 +72,10 @@ fn the_copies_are_created_even_if_the_creature_left_the_battlefield() {
         "Wasteland Raider",
         "If the spell resolves but the creature with squad leaves the battlefield before its squad ability resolves, you’ll still create the token copies."
     );
+    ruling!(
+        "Ruthless Radrat",
+        "You will create a token that is a copy of that permanent for each time you paid the squad cost."
+    );
     assert_supported("Ruthless Radrat");
     // Ruthless Radrat: "Squad—Exile four cards from your graveyard."
     let mut t = TestGame::new(2);
@@ -96,6 +104,50 @@ fn the_copies_are_created_even_if_the_creature_left_the_battlefield() {
     assert!(named(&t, P0, "Ruthless Radrat")
         .iter()
         .all(|id| t.obj(*id).is_token()));
+}
+
+#[test]
+fn a_countered_squad_spell_or_a_permanent_without_squad_makes_no_tokens() {
+    cr!("702.157a");
+    ruling!(
+        "Galadhrim Brigade",
+        "If the spell is countered, the squad ability will not trigger, and no tokens will be created."
+    );
+    ruling!(
+        "Galadhrim Brigade",
+        "If, for some reason, the creature doesn't have the squad ability when it's on the battlefield, the ability won't trigger, even if you've paid the squad cost one or more times."
+    );
+    // Countered.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let brigade = t.hand(P0, "Galadhrim Brigade");
+    pay_times(&mut t, P0, 1);
+    let spell = t.cast(P0, brigade).go();
+    run_effect(
+        &mut t,
+        None,
+        P1,
+        mtg_engine::ability::Effect::CounterSpell {
+            what: mtg_engine::ability::Sel::Target(0),
+        },
+        &[Entity::Object(spell)],
+    );
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Galadhrim Brigade"));
+    assert!(tokens(&t, P0).is_empty());
+    // Dress Down: "Creatures lose all abilities." The Brigade has no squad ability on the
+    // battlefield: nothing triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Dress Down");
+    t.lands(P0, "Forest", 5);
+    let brigade = t.hand(P0, "Galadhrim Brigade");
+    pay_times(&mut t, P0, 1);
+    t.cast(P0, brigade).go();
+    t.resolve();
+    t.settle();
+    assert!(triggers_named(&t, "Squad").is_empty());
+    t.resolve_all();
+    assert!(tokens(&t, P0).is_empty());
 }
 
 /// A {W} 1/1 creature with two squad abilities.

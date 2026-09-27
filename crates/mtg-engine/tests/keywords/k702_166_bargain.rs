@@ -13,6 +13,10 @@ fn bargain_sacrifices_an_artifact_enchantment_or_token_as_an_optional_cost() {
         "Troublemaker Ouphe",
         "You may sacrifice only one artifact, enchantment, or token to pay a spell’s bargain cost."
     );
+    ruling!(
+        "Candy Grapple",
+        "Bargain means “As an additional cost to cast this spell, you may sacrifice an artifact, enchantment, or token.”"
+    );
     assert_supported("Candy Grapple");
     // Candy Grapple: -3/-3, or -5/-5 if bargained.
     for what in ["Ornithopter", "Glorious Anthem", "Treasure"] {

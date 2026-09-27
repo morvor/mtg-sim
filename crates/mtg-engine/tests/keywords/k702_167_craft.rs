@@ -231,3 +231,73 @@ fn the_exiled_cards_used_to_craft_it() {
     t.g.recompute();
     assert_eq!(t.pt(effigy), (1, 1));
 }
+
+#[test]
+fn tokens_may_be_materials_but_arent_cards_used_to_craft_it() {
+    cr!("702.167a", "702.167c");
+    ruling!(
+        "Oteclan Landmark // Oteclan Levitator",
+        "You may exile tokens you control as part of the materials required. However, because they aren't cards and won't stay in exile"
+    );
+    // Sunbird Standard crafted with a red card and a green token: only the card counts.
+    let mut t = TestGame::new(2);
+    let sunbird = t.battlefield(P0, "Sunbird Standard");
+    let goblin = t.graveyard(P0, "Raging Goblin");
+    run(
+        &mut t,
+        P0,
+        mtg_engine::ability::Effect::CreateToken {
+            spec: mtg_engine::ability::TokenSpec {
+                name: "".into(),
+                colors: mtg_engine::types::ColorSet::single(mtg_engine::types::Color::Green),
+                supertypes: vec![],
+                card_types: vec![CardType::Creature],
+                subtypes: vec![mtg_engine::types::Subtype::new("Saproling")],
+                power: Some(1),
+                toughness: Some(1),
+                abilities: vec![],
+                scryfall_name: None,
+            },
+            count: mtg_engine::ability::Value::c(1),
+            controller: mtg_engine::ability::PlayerRef::You,
+            tapped: false,
+            attacking: false,
+        },
+    );
+    let saproling = tokens(&t, P0)[0];
+    t.lands(P0, "Swamp", 5);
+    let craft = ability_uid(&mut t, sunbird, "Craft");
+    materials(&mut t, P0, &[goblin, saproling]);
+    activate_uid(&mut t, P0, sunbird, craft).unwrap();
+    assert!(!t.g.is_live(saproling) || t.zone(saproling) != Zone::Battlefield);
+    t.resolve_all();
+    let effigy = t.g.current(sunbird);
+    assert_eq!(t.obj(effigy).chars.name, "Sunbird Effigy");
+    assert_eq!(t.pt(effigy), (1, 1));
+}
+
+#[test]
+fn a_copy_that_isnt_a_double_faced_card_stays_in_exile() {
+    cr!("702.167a");
+    ruling!(
+        "Oteclan Landmark // Oteclan Levitator",
+        "If a card that isn't a transforming double-faced card becomes a copy of a card with craft, it'll stay in exile if you activate the craft ability."
+    );
+    assert_supported("Phyrexian Metamorph");
+    // Phyrexian Metamorph enters as a copy of Oteclan Landmark, then crafts.
+    let mut t = TestGame::new(2);
+    let landmark = t.battlefield(P0, LANDMARK);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(landmark)]);
+    let meta = t.enter(P0, "Phyrexian Metamorph");
+    t.resolve_all();
+    assert_eq!(t.obj_now(meta).chars.name, LANDMARK);
+    t.lands(P0, "Plains", 3);
+    let craft = ability_uid(&mut t, meta, "Craft");
+    materials(&mut t, P0, &[thopter]);
+    activate_uid(&mut t, P0, meta, craft).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(meta), Zone::Exile);
+    assert!(t.on_battlefield(landmark));
+}

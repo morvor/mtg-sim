@@ -35,6 +35,10 @@ fn space_sculptor_gives_creatures_sector_designations() {
     cr!("702.158", "702.158a", "702.158c");
     ruling!(
         "Space Beleren",
+        "Any time Space Beleren is on the battlefield, the battlefield is divided into three sectors: alpha, beta, and gamma. All creatures will be assigned to one of the three sectors."
+    );
+    ruling!(
+        "Space Beleren",
         "First, all players who don’t control a Space Beleren (or another permanent with space sculptor, but come on) in turn order assign their creatures."
     );
     assert_supported(BELEREN);
@@ -229,4 +233,25 @@ fn the_same_sector_blocking_restriction_lasts_this_turn() {
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(wall, bears)]));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20, "blocked by the wall");
+}
+
+#[test]
+fn a_creature_is_never_in_more_than_one_sector() {
+    cr!("702.158b");
+    ruling!(
+        "Space Beleren",
+        "A creature can never be in more than one sector. If Space Beleren is on the battlefield, another Space Beleren coming under a player’s control won’t affect any creature’s sector assignment."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, BELEREN);
+    choose(&mut t, P1, 1);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.settle();
+    assert_eq!(sector(&t, theirs).as_deref(), Some("beta"));
+    // Another Space Beleren, under the other player's control: nobody is asked again.
+    let from = t.asked().len();
+    t.battlefield(P1, BELEREN);
+    t.settle();
+    assert!(assigners(&t, from).is_empty());
+    assert_eq!(sector(&t, theirs).as_deref(), Some("beta"));
 }

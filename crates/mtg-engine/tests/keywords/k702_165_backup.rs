@@ -21,6 +21,10 @@ fn clone_of(t: &mut TestGame, what: ObjectId) -> ObjectId {
 #[test]
 fn backup_puts_counters_and_grants_the_abilities_printed_below_it() {
     cr!("702.165", "702.165a");
+    ruling!(
+        "Gloomfang Mauler",
+        "If a backup ability causes another creature to gain abilities, the creature with backup will still have those abilities."
+    );
     assert_supported("Boon-Bringer Valkyrie");
     // Boon-Bringer Valkyrie: backup 1, then "Flying, first strike, lifelink".
     let mut t = TestGame::new(2);

@@ -12,6 +12,10 @@ fn casualty_sacrifices_a_creature_to_copy_the_spell_with_new_targets() {
         "Light 'Em Up",
         "If you pay the casualty cost of a spell, the copy will resolve before the original spell."
     );
+    ruling!(
+        "Make Disappear",
+        "Casualty N means “As an additional cost to cast this spell, you may sacrifice a creature with power N or greater.”"
+    );
     assert_supported("Light 'Em Up");
     let mut t = TestGame::new(2);
     // Light 'Em Up: casualty 2; 2 damage to target creature or planeswalker.

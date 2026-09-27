@@ -23,6 +23,14 @@ fn starscream_converted(t: &mut TestGame) -> ObjectId {
 #[test]
 fn living_metal_makes_the_vehicle_an_artifact_creature_during_your_turn() {
     cr!("702.161", "702.161a");
+    ruling!(
+        "Starscream, Power Hungry // Starscream, Seeker Leader",
+        "\"Living metal\" means \"As long as it's your turn, this permanent is an artifact creature in addition to its other types.\""
+    );
+    ruling!(
+        "Starscream, Power Hungry // Starscream, Seeker Leader",
+        "While it's a creature, the Vehicle has its printed power and toughness."
+    );
     let mut t = TestGame::new(2);
     let v = starscream_converted(&mut t);
     assert!(has_kw(&t, v, KeywordKind::LivingMetal));
@@ -40,4 +48,26 @@ fn living_metal_makes_the_vehicle_an_artifact_creature_during_your_turn() {
     // Back on P0's turn it can attack (it has haste anyway).
     t.set_step(P0, Step::PrecombatMain);
     assert!(t.obj_now(v).is(CardType::Creature));
+}
+
+#[test]
+fn effects_on_noncreature_permanents_apply_only_during_opponents_turns() {
+    cr!("702.161a");
+    ruling!(
+        "Starscream, Power Hungry // Starscream, Seeker Leader",
+        "If a static ability of another permanent applies only to noncreature permanents, that ability applies to a Vehicle with living metal only during your opponents' turns."
+    );
+    let mut t = TestGame::new(2);
+    let v = starscream_converted(&mut t);
+    let def = custom_card(
+        "Shroud Engine",
+        "Artifact",
+        None,
+        "Noncreature artifacts you control have hexproof.",
+    );
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+    t.g.recompute();
+    assert!(!has_kw(&t, v, KeywordKind::Hexproof));
+    t.set_step(P1, Step::Upkeep);
+    assert!(has_kw(&t, v, KeywordKind::Hexproof));
 }

@@ -148,3 +148,28 @@ fn toxic_and_infect_both_give_poison_counters() {
     assert_eq!(t.life(P1), 20);
     assert_eq!(poison(&t, P1), 3);
 }
+
+#[test]
+fn toxic_can_give_a_player_the_poison_counters_that_lose_the_game() {
+    cr!("702.164c");
+    ruling!(
+        "Tyrranax Atrocity",
+        "A player with ten or more poison counters loses the game. This is a state-based action and doesn't use the stack."
+    );
+    let mut t = TestGame::new(2);
+    t.g.players[P1.idx()]
+        .counters
+        .insert(mtg_engine::types::counters::POISON.into(), 7);
+    let dino = t.battlefield(P0, "Tyrranax Atrocity");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(dino, Entity::Player(P1))]),
+    );
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    // The game ends as soon as state-based actions are checked after combat damage.
+    let ended = t.g.run_until(10_000, |g| g.player(P1).has_lost);
+    assert!(ended);
+    assert_eq!(poison(&t, P1), 10);
+    assert_eq!(t.life(P1), 16);
+}
