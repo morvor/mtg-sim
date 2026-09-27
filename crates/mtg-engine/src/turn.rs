@@ -144,6 +144,10 @@ pub struct TurnState {
     /// Illegal actions the player with priority attempted in a row (CR 733.2).
     #[serde(default)]
     pub illegal_attempts: u32,
+    /// The active player of the most recent turn that wasn't an extra turn: turn order
+    /// resumes from that turn once the extra turns added after it are taken (CR 500.7).
+    #[serde(default)]
+    pub normal_active: Option<PlayerId>,
 }
 
 impl TurnState {
@@ -166,6 +170,18 @@ impl TurnState {
             step_log: vec![],
             attacked_players: vec![],
             illegal_attempts: 0,
+            normal_active: None,
+        }
+    }
+
+    /// The player whose turn the next turn in the normal turn order follows: the active
+    /// player, or after an extra turn, the active player of the turn the extra turns were
+    /// added after (CR 500.7).
+    pub fn turn_order_position(&self) -> PlayerId {
+        if self.extra {
+            self.normal_active.unwrap_or(self.active)
+        } else {
+            self.active
         }
     }
 
@@ -266,7 +282,8 @@ impl Game {
         // CR 702.26n: the turns of players who left the game seated before this one would
         // have begun.
         if self.turn.number > 0 && !extra {
-            crate::kw::phasing::turns_would_have_begun(self, self.turn.active, active);
+            let from = self.turn.turn_order_position();
+            crate::kw::phasing::turns_would_have_begun(self, from, active);
         }
         self.turn.previous_active = if self.turn.number > 0 {
             Some(self.turn.active)
@@ -290,8 +307,11 @@ impl Game {
             .unwrap_or(0);
         self.spells_cast_last_turn_by_active = last_spells;
         self.turn.number += 1;
+        // An extra turn keeps the turn order where it was (CR 500.7).
+        let position = self.turn.turn_order_position();
         self.turn.active = active;
         self.turn.extra = extra;
+        self.turn.normal_active = Some(if extra { position } else { active });
         self.turn.step = Step::Untap;
         self.turn.stage = Stage::Begin;
         self.turn.schedule = TurnState::default_schedule();
@@ -582,9 +602,9 @@ impl Game {
             return;
         }
         if self.turn.schedule.is_empty() {
-            // Next turn (CR 500.7: extra turns first). Skipped turns never begin
-            // (CR 614.10).
-            let mut after = self.turn.active;
+            // Next turn (CR 500.7: extra turns first, then the turn order resumes from
+            // the turn they were added after). Skipped turns never begin (CR 614.10).
+            let mut after = self.turn.turn_order_position();
             for _ in 0..1000 {
                 if let Some(p) = self.extra_turns.pop() {
                     let at_start = crate::skip::take_extra_turn_actions(self, p);
