@@ -516,6 +516,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 ]),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("with a basic land type") {
+            // "a land card with a basic land type" (Nervous Gardener).
+            (
+                Filter::Or(
+                    ["Plains", "Island", "Swamp", "Mountain", "Forest"]
+                        .iter()
+                        .map(|n| Filter::Subtype((*n).into()))
+                        .collect(),
+                ),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("other than ~") {
             // "each Mount and/or Vehicle you control other than ~" (Spire Mechcycle).
             (Filter::Other, r)

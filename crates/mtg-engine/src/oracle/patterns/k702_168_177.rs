@@ -717,6 +717,27 @@ fn disguise_cost_reduced(block: &str, _ctx: &CompileContext) -> Option<Vec<Abili
 
 inventory::submit! { AbilityPattern { name: "k702.168 disguise cost reduced for each", priority: 100, parse: disguise_cost_reduced } }
 
+/// "As ~ enters or is turned face up, put X +1/+1 counters on it, where X is the number of
+/// other creatures you control." (Crowd-Control Warden): it enters with the counters, and
+/// gets them as it's turned face up (CR 702.168d, 708.8): two replacement effects.
+fn as_enters_or_turned_face_up(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as ~ enters or is turned face up, put ")?;
+    let (counters, rest) = r.split_once(" on it")?;
+    let mut out =
+        crate::oracle::parse_ability(&format!("~ enters with {counters} on it{rest}."), ctx)?;
+    out.extend(crate::oracle::parse_ability(
+        &format!("As ~ is turned face up, put {counters} on it{rest}."),
+        ctx,
+    )?);
+    Some(
+        out.into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), text))
+            .collect(),
+    )
+}
+
+inventory::submit! { StaticPattern { name: "k702.168 as ~ enters or is turned face up", priority: 100, parse: as_enters_or_turned_face_up } }
+
 // ---------------------------------------------------------------------------
 // Solved (CR 702.169): what Cases are solved by
 // ---------------------------------------------------------------------------
