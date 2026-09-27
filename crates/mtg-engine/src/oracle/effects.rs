@@ -428,8 +428,11 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "the creature",
         "that token",
         "this token",
-        // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b).
+        // "Whenever ~ crews a Vehicle, that Vehicle ..." (CR 702.122b); "whenever ~
+        // saddles a Mount or crews a Vehicle, that Mount or Vehicle ..." (CR 702.171c).
         "that vehicle",
+        "that mount or vehicle",
+        "that mount",
         "that artifact",
         "that land",
     ] {

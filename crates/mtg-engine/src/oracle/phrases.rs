@@ -560,6 +560,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::kw::crew::CREWED_IT_THIS_TURN.into()),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("that saddled it this turn") {
+            // CR 702.171c.
+            (
+                Filter::Custom(crate::kw::saddle::SADDLED_IT_THIS_TURN.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("crewed by ~ this turn") {
             (
                 Filter::Custom(crate::kw::crew::CREWED_BY_IT_THIS_TURN.into()),

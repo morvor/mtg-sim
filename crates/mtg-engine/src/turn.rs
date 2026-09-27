@@ -876,6 +876,8 @@ impl Game {
             let o = &mut self.objects[id.0 as usize];
             o.damage = 0;
             o.deathtouch_damage = false;
+            // Saddled "until end of turn" (CR 702.171b).
+            o.saddled = false;
         }
         self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
         // "Until end of turn, you don't lose this mana as steps and phases end": the pool
