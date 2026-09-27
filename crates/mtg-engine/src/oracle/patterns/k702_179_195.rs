@@ -250,7 +250,7 @@ fn warp_from_graveyard(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 inventory::submit! { StaticPattern { name: "k702.185 cast from graveyard using warp", priority: 50, parse: warp_from_graveyard } }
 
 /// "if ~'s mayhem cost was paid", "if its warp cost was paid", "if this spell's ... cost
-/// was paid", "if his/her ... cost was paid" (CR 702.185a, 702.187b), "if ~ was cast
+/// was paid", "if his/her ... cost was paid" (CR 702.185a, 702.187b, 702.190), "if ~ was cast
 /// using web-slinging" (CR 702.188a).
 fn keyword_cost_paid(c: &str) -> Option<Condition> {
     let c = end(c);
@@ -271,6 +271,7 @@ fn keyword_cost_paid(c: &str) -> Option<Condition> {
     let name = match r {
         "mayhem cost was paid" => crate::kw::mayhem::MAYHEM,
         "warp cost was paid" => crate::kw::warp::WARP,
+        "sneak cost was paid" => crate::kw::sneak::SNEAK,
         _ => return None,
     };
     Some(Condition::CostPaid(name.into()))
