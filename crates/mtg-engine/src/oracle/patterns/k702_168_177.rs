@@ -363,6 +363,41 @@ fn also(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "k702.174 [subject] also [effect]", priority: 150, parse: also } }
 
+/// "up to two target creature cards each with mana value 2 or less" (Dewdrop Cure): "each"
+/// restates that the quality applies to every one of the targets.
+fn targets_each_with(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" target ") || !l.contains(" each with ") {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replacen(" each with ", " with ", 1), b)
+}
+
+inventory::submit! { EffectPattern { name: "k702.174 target [objects] each with [quality]", priority: 150, parse: targets_each_with } }
+
+/// "You and permanents you control gain hexproof until end of turn." (Dawn's Truce): the
+/// same instruction for the player and for the group.
+fn you_and_group_gain(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let rest = l.strip_prefix("you and ")?;
+    let (group, what) = rest.split_once(" gain ")?;
+    if group.contains(" and ") || group.contains(',') {
+        return None;
+    }
+    let saved = b.targets.len();
+    let you = crate::oracle::effects::parse_clause(&format!("you gain {what}"), b);
+    let them = crate::oracle::effects::parse_clause(&format!("{group} gain {what}"), b);
+    match (you, them) {
+        (Some(a), Some(c)) => Some(Effect::Seq(vec![a, c])),
+        _ => {
+            b.targets.truncate(saved);
+            None
+        }
+    }
+}
+
+inventory::submit! { EffectPattern { name: "k702.174 you and [group] gain [ability]", priority: 150, parse: you_and_group_gain } }
+
 // ---------------------------------------------------------------------------
 // Disguise (CR 702.168)
 // ---------------------------------------------------------------------------

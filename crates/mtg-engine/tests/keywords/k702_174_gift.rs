@@ -407,3 +407,52 @@ fn a_copy_of_a_permanent_whose_gift_was_promised_has_no_promise() {
     assert_eq!(t.obj(t.g.current(clone)).chars.name, "Scrapshooter");
     assert_eq!(t.hand_size(P1), hand + 1);
 }
+
+#[test]
+fn a_promised_gift_can_allow_more_targets() {
+    cr!("702.174m");
+    assert_supported("Dewdrop Cure");
+    // Dewdrop Cure: gift a card, "Return up to two target creature cards each with mana
+    // value 2 or less from your graveyard to the battlefield. If the gift was promised,
+    // instead return up to three target creature cards ..."
+    for (promise, returned) in [(false, 2), (true, 3)] {
+        let mut t = TestGame::new(2);
+        let cards: Vec<ObjectId> = (0..3).map(|_| t.graveyard(P0, "Grizzly Bears")).collect();
+        t.graveyard(P0, "Hill Giant");
+        let cure = t.hand(P0, "Dewdrop Cure");
+        add_mana(&mut t, P0, ManaType::W, 3);
+        let es: Vec<Entity> = cards.iter().map(|c| Entity::Object(*c)).collect();
+        pay_optional(&mut t, P0, promise);
+        t.answer_targets(P0, &es[..returned]);
+        t.cast(P0, cure).go();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            returned,
+            "promised: {promise}"
+        );
+        assert!(t.in_graveyard(P0, "Hill Giant"));
+    }
+}
+
+#[test]
+fn a_promised_gift_can_add_to_the_effect() {
+    cr!("702.174k");
+    assert_supported("Dawn's Truce");
+    // Dawn's Truce: gift a card, "You and permanents you control gain hexproof until end
+    // of turn. If the gift was promised, permanents you control also gain indestructible
+    // until end of turn."
+    for promise in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let truce = t.hand(P0, "Dawn's Truce");
+        add_mana(&mut t, P0, ManaType::W, 2);
+        cast_gift(&mut t, truce, promise, &[]);
+        t.resolve_all();
+        assert!(t.obj(bears).chars.has_keyword(KeywordKind::Hexproof));
+        assert_eq!(
+            t.obj(bears).chars.has_keyword(KeywordKind::Indestructible),
+            promise
+        );
+    }
+}
