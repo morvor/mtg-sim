@@ -14,8 +14,12 @@
 //!   718.3c, 718.3d). Everything else is the card's (CR 718.5).
 //! * Elsewhere, or when not cast prototyped, it has only its normal characteristics
 //!   (CR 718.4): a new object after a zone change doesn't remember how it was cast.
+//! * Casting it prototyped isn't an alternative cost, so it combines with one: an effect
+//!   that lets its player cast it without paying its mana cost, or has them cast it
+//!   (CR 608.2g), lets them cast it prototyped too.
 
 use super::{KeywordRegistration, KeywordRules};
+use crate::ability::Cost;
 use crate::casting::CastOption;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
@@ -79,6 +83,15 @@ pub fn prototyped_characteristics(g: &mut Game, live: &[ObjectId]) {
     }
 }
 
+/// Casting a card with the prototype `kw` as a prototyped spell (CR 718.3).
+fn prototyped(kw: &Keyword) -> Option<CastOption> {
+    prototype_values(kw)?;
+    let mut opt = CastOption::normal(FaceState::Front);
+    opt.method = CastMethod::Keyword(KeywordKind::Prototype);
+    opt.tag = Some(PROTOTYPE);
+    Some(opt)
+}
+
 pub struct Prototype;
 
 impl KeywordRules for Prototype {
@@ -89,13 +102,10 @@ impl KeywordRules for Prototype {
     /// CR 718.3: cast it normally or as a prototyped spell, from any zone it could be
     /// cast from.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
-        if prototype_values(kw).is_none() {
+        let Some(mut opt) = prototyped(kw) else {
             return vec![];
-        }
+        };
         let o = g.obj(card);
-        let mut opt = CastOption::normal(FaceState::Front);
-        opt.method = CastMethod::Keyword(KeywordKind::Prototype);
-        opt.tag = Some(PROTOTYPE);
         if o.zone != Zone::Hand(p) {
             // A permission to cast it looks at the characteristics it would have
             // (CR 601.3e, 718.3a).
@@ -105,7 +115,26 @@ impl KeywordRules for Prototype {
                 return vec![];
             }
         }
+        // Casting it prototyped isn't an alternative cost: an effect letting its player
+        // cast it without paying its mana cost applies to it too (CR 118.9, 718.3).
+        if g.play_grants
+            .iter()
+            .any(|gr| gr.player == p && gr.object == card && gr.free)
+        {
+            opt.alt_cost = Some(Cost::free());
+        }
         vec![opt]
+    }
+
+    /// An effect that has a player cast it (CR 608.2g) lets them cast it prototyped.
+    fn cast_options_with_any_cost(
+        &self,
+        _g: &Game,
+        _p: PlayerId,
+        _card: ObjectId,
+        kw: &Keyword,
+    ) -> Vec<CastOption> {
+        prototyped(kw).into_iter().collect()
     }
 
     /// CR 718.3a: the characteristics evaluated while casting it this way.

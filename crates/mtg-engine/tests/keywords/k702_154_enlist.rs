@@ -226,3 +226,86 @@ fn if_it_enlisted_a_creature_this_combat() {
         assert_eq!(t.hand_size(P0), usize::from(enlist_first));
     }
 }
+
+#[test]
+fn linebreaker_baloth_enlists_an_untapped_nonattacking_creature() {
+    cr!("702.154a", "702.154b", "508.1g");
+    ruling!(
+        "Linebreaker Baloth",
+        "To enlist a creature, that creature must be untapped, it must not be attacking (even if it has vigilance), and it must have haste or have been under that attacking player's control since the beginning of their current turn."
+    );
+    ruling!(
+        "Linebreaker Baloth",
+        "The attacking player chooses whether to tap a creature for an enlist ability immediately after they tap the creatures that they have chosen to attack with. You can't choose to enlist a creature later."
+    );
+    ruling!(
+        "Linebreaker Baloth",
+        "When a player taps a creature for an attacking creature's enlist ability, that attacking creature gets +X/+0 until end of turn, where X is the tapped creature's power. This is a triggered ability that goes on the stack immediately after attackers have been declared in the declare attackers step."
+    );
+    ruling!(
+        "Linebreaker Baloth",
+        "You may tap only one creature for an enlist ability of an attacking creature, and a single creature can't be tapped for more than one enlist ability."
+    );
+    assert_supported("Linebreaker Baloth");
+    // Linebreaker Baloth: 4/5 enlist, "can't be blocked by creatures with power 2 or
+    // less."
+    let mut t = TestGame::new(2);
+    let baloth = t.battlefield(P0, "Linebreaker Baloth");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let sick = t.battlefield_sick(P0, "Grizzly Bears");
+    let angel = t.battlefield(P0, "Serra Angel");
+    // Attacking with the Baloth and the vigilant Angel; the Giant is enlisted.
+    attack_enlisting(&mut t, &[baloth, angel], &[Some(giant)]);
+    let offered = enlist_candidates(&t);
+    assert_eq!(offered.len(), 1, "one question, as attackers are declared");
+    let offered = &offered[0];
+    assert!(offered.contains(&Entity::Object(giant)));
+    assert!(offered.contains(&Entity::Object(bears)));
+    assert!(!offered.contains(&Entity::Object(sick)));
+    assert!(!offered.contains(&Entity::Object(angel)));
+    // Only the Giant was tapped for it.
+    assert!(t.obj_now(giant).tapped);
+    assert!(!t.obj_now(bears).tapped);
+    // The trigger is on the stack in the declare attackers step, before blockers.
+    assert_eq!(t.g.turn.step, Step::DeclareAttackers);
+    assert_eq!(triggers_named(&t, "Enlist").len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(baloth), (7, 5));
+    // Nothing is asked again later in combat.
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(enlist_candidates(&t).len(), 1);
+    assert_eq!(t.life(P1), 20 - 7 - 4);
+}
+
+#[test]
+fn aradesh_doesnt_care_what_happens_to_the_enlisted_creature() {
+    cr!("702.154c", "603.4");
+    ruling!(
+        "Aradesh, the Founder",
+        "It doesn’t matter what happens to the enlisted creature after Aradesh’s last ability triggers."
+    );
+    // The Warbrute enlists the Hill Giant, which then leaves the battlefield before
+    // Aradesh's ability resolves: the Warbrute still gets double strike, and its power
+    // is 6 once its enlist ability resolves (the Giant's last known power, 3).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Aradesh, the Founder");
+    let brute = t.battlefield(P0, "Coalition Warbrute");
+    let giant = t.battlefield(P0, "Hill Giant");
+    // The enlist ability resolves first.
+    t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
+    attack_enlisting(&mut t, &[brute], &[Some(giant)]);
+    t.g.move_object(
+        giant,
+        mtg_engine::object::Zone::Graveyard(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    )
+    .unwrap();
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert!(has_kw(&t, brute, KeywordKind::DoubleStrike));
+    assert_eq!(t.pt(brute), (6, 4));
+    // Its power was 6 as Aradesh's ability resolved: a card was drawn.
+    assert_eq!(t.hand_size(P0), hand + 1);
+}

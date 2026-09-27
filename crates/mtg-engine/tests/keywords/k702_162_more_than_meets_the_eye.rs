@@ -116,3 +116,117 @@ fn a_copy_of_a_converted_spell_has_the_back_face_characteristics() {
     assert!(t.obj(token[0]).is_token());
     assert!(has_kw(&t, token[0], KeywordKind::LivingMetal));
 }
+
+/// A double-faced card: "Kicker Robot" ({3} 2/2 artifact creature, "More Than Meets the
+/// Eye {1}") whose back face "Kicker Coupe" (3/3) has "Kicker {2}".
+fn kicker_robot() -> mtg_engine::card::CardDef {
+    use crate::common_k702_038_051::with_cost;
+    let mut def = with_cost(
+        custom_card(
+            "Kicker Robot",
+            "Artifact Creature — Robot",
+            Some((2, 2)),
+            "More Than Meets the Eye {1}",
+        ),
+        "{3}",
+    );
+    let back = custom_card(
+        "Kicker Coupe",
+        "Artifact Creature — Robot",
+        Some((3, 3)),
+        "Kicker {2}",
+    );
+    def.layout = mtg_engine::card::Layout::Transform;
+    def.faces.push(mtg_engine::card::FaceDef {
+        chars: back.faces[0].chars.clone(),
+        unsupported: vec![],
+        star_power: false,
+        star_toughness: false,
+    });
+    def
+}
+
+#[test]
+fn more_than_meets_the_eye_is_an_alternative_cost() {
+    cr!("702.162a", "118.9a");
+    ruling!(
+        "Starscream, Power Hungry // Starscream, Seeker Leader",
+        "The cost is an alternative cost, so it can't be combined with any other alternative costs. It can be combined with any applicable additional costs."
+    );
+    // An effect lets P0 cast the exiled Starscream without paying its mana cost: that's
+    // an alternative cost, which can't be combined with More Than Meets the Eye.
+    let grant = |t: &mut TestGame, card: ObjectId| {
+        run_effect(
+            t,
+            None,
+            P0,
+            mtg_engine::ability::Effect::GrantPlayPermission {
+                who: mtg_engine::ability::PlayerRef::You,
+                what: mtg_engine::ability::Sel::Target(0),
+                duration: mtg_engine::ability::Duration::EndOfTurn,
+                free: true,
+            },
+            &[Entity::Object(card)],
+        );
+    };
+    let mut t = TestGame::new(2);
+    let card = t.exile(P0, "Starscream, Power Hungry");
+    grant(&mut t, card);
+    assert!(t.cast(P0, card).method(MTMTE).try_go().is_err());
+    let card = t.g.current(card);
+    let spell = t.cast(P0, card).method(CastMethod::Free).go();
+    assert_eq!(t.g.obj(spell).face, FaceState::Front);
+    // With {2}{B}, it can be cast converted instead, paying that cost.
+    let mut t = TestGame::new(2);
+    let card = t.exile(P0, "Starscream, Power Hungry");
+    grant(&mut t, card);
+    t.lands(P0, "Swamp", 3);
+    let spell = t.cast(P0, card).method(MTMTE).go();
+    assert_eq!(t.g.obj(spell).face, FaceState::Back);
+    assert_eq!(
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).tapped)
+            .count(),
+        3
+    );
+    // An additional cost can be paid along with it: the converted spell's kicker.
+    let mut t = TestGame::new(2);
+    let card = t.custom(P0, kicker_robot(), mtg_engine::object::Zone::Hand(P0));
+    t.lands(P0, "Plains", 3);
+    let spell = t.cast(P0, card).method(MTMTE).kicked(true).go();
+    let s = t.g.obj(spell);
+    assert_eq!(s.chars.name, "Kicker Coupe");
+    let paid = &s.stack.as_ref().expect("a spell").cast.paid;
+    assert!(paid.iter().any(|p| p == "kicker"), "{paid:?}");
+    assert!(paid.iter().any(|p| p == "more than meets the eye"), "{paid:?}");
+    assert!(t
+        .g
+        .battlefield
+        .iter()
+        .filter(|id| t.g.obj(**id).chars.is_land())
+        .all(|id| t.g.obj(*id).tapped));
+}
+
+#[test]
+fn converting_a_permanent_turns_it_over() {
+    cr!("702.162a", "701.28a");
+    ruling!(
+        "Starscream, Power Hungry // Starscream, Seeker Leader",
+        "The convert keyword action functions the same way as the transform keyword action found on some other cards; to convert a permanent on the battlefield, turn it over so that its other face is up."
+    );
+    // Starscream, Power Hungry: "Whenever one or more creatures deal combat damage to you,
+    // convert Starscream."
+    let mut t = TestGame::new(2);
+    let star = t.battlefield(P0, "Starscream, Power Hungry");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    t.resolve_all();
+    // The same permanent, with its other face up.
+    assert!(t.g.is_live(star));
+    let o = t.g.obj(star);
+    assert_eq!(o.face, FaceState::Back);
+    assert_eq!(o.chars.name, "Starscream, Seeker Leader");
+    assert!(o.chars.has_keyword(KeywordKind::LivingMetal));
+}

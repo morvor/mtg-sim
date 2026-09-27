@@ -203,3 +203,183 @@ fn each_instance_of_squad_is_paid_separately_and_counts_its_own_payments() {
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 1);
 }
+
+#[test]
+fn the_squad_cost_may_be_paid_any_number_of_times() {
+    cr!("702.157a");
+    ruling!(
+        "Sicarian Infiltrator",
+        "You may pay the squad cost any number of times. You will get a token that is a copy of that permanent for each time you paid the squad cost."
+    );
+    assert_supported("Sicarian Infiltrator");
+    // Sicarian Infiltrator {2}{U}: flash, squad {2}, "When this creature enters, draw a
+    // card." Paid three times: three tokens, and each of the four draws a card.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 9);
+    let card = t.hand(P0, "Sicarian Infiltrator");
+    let hand = t.hand_size(P0) - 1;
+    pay_times(&mut t, P0, 3);
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert_eq!(named(&t, P0, "Sicarian Infiltrator").len(), 4);
+    assert_eq!(tokens(&t, P0).len(), 3);
+    assert_eq!(t.hand_size(P0), hand + 4);
+}
+
+#[test]
+fn a_permanent_without_its_squad_ability_doesnt_trigger() {
+    cr!("702.157a");
+    ruling!(
+        "Wasteland Raider",
+        "If, for some reason, the creature doesn’t have the squad ability when it’s on the battlefield, the ability won’t trigger, even if you’ve paid the squad cost one or more times."
+    );
+    ruling!(
+        "Roadkill Rodney",
+        "If, for some reason, the permanent doesn't have the squad ability when it's on the battlefield, the ability won't trigger, even if you've paid the squad cost one or more times."
+    );
+    for name in ["Wasteland Raider", "Roadkill Rodney"] {
+        assert_supported(name);
+        // Dress Down: "Creatures lose all abilities."
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Dress Down");
+        t.lands(P0, "Swamp", 8);
+        let card = t.hand(P0, name);
+        pay_times(&mut t, P0, 1);
+        t.cast(P0, card).go();
+        t.resolve();
+        t.settle();
+        assert!(triggers_named(&t, "Squad").is_empty(), "{name}");
+        t.resolve_all();
+        assert!(tokens(&t, P0).is_empty(), "{name}");
+    }
+}
+
+#[test]
+fn roadkill_rodneys_copies_are_created_after_it_left_the_battlefield() {
+    cr!("702.157a");
+    ruling!(
+        "Roadkill Rodney",
+        "If the spell resolves but the permanent with squad leaves the battlefield before its squad ability resolves, you'll still create the token copies."
+    );
+    // Roadkill Rodney {2}: squad {3}, deathtouch.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 8);
+    let card = t.hand(P0, "Roadkill Rodney");
+    pay_times(&mut t, P0, 2);
+    t.cast(P0, card).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(triggers_named(&t, "Squad").len(), 1);
+    let rodney = named(&t, P0, "Roadkill Rodney")[0];
+    t.g.move_object(
+        rodney,
+        Zone::Graveyard(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    )
+    .unwrap();
+    t.resolve_all();
+    let copies = named(&t, P0, "Roadkill Rodney");
+    assert_eq!(copies.len(), 2);
+    for c in copies {
+        assert!(t.obj(c).is_token());
+        assert!(has_kw(&t, c, mtg_engine::keywords::KeywordKind::Deathtouch));
+    }
+}
+
+#[test]
+fn a_miracle_spell_may_also_pay_its_squad_cost() {
+    cr!("702.157a", "702.94a", "118.8");
+    ruling!(
+        "Zephyrim",
+        "If you cast Zephyrim for its miracle cost, you may also choose to pay its squad cost one or more times."
+    );
+    ruling!(
+        "Zephyrim",
+        "You may pay the squad cost any number of times. You will get a token that is a copy of that permanent for each time you paid the squad cost."
+    );
+    assert_supported("Zephyrim");
+    // Zephyrim {3}{W} 3/3: squad {2}, flying, vigilance, miracle {1}{W}. Drawn first this
+    // turn and cast for {1}{W} plus squad {2} twice.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Zephyrim");
+    t.lands(P0, "Plains", 6);
+    t.answer_yes(P0, true); // reveal
+    t.answer_yes(P0, true); // cast
+    pay_times(&mut t, P0, 2);
+    t.g.draw_cards(P0, 1);
+    t.resolve_all();
+    let all = named(&t, P0, "Zephyrim");
+    assert_eq!(all.len(), 3);
+    assert_eq!(tokens(&t, P0).len(), 2);
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.chars.name == "Plains")
+        .all(|o| o.tapped));
+}
+
+#[test]
+fn securitron_squadrons_copies_see_each_other_enter() {
+    cr!("702.157a", "603.6a");
+    ruling!(
+        "Securitron Squadron",
+        "If Securitron Squadron enters the battlefield at the same time as one or more creature tokens, its last ability will trigger for each of those creature tokens. If that Securitron Squadron is itself a creature token, its last ability will trigger when it enters the battlefield as well."
+    );
+    ruling!(
+        "Securitron Squadron",
+        "After all of the triggered abilities resolve, each of the three token copies of Securitron Squadron will have four +1/+1 counters on it."
+    );
+    assert_supported("Securitron Squadron");
+    // Securitron Squadron {1}{W}: squad {3}, vigilance, "Whenever a creature token you
+    // control enters, put a +1/+1 counter on it." Squad paid three times: each token gets
+    // a counter from each of the four Squadrons.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 11);
+    let card = t.hand(P0, "Securitron Squadron");
+    pay_times(&mut t, P0, 3);
+    t.cast(P0, card).go();
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 3);
+    for tok in &toks {
+        assert_eq!(plus1(&t, *tok), 4);
+    }
+    let original = named(&t, P0, "Securitron Squadron")
+        .into_iter()
+        .find(|id| !t.obj(*id).is_token())
+        .unwrap();
+    assert_eq!(plus1(&t, original), 0);
+}
+
+#[test]
+fn no_player_acts_while_the_squad_spell_is_being_cast() {
+    cr!("702.157a", "601.2");
+    ruling!(
+        "Ruthless Radrat",
+        "Once you announce that you’re casting Ruthless Radrat, no player may take actions until you’re done casting it."
+    );
+    ruling!(
+        "Ruthless Radrat",
+        "If, for some reason, the creature doesn’t have the squad ability when it’s on the battlefield, the ability won’t trigger, even if you’ve paid the squad cost one or more times."
+    );
+    // Ruthless Radrat: "Squad—Exile four cards from your graveyard." The opponent isn't
+    // asked anything while it's cast, so the cards can't be removed from the graveyard
+    // before the cost is paid.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    for _ in 0..4 {
+        t.graveyard(P0, "Grizzly Bears");
+    }
+    let rat = t.hand(P0, "Ruthless Radrat");
+    let asked_before = t.asked().len();
+    pay_times(&mut t, P0, 1);
+    t.cast(P0, rat).go();
+    assert!(t.asked()[asked_before..].iter().all(|(p, _)| *p == P0));
+    assert_eq!(t.graveyard_size(P0), 0);
+    // With its abilities lost (Dress Down), its squad ability doesn't trigger.
+    t.battlefield(P1, "Dress Down");
+    t.resolve();
+    t.settle();
+    assert!(triggers_named(&t, "Squad").is_empty());
+}

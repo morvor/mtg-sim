@@ -157,9 +157,26 @@ pub fn cast_during_resolution(
     let face = choose_face_to_cast(g, p, card);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
+    // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
+    // keep their own method.
+    let mut keyword_way = false;
+    if face == FaceState::Front {
+        let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
+        if !others.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(others.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= others.len() {
+                opt = others.swap_remove(k - 1);
+                keyword_way = true;
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
-        opt.method = CastMethod::Free;
+        if !keyword_way {
+            opt.method = CastMethod::Free;
+        }
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
@@ -2660,8 +2677,9 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
     let is_x = |v: &Value| matches!(v, Value::X);
     match c {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
-        CostPart::Sacrifice { count, .. }
-        | CostPart::Discard { count, .. }
+        // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
+        CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::Discard { count, .. }
         | CostPart::Exile { count, .. }
         | CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
@@ -2669,6 +2687,18 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
+        _ => false,
+    }
+}
+
+/// Whether a filter compares a characteristic with X ("power X or greater").
+fn filter_mentions_x(f: &Filter) -> bool {
+    match f {
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
+            matches!(**v, Value::X)
+        }
+        Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_x),
+        Filter::Not(f) => filter_mentions_x(f),
         _ => false,
     }
 }

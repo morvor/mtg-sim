@@ -3,6 +3,8 @@
 //! quality, backup and bargain have their own files, `k702_153_casualty.rs`,
 //! `k702_165_backup.rs` and `k702_166_bargain.rs`):
 //!
+//! * "Casualty X. The copy isn't legendary and has starting loyalty X." (CR 702.153a, with
+//!   copy exceptions, see `kw/casualty.rs`);
 //! * "The first [quality] spell you cast each turn has [keyword]" (e.g. casualty, see
 //!   `kw/first_spell_each_turn.rs`);
 //! * "Whenever ~ enlists a creature", "if it enlisted a creature this combat" (and
@@ -24,6 +26,36 @@ use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
+
+/// "Casualty X. The copy isn't legendary and has starting loyalty X." (Ob Nixilis, the
+/// Adversary): the keyword, with the exceptions for the copy (CR 707.9) kept in its text
+/// for its triggered ability (see `kw/casualty.rs`).
+fn casualty_with_copy_exceptions(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (kw_text, rest) = t.split_once(". ")?;
+    let exceptions = rest.trim().trim_end_matches('.').to_lowercase();
+    if !matches!(
+        exceptions.as_str(),
+        "the copy isn't legendary" | "the copy isn't legendary and has starting loyalty x"
+    ) {
+        return None;
+    }
+    let abilities = crate::oracle::keywords::parse_keyword_line(kw_text, ctx)?;
+    let [a] = abilities.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Keyword(k) = &a.kind else {
+        return None;
+    };
+    if k.kind != KeywordKind::Casualty {
+        return None;
+    }
+    let mut kw = k.clone();
+    kw.text = Some(t.into());
+    Some(crate::oracle::keywords::compile_keyword(kw, t))
+}
+
+inventory::submit! { AbilityPattern { name: "k702.153 casualty with copy exceptions", priority: 100, parse: casualty_with_copy_exceptions } }
 
 /// "Whenever ~ enlists a creature" (Guardian of New Benalia; CR 702.154c).
 fn enlists(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {

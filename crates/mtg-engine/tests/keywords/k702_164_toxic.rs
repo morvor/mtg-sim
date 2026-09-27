@@ -114,6 +114,10 @@ fn total_toxic_value_is_the_sum_of_its_toxic_abilities() {
         "Tyrranax Atrocity",
         "Multiple instances of toxic are cumulative."
     );
+    ruling!(
+        "Bloodroot Apothecary",
+        "Multiple instances of toxic are cumulative. For example, if a creature has toxic 2 and gains toxic 1 due to another effect, combat damage that creature deals to a player will cause that player to get three poison counters."
+    );
     assert_supported("Plague Nurse");
     // Plague Nurse (toxic 2) gains toxic 1: total toxic value 3.
     let mut t = TestGame::new(2);
@@ -172,4 +176,22 @@ fn toxic_can_give_a_player_the_poison_counters_that_lose_the_game() {
     assert!(ended);
     assert_eq!(poison(&t, P1), 10);
     assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn replacement_effects_modify_the_poison_counters_toxic_gives() {
+    cr!("702.164c", "614.1a");
+    ruling!(
+        "Tyrranax Atrocity",
+        "Conversely, replacement effects that apply to the number of counters put on a player can modify the counters placed this way."
+    );
+    // Winding Constrictor: "If you would get one or more counters, you get that many plus
+    // one of each of those kinds of counters instead." The defending player controls it:
+    // toxic 3 gives four poison counters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Winding Constrictor");
+    let dino = t.battlefield(P0, "Tyrranax Atrocity");
+    t.attack(&[(dino, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(poison(&t, P1), 4);
 }
