@@ -2473,7 +2473,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
         | Restriction::Goaded(f)
-        | Restriction::DamageByToughness(f) => Some(f),
+        | Restriction::DamageByToughness(f)
+        | Restriction::AssignsNoCombatDamage(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. } => Some(attackers),
         _ => None,

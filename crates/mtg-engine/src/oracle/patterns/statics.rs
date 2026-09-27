@@ -1603,6 +1603,9 @@ pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restricti
         | "assign combat damage equal to their toughness rather than their power" => {
             return Some(vec![Restriction::DamageByToughness(fc)])
         }
+        "assigns no combat damage" | "assign no combat damage" => {
+            return Some(vec![Restriction::AssignsNoCombatDamage(fc)])
+        }
         "attack or block each combat if able" | "attacks or blocks each combat if able" => {
             return Some(vec![
                 Restriction::MustAttack(fc.clone()),

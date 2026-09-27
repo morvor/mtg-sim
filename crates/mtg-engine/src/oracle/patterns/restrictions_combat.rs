@@ -52,6 +52,7 @@ fn lockable(r: &Restriction) -> bool {
             | Restriction::CantBeBlockedBy { .. }
             | Restriction::AttackDespiteDefender(_)
             | Restriction::DamageByToughness(_)
+            | Restriction::AssignsNoCombatDamage(_)
     )
 }
 

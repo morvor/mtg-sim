@@ -1860,6 +1860,9 @@ pub enum Restriction {
     /// "assigns combat damage equal to its toughness rather than its power" (modifies
     /// CR 510.1a).
     DamageByToughness(Filter),
+    /// "assigns no combat damage (this turn)": the creature assigns no combat damage
+    /// (CR 510.1a).
+    AssignsNoCombatDamage(Filter),
     /// "attacks each combat if able".
     MustAttack(Filter),
     /// "[attackers] attack [defender] (this turn / each combat) if able": a requirement
