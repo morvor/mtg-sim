@@ -416,6 +416,12 @@ pub struct TurnHistory {
     /// "as long as you haven't activated an exhaust ability this turn" (CR 702.177b).
     #[serde(default)]
     pub activated: Vec<(PlayerId, ObjectId, u64)>,
+    /// Activated abilities players began to activate this turn (CR 602.2), whether or not
+    /// the activation is complete yet: "you haven't begun to activate an exhaust ability
+    /// this turn" (CR 702.177b). An activation that's reversed is forgotten with the rest
+    /// of it.
+    #[serde(default)]
+    pub activations_begun: Vec<(PlayerId, ObjectId, u64)>,
     pub crimes: BTreeMap<PlayerId, u32>,
     pub counters_put: u32,
     pub descended: BTreeMap<PlayerId, u32>,

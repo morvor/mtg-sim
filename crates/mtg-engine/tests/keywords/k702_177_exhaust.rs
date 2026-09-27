@@ -246,3 +246,79 @@ fn an_exhaust_ability_can_give_a_keyword_counter() {
     add_mana(&mut t, P0, ManaType::C, 3);
     assert!(!activatable(&mut t, P0, mai, exhaust));
 }
+
+/// Records, whenever its player is asked to choose targets, whether they could activate
+/// the ability `uid` of `src` at that moment; the answer is left to the scripted agent.
+struct WatchActivatable {
+    inner: Box<dyn mtg_engine::decision::Agent>,
+    src: ObjectId,
+    uid: u64,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<bool>>>,
+}
+
+impl mtg_engine::decision::Agent for WatchActivatable {
+    fn decide(
+        &mut self,
+        g: &mtg_engine::game::Game,
+        p: PlayerId,
+        d: &mtg_engine::decision::Decision,
+    ) -> mtg_engine::decision::Answer {
+        if matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }) {
+            let a = g
+                .obj(self.src)
+                .chars
+                .abilities
+                .iter()
+                .find(|a| a.uid == self.uid)
+                .cloned();
+            let could = a.is_some_and(|a| match &a.kind {
+                AbilityKind::Activated(act) => g.can_activate(p, self.src, &a, act),
+                _ => false,
+            });
+            self.seen.lock().unwrap().push(could);
+        }
+        self.inner.decide(g, p, d)
+    }
+}
+
+#[test]
+fn such_an_effect_stops_applying_once_an_exhaust_ability_is_begun_to_be_activated() {
+    cr!("702.177b");
+    let mut t = TestGame::new(2);
+    let paragon = t.battlefield(P0, "Pacesetter Paragon");
+    let loot = t.battlefield(P0, "Loot, the Pathfinder");
+    let exhaust = ability_uid(&mut t, paragon, "Exhaust");
+    let damage = ability_uid(&mut t, loot, "Exhaust — {R}");
+    // Pacesetter Paragon's exhaust ability was activated on an earlier turn.
+    add_mana(&mut t, P0, ManaType::R, 3);
+    activate_uid(&mut t, P0, paragon, exhaust).unwrap();
+    t.resolve_all();
+    t.battlefield(P0, "Elvish Refueler");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::R, 4);
+    assert!(activatable(&mut t, P0, paragon, exhaust));
+    // While Loot's exhaust ability is being activated (its target being chosen), P0 has
+    // begun to activate an exhaust ability this turn: Elvish Refueler no longer lets the
+    // Paragon's be activated again.
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    {
+        let mut agents = t.g.agents.0.lock().unwrap();
+        let inner = std::mem::replace(
+            &mut agents[P0.idx()],
+            Box::new(mtg_engine::decision::PassiveAgent),
+        );
+        agents[P0.idx()] = Box::new(WatchActivatable {
+            inner,
+            src: paragon,
+            uid: exhaust,
+            seen: seen.clone(),
+        });
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_uid(&mut t, P0, loot, damage).unwrap();
+    assert_eq!(*seen.lock().unwrap(), vec![false]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(!activatable(&mut t, P0, paragon, exhaust));
+}

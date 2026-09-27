@@ -1698,6 +1698,8 @@ impl Game {
         act: &ActivatedAbility,
     ) -> Result<Option<ObjectId>, Illegal> {
         let src_chars = self.obj(src).chars.clone();
+        // CR 602.2: `p` began to activate it (undone with the rest if it's reversed).
+        self.history.activations_begun.push((p, src, a.uid));
         // CR 602.2a: an ability activated from a hidden zone reveals the card.
         if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
             self.emit(Event::Custom {

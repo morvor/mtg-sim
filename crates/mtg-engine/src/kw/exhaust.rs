@@ -12,10 +12,12 @@
 //! An effect may allow a player to activate exhaust abilities as long as they haven't
 //! activated an exhaust ability this turn (CR 702.177b): "During your turn, as long as
 //! you haven't activated an exhaust ability this turn, you may activate exhaust abilities
-//! as though they haven't been activated." ([`AS_THOUGH_NOT_ACTIVATED`]). That's judged
-//! as the player begins to activate the ability: the activation in progress isn't
-//! counted (the turn's activations are recorded in `TurnHistory::activated` once an
-//! activation is complete).
+//! as though they haven't been activated." ([`AS_THOUGH_NOT_ACTIVATED`]). That allows it
+//! only if the player hasn't begun to activate an exhaust ability this turn: activations
+//! are recorded as they begin (`TurnHistory::activations_begun`), so while one exhaust
+//! ability is being activated (its targets chosen, its costs paid), another can't be
+//! activated this way. The ability the player is beginning to activate isn't counted yet
+//! as it's checked (CR 602.5).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -50,10 +52,11 @@ fn exhaust_uid(g: &Game, src: ObjectId, uid: u64) -> bool {
     })
 }
 
-/// Whether `p` has activated an exhaust ability this turn.
-pub fn activated_exhaust_this_turn(g: &Game, p: PlayerId) -> bool {
+/// Whether `p` has begun to activate an exhaust ability this turn (CR 702.177b), whether
+/// or not that activation is complete.
+pub fn began_exhaust_this_turn(g: &Game, p: PlayerId) -> bool {
     g.history
-        .activated
+        .activations_begun
         .iter()
         .any(|(q, src, uid)| *q == p && exhaust_uid(g, *src, *uid))
 }
@@ -66,7 +69,7 @@ fn may_activate_again(g: &Game, p: PlayerId) -> bool {
             .customs
             .iter()
             .any(|(_, ctl, name)| name == AS_THOUGH_NOT_ACTIVATED && *ctl == p)
-        && !activated_exhaust_this_turn(g, p)
+        && !began_exhaust_this_turn(g, p)
 }
 
 pub struct Exhaust;
