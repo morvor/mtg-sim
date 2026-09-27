@@ -203,3 +203,20 @@ fn becomes_saddled(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "k702.171 becomes saddled until end of turn", priority: 100, parse: becomes_saddled } }
+
+// ---------------------------------------------------------------------------
+// Freerunning (CR 702.173)
+// ---------------------------------------------------------------------------
+
+/// "this spell's freerunning cost was paid" (Monastery Raid).
+fn freerunning_paid(c: &str) -> Option<Condition> {
+    matches!(
+        end(c),
+        "this spell's freerunning cost was paid"
+            | "~'s freerunning cost was paid"
+            | "its freerunning cost was paid"
+    )
+    .then(|| Condition::CostPaid(crate::kw::freerunning::FREERUNNING.into()))
+}
+
+inventory::submit! { ConditionPattern { name: "k702.173 freerunning cost was paid", priority: 100, parse: freerunning_paid } }
