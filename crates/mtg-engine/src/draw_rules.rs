@@ -121,6 +121,8 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 },
             ..
         } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // Named effects a keyword implements (e.g. exiling craft materials, CR 702.167a).
+        Effect::Custom(name) => crate::kw::custom_effect_possible(g, name, ctx).unwrap_or(true),
         _ => true,
     }
 }
