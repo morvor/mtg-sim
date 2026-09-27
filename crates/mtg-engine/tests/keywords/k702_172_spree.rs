@@ -85,6 +85,14 @@ fn a_mode_can_be_chosen_only_if_its_cost_and_targets_are_available() {
         "Unfortunate Accident",
         "You can’t choose the same mode more than once."
     );
+    ruling!(
+        "Requisition Raid",
+        "If a mode requires a target, you can select that mode only if there's a legal target available. Ignore the targeting requirements for modes you don't choose."
+    );
+    ruling!(
+        "Requisition Raid",
+        "You can't choose the same mode more than once."
+    );
     // No creature to destroy: the destroy mode can't be chosen (asking for it, or for no
     // mode, or for a mode twice, gets the one mode that can be chosen).
     for answer in [vec![0], vec![], vec![1, 1]] {
@@ -107,6 +115,27 @@ fn a_mode_can_be_chosen_only_if_its_cost_and_targets_are_available() {
         t.resolve_all();
         assert_eq!(creature_tokens(&t, P0).len(), 1);
     }
+    // Requisition Raid with no artifact to destroy: its first mode can't be chosen.
+    let mut t = TestGame::new(2);
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    let raid = t.hand(P0, "Requisition Raid");
+    add_mana(&mut t, P0, ManaType::W, 4);
+    t.answer_targets(P0, &[Entity::Object(anthem)]);
+    let spell = t.cast(P0, raid).modes(&[0, 1]).go();
+    let chosen: Vec<Option<usize>> = t
+        .obj(spell)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .map(|c| c.mode)
+        .collect();
+    assert_eq!(chosen, vec![Some(1)]);
+    // {W} + {1}.
+    assert_eq!(pool(&t, P0), 2);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Glorious Anthem"));
     // {B} alone pays for no mode: it can't be cast.
     let mut t = TestGame::new(2);
     let accident = t.hand(P0, ACCIDENT);
@@ -125,6 +154,14 @@ fn casting_without_paying_the_mana_cost_still_pays_the_mode_costs() {
     ruling!(
         "Unfortunate Accident",
         "The mana value of a spell with spree is determined only by its mana cost (in the upper right corner of the card). It doesn’t matter which modes you choose or which additional costs you pay, including any additional costs imposed by other effects."
+    );
+    ruling!(
+        "Requisition Raid",
+        "If an effect allows you to cast a spell with spree \"without paying its mana cost,\" you must still choose at least one mode and pay the associated additional costs."
+    );
+    ruling!(
+        "Requisition Raid",
+        "The mana value of a spell with spree is determined only by its mana cost (in the upper right corner of the card). It doesn't matter which modes you choose or which additional costs you pay, including any additional costs imposed by other effects."
     );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -185,11 +222,109 @@ fn modes_are_chosen_as_its_cast_and_performed_in_printed_order() {
 }
 
 #[test]
+fn a_spree_spell_whose_targets_are_all_illegal_doesnt_resolve() {
+    cr!("702.172a", "608.2b");
+    ruling!(
+        "Unfortunate Accident",
+        "If all targets for the chosen modes become illegal before a spell with spree resolves, the spell won’t resolve and none of its effects will happen."
+    );
+    // Unfortunate Accident: destroy target creature, and create a Mercenary token (a mode
+    // without a target). The creature leaves: no token either.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let accident = t.hand(P0, ACCIDENT);
+    add_mana(&mut t, P0, ManaType::B, 5);
+    t.cast(P0, accident).modes(&[0, 1]).target(bears).go();
+    crate::common_k702_052_066::destroy(&mut t, bears);
+    t.resolve_all();
+    assert!(creature_tokens(&t, P0).is_empty());
+    assert!(t.in_graveyard(P0, ACCIDENT));
+}
+
+#[test]
+fn a_copy_of_a_spree_spell_has_its_modes() {
+    cr!("702.172a", "700.2g", "707.10");
+    assert_supported("Twincast");
+    ruling!(
+        "Unfortunate Accident",
+        "If a spell with spree is copied, the effect that creates the copy may allow you to choose new targets. You cannot choose new modes."
+    );
+    ruling!(
+        "Unfortunate Accident",
+        "You choose the modes as you cast the spell with spree. Once modes are chosen, they can’t be changed."
+    );
+    ruling!(
+        "Requisition Raid",
+        "You choose the modes as you cast the spell with spree. Once modes are chosen, they can't be changed."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let accident = t.hand(P0, ACCIDENT);
+    add_mana(&mut t, P0, ManaType::B, 5);
+    let spell = t.cast(P0, accident).modes(&[0, 1]).target(bears).go();
+    // Twincast copies it; the copy gets a new target but keeps both modes.
+    let twincast = t.hand(P0, "Twincast");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    t.cast(P0, twincast).target(spell).go();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(creature_tokens(&t, P0).len(), 2);
+    // Modes were chosen only once, as the original was cast.
+    let modes_asked = t
+        .asked()
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseModes { .. }))
+        .count();
+    assert_eq!(modes_asked, 1);
+}
+
+#[test]
+fn abilities_that_trigger_during_its_modes_wait_until_it_has_resolved() {
+    cr!("702.172a", "603.3");
+    assert_supported("Blood Artist");
+    ruling!(
+        "Unfortunate Accident",
+        "No player can cast spells or activate abilities in between the modes of a resolving spell. Any abilities that trigger won’t be put onto the stack until the spell is done resolving."
+    );
+    ruling!(
+        "Requisition Raid",
+        "No player can cast spells or activate abilities in between the modes of a resolving spell. Any abilities that trigger won't be put onto the stack until the spell is done resolving."
+    );
+    // Blood Artist: "Whenever this creature or another creature dies, target player loses
+    // 1 life and you gain 1 life."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Blood Artist");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let accident = t.hand(P0, ACCIDENT);
+    add_mana(&mut t, P0, ManaType::B, 5);
+    t.cast(P0, accident).modes(&[0, 1]).target(bears).go();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    // Both modes happened; Blood Artist's ability triggered during the first and is put on
+    // the stack only now.
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(creature_tokens(&t, P0).len(), 1);
+    assert!(t.in_graveyard(P0, ACCIDENT));
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.life(P1), 20);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
 fn the_plus_signs_are_reminders_of_the_additional_costs() {
     cr!("702.172b");
     ruling!(
         "Unfortunate Accident",
         "Each additional cost and associated mode in the text box is also preceded with a + indicator. These symbols also have no rules meaning and serve only to remind players that the listed costs are additional costs."
+    );
+    ruling!(
+        "Unfortunate Accident",
+        "Spells with spree have a + (plus sign) indicator in the upper right corner of the card frame. This has no rules meaning and serves only to remind players that at least one additional cost is required to cast the spell."
     );
     // The "+ [cost] — [effect]" lines are the spell's modes, each with its additional
     // cost; the spell has the spree keyword.
