@@ -115,3 +115,30 @@ fn random_games_complete() {
         assert!(g.result.is_some());
     }
 }
+
+/// A free repeatable ability ("{0}: Viscid Lemures gets -1/-0 and gains swampwalk until
+/// end of turn") used to keep random agents activating it hundreds of times a step (each
+/// time they got priority they acted with probability 0.8), each activation adding an
+/// effect that slowed every later one: games took minutes. Now each action in a step
+/// makes passing more likely.
+#[test]
+fn random_agents_pass_after_acting_repeatedly_in_a_step() {
+    let mut t = TestGame::new(2);
+    let lemures = t.battlefield(PlayerId(0), "Viscid Lemures");
+    let activate = Action::Activate {
+        source: lemures,
+        ability: t.obj(lemures).chars.abilities[0].uid,
+    };
+    let mut agent = RandomAgent::new(7);
+    let mut acted = 0;
+    for _ in 0..200 {
+        let d = Decision::Priority {
+            actions: vec![Action::Pass, activate.clone()],
+        };
+        if agent.decide(&t.g, PlayerId(0), &d) != Answer::Action(Action::Pass) {
+            acted += 1;
+        }
+    }
+    // With a constant 0.8 it would act about 160 times.
+    assert!(acted < 40, "acted {acted} times in one step");
+}
