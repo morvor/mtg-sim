@@ -64,6 +64,12 @@ pub trait KeywordRules: Sync + Send {
     fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         vec![]
     }
+    /// Land cards outside `p`'s hand that a keyword's rule lets them play, e.g. a card
+    /// with mayhem they discarded this turn (CR 702.187c). Called for every registered
+    /// implementation; the usual rules for playing lands still apply (CR 305.2).
+    fn playable_lands(&self, g: &Game, p: PlayerId) -> Vec<ObjectId> {
+        vec![]
+    }
     /// Optional additional costs announced while casting (name, cost, repeatable).
     fn optional_costs(
         &self,
@@ -428,6 +434,14 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         }
     }
     out
+}
+
+/// See [`KeywordRules::playable_lands`].
+pub fn playable_lands(g: &Game, p: PlayerId) -> Vec<ObjectId> {
+    registry()
+        .iter()
+        .flat_map(|r| r.playable_lands(g, p))
+        .collect()
 }
 
 /// See [`KeywordRules::cast_prohibited`].

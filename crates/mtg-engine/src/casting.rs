@@ -237,6 +237,12 @@ impl Game {
                 out.push(c);
             }
         }
+        // Keyword rules ("play this card from your graveyard if you discarded it this turn").
+        for c in crate::kw::playable_lands(self, p) {
+            if self.card_has_land_face(c) && !out.contains(&c) {
+                out.push(c);
+            }
+        }
         out.retain(|c| !self.land_play_prohibited(p, *c));
         out
     }

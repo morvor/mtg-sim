@@ -11,6 +11,7 @@
 //! * warp (CR 702.185): the void condition "a nonland permanent left the battlefield this
 //!   turn or a spell was warped this turn", "You may cast ~ from your graveyard using its
 //!   warp ability";
+//! * "if ~'s mayhem cost was paid" and the like (CR 702.185, 702.187);
 
 use super::{AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
@@ -244,3 +245,20 @@ fn warp_from_graveyard(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "k702.185 cast from graveyard using warp", priority: 50, parse: warp_from_graveyard } }
+
+/// "if ~'s mayhem cost was paid", "if its warp cost was paid", "if this spell's ... cost
+/// was paid", "if his/her ... cost was paid" (CR 702.185a, 702.187b).
+fn keyword_cost_paid(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = ["its ", "~'s ", "this spell's ", "his ", "her ", "their "]
+        .iter()
+        .find_map(|p| c.strip_prefix(p))?;
+    let name = match r {
+        "mayhem cost was paid" => crate::kw::mayhem::MAYHEM,
+        "warp cost was paid" => crate::kw::warp::WARP,
+        _ => return None,
+    };
+    Some(Condition::CostPaid(name.into()))
+}
+
+inventory::submit! { ConditionPattern { name: "k702.185-190 keyword cost was paid", priority: 50, parse: keyword_cost_paid } }
