@@ -572,3 +572,39 @@ fn cast_from_zone(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.187 it was cast from your graveyard", priority: 60, parse: cast_from_zone } }
+
+/// "Artifact cards and red creature cards in your hand have warp {1}{R}." (Tannuk,
+/// Steadfast Second; CR 702.185a): each group of cards has the keyword.
+fn two_groups_of_cards_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (a, r) = l.split_once(" cards and ")?;
+    let (b, r) = r.split_once(" cards in your ")?;
+    let (zone, rest) = r.split_once(' ')?;
+    if !matches!(zone, "hand" | "graveyard") || !rest.starts_with("have ") {
+        return None;
+    }
+    let one = |group: &str| -> Option<(Filter, Vec<Modification>, StaticAbility)> {
+        let line = format!("{group} cards in your {zone} {rest}.");
+        let v = crate::oracle::parse_ability(&line, ctx)?;
+        let [a] = v.as_slice() else { return None };
+        let AbilityKind::Static(s) = &a.kind else { return None };
+        let StaticEffect::Continuous { affected, mods } = &s.effect else {
+            return None;
+        };
+        Some((affected.clone(), mods.clone(), s.clone()))
+    };
+    let (fa, mods, mut s) = one(a)?;
+    let (fb, mods_b, _) = one(b)?;
+    if format!("{mods:?}") != format!("{mods_b:?}") {
+        return None;
+    }
+    // (The zone stays visible at the top of the filter: it's where the effect looks.)
+    let zone = fa.zone()?;
+    s.effect = StaticEffect::Continuous {
+        affected: Filter::And(vec![Filter::InZone(zone), Filter::Or(vec![fa, fb])]),
+        mods,
+    };
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.185 [cards] and [cards] in your hand have warp", priority: 100, parse: two_groups_of_cards_have } }

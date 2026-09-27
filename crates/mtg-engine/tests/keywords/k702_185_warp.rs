@@ -292,3 +292,36 @@ fn a_card_may_be_cast_from_the_graveyard_using_its_warp_ability() {
     let g = t.graveyard(P0, "Red Tiger Mechan");
     assert!(t.cast(P0, g).method(WARP).try_go().is_err());
 }
+
+#[test]
+fn cards_in_hand_granted_warp() {
+    cr!("702.185a");
+    // Tannuk, Steadfast Second: "Artifact cards and red creature cards in your hand have
+    // warp {2}{R}."
+    assert_supported(&["Tannuk, Steadfast Second"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    t.battlefield(P0, "Tannuk, Steadfast Second");
+    let wurm = t.hand(P0, "Craw Wurm");
+    let colossus = t.hand(P0, "Darksteel Colossus");
+    // A green creature card doesn't have warp.
+    assert!(t.cast(P0, wurm).method(WARP).try_go().is_err());
+    t.clear_answers();
+    // An artifact card does: {2}{R} rather than {11}.
+    t.cast(P0, colossus).method(WARP).go();
+    assert_eq!(untapped_lands(&t), 0);
+    t.resolve_all();
+    assert_eq!(named(&t, "Darksteel Colossus").len(), 1);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(named(&t, "Darksteel Colossus").is_empty());
+    assert_eq!(exiled_count(&t, "Darksteel Colossus"), 1);
+    // A red creature card does too.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    t.battlefield(P0, "Tannuk, Steadfast Second");
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, giant).method(WARP).go();
+    t.resolve_all();
+    assert_eq!(named(&t, "Hill Giant").len(), 1);
+}
