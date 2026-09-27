@@ -92,10 +92,18 @@ impl KeywordRules for Devour {
         };
         let this = ctx.source;
         let p = ctx.controller;
+        // Not itself, nothing entering at the same time, nothing another object entering
+        // at the same time devours, and nothing that can't be sacrificed (the permanents
+        // chosen are sacrificed later, all together, and each one chosen counts).
         let cands: Vec<ObjectId> = ctx
             .var_objects(CANDIDATES)
             .into_iter()
-            .filter(|c| Some(*c) != this && !g.entering.contains(c))
+            .filter(|c| {
+                Some(*c) != this
+                    && !g.entering.contains(c)
+                    && !g.zones.entry_sacrifices.iter().any(|(o, _)| o == c)
+                    && !g.cant_be_sacrificed(*c)
+            })
             .collect();
         let chosen = if cands.is_empty() {
             vec![]
@@ -110,12 +118,12 @@ impl KeywordRules for Devour {
                 max,
             )
         };
-        let what: Vec<(ObjectId, PlayerId)> = chosen.iter().map(|o| (*o, p)).collect();
-        let sacrificed: Vec<ObjectId> = g
-            .sacrifice_simultaneously(&what)
-            .into_iter()
-            .map(|(old, _)| old)
-            .collect();
+        // The permanents devoured by everything entering at the same time are sacrificed
+        // together, before any of it enters (see `Game::move_objects`).
+        let sacrificed: Vec<ObjectId> = chosen.into_iter().filter(|o| g.is_live(*o)).collect();
+        g.zones
+            .entry_sacrifices
+            .extend(sacrificed.iter().map(|o| (*o, p)));
         let k = sacrificed.len() as u32;
         // "Devour X, where X is the number of creatures devoured this way".
         let per = if n < 0 { k } else { n as u32 };
