@@ -18,6 +18,23 @@ fn triggers_additional_time(l: &str, text: &str, _ctx: &CompileContext) -> Optio
         Some(o) => (true, o),
         None => (false, objects),
     };
+    // "equipped creature" / "enchanted creature" without an article is the creature this
+    // permanent is attached to (Wizard's Staff), not any equipped or enchanted creature.
+    if !other && matches!(objects, "equipped creature" | "enchanted creature") {
+        return Some(vec![AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::AdditionalTrigger {
+                sources: Filter::and(vec![Filter::AttachedToSource, Filter::creature()]),
+                cause: None,
+            })),
+            text,
+        )]);
+    }
+    if ["equipped ", "enchanted ", "fortified "]
+        .iter()
+        .any(|p| objects.starts_with(p))
+    {
+        return None;
+    }
     let objects = objects
         .strip_prefix("a ")
         .or_else(|| objects.strip_prefix("an "))

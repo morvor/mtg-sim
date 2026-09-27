@@ -244,6 +244,7 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
     let mut t = TestGame::new(2);
     put(&mut t, P0, rally, Zone::Battlefield);
     t.lands(P0, "Plains", 2);
+    let walker = t.battlefield(P1, "Jace Beleren");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P0, "Hill Giant");
     let c = t.hand(P0, "The Last Ronin's Technique");
@@ -252,7 +253,21 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
         &[(bears, Entity::Player(P1)), (giant, Entity::Player(P1))],
         &[],
     );
+    // The creature to return, as the cost is chosen and as it's paid.
     choose_objects(&mut t, P0, &[bears]);
+    choose_objects(&mut t, P0, &[bears]);
+    // What each token attacks: Jace for the first, the player for the other two.
+    choose_objects(&mut t, P0, &[walker]);
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(vec![Entity::Player(P1)]),
+    );
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(vec![Entity::Player(P1)]),
+    );
     t.cast(P0, c).method(SNEAK).go();
     t.resolve_all();
     let spirits: Vec<ObjectId> = t
@@ -262,14 +277,26 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
         .map(|o| o.id)
         .collect();
     assert_eq!(spirits.len(), 3);
+    let mut targets: Vec<Option<Entity>> = Vec::new();
     for s in &spirits {
         assert!(t.obj(*s).tapped);
-        assert_eq!(attacking(&t, *s), Some(Entity::Player(P1)));
+        targets.push(attacking(&t, *s));
     }
+    targets.sort_by_key(|e| format!("{e:?}"));
+    assert_eq!(
+        targets,
+        vec![
+            Some(Entity::Object(walker)),
+            Some(Entity::Player(P1)),
+            Some(Entity::Player(P1))
+        ]
+    );
     // Only the two declared attackers triggered the Horn.
     assert_eq!(t.life(P0), 22);
     t.advance_to(P0, Step::EndOfCombat);
-    assert_eq!(t.life(P1), 14);
+    // The Giant and two Spirits hit the player; one Spirit hit Jace (loyalty 3).
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.counters(walker, "loyalty"), 2);
     // Cast for its mana cost, they don't.
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 4);

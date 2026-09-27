@@ -189,6 +189,21 @@ fn the_mana_value_of_the_returned_creature() {
     t2.resolve_all();
     let s2 = named(&t2, "Scarlet Spider, Ben Reilly")[0];
     assert_eq!(t2.counters(s2, "+1/+1"), 0);
+    // As it last existed on the battlefield: a face-down Craw Wurm had mana value 0
+    // (CR 708.2a), though the card in hand has mana value 6.
+    let mut t3 = TestGame::new(2);
+    t3.lands(P0, "Mountain", 1);
+    t3.lands(P0, "Forest", 1);
+    let hidden = tapped(&mut t3, P0, "Craw Wurm");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t3.g, hidden));
+    t3.recompute();
+    assert_eq!(t3.g.mana_value_of(hidden), 0);
+    let c = t3.hand(P0, "Scarlet Spider, Ben Reilly");
+    t3.cast(P0, c).method(WEB).go();
+    assert!(t3.in_hand(P0, "Craw Wurm"));
+    t3.resolve_all();
+    let s3 = named(&t3, "Scarlet Spider, Ben Reilly")[0];
+    assert_eq!(t3.counters(s3, "+1/+1"), 0);
     // Cast for its mana cost, no counters.
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 2);

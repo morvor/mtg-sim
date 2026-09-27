@@ -225,7 +225,7 @@ fn multiple_instances_trigger_separately() {
     t.resolve_all();
     // The second one checks again: 2 isn't greater than 2 after the first counter.
     assert_eq!(plus1(&t, c), 1);
-    // Four mana on a 2/2: both put a counter (4 > 3 after the first).
+    // Four mana on a 1/1: both put a counter (4 > 2 after the first).
     let mut t2 = TestGame::new(2);
     let def = custom_card(
         "Twice Incremented",

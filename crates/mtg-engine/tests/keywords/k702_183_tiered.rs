@@ -55,7 +55,8 @@ fn choose_one_mode_and_pay_its_additional_cost() {
 fn only_one_mode_and_only_if_its_cost_can_be_paid() {
     cr!("702.183a");
     let mut t = TestGame::new(2);
-    t.lands(P0, "Mountain", 3);
+    // Enough mana for both Thunder and Thundara ({R} + {0} + {3}).
+    t.lands(P0, "Mountain", 8);
     let wurm = t.battlefield(P1, "Craw Wurm");
     let c = t.hand(P0, "Thunder Magic");
     // Two modes can't be chosen.
@@ -168,6 +169,10 @@ fn modes_can_choose_values_for_the_spells_text() {
         "Vincent's Limit Break",
         "Vincent's Limit Break will overwrite any previous effects that set the creature's power and toughness to specific numbers."
     );
+    ruling!(
+        "Vincent's Limit Break",
+        "Effects that otherwise modify its power and toughness will still apply no matter when they took effect. The same is true for +1/+1 counters."
+    );
     // Vincent's Limit Break ({1}{B} instant): "Tiered. Until end of turn, target creature
     // you control gains "When this creature dies, return it to the battlefield tapped
     // under its owner's control" and has the chosen base power and toughness.
@@ -176,16 +181,34 @@ fn modes_can_choose_values_for_the_spells_text() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 3);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    // A +1/+1 counter still applies on top of the new base.
+    // A +1/+1 counter, an earlier +1/+0 and an earlier effect setting it to 0/1.
     t.g.objects[bears.0 as usize]
         .counters
         .insert(mtg_engine::types::counters::PLUS1.into(), 1);
+    for m in [
+        Modification::SetPT(Some(Value::c(0)), Some(Value::c(1))),
+        Modification::ModifyPT(Value::c(1), Value::c(0)),
+    ] {
+        crate::common_k702_052_066::run_effect(
+            &mut t,
+            None,
+            P0,
+            Effect::Modify {
+                what: Sel::Target(0),
+                mods: vec![m],
+                duration: Duration::EndOfTurn,
+            },
+            &[Entity::Object(bears)],
+        );
+    }
+    assert_eq!(t.pt(bears), (2, 2));
     let c = t.hand(P0, "Vincent's Limit Break");
     t.cast(P0, c).modes(&[1]).target(bears).go();
     // {1}{B} plus {1}.
     assert_eq!(untapped_lands(&t), 0);
     t.resolve_all();
-    assert_eq!(t.pt(bears), (6, 3));
+    // Base 5/2 replaces the earlier 0/1; the +1/+0 and the counter still apply.
+    assert_eq!(t.pt(bears), (7, 3));
     // It dies and returns tapped.
     crate::common_k702_052_066::run_effect(
         &mut t,

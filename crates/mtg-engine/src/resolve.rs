@@ -719,21 +719,32 @@ impl Game {
                 let players = self.eval_players(controller, ctx);
                 let mut created = Vec::new();
                 for p in players {
-                    let chars = crate::tokens::token_characteristics(spec);
-                    let attack = if *attacking {
-                        self.attack_target_for_new_attacker(ctx)
-                    } else {
-                        None
-                    };
-                    let tc = TokenCreate {
-                        chars,
-                        card: crate::tokens::predefined_card(spec),
-                        tapped: *tapped,
-                        attacking: attack,
-                        copy_of: None,
-                        copy_exceptions: vec![],
-                    };
-                    created.extend(self.create_tokens(p, tc, n, ctx.source));
+                    // CR 508.4: what each token entering attacking attacks is chosen for
+                    // each of them; tokens attacking the same thing are created together.
+                    let mut groups: Vec<(Option<Entity>, u32)> = Vec::new();
+                    if *attacking {
+                        for _ in 0..n {
+                            let attack = self.attack_target_for_new_attacker(ctx);
+                            match groups.iter_mut().find(|(a, _)| *a == attack) {
+                                Some(g) => g.1 += 1,
+                                None => groups.push((attack, 1)),
+                            }
+                        }
+                    }
+                    if groups.is_empty() {
+                        groups.push((None, n));
+                    }
+                    for (attack, k) in groups {
+                        let tc = TokenCreate {
+                            chars: crate::tokens::token_characteristics(spec),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: *tapped,
+                            attacking: attack,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        };
+                        created.extend(self.create_tokens(p, tc, k, ctx.source));
+                    }
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
