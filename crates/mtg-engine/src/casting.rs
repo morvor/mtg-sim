@@ -1158,7 +1158,11 @@ impl Game {
             add_cost(&mut extra, &c);
         }
         let base_cost_has_x = match &opt.alt_cost {
-            Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
+            // CR 107.3a: an X in any part of an alternative cost ("Flashback—{1}{U}, Exile
+            // X blue cards from your graveyard").
+            Some(c) => {
+                c.mana.as_ref().is_some_and(|m| m.has_x()) || c.parts.iter().any(cost_part_has_x)
+            }
             None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
         } || extra.mana.as_ref().is_some_and(|m| m.has_x())
             || extra.parts.iter().any(cost_part_has_x)
