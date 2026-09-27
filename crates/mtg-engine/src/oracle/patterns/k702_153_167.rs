@@ -7,10 +7,15 @@
 //! * "[action on] each creature in the sector of your choice" (CR 702.158d) and
 //!   "Creatures in each sector can be blocked this turn only by creatures in the same
 //!   sector" (CR 702.158e);
+//! * an Attraction's "Prize — [effect]" paragraph, "claim the prize", and "Whenever you
+//!   claim the prize of an Attraction" (CR 702.159b);
 //! * "if this spell was bargained", "if it was bargained", "if it's bargained"
 //!   (CR 702.166b–c).
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
+use super::{
+    AbilityPattern, BlockGroupPattern, ConditionPattern, EffectPattern, StaticPattern,
+    TriggerPattern,
+};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::Builder;
@@ -177,3 +182,60 @@ fn same_sector_blocking(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "k702.158 blocked only by creatures in the same sector", priority: 100, parse: same_sector_blocking } }
+
+/// Marks an Attraction's prize paragraph during grouping ("Prize" looks like an ability
+/// word).
+const PRIZE_MARK: &str = "{PRIZE} ";
+
+fn mark_prizes(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
+    let attraction = ctx
+        .type_line
+        .subtypes
+        .iter()
+        .any(|s| s.as_str() == "Attraction");
+    blocks
+        .into_iter()
+        .map(|b| {
+            if attraction && b.starts_with("Prize — ") {
+                format!("{PRIZE_MARK}{b}")
+            } else {
+                b
+            }
+        })
+        .collect()
+}
+
+inventory::submit! { BlockGroupPattern { name: "k702.159 attraction prizes", priority: 10, group: mark_prizes } }
+
+/// "Prize — [effect]" (CR 702.159b): part of the Attraction's visit ability, performed when
+/// its prize is claimed (see `kw/visit.rs`).
+fn prize(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let block = block.strip_prefix(PRIZE_MARK)?;
+    let eff = block.strip_prefix("Prize — ")?;
+    let body = crate::oracle::effects::parse_body(eff, ctx)?;
+    let tr = TriggeredAbility::new(TriggerCond::Custom(crate::kw::visit::PRIZE.into()), body);
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), block)])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.159 attraction prize", priority: 70, parse: prize } }
+
+/// "claim the prize" (CR 702.159b).
+fn claim_the_prize(l: &str, _b: &mut Builder) -> Option<Effect> {
+    matches!(end(l).trim_end_matches('!'), "claim the prize")
+        .then(|| Effect::Custom(crate::kw::visit::CLAIM_THE_PRIZE.into()))
+}
+
+inventory::submit! { EffectPattern { name: "k702.159 claim the prize", priority: 100, parse: claim_the_prize } }
+
+/// "Whenever you claim the prize of an Attraction" (The Most Dangerous Gamer).
+fn you_claim_the_prize(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(r) == "you claim the prize of an attraction").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::visit::YOU_CLAIM.into()),
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "k702.159 you claim the prize", priority: 100, parse: you_claim_the_prize } }
