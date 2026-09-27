@@ -731,3 +731,48 @@ fn a_kirin_uses_the_value_of_x_on_the_stack_for_the_spells_mana_value() {
     assert_eq!(t.obj_now(giant).controller, P0);
     assert!(t.in_graveyard(P1, "Llanowar Elves"));
 }
+
+#[test]
+fn an_aura_spell_has_a_target_and_triggers_a_spell_with_targets_ability() {
+    cr!("115.1b", "115.9a", "702.5a");
+    ruling!(
+        "Voracious Bibliophile",
+        "An Aura spell requires a target, as defined by its enchant ability."
+    );
+    supported("Voracious Bibliophile");
+    supported("Fire // Ice");
+    // Voracious Bibliophile: "Whenever you cast a spell with one or more targets, draw
+    // that many cards."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Voracious Bibliophile");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Mountain", 2);
+    let hand = t.hand_size(P0);
+    // Rancor (Aura, "Enchant creature"): one target.
+    let rancor = t.hand(P0, "Rancor");
+    t.cast(P0, rancor).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Grizzly Bears: no targets, no trigger.
+    let mine = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, mine).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Fire with two targets: two cards.
+    let fire = t.hand(P0, "Fire // Ice");
+    t.answer(
+        P0,
+        DecisionKind::Divide,
+        Answer::Numbers(vec![1, 1]),
+    );
+    t.cast(P0, fire)
+        .method(CastMethod::Half(0))
+        .targets(&[Entity::Player(P1), Entity::Object(bears)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 3);
+    assert_eq!(t.life(P1), 19);
+}
