@@ -219,3 +219,52 @@ fn if_his_sneak_cost_was_paid() {
     t.resolve_all();
     assert_eq!(t.pt(giant), (3, 3));
 }
+
+#[test]
+fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
+    cr!("702.190a");
+    ruling!(
+        "The Last Ronin's Technique",
+        "You choose the player, planeswalker, or battle each token is attacking."
+    );
+    // The Last Ronin's Technique ({3}{W} instant): "Sneak {1}{W}. Create three 1/1 white
+    // Ninja Turtle Spirit creature tokens. If this spell's sneak cost was paid, they enter
+    // tapped and attacking."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let c = t.hand(P0, "The Last Ronin's Technique");
+    to_blockers(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (giant, Entity::Player(P1))],
+        &[],
+    );
+    choose_objects(&mut t, P0, &[bears]);
+    t.cast(P0, c).method(SNEAK).go();
+    t.resolve_all();
+    let spirits: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token() && o.chars.has_subtype("Spirit"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(spirits.len(), 3);
+    for s in &spirits {
+        assert!(t.obj(*s).tapped);
+        assert_eq!(attacking(&t, *s), Some(Entity::Player(P1)));
+    }
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 14);
+    // Cast for its mana cost, they don't.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    let c = t.hand(P0, "The Last Ronin's Technique");
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.is_token())
+        .all(|o| !o.tapped));
+}

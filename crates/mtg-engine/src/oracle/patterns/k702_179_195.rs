@@ -11,7 +11,8 @@
 //! * warp (CR 702.185): the void condition "a nonland permanent left the battlefield this
 //!   turn or a spell was warped this turn", "You may cast ~ from your graveyard using its
 //!   warp ability";
-//! * "if ~'s mayhem cost was paid" and the like (CR 702.185, 702.187);
+//! * "if ~'s mayhem cost was paid" and the like (CR 702.185, 702.187); "If this spell's
+//!   sneak cost was paid, they enter tapped and attacking." after creating tokens;
 //! * "whenever you firebend" (CR 702.189b);
 //! * "Power-up — [cost]: [effect]" (CR 702.193a), "Each power-up ability of permanents
 //!   you control can be activated an additional time", "Power-up abilities of other
@@ -440,3 +441,43 @@ fn enduring_story(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.195 you have an enduring story", priority: 50, parse: enduring_story } }
+
+/// "If this spell's sneak cost was paid, they enter tapped and attacking." after "Create
+/// [tokens]" (The Last Ronin's Technique): the tokens enter tapped and attacking if it was
+/// (each attacking what its controller chooses, CR 508.4).
+fn tokens_enter_attacking_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(cond) = end(l)
+        .strip_prefix("if ")
+        .and_then(|r| r.strip_suffix(", they enter tapped and attacking"))
+        .and_then(keyword_cost_paid)
+    else {
+        return false;
+    };
+    let Effect::CreateToken {
+        tapped: false,
+        attacking: false,
+        ..
+    } = prev
+    else {
+        return false;
+    };
+    let plain = prev.clone();
+    let mut attacking = prev.clone();
+    if let Effect::CreateToken {
+        tapped, attacking: a, ..
+    } = &mut attacking
+    {
+        *tapped = true;
+        *a = true;
+    }
+    *prev = Effect::If {
+        cond,
+        then: Box::new(attacking),
+        otherwise: Box::new(plain),
+    };
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "k702.190 tokens enter tapped and attacking if sneak cost was paid", priority: 50, apply: tokens_enter_attacking_if }
+}
