@@ -40,8 +40,7 @@ const RETURNING: Var = vars::USER + 170;
 
 pub struct Craft;
 
-/// The materials of the craft keyword: (description, min, max), and whether they must be
-/// cards (in a graveyard).
+/// The materials of the craft keyword: (description, fewest, most).
 fn materials(kw: &Keyword) -> Option<(Filter, u32, u32)> {
     let f = kw.filter.clone()?;
     let n = kw.n.unwrap_or(1);
@@ -171,6 +170,10 @@ fn exile_materials(g: &mut Game, ctx: &Ctx) {
         return;
     };
     let cands = candidates(g, p, src, &filter, ctx);
+    // Checked before paying (`custom_effect_possible`).
+    if (cands.len() as u32) < min {
+        return;
+    }
     let max = max.min(cands.len() as u32);
     let chosen = g.ask_objects(p, Some(src), "Choose materials to exile (craft)", cands, min, max);
     let mut exiled = Vec::new();
