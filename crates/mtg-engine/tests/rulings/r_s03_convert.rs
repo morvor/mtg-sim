@@ -279,7 +279,7 @@ fn more_than_meets_the_eye_is_an_alternative_cost_and_additional_costs_still_app
 
 #[test]
 fn a_copy_of_a_spell_cast_converted_has_the_back_face_characteristics() {
-    cr!("707.10", "707.2", "702.78a", "111.10");
+    cr!("707.10", "707.2", "702.78a", "111.13");
     ruling!(
         "Cyclonus, the Saboteur // Cyclonus, Cybertronian Fighter",
         "If you copy a permanent spell cast this way, the copy has the characteristics of the card's back face, even though it isn't itself a double-faced card."
@@ -324,7 +324,7 @@ fn a_copy_of_a_spell_cast_converted_has_the_back_face_characteristics() {
 
 #[test]
 fn living_metal_makes_the_vehicle_an_artifact_creature_during_your_turn() {
-    cr!("702.161a", "613.1d", "301.7");
+    cr!("702.161a", "613.1d", "301.7a", "301.7b");
     ruling!(
         "Cyclonus, the Saboteur // Cyclonus, Cybertronian Fighter",
         "\"Living metal\" means \"As long as it's your turn, this permanent is an artifact creature in addition to its other types.\""
