@@ -1,6 +1,8 @@
 //! "Mill four cards. You may put up to two creature and/or land cards from among the
-//! milled cards into your hand." (Smuggler's Surprise): cards chosen among those the mill
-//! put into the graveyard (the new objects there, CR 400.7).
+//! milled cards into your hand." (Smuggler's Surprise), "... a permanent card from among
+//! the cards milled this way ..." (Wasteful Harvest): cards chosen among those the mill
+//! put into the graveyard (the new objects there, CR 400.7), or wherever else they went
+//! instead if that's a public zone (CR 701.17c).
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -35,7 +37,10 @@ fn put_from_among_milled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     } else {
         return false;
     };
-    let Some((desc, rest)) = r.split_once(" from among the milled cards ") else {
+    let Some((desc, rest)) = r
+        .split_once(" from among the milled cards ")
+        .or_else(|| r.split_once(" from among the cards milled this way "))
+    else {
         return false;
     };
     if rest != "into your hand" || !ends_with_mill(prev) {

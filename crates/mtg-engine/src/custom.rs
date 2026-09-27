@@ -211,6 +211,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::dice::custom_condition(name, ctx) {
         return b;
     }
+    // "If two cards that share all their card types were milled this way" (CR 701.17c).
+    if let Some(b) = crate::mill_rules::custom_condition(g, name, ctx) {
+        return b;
+    }
     // "If it's a creature card" about a revealed face-down permanent (CR 708.12).
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
         return b;

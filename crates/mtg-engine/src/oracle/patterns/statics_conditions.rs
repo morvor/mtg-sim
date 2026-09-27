@@ -297,8 +297,12 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
             Condition::And(conds)
         });
     }
-    // "there are N or more X in your graveyard" / "N or more X are in your graveyard"
-    let (cmp, n, rest) = if let Some(r) = c.strip_prefix("there are ") {
+    // "there are N or more X in your graveyard" / "N or more X are in your graveyard" /
+    // "you have N or more X in your graveyard" (Octavia, Living Thesis)
+    let (cmp, n, rest) = if let Some(r) = c
+        .strip_prefix("there are ")
+        .or_else(|| c.strip_prefix("you have "))
+    {
         let (cmp, n, r) = amount_cmp(r)?;
         (cmp, n, r.trim().to_string())
     } else {

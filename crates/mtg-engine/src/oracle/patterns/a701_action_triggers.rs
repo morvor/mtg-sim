@@ -73,6 +73,20 @@ fn object_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "a701 object keyword action triggers", priority: 60, parse: object_action_trigger } }
 
+/// "~ enters or becomes monstrous" (Alpha Deathclaw), "~ enters or explores": either
+/// event triggers the ability (CR 603.2). "It" is ~ either way.
+fn enters_or_object_action(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let action = end(r).strip_prefix("~ enters or ")?;
+    let (cond, _, _) = object_action_trigger(&format!("~ {action}"))?;
+    Some((
+        TriggerCond::AnyOf(vec![TriggerCond::EntersBattlefield(Filter::Source), cond]),
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "a701 ~ enters or [keyword action]", priority: 60, parse: enters_or_object_action } }
+
 /// "[player] [action]s": "whenever you clash", "whenever you discover", "whenever an
 /// opponent blights", ...
 fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
