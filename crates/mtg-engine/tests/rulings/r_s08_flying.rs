@@ -12,6 +12,7 @@ use crate::r_s03_common::*;
 use crate::r_s04_common::*;
 use crate::r_s05_common::*;
 use crate::r_s06_common::*;
+use crate::r_s07_common::named_of;
 use crate::r_s08_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::{CastMethod, Zone};
@@ -941,4 +942,36 @@ fn a_spell_cast_without_paying_its_mana_cost_has_x_zero() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
     assert!(t.in_graveyard(P1, "Blaze"));
+}
+
+#[test]
+fn no_extra_mana_can_be_paid_for_a_creature_spell_unless_an_effect_says_so() {
+    cr!("601.2f", "601.2h", "106.1");
+    ruling!(
+        "Prossh, Skyraider of Kher",
+        "You can't choose to pay extra mana to cast a creature spell unless something instructs you to."
+    );
+    supported("Prossh, Skyraider of Kher");
+    supported("Sphere of Resistance");
+    // Prossh ({3}{B}{R}{G}): "When you cast this spell, create X 0/1 red Kobold creature
+    // tokens named Kobolds of Kher Keep, where X is the amount of mana spent to cast it."
+    // Sphere of Resistance: "Spells cost {1} more to cast."
+    for sphere in [false, true] {
+        let mut t = TestGame::new(2);
+        if sphere {
+            t.battlefield(P1, "Sphere of Resistance");
+        }
+        t.lands(P0, "Swamp", 1);
+        t.lands(P0, "Mountain", 1);
+        t.lands(P0, "Forest", 1);
+        t.lands(P0, "Wastes", 7);
+        let prossh = t.hand(P0, "Prossh, Skyraider of Kher");
+        t.cast(P0, prossh).go();
+        t.resolve_all();
+        let spent = if sphere { 7 } else { 6 };
+        assert_eq!(untapped_lands(&t, P0), 10 - spent);
+        let kobolds = named_of(&t, P0, "Kobolds of Kher Keep");
+        assert_eq!(kobolds.len(), spent, "sphere: {sphere}");
+        assert_eq!(t.pt(kobolds[0]), (0, 1));
+    }
 }

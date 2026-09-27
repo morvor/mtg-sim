@@ -528,6 +528,19 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
         return Some(v);
     }
+    // "the amount of mana spent to cast ~" (CR 601.2h), also as "it" when "it" is the
+    // source ("When you cast this spell, create X ..., where X is the amount of mana spent
+    // to cast it.").
+    for (p, needs_self) in [
+        ("the amount of mana spent to cast ~", false),
+        ("the amount of mana spent to cast it", true),
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if !needs_self || matches!(b.it, Sel::This) {
+                return Some((Value::ManaSpent, rest.to_string()));
+            }
+        }
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((
