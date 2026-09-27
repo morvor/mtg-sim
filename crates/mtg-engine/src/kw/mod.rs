@@ -95,6 +95,19 @@ pub trait KeywordRules: Sync + Send {
     ) -> Result<(), Illegal> {
         Ok(())
     }
+    /// Choices announced as `spell` is proposed (CR 601.2b) that are recorded by name in
+    /// its `CastInfo::paid` (`paid`), such as promising a gift to an opponent
+    /// (CR 702.174a, 702.174k). Called once per keyword kind the spell has, after its
+    /// optional additional costs are announced.
+    fn announce_choices(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        paid: &mut Vec<SmolStr>,
+    ) {
+    }
     /// Adjust the targets/effect of a spell being cast.
     fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
         body
@@ -449,6 +462,15 @@ pub fn announce(
         }
     }
     Ok(())
+}
+
+/// See [`KeywordRules::announce_choices`].
+pub fn announce_choices(g: &mut Game, p: PlayerId, spell: ObjectId, paid: &mut Vec<SmolStr>) {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.announce_choices(g, p, spell, kw, paid);
+        }
+    }
 }
 
 pub fn adjust_spell_body(g: &Game, spell: ObjectId, mut body: Body) -> Body {

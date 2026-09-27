@@ -9,9 +9,15 @@
 //! * saddle (CR 702.171): "~ is saddled", "whenever ~ becomes saddled [for the first time
 //!   each turn]", "whenever ~ saddles a Mount [or crews a Vehicle] [during your main
 //!   phase]", "[Mount] becomes saddled until end of turn" (and "creature that saddled it
-//!   this turn" in `oracle/phrases.rs`).
+//!   this turn" in `oracle/phrases.rs`);
+//! * "if this spell's freerunning cost was paid" (CR 702.173a);
+//! * "Gift a [something]" (CR 702.174a–b, the keyword and its second ability), "if the
+//!   gift was promised", "if the gift wasn't promised" (CR 702.174k), "whenever you give a
+//!   gift" (CR 702.174c).
 
-use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern, TriggerPattern,
+};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
@@ -220,3 +226,137 @@ fn freerunning_paid(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "k702.173 freerunning cost was paid", priority: 100, parse: freerunning_paid } }
+
+// ---------------------------------------------------------------------------
+// Gift (CR 702.174)
+// ---------------------------------------------------------------------------
+
+/// "Gift a card", "Gift a tapped Fish", ...: the gift keyword (its [something] kept in its
+/// text) and its second ability, where the keyword is printed (CR 702.174a–b, 702.174j;
+/// see `kw/gift.rs`).
+fn gift(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::keywords::{Keyword, KeywordKind};
+    use crate::kw::gift::{gift_ability, GiftKind};
+    let t = block.trim().trim_end_matches('.');
+    let words = t.strip_prefix("Gift ")?;
+    let kind = GiftKind::parse(words)?;
+    let kw = Keyword {
+        text: Some(SmolStr::new(t)),
+        ..Keyword::new(KeywordKind::Gift)
+    };
+    Some(vec![
+        AbilityDef::new(AbilityKind::Keyword(kw), t),
+        gift_ability(kind, ctx.is_spell(), t),
+    ])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.174 gift a [something]", priority: 100, parse: gift } }
+
+/// "the gift was promised", "the gift wasn't promised" (CR 702.174k).
+fn gift_promised(c: &str) -> Option<Condition> {
+    use crate::kw::gift::promised;
+    match end(c) {
+        "the gift was promised" | "its gift was promised" | "this spell's gift was promised" => {
+            Some(promised())
+        }
+        "the gift wasn't promised" | "the gift was not promised" => {
+            Some(Condition::Not(Box::new(promised())))
+        }
+        _ => None,
+    }
+}
+
+inventory::submit! { ConditionPattern { name: "k702.174k the gift was promised", priority: 100, parse: gift_promised } }
+
+/// "Whenever you give a gift" (Jolly Gerbils; CR 702.174c).
+fn give_a_gift(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(r) == "you give a gift").then(|| {
+        (
+            TriggerCond::PlayerAction {
+                name: SmolStr::new(crate::kw::gift::GAVE_GIFT),
+                who: PlayerRel::You,
+            },
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "k702.174c you give a gift", priority: 100, parse: give_a_gift } }
+
+/// "If the gift was promised, instead [effect with targets of its own]." after a sentence
+/// ("Counter target creature spell. If the gift was promised, instead counter target
+/// spell."): the targets are alternatives chosen as the spell is cast, depending on
+/// whether the optional cost was paid (CR 702.174m, 601.2c; also "if this spell was
+/// kicked"): the new effect's targets are chosen only if it was, the previous sentence's
+/// only if it wasn't.
+fn if_paid_instead_with_targets(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", instead ") else {
+        return false;
+    };
+    if matches!(prev, Effect::Noop | Effect::Seq(_)) {
+        return false;
+    }
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let cast_time = match &cond {
+        Condition::CostPaid(_) => true,
+        Condition::Not(inner) => matches!(**inner, Condition::CostPaid(_)),
+        _ => false,
+    };
+    if !cast_time {
+        return false;
+    }
+    let first_new = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_effect_text(x, b) else {
+        b.targets.truncate(first_new);
+        return false;
+    };
+    if b.targets.len() == first_new {
+        // No targets of its own: the general "If [condition], instead [effect]" handles it.
+        b.targets.truncate(first_new);
+        return false;
+    }
+    // The previous sentence's targets: those it refers to, chosen only if its effect can
+    // happen.
+    let old = std::mem::replace(prev, Effect::Noop);
+    let not = match &cond {
+        Condition::Not(inner) => (**inner).clone(),
+        c => Condition::Not(Box::new(c.clone())),
+    };
+    let old_json = serde_json::to_string(&old).unwrap_or_default();
+    for (i, spec) in b.targets[..first_new].iter_mut().enumerate() {
+        if spec.condition.is_none() && old_json.contains(&format!("{{\"Target\":{i}}}")) {
+            spec.condition = Some(not.clone());
+        }
+    }
+    for spec in &mut b.targets[first_new..] {
+        spec.condition = Some(cond.clone());
+    }
+    *prev = Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "k702.174m if the gift was promised, instead [effect with targets]", priority: 90, apply: if_paid_instead_with_targets } }
+
+/// "[subject] also [does something]" ("If the gift was promised, that creature also gains
+/// indestructible until end of turn."): "also" only stresses that the earlier instructions
+/// still happen.
+fn also(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subject, rest) = l.split_once(" also ")?;
+    if subject.is_empty() || rest.contains(" also ") || subject.contains(',') {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&format!("{subject} {rest}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "k702.174 [subject] also [effect]", priority: 150, parse: also } }

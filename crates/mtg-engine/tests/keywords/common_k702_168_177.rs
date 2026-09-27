@@ -83,3 +83,15 @@ pub fn tokens_named(t: &TestGame, p: PlayerId, name: &str) -> Vec<ObjectId> {
         .filter(|id| t.g.obj(*id).controller == p && t.g.obj(*id).is_token())
         .collect()
 }
+
+/// Tokens `p` controls with the subtype `subtype`.
+pub fn tokens_of_subtype(t: &TestGame, p: PlayerId, subtype: &str) -> Vec<ObjectId> {
+    t.g.battlefield
+        .iter()
+        .copied()
+        .filter(|id| {
+            let o = t.g.obj(*id);
+            o.controller == p && o.is_token() && o.chars.has_subtype(subtype)
+        })
+        .collect()
+}
