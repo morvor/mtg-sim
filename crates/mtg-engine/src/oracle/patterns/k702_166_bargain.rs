@@ -37,10 +37,15 @@ fn bargained_look_at_more(block: &str, ctx: &CompileContext) -> Option<Vec<Abili
         return None;
     }
     let end_of_sentence = start + IF.len() + n_end + INSTEAD.len();
+    // The offsets are the lowercased text's; they're the block's only if lowercasing
+    // didn't change any lengths.
+    if lower.len() != block.len() {
+        return None;
+    }
     let text = format!(
         "{}{}",
-        &block[..start],
-        block[end_of_sentence..].trim_start()
+        block.get(..start)?,
+        block.get(end_of_sentence..)?.trim_start()
     );
     let abilities = crate::oracle::parse_ability(&text, ctx)?;
     let bargained = was_bargained("~ was bargained")?;

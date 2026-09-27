@@ -168,8 +168,11 @@ fn creatures_in_the_same_sector_have_the_same_designation() {
     t.settle();
     let can_block = |t: &mut TestGame, w: ObjectId| {
         t.set_step(P0, Step::DeclareBlockers);
-        t.g.combat.as_mut().unwrap().attackers.push(
-            mtg_engine::combat::AttackerInfo {
+        t.g.combat
+            .as_mut()
+            .unwrap()
+            .attackers
+            .push(mtg_engine::combat::AttackerInfo {
                 id: bears,
                 target: Some(Entity::Player(P1)),
                 original_target: Some(Entity::Player(P1)),
@@ -178,8 +181,7 @@ fn creatures_in_the_same_sector_have_the_same_designation() {
                 blockers: vec![],
                 band: None,
                 defending_player: Some(P1),
-            },
-        );
+            });
         t.g.recompute();
         let ok = mtg_engine::combat::block_options(&t.g, &[P1])
             .iter()
@@ -221,7 +223,9 @@ fn the_same_sector_blocking_restriction_lasts_this_turn() {
     t.settle();
     t.activate(P0, beleren, 0, &[]).unwrap();
     t.resolve_all();
-    assert!(!mtg_engine::kw::space_sculptor::same_sector(&t.g, wall, bears));
+    assert!(!mtg_engine::kw::space_sculptor::same_sector(
+        &t.g, wall, bears
+    ));
     // Next turn, P0 attacks: the wall in another sector can block again.
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::BeginningOfCombat);
@@ -230,7 +234,11 @@ fn the_same_sector_blocking_restriction_lasts_this_turn() {
         DecisionKind::Attackers,
         Answer::Attackers(vec![(bears, Entity::Player(P1))]),
     );
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(wall, bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(wall, bears)]),
+    );
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20, "blocked by the wall");
 }

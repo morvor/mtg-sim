@@ -1,6 +1,6 @@
 //! CR 702.167 Craft.
 
-use crate::common_k702_140_152::{activatable, ability_uid, activate_uid};
+use crate::common_k702_140_152::{ability_uid, activatable, activate_uid};
 use crate::common_k702_153_167::*;
 use mtg_engine::decision::Decision;
 use mtg_engine::kw::craft::parse_materials;
@@ -131,7 +131,10 @@ fn materials_are_permanents_you_control_or_cards_in_your_graveyard() {
     t.battlefield(P0, "Hill Giant");
     t.lands(P0, "Plains", 1);
     let craft = ability_uid(&mut t, kiln, "Craft");
-    assert!(!activatable(&mut t, P0, kiln, craft), "creatures aren't cards");
+    assert!(
+        !activatable(&mut t, P0, kiln, craft),
+        "creatures aren't cards"
+    );
     t.graveyard(P0, "Grizzly Bears");
     t.graveyard(P0, "Hill Giant");
     assert!(activatable(&mut t, P0, kiln, craft));

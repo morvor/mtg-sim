@@ -11,6 +11,12 @@ use crate::oracle::phrases::end;
 
 /// "if that creature has [keyword], [effect]", "if it has [keyword], [effect]".
 fn if_it_has_keyword(l: &str, b: &mut Builder) -> Option<Effect> {
+    // At the start of a triggered ability's effect, "if ..., ..." is an intervening "if"
+    // clause (CR 603.4): checked as the ability triggers and again as it resolves, not
+    // only as it resolves ("Whenever ~ attacks, if it has first strike, ...").
+    if b.in_trigger && b.sentences == 0 {
+        return None;
+    }
     let r = end(l).strip_prefix("if ")?;
     let (c, rest) = r.split_once(", ")?;
     let (subject, kw) = c.split_once(" has ")?;

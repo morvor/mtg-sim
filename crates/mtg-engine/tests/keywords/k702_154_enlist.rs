@@ -12,10 +12,8 @@ use mtg_engine::*;
 /// on the stack.
 fn attack_enlisting(t: &mut TestGame, attackers: &[ObjectId], enlisted: &[Option<ObjectId>]) {
     t.set_step(P0, Step::BeginningOfCombat);
-    let decl: Vec<(ObjectId, Entity)> = attackers
-        .iter()
-        .map(|a| (*a, Entity::Player(P1)))
-        .collect();
+    let decl: Vec<(ObjectId, Entity)> =
+        attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     t.answer(P0, DecisionKind::Attackers, Answer::Attackers(decl));
     for e in enlisted {
         let v: Vec<Entity> = e.iter().map(|o| Entity::Object(*o)).collect();
@@ -136,7 +134,10 @@ fn a_creature_enlists_the_creature_tapped_for_its_enlist_cost() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     attack_enlisting(&mut t, &[guardian], &[Some(bears)]);
     assert_eq!(triggers_named(&t, "Enlist").len(), 1);
-    assert_eq!(triggers_starting(&t, "Whenever ~ enlists a creature").len(), 1);
+    assert_eq!(
+        triggers_starting(&t, "Whenever ~ enlists a creature").len(),
+        1
+    );
     t.resolve_all();
     assert_eq!(t.pt(guardian), (4, 2));
     // Not enlisting: no scry.

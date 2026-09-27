@@ -14,8 +14,8 @@ use crate::ability::*;
 use crate::eval::Ctx;
 use crate::events::Event;
 use crate::game::Game;
-use crate::object::EventInfo;
 use crate::keywords::KeywordKind;
+use crate::object::EventInfo;
 use crate::types::*;
 
 /// `TriggerCond::Custom` of an Attraction's prize paragraph (performed by claiming the
@@ -52,7 +52,13 @@ impl KeywordRules for Visit {
             }
             _ => None,
         });
-        g.log(|g| format!("{} claims the prize of {}", ctx.controller, g.obj(src).chars.name));
+        g.log(|g| {
+            format!(
+                "{} claims the prize of {}",
+                ctx.controller,
+                g.obj(src).chars.name
+            )
+        });
         g.emit(Event::Custom {
             name: CLAIMED.into(),
             player: Some(ctx.controller),

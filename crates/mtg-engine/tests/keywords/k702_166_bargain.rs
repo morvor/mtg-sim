@@ -65,8 +65,11 @@ fn a_spell_whose_bargain_cost_was_paid_is_bargained() {
         let mut t = TestGame::new(2);
         t.set_step(P1, mtg_engine::turn::Step::DeclareBlockers);
         let wurm = t.battlefield(P1, "Craw Wurm");
-        t.g.combat.as_mut().unwrap().attackers.push(
-            mtg_engine::combat::AttackerInfo {
+        t.g.combat
+            .as_mut()
+            .unwrap()
+            .attackers
+            .push(mtg_engine::combat::AttackerInfo {
                 id: wurm,
                 target: Some(Entity::Player(P0)),
                 original_target: Some(Entity::Player(P0)),
@@ -75,8 +78,7 @@ fn a_spell_whose_bargain_cost_was_paid_is_bargained() {
                 blockers: vec![],
                 band: None,
                 defending_player: Some(P0),
-            },
-        );
+            });
         let thopter = t.battlefield(P0, "Ornithopter");
         t.lands(P0, "Plains", 2);
         let spell = t.hand(P0, "Kellan's Lightblades");
@@ -210,9 +212,7 @@ fn targets_needed_only_if_bargained_are_chosen_only_if_it_was() {
     // Without a land to target, it can't be bargained (but can be cast otherwise).
     let mut t = TestGame::new(2);
     let thopter = t.battlefield(P0, "Ornithopter");
-    t.g.players[P0.idx()]
-        .mana_pool
-        .add_type(ManaType::G, 1);
+    t.g.players[P0.idx()].mana_pool.add_type(ManaType::G, 1);
     let spell = t.hand(P0, "Brave the Wilds");
     pay_with(&mut t, P0, &[thopter]);
     assert!(t.cast(P0, spell).try_go().is_err());

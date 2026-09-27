@@ -123,7 +123,12 @@ fn only_abilities_printed_on_the_creature_are_granted() {
     t.answer_targets(P0, &[Entity::Object(theirs)]);
     let valk = t.enter(P0, "Boon-Bringer Valkyrie");
     // The Valkyrie has haste (Fervor) and an ability a resolving effect gave it.
-    gain(&mut t, P0, valk, mtg_engine::keywords::Keyword::new(KeywordKind::Vigilance));
+    gain(
+        &mut t,
+        P0,
+        valk,
+        mtg_engine::keywords::Keyword::new(KeywordKind::Vigilance),
+    );
     assert!(has_kw(&t, valk, KeywordKind::Haste));
     t.resolve_all();
     assert!(has_kw(&t, theirs, KeywordKind::Flying));
@@ -189,7 +194,10 @@ fn each_backup_ability_triggers_separately() {
         .chars
         .abilities
         .iter()
-        .filter(|a| a.text.starts_with("Whenever ~ deals combat damage to a player"))
+        .filter(|a| {
+            a.text
+                .starts_with("Whenever ~ deals combat damage to a player")
+        })
         .count();
     assert_eq!(n, 3);
 }

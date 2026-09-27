@@ -83,10 +83,7 @@ pub fn triggers_starting(t: &TestGame, prefix: &str) -> Vec<ObjectId> {
 
 /// Decisions `p` was asked so far that match `pred`.
 pub fn asked_matching(t: &TestGame, p: PlayerId, pred: impl Fn(&Decision) -> bool) -> usize {
-    t.asked()
-        .iter()
-        .filter(|(q, d)| *q == p && pred(d))
-        .count()
+    t.asked().iter().filter(|(q, d)| *q == p && pred(d)).count()
 }
 
 /// The +1/+1 counters on the object (followed across zone changes).

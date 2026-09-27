@@ -138,17 +138,15 @@ impl KeywordRules for SpaceSculptor {
         if name != IN_CHOSEN_SECTOR {
             return None;
         }
-        let chosen = ctx
-            .nums
-            .get(&CHOSEN)
-            .and_then(|i| SECTORS.get(*i as usize));
+        let chosen = ctx.nums.get(&CHOSEN).and_then(|i| SECTORS.get(*i as usize));
         Some(chosen.is_some_and(|s| g.obj(id).sector.as_deref() == Some(*s)))
     }
 
     fn block_allowed(&self, g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
-        let restricted = g.turn_events.iter().any(|e| {
-            matches!(e, Event::Custom { name, .. } if name == SAME_SECTOR_BLOCKING)
-        });
+        let restricted = g
+            .turn_events
+            .iter()
+            .any(|e| matches!(e, Event::Custom { name, .. } if name == SAME_SECTOR_BLOCKING));
         !restricted || g.obj(attacker).sector.is_none() || same_sector(g, blocker, attacker)
     }
 }

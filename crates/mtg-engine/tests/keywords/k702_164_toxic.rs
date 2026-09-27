@@ -253,3 +253,28 @@ fn compleat_devotion_checks_whether_the_creature_has_toxic() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn if_it_has_a_keyword_starting_a_triggered_ability_is_an_intervening_if() {
+    cr!("603.4");
+    // Momentum Rumbler: "Whenever ~ attacks, if it has first strike, it gains double
+    // strike until end of turn." The condition is checked as the ability triggers (and
+    // again as it resolves), not only as it resolves: if it's compiled at all, it's an
+    // intervening "if" clause, not an "if" inside the effect.
+    let def = card("Momentum Rumbler");
+    for a in &def.faces[0].chars.abilities {
+        if !a
+            .text
+            .starts_with("Whenever ~ attacks, if it has first strike")
+        {
+            continue;
+        }
+        if let AbilityKind::Triggered(tr) = &a.kind {
+            assert!(
+                tr.intervening_if.is_some(),
+                "compiled without an intervening if: {:?}",
+                tr.body.effect
+            );
+        }
+    }
+}

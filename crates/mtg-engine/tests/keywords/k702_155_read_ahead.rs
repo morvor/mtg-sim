@@ -44,9 +44,9 @@ fn read_ahead_questions(t: &TestGame) -> Vec<(i64, i64)> {
     t.asked()
         .into_iter()
         .filter_map(|(_, d)| match d {
-            Decision::ChooseNumber { min, max, prompt, .. } if prompt.contains("Read ahead") => {
-                Some((min, max))
-            }
+            Decision::ChooseNumber {
+                min, max, prompt, ..
+            } if prompt.contains("Read ahead") => Some((min, max)),
             _ => None,
         })
         .collect()

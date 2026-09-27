@@ -1,11 +1,11 @@
 //! CR 702.160 Prototype (see also `tests/cr/r718_prototype_cards.rs`).
 
 use crate::common_k702_153_167::*;
+use mtg_engine::decision::Answer;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::types::{CardType, Color};
-use mtg_engine::decision::Answer;
 use mtg_engine::*;
 
 const PROTOTYPED: CastMethod = CastMethod::Keyword(KeywordKind::Prototype);

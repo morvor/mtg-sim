@@ -28,11 +28,7 @@ fn more_than_meets_the_eye_casts_the_card_converted_for_its_cost() {
     assert_eq!(s.chars.name, "Starscream, Seeker Leader");
     assert!(s.chars.has_subtype("Vehicle"));
     assert_eq!(t.g.mana_value_of(spell), 4);
-    assert!(t
-        .g
-        .player(P0)
-        .mana_pool
-        .is_empty());
+    assert!(t.g.player(P0).mana_pool.is_empty());
     t.resolve();
     // It enters converted: the Vehicle face is up.
     let v = named(&t, P0, "Starscream, Seeker Leader");
@@ -102,13 +98,12 @@ fn a_copy_of_a_converted_spell_has_the_back_face_characteristics() {
         },
         &[Entity::Object(spell)],
     );
-    let copy = t
-        .g
-        .stack
-        .iter()
-        .copied()
-        .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::SpellCopy)
-        .expect("a copy");
+    let copy =
+        t.g.stack
+            .iter()
+            .copied()
+            .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::SpellCopy)
+            .expect("a copy");
     assert_eq!(t.g.obj(copy).chars.name, "Starscream, Seeker Leader");
     t.resolve();
     let token = named(&t, P0, "Starscream, Seeker Leader");
@@ -199,7 +194,10 @@ fn more_than_meets_the_eye_is_an_alternative_cost() {
     assert_eq!(s.chars.name, "Kicker Coupe");
     let paid = &s.stack.as_ref().expect("a spell").cast.paid;
     assert!(paid.iter().any(|p| p == "kicker"), "{paid:?}");
-    assert!(paid.iter().any(|p| p == "more than meets the eye"), "{paid:?}");
+    assert!(
+        paid.iter().any(|p| p == "more than meets the eye"),
+        "{paid:?}"
+    );
     assert!(t
         .g
         .battlefield

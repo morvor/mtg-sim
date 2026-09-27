@@ -28,7 +28,10 @@ fn casualty_sacrifices_a_creature_to_copy_the_spell_with_new_targets() {
     t.cast(P0, spell).target(b1).go();
     // The creature was sacrificed as the spell was cast (an additional cost).
     assert!(t.in_graveyard(P0, "Hill Giant"));
-    assert_eq!(optional_costs_offered(&t, P0), vec!["casualty#1".to_string()]);
+    assert_eq!(
+        optional_costs_offered(&t, P0),
+        vec!["casualty#1".to_string()]
+    );
     t.settle();
     // "When you cast this spell, if a casualty cost was paid for it, copy it."
     assert_eq!(triggers_named(&t, "Casualty").len(), 1);
@@ -107,9 +110,7 @@ fn each_instance_of_casualty_is_paid_separately_and_triggers_for_its_own_payment
         t.battlefield(P0, "Silverquill, the Disputant");
         let giant = t.battlefield(P0, "Hill Giant");
         let goblin = t.battlefield(P0, "Raging Goblin");
-        let targets: Vec<ObjectId> = (0..3)
-            .map(|_| t.battlefield(P1, "Grizzly Bears"))
-            .collect();
+        let targets: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P1, "Grizzly Bears")).collect();
         t.lands(P0, "Mountain", 2);
         let spell = t.hand(P0, "Light 'Em Up");
         if pay2 {
@@ -170,13 +171,12 @@ fn the_first_instant_or_sorcery_spell_each_turn_has_casualty() {
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[Entity::Object(b2)]);
     t.resolve();
-    let copy = t
-        .g
-        .stack
-        .iter()
-        .copied()
-        .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::SpellCopy)
-        .expect("a copy");
+    let copy =
+        t.g.stack
+            .iter()
+            .copied()
+            .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::SpellCopy)
+            .expect("a copy");
     assert_eq!(t.g.obj(copy).chars.keyword_count(KeywordKind::Casualty), 0);
     t.resolve_all();
     assert!(!t.on_battlefield(b1) && !t.on_battlefield(b2));
@@ -268,6 +268,39 @@ fn casualty_x_needs_a_creature_with_power_x_or_greater() {
     t.settle();
     t.resolve_all();
     assert_eq!(named(&t, P0, "Ob Nixilis, the Adversary").len(), 2);
+}
+
+#[test]
+fn casualty_x_is_bounded_by_the_greatest_power_not_by_mana() {
+    cr!("702.153a", "601.2b");
+    // Seven lands and a 3/3: X isn't paid with mana, so the most X can be is 3 (the
+    // greatest power among P0's creatures), and that's the default choice; a 3 is enough
+    // to sacrifice the Hill Giant.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    t.lands(P0, "Mountain", 3);
+    let spell = t.hand(P0, "Ob Nixilis, the Adversary");
+    pay_with(&mut t, P0, &[giant]);
+    t.cast(P0, spell).go();
+    let max = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseX { max, .. } => Some(max),
+            _ => None,
+        })
+        .expect("X was chosen");
+    assert_eq!(max, 3);
+    assert!(!t.on_battlefield(giant));
+    t.settle();
+    t.resolve_all();
+    let token = named(&t, P0, "Ob Nixilis, the Adversary")
+        .into_iter()
+        .find(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::Token)
+        .expect("the copy");
+    assert_eq!(t.counters(token, "loyalty"), 3);
 }
 
 #[test]

@@ -1132,19 +1132,28 @@ impl Game {
         let mut x: i64 = 0;
         if base_cost_has_x {
             let mut max = self.max_mana_available(p) as i64;
-            // "Sacrifice a creature with power X or greater" (casualty X): X isn't paid
-            // with mana, so it can be as large as the greatest power to sacrifice.
+            // "Sacrifice a creature with power X or greater" (casualty X): X can be at
+            // most the greatest power among the creatures to sacrifice, and if no mana is
+            // paid for X, that's the only bound.
             if extra.parts.iter().any(
                 |c| matches!(c, CostPart::Sacrifice { filter, .. } if filter_mentions_x(filter)),
             ) {
                 let power = self
                     .battlefield
                     .iter()
-                    .filter(|o| self.obj(**o).controller == p)
+                    .filter(|o| self.obj(**o).controller == p && self.obj(**o).is_creature())
                     .map(|o| self.obj(*o).power() as i64)
                     .max()
                     .unwrap_or(0);
-                max = max.max(power);
+                let mana_x = match &opt.alt_cost {
+                    Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
+                    None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+                } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+                    || opt
+                        .extra_cost
+                        .as_ref()
+                        .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
+                max = if mana_x { max.min(power) } else { power };
             }
             x = match self.ask(p, Decision::ChooseX { source: id, max }) {
                 Answer::Number(n) if n >= 0 => n,

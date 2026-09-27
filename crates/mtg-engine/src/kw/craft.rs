@@ -230,7 +230,13 @@ fn valid(g: &Game, chosen: &[ObjectId], m: &Materials, ctx: &Ctx) -> bool {
 
 /// Whether each slot can be filled by a distinct chosen object.
 fn assign_slots(g: &Game, chosen: &[ObjectId], slots: &[Filter], ctx: &Ctx) -> bool {
-    fn go(g: &Game, chosen: &[ObjectId], slots: &[Filter], used: &mut Vec<bool>, ctx: &Ctx) -> bool {
+    fn go(
+        g: &Game,
+        chosen: &[ObjectId],
+        slots: &[Filter],
+        used: &mut Vec<bool>,
+        ctx: &Ctx,
+    ) -> bool {
         let Some((first, rest)) = slots.split_first() else {
             return true;
         };
@@ -314,9 +320,10 @@ impl KeywordRules for Craft {
         let mut cost = kw.cost.clone().unwrap_or_default();
         // The materials first, while the permanent is still on the battlefield; then the
         // permanent itself.
-        cost.parts.push(CostPart::Effect(Box::new(Effect::Custom(SmolStr::new(
-            format!("{EXILE_MATERIALS}{desc}"),
-        )))));
+        cost.parts
+            .push(CostPart::Effect(Box::new(Effect::Custom(SmolStr::new(
+                format!("{EXILE_MATERIALS}{desc}"),
+            )))));
         cost.parts.push(CostPart::ExileSelf);
         let mut act = ActivatedAbility::new(
             cost,
@@ -420,7 +427,9 @@ impl KeywordRules for Craft {
         if let Some(new) = new.filter(|n| g.obj(*n).zone == Zone::Battlefield) {
             // CR 702.167c: the cards exiled to pay the cost are the exiled cards used to
             // craft it.
-            g.objects[new.0 as usize].linked.insert(CRAFT_LINK, materials);
+            g.objects[new.0 as usize]
+                .linked
+                .insert(CRAFT_LINK, materials);
             g.dirty = true;
         }
         true

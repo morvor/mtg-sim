@@ -73,9 +73,8 @@ inventory::submit! { TriggerPattern { name: "k702.154 ~ enlists a creature", pri
 /// "if it enlisted a creature this combat" (Aradesh, the Founder; CR 702.154c): the
 /// creature of the triggering event enlisted a creature this combat.
 fn enlisted_this_combat(c: &str) -> Option<Condition> {
-    (end(c) == "it enlisted a creature this combat").then(|| {
-        Condition::Custom(crate::kw::enlist::ENLISTED_THIS_COMBAT.into())
-    })
+    (end(c) == "it enlisted a creature this combat")
+        .then(|| Condition::Custom(crate::kw::enlist::ENLISTED_THIS_COMBAT.into()))
 }
 
 inventory::submit! { ConditionPattern { name: "k702.154 it enlisted a creature this combat", priority: 100, parse: enlisted_this_combat } }
@@ -121,7 +120,10 @@ fn enlisted_attacker_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ab
             otherwise: Box::new(Effect::Noop),
         },
     ]);
-    Some(vec![AbilityDef::new(AbilityKind::Triggered(t), block.trim())])
+    Some(vec![AbilityDef::new(
+        AbilityKind::Triggered(t),
+        block.trim(),
+    )])
 }
 
 inventory::submit! { AbilityPattern { name: "k702.154 the creature that attacked", priority: 100, parse: enlisted_attacker_trigger } }
@@ -239,7 +241,10 @@ fn craft_references(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         ("the exiled cards used to craft", "cards used to craft"),
         ("the exiled card used to craft", "the card used to craft"),
         ("an exiled card used to craft", "a card used to craft"),
-        ("exiled creature card used to craft", "creature card used to craft"),
+        (
+            "exiled creature card used to craft",
+            "creature card used to craft",
+        ),
         ("exiled cards used to craft", "cards used to craft"),
     ] {
         text = text.replace(from, to);
