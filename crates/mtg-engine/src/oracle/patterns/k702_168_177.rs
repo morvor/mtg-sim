@@ -11,6 +11,8 @@
 //!   phase]", "[Mount] becomes saddled until end of turn" (and "creature that saddled it
 //!   this turn" in `oracle/phrases.rs`);
 //! * "if this spell's freerunning cost was paid" (CR 702.173a);
+//! * plot (CR 702.170): "it becomes plotted", "when ~ becomes plotted", plotting from the
+//!   top of the library and cheaper plotting from hand;
 //! * "Gift a [something]" (CR 702.174a–b, the keyword and its second ability), "if the
 //!   gift was promised", "if the gift wasn't promised" (CR 702.174k), "whenever you give a
 //!   gift" (CR 702.174c).
@@ -360,3 +362,119 @@ fn also(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "k702.174 [subject] also [effect]", priority: 150, parse: also } }
+
+// ---------------------------------------------------------------------------
+// Plot (CR 702.170)
+// ---------------------------------------------------------------------------
+
+/// "It becomes plotted." after an instruction that exiled a card (Aven Interrupter, Kellan
+/// Joins Up; CR 702.170c).
+fn becomes_plotted(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subj = end(l).strip_suffix(" becomes plotted")?;
+    let what = match subj {
+        "it" | "that card" => b.it.clone(),
+        _ => return None,
+    };
+    Some(crate::kw::plot::becomes_plotted(what))
+}
+
+inventory::submit! { EffectPattern { name: "k702.170c it becomes plotted", priority: 100, parse: becomes_plotted } }
+
+/// "exile a nonland card with mana value 3 or less from your hand" (Kellan Joins Up, Jace
+/// Reawakened): the player chooses such a card in their hand; "it" is the exiled card
+/// afterward ("If you do, it becomes plotted.").
+fn exile_card_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("exile a ")?
+        .strip_suffix(" from your hand")?;
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Exile {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::And(vec![
+                f,
+                Filter::Card,
+                Filter::InZone(ZoneKind::Hand),
+                Filter::OwnedBy(PlayerRel::You),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "k702.170c exile a [quality] card from your hand", priority: 100, parse: exile_card_from_hand } }
+
+/// "When ~ becomes plotted" (CR 702.170a, 702.170c): the card in exile became plotted.
+fn becomes_plotted_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(r) == "~ becomes plotted").then(|| {
+        (
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerAction {
+                    name: SmolStr::new(crate::kw::plot::BECAME_PLOTTED),
+                    who: PlayerRel::Any,
+                }),
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+            },
+            Sel::This,
+            PlayerRef::TriggerPlayer,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "k702.170 ~ becomes plotted", priority: 100, parse: becomes_plotted_trigger } }
+
+/// "When this card becomes plotted, [effect]" (Longhorn Sharpshooter): the ability
+/// functions while the card is in exile, where it becomes plotted.
+fn when_becomes_plotted(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    if !t.to_lowercase().starts_with("when ~ becomes plotted,") {
+        return None;
+    }
+    let a = crate::oracle::triggers::parse_triggered(t, ctx)?;
+    let AbilityKind::Triggered(tr) = &a.kind else {
+        return None;
+    };
+    let mut tr = tr.clone();
+    tr.zone = FunctionZone::Exile;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { AbilityPattern { name: "k702.170 when ~ becomes plotted", priority: 100, parse: when_becomes_plotted } }
+
+/// "You may plot nonland cards from the top of your library." (CR 702.170f); "The top card
+/// of your library has plot. The plot cost is equal to its mana cost."; "Plotting cards
+/// from your hand costs {N} less." (CR 702.170e). All from Fblthp, Lost on the Range and
+/// Doc Aurlock, Grizzled Genius.
+fn plot_statics(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::plot::{from_hand_costs_less, PLOT_FROM_LIBRARY_TOP, TOP_CARD_HAS_PLOT};
+    let name = match end(l) {
+        "you may plot nonland cards from the top of your library" => {
+            SmolStr::new(PLOT_FROM_LIBRARY_TOP)
+        }
+        "the top card of your library has plot. the plot cost is equal to its mana cost" => {
+            SmolStr::new(TOP_CARD_HAS_PLOT)
+        }
+        other => {
+            let n = other
+                .strip_prefix("plotting cards from your hand costs {")?
+                .strip_suffix("} less")?
+                .parse::<u32>()
+                .ok()?;
+            from_hand_costs_less(n)
+        }
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "k702.170 plot statics", priority: 100, parse: plot_statics } }
