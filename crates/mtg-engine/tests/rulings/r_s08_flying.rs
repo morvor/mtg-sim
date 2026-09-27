@@ -628,3 +628,72 @@ fn a_creature_spell_that_gains_flying_only_on_the_battlefield_doesnt_cost_less()
     t.cast(P0, corsair).go();
     assert_eq!(untapped_lands(&t, P0), 0);
 }
+
+/// Casts the real card `name` from P0's hand (with lands for its mana cost, targeting P1
+/// if it needs a target) and returns how many triggered abilities are then on the stack.
+fn triggers_from_casting(t: &mut TestGame, name: &str) -> usize {
+    give_mana_for(t, P0, name);
+    let card = t.hand(P0, name);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, card).go();
+    t.settle();
+    let n = t.stack_len() - 1;
+    t.clear_answers();
+    t.resolve_all();
+    n
+}
+
+#[test]
+fn a_wizard_spell_has_the_creature_type_wizard() {
+    cr!("603.2", "205.3m", "601.2i");
+    ruling!(
+        "Umara Mystic",
+        "A Wizard spell is one with the creature type Wizard. Spells that are Wizard-themed (such as Relic Amulet) aren’t Wizard spells."
+    );
+    ruling!(
+        "Umara Wizard // Umara Skyfalls",
+        "A Wizard spell is one with the creature type Wizard. Spells that are Wizard-themed (such as Relic Amulet) aren't Wizard spells."
+    );
+    supported("Umara Mystic");
+    supported("Umara Wizard // Umara Skyfalls");
+    supported("Prodigal Sorcerer");
+    // "Whenever you cast an instant, sorcery, or Wizard spell, this creature gets +2/+0
+    // (gains flying) until end of turn."
+    for name in ["Umara Mystic", "Umara Wizard // Umara Skyfalls"] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, name);
+        // Prodigal Sorcerer is a Human Wizard Sorcerer; Lightning Bolt is an instant.
+        assert_eq!(triggers_from_casting(&mut t, "Prodigal Sorcerer"), 1, "{name}");
+        assert_eq!(triggers_from_casting(&mut t, "Lightning Bolt"), 1, "{name}");
+        // Relic Amulet (an artifact) and Grizzly Bears (a Bear) aren't Wizard spells.
+        assert_eq!(triggers_from_casting(&mut t, "Relic Amulet"), 0, "{name}");
+        assert_eq!(triggers_from_casting(&mut t, "Grizzly Bears"), 0, "{name}");
+    }
+    // Umara Mystic got +2/+0 twice.
+    let mut t = TestGame::new(2);
+    let mystic = t.battlefield(P0, "Umara Mystic");
+    triggers_from_casting(&mut t, "Prodigal Sorcerer");
+    triggers_from_casting(&mut t, "Lightning Bolt");
+    assert_eq!(t.pt(mystic), (5, 3));
+}
+
+#[test]
+fn a_trigger_condition_with_a_comma_list_is_read_whole() {
+    cr!("603.1", "603.2");
+    supported("God-Pharaoh's Faithful");
+    supported("Rockslide Sorcerer");
+    // God-Pharaoh's Faithful: "Whenever you cast a blue, black, or red spell, you gain 1
+    // life." Rockslide Sorcerer: "Whenever you cast an instant, sorcery, or Wizard spell,
+    // this creature deals 1 damage to any target."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "God-Pharaoh's Faithful");
+    t.battlefield(P0, "Rockslide Sorcerer");
+    // Lightning Bolt: red and an instant. Both trigger.
+    assert_eq!(triggers_from_casting(&mut t, "Lightning Bolt"), 2);
+    assert_eq!(t.life(P0), 21);
+    // Grizzly Bears: green, and a Bear creature spell. Neither triggers.
+    assert_eq!(triggers_from_casting(&mut t, "Grizzly Bears"), 0);
+    // Prodigal Sorcerer: a blue Wizard. Both trigger.
+    assert_eq!(triggers_from_casting(&mut t, "Prodigal Sorcerer"), 2);
+    assert_eq!(t.life(P0), 22);
+}

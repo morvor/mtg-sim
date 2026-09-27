@@ -8,8 +8,22 @@ use crate::ability::*;
 pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
     let t = text.trim();
     // Split trigger condition from effect at the first comma outside quotes that
-    // follows the trigger phrase.
-    let (cond_s, eff_s) = split_trigger(t)?;
+    // follows the trigger phrase. A condition with a list in it ("Whenever you cast an
+    // instant, sorcery, or Wizard spell, ...") ends at a later comma: the first one at
+    // which the whole ability can be read.
+    trigger_splits(t)
+        .into_iter()
+        .find_map(|(c, e)| parse_triggered_at(text, c, e, ctx))
+}
+
+/// The triggered ability `text`, read as the trigger condition `cond_s` followed by
+/// `eff_s`.
+fn parse_triggered_at(
+    text: &str,
+    cond_s: &str,
+    eff_s: &str,
+    ctx: &CompileContext,
+) -> Option<Ability> {
     let lower = cond_s.to_lowercase();
     let (trigger, it, it_player) = parse_trigger_condition(&lower)?;
     let mut eff = eff_s.trim();
@@ -171,16 +185,18 @@ fn mentions_object_pronoun(eff: &str) -> bool {
     .any(|p| l.contains(p))
 }
 
-fn split_trigger(t: &str) -> Option<(&str, &str)> {
+/// Every way to split `t` at a comma outside quotes, first comma first.
+fn trigger_splits(t: &str) -> Vec<(&str, &str)> {
     let mut in_quote = false;
+    let mut out = Vec::new();
     for (i, ch) in t.char_indices() {
         match ch {
             '"' => in_quote = !in_quote,
-            ',' if !in_quote => return Some((&t[..i], &t[i + 1..])),
+            ',' if !in_quote => out.push((&t[..i], &t[i + 1..])),
             _ => {}
         }
     }
-    None
+    out
 }
 
 /// Returns (trigger, what "it" refers to, what "that player" refers to).
