@@ -984,8 +984,10 @@ inventory::submit! { FollowupPattern { name: "k702.170c put the rest into your h
 /// afterward ("If you do, it becomes plotted."). The card is exiled with the source, for
 /// the source's other abilities that refer to "the exiled card" (imprint, CR 607.2a).
 fn exile_card_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
-    let r = end(l)
-        .strip_prefix("exile a ")?
+    let l = end(l);
+    let r = l
+        .strip_prefix("exile a ")
+        .or_else(|| l.strip_prefix("exile an "))?
         .strip_suffix(" from your hand")?;
     let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
     if !end(tail).is_empty() {

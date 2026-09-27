@@ -64,3 +64,21 @@ fn put_milled_into_hand(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "a701 put a milled card into your hand", priority: 100, parse: put_milled_into_hand } }
+
+/// "two cards that share all their card types were milled this way" (Demonic Covenant),
+/// "two cards that share a card type were milled this way" (The Tale of Tamiyo): about the
+/// two cards the preceding instruction milled (CR 701.17c).
+fn milled_cards_share_types(c: &str) -> Option<Condition> {
+    let name = match end(c) {
+        "two cards that share all their card types were milled this way" => {
+            crate::mill_rules::TWO_MILLED_SHARE_ALL_TYPES
+        }
+        "two cards that share a card type were milled this way" => {
+            crate::mill_rules::TWO_MILLED_SHARE_A_TYPE
+        }
+        _ => return None,
+    };
+    Some(Condition::Custom(SmolStr::new(name)))
+}
+
+inventory::submit! { super::ConditionPattern { name: "a701 two milled cards share card types", priority: 100, parse: milled_cards_share_types } }

@@ -46,3 +46,32 @@ pub fn replaced_count(g: &Game, p: PlayerId, n: u32) -> u32 {
     }
     n
 }
+
+/// `Condition::Custom`: "if two cards that share all their card types were milled this
+/// way" (Demonic Covenant): the milled cards (`vars::IT`, CR 701.17c) are two with the same
+/// set of card types (CR 205.2a; supertypes and subtypes don't count).
+pub const TWO_MILLED_SHARE_ALL_TYPES: &str = "mill:two milled cards share all their card types";
+/// `Condition::Custom`: "if two cards that share a card type were milled this way" (The
+/// Tale of Tamiyo).
+pub const TWO_MILLED_SHARE_A_TYPE: &str = "mill:two milled cards share a card type";
+
+/// `Condition::Custom` conditions of this module.
+pub fn custom_condition(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<bool> {
+    if name != TWO_MILLED_SHARE_ALL_TYPES && name != TWO_MILLED_SHARE_A_TYPE {
+        return None;
+    }
+    let milled: Vec<ObjectId> = ctx
+        .vars
+        .get(&crate::ability::vars::IT)
+        .map(|v| v.iter().filter_map(|e| e.object()).collect())
+        .unwrap_or_default();
+    let [a, b] = milled.as_slice() else {
+        return Some(false);
+    };
+    let (ta, tb) = (g.obj(*a).chars.card_types, g.obj(*b).chars.card_types);
+    Some(if name == TWO_MILLED_SHARE_ALL_TYPES {
+        ta == tb
+    } else {
+        ta.intersects(tb)
+    })
+}

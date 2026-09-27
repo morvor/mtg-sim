@@ -38,6 +38,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::transform_rules::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "creature cards above ~" in its graveyard (CR 404.1).
+    if let Some(b) = crate::zones::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
@@ -205,6 +209,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     }
     // "If you rolled doubles" (CR 706.5).
     if let Some(b) = crate::dice::custom_condition(name, ctx) {
+        return b;
+    }
+    // "If two cards that share all their card types were milled this way" (CR 701.17c).
+    if let Some(b) = crate::mill_rules::custom_condition(g, name, ctx) {
         return b;
     }
     // "If it's a creature card" about a revealed face-down permanent (CR 708.12).

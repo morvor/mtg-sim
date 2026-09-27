@@ -56,7 +56,12 @@ fn look_at_top(l: &str, b: &mut Builder) -> Option<Effect> {
         (Value::c(1), r)
     } else {
         let (n, r) = parse_number(r)?;
-        n.as_const()?;
+        // A number, or an instant's or sorcery's X ("Reveal the top X cards of your
+        // library." on a spell with {X} in its mana cost).
+        let spell_x = matches!(n, Value::X) && b.ctx.is_spell() && !b.in_trigger;
+        if n.as_const().is_none() && !spell_x {
+            return None;
+        }
         (n, r.strip_prefix("cards of ")?)
     };
     let who = match r {
@@ -309,10 +314,12 @@ fn take_from_among(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 /// "put the rest on the bottom of your library in a random order", "put the rest into
 /// your graveyard", after cards were taken from among them.
 fn put_the_rest(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    let Some(r) = l
-        .strip_prefix("put the rest ")
-        .or_else(|| l.strip_prefix("then put the rest "))
-    else {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    // "put all cards revealed this way that weren't put onto the battlefield into your
+    // graveyard" (after putting some of them onto the battlefield).
+    let rest_way =
+        l.strip_prefix("put all cards revealed this way that weren't put onto the battlefield ");
+    let Some(r) = l.strip_prefix("put the rest ").or(rest_way) else {
         return false;
     };
     let Some(rest) = rest_destination(r, false) else {

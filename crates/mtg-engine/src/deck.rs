@@ -254,7 +254,12 @@ pub fn check_constructed_with(
 /// lands. Conspiracy cards can't be included in the deck (CR 315.3); they're used from the
 /// sideboard.
 pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckProblem> {
-    let cards = traditional(deck);
+    // A conspiracy listed with the deck isn't a card in it: it doesn't count toward the
+    // minimum deck size (CR 315.3).
+    let cards: Vec<&Arc<CardDef>> = traditional(deck)
+        .into_iter()
+        .filter(|c| !c.front().chars.card_types.contains(CardType::Conspiracy))
+        .collect();
     let mut problems = conspiracies(deck);
     if cards.len() < 40 {
         problems.push(DeckProblem::TooFewCards {

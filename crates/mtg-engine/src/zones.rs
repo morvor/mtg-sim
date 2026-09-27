@@ -545,6 +545,44 @@ pub fn library_shuffled(g: &mut Game, p: PlayerId) {
 }
 
 // ---------------------------------------------------------------------------
+// The order of a graveyard (CR 404.1, 404.2)
+// ---------------------------------------------------------------------------
+
+/// `Filter::Custom`: a card above the source in the graveyard the source is in — put into
+/// that graveyard later (CR 404.1: cards are put on top of it).
+pub const ABOVE_SOURCE_IN_GRAVEYARD: &str = "zones:above ~ in its graveyard";
+/// `Filter::Custom`: the card directly above the source in its graveyard.
+pub const DIRECTLY_ABOVE_SOURCE_IN_GRAVEYARD: &str = "zones:directly above ~ in its graveyard";
+/// `Filter::Custom`: the object is still in its zone — not the last known information of
+/// an object that has since moved (CR 400.7).
+pub const STILL_THERE: &str = "zones:still in its zone";
+
+/// The filters above; `None` for other names.
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    let directly = match name {
+        ABOVE_SOURCE_IN_GRAVEYARD => false,
+        DIRECTLY_ABOVE_SOURCE_IN_GRAVEYARD => true,
+        STILL_THERE => return Some(g.is_live(id)),
+        _ => return None,
+    };
+    let Some(src) = ctx.source.filter(|s| g.is_live(*s)) else {
+        return Some(false);
+    };
+    let Zone::Graveyard(p) = g.obj(src).zone else {
+        return Some(false);
+    };
+    // A graveyard lists its cards bottom first.
+    let gy = &g.player(p).graveyard;
+    let (Some(i), Some(j)) = (
+        gy.iter().position(|o| *o == src),
+        gy.iter().position(|o| *o == id),
+    ) else {
+        return Some(false);
+    };
+    Some(if directly { j == i + 1 } else { j > i })
+}
+
+// ---------------------------------------------------------------------------
 // Face-down cards in exile (CR 406.3)
 // ---------------------------------------------------------------------------
 

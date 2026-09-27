@@ -357,10 +357,6 @@ impl Game {
         for p in actives {
             self.expire_until_next_turn(p);
         }
-        // Goad ends at the goading player's next turn (CR 701.15b).
-        for o in self.objects.iter_mut() {
-            o.goaded_by.retain(|p| *p != active);
-        }
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
         // CR 723.1: player-controlling effects for this turn start (and last turn's end).
         crate::player_control::turn_began(self);
@@ -935,9 +931,15 @@ impl Game {
         self.dirty = true;
     }
 
+    /// Ends what lasts until `active`'s next turn, as that turn begins — or, for a player
+    /// who left the game, as it would have begun (CR 800.4m).
     pub(crate) fn expire_until_next_turn(&mut self, active: PlayerId) {
         let until =
             |d: &Duration, c: PlayerId| matches!(d, Duration::UntilYourNextTurn) && c == active;
+        // Goad lasts until the goading player's next turn (CR 701.15a).
+        for o in self.objects.iter_mut() {
+            o.goaded_by.retain(|p| *p != active);
+        }
         self.play_grants.retain(|g| !until(&g.duration, g.player));
         // "Until the end of your next turn, you may play that card."
         let turn = self.turn.number;

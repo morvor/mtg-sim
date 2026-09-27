@@ -70,6 +70,16 @@ fn parse_triggered_at(
             }
         }
     }
+    // "..., if this card is in your graveyard, you may pay {3}. If you do, you may cast
+    // it ...": "it" is the card the condition is about.
+    let it = if intervening
+        .as_ref()
+        .is_some_and(super::patterns::graveyard_order::requires_source_in_graveyard)
+    {
+        Sel::This
+    } else {
+        it
+    };
     // A trigger condition with no single referent for "it"/"that player" (e.g. several
     // conditions joined by "and whenever") can't be used with a body that refers to one.
     if matches!(it, Sel::None) && mentions_object_pronoun(eff) {
@@ -87,6 +97,15 @@ fn parse_triggered_at(
     tr.intervening_if = intervening;
     tr.once_per_turn = once_per_turn;
     tr.zone = trigger_zone(&tr.trigger, &eff.to_lowercase());
+    // "At the beginning of your upkeep, if ~ is in your graveyard, ...": it functions from
+    // the graveyard (CR 113.6).
+    if tr
+        .intervening_if
+        .as_ref()
+        .is_some_and(super::patterns::graveyard_order::requires_source_in_graveyard)
+    {
+        tr.zone = FunctionZone::Graveyard;
+    }
     // CR 113.6: an instant or sorcery is never on the battlefield, so a triggered ability
     // that would only function there can't be what the text means.
     if ctx.is_spell() && tr.zone == FunctionZone::Battlefield {

@@ -86,12 +86,23 @@ fn activate_only_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let text = crate::oracle::strip_ability_word(block.trim());
     let (cost_s, eff_s) = crate::oracle::split_cost(text)?;
     let sentences = crate::oracle::effects::split_sentences(eff_s);
-    let i = sentences
-        .iter()
-        .position(|s| s.to_lowercase().starts_with("activate only if "))?;
+    // "Activate only during your upkeep and only if [condition]." is the timing
+    // restriction plus the condition.
+    const PREFIXES: [(&str, Option<&str>); 2] = [
+        ("activate only if ", None),
+        (
+            "activate only during your upkeep and only if ",
+            Some("Activate only during your upkeep."),
+        ),
+    ];
+    let i = sentences.iter().position(|s| {
+        let l = s.to_lowercase();
+        PREFIXES.iter().any(|(p, _)| l.starts_with(p))
+    })?;
     let lower = sentences[i].to_lowercase();
-    let cond_s = end(&lower).strip_prefix("activate only if ")?;
-    let mut extra = None;
+    let (cond_s, mut extra) = PREFIXES
+        .iter()
+        .find_map(|(p, x)| end(&lower).strip_prefix(p).map(|c| (c, *x)))?;
     let mut cond_s = cond_s;
     for (suffix, sentence) in [
         (" and only once each turn", "Activate only once each turn."),
