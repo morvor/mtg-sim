@@ -69,6 +69,16 @@ fn multiply(e: Effect, count: Value) -> Option<Effect> {
             tapped,
             attacking,
         },
+        // "Exile the top card of your library for each [thing]".
+        Effect::Exile {
+            what: Sel::TopOfLibrary(who, n),
+            face_down,
+            link,
+        } => Effect::Exile {
+            what: Sel::TopOfLibrary(who, times(&n)?),
+            face_down,
+            link,
+        },
         _ => return None,
     })
 }

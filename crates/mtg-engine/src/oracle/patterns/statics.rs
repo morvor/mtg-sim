@@ -1282,6 +1282,15 @@ fn type_words(s: &str) -> Option<TypeWords> {
     if let Some(i) = s.find(" with base power and toughness ") {
         tw.pt = Some(base_pt(&s[i + " with base power and toughness ".len()..])?);
         s = &s[..i];
+    } else if let Some(r) =
+        s.strip_suffix(" with power and toughness each equal to its mana value")
+    {
+        // "Each noncreature artifact is an artifact creature with power and toughness
+        // each equal to its mana value" (March of the Machines): each affected object's
+        // base P/T (CR 613.4b).
+        let mv = Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED)));
+        tw.pt = Some((mv.clone(), mv));
+        s = r;
     } else if let Some(i) = s.find(" with ") {
         for item in split_list(&s[i + " with ".len()..]) {
             tw.keywords.extend(keyword_mods(item)?);

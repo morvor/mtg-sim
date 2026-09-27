@@ -677,8 +677,9 @@ pub mod vars {
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
     /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
-    /// on it").
-    pub const AFFECTED: Var = 9;
+    /// on it"), or a resolving effect's values are determined for (distinct from
+    /// [`SACRIFICED`], which the same effect may use).
+    pub const AFFECTED: Var = 8;
 }
 
 /// Selects players and/or objects.

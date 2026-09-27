@@ -1408,7 +1408,10 @@ fn p_scry_surveil_mill(l: &str, b: &mut Builder) -> Option<Effect> {
             n,
         });
     }
-    if let Some(r) = l.strip_prefix("mill ") {
+    if let Some(r) = l
+        .strip_prefix("mill ")
+        .or_else(|| l.strip_prefix("you mill "))
+    {
         let (n, t) = parse_card_count(r)?;
         return end(t).is_empty().then_some(Effect::Mill {
             who: PlayerRef::You,
