@@ -58,6 +58,7 @@ fn damage(source: &Sel, amount: Value, to: Sel) -> Effect {
 fn it_is_object(b: &Builder) -> bool {
     match &b.it {
         Sel::This => false,
+        s if super::oracle_hardening_referents::is_no_referent(s) => false,
         Sel::Target(n) => !matches!(
             b.targets.get(*n as usize).map(|t| &t.what),
             Some(TargetKind::Player(_)) | None
@@ -456,11 +457,18 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
     };
     // The source comes first (its target, if any, is first in the text).
     let (src, rest) = damage_source(l, verb, b)?;
-    // "X ... where X is its power": "its" is the source.
+    // "X ... where X is its power": "its" is the source, unless an earlier instruction
+    // gave "it" an antecedent of its own ("Amass Orcs 2. When you do, ~ deals X damage
+    // ..., where X is the amassed Army's power").
     let where_x = match where_text {
         Some(v) => {
             let saved = b.it.clone();
-            b.it = src.clone();
+            if matches!(b.it, Sel::This)
+                || super::oracle_hardening_referents::is_no_referent(&b.it)
+                || matches!(src, Sel::Target(_))
+            {
+                b.it = src.clone();
+            }
             let (val, tail) = value_phrase(v, b)?;
             b.it = saved;
             if !end(&tail).is_empty() {

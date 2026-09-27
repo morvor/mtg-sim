@@ -160,7 +160,14 @@ fn cleave_brackets(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let full = crate::kw::cleave::without_brackets(t);
     let cleaved = crate::kw::cleave::cleaved(t);
     if !cleaved.is_empty() {
-        crate::oracle::parse_ability(&cleaved, ctx)?;
+        // Understood includes what its pronouns refer to: `compile` only checks the
+        // abilities returned here, not the cleaved ones compiled again when cast.
+        let v = crate::oracle::parse_ability(&cleaved, ctx)?;
+        if v.iter()
+            .any(|a| super::oracle_hardening_referents::has_no_referent(a))
+        {
+            return None;
+        }
     }
     let abilities = crate::oracle::parse_ability(&full, ctx)?;
     Some(

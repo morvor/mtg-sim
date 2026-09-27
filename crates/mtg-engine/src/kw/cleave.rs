@@ -87,7 +87,11 @@ fn cleaved_abilities(a: &Ability, chars: &Characteristics) -> Vec<Ability> {
     let result = if text.is_empty() {
         vec![]
     } else {
-        match crate::oracle::parse_ability(&text, &ctx) {
+        let understood = crate::oracle::parse_ability(&text, &ctx).filter(|v| {
+            !v.iter()
+                .any(|x| crate::oracle::patterns::oracle_hardening_referents::has_no_referent(x))
+        });
+        match understood {
             Some(v) => v,
             // Not understood: the ability as it was (never happens for a card whose
             // cleaved text compiled, see the oracle pattern).

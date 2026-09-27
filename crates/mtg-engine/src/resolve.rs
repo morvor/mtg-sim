@@ -1069,12 +1069,14 @@ impl Game {
                     .collect();
                 let rctx: &Ctx = ctx;
                 self.apnap_round(requests, |g, p, ()| {
+                    // Only cards can be discarded (CR 701.9a, 108.2): a token returned to a
+                    // hand isn't a card (CR 111.6) and can't leave it (CR 111.8).
                     let hand: Vec<ObjectId> = g
                         .player(p)
                         .hand
                         .clone()
                         .into_iter()
-                        .filter(|c| g.matches(*c, filter, rctx))
+                        .filter(|c| g.obj(*c).is_card() && g.matches(*c, filter, rctx))
                         .collect();
                     let k = k.min(hand.len() as u32);
                     let pick = if *random {

@@ -263,7 +263,15 @@ impl CardDef {
                 power: f.power.as_deref(),
                 toughness: f.toughness.as_deref(),
             };
-            let compiled = oracle::compile(&text, &ctx);
+            let mut compiled = oracle::compile(&text, &ctx);
+            for u in oracle::patterns::oracle_hardening_mechanics::unimplemented(layout, &type_line)
+            {
+                compiled.abilities.push(crate::ability::AbilityDef::new(
+                    crate::ability::AbilityKind::Unsupported(u.clone()),
+                    u.clone(),
+                ));
+                compiled.unsupported.push(u);
+            }
             faces.push(FaceDef {
                 chars: Characteristics {
                     name: SmolStr::new(&f.name),

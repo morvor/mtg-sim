@@ -246,6 +246,7 @@ fn strip_group_stores(e: Effect) -> Effect {
 pub fn plural_referent(sel: &Sel, ctx: &CompileContext) -> bool {
     match sel {
         Sel::This => plural_self(ctx),
+        s if super::oracle_hardening_referents::is_no_referent(s) => false,
         Sel::None
         | Sel::AttachedTo
         | Sel::TriggerObject
@@ -379,6 +380,7 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
     }
     match &b.it_player {
         PlayerRef::You => None,
+        p if super::oracle_hardening_referents::is_no_player_referent(p) => None,
         p => Some(p.clone()),
     }
 }

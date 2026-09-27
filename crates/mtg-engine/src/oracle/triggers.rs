@@ -283,7 +283,13 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     ];
     for (p, t) in self_pairs {
         if r == p {
-            return Some((t, Sel::This, PlayerRef::You));
+            // "..., that player loses 4 life": the player who controls the spell or
+            // ability that targeted it.
+            let who = match t {
+                TriggerCond::BecomesTarget { .. } => PlayerRef::TriggerPlayer,
+                _ => PlayerRef::You,
+            };
+            return Some((t, Sel::This, who));
         }
     }
     if r == "you cast this spell" {

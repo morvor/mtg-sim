@@ -97,9 +97,14 @@ pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -
     if !end(&tail).is_empty() {
         return None;
     }
-    b.it = it;
+    // An object the value named ("cards equal to the sacrificed creature's power") is
+    // what a later "its" refers to, unless the clause names another.
+    let value_it = std::mem::replace(&mut b.it, it.clone());
     let first_target = b.targets.len();
     let e = crate::oracle::effects::parse_clause(clause, b)?;
+    if format!("{:?}", b.it) == format!("{it:?}") {
+        b.it = value_it;
+    }
     let x = nonnegative(v);
     // "Return up to X target permanents ..., where X is ...": the defined X is also the
     // number of targets (or the amount divided among them).
