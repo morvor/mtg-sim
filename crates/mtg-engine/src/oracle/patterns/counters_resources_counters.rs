@@ -202,6 +202,32 @@ fn counter_condition(c: &str) -> Option<Condition> {
 
 inventory::submit! { ConditionPattern { name: "counters_resources: counters on the source", priority: 100, parse: counter_condition } }
 
+/// "(then) if it has three or more +1/+1 counters on it, sacrifice ~" (the Ordeals): a
+/// condition on the object "it" refers to, checked as that part of the effect happens.
+fn if_it_has_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if it has ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let (cmp, n, c) = amount_cmp(c)?;
+    let (kind, c) = kind_then_on(c)?;
+    if end(c) != "it" {
+        return None;
+    }
+    let it = b.it.clone();
+    if matches!(it, Sel::None)
+        || super::oracle_hardening_referents::is_no_referent(&it)
+    {
+        return None;
+    }
+    let then = crate::oracle::effects::parse_clause(rest, b)?;
+    Some(Effect::If {
+        cond: Condition::Compare(counters(it, kind), cmp, n),
+        then: Box::new(then),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counters_resources: if it has counters on it", priority: 100, parse: if_it_has_counters } }
+
 /// A triggered ability of the source about the source with an intervening "if it
 /// had/has ... counter(s) on it" clause: "When ~ dies, if it had a +1/+1 counter on it,
 /// draw a card." Only when the trigger's "it" is the source itself, so "it" can be read
