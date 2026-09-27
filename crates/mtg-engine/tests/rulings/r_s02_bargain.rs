@@ -488,3 +488,59 @@ fn an_instead_clause_about_what_the_spell_deals_keeps_the_spell_as_the_source() 
         assert_eq!(t.life(P1), 20);
     }
 }
+
+#[test]
+fn torch_the_tower_exiles_what_it_damaged_if_it_would_die_this_turn() {
+    cr!("614.1a", "700.4", "701.22a", "702.166b", "608.2c");
+    ruling!(
+        "Torch the Tower",
+        "Torch the Tower's last replacement effect will exile the target permanent if it would die this turn for any reason, not just due to lethal damage or having 0 loyalty."
+    );
+    // "Bargain. Torch the Tower deals 2 damage to target creature or planeswalker. If this
+    // spell was bargained, instead it deals 3 damage to that permanent and you scry 1. If a
+    // permanent dealt damage by Torch the Tower would die this turn, exile it instead."
+    supported("Torch the Tower");
+    let scries = |t: &TestGame| {
+        t.asked()
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::Scry { .. }))
+            .count()
+    };
+    // Lethal damage: the Bears are exiled.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_bargained(&mut t, "Torch the Tower", None, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(scries(&t), 0);
+    // A 3/3 survives 2 damage, but dies to Murder later in the turn: it's exiled too.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_bargained(&mut t, "Torch the Tower", None, &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj_now(giant).damage, 2);
+    for victim in [giant, bears] {
+        give_mana_for(&mut t, P0, "Murder");
+        let murder = t.hand(P0, "Murder");
+        t.cast(P0, murder).target(victim).go();
+        t.resolve_all();
+    }
+    assert_eq!(t.zone(giant), Zone::Exile);
+    // (A creature it didn't damage dies normally.)
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // Bargained: 3 damage kills the Giant, which is exiled, and P0 scries 1.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let food = create_token(&mut t, P0, "Food");
+    cast_bargained(
+        &mut t,
+        "Torch the Tower",
+        Some(food),
+        &[Entity::Object(giant)],
+    );
+    t.resolve_all();
+    assert_eq!(t.zone(giant), Zone::Exile);
+    assert_eq!(scries(&t), 1);
+}

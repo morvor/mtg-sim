@@ -623,6 +623,14 @@ fn p_exile_instead(l: &str, b: &mut Builder) -> Option<Effect> {
         | "a creature or planeswalker dealt damage this way" => {
             Filter::In(Box::new(Sel::Var(vars::DAMAGED)))
         }
+        // "If a permanent dealt damage by ~ would die this turn, exile it instead." (a
+        // paragraph of its own, Torch the Tower): whatever this spell or ability dealt
+        // damage to this turn.
+        "a permanent dealt damage by ~" => Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
+        "a creature dealt damage by ~" => Filter::and(vec![
+            Filter::creature(),
+            Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
+        ]),
         _ => return None,
     };
     // "Dies" means put into a graveyard from the battlefield (CR 700.4).

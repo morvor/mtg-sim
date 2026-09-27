@@ -85,7 +85,11 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((c, x)) = r.split_once(", ") else {
         return false;
     };
-    let Some(x) = x.strip_suffix(" instead") else {
+    // "..., [effect] instead" or "..., instead [effect]".
+    let Some(x) = x
+        .strip_suffix(" instead")
+        .or_else(|| x.strip_prefix("instead "))
+    else {
         return false;
     };
     if matches!(prev, Effect::Seq(_) | Effect::Noop) || !pronoun_free(c) {
