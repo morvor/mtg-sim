@@ -372,6 +372,19 @@ pub struct PendingTrigger {
     pub order: u64,
 }
 
+/// A permanent that entered the battlefield this turn (see
+/// [`TurnHistory::permanents_entered`]).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnteredPermanent {
+    /// The player under whose control it entered.
+    pub controller: PlayerId,
+    pub id: ObjectId,
+    /// Its characteristics and whether it was face down as it entered, recorded when the
+    /// event of its entering is processed (until then, they're its current ones).
+    #[serde(default)]
+    pub as_entered: Option<(Arc<Characteristics>, bool)>,
+}
+
 /// Facts about the current turn used by abilities that look back ("if a creature died
 /// this turn", storm count, etc.).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -380,6 +393,12 @@ pub struct TurnHistory {
     pub spells_cast: Vec<(PlayerId, ObjectId)>,
     pub creatures_died: Vec<ObjectId>,
     pub permanents_left: Vec<ObjectId>,
+    /// Permanents that entered the battlefield this turn, with the player under whose
+    /// control each one entered and what each was as it entered ("if two or more nonland
+    /// permanents entered the battlefield under your control this turn", "if a face-down
+    /// creature entered ..."). They may have changed or left since.
+    #[serde(default)]
+    pub permanents_entered: Vec<EnteredPermanent>,
     pub cards_drawn: BTreeMap<PlayerId, u32>,
     pub life_gained: BTreeMap<PlayerId, u32>,
     pub life_lost: BTreeMap<PlayerId, u32>,

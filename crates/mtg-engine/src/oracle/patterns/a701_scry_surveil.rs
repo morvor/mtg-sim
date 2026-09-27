@@ -69,6 +69,27 @@ fn each_player_scries(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "a701 each player scries", priority: 100, parse: each_player_scries } }
 
+/// "you scry 1", "you surveil 2" (as in "... and you scry 1").
+fn you_scry(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you ")?;
+    let (scry, r) = match r.strip_prefix("scry ") {
+        Some(r) => (true, r),
+        None => (false, r.strip_prefix("surveil ")?),
+    };
+    let (n, t) = parse_number(r)?;
+    if !end(t).is_empty() {
+        return None;
+    }
+    let who = PlayerRef::You;
+    Some(if scry {
+        Effect::Scry { who, n }
+    } else {
+        Effect::Surveil { who, n }
+    })
+}
+
+inventory::submit! { EffectPattern { name: "a701 you scry", priority: 100, parse: you_scry } }
+
 /// "you may look at an additional two cards each time you surveil".
 fn surveil_extra(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = end(l).strip_prefix("you may look at an additional ")?;

@@ -544,6 +544,21 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some(v) = counters_on_value(r, b) {
             return Some(v);
         }
+        // Chroma: "the number of red mana symbols in the mana costs of permanents you
+        // control" (CR 700.5).
+        if let Some((v, rest)) = super::patterns::chroma::mana_symbols_among_your_permanents(r) {
+            return Some((v, rest.to_string()));
+        }
+        // "the number of players being attacked" ("for each player being attacked").
+        if let Some(rest) = r
+            .strip_prefix("players being attacked")
+            .or_else(|| r.strip_prefix("player being attacked"))
+        {
+            return Some((
+                Value::Custom(crate::kw::players_being_attacked::PLAYERS_BEING_ATTACKED.into()),
+                rest.to_string(),
+            ));
+        }
         // "the number of cards in your hand"
         if let Some(rest) = r.strip_prefix("cards in your hand") {
             return Some((Value::HandSize(PlayerRef::You), rest.to_string()));
@@ -615,7 +630,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {
-        return sacrificed_value(r);
+        // "... equal to the sacrificed creature's power, then ... equal to its toughness".
+        let v = sacrificed_value(r)?;
+        b.it = Sel::Var(vars::SACRIFICED);
+        return Some(v);
     }
     // "your devotion to black", "your devotion to black and red" (CR 700.5).
     if let Some(r) = s.strip_prefix("your devotion to ") {
