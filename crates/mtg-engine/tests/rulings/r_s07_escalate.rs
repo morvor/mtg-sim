@@ -15,7 +15,7 @@ fn is_modes(d: &Decision) -> bool {
     matches!(d, Decision::ChooseModes { .. })
 }
 
-/// Untapped lands P0 controls and whether a spell is on the stack.
+/// The number of untapped lands P0 controls, and of objects on the stack.
 fn lands_and_stack(g: &Game) -> (usize, usize) {
     let lands = g
         .permanents()
