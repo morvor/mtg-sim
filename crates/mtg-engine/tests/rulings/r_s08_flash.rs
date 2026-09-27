@@ -188,3 +188,39 @@ fn casting_sorceries_as_though_they_had_flash_doesnt_change_sorcery_speed_activa
     assert!(can_cast(&mut t, P0, divination, CastMethod::Normal));
     assert!(!can_activate(&mut t, P0, splitter));
 }
+
+#[test]
+fn with_teferi_creature_cards_can_be_suspended_any_time_you_could_cast_an_instant() {
+    cr!("702.8a", "116.2f", "702.62a");
+    ruling!(
+        "Teferi, Mage of Zhalfir",
+        "While you control Teferi, you may exile creature cards in your hand with suspend any time you could cast an instant."
+    );
+    supported("Teferi, Mage of Zhalfir");
+    supported("Teferi, Druid of Argoth");
+    supported("Durkwood Baloth");
+    use mtg_engine::decision::{Action, SpecialAction};
+    // Teferi: "Creature cards you own that aren't on the battlefield have flash."
+    // Durkwood Baloth: {4}{G}{G} creature, "Suspend 5—{G}".
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P0, "Forest", 6);
+    let baloth = t.hand(P0, "Durkwood Baloth");
+    let suspend = Action::Special(SpecialAction::Suspend { card: baloth });
+    assert!(!actions_of(&mut t, P0).contains(&suspend));
+    assert!(!can_cast(&mut t, P0, baloth, CastMethod::Normal));
+    t.battlefield(P0, "Teferi, Mage of Zhalfir");
+    assert!(t.obj(baloth).has_keyword(mtg_engine::keywords::KeywordKind::Flash));
+    assert!(actions_of(&mut t, P0).contains(&suspend));
+    assert!(can_cast(&mut t, P0, baloth, CastMethod::Normal));
+    t.g.take_action(P0, suspend);
+    t.g.flush_events();
+    assert!(t.in_exile("Durkwood Baloth"));
+    assert_eq!(t.counters(baloth, "time"), 5);
+    // Cards P1 owns don't get flash, nor do P0's noncreature cards.
+    let theirs = t.hand(P1, "Durkwood Baloth");
+    let sorcery = t.hand(P0, "Divination");
+    t.g.recompute();
+    assert!(!t.obj(theirs).has_keyword(mtg_engine::keywords::KeywordKind::Flash));
+    assert!(!t.obj(sorcery).has_keyword(mtg_engine::keywords::KeywordKind::Flash));
+}
