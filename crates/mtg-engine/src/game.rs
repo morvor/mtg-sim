@@ -380,6 +380,11 @@ pub struct TurnHistory {
     pub spells_cast: Vec<(PlayerId, ObjectId)>,
     pub creatures_died: Vec<ObjectId>,
     pub permanents_left: Vec<ObjectId>,
+    /// Permanents that entered the battlefield this turn, with the player under whose
+    /// control each one entered ("if two or more nonland permanents entered the
+    /// battlefield under your control this turn"). They may have left since.
+    #[serde(default)]
+    pub permanents_entered: Vec<(PlayerId, ObjectId)>,
     pub cards_drawn: BTreeMap<PlayerId, u32>,
     pub life_gained: BTreeMap<PlayerId, u32>,
     pub life_lost: BTreeMap<PlayerId, u32>,

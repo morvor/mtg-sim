@@ -834,6 +834,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         }
         _ => {}
     }
+    // Chroma: "white mana symbol in the mana costs of permanents you control".
+    if let Some((v, "")) = super::chroma::mana_symbols_among_your_permanents(s) {
+        return Some(v);
+    }
     // "creature you control and each creature card in your graveyard": a sum.
     if let Some((a, b)) = s.split_once(" and each ") {
         if let (Some(va), Some(vb)) = (parse_for_each(a, it), parse_for_each(b, it)) {

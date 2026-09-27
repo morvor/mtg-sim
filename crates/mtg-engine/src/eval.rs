@@ -1030,6 +1030,14 @@ impl Game {
                 self.history.life_lost.get(&p).copied().unwrap_or(0) as i64
             }),
             Value::CreaturesDiedThisTurn => self.history.creatures_died.len() as i64,
+            // Each permanent as it is now, or as it last existed on the battlefield.
+            Value::PermanentsEnteredThisTurn(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
+                self.history
+                    .permanents_entered
+                    .iter()
+                    .filter(|(ctl, id)| *ctl == p && self.matches_view(&Current, *id, f, ctx))
+                    .count() as i64
+            }),
             Value::TimesResolvedThisTurn => ctx
                 .source
                 .map(|s| {

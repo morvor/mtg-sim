@@ -544,6 +544,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some(v) = counters_on_value(r, b) {
             return Some(v);
         }
+        // Chroma: "the number of red mana symbols in the mana costs of permanents you
+        // control" (CR 700.5).
+        if let Some((v, rest)) = super::patterns::chroma::mana_symbols_among_your_permanents(r) {
+            return Some((v, rest.to_string()));
+        }
         // "the number of cards in your hand"
         if let Some(rest) = r.strip_prefix("cards in your hand") {
             return Some((Value::HandSize(PlayerRef::You), rest.to_string()));

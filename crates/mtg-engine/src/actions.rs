@@ -680,6 +680,10 @@ impl Game {
                     .push(new_id);
             }
         }
+        if m.to == Zone::Battlefield && self.obj(new_id).zone == Zone::Battlefield {
+            let ctl = self.obj(new_id).controller;
+            self.history.permanents_entered.push((ctl, new_id));
+        }
         if from == Zone::Battlefield {
             self.history.permanents_left.push(old_id);
             if old_was_creature && matches!(m.to, Zone::Graveyard(_)) {
