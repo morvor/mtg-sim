@@ -60,7 +60,7 @@ fn inspired_triggers_however_the_creature_becomes_untapped() {
 
 #[test]
 fn an_inspired_optional_cost_is_paid_on_resolution_even_if_the_creature_left() {
-    cr!("603.5", "118.12", "608.2b");
+    cr!("603.5", "118.12", "113.7a");
     ruling!(
         "Pheres-Band Raiders",
         "If the inspired ability includes an optional cost, you decide whether to pay that cost as the ability resolves. You can do this even if the creature leaves the battlefield in response to the ability."

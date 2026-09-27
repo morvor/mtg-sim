@@ -62,7 +62,7 @@ fn clue_is_only_an_artifact_type() {
 
 #[test]
 fn a_clue_that_becomes_a_creature_is_still_only_an_artifact_clue() {
-    cr!("205.3g", "205.3d", "613.1d");
+    cr!("205.3g", "613.1d");
     ruling!(
         "Tangletrove Kelp",
         "Clue is an artifact type. Even though it appears on some cards with other permanent types, it’s never a creature type, a land type, or anything but an artifact type."

@@ -42,7 +42,7 @@ fn a_granted_trigger_resolves_after_the_commander_leaves() {
     let familiar = t.battlefield(P0, "Tyrant's Familiar");
     let cmdr = commander(&mut t, P0, "Grizzly Bears");
     let angel = t.battlefield(P1, "Serra Angel");
-    // Tyrant's Familiar is a 5/5.
+    // Tyrant's Familiar (5/5) gets +2/+2 while P0 controls their commander.
     assert_eq!(t.pt(familiar), (7, 7));
     t.answer_targets(P0, &[Entity::Object(angel)]);
     attack_with(&mut t, &[(familiar, Entity::Player(P1))]);

@@ -261,7 +261,7 @@ fn more_lands_give_no_additional_benefit() {
 
 #[test]
 fn a_land_after_the_spell_resolved_gives_no_benefit() {
-    cr!("608.2c", "611.2c");
+    cr!("608.2c", "608.2h");
     ruling!(
         "Groundswell",
         "Once the spell resolves, having a land enter under your control provides no further benefit."
@@ -276,7 +276,7 @@ fn a_land_after_the_spell_resolved_gives_no_benefit() {
 
 #[test]
 fn the_landfall_condition_is_checked_on_resolution() {
-    cr!("608.2c", "601.2");
+    cr!("608.2c", "608.2h");
     ruling!(
         "Tomb Hex",
         "Whether you had a land enter the battlefield under your control this turn is checked as this spell resolves, not as you cast it."
@@ -304,7 +304,7 @@ fn the_landfall_condition_is_checked_on_resolution() {
 
 #[test]
 fn modifying_effects_apply_to_the_land_creatures_new_base_pt() {
-    cr!("613.4b", "613.4c", "613.7");
+    cr!("613.4b", "613.4c");
     ruling!(
         "Nissa's Zendikon",
         "Effects that modify the power or toughness of the land creature without setting it will apply to its new base power and toughness no matter when they started to take effect. The same is true for counters that change its power and toughness."

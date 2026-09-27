@@ -382,11 +382,11 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 // landwalk ability, not every landwalk.
                 let word = r.split([' ', ',', '.']).next().unwrap_or("");
                 let stem = word.strip_suffix("walk").unwrap_or("");
-                if k1 != KeywordKind::Landwalk
-                    && !stem.is_empty()
-                    && stem != "land"
-                    && stem.chars().all(|c| c.is_ascii_lowercase())
-                {
+                let is_land_type = crate::types::subtype_lists()
+                    .land
+                    .iter()
+                    .any(|t| t.eq_ignore_ascii_case(stem));
+                if k1 != KeywordKind::Landwalk && !stem.is_empty() && is_land_type {
                     parts.pop();
                     parts.push(Filter::not(Filter::Or(vec![
                         Filter::HasKeyword(k1),

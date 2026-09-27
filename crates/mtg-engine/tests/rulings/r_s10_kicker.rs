@@ -27,7 +27,7 @@ fn choose_creature_type(t: &mut TestGame, p: PlayerId, ty: &str) {
 
 #[test]
 fn a_copy_of_a_kicked_permanent_spell_becomes_a_kicked_token() {
-    cr!("702.33d", "707.10", "707.10c");
+    cr!("702.33d", "707.10", "707.10f", "608.3f");
     ruling!(
         "Kavu Titan",
         "If you copy a kicked spell on the stack, the copy is also kicked. If the copied spell is a permanent spell, the token the copy of that spell becomes when it enters is also kicked."

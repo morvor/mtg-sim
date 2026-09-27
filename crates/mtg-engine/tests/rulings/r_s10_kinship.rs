@@ -5,6 +5,7 @@
 use crate::r_s01_common::supported;
 use crate::r_s04_common::next_upkeep;
 use mtg_engine::decision::Decision;
+use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -19,9 +20,17 @@ fn yes_no_prompts(t: &TestGame, p: PlayerId, from: usize) -> Vec<String> {
         .collect()
 }
 
+/// Whether the card `card` was revealed (by anyone) since event `from` of this turn.
+fn revealed_since(t: &TestGame, from: usize, card: ObjectId) -> bool {
+    t.g.turn_events[from..].iter().any(|e| {
+        matches!(e, Event::Custom { name, obj: Some(o), .. }
+            if name == mtg_engine::reveal::REVEALED && *o == card)
+    })
+}
+
 #[test]
-fn kinship_compiles_for_its_cards() {
-    cr!("207.2c");
+fn each_kinship_ability_offers_the_reveal_only_for_a_card_sharing_a_creature_type() {
+    cr!("207.2c", "603.5", "701.20a");
     for name in [
         "Wandering Graybeard",
         "Nightshade Schemers",
@@ -36,6 +45,43 @@ fn kinship_compiles_for_its_cards() {
         "Squeaking Pie Grubfellows",
     ] {
         supported(name);
+        // Another copy of the card is on top (it shares every creature type with it):
+        // the controller may reveal it.
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, name);
+        t.library_top(P0, name);
+        t.library_top(P0, name);
+        next_upkeep(&mut t, P0);
+        assert_eq!(t.stack_len(), 1, "{name}: the kinship trigger");
+        let top = t.g.library_top(P0).expect("a library");
+        let (from, events) = (t.asked().len(), t.g.turn_events.len());
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        t.resolve();
+        assert!(
+            yes_no_prompts(&t, P0, from)
+                .iter()
+                .any(|p| p.starts_with("Reveal")),
+            "{name}: no reveal offered"
+        );
+        assert!(revealed_since(&t, events, top), "{name}: not revealed");
+        // A Forest (no creature types) on top: no reveal is offered.
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, name);
+        t.library_top(P0, "Forest");
+        t.library_top(P0, "Forest");
+        next_upkeep(&mut t, P0);
+        let top = t.g.library_top(P0).expect("a library");
+        let (from, events) = (t.asked().len(), t.g.turn_events.len());
+        t.answer_yes(P0, true);
+        t.resolve();
+        assert!(
+            !yes_no_prompts(&t, P0, from)
+                .iter()
+                .any(|p| p.starts_with("Reveal")),
+            "{name}: a reveal was offered"
+        );
+        assert!(!revealed_since(&t, events, top), "{name}: revealed");
     }
 }
 
@@ -109,7 +155,7 @@ fn an_already_revealed_top_card_may_still_be_revealed_or_not() {
 
 #[test]
 fn several_kinship_abilities_look_at_the_same_card() {
-    cr!("603.3b", "701.20c");
+    cr!("603.3b", "701.20b");
     ruling!(
         "Wandering Graybeard",
         "If you have multiple creatures with kinship abilities, each triggers and resolves separately. You’ll look at the same card for each one"
