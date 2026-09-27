@@ -190,3 +190,135 @@ fn flash_if_it_is_cast_using_teamwork() {
     t.resolve_all();
     assert_eq!(t.pt(wurm), (1, 4));
 }
+
+/// The target decisions asked since `from`: (text, candidates).
+fn target_choices(t: &TestGame, from: usize) -> Vec<(String, Vec<Entity>)> {
+    asked_since(t, from)
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets {
+                text, candidates, ..
+            } => Some((text, candidates)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn instead_a_part_with_its_own_target_cruel_alliance() {
+    cr!("702.194b", "702.194c");
+    // Cruel Alliance ({2}{B} sorcery): "Teamwork 2. Exile target creature with mana value
+    // 3 or less. If this spell was cast using teamwork, instead exile target creature and
+    // you gain 3 life."
+    assert_supported(&["Cruel Alliance"]);
+    // With teamwork, only the replacement's target is chosen: any creature.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, "Cruel Alliance");
+    let from = t.asked().len();
+    t.cast(P0, c).kicked(true).target(wurm).go();
+    assert!(t.obj(bears).tapped);
+    let choices = target_choices(&t, from);
+    assert_eq!(choices.len(), 1);
+    assert_eq!(choices[0].0, "target creature");
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+    assert_eq!(t.life(P0), 23);
+    // Without teamwork, only a creature with mana value 3 or less can be the target, and
+    // no life is gained.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, "Cruel Alliance");
+    let from = t.asked().len();
+    t.cast(P0, c).kicked(false).target(theirs).go();
+    assert!(!t.obj(bears).tapped);
+    let choices = target_choices(&t, from);
+    assert_eq!(choices.len(), 1);
+    assert!(!choices[0].1.contains(&Entity::Object(wurm)));
+    t.resolve_all();
+    assert!(!t.on_battlefield(theirs));
+    assert!(t.on_battlefield(wurm));
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn the_chosen_card_is_whichever_target_was_chosen() {
+    cr!("702.194c");
+    // Too Evil to Stay Dead ({2}{B} sorcery): "Teamwork 4. Choose target creature card in
+    // your graveyard with mana value 4 or less. If this spell was cast using teamwork,
+    // instead choose target creature card in your graveyard. Return the chosen card to
+    // the battlefield."
+    assert_supported(&["Too Evil to Stay Dead"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    t.graveyard(P0, "Grizzly Bears");
+    let c = t.hand(P0, "Too Evil to Stay Dead");
+    t.cast(P0, c).kicked(true).target(wurm).go();
+    assert!(t.obj(giant).tapped && t.obj(elves).tapped);
+    t.resolve_all();
+    assert_eq!(named(&t, "Craw Wurm").len(), 1);
+    // Without teamwork: a creature card with mana value 4 or less.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let c = t.hand(P0, "Too Evil to Stay Dead");
+    let from = t.asked().len();
+    t.cast(P0, c).kicked(false).target(bears).go();
+    let choices = target_choices(&t, from);
+    assert_eq!(choices.len(), 1);
+    assert!(!choices[0].1.contains(&Entity::Object(wurm)));
+    t.resolve_all();
+    assert_eq!(named(&t, "Grizzly Bears").len(), 1);
+    assert!(named(&t, "Craw Wurm").is_empty());
+}
+
+#[test]
+fn unless_this_spell_was_cast_using_teamwork() {
+    cr!("702.194b");
+    // Timeline Inquiry ({3}{U} instant): "Teamwork 2. Draw three cards. Then discard a
+    // card unless this spell was cast using teamwork."
+    assert_supported(&["Timeline Inquiry"]);
+    for teamwork in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 4);
+        t.battlefield(P0, "Grizzly Bears");
+        for _ in 0..5 {
+            t.library_top(P0, "Island");
+        }
+        let c = t.hand(P0, "Timeline Inquiry");
+        t.cast(P0, c).kicked(teamwork).go();
+        t.resolve_all();
+        let hand = t.g.player(P0).hand.len();
+        assert_eq!(hand, if teamwork { 3 } else { 2 }, "teamwork: {teamwork}");
+    }
+}
+
+#[test]
+fn also_if_this_spell_was_cast_using_teamwork() {
+    cr!("702.194b");
+    // Beast Mode ({1}{G} instant): "Teamwork 1. Target creature gets +2/+2 and gains
+    // trample until end of turn. Also put a +1/+1 counter on that creature if this spell
+    // was cast using teamwork."
+    assert_supported(&["Beast Mode"]);
+    for teamwork in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 2);
+        t.battlefield(P0, "Llanowar Elves");
+        let giant = t.battlefield(P0, "Hill Giant");
+        let c = t.hand(P0, "Beast Mode");
+        t.cast(P0, c).kicked(teamwork).target(giant).go();
+        t.resolve_all();
+        let n = t.counters(giant, counters::PLUS1);
+        assert_eq!(n, if teamwork { 1 } else { 0 }, "teamwork: {teamwork}");
+        assert_eq!(t.pt(giant).0, 5 + n as i32);
+    }
+}

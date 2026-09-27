@@ -80,7 +80,7 @@ fn mentions_it(e: &Effect) -> bool {
 
 /// The target slots an effect refers to (`Sel::Target(i)`, also inside other selectors
 /// and player references).
-fn targets_mentioned(e: &Effect) -> Vec<usize> {
+pub fn targets_mentioned(e: &Effect) -> Vec<usize> {
     let Ok(s) = serde_json::to_string(e) else {
         return Vec::new();
     };

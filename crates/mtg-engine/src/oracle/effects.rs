@@ -485,9 +485,29 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "that vehicle",
         "that artifact",
         "that land",
+        // "Choose target creature ... Exile the chosen creature." (Turncoat Kunoichi).
+        "the chosen creature",
+        "the chosen card",
+        // A named character's personal pronouns mean what "it" would ("Put a +1/+1
+        // counter on ~. He gains vigilance ...", "put a +1/+1 counter on him").
+        "he",
+        "she",
+        "him",
+        "her",
     ] {
         if let Some(rest) = s.strip_prefix(p) {
-            if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\'') {
+            let personal = matches!(p, "he" | "she" | "him" | "her");
+            // "her" is also possessive ("her power"): only an object at the end of the
+            // phrase or before a conjunction or preposition.
+            if p == "her"
+                && !(rest.is_empty()
+                    || [" and ", " until ", " to ", " from ", " on "]
+                        .iter()
+                        .any(|x| rest.starts_with(x)))
+            {
+                continue;
+            }
+            if rest.is_empty() || rest.starts_with(' ') || (rest.starts_with('\'') && !personal) {
                 // "This token" is always the source (normally normalized to "~").
                 if p == "this token" {
                     return Some((Sel::This, rest.to_string()));
@@ -500,7 +520,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 // not understood.
                 let own_card = p == "that card" && b.in_trigger && b.sentences == 0;
                 if super::patterns::oracle_hardening_referents::is_no_referent(&it)
-                    || (p != "it" && !own_card && matches!(it, Sel::This))
+                    || (p != "it" && !personal && !own_card && matches!(it, Sel::This))
                 {
                     return None;
                 }

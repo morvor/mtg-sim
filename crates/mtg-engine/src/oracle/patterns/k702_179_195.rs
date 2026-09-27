@@ -393,6 +393,17 @@ fn keyword_cost_paid(c: &str) -> Option<Condition> {
     let r = ["its ", "~'s ", "this spell's ", "his ", "her ", "their "]
         .iter()
         .find_map(|p| c.strip_prefix(p))?;
+    // "If her sneak cost was paid this turn" (a permanent's ability): the spell it was
+    // cast as had that cost paid, and it became this permanent this turn.
+    if let Some(r) = r.strip_suffix(" this turn") {
+        let Some(Condition::CostPaid(n)) = keyword_cost_paid(&format!("its {r}")) else {
+            return None;
+        };
+        return Some(Condition::And(vec![
+            Condition::CostPaid(n),
+            Condition::SelMatches(Sel::This, Filter::EnteredThisTurn),
+        ]));
+    }
     let name = match r {
         "mayhem cost was paid" => crate::kw::mayhem::MAYHEM,
         "warp cost was paid" => crate::kw::warp::WARP,

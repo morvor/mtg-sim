@@ -282,3 +282,105 @@ fn tokens_enter_attacking_if_the_sneak_cost_was_paid() {
         .filter(|o| o.is_token())
         .all(|o| !o.tapped));
 }
+
+#[test]
+fn instead_exile_the_chosen_creature_if_its_sneak_cost_was_paid() {
+    cr!("702.190a");
+    ruling!(
+        "Turncoat Kunoichi",
+        "If Turncoat Kunoichi's sneak cost wasn't paid and it leaves the battlefield before its triggered ability resolves, the target creature won't be exiled."
+    );
+    // Turncoat Kunoichi ({2}{W} 3/2): "Sneak {2}{W}{B}. When this creature enters, choose
+    // target creature an opponent controls. Exile that creature until this creature leaves
+    // the battlefield. If this creature's sneak cost was paid, instead exile the chosen
+    // creature."
+    const KUNOICHI: &str = "Turncoat Kunoichi";
+    assert_supported(&[KUNOICHI]);
+    // Cast for its sneak cost: the creature is exiled for good.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Swamp", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, KUNOICHI);
+    to_blockers(&mut t, &[(bears, Entity::Player(P1))], &[]);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, c).method(SNEAK).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+    let k = named(&t, KUNOICHI)[0];
+    t.g.destroy(k, None);
+    t.settle();
+    assert!(named(&t, "Craw Wurm").is_empty());
+    assert_eq!(exiled_count(&t, "Craw Wurm"), 1);
+    // Cast for its mana cost: only until it leaves the battlefield.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, KUNOICHI);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+    let k = named(&t, KUNOICHI)[0];
+    t.g.destroy(k, None);
+    t.settle();
+    assert_eq!(named(&t, "Craw Wurm").len(), 1);
+    // If it leaves before its triggered ability resolves, nothing is exiled.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, KUNOICHI);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, c).go();
+    t.resolve();
+    let k = named(&t, KUNOICHI)[0];
+    t.g.destroy(k, None);
+    t.settle();
+    t.resolve_all();
+    assert!(t.on_battlefield(wurm));
+}
+
+#[test]
+fn if_her_sneak_cost_was_paid_this_turn() {
+    cr!("702.190a", "702.190b");
+    // Karai, Future of the Foot ({1}{W}{B} 3/3): "Sneak {2}{W}{B}. Whenever Karai deals
+    // combat damage to a player, return target creature card from your graveyard to your
+    // hand. If her sneak cost was paid this turn, instead return that card to the
+    // battlefield."
+    const KARAI: &str = "Karai, Future of the Foot";
+    assert_supported(&[KARAI]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Swamp", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    let c = t.hand(P0, KARAI);
+    to_blockers(&mut t, &[(bears, Entity::Player(P1))], &[]);
+    t.cast(P0, c).method(SNEAK).go();
+    t.resolve_all();
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(named(&t, "Craw Wurm").len(), 1);
+    // On a later turn, her sneak cost wasn't paid that turn: to its owner's hand.
+    let karai = named(&t, KARAI)[0];
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.g.turn.number += 2;
+    let karai = t.g.current(karai);
+    t.g.objects[karai.0 as usize].tapped = false;
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(karai, Entity::Player(P1))]),
+    );
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert!(named(&t, "Hill Giant").is_empty());
+}
