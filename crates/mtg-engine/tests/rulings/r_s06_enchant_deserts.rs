@@ -105,7 +105,7 @@ fn unquenchable_thirst_needs_only_one_desert() {
 
 #[test]
 fn wall_of_forgotten_pharaohs_needs_a_desert_to_activate() {
-    cr!("602.5b");
+    cr!("602.5");
     ruling!(
         "Wall of Forgotten Pharaohs",
         "If an ability checks whether you control a Desert or there is a Desert card in your graveyard, having more than one doesn't matter."

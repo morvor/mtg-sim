@@ -225,7 +225,7 @@ fn moving_the_equipment_off_the_phyrexian_germ_kills_it() {
 
 #[test]
 fn the_equipment_stays_when_the_phyrexian_germ_is_destroyed() {
-    cr!("702.92a", "704.5n");
+    cr!("702.92a", "301.5c");
     ruling!(
         "Nettlecyst",
         "If the Phyrexian Germ token is destroyed, the Equipment remains on the battlefield as with any other Equipment."
@@ -276,7 +276,7 @@ fn kindred_equipment_has_a_creature_type_and_the_equipment_type() {
 
 #[test]
 fn a_kindred_equipment_can_attach_itself_to_an_opponents_creature() {
-    cr!("301.5c", "301.5d", "702.6a", "113.8", "603.2");
+    cr!("301.5b", "301.5d", "702.6a", "113.8", "603.2");
     ruling!(
         "Thornbite Staff",
         "This triggers whenever any creature of the specified creature type enters, no matter who controls it. You may attach your Equipment to another player's creature this way, even though you can't do so with the equip ability."
@@ -413,11 +413,6 @@ fn protection_from_a_color_prevents_only_what_it_says() {
     t.resolve();
     assert_eq!(t.obj_now(bears).damage, 0);
     assert_eq!(t.obj_now(other).damage, 2);
-    // A black Aura can't enchant it: it's put into its owner's graveyard.
-    let phyresis = t.battlefield(P1, "Phyresis");
-    t.g.attach(phyresis, Entity::Object(bears));
-    t.settle();
-    assert!(t.in_graveyard(P1, "Phyresis"));
     // Can't be blocked by a red creature, but can be by a white one.
     let piker = t.battlefield(P1, "Goblin Piker");
     to_blockers(&mut t, &[(bears, Entity::Player(P1))], &[(piker, bears)]);
@@ -438,6 +433,23 @@ fn protection_from_a_color_prevents_only_what_it_says() {
     t.cast(P0, damnation).go();
     t.resolve();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // It can't be enchanted or equipped by black or red Auras and Equipment: a black Aura
+    // already attached is put into its owner's graveyard, and a red Equipment becomes
+    // unattached but stays on the battlefield. A green Aura stays attached.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let phyresis = attach_new(&mut t, P1, "Phyresis", bears);
+    let rancor = attach_new(&mut t, P0, "Rancor", bears);
+    let cleave = attach_new(&mut t, P0, "Embercleave", bears);
+    t.settle();
+    assert!(t.on_battlefield(phyresis));
+    assert_eq!(attached_to(&t, cleave), Some(Entity::Object(bears)));
+    attach_new(&mut t, P0, "Sword of Sinew and Steel", bears);
+    t.settle();
+    assert!(t.in_graveyard(P1, "Phyresis"));
+    assert!(t.on_battlefield(cleave));
+    assert_eq!(attached_to(&t, cleave), None);
+    assert_eq!(attached_to(&t, rancor), Some(Entity::Object(bears)));
 }
 
 // ---------------------------------------------------------------------------------------

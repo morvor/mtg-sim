@@ -276,7 +276,7 @@ fn activatable(t: &mut TestGame, p: PlayerId, source: ObjectId) -> Vec<String> {
 
 #[test]
 fn bound_in_gold_stops_equip_and_loyalty_abilities_but_not_mana_abilities() {
-    cr!("602.1", "602.5", "606.3", "702.6a", "605.1a");
+    cr!("602.1", "602.5", "606.2", "702.6a", "605.1a");
     ruling!(
         "Bound in Gold",
         "Activated abilities contain a colon and appear in the form “[Cost]: [Effect].” Some keywords (such as equip) are activated abilities and will have colons in their reminder texts. Loyalty abilities of planeswalkers are also activated abilities."
@@ -468,6 +468,14 @@ fn animated_artifact_keeps_pt_modifications_counters_and_switches() {
     t.resolve();
     assert_eq!(t.pt(stone), (9, 9));
     assert!(t.on_battlefield(stone));
+    // Bonesplitter (+2/+0), then an effect switching its power and toughness.
+    attach_new(&mut t, P0, "Bonesplitter", stone);
+    assert_eq!(t.pt(stone), (11, 9));
+    t.lands(P0, "Island", 2);
+    let inside = t.hand(P0, "Inside Out");
+    t.cast(P0, inside).target(stone).go();
+    t.resolve();
+    assert_eq!(t.pt(stone), (9, 11));
 }
 
 #[test]

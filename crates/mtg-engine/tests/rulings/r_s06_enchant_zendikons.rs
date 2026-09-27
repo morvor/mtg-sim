@@ -83,7 +83,7 @@ fn a_zendikon_destroyed_with_its_land_still_returns_the_land() {
 
 #[test]
 fn the_land_card_leaving_the_graveyard_makes_the_return_do_nothing() {
-    cr!("400.7", "608.2b");
+    cr!("400.7");
     ruling!(
         "Crusher Zendikon",
         "If a Zendikon's last ability triggers, but the land card it refers to leaves the graveyard before it resolves, it will resolve but do nothing."
@@ -104,7 +104,7 @@ fn the_land_card_leaving_the_graveyard_makes_the_return_do_nothing() {
 
 #[test]
 fn a_land_that_stops_being_a_creature_is_removed_from_combat() {
-    cr!("506.4", "506.4a", "509.1h", "510.1c");
+    cr!("506.4", "509.1h", "510.1c");
     ruling!(
         "Guardian Zendikon",
         "An attacking or blocking creature that stops being a creature is removed from combat. This can happen if a Zendikon enchanting an attacking or blocking creature leaves the battlefield, for example. The permanent that was removed from combat neither deals nor is dealt combat damage. Any attacking creature that the land creature was blocking remains blocked, however."

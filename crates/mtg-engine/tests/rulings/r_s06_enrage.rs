@@ -29,7 +29,7 @@ fn enrage_triggers_once_for_damage_dealt_by_several_blockers_at_once() {
 
 #[test]
 fn enrage_triggers_on_lethal_damage_but_the_creature_is_gone_when_it_resolves() {
-    cr!("207.2c", "603.10a", "704.5g", "608.2h");
+    cr!("207.2c", "603.10", "704.5g", "608.2h");
     ruling!(
         "Siegehorn Ceratops",
         "If lethal damage is dealt to a creature with an enrage ability, that ability triggers. The creature with that enrage ability leaves the battlefield before that ability resolves, so it won’t be affected by the resolving ability."
@@ -63,7 +63,7 @@ fn enrage_triggers_on_lethal_damage_but_the_creature_is_gone_when_it_resolves() 
 
 #[test]
 fn ripjaw_raptor_dealt_lethal_damage_still_draws() {
-    cr!("207.2c", "603.10a", "704.5g");
+    cr!("207.2c", "603.10", "704.5g");
     ruling!(
         "Ripjaw Raptor",
         "If lethal damage is dealt to a creature with an enrage ability, that ability triggers. The creature with that enrage ability leaves the battlefield before that ability resolves, so it won't be affected by the resolving ability."

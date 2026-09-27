@@ -46,14 +46,15 @@ fn moving_laccolith_rig_after_it_triggers_doesnt_change_the_creature_affected() 
     );
     supported("Laccolith Rig");
     // Hill Giant (3/3) enchanted with Laccolith Rig attacks and is blocked by Grizzly
-    // Bears; P0 targets P1's Savannah Lions with the trigger.
+    // Bears; P0 targets P1's Centaur Courser (3/3) with the trigger. (Only the Giant's 3
+    // damage kills the Courser; the Elves' 1 wouldn't.)
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
     let elves = t.battlefield(P0, "Llanowar Elves");
     let rig = attach_new(&mut t, P0, "Laccolith Rig", giant);
     let blocker = t.battlefield(P1, "Grizzly Bears");
-    let lions = t.battlefield(P1, "Savannah Lions");
-    t.answer_targets(P0, &[Entity::Object(lions)]);
+    let courser = t.battlefield(P1, "Centaur Courser");
+    t.answer_targets(P0, &[Entity::Object(courser)]);
     to_blockers(&mut t, &[(giant, Entity::Player(P1))], &[(blocker, giant)]);
     assert_eq!(on_stack(&t, "deal damage equal to its power"), 1);
     // The Aura moves to Llanowar Elves (1/1) before the ability resolves.
@@ -61,8 +62,8 @@ fn moving_laccolith_rig_after_it_triggers_doesnt_change_the_creature_affected() 
     t.g.recompute();
     t.answer_yes(P0, true);
     t.resolve_all();
-    // Hill Giant dealt the damage (3, killing the 2/1 Lions)...
-    assert!(t.in_graveyard(P1, "Savannah Lions"));
+    // Hill Giant dealt the damage (3, killing the 3/3 Courser)...
+    assert!(t.in_graveyard(P1, "Centaur Courser"));
     t.advance_to(P0, Step::EndOfCombat);
     // ... and it assigns no combat damage: the blocking Bears survive.
     assert!(t.on_battlefield(blocker));
@@ -75,12 +76,12 @@ fn moving_laccolith_rig_after_it_triggers_doesnt_change_the_creature_affected() 
     let giant = t.battlefield(P0, "Hill Giant");
     attach_new(&mut t, P0, "Laccolith Rig", giant);
     let blocker = t.battlefield(P1, "Grizzly Bears");
-    let lions = t.battlefield(P1, "Savannah Lions");
-    t.answer_targets(P0, &[Entity::Object(lions)]);
+    let courser = t.battlefield(P1, "Centaur Courser");
+    t.answer_targets(P0, &[Entity::Object(courser)]);
     t.answer_yes(P0, false);
     to_blockers(&mut t, &[(giant, Entity::Player(P1))], &[(blocker, giant)]);
     t.resolve_all();
     t.advance_to(P0, Step::EndOfCombat);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
-    assert!(t.on_battlefield(lions));
+    assert!(t.on_battlefield(courser));
 }
