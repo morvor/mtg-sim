@@ -173,14 +173,14 @@ fn an_equipment_that_is_a_creature_cant_equip_unless_it_has_reconfigure() {
         None,
         Effect::Modify {
             what: Sel::Target(0),
-            mods: vec![Modification::SetTypes {
-                types: vec![CardType::Artifact],
-                subtypes: vec![],
-            }],
+            // (Setting its card type to artifact wouldn't do: an artifact keeps its
+            // artifact subtypes, CR 205.1a.)
+            mods: vec![Modification::RemoveSubtypes(vec!["Equipment".into()])],
             duration: Duration::EndOfTurn,
         },
         &[Entity::Object(other)],
     );
+    assert!(t.obj(other).is(CardType::Artifact));
     assert!(!t.obj(other).chars.has_subtype("Equipment"));
     assert!(!mtg_engine::attach::can_attach(
         &t.g,

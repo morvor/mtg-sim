@@ -274,11 +274,15 @@ impl Game {
                 }
             }
             Effect::SacrificeObjects { what } => {
+                // "Sacrifice ~": the ability's controller sacrifices its source, which they
+                // can't do if another player controls it now (CR 701.21a).
+                let own_source = matches!(what, Sel::This);
                 let objs = self.resolve_objects(what, ctx);
                 // Sacrificed at the same time (CR 101.4).
                 let what: Vec<(ObjectId, PlayerId)> = objs
                     .into_iter()
                     .filter(|o| self.is_live(*o))
+                    .filter(|o| !own_source || self.obj(*o).controller == ctx.controller)
                     .map(|o| (o, self.obj(o).controller))
                     .collect();
                 let mut res = Vec::new();

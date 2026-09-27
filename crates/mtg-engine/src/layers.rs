@@ -11,7 +11,6 @@ use crate::game::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
 use crate::types::*;
-use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1488,9 +1487,30 @@ pub fn apply_mod(
         }
         Modification::RemoveSubtypes(ss) => c.subtypes.retain(|s| !ss.contains(s)),
         Modification::SetTypes { types, subtypes } => {
+            // CR 205.1a: the new card types replace the old ones, and the new subtypes
+            // replace the existing subtypes of their sets. Other subtypes remain only if
+            // they're correlated with a card type the object still has.
             c.card_types = types.iter().copied().collect();
-            c.subtypes = subtypes.iter().cloned().collect::<SmallVec<[Subtype; 3]>>();
-            c.all_creature_types = false;
+            let new_types = c.card_types;
+            let replaced: Vec<SubtypeKind> =
+                subtypes.iter().flat_map(|s| subtype_kinds(s)).collect();
+            c.subtypes.retain(|s| {
+                let kinds = subtype_kinds(s);
+                !kinds.is_empty()
+                    && !kinds.iter().any(|k| replaced.contains(k))
+                    && subtype_still_valid(s, new_types)
+            });
+            for s in subtypes {
+                if !c.subtypes.contains(s) {
+                    c.subtypes.push(s.clone());
+                }
+            }
+            if replaced.contains(&SubtypeKind::Creature)
+                || !(new_types.contains(CardType::Creature)
+                    || new_types.contains(CardType::Kindred))
+            {
+                c.all_creature_types = false;
+            }
         }
         // Every creature type (CR 205.3m, 702.73a), kept as a flag rather than a list of
         // every creature type (see `Characteristics::has_subtype`).
