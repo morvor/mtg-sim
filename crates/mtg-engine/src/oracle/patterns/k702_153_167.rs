@@ -3,7 +3,7 @@
 //!
 //! * "Each [quality] spell you cast has casualty N" (CR 702.153a);
 
-use super::StaticPattern;
+use super::{ConditionPattern, StaticPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::phrases::{end, parse_object_phrase};
@@ -52,3 +52,23 @@ fn spells_have_casualty(l: &str, text: &str, _ctx: &CompileContext) -> Option<Ve
 }
 
 inventory::submit! { StaticPattern { name: "each [quality] spell you cast has casualty N", priority: 100, parse: spells_have_casualty } }
+
+/// "if this spell was bargained", "if it was bargained", "if it's bargained" (CR 702.166b–c):
+/// the bargain cost was paid for the spell (or the spell the permanent was).
+fn bargained(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let paid = Condition::CostPaid(crate::kw::bargain::BARGAIN.into());
+    if c == "it's bargained" {
+        return Some(paid);
+    }
+    let r = ["it ", "~ ", "this spell ", "this creature ", "this permanent "]
+        .iter()
+        .find_map(|p| c.strip_prefix(p))?;
+    match r {
+        "was bargained" => Some(paid),
+        "wasn't bargained" | "was not bargained" => Some(Condition::Not(Box::new(paid))),
+        _ => None,
+    }
+}
+
+inventory::submit! { ConditionPattern { name: "k702.166 it was bargained", priority: 100, parse: bargained } }

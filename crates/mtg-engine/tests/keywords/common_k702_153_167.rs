@@ -98,3 +98,24 @@ pub fn plus1(t: &TestGame, id: ObjectId) -> u32 {
 pub fn poison(t: &TestGame, p: PlayerId) -> u32 {
     t.g.player(p).counter(counters::POISON)
 }
+
+/// Creates a predefined token ("Treasure", "Food", ...) for `p`; returns it.
+pub fn make_token(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    let spec = mtg_engine::tokens_predefined::predefined(name).expect("predefined token");
+    let before = tokens(t, p);
+    run(
+        t,
+        p,
+        Effect::CreateToken {
+            spec,
+            count: Value::c(1),
+            controller: PlayerRef::You,
+            tapped: false,
+            attacking: false,
+        },
+    );
+    tokens(t, p)
+        .into_iter()
+        .find(|id| !before.contains(id))
+        .expect("token created")
+}
