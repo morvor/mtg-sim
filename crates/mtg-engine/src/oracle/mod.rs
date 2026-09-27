@@ -347,6 +347,9 @@ pub fn strip_ability_word(text: &str) -> &str {
     if let Some((head, rest)) = text.split_once(" — ") {
         let words = head.split_whitespace().count();
         let looks_like_word = words <= 4
+            // An ability word starts its line: not a mode's name on a later line
+            // ("Tiered\n• Thunder — {0} — ...", CR 702.183a).
+            && !head.contains('\n')
             && !head.contains(':')
             && !head.to_lowercase().starts_with("choose")
             && head.chars().next().is_some_and(|c| c.is_uppercase())

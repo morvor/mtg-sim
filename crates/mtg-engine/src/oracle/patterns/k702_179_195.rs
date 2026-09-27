@@ -52,6 +52,62 @@ fn keyword_x_where(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 inventory::submit! { AbilityPattern { name: "k702.181/189 keyword x, where x is", priority: 50, parse: keyword_x_where } }
 
+/// "Tiered" followed by "• [Name] — [cost] — [effect]" modes (CR 702.183a): "Choose one.
+/// As an additional cost to cast this spell, pay the cost associated with that mode."
+/// Compiles to the tiered keyword and a modal spell ability whose modes carry their
+/// additional costs (paid for the chosen mode, CR 601.2b, 601.2f).
+fn tiered(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() {
+        return None;
+    }
+    let mut lines = block.lines();
+    if !lines.next()?.trim().eq_ignore_ascii_case("tiered") {
+        return None;
+    }
+    let mut modes = Vec::new();
+    for line in lines {
+        let l = line.trim().strip_prefix('•')?.trim();
+        // The mode's name has no rules meaning.
+        let (_name, rest) = l.split_once(" — ")?;
+        let (cost, eff) = rest.split_once(" — ")?;
+        let (cost, _) = crate::oracle::costs::parse_cost(cost)?;
+        let mut b = Builder::new(ctx);
+        let effect = crate::oracle::effects::parse_effect_text(eff, &mut b)?;
+        modes.push(Mode {
+            text: l.to_string(),
+            targets: b.targets,
+            effect,
+            cost: Some(cost),
+        });
+    }
+    if modes.len() < 2 {
+        return None;
+    }
+    let modal = Modal {
+        min: Value::c(1),
+        max: Value::c(1),
+        allow_repeat: false,
+        modes,
+        per_mode_cost: true,
+        chooser: ModeChooser::Controller,
+    };
+    let mut out =
+        crate::oracle::keywords::compile_keyword(Keyword::new(KeywordKind::Tiered), "Tiered");
+    out.push(AbilityDef::new(
+        AbilityKind::Spell(SpellAbility {
+            body: Body {
+                targets: vec![],
+                effect: Effect::Noop,
+                modal: Some(modal),
+            },
+        }),
+        block.trim(),
+    ));
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "k702.183 tiered modes", priority: 50, parse: tiered } }
+
 /// Whether the effect grants the keyword `kind` without a cost of its own ("gains
 /// harmonize until end of turn").
 fn grants_costless(e: &Effect, kind: KeywordKind) -> bool {
