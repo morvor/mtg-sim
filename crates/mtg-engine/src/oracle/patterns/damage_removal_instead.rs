@@ -94,6 +94,16 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(cond) = parse_condition(c, b.ctx) else {
         return false;
     };
+    // "If ~ was bargained, it deals twice X damage to that permanent instead": the subject
+    // "it" is the condition's (the source), not the object the previous sentence affects.
+    let subject_is_source;
+    let x = match x.strip_prefix("it ") {
+        Some(r) if c.starts_with("~ ") => {
+            subject_is_source = format!("~ {r}");
+            subject_is_source.as_str()
+        }
+        _ => x,
+    };
     let targets = b.targets.len();
     let replacement = match parse_clause(x, b) {
         Some(e) if b.targets.len() == targets => Some(e),

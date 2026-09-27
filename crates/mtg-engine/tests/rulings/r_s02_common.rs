@@ -65,3 +65,44 @@ pub fn target_candidates(t: &TestGame, p: PlayerId, from: usize) -> Vec<Vec<Enti
         })
         .collect()
 }
+
+/// `p` creates a token as a resolving effect would, and it's returned: a predefined token
+/// ("Treasure", "Food", ...), or for any other name a 1/1 colorless creature token with
+/// that creature type.
+pub fn create_token(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    use mtg_engine::ability::{Effect, PlayerRef, TokenSpec, Value};
+    use mtg_engine::types::{CardType, ColorSet};
+    let spec = mtg_engine::tokens::predefined(name).unwrap_or_else(|| TokenSpec {
+        name: name.into(),
+        colors: ColorSet::NONE,
+        supertypes: vec![],
+        card_types: vec![CardType::Creature],
+        subtypes: vec![name.into()],
+        power: Some(1),
+        toughness: Some(1),
+        abilities: vec![],
+        scryfall_name: None,
+    });
+    let before = t.g.battlefield.clone();
+    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
+    t.g.exec(
+        &Effect::CreateToken {
+            spec,
+            count: Value::c(1),
+            controller: PlayerRef::You,
+            tapped: false,
+            attacking: false,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    let token = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| !before.contains(id))
+        .expect("no token was created");
+    t.g.objects[token.0 as usize].summoning_sick = false;
+    token
+}
