@@ -1900,7 +1900,7 @@ impl Game {
         let ctx = Ctx::new(src, p);
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, &ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), &ctx) {
                 return false;
             }
         }
@@ -1963,11 +1963,15 @@ impl Game {
         }
     }
 
+    /// Whether `part` of a cost could be paid. `taps_src`: the cost also has {T}, so the
+    /// source will be tapped and can't be one of the untapped permanents tapped for
+    /// "Tap an untapped [permanent] you control" (CR 118.3).
     fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
         src: Option<ObjectId>,
+        taps_src: bool,
         ctx: &Ctx,
     ) -> bool {
         let so = src.map(|s| self.obj(s));
@@ -2060,18 +2064,14 @@ impl Game {
                 total >= n
             }
             CostPart::AddCounters { .. } => so.is_some(),
+            // Summoning sickness doesn't matter: this isn't {T} (CR 302.6).
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p
-                            && !ob.tapped
-                            && !(ob.is_creature()
-                                && ob.summoning_sick
-                                && !ob.has_keyword(KeywordKind::Haste)
-                                && Some(*o) == src)
+                        ob.controller == p && !ob.tapped && !(taps_src && Some(*o) == src)
                     })
                     .count()
                     >= n
@@ -2209,7 +2209,7 @@ impl Game {
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), ctx) {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
