@@ -8,8 +8,11 @@
 //! * "Each creature you control [...] stations permanents using its toughness rather than
 //!   its power", "... crews Vehicles and stations permanents as though its power were N
 //!   greater" (CR 702.184c);
+//! * warp (CR 702.185): the void condition "a nonland permanent left the battlefield this
+//!   turn or a spell was warped this turn", "You may cast ~ from your graveyard using its
+//!   warp ability";
 
-use super::{AbilityPattern, EffectPattern, FollowupPattern, StaticPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
 use crate::oracle::effects::Builder;
@@ -212,3 +215,32 @@ fn stations_permanents(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "k702.184c stations permanents using", priority: 100, parse: stations_permanents } }
+
+/// Void's condition, "a nonland permanent left the battlefield this turn or a spell was
+/// warped this turn", and its parts (CR 702.185c).
+fn warp_conditions(c: &str) -> Option<Condition> {
+    use crate::kw::warp::{NONLAND_LEFT_THIS_TURN, WARPED_THIS_TURN};
+    let custom = |n: &str| Condition::Custom(n.into());
+    Some(match end(c) {
+        "a nonland permanent left the battlefield this turn or a spell was warped this turn" => {
+            Condition::Or(vec![custom(NONLAND_LEFT_THIS_TURN), custom(WARPED_THIS_TURN)])
+        }
+        "a spell was warped this turn" => custom(WARPED_THIS_TURN),
+        "a nonland permanent left the battlefield this turn" => custom(NONLAND_LEFT_THIS_TURN),
+        _ => return None,
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "k702.185c a spell was warped this turn", priority: 50, parse: warp_conditions } }
+
+/// "You may cast ~ from your graveyard using its warp ability." (see `kw/warp.rs`).
+fn warp_from_graveyard(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if end(l) != "you may cast ~ from your graveyard using its warp ability" {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Custom(crate::kw::warp::FROM_GRAVEYARD.into()));
+    s.zone = FunctionZone::Graveyard;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "k702.185 cast from graveyard using warp", priority: 50, parse: warp_from_graveyard } }
