@@ -49,6 +49,13 @@ pub struct ZoneState {
     pub piles: Vec<(ObjectId, u32)>,
     #[serde(default)]
     pub next_pile: u32,
+    /// Permanents chosen to be sacrificed as the objects of the move being performed enter
+    /// the battlefield ("as this enters, you may sacrifice ...", devour, CR 702.82a), with
+    /// the player sacrificing each. They're all sacrificed at the same time once every
+    /// entering object's replacement effects have been applied (see
+    /// [`Game::move_objects`]).
+    #[serde(default)]
+    pub entry_sacrifices: Vec<(ObjectId, PlayerId)>,
 }
 
 /// `Event::Custom` name: the top card of a player's library became revealed (CR 401.5).
