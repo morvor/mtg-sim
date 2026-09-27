@@ -378,6 +378,24 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         // "without flying or reach": neither keyword.
         if let (Some(r), Some(Filter::Not(inner))) = (t.strip_prefix("or "), parts.last()) {
             if let Filter::HasKeyword(k1) = **inner {
+                // "without flying or islandwalk" (Stormtide Leviathan): one specific
+                // landwalk ability, not every landwalk.
+                let word = r.split([' ', ',', '.']).next().unwrap_or("");
+                let stem = word.strip_suffix("walk").unwrap_or("");
+                if k1 != KeywordKind::Landwalk
+                    && !stem.is_empty()
+                    && stem.chars().all(|c| c.is_ascii_lowercase())
+                {
+                    parts.pop();
+                    parts.push(Filter::not(Filter::Or(vec![
+                        Filter::HasKeyword(k1),
+                        Filter::Custom(
+                            format!("{}{word}", crate::kw::landwalk::HAS_LANDWALK).into(),
+                        ),
+                    ])));
+                    rest = &r[word.len()..];
+                    continue;
+                }
                 let probe = format!("with {r}");
                 let parsed = extra_suffix(&probe).map(|(f, r2)| (f, r.len() - r2.len()));
                 if let Some((Filter::HasKeyword(k2), used)) = parsed {
