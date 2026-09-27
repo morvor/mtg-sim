@@ -4,6 +4,7 @@
 //! targets, you may choose new targets for the copy."
 
 use crate::r_s01_common::*;
+use crate::r_s02_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::ObjKind;
 use mtg_engine::testing::*;
@@ -192,7 +193,7 @@ fn casualty_is_an_optional_cost_sacrificing_a_creature_with_enough_power() {
 
 #[test]
 fn spells_given_casualty_by_silverquill_can_be_copied() {
-    cr!("702.153a", "611.3a", "601.2b");
+    cr!("702.153a", "610.5", "601.2b", "113.7a");
     ruling!(
         "Silverquill, the Disputant",
         "Casualty N means \"As an additional cost to cast this spell, you may sacrifice a creature with power N or greater.\" and \"When you cast this spell, if a casualty cost was paid for it, copy it."
@@ -227,6 +228,18 @@ fn spells_given_casualty_by_silverquill_can_be_copied() {
     let from = t.asked().len();
     cast_with_casualty(&mut t, "Shock", None, &[Entity::Player(P1)]);
     assert!(offered_costs(&t, from).is_empty());
+    // The spell gained casualty as it was cast: Silverquill leaving the battlefield in
+    // response to the casualty ability doesn't stop the copy.
+    let mut t = TestGame::new(2);
+    let silverquill = t.battlefield(P0, "Silverquill, the Disputant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    cast_with_casualty(&mut t, "Shock", Some(elves), &[Entity::Player(P1)]);
+    assert_eq!(triggers_on_stack(&t, "Casualty"), 1);
+    destroy(&mut t, silverquill);
+    assert!(t.in_graveyard(P0, "Silverquill, the Disputant"));
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
 }
 
 #[test]
@@ -328,4 +341,48 @@ fn the_copy_is_not_cast() {
     // Only the spell that was cast triggered them.
     assert_eq!(with_subtype(&t, P0, "Elemental").len(), 1);
     assert_eq!(t.pt(swiftspear), (2, 3));
+}
+
+#[test]
+fn a_casualty_trigger_copies_the_spell_even_if_the_spell_lost_casualty() {
+    cr!("702.153a", "113.7a", "603.4");
+    // Light 'Em Up is cast with its casualty cost paid. In response to its casualty
+    // ability, the spell loses all abilities: the ability exists independently of the
+    // spell, and the cost was paid, so it still copies the spell.
+    use mtg_engine::ability::{Duration, Effect, Modification, Sel};
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let dreadmaw = t.battlefield(P1, "Colossal Dreadmaw");
+    let spell = cast_with_casualty(
+        &mut t,
+        "Light 'Em Up",
+        Some(giant),
+        &[Entity::Object(dreadmaw)],
+    );
+    assert_eq!(triggers_on_stack(&t, "Casualty"), 1);
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![Entity::Object(spell)]];
+    t.g.exec(
+        &Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.settle();
+    assert!(!t
+        .obj(spell)
+        .chars
+        .keywords()
+        .any(|k| k.kind == mtg_engine::keywords::KeywordKind::Casualty));
+    t.answer_yes(P0, false);
+    t.resolve();
+    assert_eq!(
+        spells(&t),
+        vec![
+            ("Light 'Em Up".to_string(), false),
+            ("Light 'Em Up".to_string(), true)
+        ]
+    );
 }

@@ -38,7 +38,7 @@ pub fn can_attack(t: &mut TestGame, id: ObjectId) -> bool {
         .any(|(c, _)| *c == t.g.current(id))
 }
 
-/// Whether `p` could activate the `index`th activated ability of `source` now.
+/// Whether `p` could activate an activated ability of `source` now.
 pub fn can_activate(t: &mut TestGame, p: PlayerId, source: ObjectId) -> bool {
     t.g.turn.priority = Some(p);
     t.g.recompute();

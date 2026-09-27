@@ -264,7 +264,7 @@ fn the_abilities_backup_grants_are_fixed_when_it_triggers() {
 
 #[test]
 fn each_backup_instance_triggers_separately() {
-    cr!("702.165a", "603.2c");
+    cr!("702.165a", "113.2c");
     // Conclave Sledge-Captain: "Backup 1, backup 1, backup 1 / Trample / Whenever this
     // creature deals combat damage to a player, put that many +1/+1 counters on it."
     supported("Conclave Sledge-Captain");

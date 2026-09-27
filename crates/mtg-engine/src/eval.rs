@@ -103,6 +103,10 @@ pub trait View {
     fn controller_override(&self, _id: ObjectId) -> Option<PlayerId> {
         None
     }
+    /// Whether the object is face down (CR 708.2).
+    fn face_down(&self, g: &Game, id: ObjectId) -> bool {
+        g.obj(id).face_down
+    }
 }
 
 /// The normal view: an object's computed characteristics.
@@ -114,6 +118,38 @@ impl View for Current {
     }
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
         g.obj(id).controller
+    }
+}
+
+/// A permanent as it entered the battlefield (see `TurnHistory::permanents_entered`).
+struct AsEntered<'c> {
+    id: ObjectId,
+    chars: &'c Characteristics,
+    face_down: bool,
+    controller: PlayerId,
+}
+
+impl View for AsEntered<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn face_down(&self, g: &Game, id: ObjectId) -> bool {
+        if id == self.id {
+            self.face_down
+        } else {
+            g.obj(id).face_down
+        }
     }
 }
 
@@ -552,7 +588,7 @@ impl Game {
                     || c.is_legendary()
                     || c.has_subtype("Saga")
             }
-            Filter::FaceDown => o.face_down,
+            Filter::FaceDown => view.face_down(self, id),
             Filter::HasX => c.mana_cost.as_ref().is_some_and(|m| m.has_x()),
             Filter::HasPhyrexianMana => c
                 .mana_cost
@@ -1030,12 +1066,27 @@ impl Game {
                 self.history.life_lost.get(&p).copied().unwrap_or(0) as i64
             }),
             Value::CreaturesDiedThisTurn => self.history.creatures_died.len() as i64,
-            // Each permanent as it is now, or as it last existed on the battlefield.
+            // Each permanent as it entered: these conditions look at past events, not at
+            // what the permanent is now (it may have changed or left since).
             Value::PermanentsEnteredThisTurn(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
                 self.history
                     .permanents_entered
                     .iter()
-                    .filter(|(ctl, id)| *ctl == p && self.matches_view(&Current, *id, f, ctx))
+                    .filter(|e| {
+                        e.controller == p
+                            && match &e.as_entered {
+                                Some((chars, face_down)) => {
+                                    let view = AsEntered {
+                                        id: e.id,
+                                        chars,
+                                        face_down: *face_down,
+                                        controller: e.controller,
+                                    };
+                                    self.matches_view(&view, e.id, f, ctx)
+                                }
+                                None => self.matches_view(&Current, e.id, f, ctx),
+                            }
+                    })
                     .count() as i64
             }),
             Value::TimesResolvedThisTurn => ctx

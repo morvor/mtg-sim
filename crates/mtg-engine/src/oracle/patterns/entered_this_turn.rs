@@ -2,8 +2,10 @@
 //! they're still there: "two or more nonland permanents entered the battlefield under your
 //! control this turn" (celebration), "an artifact entered the battlefield under your
 //! control this turn", "another creature entered the battlefield under your control this
-//! turn". They look at past events, not the current game state
-//! ([`Value::PermanentsEnteredThisTurn`], recorded in `TurnHistory::permanents_entered`).
+//! turn". They look at past events, not the current game state: each permanent as it
+//! entered ([`Value::PermanentsEnteredThisTurn`], recorded in
+//! `TurnHistory::permanents_entered`), e.g. a face-down creature that has since been
+//! turned face up still entered face down.
 
 use super::ConditionPattern;
 use crate::ability::*;
@@ -28,8 +30,7 @@ fn entered_under_your_control(c: &str) -> Option<Condition> {
         }
     };
     let (f, _plural, tail) = parse_object_phrase(phrase)?;
-    // ("permanent" means one on the battlefield; a permanent that left is looked at as it
-    // last existed there.)
+    // ("permanent" means one on the battlefield: each is looked at as it entered.)
     if !tail.trim().is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
         return None;
     }

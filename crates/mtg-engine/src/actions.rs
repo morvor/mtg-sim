@@ -681,8 +681,11 @@ impl Game {
             }
         }
         if m.to == Zone::Battlefield && self.obj(new_id).zone == Zone::Battlefield {
-            let ctl = self.obj(new_id).controller;
-            self.history.permanents_entered.push((ctl, new_id));
+            self.history.permanents_entered.push(EnteredPermanent {
+                controller: self.obj(new_id).controller,
+                id: new_id,
+                as_entered: None,
+            });
         }
         if from == Zone::Battlefield {
             self.history.permanents_left.push(old_id);

@@ -171,7 +171,7 @@ fn your_commander_is_the_one_of_your_two_commanders_you_choose() {
 
 #[test]
 fn amber_gristle_draws_a_card_for_each_player_being_attacked() {
-    cr!("508.1b", "506.2");
+    cr!("508.1b", "802.3");
     let mut t = TestGame::new(4);
     // Amber Gristle O'Maul (3/3 haste): "Whenever Amber Gristle O'Maul attacks, you may
     // discard your hand. If you do, draw a card for each player being attacked."

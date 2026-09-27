@@ -1,7 +1,8 @@
 //! Oracle patterns for CR 702.153 casualty: "Each instant and sorcery spell you cast has
-//! casualty 1." (Silverquill, the Disputant): the spells have casualty while they're on
-//! the stack, where it functions — its optional additional cost is offered as they're cast
-//! and its triggered ability triggers when they're cast (CR 702.153a, 601.2b, 611.3a).
+//! casualty 1." (Silverquill, the Disputant): the spells gain casualty as they're cast
+//! (CR 610.5, 601.2a; see `next_spell.rs`), so its optional additional cost is offered
+//! as they're cast and its triggered ability triggers when they've been cast
+//! (CR 702.153a, 601.2b).
 
 use super::StaticPattern;
 use crate::ability::*;

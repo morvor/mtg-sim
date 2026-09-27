@@ -1201,9 +1201,10 @@ pub enum Value {
     LifeLostThisTurn(PlayerRef),
     /// Number of creatures that died this turn.
     CreaturesDiedThisTurn,
-    /// Number of permanents matching the filter that entered the battlefield under the
-    /// player's control this turn, whether or not they're still there ("two or more
-    /// nonland permanents entered the battlefield under your control this turn").
+    /// Number of permanents that entered the battlefield under the player's control this
+    /// turn matching the filter as they entered, whether or not they're still there or
+    /// have changed since ("two or more nonland permanents entered the battlefield under
+    /// your control this turn").
     PermanentsEnteredThisTurn(PlayerRef, Filter),
     /// Number of times this ability has resolved this turn.
     TimesResolvedThisTurn,

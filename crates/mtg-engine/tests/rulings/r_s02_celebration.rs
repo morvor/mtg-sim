@@ -161,3 +161,57 @@ fn an_artifact_that_entered_this_turn_enables_a_static_ability() {
     t.settle();
     assert_eq!(t.pt(bears), (4, 4));
 }
+
+/// P0 manifests the card `name` from the top of their library: a face-down creature
+/// enters the battlefield under P0's control.
+fn manifest(t: &mut TestGame, name: &str) -> ObjectId {
+    use mtg_engine::kwa::manifest::{put_face_down, MANIFESTED};
+    let card = t.library_top(P0, name);
+    let id = put_face_down(&mut t.g, card, P0, MANIFESTED, None).expect("manifested");
+    t.settle();
+    assert!(t.obj(id).face_down);
+    id
+}
+
+#[test]
+fn a_permanent_counts_as_what_it_was_when_it_entered() {
+    cr!("603.4", "701.40a", "708.8", "708.2a");
+    ruling!(
+        "Tunnel Tipster",
+        "Tunnel Tipster's first ability will trigger as long as a face-down creature entered the battlefield under your control this turn, even if that creature has turned face up or left the battlefield since. A creature that enters the battlefield face up and turns face down later in the turn won't cause Tunnel Tipster's first ability to trigger."
+    );
+    supported("Tunnel Tipster");
+    // "At the beginning of your end step, if a face-down creature entered the battlefield
+    // under your control this turn, put a +1/+1 counter on this creature."
+    let end_step_counters = |t: &mut TestGame, tipster: ObjectId| {
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        t.counters(tipster, counters::PLUS1)
+    };
+    // A manifested Grizzly Bears card is turned face up before the end step.
+    let mut t = TestGame::new(2);
+    let tipster = t.battlefield(P0, "Tunnel Tipster");
+    let bears = manifest(&mut t, "Grizzly Bears");
+    assert!(mtg_engine::facedown::turn_face_up(&mut t.g, bears, false));
+    t.settle();
+    assert!(!t.obj(bears).face_down);
+    assert_eq!(t.obj(bears).chars.name, "Grizzly Bears");
+    assert_eq!(end_step_counters(&mut t, tipster), 1);
+    // A manifested card that has left the battlefield.
+    let mut t = TestGame::new(2);
+    let tipster = t.battlefield(P0, "Tunnel Tipster");
+    let bears = manifest(&mut t, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(end_step_counters(&mut t, tipster), 1);
+    // Grizzly Bears enter face up and are turned face down later: no counter.
+    let mut t = TestGame::new(2);
+    let tipster = t.battlefield(P0, "Tunnel Tipster");
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, bears));
+    t.settle();
+    assert!(t.obj_now(bears).face_down);
+    assert_eq!(end_step_counters(&mut t, tipster), 0);
+}

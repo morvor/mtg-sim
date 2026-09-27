@@ -9,7 +9,8 @@
 //! Each instance is paid separately and triggers based on its own payment (CR 702.153b):
 //! paying the `i`th casualty cost of a spell (counting from 1) is recorded as
 //! `"casualty#i"` in `CastInfo::paid`, and the `i`th "Casualty" triggered ability of the
-//! spell checks it.
+//! spell checks it. If the spell loses that instance before its triggered ability resolves
+//! (e.g. it loses all abilities), the ability still copies it (CR 113.7a).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -98,7 +99,11 @@ impl KeywordRules for Casualty {
                 .position(|a| a.uid == ctx.ability_uid)
         });
         let Some(i) = index else {
-            return Some(false);
+            // The spell no longer has this ability (e.g. it lost all abilities). Once
+            // triggered, the ability exists independently of its source (CR 113.7a); it
+            // triggered because this instance's casualty cost was paid, and that doesn't
+            // change: as it resolves (CR 603.4), it still was.
+            return Some(ctx.stack_obj.is_some());
         };
         let paid = cost_name(i);
         Some(

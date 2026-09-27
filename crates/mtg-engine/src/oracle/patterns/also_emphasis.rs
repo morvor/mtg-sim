@@ -21,6 +21,11 @@ fn also(l: &str, b: &mut Builder) -> Option<Effect> {
             if subject.is_empty() || subject.contains(',') || subject.contains(". ") {
                 return None;
             }
+            // "It's also a Zombie": a type in addition to its other types, which it
+            // wouldn't mean without "also".
+            if rest.starts_with("a ") || rest.starts_with("an ") {
+                return None;
+            }
             format!("{subject} {rest}")
         }
     };
