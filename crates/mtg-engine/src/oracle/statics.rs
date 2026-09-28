@@ -548,6 +548,18 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             }
         }
     }
+    // CR 107.4h: "the amount of {S} spent to cast ~" (mana from snow sources).
+    for p in [
+        "the amount of {s} spent to cast ~",
+        "the amount of {S} spent to cast ~",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((
+                Value::Custom(crate::kw::snow_mana::SNOW_MANA_SPENT.into()),
+                rest.to_string(),
+            ));
+        }
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((
