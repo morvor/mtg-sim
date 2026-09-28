@@ -85,6 +85,9 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         (Some(Duration::UntilEndOfYourNextTurn), r)
     } else if let Some(r) = l.strip_prefix("until end of turn, ") {
         (Some(Duration::EndOfTurn), r)
+    } else if let Some(r) = l.strip_prefix("until the beginning of your next upkeep, ") {
+        // Elkin Bottle (CR 500.4: until that step next begins).
+        (Some(Duration::UntilYourNextStep(TriggerStep::Upkeep)), r)
     } else {
         (None, l)
     };

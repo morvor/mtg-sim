@@ -17,6 +17,60 @@ use mtg_engine::*;
 
 const OVERLOAD: CastMethod = CastMethod::Keyword(KeywordKind::Overload);
 
+/// P0 activates Elkin Bottle ("{3}, {T}: Exile the top card of your library. Until the
+/// beginning of your next upkeep, you may play that card.") with `top` on top of their
+/// library; returns the exiled card.
+fn elkin_bottle(t: &mut TestGame, top: &str) -> ObjectId {
+    let bottle = t.battlefield(P0, "Elkin Bottle");
+    let card = t.library_top(P0, top);
+    crate::r_s04_common::add_mana(t, P0, mtg_engine::mana::ManaType::C, 3);
+    t.activate(P0, bottle, 0, &[]).expect("activate Elkin Bottle");
+    t.resolve_all();
+    let card = t.g.current(card);
+    assert_eq!(t.zone(card), Zone::Exile);
+    card
+}
+
+#[test]
+fn elkin_bottle_playing_a_card_is_casting_it_or_playing_it_as_a_land() {
+    cr!("305.1", "305.2", "601.3", "116.2a");
+    ruling!(
+        "Elkin Bottle",
+        "To “play a card” is to either cast a spell or to put a land onto the battlefield using the main phase special action."
+    );
+    supported("Elkin Bottle");
+    // A land: played as P0's land play for the turn (not during P1's turn), after which
+    // P0 can't play another land this turn.
+    let mut t = TestGame::new(2);
+    let forest = elkin_bottle(&mut t, "Forest");
+    let island = t.hand(P0, "Island");
+    assert!(!can_cast(&mut t, P0, forest, CastMethod::Normal));
+    assert!(can_play_land(&mut t, P0, forest));
+    t.play_land(P0, forest).unwrap();
+    assert!(t.on_battlefield(forest));
+    assert!(!can_play_land(&mut t, P0, island));
+    // A spell: cast (and paid for) with its normal timing: an instant during P1's turn.
+    let mut t = TestGame::new(2);
+    let bolt = elkin_bottle(&mut t, "Lightning Bolt");
+    assert!(!can_play_land(&mut t, P0, bolt));
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    t.lands(P0, "Mountain", 1);
+    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // The permission ends as P0's next upkeep begins.
+    let mut t = TestGame::new(2);
+    let bolt = elkin_bottle(&mut t, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    t.advance_to(P0, Step::Upkeep);
+    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    assert_eq!(t.zone(bolt), Zone::Exile);
+}
+
 /// Whether `p` could cast the card `card` (normally) in each situation: during their
 /// main phase with an empty stack, with a spell on the stack, in their combat, and during
 /// the opponent's turn.
