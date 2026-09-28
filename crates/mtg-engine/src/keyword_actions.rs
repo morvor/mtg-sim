@@ -21,10 +21,10 @@ pub fn perform(
     let objs = g.resolve_objects(what, ctx);
     let k = g.eval_value(n, ctx).max(0) as u32;
     match action {
-        // CR 701.16a: create a Clue token.
+        // CR 701.16a: create a Clue token ("investigate X times" with X = 0: none).
         KeywordAction::Investigate => {
             for p in players {
-                for _ in 0..k.max(1) {
+                for _ in 0..k {
                     if let Some(spec) = crate::tokens::predefined("Clue") {
                         let chars = crate::tokens::token_characteristics(&spec);
                         g.create_tokens(
