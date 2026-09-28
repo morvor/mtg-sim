@@ -60,7 +60,7 @@ fn loyalty_ability_of_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)
             }),
             cond: Condition::SelMatches(
                 Sel::TriggerSpell,
-                Filter::Custom(crate::loyalty_abilities::LOYALTY_ABILITY.into()),
+                Filter::Custom(crate::stack_ability_filters::LOYALTY_ABILITY.into()),
             ),
         },
         Sel::TriggerSpell,

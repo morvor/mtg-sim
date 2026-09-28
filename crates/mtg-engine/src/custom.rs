@@ -43,7 +43,7 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
         return b;
     }
     // "a loyalty ability" being activated (CR 606).
-    if let Some(b) = crate::loyalty_abilities::custom_filter(g, name, id, ctx) {
+    if let Some(b) = crate::stack_ability_filters::custom_filter(g, name, id, ctx) {
         return b;
     }
     match name {
