@@ -302,6 +302,17 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if named.is_some() {
         return named;
     }
+    // "Whenever you cast a spell that targets only a single artifact or creature you
+    // control, create a token that's a copy of that artifact or creature" (Vesuvan
+    // Duplimancy): the spell's target.
+    if matches!(b.it, Sel::TriggerSpell) {
+        if let Some(rest) = r.strip_prefix("that artifact or creature") {
+            return Some((
+                Sel::All(Filter::TargetOf(Box::new(Sel::TriggerSpell))),
+                rest.to_string(),
+            ));
+        }
+    }
     for p in [
         "enchanted creature",
         "equipped creature",
