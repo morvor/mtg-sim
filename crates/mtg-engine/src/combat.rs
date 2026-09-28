@@ -1613,6 +1613,9 @@ pub fn declare_blockers_step(g: &mut Game) {
         } else {
             group[0]
         };
+        // "You choose which creatures block this combat and how those creatures block."
+        let chosen_by = crate::block_choice::block_decider(g, &group);
+        let decider = chosen_by.unwrap_or(decider);
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;
@@ -1620,23 +1623,35 @@ pub fn declare_blockers_step(g: &mut Game) {
         let reqs = block_requirements(g, &options);
         let (max, best) = best_blocks(g, &options, &reqs);
         let rules = block_rules(g, &options);
-        let blocks = match g.ask(
-            decider,
-            Decision::DeclareBlockers {
-                options: options.clone(),
-            },
-        ) {
-            Answer::Blockers(v)
-                if block_restrictions_ok(g, &rules, &options, &v)
-                    && obeyed_block_requirements(&reqs, &v) >= max
-                    && block_costs_by_player(g, &v)
-                        .iter()
-                        .all(|(p, c)| g.can_pay_cost(*p, c, None, &Ctx::new(None, *p))) =>
-            {
-                v
+        let mut proposals = 0;
+        let blocks = loop {
+            proposals += 1;
+            let v = match g.ask(
+                decider,
+                Decision::DeclareBlockers {
+                    options: options.clone(),
+                },
+            ) {
+                Answer::Blockers(v)
+                    if block_restrictions_ok(g, &rules, &options, &v)
+                        && obeyed_block_requirements(&reqs, &v) >= max
+                        && block_costs_by_player(g, &v)
+                            .iter()
+                            .all(|(p, c)| g.can_pay_cost(*p, c, None, &Ctx::new(None, *p))) =>
+                {
+                    v
+                }
+                // CR 509.1: an illegal declaration is undone; the engine declares a legal one.
+                _ => break best.clone(),
+            };
+            // Blocks chosen by another player (Odric): if a player declines to pay the
+            // costs to block, a new set of blocks is proposed.
+            if chosen_by.is_none() || crate::block_choice::costs_accepted(g, decider, &v) {
+                break v;
             }
-            // CR 509.1: an illegal declaration is undone; the engine declares a legal one.
-            _ => best.clone(),
+            if proposals >= 3 {
+                break best.clone();
+            }
         };
         // CR 509.1d–f: pay the locked-in costs to block.
         let costs = block_costs_by_player(g, &blocks);
