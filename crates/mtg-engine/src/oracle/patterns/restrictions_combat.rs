@@ -59,6 +59,16 @@ fn lockable(r: &Restriction) -> bool {
 /// The restrictions and duration of a predicate like "attacks this turn if able", "can't
 /// block ~ this turn", "can't be blocked this turn except by creatures with haste".
 fn predicate(rest: &str, f: &Filter) -> Option<(Vec<Restriction>, Duration)> {
+    predicate_with_it(rest, f, None)
+}
+
+/// [`predicate`], where "it" (as in "blocks it this turn if able") refers to `it`: what
+/// the text named before the subject of this sentence.
+fn predicate_with_it(
+    rest: &str,
+    f: &Filter,
+    it: Option<&Sel>,
+) -> Option<(Vec<Restriction>, Duration)> {
     let rest = end(rest.trim());
     // Requirements name their duration before "if able".
     for (infix, dur) in [
@@ -76,6 +86,23 @@ fn predicate(rest: &str, f: &Filter) -> Option<(Vec<Restriction>, Duration)> {
             "blocks ~" | "block ~" => Restriction::MustBlockAttacker {
                 blocker: f.clone(),
                 attacker: Filter::Source,
+            },
+            // "Target creature gets +7/+7 until end of turn. Up to one other target
+            // creature blocks it this turn if able."
+            // "Whenever ~ attacks, target creature defending player controls blocks it
+            // this combat if able." (the source); "Whenever a creature you control
+            // attacks, up to one target creature blocks it this combat if able." (the
+            // trigger object).
+            "blocks it" | "block it" => match it {
+                Some(s @ (Sel::Target(_) | Sel::TriggerObject)) => Restriction::MustBlockAttacker {
+                    blocker: f.clone(),
+                    attacker: Filter::In(Box::new(s.clone())),
+                },
+                Some(Sel::This) => Restriction::MustBlockAttacker {
+                    blocker: f.clone(),
+                    attacker: Filter::Source,
+                },
+                _ => return None,
             },
             _ => return None,
         };
@@ -151,13 +178,14 @@ fn temporary_restriction(l: &str, b: &mut Builder) -> Option<Effect> {
         v.extend(add(rs, dur));
         return Some(Effect::seq(v));
     }
+    let it = b.it.clone();
     let (what, rest) = object_ref(l, b)?;
     let subject = l.trim().strip_suffix(rest.as_str()).unwrap_or(l);
     if !names_source_faithfully(subject, &what) {
         return None;
     }
     let f = subject_filter(&what)?;
-    let (rs, dur) = predicate(&rest, &f)?;
+    let (rs, dur) = predicate_with_it(&rest, &f, Some(&it))?;
     Some(Effect::seq(add(rs, dur)))
 }
 
