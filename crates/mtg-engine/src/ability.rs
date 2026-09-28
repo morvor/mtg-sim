@@ -1113,6 +1113,9 @@ pub enum Filter {
     /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
     /// ability (CR 607.2f).
     ManaValueOfChosenQuality,
+    /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
+    /// filter: "activated or triggered ability ... from an artifact source".
+    AbilityFrom(Box<Filter>),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -2845,6 +2848,14 @@ pub enum Effect {
         what: Sel,
         of: Sel,
         duration: Duration,
+    },
+    /// `BecomeCopy` with the copy effect's exceptions ("..., except those creatures aren't
+    /// legendary", CR 707.9), which become part of the copiable values.
+    BecomeCopyExcept {
+        what: Sel,
+        of: Sel,
+        duration: Duration,
+        exceptions: Vec<Modification>,
     },
     Transform {
         what: Sel,

@@ -443,6 +443,7 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         if !end(tail).is_empty() {
             return None;
         }
+        let f = permanent_spell(f);
         return Some((
             TriggerCond::CastSpell { who, filter: f },
             Sel::TriggerSpell,
@@ -618,6 +619,19 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
     // "a land enters under your control" handled above; landfall ability word stripped.
     None
+}
+
+/// In a description of a spell ("a Faerie or Wizard permanent spell", "a green permanent
+/// spell"), "permanent" means a spell with a permanent type (CR 110.4b), not an object on
+/// the battlefield.
+fn permanent_spell(f: Filter) -> Filter {
+    match f {
+        Filter::Permanent => Filter::PermanentCard,
+        Filter::And(v) => Filter::And(v.into_iter().map(permanent_spell).collect()),
+        Filter::Or(v) => Filter::Or(v.into_iter().map(permanent_spell).collect()),
+        Filter::Not(x) => Filter::not(permanent_spell(*x)),
+        other => other,
+    }
 }
 
 /// "you cast", "an opponent casts", "a player casts".

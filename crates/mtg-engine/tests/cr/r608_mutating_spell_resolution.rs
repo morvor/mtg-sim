@@ -100,7 +100,7 @@ fn a_copy_of_a_mutating_spell_merges_with_the_same_target() {
         "Lithoform Engine",
         "If a permanent spell is copied, new targets can't be chosen for it, if it has any (perhaps because it's an Aura or a mutating creature spell)."
     );
-    // (Its first ability, copying an ability, isn't supported; the one under test is.)
+    // (The ability under test must be supported.)
     let lithoform = mtg_engine::card::card("Lithoform Engine");
     let unsupported = lithoform.unsupported_text();
     assert!(
@@ -116,7 +116,7 @@ fn a_copy_of_a_mutating_spell_merges_with_the_same_target() {
     t.lands(P0, "Wastes", 4);
     let spell = cast_mutating_gemrazer(&mut t, P0, bears);
     // "{4}, {T}: Copy target permanent spell you control. (The copy becomes a token.)"
-    t.activate(P0, engine, 1, &[Entity::Object(spell)]).unwrap();
+    t.activate(P0, engine, 2, &[Entity::Object(spell)]).unwrap();
     // If P0 were offered new targets for the copy, they'd move it to the Elves.
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[Entity::Object(elves)]);

@@ -3,7 +3,8 @@
 //! "Target artifact or creature becomes a copy of another target artifact or creature.").
 //! The affected permanents get the other object's copiable values in layer 1 for the
 //! duration; everything else about them (designations, counters, status) is unchanged.
-//! Copy effects with exceptions ("except it's ...") aren't handled here.
+//! Exceptions ("..., except those creatures aren't legendary", CR 707.9) are parsed like
+//! a token copy's (see `tokens_copies_copy::copy_exceptions`).
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -12,6 +13,17 @@ use crate::oracle::phrases::end;
 
 fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    if !l.contains(" a copy of ") {
+        return None;
+    }
+    // "..., except those creatures aren't legendary" (Echoing Equation).
+    let (l, exceptions) = match l.split_once(", except ") {
+        Some((head, except)) => (
+            head,
+            super::tokens_copies_copy::copy_exceptions(except, &[], b.ctx)?,
+        ),
+        None => (l, vec![]),
+    };
     let (duration, l) = match l.strip_prefix("until end of turn, ") {
         Some(r) => (Duration::EndOfTurn, r),
         None => duration_suffix(l),
@@ -36,7 +48,32 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
-    Some(Effect::BecomeCopy { what, of, duration })
+    // "Each other creature you control becomes a copy of it": other than the object
+    // copied (the chosen or targeted creature), not only other than the source.
+    let what = match what {
+        Sel::All(f) => Sel::All(other_than(f, &of)),
+        w => w,
+    };
+    Some(if exceptions.is_empty() {
+        Effect::BecomeCopy { what, of, duration }
+    } else {
+        Effect::BecomeCopyExcept {
+            what,
+            of,
+            duration,
+            exceptions,
+        }
+    })
+}
+
+/// Replaces "other" in the description of the objects becoming copies with "other than
+/// the copied object".
+fn other_than(f: Filter, of: &Sel) -> Filter {
+    match f {
+        Filter::Other => Filter::not(Filter::In(Box::new(of.clone()))),
+        Filter::And(v) => Filter::And(v.into_iter().map(|x| other_than(x, of)).collect()),
+        x => x,
+    }
 }
 
 inventory::submit! { EffectPattern { name: "r707 becomes a copy of", priority: 80, parse: becomes_copy } }

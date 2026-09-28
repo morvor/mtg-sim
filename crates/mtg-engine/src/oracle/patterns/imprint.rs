@@ -28,7 +28,7 @@ fn exiled_with_source() -> Filter {
 
 /// "the exiled card" (all of them, usually one), "a card exiled with ~" (one of them, the
 /// controller's choice).
-fn exiled_card_ref(s: &str) -> Option<Sel> {
+pub(crate) fn exiled_card_ref(s: &str) -> Option<Sel> {
     Some(match s {
         "the exiled card" => Sel::All(exiled_with_source()),
         "a card exiled with ~" => Sel::Choose {
