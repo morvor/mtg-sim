@@ -50,11 +50,17 @@ fn counter_of(e: &mut Effect) -> Option<&mut Effect> {
 }
 
 fn f_countered_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    let Some(r) = l
+    // "If a permanent spell is countered this way, ..." (Thranduil's Decree): only a
+    // permanent spell moves elsewhere.
+    let (r, permanent_only) = match l
         .strip_prefix("if that spell is countered this way, ")
         .or_else(|| l.strip_prefix("if the spell is countered this way, "))
-    else {
-        return false;
+    {
+        Some(r) => (r, false),
+        None => match l.strip_prefix("if a permanent spell is countered this way, ") {
+            Some(r) => (r, true),
+            None => return false,
+        },
     };
     let Some(dest) = destination(r) else {
         return false;
@@ -66,7 +72,10 @@ fn f_countered_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         return false;
     };
     // Only a countered spell moves; a countered ability just ceases to exist.
-    let filter = Filter::In(Box::new(what.clone()));
+    let mut filter = Filter::In(Box::new(what.clone()));
+    if permanent_only {
+        filter = Filter::and(vec![filter, Filter::PermanentCard]);
+    }
     let inner = std::mem::replace(counter, Effect::Noop);
     *counter = Effect::SelfReplace {
         replacement: ReplacementDef {

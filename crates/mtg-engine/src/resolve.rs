@@ -816,10 +816,25 @@ impl Game {
             }
             Effect::CounterSpell { what } => {
                 let mut any = false;
+                let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    any |= self.counter(o, ctx.source);
+                    if self.counter(o, ctx.source) {
+                        any = true;
+                        // CR 400.7j: other parts of the effect can find the countered card
+                        // in the public zone it moved to ("exile it instead ... You may
+                        // cast that card ...").
+                        let now = self.current(o);
+                        if now != o
+                            && matches!(self.obj(now).zone, Zone::Graveyard(_) | Zone::Exile)
+                        {
+                            moved.push(Entity::Object(now));
+                        }
+                    }
                 }
                 ctx.prev_happened = any;
+                if !moved.is_empty() {
+                    ctx.set_var(vars::IT, moved);
+                }
             }
             Effect::CopySpell {
                 what,
