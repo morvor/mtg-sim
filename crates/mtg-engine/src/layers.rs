@@ -1206,13 +1206,24 @@ impl Game {
                 }
             }
         }
-        // Cost modifiers resolved effects created for players ("Until your next turn,
-        // spells that player casts cost {2} less to cast"), relative to each such player.
+        // Cost modifiers and play permissions resolved effects created for players
+        // ("Until your next turn, spells that player casts cost {2} less to cast"),
+        // relative to each such player.
         for e in &self.player_effects {
-            if let (PlayerModification::CostModifier(cm), Some(src)) = (&e.effect, e.source) {
-                for p in &e.players {
-                    st.cost_modifiers.push((src, *p, cm.clone()));
+            match (&e.effect, e.source) {
+                (PlayerModification::CostModifier(cm), Some(src)) => {
+                    for p in &e.players {
+                        st.cost_modifiers.push((src, *p, cm.clone()));
+                    }
                 }
+                // "Until end of turn, you may play lands and cast spells from the top of
+                // your library."
+                (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    for p in &e.players {
+                        st.play_permissions.push((src, *p, pp.clone()));
+                    }
+                }
+                _ => {}
             }
         }
         crate::special_actions::apply_ignoring(self, &mut st.restrictions);

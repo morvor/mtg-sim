@@ -2215,6 +2215,11 @@ pub enum PlayerModification {
     /// relative to the affected player. Applied with the static cost modifiers (see
     /// `layers.rs`, `collect_statics`).
     CostModifier(CostModifier),
+    /// A permission to play cards (CR 601.2, 305.1) created by a resolved effect for a
+    /// duration ("Until end of turn, you may play lands and cast spells from the top of
+    /// your library."). Its `who` is relative to the affected player. Collected with the
+    /// static play permissions (see `layers.rs`, `collect_statics`).
+    PlayPermission(PlayPermission),
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.

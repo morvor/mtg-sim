@@ -402,3 +402,94 @@ fn glarb_cards_from_the_library_follow_all_costs_and_timing_rules() {
     t.play_land(P0, island).unwrap();
     assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
 }
+
+/// P0's The Belligerent, crewed by a Hill Giant, attacks P1; its trigger resolves (in the
+/// declare attackers step).
+fn belligerent_attacks(t: &mut TestGame) {
+    let belligerent = t.battlefield(P0, "The Belligerent");
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(crate::r_s04_common::crew(t, P0, belligerent, &[giant]));
+    attack_with(t, &[(belligerent, Entity::Player(P1))]);
+    t.resolve();
+}
+
+#[test]
+fn the_belligerent_can_cast_an_adventure_from_the_top_of_the_library() {
+    cr!("715.3", "715.3a", "601.3e", "611.2a");
+    ruling!(
+        "The Belligerent",
+        "If the top card of your library has an Adventure, you can cast the Adventure spell this way."
+    );
+    ruling!(
+        "The Belligerent",
+        "Once The Belligerent's triggered ability resolves, you can look at the top card of your library whenever you want until end of turn"
+    );
+    supported("The Belligerent");
+    supported("Bonecrusher Giant // Stomp");
+    // "Whenever The Belligerent attacks, create a Treasure token. Until end of turn, you
+    // may look at the top card of your library any time, and you may play lands and cast
+    // spells from the top of your library."
+    let mut t = TestGame::new(2);
+    let top = t.library_top(P0, "Bonecrusher Giant // Stomp");
+    t.lands(P0, "Mountain", 2);
+    t.g.recompute();
+    assert!(!sees_top(&t.g));
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, top).is_empty());
+    belligerent_attacks(&mut t);
+    assert_eq!(with_subtype(&t, P0, "Treasure").len(), 1);
+    assert!(sees_top(&t.g));
+    // During combat only Stomp, the instant Adventure, can be cast.
+    let methods = crate::r_s08_common::legal_cast_methods(&mut t, P0, top);
+    assert!(!methods.is_empty());
+    assert!(!methods.contains(&NORMAL));
+    let stomp = methods[0].clone();
+    t.cast(P0, top).method(stomp).target(Entity::Player(P1)).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    // The card goes on an adventure (exile).
+    assert!(t.in_exile("Bonecrusher Giant // Stomp") || t.in_exile("Bonecrusher Giant"));
+    // The permission ends with the turn.
+    let mut t = TestGame::new(2);
+    let top = t.library_top(P0, "Bonecrusher Giant // Stomp");
+    belligerent_attacks(&mut t);
+    t.advance_to(P1, Step::Upkeep);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 5);
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, top).is_empty());
+    assert!(!sees_top(&t.g));
+}
+
+#[test]
+fn the_belligerent_cards_from_the_library_follow_all_costs_and_timing_rules() {
+    cr!("601.3", "305.2", "307.1", "601.2f", "611.2a");
+    ruling!(
+        "The Belligerent",
+        "You must pay all costs and follow all timing rules for spells cast and lands played from the top of your library this way."
+    );
+    supported("The Belligerent");
+    // A creature card on top can't be cast during combat, and costs its mana cost in the
+    // postcombat main phase.
+    let mut t = TestGame::new(2);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    belligerent_attacks(&mut t);
+    t.lands(P0, "Forest", 2);
+    assert!(!can_cast(&mut t, P0, bears, NORMAL));
+    block_and_finish(&mut t, P1, &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    assert!(can_cast(&mut t, P0, bears, NORMAL));
+    t.cast(P0, bears).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // A land on top is played only in a main phase, as the land for the turn.
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    belligerent_attacks(&mut t);
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    block_and_finish(&mut t, P1, &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    assert!(crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    let island = t.hand(P0, "Island");
+    t.play_land(P0, island).unwrap();
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+}
