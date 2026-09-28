@@ -1573,6 +1573,11 @@ pub fn apply_mod(
                 c.colors = ColorSet::single(col);
             }
         }
+        Modification::SetChosenColors => {
+            if let Some(cs) = g.source_choices(ctx).and_then(|ch| ch.colors) {
+                c.colors = cs;
+            }
+        }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         Modification::AddKeyword(k) => {

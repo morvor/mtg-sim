@@ -1990,6 +1990,12 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                Modification::SetChosenColors => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.colors) {
+                        Some(cs) => Modification::SetColors(cs),
+                        None => m.clone(),
+                    }
+                }
                 Modification::AddChosenType => {
                     match ctx.source.and_then(|s| {
                         let ch = &self.obj(s).choices;

@@ -1508,6 +1508,9 @@ pub enum Modification {
     /// "becomes the color of your choice": the color chosen for the effect's source
     /// (fixed when a resolving effect is created).
     SetChosenColor,
+    /// "becomes the color or colors of your choice": the colors chosen for the effect's
+    /// source (fixed when a resolving effect is created).
+    SetChosenColors,
     // Layer 6
     AddAbility(Ability),
     AddKeyword(Keyword),
@@ -1564,7 +1567,8 @@ impl Modification {
             | SetBasicLandType(_)
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
-            SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor => Layer::L5Color,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
+            | SetChosenColors => Layer::L5Color,
             AddAbility(_)
             | AddKeyword(_)
             | AddKeywordX(..)
@@ -3290,6 +3294,9 @@ pub enum ChoiceKind {
     Color,
     /// "choose a color other than [color]".
     ColorOtherThan(Color),
+    /// "the color or colors of your choice": one or more of the five colors, never
+    /// colorless (CR 105.4).
+    Colors,
     /// "choose A, B, or C": one of the listed words — creature types, land types, card
     /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
     /// (and as the chosen type/color when the word is one).

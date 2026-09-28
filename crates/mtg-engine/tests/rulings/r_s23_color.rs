@@ -456,3 +456,179 @@ fn solar_array_offers_the_five_colors_and_colorless_mana_adds_no_sunburst_counte
     let gnomes = t.named_on_battlefield("Bottle Gnomes")[0];
     assert_eq!(t.counters(gnomes, "+1/+1"), 1);
 }
+
+#[test]
+fn turn_to_frog_keeps_other_card_types_and_supertypes() {
+    cr!("205.1a", "205.1b", "105.3", "613.1d", "613.1f", "613.4b");
+    ruling!(
+        "Turn to Frog",
+        "The creature will lose all other colors and creature types, but it will retain any other card types (such as artifact) or supertypes (such as legendary) it may have."
+    );
+    supported("Turn to Frog");
+    supported("Sharuum the Hegemon");
+    // "Until end of turn, target creature loses all abilities and becomes a blue Frog with
+    // base power and toughness 1/1." Sharuum the Hegemon is a white, blue, and black
+    // legendary artifact creature — Sphinx, 5/5 with flying.
+    let mut t = TestGame::new(2);
+    let sharuum = t.battlefield(P1, "Sharuum the Hegemon");
+    cast_from_hand(&mut t, P0, "Turn to Frog", &[Entity::Object(sharuum)]);
+    t.resolve_all();
+    t.g.recompute();
+    let o = t.obj_now(sharuum);
+    assert_eq!(o.chars.colors, colors_of(&[Color::Blue]));
+    assert!(o.chars.has_subtype("Frog"));
+    assert!(!o.chars.has_subtype("Sphinx"));
+    assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
+    assert!(o.chars.supertypes.contains(Supertype::Legendary));
+    assert!(!o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert_eq!(t.pt(sharuum), (1, 1));
+    // Until end of turn.
+    t.advance_to(P1, Step::Upkeep);
+    t.g.recompute();
+    assert_eq!(t.pt(sharuum), (5, 5));
+    assert!(t.obj_now(sharuum).chars.has_subtype("Sphinx"));
+}
+
+#[test]
+fn okos_elk_loses_other_card_types_but_keeps_supertypes_indefinitely() {
+    cr!("205.1a", "105.3", "613.1d", "613.1f", "613.4b", "611.2a");
+    ruling!(
+        "Oko, Thief of Crowns",
+        "Oko's second ability overwrites all colors and creature types the affected creature has. It's just a green Elk. The creature keeps any supertypes (such as legendary) it has, but loses any other card types it has (such as artifact)."
+    );
+    ruling!(
+        "Oko, Thief of Crowns",
+        "The effects of Oko's second ability lasts indefinitely."
+    );
+    supported("Oko, Thief of Crowns");
+    // "+1: Target artifact or creature loses all abilities and becomes a green Elk
+    // creature with base power and toughness 3/3."
+    let mut t = TestGame::new(2);
+    let oko = t.battlefield(P0, "Oko, Thief of Crowns");
+    let sharuum = t.battlefield(P1, "Sharuum the Hegemon");
+    t.activate(P0, oko, 1, &[Entity::Object(sharuum)]).unwrap();
+    t.resolve_all();
+    t.advance_to(P1, Step::Upkeep);
+    t.g.recompute();
+    let o = t.obj_now(sharuum);
+    assert_eq!(o.chars.colors, colors_of(&[Color::Green]));
+    assert!(o.chars.has_subtype("Elk") && !o.chars.has_subtype("Sphinx"));
+    assert!(o.is(CardType::Creature) && !o.is(CardType::Artifact));
+    assert!(o.chars.supertypes.contains(Supertype::Legendary));
+    assert!(!o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert_eq!(t.pt(sharuum), (3, 3));
+}
+
+/// The options of the "Choose a color or colors" decisions asked since `from`.
+fn color_choices(t: &TestGame, from: usize) -> Vec<Vec<String>> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if prompt.as_str() == "Choose a color or colors" => Some(options.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Index of a set of colors ("white and blue") among the offered choices: every nonempty
+/// set of colors, in the order of their bits.
+fn colors_idx(words: &str) -> usize {
+    (1..32u8)
+        .map(ColorSet)
+        .position(|s| {
+            s.iter()
+                .map(|c| c.word())
+                .collect::<Vec<_>>()
+                .join(" and ")
+                == words
+        })
+        .unwrap()
+}
+
+#[test]
+fn quickchange_any_single_color_or_combination_but_not_colorless() {
+    cr!("105.4", "105.3", "613.1e");
+    ruling!(
+        "Quickchange",
+        "You can choose any single color or any combination of more than one color. You can’t choose colorless."
+    );
+    supported("Quickchange");
+    supported("Prismwake Merrow");
+    // Quickchange: "Target creature becomes the color or colors of your choice until end
+    // of turn."
+    let mut t = TestGame::new(2);
+    let memnite = t.battlefield(P1, "Memnite");
+    let from = t.asked().len();
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        Answer::Index(colors_idx("white and blue")),
+    );
+    cast_from_hand(&mut t, P0, "Quickchange", &[Entity::Object(memnite)]);
+    t.resolve_all();
+    assert_eq!(
+        colors_now(&mut t, memnite),
+        colors_of(&[Color::White, Color::Blue])
+    );
+    // The choices: each single color and each combination (31), not colorless.
+    let offered = color_choices(&t, from);
+    assert_eq!(offered.len(), 1);
+    assert_eq!(offered[0].len(), 31);
+    assert!(offered[0].iter().all(|o| !o.contains("colorless")));
+    assert!(offered[0].contains(&"red".to_string()));
+    assert!(offered[0].contains(&"white and blue and black and red and green".to_string()));
+    // Until end of turn: Memnite is colorless again.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(colors_now(&mut t, memnite).is_colorless());
+    // Prismwake Merrow's enters ability: a single color.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        Answer::Index(colors_idx("red")),
+    );
+    enter(&mut t, P0, "Prismwake Merrow");
+    t.resolve_all();
+    assert_eq!(colors_now(&mut t, bears), colors_of(&[Color::Red]));
+}
+
+#[test]
+fn shyft_cant_become_colorless() {
+    cr!("105.4", "105.3");
+    ruling!(
+        "Shyft",
+        "Shyft’s ability won’t let you make it colorless. Colorless is not a color."
+    );
+    supported("Shyft");
+    // "At the beginning of your upkeep, you may have this creature become the color or
+    // colors of your choice. (This effect lasts indefinitely.)"
+    let mut t = TestGame::new(2);
+    let shyft = t.battlefield(P0, "Shyft");
+    t.set_step(P1, Step::End);
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        Answer::Index(colors_idx("black and green")),
+    );
+    let from = t.asked().len();
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(
+        colors_now(&mut t, shyft),
+        colors_of(&[Color::Black, Color::Green])
+    );
+    let offered = color_choices(&t, from);
+    assert_eq!(offered.len(), 1);
+    assert!(offered[0].iter().all(|o| !o.is_empty() && !o.contains("colorless")));
+    // It lasts indefinitely.
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(
+        colors_now(&mut t, shyft),
+        colors_of(&[Color::Black, Color::Green])
+    );
+}
