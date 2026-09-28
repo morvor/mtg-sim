@@ -421,9 +421,13 @@ impl Game {
             }
             Effect::AddCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
+                let mut placed = 0;
                 for t in self.resolve_sel(what, ctx) {
-                    self.add_counters(t, kind, k, ctx.source);
+                    placed += self.add_counters(t, kind, k, ctx.source);
                 }
+                // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
+                // whether any counter was put.
+                ctx.prev_happened = placed > 0;
             }
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
