@@ -551,6 +551,7 @@ impl Game {
                         None => vec![(None, fixed)],
                     }
                 };
+                let first = self.effects.len();
                 for (o, part) in parts {
                     let id = self.new_effect_id();
                     self.effects.push(ContinuousEffect {
@@ -569,6 +570,8 @@ impl Game {
                     });
                 }
                 self.dirty = true;
+                // CR 113.11: not for an object that can't have an ability it adds.
+                crate::kw::cant_have::drop_ungrantable_keywords(self, first);
             }
             Effect::AddRestriction {
                 restriction,

@@ -659,6 +659,31 @@ pub fn resolved_destination_by(
         .map(|d| (d, Some(format!("Put it into {:?} instead", d.0))))
 }
 
+/// Every destination keywords give the spell as it resolves (see
+/// [`resolved_destination_by`]), one per keyword (e.g. both rebound and buyback, among
+/// which the spell's controller chooses, CR 616.1); or else the one an effect applying to
+/// the spell gives it.
+pub fn resolved_destinations(
+    g: &Game,
+    spell: ObjectId,
+) -> Vec<((Zone, LibraryPosition), Option<String>)> {
+    let mut out = Vec::new();
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            if let Some(d) = r.resolved_destination(g, spell, kw) {
+                let label = r
+                    .resolved_destination_replaces()
+                    .then(|| format!("{}: put it into {:?} instead", kw.kind.name(), d.0));
+                out.push((d, label));
+            }
+        }
+    }
+    if out.is_empty() {
+        out.extend(resolved_destination_by(g, spell));
+    }
+    out
+}
+
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
     for r in registry() {
         r.global_after_spell_resolved(g, spell, new);

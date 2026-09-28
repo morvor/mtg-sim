@@ -211,12 +211,15 @@ pub fn choose_resolved_spell_destination(
     if crate::adventure::resolved_destination(g, id).is_some() {
         return (resolved_spell_destination(g, id), false);
     }
-    let Some((dest, label)) = crate::kw::resolved_destination_by(g, id) else {
+    let dests = crate::kw::resolved_destinations(g, id);
+    if dests.is_empty() {
         return (graveyard, false);
-    };
-    let Some(label) = label else {
-        return (dest, false);
-    };
+    }
+    // A destination that isn't a replacement effect the player chooses among (flashback's
+    // "exile it instead of putting it anywhere else") applies.
+    if let Some((dest, _)) = dests.iter().find(|(_, l)| l.is_none()) {
+        return (*dest, false);
+    }
     let others = g.applicable_replacements(&crate::replacement::ReplEvent::Move(
         crate::replacement::MoveEv {
             obj: id,
@@ -228,18 +231,22 @@ pub fn choose_resolved_spell_destination(
             source: None,
         },
     ));
-    if others.is_empty() {
-        return (dest, false);
+    if others.is_empty() && dests.len() == 1 {
+        return (dests[0].0, false);
     }
-    let n = others.len() + 1;
-    let mut options = vec![label];
+    // The keywords' replacement effects (e.g. rebound and buyback) and the others: the
+    // controller chooses one (CR 616.1).
+    let k = dests.len();
+    let n = k + others.len();
+    let mut options: Vec<String> = dests.iter().filter_map(|(_, l)| l.clone()).collect();
     options.extend(others);
     match g.ask(
         controller,
         crate::decision::Decision::ChooseReplacement { options },
     ) {
-        crate::decision::Answer::Index(i) if i > 0 && i < n => (graveyard, true),
-        _ => (dest, false),
+        crate::decision::Answer::Index(i) if i < k => (dests[i].0, false),
+        crate::decision::Answer::Index(i) if i < n => (graveyard, true),
+        _ => (dests[0].0, false),
     }
 }
 
