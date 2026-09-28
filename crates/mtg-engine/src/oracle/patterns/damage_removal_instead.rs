@@ -27,6 +27,11 @@ fn pronoun_free(c: &str) -> bool {
     ) {
         return true;
     }
+    // "that spell" in a "whenever you cast" trigger is the spell that caused it to trigger
+    // (opus: "if five or more mana was spent to cast that spell").
+    if crate::oracle::patterns::opus::refers_to_the_trigger_spell(c) {
+        return true;
+    }
     !c.split(' ')
         .any(|w| matches!(w, "it" | "its" | "it's" | "that" | "they" | "their" | "them" | "those"))
 }
