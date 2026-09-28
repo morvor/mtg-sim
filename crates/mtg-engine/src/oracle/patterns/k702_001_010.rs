@@ -725,7 +725,12 @@ fn play_from_top_of_library(l: &str, text: &str, _ctx: &CompileContext) -> Optio
         Some("spells") => Filter::Any,
         Some(s) => {
             let mut fs = Vec::new();
+            // "spells with mana value 4 or greater" (Glarb) is one phrase.
+            let s = s
+                .replace(" or greater", "\u{1}greater")
+                .replace(" or less", "\u{1}less");
             for part in s.split(" and ").flat_map(|p| p.split(" or ")) {
+                let part = part.replace('\u{1}', " or ");
                 let (f, _, tail) = parse_object_phrase(part.trim())?;
                 if !end(tail).is_empty() {
                     return None;

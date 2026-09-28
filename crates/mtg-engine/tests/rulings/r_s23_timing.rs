@@ -357,3 +357,48 @@ fn omniscience_spells_keep_their_normal_timing() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand - 1 + 2);
 }
+
+#[test]
+fn glarb_cards_from_the_library_follow_all_costs_and_timing_rules() {
+    cr!("601.3", "305.2", "116.2a", "307.1", "601.2f");
+    ruling!(
+        "Glarb, Calamity's Augur",
+        "You must pay all costs and follow all timing rules for lands played and spells cast from the top of your library this way."
+    );
+    supported("Glarb, Calamity's Augur");
+    // "You may play lands and cast spells with mana value 4 or greater from the top of
+    // your library."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Glarb, Calamity's Augur");
+    let giant = t.library_top(P0, "Hill Giant");
+    t.g.recompute();
+    // Hill Giant ({3}{R}) costs its mana cost: not castable without the mana.
+    assert!(!can_cast(&mut t, P0, giant, NORMAL));
+    t.lands(P0, "Mountain", 4);
+    assert!(can_cast(&mut t, P0, giant, NORMAL));
+    // Not during P1's turn.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!can_cast(&mut t, P0, giant, NORMAL));
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, giant).go();
+    assert_eq!(tapped_lands(&t, P0), 4);
+    t.resolve_all();
+    // A spell with mana value less than 4 can't be cast this way.
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.g.recompute();
+    assert!(!can_cast(&mut t, P0, bears, NORMAL));
+    // A land from the top is played as the land for the turn: not if one was already
+    // played, and only in a main phase.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Glarb, Calamity's Augur");
+    let forest = t.library_top(P0, "Forest");
+    t.g.recompute();
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    let island = t.hand(P0, "Island");
+    t.play_land(P0, island).unwrap();
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+}
