@@ -103,3 +103,91 @@ fn ertha_jo_ignores_abilities_that_dont_target_a_creature_or_player() {
     assert_eq!(triggered_from(&t, ertha), 0);
     t.resolve_all();
 }
+
+/// P0's Bill Potts ("Whenever you cast an instant or sorcery spell that targets only Bill
+/// Potts or activate an ability that targets only Bill Potts, copy that spell or ability.
+/// You may choose new targets for the copy. This ability triggers only once each turn.")
+/// and Grizzly Bears. Returns (Bill, Bears).
+fn bill_and_bears(t: &mut TestGame) -> (ObjectId, ObjectId) {
+    supported("Bill Potts");
+    let bill = t.battlefield(P0, "Bill Potts");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    (bill, bears)
+}
+
+#[test]
+fn bill_potts_s_copy_may_get_new_legal_targets() {
+    cr!("707.10", "707.10c", "115.9c");
+    ruling!(
+        "Bill Potts",
+        "The copy will have the same targets as the spell or ability it's copying unless you choose new ones. You may change any number of the targets, including all of them or none of them. The new targets must be legal."
+    );
+    let mut t = TestGame::new(2);
+    let (bill, bears) = bill_and_bears(&mut t);
+    cast_new(&mut t, P0, "Giant Growth", &[Entity::Object(bill)]);
+    t.settle();
+    assert_eq!(triggered_from(&t, bill), 1);
+    change_copy_targets(&mut t, P0, &[Some(Entity::Object(bears))]);
+    t.resolve();
+    let copy = spell_copies(&t)[0];
+    assert_eq!(targets_of(&t, copy), vec![Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.pt(bill), (5, 7));
+    // It triggers only once each turn.
+    cast_new(&mut t, P0, "Giant Growth", &[Entity::Object(bill)]);
+    t.settle();
+    assert_eq!(triggered_from(&t, bill), 1);
+}
+
+#[test]
+fn bill_potts_s_copy_of_a_modal_spell_has_the_same_mode() {
+    cr!("707.10", "700.2");
+    ruling!(
+        "Bill Potts",
+        "If the spell or ability that's copied is modal (that is, it says \"Choose one —\" or the like), the copy will have the same mode or modes. You can't choose different ones."
+    );
+    supported("Boros Charm");
+    // Boros Charm's third mode: "Target creature gains double strike until end of turn."
+    let mut t = TestGame::new(2);
+    let (bill, bears) = bill_and_bears(&mut t);
+    lands_for_cost(&mut t, P0, "Boros Charm");
+    let card = t.hand(P0, "Boros Charm");
+    let charm = t.cast(P0, card).modes(&[2]).target(bill).go();
+    t.settle();
+    let from = t.asked().len();
+    change_copy_targets(&mut t, P0, &[Some(Entity::Object(bears))]);
+    t.resolve();
+    let copy = spell_copies(&t)[0];
+    assert_eq!(
+        crate::r_s07_common::chosen_modes(&t, copy),
+        crate::r_s07_common::chosen_modes(&t, charm)
+    );
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
+    t.resolve_all();
+    assert!(t
+        .obj_now(bears)
+        .has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike));
+    assert!(t
+        .obj_now(bill)
+        .has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike));
+}
+
+#[test]
+fn bill_potts_copies_an_activated_ability_that_targets_only_it() {
+    cr!("707.10", "115.9c", "602.2");
+    // Prodigal Pyromancer: "{T}: This creature deals 1 damage to any target."
+    let mut t = TestGame::new(2);
+    let (bill, _) = bill_and_bears(&mut t);
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    t.answer_targets(P0, &[Entity::Object(bill)]);
+    activate_containing(&mut t, P0, pyro, "damage").unwrap();
+    t.settle();
+    assert_eq!(triggered_from(&t, bill), 1);
+    change_copy_targets(&mut t, P0, &[Some(Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.obj_now(bill).damage, 1);
+}
