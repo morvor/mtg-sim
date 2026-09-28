@@ -147,12 +147,15 @@ fn until_end_of_turn_cast_those_free(l: &str, prev: &mut Effect, b: &mut Builder
 
 inventory::submit! { super::FollowupPattern { name: "r406 until end of turn, you may cast spells from among those cards for free", priority: 80, apply: until_end_of_turn_cast_those_free } }
 
-/// What "the rest" means after exiling cards until one is exiled: the other exiled cards
-/// still in exile (the one exiled last stays there if it isn't cast).
-const THE_REST: &str = "the rest";
+/// The name (in `Builder::named`) of what "the rest" means: after exiling cards until one
+/// is exiled, the other exiled cards still in exile (the one exiled last stays there if
+/// it isn't cast); after looking at the top cards of a library, those still there.
+pub(super) const THE_REST: &str = "the rest";
 
 /// "Put the rest on the bottom of your library in a random order." after exiling cards
-/// until one is exiled (and what's done with that card, Jodah, the Unifier).
+/// until one is exiled (and what's done with that card, Jodah, the Unifier), or after
+/// looking at the top cards of your library and casting one (Kiora, Sovereign of the
+/// Deep).
 fn put_the_rest_on_the_bottom(l: &str, b: &mut Builder) -> Option<Effect> {
     if end(l.trim()) != "put the rest on the bottom of your library in a random order" {
         return None;

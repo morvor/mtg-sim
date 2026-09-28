@@ -1254,3 +1254,110 @@ fn anrakyr_spells_are_cast_only_by_paying_life_plus_additional_costs() {
     assert_eq!(t.life(P0), 5);
     assert!(t.in_hand(P0, "Salvage Titan"));
 }
+
+/// Whether a card named `name` is among the bottom `n` cards of `p`'s library.
+fn in_bottom(t: &TestGame, p: PlayerId, n: usize, name: &str) -> bool {
+    t.g.player(p).library[..n]
+        .iter()
+        .any(|c| t.g.obj(*c).chars.name == name)
+}
+
+/// P0 controls Kiora, Sovereign of the Deep with `top` on top of their library (top
+/// first) and casts Sea Monster (a Serpent spell with mana value 6) from their hand;
+/// Kiora's trigger resolves with the answers queued (P0 casts `pick`, choosing the cards
+/// in `discard` for its cost).
+fn kiora_trigger(t: &mut TestGame, top: &[&str], pick: Option<&str>, discard: &[ObjectId]) {
+    t.battlefield(P0, "Kiora, Sovereign of the Deep");
+    let cards = stack_library(t, P0, top);
+    give_mana_for(t, P0, "Sea Monster");
+    let monster = t.hand(P0, "Sea Monster");
+    t.answer_yes(P0, true);
+    if let Some(name) = pick {
+        let i = top.iter().position(|n| *n == name).unwrap();
+        t.answer_choose(P0, &[Entity::Object(cards[i])]);
+    }
+    if !discard.is_empty() {
+        let d: Vec<Entity> = discard.iter().map(|c| Entity::Object(*c)).collect();
+        t.answer_choose(P0, &d);
+    }
+    t.cast(P0, monster).go();
+    t.resolve();
+}
+
+#[test]
+fn kiora_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Kiora, Sovereign of the Deep",
+        "If you cast a spell \"without paying its mana cost,\" you can't pay any alternative costs. You can, however, pay additional costs. If the spell has any mandatory additional costs, those must be paid to cast it."
+    );
+    supported("Kiora, Sovereign of the Deep");
+    supported("Sea Monster");
+    // "Whenever you cast a Kraken, Leviathan, Octopus, or Serpent spell from your hand,
+    // look at the top X cards of your library, where X is that spell's mana value. You may
+    // cast a spell with mana value less than X from among them without paying its mana
+    // cost. Put the rest on the bottom of your library in a random order."
+    // Burst Lightning, kicked for {4}; Grizzly Bears goes to the bottom.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    kiora_trigger(&mut t, &["Grizzly Bears", "Burst Lightning"], Some("Burst Lightning"), &[]);
+    // The other five cards looked at are the bottom five, in a random order.
+    assert!(in_bottom(&t, P0, 5, "Grizzly Bears"));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(tapped_lands(&t, P0), 10);
+    // Tormenting Voice: a card is discarded to cast it.
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    kiora_trigger(&mut t, &["Tormenting Voice"], Some("Tormenting Voice"), &[forest]);
+    assert!(t.in_graveyard(P0, "Forest"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    // Cyclonic Rift can't be cast for its overload cost.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    kiora_trigger(&mut t, &["Cyclonic Rift"], Some("Cyclonic Rift"), &[]);
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(elves));
+    assert_eq!(tapped_lands(&t, P0), 6);
+}
+
+#[test]
+fn kiora_free_spell_resolves_first_ignoring_timing_with_x_zero() {
+    cr!("608.2g", "107.3b", "405.2");
+    ruling!(
+        "Kiora, Sovereign of the Deep",
+        "The spell you cast without paying its mana cost is cast during the resolution of the triggered ability. Timing restrictions of that spell based on card type are ignored. It will resolve before the spell that caused the ability to trigger."
+    );
+    ruling!(
+        "Kiora, Sovereign of the Deep",
+        "If the spell has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Kiora, Sovereign of the Deep");
+    // Blaze, a sorcery, is cast with Sea Monster on the stack, with X = 0; it resolves
+    // first, dealing no damage.
+    let mut t = TestGame::new(2);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    kiora_trigger(&mut t, &["Blaze"], Some("Blaze"), &[]);
+    assert_eq!(t.stack_len(), 2);
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Blaze"));
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.stack_len(), 1);
+    assert!(t.named_on_battlefield("Sea Monster").is_empty());
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Sea Monster").len(), 1);
+    // A card whose spell would have mana value 6 (another Sea Monster) can't be cast.
+    let mut t = TestGame::new(2);
+    kiora_trigger(&mut t, &["Sea Monster"], None, &[]);
+    assert_eq!(t.stack_len(), 1);
+    assert!(in_bottom(&t, P0, 6, "Sea Monster"));
+}
