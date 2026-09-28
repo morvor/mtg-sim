@@ -51,11 +51,10 @@ fn a_strive_spell_may_have_no_targets_and_cant_target_the_same_creature_twice() 
     let p = t.hand(P0, "Ajani's Presence");
     let spell = t.cast(P0, p).targets(&[a.into(), a.into()]).go();
     let chosen = chosen_targets(&t, spell);
-    assert!(chosen.iter().filter(|e| **e == Entity::Object(a)).count() <= 1);
-    assert!(chosen.len() <= 1);
+    assert!(chosen.len() <= 1, "targets {chosen:?}");
     assert_eq!(tapped_lands(&t, P0), 2);
     t.resolve_all();
-    assert!(t.pt(a).0 <= 3);
+    assert!(t.pt(a).0 <= 3, "the Bears got +1/+1 at most once");
     // Two different creatures: {W} plus {2}{W}.
     let a_before = t.pt(a);
     t.lands(P0, "Plains", 1);
