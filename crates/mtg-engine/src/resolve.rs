@@ -729,32 +729,15 @@ impl Game {
                 let players = self.eval_players(controller, ctx);
                 let mut created = Vec::new();
                 for p in players {
-                    // CR 508.4: what each token entering attacking attacks is chosen for
-                    // each of them; tokens attacking the same thing are created together.
-                    let mut groups: Vec<(Option<Entity>, u32)> = Vec::new();
-                    if *attacking {
-                        for _ in 0..n {
-                            let attack = self.attack_target_for_new_attacker(ctx);
-                            match groups.iter_mut().find(|(a, _)| *a == attack) {
-                                Some(g) => g.1 += 1,
-                                None => groups.push((attack, 1)),
-                            }
-                        }
-                    }
-                    if groups.is_empty() {
-                        groups.push((None, n));
-                    }
-                    for (attack, k) in groups {
-                        let tc = TokenCreate {
-                            chars: crate::tokens::token_characteristics(spec),
-                            card: crate::tokens::predefined_card(spec),
-                            tapped: *tapped,
-                            attacking: attack,
-                            copy_of: None,
-                            copy_exceptions: vec![],
-                        };
-                        created.extend(self.create_tokens(p, tc, k, ctx.source));
-                    }
+                    let tc = TokenCreate {
+                        chars: crate::tokens::token_characteristics(spec),
+                        card: crate::tokens::predefined_card(spec),
+                        tapped: *tapped,
+                        attacking: None,
+                        copy_of: None,
+                        copy_exceptions: vec![],
+                    };
+                    created.extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
@@ -807,20 +790,16 @@ impl Game {
                 let mut created = Vec::new();
                 for p in players {
                     for s in &sources {
-                        let attack = if *attacking {
-                            self.attack_target_for_new_attacker(ctx)
-                        } else {
-                            None
-                        };
                         let tc = TokenCreate {
                             chars: self.obj(*s).copiable.clone(),
                             card: self.obj(*s).card.clone(),
                             tapped: *tapped,
-                            attacking: attack,
+                            attacking: None,
                             copy_of: Some(*s),
                             copy_exceptions: fixed.clone(),
                         };
-                        created.extend(self.create_tokens(p, tc, n, ctx.source));
+                        created
+                            .extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
                     }
                 }
                 ctx.set_var(
@@ -2202,17 +2181,40 @@ impl Game {
         self.move_objects(moves).into_iter().flatten().collect()
     }
 
-    /// Default attack target for "put onto the battlefield attacking": the defending
-    /// player of the source if it's attacking, else a defending player (CR 508.4).
+    /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each
+    /// token is created (including any more an effect such as Parallel Lives adds), its
+    /// controller chooses what it's attacking (CR 508.4), by default what the source is
+    /// attacking (see [`Self::attack_target_for_new_attacker`]).
+    fn create_tokens_maybe_attacking(
+        &mut self,
+        p: PlayerId,
+        mut spec: TokenCreate,
+        n: u32,
+        attacking: bool,
+        ctx: &Ctx,
+    ) -> Vec<ObjectId> {
+        if !attacking {
+            return self.create_tokens(p, spec, n, ctx.source);
+        }
+        let preferred = self
+            .combat
+            .as_ref()
+            .and_then(|c| ctx.source.and_then(|src| c.attack_target(src)));
+        let options = crate::combat::attack_target_options(self, preferred);
+        spec.attacking = options.first().copied();
+        let prev = std::mem::replace(&mut self.token_attack_options, options);
+        let out = self.create_tokens(p, spec, n, ctx.source);
+        self.token_attack_options = prev;
+        out
+    }
+
+    /// What a creature put onto the battlefield attacking attacks when the effect doesn't
+    /// say: its controller chooses (CR 508.4), by default what the source is attacking if
+    /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
     fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
         let combat = self.combat.as_ref()?;
-        if let Some(src) = ctx.source {
-            if let Some(t) = combat.attack_target(src) {
-                return Some(t);
-            }
-        }
-        // CR 508.4: otherwise its controller chooses what it's attacking.
-        crate::combat::choose_attack_target_for_new_attacker(self, ctx.controller)
+        let preferred = ctx.source.and_then(|src| combat.attack_target(src));
+        crate::combat::choose_attack_target_preferring(self, ctx.controller, preferred)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).

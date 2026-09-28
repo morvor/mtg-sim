@@ -17,7 +17,7 @@ use crate::types::CardType;
 
 /// Multiplies the amount of an effect by `count`. Only effects with a single constant
 /// amount qualify.
-fn multiply(e: Effect, count: Value) -> Option<Effect> {
+pub(crate) fn multiply(e: Effect, count: Value) -> Option<Effect> {
     let times = |n: &Value| -> Option<Value> {
         let k = n.as_const()?;
         Some(if k == 1 {
