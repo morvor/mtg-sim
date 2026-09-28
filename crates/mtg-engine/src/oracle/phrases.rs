@@ -842,6 +842,16 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::Power(cmp, Box::new(v)), r));
         }
     }
+    // "with mana value less than ~'s power" (Narset, Enlightened Exile; Arcane Proxy).
+    for (p, cmp) in [
+        ("with mana value less than or equal to ~'s power", Cmp::Le),
+        ("with mana value less than ~'s power", Cmp::Lt),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            let v = Value::PowerOf(Box::new(Sel::This));
+            return Some((Filter::ManaValue(cmp, Box::new(v)), r));
+        }
+    }
     // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
     if let Some(r) = t.strip_prefix("with base power ") {
         let (n, r) = parse_number(r)?;
