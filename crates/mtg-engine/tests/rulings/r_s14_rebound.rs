@@ -556,3 +556,61 @@ fn casting_it_again_is_optional_or_prohibited_and_it_then_stays_exiled() {
     assert_eq!(upkeep_triggers(&mut t), 0);
     assert_eq!(t.zone(exiled[0]), Zone::Exile);
 }
+
+/// The replacement-effect choices P0 was asked since decision `from`.
+fn replacement_choices(t: &TestGame, from: usize) -> Vec<Vec<String>> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseReplacement { options } if *p == P0 => Some(options.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn buyback_and_rest_in_peace_are_chosen_between_like_rebound() {
+    cr!("616.1", "702.27a");
+    supported("Whispers of the Muse");
+    // Whispers of the Muse ({U}: draw a card; buyback {5}) with P1's Rest in Peace: P0
+    // chooses buyback (the card returns to P0's hand) or Rest in Peace (it's exiled).
+    for buyback in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Rest in Peace");
+        t.lands(P0, "Island", 6);
+        let card = t.hand(P0, "Whispers of the Muse");
+        let from = t.asked().len();
+        t.answer(
+            P0,
+            DecisionKind::Replacement,
+            Answer::Index(usize::from(!buyback)),
+        );
+        t.cast(P0, card).kicked(true).go();
+        t.resolve_all();
+        assert_eq!(replacement_choices(&t, from).len(), 1);
+        assert_eq!(t.in_hand(P0, "Whispers of the Muse"), buyback);
+        assert_eq!(t.in_exile("Whispers of the Muse"), !buyback);
+    }
+}
+
+#[test]
+fn flashback_exiles_the_card_whatever_else_would_apply() {
+    cr!("702.34a", "616.1");
+    supported("Think Twice");
+    // Think Twice cast with flashback while P1 controls Rest in Peace: it's exiled, with
+    // nothing to choose ("exile it instead of putting it anywhere else" applies after any
+    // other replacement effect anyway).
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rest in Peace");
+    t.lands(P0, "Island", 3);
+    let card = t.graveyard(P0, "Think Twice");
+    let from = t.asked().len();
+    t.cast(P0, card)
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .go();
+    t.resolve_all();
+    assert!(replacement_choices(&t, from).is_empty());
+    assert!(t.in_exile("Think Twice"));
+}

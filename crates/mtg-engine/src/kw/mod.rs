@@ -165,10 +165,12 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
-    /// Whether [`KeywordRules::resolved_destination`] is a replacement effect ("instead of
-    /// putting it into your graveyard as it resolves, ...", CR 614.1a): if other
-    /// replacement effects would apply to the spell being put into its owner's graveyard,
-    /// its controller chooses which to apply (CR 616.1). Not so for a spell whose own
+    /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
+    /// spell being put into its owner's graveyard ("instead of putting it into your
+    /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
+    /// apply to that event, its controller chooses which to apply (CR 616.1). Not so for
+    /// an effect that applies wherever the card would go ("exile it instead of putting it
+    /// anywhere else", which still applies after any other), nor for a spell whose own
     /// instruction puts it somewhere ("Exile this spell.").
     fn resolved_destination_replaces(&self) -> bool {
         true
