@@ -15,8 +15,9 @@
 //!
 //! "You may collect evidence N rather than pay the mana cost for spells you cast"
 //! ([`ALT_COST_PREFIX`], Conspiracy Unraveler) is an alternative cost for the spells its
-//! controller casts from their hand ([`EvidenceInsteadOfMana`]); paying it isn't the
-//! linked additional cost, so "if evidence was collected" stays false.
+//! controller casts, from their hand or wherever else they may cast them
+//! ([`EvidenceInsteadOfMana`]); paying it isn't the linked additional cost, so "if
+//! evidence was collected" stays false.
 
 use super::*;
 
@@ -259,7 +260,20 @@ impl crate::kw::KeywordRules for EvidenceInsteadOfMana {
         p: PlayerId,
         card: ObjectId,
     ) -> Vec<crate::casting::CastOption> {
-        if g.obj(card).zone != Zone::Hand(p) {
+        // "For spells you cast": from the hand, or from wherever else the player may cast
+        // the card (a permission to cast it, a prepare-spell copy, a commander, CR 601.3)
+        // — but never together with another alternative cost (CR 118.9a), such as a
+        // permission to cast it without paying its mana cost or a keyword's own cost
+        // (flashback, foretell, ...), which isn't among these permissions.
+        let o = g.obj(card);
+        let castable_here = o.zone == Zone::Hand(p)
+            || (g.permitted_cards(p).contains(&card)
+                && g.permission_allows(p, card, &o.chars, false));
+        let free = g
+            .play_grants
+            .iter()
+            .any(|gr| gr.player == p && gr.object == card && gr.free);
+        if !castable_here || free {
             return vec![];
         }
         let Some(n) = g
