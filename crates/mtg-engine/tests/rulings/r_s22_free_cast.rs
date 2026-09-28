@@ -543,3 +543,33 @@ fn a_spell_with_x_cast_by_impulsivity_has_x_zero() {
     // It's exiled rather than put into a graveyard.
     assert!(t.in_exile("Blaze"));
 }
+
+#[test]
+fn wishing_well_casts_the_card_while_its_ability_resolves_and_exiles_that_spell() {
+    cr!("603.12", "608.2", "400.7", "614.1a");
+    ruling!(
+        "Wishing Well",
+        "You cast the instant or sorcery while the ability is resolving and still on the stack."
+    );
+    supported("Wishing Well");
+    // Lava Spike (mana value 1) is cast by the reflexive ability of Wishing Well's first
+    // coin counter; it's a sorcery, cast although the stack isn't empty.
+    let mut t = TestGame::new(2);
+    let spike = t.graveyard(P0, "Lava Spike");
+    let well = t.battlefield(P0, "Wishing Well");
+    t.answer_targets(P0, &[Entity::Object(spike)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.activate(P0, well, 0, &[]).expect("activate Wishing Well");
+    // The activated ability resolves and its reflexive ability triggers.
+    t.resolve();
+    assert_eq!(t.stack_len(), 1, "the reflexive ability is on the stack");
+    // As the reflexive ability resolves, Lava Spike is cast: it's on the stack afterwards.
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.zone(spike), mtg_engine::object::Zone::Stack);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // "If that spell would be put into your graveyard, exile it instead."
+    assert!(t.in_exile("Lava Spike"));
+    assert!(!t.in_graveyard(P0, "Lava Spike"));
+}
