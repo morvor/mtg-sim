@@ -501,3 +501,69 @@ fn omniscience_free_spells_have_x_zero_and_pay_additional_costs() {
     assert!(mountains.iter().all(|m| t.on_battlefield(*m)));
     assert_eq!(t.life(P1), 12);
 }
+
+/// P1 casts the real card `theirs`; P0 counters it with Reinterpret, whose free-cast
+/// answers `then` queues. Everything resolves.
+fn reinterpret(t: &mut TestGame, theirs: &str, then: impl FnOnce(&mut TestGame)) {
+    t.set_step(P1, Step::PrecombatMain);
+    give_mana_for(t, P1, theirs);
+    let card = t.hand(P1, theirs);
+    let spell = t.cast(P1, card).go();
+    give_mana_for(t, P0, "Reinterpret");
+    let r = t.hand(P0, "Reinterpret");
+    t.cast(P0, r).target(Entity::Object(spell)).go();
+    then(t);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, theirs));
+}
+
+#[test]
+fn reinterpret_free_spell_can_be_kicked_must_pay_additional_costs_and_cant_be_evoked() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "601.3e");
+    ruling!(
+        "Reinterpret",
+        "If you cast a spell “without paying its mana cost,” you can’t pay any alternative costs. You can, however, pay additional costs, such as kicker costs. If the card has any mandatory additional costs, you must pay those."
+    );
+    supported("Reinterpret");
+    // "Counter target spell. You may cast a spell with equal or lesser mana value from your
+    // hand without paying its mana cost." Hill Giant (mana value 4) is countered.
+    // Burst Lightning may be kicked.
+    let mut t = TestGame::new(2);
+    let burst = t.hand(P0, "Burst Lightning");
+    t.lands(P0, "Wastes", 4);
+    reinterpret(&mut t, "Hill Giant", |t| {
+        t.answer_choose(P0, &[Entity::Object(burst)]);
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    });
+    assert_eq!(t.life(P1), 16);
+    // Tormenting Voice's discard must be paid.
+    let mut t = TestGame::new(2);
+    let voice = t.hand(P0, "Tormenting Voice");
+    let forest = t.hand(P0, "Forest");
+    reinterpret(&mut t, "Hill Giant", |t| {
+        t.answer_choose(P0, &[Entity::Object(voice)]);
+        t.answer_choose(P0, &[Entity::Object(forest)]);
+    });
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    // Mulldrifter (mana value 5) after countering a mana value 5 spell: not for its evoke
+    // cost, so it isn't sacrificed.
+    let mut t = TestGame::new(2);
+    let drifter = t.hand(P0, "Mulldrifter");
+    reinterpret(&mut t, "Air Elemental", |t| {
+        t.answer_choose(P0, &[Entity::Object(drifter)]);
+    });
+    assert!(t.on_battlefield(drifter));
+    // A spell with greater mana value can't be cast: Mulldrifter after Hill Giant.
+    let mut t = TestGame::new(2);
+    let drifter = t.hand(P0, "Mulldrifter");
+    let from = t.asked().len();
+    reinterpret(&mut t, "Hill Giant", |_| {});
+    assert!(t.in_hand(P0, "Mulldrifter"));
+    assert!(t.asked()[from..].iter().all(|(_, d)| !matches!(
+        d,
+        mtg_engine::decision::Decision::ChooseEntities { candidates, .. }
+            if candidates.contains(&Entity::Object(drifter))
+    )));
+}

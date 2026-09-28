@@ -23,3 +23,23 @@ fn cast_from_hand_free(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "you may cast a spell with mana value N or less from your hand without paying its mana cost", priority: 99, parse: cast_from_hand_free } }
+
+/// "Counter target spell. You may cast a spell with equal or lesser mana value from your
+/// hand without paying its mana cost." (Reinterpret): at most the mana value of the spell
+/// targeted earlier in the text, as it last existed.
+fn cast_from_hand_free_equal_or_lesser(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let l = l.strip_prefix("you may ").unwrap_or(l);
+    if l != "cast a spell with equal or lesser mana value from your hand without paying its mana cost" {
+        return None;
+    }
+    let slot = b
+        .targets
+        .iter()
+        .rposition(|t| matches!(t.what, TargetKind::Spell(_)))?;
+    Some(Effect::Custom(
+        crate::kw::cast_from_hand_free::effect_name_target(slot as u8).into(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "you may cast a spell with equal or lesser mana value from your hand without paying its mana cost", priority: 99, parse: cast_from_hand_free_equal_or_lesser } }
