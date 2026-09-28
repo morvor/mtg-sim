@@ -32,7 +32,7 @@ fn cost_for_a_duration_cards_compile() {
 
 #[test]
 fn will_kenrith_makes_that_players_spells_cheaper_until_your_next_turn() {
-    cr!("601.2f", "611.2a", "606.3");
+    cr!("601.2f", "611.2a");
     // "−2: Target player draws two cards. Until your next turn, instant, sorcery, and
     // planeswalker spells that player casts cost {2} less to cast."
     let mut t = TestGame::new(2);

@@ -11,7 +11,7 @@ use mtg_engine::*;
 
 #[test]
 fn damage_dealt_to_an_opponent_who_left_the_game_still_counts() {
-    cr!("603.4", "104.3a", "800.4a", "120.3a");
+    cr!("603.4", "104.3a", "800.4i", "120.3a");
     ruling!(
         "Dunerider Outlaw",
         "If Dunerider Outlaw dealt damage to an opponent who later left the game before that turn's end step, its ability still gives it a +1/+1 counter."

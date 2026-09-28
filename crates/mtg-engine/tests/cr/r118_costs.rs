@@ -854,6 +854,84 @@ fn if_you_do_after_a_search_checks_whether_the_player_searched() {
 }
 
 #[test]
+fn a_player_who_cant_search_doesnt_search_so_if_you_do_is_false() {
+    cr!("118.12b");
+    ruling!(
+        "Stranglehold",
+        "your opponents can\u{2019}t choose to search, so they won\u{2019}t shuffle."
+    );
+    let search = |shuffle: bool| Effect::Search {
+        who: PlayerRef::You,
+        whose: PlayerRef::You,
+        filter: Filter::and(vec![
+            Filter::Type(CardType::Land),
+            Filter::Supertype(Supertype::Basic),
+        ]),
+        count: Value::c(1),
+        to: Destination::battlefield(),
+        reveal: false,
+        shuffle,
+    };
+    let may = |e: Effect| Effect::May {
+        who: PlayerRef::You,
+        effect: Box::new(e),
+    };
+    let if_you_do = |e: Effect| Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    };
+    // "You may search your library for a basic land card and put it onto the battlefield.
+    // If you do, shuffle."; "You may search your library for a basic land card, put it
+    // onto the battlefield, then shuffle."; "Search your library for a basic land card and
+    // put it onto the battlefield. If you do, you gain 2 life."
+    let effects = [
+        Effect::seq(vec![
+            may(search(false)),
+            if_you_do(Effect::Shuffle {
+                who: PlayerRef::You,
+            }),
+        ]),
+        may(search(true)),
+        Effect::seq(vec![search(false), if_you_do(gain(2))]),
+    ];
+    for (i, effect) in effects.into_iter().enumerate() {
+        for stranglehold in [false, true] {
+            let mut t = TestGame::new(2);
+            if stranglehold {
+                // "Your opponents can't search libraries."
+                t.battlefield(P1, "Stranglehold");
+            }
+            let forest = t.library_top(P0, "Forest");
+            let spell = CB::new("Scout Ahead")
+                .sorcery()
+                .cost("{0}")
+                .spell(Body::effect(effect.clone()))
+                .build();
+            let s = t.custom(P0, spell, Zone::Hand(P0));
+            t.answer_yes(P0, true);
+            t.answer_choose(P0, &[Entity::Object(forest)]);
+            t.cast(P0, s).go();
+            t.resolve();
+            let searched = !stranglehold;
+            assert_eq!(
+                t.permanents().any(|o| o.is(CardType::Land)),
+                searched,
+                "effect {i}"
+            );
+            if i < 2 {
+                let shuffled = t.g.turn_events.iter().any(|e| {
+                    matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == P0)
+                });
+                assert_eq!(shuffled, searched, "effect {i}");
+            } else {
+                assert_eq!(t.life(P0), if searched { 22 } else { 20 });
+            }
+        }
+    }
+}
+
+#[test]
 fn the_player_chooses_how_to_pay_hybrid_and_phyrexian_symbols_as_they_cast() {
     cr!("118.13", "118.13a");
     let mut t = TestGame::new(2);

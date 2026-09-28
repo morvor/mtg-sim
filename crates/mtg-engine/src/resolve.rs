@@ -1284,6 +1284,12 @@ impl Game {
                 if searchers.is_empty() {
                     searchers.push(ctx.controller);
                 }
+                // CR 118.12b: "If you do" after a search checks whether the player
+                // searched (one who can't search libraries doesn't), not whether they
+                // found anything or took the additional actions.
+                let searched = searchers.iter().any(|p| {
+                    !self.player_restricted(*p, |r| matches!(r, Restriction::CantSearch(_)))
+                });
                 // CR 701.23i: several players searching at once look at the cards at the
                 // same time and choose in APNAP order; then the found cards move.
                 let mut founds: Vec<(PlayerId, PlayerId, Vec<ObjectId>)> = Vec::new();
@@ -1326,6 +1332,7 @@ impl Game {
                     all.extend(res);
                 }
                 ctx.prev_affected = all.iter().map(|o| Entity::Object(*o)).collect();
+                ctx.prev_happened = searched;
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
             Effect::Shuffle { who } => {

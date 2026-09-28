@@ -25,6 +25,7 @@ fn becomes_a_copy_cards_compile() {
         "Cytoshape",
         "Fleeting Reflection",
         "Mirrorform",
+        "Scion of the Ur-Dragon",
     ]);
 }
 
@@ -132,6 +133,26 @@ fn mirrorform_makes_each_nonland_permanent_you_control_a_copy() {
     for land in t.g.permanents().filter(|o| o.controller == P0 && o.chars.is_land()) {
         assert_ne!(land.chars.name.as_str(), "Hill Giant");
     }
+}
+
+#[test]
+fn scion_of_the_ur_dragon_becomes_a_copy_of_the_dragon_it_put_into_the_graveyard() {
+    cr!("707.2", "611.2a", "701.23a");
+    // "{2}: Search your library for a Dragon permanent card and put it into your
+    // graveyard. If you do, Scion of the Ur-Dragon becomes a copy of that card until end
+    // of turn. Then shuffle."
+    let mut t = TestGame::new(2);
+    let scion = t.battlefield(P0, "Scion of the Ur-Dragon");
+    t.lands(P0, "Wastes", 2);
+    let dragon = t.library_top(P0, "Shivan Dragon");
+    t.answer_choose(P0, &[Entity::Object(dragon)]);
+    t.activate(P0, scion, 0, &[]).expect("Scion of the Ur-Dragon");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Shivan Dragon"));
+    assert_eq!(name(&t, scion), "Shivan Dragon");
+    assert_eq!(t.pt(scion), (5, 5));
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(name(&t, scion), "Scion of the Ur-Dragon");
 }
 
 /// Lands to pay for `spell`'s mana cost (Islands for {U}, Forests for {G}, Plains for

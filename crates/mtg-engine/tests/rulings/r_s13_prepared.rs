@@ -5,6 +5,7 @@
 
 use crate::r_s01_common::*;
 use crate::r_s02_common::can_cast;
+use mtg_engine::ability::AbilityKind;
 use mtg_engine::decision::Answer;
 use mtg_engine::designations;
 use mtg_engine::kwa::evidence_forage::ALT_COST_METHOD;
@@ -113,7 +114,7 @@ fn casting_the_prepare_copy_isnt_casting_it_for_an_alternative_cost() {
 
 #[test]
 fn the_prepare_spells_name_can_be_chosen_as_a_card_name() {
-    cr!("722.5", "201.3");
+    cr!("722.5", "201.4a");
     ruling!(
         "Adventurous Eater // Have a Bite",
         "If an effect instructs you to choose a card name, you may choose the alternative prepare spell's name. Consider only the alternative characteristics to determine whether that is an appropriate name to choose."
@@ -258,6 +259,10 @@ fn a_prepared_creature_that_stops_being_a_creature_or_becomes_a_copy_stays_prepa
     let forest = t.g.current(eater);
     assert!(!t.obj(forest).chars.is_creature());
     assert!(t.obj(forest).chars.is(CardType::Land));
+    // It lost its own abilities; it has just the Forest's mana ability (CR 305.7).
+    let abilities = &t.obj(forest).chars.abilities;
+    assert_eq!(abilities.len(), 1);
+    assert!(matches!(&abilities[0].kind, AbilityKind::Activated(a) if a.is_mana_ability));
     assert_eq!(prepared_copy(&t, eater), Some(copy));
     assert_eq!(t.obj(copy).zone, Zone::Exile);
     // (Have a Bite needs a target creature.)
