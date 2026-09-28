@@ -677,6 +677,12 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
             return Some((Value::Count(f), rest));
         }
+        // "for each creature card milled this way": among the cards the preceding
+        // instruction milled, where they went (CR 701.17c).
+        if let Some(rest) = rest.trim_start().strip_prefix("milled this way") {
+            let milled = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]);
+            return Some((Value::Count(milled), rest.to_string()));
+        }
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {

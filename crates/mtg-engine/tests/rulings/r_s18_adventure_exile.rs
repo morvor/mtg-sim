@@ -391,3 +391,37 @@ fn additional_land_plays_are_cumulative() {
     let fourth = t.hand(P0, "Forest");
     assert!(t.play_land(P0, fourth).is_err());
 }
+
+#[test]
+fn a_milled_adventurer_card_is_a_creature_card() {
+    cr!("715.4", "701.17c");
+    ruling!(
+        "Colossal Badger // Dig Deep",
+        "An adventurer card is a permanent card in every zone except the stack, as well as while on the stack if not cast as an Adventure. Ignore its alternative characteristics in those cases. For example, while it's in your graveyard, Altar of Bhaal is an artifact card whose mana value is 2."
+    );
+    permanent_card_in_the_graveyard("Colossal Badger // Dig Deep", 6);
+    // Dig Deep ({1}{G} sorcery): "Choose target creature. Mill four cards, then put a
+    // +1/+1 counter on that creature for each creature card milled this way." The milled
+    // Two-Headed Hunter is a creature card in the graveyard, like the Grizzly Bears; the
+    // Shock and the Forest aren't.
+    let mut t = TestGame::new(2);
+    stack_library(
+        &mut t,
+        P0,
+        &[
+            "Two-Headed Hunter // Twice the Rage",
+            "Grizzly Bears",
+            "Shock",
+            "Forest",
+        ],
+    );
+    let spell = cast_as_adventure(&mut t, "Colossal Badger // Dig Deep", |t| {
+        vec![Entity::Object(t.battlefield(P0, "Hill Giant"))]
+    });
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    assert_eq!(t.obj(spell).chars.name, "Dig Deep");
+    t.resolve_all();
+    assert_eq!(t.counters(giant, mtg_engine::types::counters::PLUS1), 2);
+    assert_eq!(t.graveyard_size(P0), 4);
+    assert_eq!(exiled_named(&t, "Colossal Badger").len(), 1);
+}
