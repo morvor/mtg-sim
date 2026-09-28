@@ -186,4 +186,11 @@ fn a_card_put_onto_the_battlefield_qualifies_by_its_front_face_and_enters_front_
     assert_eq!(t.zone(pathway), Zone::Battlefield);
     assert_eq!(name_of(&t, pathway), "Brightclimb Pathway");
     assert_eq!(t.zone(mammoth), Zone::Hand(P0));
+    // Emeria's Call (a sorcery) // Emeria, Shattered Skyclave (a land): its front face
+    // isn't a permanent card, so an effect putting it onto the battlefield leaves it where
+    // it is.
+    let call = t.graveyard(P0, "Emeria's Call // Emeria, Shattered Skyclave");
+    assert!(put_onto_battlefield(&mut t, P0, call, false).is_none());
+    assert_eq!(t.zone(call), Zone::Graveyard(P0));
+    assert!(t.named_on_battlefield("Emeria, Shattered Skyclave").is_empty());
 }

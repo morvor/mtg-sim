@@ -29,7 +29,7 @@ fn tap(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn the_upkeep_untap_ability_can_be_activated_any_number_of_times() {
-    cr!("602.5b", "502.3");
+    cr!("602.5", "502.3");
     ruling!(
         "Black Carriage",
         "There is no restriction on how many times it can be untapped during your upkeep with this ability."

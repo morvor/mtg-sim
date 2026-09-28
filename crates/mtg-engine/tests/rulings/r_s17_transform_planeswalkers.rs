@@ -341,6 +341,10 @@ fn a_single_faced_copy_of_ajani_is_exiled_and_stays_in_exile() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     become_copy(&mut t, bears, original);
     assert_eq!(name_of(&t, bears), "Ajani, Nacatl Pariah");
+    // Told to transform, it doesn't: it isn't represented by a double-faced card.
+    transform(&mut t, bears);
+    assert_eq!(name_of(&t, bears), "Ajani, Nacatl Pariah");
+    assert_eq!(face(&t, bears), FaceState::Front);
     // Another Cat P0 controls dies: P0 exiles the copy, which can't return transformed.
     let lions = t.battlefield(P0, "Savannah Lions");
     t.answer_yes(P0, true);

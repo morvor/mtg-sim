@@ -352,6 +352,10 @@ fn a_card_that_isnt_double_faced_isnt_put_onto_the_battlefield_transformed() {
     let splitter = t.battlefield(P0, "Bonesplitter");
     become_copy(&mut t, splitter, original);
     assert_eq!(name_of(&t, splitter), "Crystal Fragments");
+    // Told to transform, it doesn't: it isn't represented by a double-faced card.
+    transform(&mut t, splitter);
+    assert_eq!(name_of(&t, splitter), "Crystal Fragments");
+    assert_eq!(face(&t, splitter), FaceState::Front);
     activate_containing(&mut t, P0, splitter, "transformed").unwrap();
     t.resolve_all();
     assert!(t.in_exile("Bonesplitter"));

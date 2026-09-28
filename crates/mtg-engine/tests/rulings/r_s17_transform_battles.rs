@@ -12,7 +12,7 @@ use crate::r_s12_common::attack_target;
 use crate::r_s17_common::*;
 use mtg_engine::ability::*;
 use mtg_engine::battle;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Decision;
 use mtg_engine::game::GameConfig;
 use mtg_engine::object::{FaceState, Zone};
 use mtg_engine::testing::*;
@@ -366,7 +366,7 @@ fn every_player_but_the_protector_may_attack_a_battle_its_controller_included() 
 
 #[test]
 fn a_copy_of_a_siege_thats_not_a_transforming_double_faced_card_stays_in_exile() {
-    cr!("310.12b", "712.8a", "111.8", "704.5d");
+    cr!("310.12b", "111.8", "704.5d");
     ruling!(
         "Invasion of Theros // Ephara, Ever-Sheltering",
         "If a token or a card that isn’t represented by a transforming double-faced card becomes a copy of a Siege, it can’t be cast as its triggered ability resolves. It will remain in exile."
@@ -471,20 +471,53 @@ fn a_sieges_controller_cant_protect_it() {
         "A Siege’s controller can’t be its protector. If a Siege’s protector ever gains control of it, they choose a new player to be its protector. This is a state-based action."
     );
     let mut t = three_players();
+    // As it enters, P0 chooses among their opponents only.
     let siege = enter_siege(&mut t, P0, P1, THEROS);
-    // P1 gains control: P1 chooses a new protector among their opponents.
-    t.answer_choose(P1, &[Entity::Player(P2)]);
-    gain_control(&mut t, P1, siege);
-    assert_eq!(t.obj(siege).controller, P1);
-    assert_eq!(battle::protector(&t.g, siege), Some(P2));
-    // P0 (no longer its controller) could now be chosen, but never P1.
-    t.answer_choose(P0, &[Entity::Player(P1)]);
+    assert_eq!(protector_choices(&t, 0, P0), vec![vec![P1, P2]]);
+    // Each time its protector gains control of it, that player chooses a new protector
+    // among their opponents: never themselves.
+    for (new_controller, choice, offered) in [
+        (P1, P0, vec![P0, P2]),
+        (P0, P2, vec![P1, P2]),
+        (P2, P1, vec![P0, P1]),
+    ] {
+        let from = t.asked().len();
+        t.answer_choose(new_controller, &[Entity::Player(choice)]);
+        gain_control(&mut t, new_controller, siege);
+        assert_eq!(t.obj(siege).controller, new_controller);
+        assert_eq!(protector_choices(&t, from, new_controller), vec![offered]);
+        assert_eq!(battle::protector(&t.g, siege), Some(choice));
+    }
+    // P0 gains control while P1 protects it: P1 is still a legal protector, nothing to
+    // choose.
+    let from = t.asked().len();
     gain_control(&mut t, P0, siege);
-    assert_eq!(battle::protector(&t.g, siege), Some(P2));
-    t.answer_choose(P2, &[Entity::Player(P0)]);
-    gain_control(&mut t, P2, siege);
-    assert_eq!(battle::protector(&t.g, siege), Some(P0));
-    let _ = Answer::Default;
+    assert!(protector_choices(&t, from, P0).is_empty());
+    assert_eq!(battle::protector(&t.g, siege), Some(P1));
+}
+
+/// The players `p` was offered to choose from as a battle's protector, in each such
+/// decision asked since `from`.
+fn protector_choices(t: &TestGame, from: usize, p: PlayerId) -> Vec<Vec<PlayerId>> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseEntities {
+                candidates, prompt, ..
+            } if *q == p && prompt.contains("protector") => {
+                let mut ps: Vec<PlayerId> = candidates
+                    .iter()
+                    .filter_map(|e| match e {
+                        Entity::Player(x) => Some(*x),
+                        _ => None,
+                    })
+                    .collect();
+                ps.sort();
+                Some(ps)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
