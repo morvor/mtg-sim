@@ -1,8 +1,8 @@
-//! Rulings batch S24 — control-changing effects (CR 108.4, 613.1b): gaining control of a
-//! permanent doesn't give you control of what's attached to it, Auras you put on others'
-//! permanents stay yours, control effects end when their player leaves the game, effects
-//! stay on a permanent across control changes, and "activate only once each turn" counts
-//! activations by any player.
+//! Rulings batch S24 — control-changing effects (CR 613.1b, 301.5d, 303.4e): gaining
+//! control of a permanent doesn't give you control of what's attached to it, Auras you put
+//! on others' permanents stay yours, control effects end when their player leaves the
+//! game, effects stay on a permanent across control changes, and "activate only once each
+//! turn" counts activations by any player.
 
 use crate::r_s01_common::supported;
 use crate::r_s02_common::can_activate;
@@ -16,7 +16,7 @@ use mtg_engine::*;
 
 #[test]
 fn gaining_control_of_a_creature_doesnt_give_you_its_auras_or_equipment() {
-    cr!("108.4", "613.1b", "301.5c", "303.4e");
+    cr!("613.1b", "301.5d", "303.4e");
     ruling!(
         "Act of Treason",
         "Gaining control of a creature doesn't cause you to gain control of any Auras or Equipment attached to it."
@@ -50,7 +50,7 @@ fn gaining_control_of_a_creature_doesnt_give_you_its_auras_or_equipment() {
 
 #[test]
 fn exchanging_control_of_creatures_doesnt_exchange_their_equipment() {
-    cr!("108.4", "301.5c", "701.12a");
+    cr!("301.5d", "701.12a");
     ruling!(
         "Switcheroo",
         "Gaining control of a creature doesn’t cause you to gain control of any Auras or Equipment attached to it."
@@ -72,8 +72,8 @@ fn exchanging_control_of_creatures_doesnt_exchange_their_equipment() {
     assert_eq!(controller(&mut t, splitter), P0);
     assert_eq!(attached_to(&t, splitter), Some(Entity::Object(bears)));
     assert_eq!(t.pt(bears), (4, 2));
-    activate_containing(&mut t, P0, splitter, "Equip").expect("equip the Giant");
     t.answer_targets(P0, &[Entity::Object(giant)]);
+    activate_containing(&mut t, P0, splitter, "Equip").expect("equip the Giant");
     t.resolve_all();
     assert_eq!(attached_to(&t, splitter), Some(Entity::Object(giant)));
     assert_eq!(t.pt(giant), (5, 3));
@@ -81,7 +81,7 @@ fn exchanging_control_of_creatures_doesnt_exchange_their_equipment() {
 
 #[test]
 fn a_stolen_creatures_auras_and_equipment_keep_working_for_their_controller() {
-    cr!("108.4", "303.4e", "301.5c", "702.6a");
+    cr!("303.4e", "301.5d", "702.6a", "109.5");
     ruling!(
         "Lay Claim",
         "They’ll remain attached, but an Aura’s effect that affects “you” still affects its controller rather than you, the controller of an Equipment can move it during their next main phase, and so on."
@@ -120,7 +120,7 @@ fn a_stolen_creatures_auras_and_equipment_keep_working_for_their_controller() {
 
 #[test]
 fn exchanging_control_of_permanents_doesnt_exchange_what_is_attached() {
-    cr!("108.4", "701.12a", "303.4e");
+    cr!("701.12a", "303.4e");
     ruling!(
         "Shifting Grift",
         "Gaining control of a permanent doesn’t cause you to gain control of any Auras or Equipment attached to it."
@@ -146,7 +146,7 @@ fn exchanging_control_of_permanents_doesnt_exchange_what_is_attached() {
 
 #[test]
 fn you_control_an_aura_you_put_on_another_players_permanent() {
-    cr!("303.4e", "108.4");
+    cr!("303.4e", "109.5");
     ruling!(
         "All That Glitters",
         "You still control Auras that you put onto the battlefield attached to a permanent you don't control."
@@ -256,7 +256,7 @@ fn a_stolen_permanent_that_phased_out_phases_in_under_its_owner_at_your_untap_st
 
 #[test]
 fn once_each_turn_counts_activations_by_a_previous_controller() {
-    cr!("602.5b", "108.4");
+    cr!("602.5b");
     ruling!(
         "Rootwalla",
         "If this card's ability is activated by one player, then another player takes control of it on the same turn, the second player can't activate its ability that turn."

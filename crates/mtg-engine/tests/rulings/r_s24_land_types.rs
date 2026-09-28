@@ -89,7 +89,7 @@ fn an_urza_land_checks_land_types_not_names() {
 
 #[test]
 fn lands_that_become_a_basic_land_type_have_only_its_mana_ability() {
-    cr!("305.7", "305.6", "608.2h");
+    cr!("305.7", "305.6", "611.2c");
     ruling!(
         "Elsewhere Flask",
         "Lands you control will have the mana ability of the basic land type you choose (for example, Forests can tap to produce green mana) and will lose all other innate abilities they had."
@@ -128,4 +128,10 @@ fn lands_that_become_a_basic_land_type_have_only_its_mana_ability() {
     assert!(tap_for_mana(&mut t, P0, mountain, "Add {G}"));
     assert_eq!(pool(&t, P0, ManaType::G), 2);
     assert_eq!(pool(&t, P0, ManaType::R), 0);
+    // The lands affected were fixed as the ability resolved: a land P0 gets later this
+    // turn keeps its own type.
+    let later = t.battlefield(P0, "Mountain");
+    t.g.recompute();
+    assert!(t.obj_now(later).chars.has_subtype("Mountain"));
+    assert!(!t.obj_now(later).chars.has_subtype("Forest"));
 }

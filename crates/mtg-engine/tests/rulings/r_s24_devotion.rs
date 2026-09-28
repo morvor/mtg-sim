@@ -141,7 +141,7 @@ fn colorless_and_generic_symbols_dont_count_toward_devotion_curly() {
 
 #[test]
 fn your_aura_on_an_opponents_permanent_counts_toward_your_devotion() {
-    cr!("700.5", "303.4");
+    cr!("700.5", "303.4e");
     ruling!(
         "Daxos, Blessed by the Sun",
         "If you put an Aura on an opponent's permanent, you still control the Aura, and mana symbols in its mana cost count towards your devotion."
@@ -165,7 +165,7 @@ fn your_aura_on_an_opponents_permanent_counts_toward_your_devotion() {
 
 #[test]
 fn your_aura_on_an_opponents_permanent_counts_toward_your_devotion_curly() {
-    cr!("700.5", "303.4");
+    cr!("700.5", "303.4e");
     ruling!(
         "Callaphe, Beloved of the Sea",
         "If you put an Aura on an opponent’s permanent, you still control the Aura, and mana symbols in its mana cost count towards your devotion."
@@ -187,7 +187,7 @@ fn your_aura_on_an_opponents_permanent_counts_toward_your_devotion_curly() {
 
 #[test]
 fn an_aura_on_an_opponents_permanent_and_a_siege_they_protect_count_toward_your_devotion() {
-    cr!("700.5", "310.9", "310.12a");
+    cr!("700.5", "303.4e", "310.9", "310.12a");
     ruling!(
         "Clive, Ifrit's Dominant // Ifrit, Warden of Inferno",
         "Similarly, if you make an opponent the protector of a Siege you control, mana symbols in that battle's mana cost count toward your devotion."

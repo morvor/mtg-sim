@@ -270,7 +270,7 @@ fn trial_returns_only_if_still_on_the_battlefield(trial: &str) {
 
 #[test]
 fn a_trial_returns_only_if_its_still_on_the_battlefield_as_the_ability_resolves() {
-    cr!("608.2b", "603.6a");
+    cr!("400.7", "603.6a");
     ruling!(
         "Trial of Strength",
         "Each Trial has an ability to return to your hand when a Cartouche enters the battlefield under your control. The Trial is returned to its owner’s hand only if it’s on the battlefield as the ability resolves."
@@ -280,7 +280,7 @@ fn a_trial_returns_only_if_its_still_on_the_battlefield_as_the_ability_resolves(
 
 #[test]
 fn a_trial_returns_only_if_its_still_on_the_battlefield_as_the_ability_resolves_straight() {
-    cr!("608.2b", "603.6a");
+    cr!("400.7", "603.6a");
     ruling!(
         "Trial of Zeal",
         "Each Trial has an ability to return to your hand when a Cartouche enters the battlefield under your control. The Trial is returned to its owner's hand only if it's on the battlefield as the ability resolves."
@@ -305,22 +305,29 @@ fn an_end_step_power_check_is_an_intervening_if_clause() {
     t.advance_to(P0, Step::End);
     t.settle();
     assert_eq!(t.stack_len(), 0);
-    // A Giant Growth-ed Bears (until end of turn) and a Craw Wurm: one trigger.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Drumhunter");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    t.battlefield(P0, "Craw Wurm");
-    t.battlefield(P0, "Forest");
-    let growth = t.hand(P0, "Giant Growth");
-    t.cast(P0, growth).target(bears).go();
-    t.resolve_all();
-    t.answer_yes(P0, true);
-    t.advance_to(P0, Step::End);
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
-    let hand = t.hand_size(P0);
-    t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand + 1);
+    // A Giant Growth-ed Bears (5/5 until end of turn) alone: the boost is still there as
+    // the end step begins and as the ability resolves.
+    for wurm in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Drumhunter");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        if wurm {
+            t.battlefield(P0, "Craw Wurm");
+        }
+        t.battlefield(P0, "Forest");
+        let growth = t.hand(P0, "Giant Growth");
+        t.cast(P0, growth).target(bears).go();
+        t.resolve_all();
+        t.answer_yes(P0, true);
+        t.advance_to(P0, Step::End);
+        t.settle();
+        assert_eq!(t.pt(bears), (5, 5));
+        // With a Craw Wurm too, it still triggers only once.
+        assert_eq!(t.stack_len(), 1, "wurm: {wurm}");
+        let hand = t.hand_size(P0);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + 1, "wurm: {wurm}");
+    }
     // The Wurm let it trigger and is gone as it resolves, but a different creature with
     // power 5 or greater is there then: it still draws.
     let mut t = TestGame::new(2);

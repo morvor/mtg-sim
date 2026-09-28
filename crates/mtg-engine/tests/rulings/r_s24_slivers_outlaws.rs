@@ -12,7 +12,7 @@ use mtg_engine::*;
 
 #[test]
 fn a_sliver_that_stops_being_a_sliver_isnt_affected_by_its_own_ability() {
-    cr!("613.1d", "613.1f", "613.8a");
+    cr!("613.1d", "613.1f", "611.3a");
     ruling!(
         "Galerider Sliver",
         "If you change the creature type of a Sliver you control so it’s no longer a Sliver, it will no longer be affected by its own ability. Its ability will continue to affect other Sliver creatures you control."
@@ -38,7 +38,7 @@ fn a_sliver_that_stops_being_a_sliver_isnt_affected_by_its_own_ability() {
 
 #[test]
 fn these_slivers_affect_only_sliver_creatures_you_control() {
-    cr!("611.3a", "109.4");
+    cr!("611.3a", "109.5");
     ruling!(
         "Venom Sliver",
         "Slivers in this set affect only Sliver creatures you control. They don’t grant bonuses to your opponents’ Slivers."
