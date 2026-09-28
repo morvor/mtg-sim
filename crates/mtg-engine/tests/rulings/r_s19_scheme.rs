@@ -266,3 +266,36 @@ fn a_spell_cast_without_paying_its_mana_cost_may_have_additional_but_not_alterna
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Mulldrifter").len(), 1);
 }
+
+#[test]
+fn an_until_your_next_turn_effect_lasts_until_just_before_your_next_untap_step() {
+    cr!("611.2b", "603.7b", "502.1");
+    ruling!(
+        "A Display of My Dark Power",
+        "The effect doesn't wear off until just before your next untap step (even if an effect will cause that untap step to be skipped)."
+    );
+    supported("Stasis");
+    // A Display of My Dark Power: "When you set this scheme in motion, until your next
+    // turn, whenever a player taps a land for mana, that player adds one mana of any type
+    // that land produced." Stasis: "Players skip their untap steps."
+    let mut t = archenemy_game(2);
+    let forests = t.lands(P0, "Forest", 2);
+    let theirs = t.battlefield(P1, "Forest");
+    t.battlefield(P0, "Stasis");
+    scheme(&mut t, P0, "A Display of My Dark Power");
+    set_in_motion(&mut t, P0);
+    t.resolve_all();
+    let pool = |t: &TestGame, p: PlayerId| t.g.player(p).mana_pool.total();
+    t.activate(P0, forests[0], 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), 2);
+    // Through the opponent's turn.
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    t.activate(P1, theirs, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P1), 2);
+    // It ended as P0's next turn began, though P0's untap step was skipped.
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.obj(forests[0]).tapped, "the untap step was skipped");
+    t.activate(P0, forests[1], 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), 1);
+}

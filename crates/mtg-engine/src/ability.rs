@@ -270,9 +270,9 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
     fn from_mana_ability(t: &TriggerCond) -> bool {
         match t {
             TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
-            TriggerCond::ThisTurn(t) | TriggerCond::Where { trigger: t, .. } => {
-                from_mana_ability(t)
-            }
+            TriggerCond::ThisTurn(t)
+            | TriggerCond::UntilYourNextTurn(t)
+            | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
     }
@@ -2511,6 +2511,10 @@ pub enum TriggerCond {
     /// turn, whenever …", "whenever … this turn", CR 603.7b); removed in the cleanup step
     /// (CR 514.2).
     ThisTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts until its controller's next turn ("until your
+    /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
+    /// step is skipped.
+    UntilYourNextTurn(Box<TriggerCond>),
     /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
     /// only: "whenever a source you control deals noncombat damage to an opponent".
     Noncombat(Box<TriggerCond>),

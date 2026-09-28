@@ -37,6 +37,7 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
             | TriggerCond::Batched { trigger: c, .. }
             | TriggerCond::FirstTimeEachTurn(c)
             | TriggerCond::ThisTurn(c)
+            | TriggerCond::UntilYourNextTurn(c)
             | TriggerCond::Noncombat(c),
             ev,
         ) => looks_back(c, ev),
@@ -112,7 +113,8 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
         TriggerCond::AnyOf(v) => v.iter().any(phase_out_trigger),
         TriggerCond::Where { trigger: c, .. }
         | TriggerCond::FirstTimeEachTurn(c)
-        | TriggerCond::ThisTurn(c) => phase_out_trigger(c),
+        | TriggerCond::ThisTurn(c)
+        | TriggerCond::UntilYourNextTurn(c) => phase_out_trigger(c),
         _ => false,
     }
 }
@@ -556,8 +558,12 @@ impl Game {
         let turn = self.turn.number;
         // CR 603.7b: a delayed trigger that can trigger more than once has a stated
         // duration ("this turn"); it ends with the turn.
-        self.delayed_triggers
-            .retain(|d| d.once || d.for_rest_of_game || d.created_turn == turn);
+        self.delayed_triggers.retain(|d| {
+            d.once
+                || d.for_rest_of_game
+                || d.created_turn == turn
+                || matches!(d.trigger, TriggerCond::UntilYourNextTurn(_))
+        });
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
         for d in self.delayed_triggers.clone() {
             if let TriggerCond::BeginningOf { .. } = d.trigger {
@@ -1841,7 +1847,10 @@ impl Game {
                 }
             }
             // Removed in the cleanup step; until then it's the inner condition.
-            (TriggerCond::ThisTurn(inner), ev) => self.trigger_matches_ctx(inner, base, ev),
+            // Removed as its controller's next turn begins.
+            (TriggerCond::ThisTurn(inner) | TriggerCond::UntilYourNextTurn(inner), ev) => {
+                self.trigger_matches_ctx(inner, base, ev)
+            }
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches_ctx(inner, base, ev)
             }
