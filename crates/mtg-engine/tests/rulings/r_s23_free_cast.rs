@@ -1076,3 +1076,100 @@ fn jodah_card_not_cast_stays_exiled_and_the_rest_go_to_the_bottom() {
     assert!(t.g.exile.is_empty());
     assert_eq!(t.library_size(P0), library + 1);
 }
+
+/// P0's Mindleech Mass attacks P1 and isn't blocked; its trigger resolves with the
+/// answers queued (P0 looks at P1's hand and chooses `pick` to cast, then the cards in
+/// `discard` for its cost) and combat ends.
+fn mindleech_unblocked(t: &mut TestGame, pick: Option<ObjectId>, discard: &[ObjectId]) {
+    let mass = t.battlefield(P0, "Mindleech Mass");
+    t.answer_yes(P0, true);
+    if let Some(c) = pick {
+        t.answer_choose(P0, &[Entity::Object(c)]);
+    }
+    if !discard.is_empty() {
+        let d: Vec<Entity> = discard.iter().map(|c| Entity::Object(*c)).collect();
+        t.answer_choose(P0, &d);
+    }
+    attack_with(t, &[(mass, Entity::Player(P1))]);
+    block_and_finish(t, P1, &[]);
+}
+
+#[test]
+fn mindleech_mass_free_spell_may_be_kicked_but_not_overloaded() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Mindleech Mass",
+        "If you cast a spell without paying its mana cost, you can't choose to cast it for any alternative costs, such as overload costs. You can pay additional costs, such as kicker costs. If the spell has any mandatory additional costs, you must pay those."
+    );
+    supported("Mindleech Mass");
+    // "Whenever this creature deals combat damage to a player, you may look at that
+    // player's hand. If you do, you may cast a spell from among those cards without
+    // paying its mana cost."
+    // P1's Burst Lightning, kicked for {4}: 6 combat damage and 4 from the spell.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    let burst = t.hand(P1, "Burst Lightning");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    mindleech_unblocked(&mut t, Some(burst), &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 10);
+    assert_eq!(tapped_lands(&t, P0), 4);
+    // P1's Cyclonic Rift can't be cast for its overload cost.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let rift = t.hand(P1, "Cyclonic Rift");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    mindleech_unblocked(&mut t, Some(rift), &[]);
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(elves));
+    assert_eq!(tapped_lands(&t, P0), 0);
+    // P1's Tormenting Voice: P0 discards a card from their own hand to cast it (during
+    // combat: its timing is ignored).
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    let voice = t.hand(P1, "Tormenting Voice");
+    mindleech_unblocked(&mut t, Some(voice), &[forest]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P1, "Tormenting Voice"));
+    assert_eq!(t.hand_size(P0), 2);
+    // Without a card to discard, it can't be cast.
+    let mut t = TestGame::new(2);
+    let voice = t.hand(P1, "Tormenting Voice");
+    mindleech_unblocked(&mut t, Some(voice), &[]);
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Tormenting Voice"));
+    assert_eq!(t.hand_size(P0), 0);
+}
+
+#[test]
+fn mindleech_mass_permanent_spell_enters_under_the_casters_control() {
+    cr!("608.2g", "608.3", "608.2n", "110.2");
+    ruling!(
+        "Mindleech Mass",
+        "If you cast a permanent spell this way, it will enter the battlefield under your control when it resolves. If you cast an instant or sorcery spell this way, that card will be put into its owner's graveyard when it resolves."
+    );
+    supported("Mindleech Mass");
+    let mut t = TestGame::new(2);
+    let bears = t.hand(P1, "Grizzly Bears");
+    mindleech_unblocked(&mut t, Some(bears), &[]);
+    t.resolve_all();
+    let on = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(on.len(), 1);
+    assert_eq!(t.obj_now(on[0]).controller, P0);
+    assert_eq!(t.obj_now(on[0]).owner, P1);
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    mindleech_unblocked(&mut t, Some(bolt), &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - 6 - 3);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+}
