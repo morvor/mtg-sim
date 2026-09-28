@@ -48,6 +48,8 @@ fn a_token_leaving_the_battlefield_satisfies_revolt() {
     t.resolve_all();
     assert!(tokens_with_subtype(&t, P0, "Servo").is_empty());
     sacrifice_treasure(&mut t);
+    // The Treasure ceased to exist once it left the battlefield.
+    assert_eq!(t.graveyard_size(P0), 0);
     cast_from_hand(&mut t, P0, "Countless Gears Renegade", &[]);
     t.resolve_all();
     assert_eq!(tokens_with_subtype(&t, P0, "Servo").len(), 1);

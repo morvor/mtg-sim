@@ -15,7 +15,7 @@ use mtg_engine::*;
 
 #[test]
 fn radiance_targets_one_creature_and_does_nothing_if_it_becomes_illegal() {
-    cr!("608.2b", "115.1a", "701.6a");
+    cr!("608.2b", "115.1a");
     ruling!(
         "Cleansing Beam",
         "Only one creature is targeted. If that creature leaves the battlefield or otherwise becomes an illegal target, the entire spell doesn’t resolve. No other creatures are affected."
@@ -181,12 +181,17 @@ fn bathe_in_light_protects_the_target_and_each_creature_sharing_a_color() {
 
 #[test]
 fn brightflame_gains_life_equal_to_all_the_damage_it_dealt() {
-    cr!("608.2c", "120.4b");
+    cr!("608.2c", "120.4b", "702.16e");
     ruling!(
         "Brightflame",
         "All creatures that share a color are affected, even your own."
     );
+    ruling!(
+        "Brightflame",
+        "You gain life equal to the total damage dealt by Brightflame to all creatures. You don’t gain life for any damage that was prevented."
+    );
     supported("Brightflame");
+    supported("Paladin en-Vec");
     // Brightflame with X = 2 targeting Grizzly Bears (green): Llanowar Elves (P1) and
     // Scryb Sprites (P0) are green too. 2 + 2 + 2 damage is dealt: P0 gains 6 life.
     let mut t = TestGame::new(2);
@@ -203,4 +208,20 @@ fn brightflame_gains_life_equal_to_all_the_damage_it_dealt() {
     assert!(t.in_graveyard(P0, "Scryb Sprites"));
     assert_eq!(damage_on(&t, giant), 0);
     assert_eq!(t.life(P0), 26);
+    // X = 2 targeting Savannah Lions (white): P1's Paladin en-Vec (white, protection from
+    // red) is dealt no damage (Brightflame is red and white), P0's own Savannah Lions is
+    // dealt 2. P0 gains 4 life, not 6.
+    let mut t = TestGame::new(2);
+    let lions = t.battlefield(P1, "Savannah Lions");
+    let paladin = t.battlefield(P1, "Paladin en-Vec");
+    t.battlefield(P0, "Savannah Lions");
+    t.lands(P0, "Wastes", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    cast_from_hand(&mut t, P0, "Brightflame", &[Entity::Object(lions)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Savannah Lions"));
+    assert!(t.in_graveyard(P0, "Savannah Lions"));
+    assert!(t.on_battlefield(paladin));
+    assert_eq!(damage_on(&t, paladin), 0);
+    assert_eq!(t.life(P0), 24);
 }

@@ -20,7 +20,7 @@ fn spy_draws(t: &mut TestGame) -> usize {
 
 #[test]
 fn raid_looks_back_even_if_the_attacker_and_what_it_attacked_are_gone() {
-    cr!("508.1", "603.4", "104.3b", "800.4a");
+    cr!("508.1", "603.4", "104.3b");
     ruling!(
         "Storm Fleet Spy",
         "Raid abilities evaluate the entire turn to see if you attacked with a creature. That creature doesn't have to still be on the battlefield. Similarly, the player, planeswalker, or battle it attacked doesn't have to still be in the game or on the battlefield."

@@ -49,7 +49,7 @@ fn riot_haste_lasts_through_turns_and_control_changes() {
 
 #[test]
 fn a_riot_creature_that_cant_have_counters_gains_haste() {
-    cr!("702.136a", "614.12", "122.1");
+    cr!("702.136a", "614.12");
     ruling!(
         "Rhythm of the Wild",
         "If a creature entering the battlefield has riot but can't have a +1/+1 counter put onto it, it gains haste."

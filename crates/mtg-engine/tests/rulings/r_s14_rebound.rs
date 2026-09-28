@@ -157,6 +157,18 @@ fn with_rest_in_peace_the_caster_chooses_rebound_or_rest_in_peace() {
     );
 }
 
+/// Orders rebound's delayed triggers so that Distortion Strike's is put on the stack last
+/// (and resolves first).
+fn strike_resolves_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    let Decision::Order { items, .. } = d else {
+        return None;
+    };
+    let (mut strike, mut others): (Vec<usize>, Vec<usize>) =
+        (0..items.len()).partition(|i| items[*i].contains("Distortion Strike"));
+    others.append(&mut strike);
+    Some(Answer::Indices(others))
+}
+
 #[test]
 fn rebound_triggers_are_ordered_ignore_sorcery_timing_but_not_rule_of_law() {
     cr!("702.88a", "603.3b", "608.2g", "601.3");
@@ -167,47 +179,51 @@ fn rebound_triggers_are_ordered_ignore_sorcery_timing_but_not_rule_of_law() {
     supported("Rule of Law");
     // P0 casts Distortion Strike (a sorcery) and Prey's Vengeance (an instant) from hand;
     // both are exiled. P1 then puts Rule of Law ("Each player can't cast more than one
-    // spell each turn") onto the battlefield.
-    let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let strike = cast_and_resolve(&mut t, "Distortion Strike", &[Entity::Object(bears)]);
-    let vengeance = cast_and_resolve(&mut t, "Prey's Vengeance", &[Entity::Object(bears)]);
-    assert_eq!(t.zone(strike), Zone::Exile);
-    assert_eq!(t.zone(vengeance), Zone::Exile);
-    t.battlefield(P1, "Rule of Law");
-    // Both trigger at P0's upkeep; P0 orders them.
-    let from = t.asked().len();
-    assert_eq!(upkeep_triggers(&mut t), 2);
-    assert_eq!(
-        t.asked()[from..]
-            .iter()
-            .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
-            .count(),
-        1
-    );
-    // The top trigger resolves: that card is cast during the upkeep (a sorcery too).
-    let top_card = |t: &TestGame| {
-        [strike, vengeance]
-            .into_iter()
-            .find(|c| t.zone(*c) == Zone::Exile)
-            .unwrap()
-    };
-    t.answer_targets(P0, &[Entity::Object(bears)]);
-    t.resolve();
-    let cast: Vec<ObjectId> = [strike, vengeance]
-        .into_iter()
-        .filter(|c| t.zone(*c) == Zone::Stack)
-        .collect();
-    assert_eq!(cast.len(), 1, "one card was cast during the upkeep");
-    let still_exiled = top_card(&t);
-    // The spell resolves; then the other trigger resolves, and Rule of Law stops P0 from
-    // casting the other card: it stays in exile for good.
-    t.resolve();
-    t.answer_targets(P0, &[Entity::Object(bears)]);
-    t.resolve_all();
-    assert_eq!(t.zone(still_exiled), Zone::Exile);
-    assert_eq!(upkeep_triggers(&mut t), 0);
-    assert_eq!(t.zone(still_exiled), Zone::Exile);
+    // spell each turn") onto the battlefield (or, as a control, doesn't).
+    for rule_of_law in [true, false] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let strike = cast_and_resolve(&mut t, "Distortion Strike", &[Entity::Object(bears)]);
+        let vengeance = cast_and_resolve(&mut t, "Prey's Vengeance", &[Entity::Object(bears)]);
+        assert_eq!(t.zone(strike), Zone::Exile);
+        assert_eq!(t.zone(vengeance), Zone::Exile);
+        if rule_of_law {
+            t.battlefield(P1, "Rule of Law");
+        }
+        // Both trigger at P0's upkeep; P0 orders them, Distortion Strike's on top.
+        crate::r_s03_common::respond(&mut t, P0, strike_resolves_first);
+        let from = t.asked().len();
+        assert_eq!(upkeep_triggers(&mut t), 2);
+        assert_eq!(
+            t.asked()[from..]
+                .iter()
+                .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
+                .count(),
+            1
+        );
+        // Distortion Strike's trigger resolves: the sorcery is cast during the upkeep.
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.resolve();
+        assert_eq!(t.g.turn.step, mtg_engine::turn::Step::Upkeep);
+        assert_eq!(t.zone(strike), Zone::Stack, "sorcery timing is ignored");
+        assert_eq!(t.zone(vengeance), Zone::Exile);
+        t.resolve();
+        assert_eq!(t.pt(bears), (3, 2));
+        // Then Prey's Vengeance's trigger resolves: Rule of Law stops P0 from casting a
+        // second spell this turn (an instant, so it's not a matter of timing). It stays
+        // in exile for good.
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.resolve_all();
+        if rule_of_law {
+            assert_eq!(t.zone(vengeance), Zone::Exile);
+            assert_eq!(t.pt(bears), (3, 2));
+            assert_eq!(upkeep_triggers(&mut t), 0);
+            assert_eq!(t.zone(vengeance), Zone::Exile);
+        } else {
+            assert!(t.in_graveyard(P0, "Prey's Vengeance"));
+            assert_eq!(t.pt(bears), (5, 4));
+        }
+    }
 }
 
 #[test]
@@ -346,7 +362,7 @@ fn not_cast_again(name: &str, how: &str) {
 
 #[test]
 fn a_rebound_card_not_cast_from_exile_stays_there() {
-    cr!("702.88a", "603.7c", "701.6a");
+    cr!("702.88a", "701.6a");
     ruling!(
         "Prey's Vengeance",
         "If you are unable to cast a card from exile this way, or you choose not to, nothing happens when the delayed triggered ability resolves. The card remains exiled for the rest of the game, and you won’t get another chance to cast the card. The same is true if the ability is countered (due to Stifle, perhaps)."
