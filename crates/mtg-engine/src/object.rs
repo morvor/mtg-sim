@@ -345,6 +345,9 @@ pub struct Choices {
     /// Modal permanent choices (anchor words, CR 614.12c), etc.
     pub mode: Option<usize>,
     pub text: Option<SmolStr>,
+    /// "The color or colors of your choice" (one or more colors).
+    #[serde(default)]
+    pub colors: Option<ColorSet>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

@@ -430,6 +430,10 @@ fn reveals_top(g: &Game, p: PlayerId) -> bool {
     })
 }
 
+/// `PlayerModification::Custom` name of "until end of turn, you may look at the top card
+/// of your library any time" (a resolved effect's).
+pub const LOOK_AT_TOP_CARD: &str = "may look at the top card of their library any time";
+
 /// Whether an effect lets `p` look at the top card of their library any time.
 fn looks_at_top(g: &Game, p: PlayerId) -> bool {
     g.statics.other.iter().any(|(src, ctl, e)| match e {
@@ -437,7 +441,9 @@ fn looks_at_top(g: &Game, p: PlayerId) -> bool {
             g.player_rel_matches(*rel, p, &Ctx::new(Some(*src), *ctl))
         }
         _ => false,
-    })
+    }) || g
+        .player(p)
+        .has_mod(|m| matches!(m, PlayerModification::Custom(n) if n == LOOK_AT_TOP_CARD))
 }
 
 /// The card on top of `p`'s library that's revealed because of an effect, if any.

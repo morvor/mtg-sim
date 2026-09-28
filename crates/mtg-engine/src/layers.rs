@@ -1206,20 +1206,31 @@ impl Game {
                 }
             }
         }
-        // Cost modifiers resolved effects created for players ("Until your next turn,
-        // spells that player casts cost {2} less to cast"), relative to each such player.
+        // Cost modifiers and play permissions resolved effects created for players
+        // ("Until your next turn, spells that player casts cost {2} less to cast"),
+        // relative to each such player.
         for e in &self.player_effects {
-            if let (PlayerModification::CostModifier(cm), Some(src)) = (&e.effect, e.source) {
-                for p in &e.players {
-                    st.cost_modifiers.push((src, *p, cm.clone()));
+            match (&e.effect, e.source) {
+                (PlayerModification::CostModifier(cm), Some(src)) => {
+                    for p in &e.players {
+                        st.cost_modifiers.push((src, *p, cm.clone()));
+                    }
                 }
-            }
-            // "You may cast sorcery spells this turn as though they had flash."
-            if let (PlayerModification::FlashPermission(f), Some(src)) = (&e.effect, e.source) {
-                for p in &e.players {
-                    st.flash_permissions
-                        .push((src, *p, PlayerRel::You, f.clone()));
+                // "Until end of turn, you may play lands and cast spells from the top of
+                // your library."
+                (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    for p in &e.players {
+                        st.play_permissions.push((src, *p, pp.clone()));
+                    }
                 }
+                // "You may cast sorcery spells this turn as though they had flash."
+                (PlayerModification::FlashPermission(f), Some(src)) => {
+                    for p in &e.players {
+                        st.flash_permissions
+                            .push((src, *p, PlayerRel::You, f.clone()));
+                    }
+                }
+                _ => {}
             }
         }
         crate::special_actions::apply_ignoring(self, &mut st.restrictions);
@@ -1578,6 +1589,11 @@ pub fn apply_mod(
         Modification::SetChosenColor => {
             if let Some(col) = g.source_choices(ctx).and_then(|ch| ch.color) {
                 c.colors = ColorSet::single(col);
+            }
+        }
+        Modification::SetChosenColors => {
+            if let Some(cs) = g.source_choices(ctx).and_then(|ch| ch.colors) {
+                c.colors = cs;
             }
         }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),

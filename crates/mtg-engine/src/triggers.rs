@@ -1145,7 +1145,7 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Discards { who, filter }, Event::Discarded { player, card }) => {
+            (TriggerCond::Discards { who, filter }, Event::Discarded { player, card, .. }) => {
                 // CR 701.9c: a card discarded into a hidden zone has undefined
                 // characteristics.
                 if self.player_rel_matches(*who, *player, &ctx)

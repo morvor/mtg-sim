@@ -127,6 +127,11 @@ pub enum Event {
     Discarded {
         player: PlayerId,
         card: ObjectId,
+        /// The controller of the spell or ability whose effect made the player discard
+        /// the card ("when a spell or ability an opponent controls causes you to discard
+        /// ~"); `None` when it was discarded to pay a cost (CR 601.2h, 602.2b) or because
+        /// of a game rule (CR 514.1).
+        by: Option<PlayerId>,
     },
     Milled {
         player: PlayerId,
