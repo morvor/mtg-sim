@@ -1702,6 +1702,22 @@ impl Game {
             }
         }
         etb.attacking = spec.attacking;
+        // CR 508.4: each token's controller chooses what it attacks as it's created.
+        if spec.attacking.is_some() && self.token_attack_options.len() > 1 {
+            let options = self.token_attack_options.clone();
+            etb.attacking = self
+                .ask_entities(
+                    controller,
+                    spec.copy_of,
+                    "Choose what the token is attacking",
+                    options,
+                    1,
+                    1,
+                )
+                .first()
+                .copied()
+                .or(spec.attacking);
+        }
         let new = self.move_object_ev(MoveEv {
             obj: tok,
             to: Zone::Battlefield,

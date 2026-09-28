@@ -65,39 +65,26 @@ fn myriad(g: &mut Game, ctx: &mut Ctx) {
         ) {
             continue;
         }
-        // That player or a planeswalker they control.
+        // That player or a planeswalker they control, chosen for each token as it's
+        // created (more than one if an effect such as Parallel Lives creates more).
         let mut choices = vec![Entity::Player(q)];
         choices.extend(
             g.permanents()
                 .filter(|o| o.controller == q && o.is(CardType::Planeswalker))
                 .map(|o| Entity::Object(o.id)),
         );
-        let target = if choices.len() == 1 {
-            choices[0]
-        } else {
-            g.ask_entities(
-                you,
-                Some(src),
-                "Choose what the token is attacking",
-                choices.clone(),
-                1,
-                1,
-            )
-            .first()
-            .copied()
-            .filter(|e| choices.contains(e))
-            .unwrap_or(Entity::Player(q))
-        };
         let o = g.obj(src);
         let spec = TokenCreate {
             chars: o.copiable.clone(),
             card: o.card.clone(),
             tapped: true,
-            attacking: Some(target),
+            attacking: Some(Entity::Player(q)),
             copy_of: Some(src),
             copy_exceptions: vec![],
         };
+        let prev = std::mem::replace(&mut g.token_attack_options, choices);
         created.extend(g.create_tokens(you, spec, 1, Some(src)));
+        g.token_attack_options = prev;
     }
     ctx.prev_happened = !created.is_empty();
     if created.is_empty() {
