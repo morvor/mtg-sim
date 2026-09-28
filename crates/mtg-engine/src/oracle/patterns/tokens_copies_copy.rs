@@ -264,10 +264,31 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
             }
         }
     }
-    let (spec, rest) = parse_target(r)?;
-    let text = r[..r.len() - rest.len()].trim().to_string();
-    let slot = b.add_target(spec, &text);
-    Some((Sel::Target(slot), rest.to_string()))
+    if let Some((spec, rest)) = parse_target(r) {
+        let text = r[..r.len() - rest.len()].trim().to_string();
+        let slot = b.add_target(spec, &text);
+        return Some((Sel::Target(slot), rest.to_string()));
+    }
+    // "a nonlegendary enchantment you control": one chosen as the effect happens.
+    let x = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .or_else(|| r.starts_with("another ").then_some(r))?;
+    let (f, plural, rest) = parse_object_phrase(x)?;
+    if plural || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
+    let f = Filter::and(vec![Filter::Permanent, f]);
+    Some((
+        Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        rest.to_string(),
+    ))
 }
 
 /// "create a token that's a copy of target creature you control, except it isn't

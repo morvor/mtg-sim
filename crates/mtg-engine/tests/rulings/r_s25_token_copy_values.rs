@@ -223,3 +223,45 @@ fn romana_ii_copies_only_a_token_that_entered_this_turn() {
     // Romana II creates it tapped.
     assert!(o.tapped);
 }
+
+#[test]
+fn calix_copies_only_what_was_printed_on_the_chosen_enchantment() {
+    cr!("707.2", "603.2");
+    ruling!(
+        "Calix, Guided by Fate",
+        "The token copies exactly what was printed on the original permanent and nothing else (unless that permanent is copying something else or is a token; see below). It doesn't copy whether that permanent is tapped or untapped, whether it has any counters on it"
+    );
+    ruling!(
+        "Calix, Guided by Fate",
+        "Calix's last ability doesn't target any permanent. You choose which nonlegendary enchantment you control you're creating a token copy of, if any, as the ability resolves."
+    );
+    supported("Calix, Guided by Fate");
+    // "Whenever Calix or an enchanted creature you control deals combat damage to a
+    // player, you may create a token that's a copy of a nonlegendary enchantment you
+    // control. Do this only once each turn." Honor of the Pure is tapped and has a counter.
+    let mut t = TestGame::new(2);
+    let calix = t.battlefield(P0, "Calix, Guided by Fate");
+    let honor = t.battlefield(P0, "Honor of the Pure");
+    t.g.tap(honor);
+    add(&mut t, honor, "charge", 1);
+    crate::r_s01_common::attack_with(&mut t, &[(calix, Entity::Player(P1))]);
+    let from = t.asked().len();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(honor)]);
+    t.answer_targets(P0, &[Entity::Object(calix)]);
+    crate::r_s01_common::block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    // The trigger had no targets; the enchantment was chosen as it resolved.
+    assert!(t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        mtg_engine::decision::Decision::ChooseEntities { .. }
+    )));
+    let copies: Vec<ObjectId> = t
+        .named_on_battlefield("Honor of the Pure")
+        .into_iter()
+        .filter(|id| t.obj(*id).is_token())
+        .collect();
+    assert_eq!(copies.len(), 1);
+    assert!(!t.obj_now(copies[0]).tapped);
+    assert_eq!(t.counters(copies[0], "charge"), 0);
+}
