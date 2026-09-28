@@ -2,7 +2,8 @@
 //!
 //! * "[objects] phase(s) out": "target creature phases out", "it phases out", "~ phases
 //!   out", "enchanted creature phases out", "any number of target creatures you control
-//!   phase out", "all permanents you control phase out";
+//!   phase out", "all permanents you control phase out"; with "until ~ leaves the
+//!   battlefield", they phase in again right after it does (CR 610.4);
 //! * "Players skip their untap steps." / "Skip your untap step." (no phasing happens in a
 //!   skipped untap step, CR 702.26m).
 
@@ -14,6 +15,11 @@ use crate::oracle::CompileContext;
 
 fn phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // "It phases out until ~ leaves the battlefield." (CR 610.4).
+    let (l, until) = match l.strip_suffix(" until ~ leaves the battlefield") {
+        Some(r) => (r, Some(UntilEvent::SourceLeavesBattlefield)),
+        None => (l, None),
+    };
     let subject = l
         .strip_suffix(" phases out")
         .or_else(|| l.strip_suffix(" phase out"))?;
@@ -40,7 +46,10 @@ fn phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
             }
         }
     };
-    Some(Effect::PhaseOut { what })
+    Some(match until {
+        Some(until) => Effect::PhaseOutUntil { what, until },
+        None => Effect::PhaseOut { what },
+    })
 }
 
 inventory::submit! { EffectPattern { name: "k702.26 phases out", priority: 60, parse: phase_out } }

@@ -32,6 +32,64 @@ fn could_block(t: &mut TestGame, attacker: ObjectId, blocker: ObjectId) -> bool 
 }
 
 #[test]
+fn creatures_phased_out_by_the_moment_dont_exist_until_it_leaves() {
+    cr!("702.26b", "610.4");
+    ruling!(
+        "The Moment",
+        "While a permanent is phased out, it's treated as though it doesn't exist. It can't be the target of spells or abilities, its static abilities have no effect on the game, its triggered abilities can't trigger, it can't attack or block, and so on."
+    );
+    supported("The Moment");
+    let mut t = TestGame::new(2);
+    // Benalish Marshal: "Other creatures you control get +1/+1." Soul Warden: "Whenever
+    // another creature enters, you gain 1 life."
+    let marshal = t.battlefield(P0, "Benalish Marshal");
+    let warden = t.battlefield(P0, "Soul Warden");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(bolt_can_target(&mut t, marshal));
+    // The Moment (legendary): "{2}, {T}: Untap target creature you control. It phases out
+    // until The Moment leaves the battlefield."
+    let moment_on = |t: &mut TestGame, creature: ObjectId| -> ObjectId {
+        let moment = t.battlefield(P0, "The Moment");
+        add_mana(t, P0, ManaType::C, 2);
+        t.answer_targets(P0, &[Entity::Object(creature)]);
+        crate::r_s06_common::activate_containing(t, P0, moment, "phases out")
+            .expect("activate");
+        t.resolve_all();
+        assert!(phased_out(t, creature));
+        moment
+    };
+    let moment = moment_on(&mut t, marshal);
+    // Its static ability has no effect.
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (2, 2));
+    // It can't be targeted, and it can't attack.
+    assert!(!bolt_can_target(&mut t, marshal));
+    to_beginning_of_combat(&mut t, P0);
+    assert!(!legal_attack(&mut t, &[(marshal, Entity::Player(P1))]));
+    // It stays phased out through P0's untap step; in P1's turn it can't block.
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(phased_out(&t, marshal));
+    let giant = t.battlefield(P1, "Hill Giant");
+    assert!(could_block(&mut t, giant, warden));
+    assert!(!could_block(&mut t, giant, marshal));
+    // The Moment leaves the battlefield: the Marshal phases in.
+    crate::r_s02_common::destroy(&mut t, moment);
+    t.g.recompute();
+    assert!(!phased_out(&t, marshal));
+    assert_eq!(t.pt(bears), (3, 3));
+    // A phased-out Soul Warden's triggered ability doesn't trigger.
+    t.set_step(P0, Step::PostcombatMain);
+    moment_on(&mut t, warden);
+    let life = t.life(P0);
+    t.enter(P0, "Hill Giant");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), life);
+}
+
+#[test]
 fn a_creature_phased_out_by_slip_out_the_back_is_treated_as_though_it_doesnt_exist() {
     cr!("702.26b");
     ruling!(
