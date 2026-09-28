@@ -10,9 +10,11 @@
 //! in `oracle/patterns/r601_cast_from_hand_free.rs`.
 
 use super::{KeywordRegistration, KeywordRules};
+use crate::ability::vars;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
+use crate::types::{Entity, ObjectId};
 
 const PREFIX: &str = "cast from hand free with mana value at most:";
 
@@ -33,14 +35,18 @@ impl KeywordRules for CastFromHandFree {
         let Some(max) = name.strip_prefix(PREFIX).and_then(|n| n.parse::<u32>().ok()) else {
             return false;
         };
-        cast_from_hand(g, ctx.controller, max);
+        cast_from_hand(g, ctx, max);
         true
     }
 }
 
-/// `p` may cast a card from their hand as a spell with mana value `max` or less without
-/// paying its mana cost.
-fn cast_from_hand(g: &mut Game, p: crate::types::PlayerId, max: u32) {
+/// The controller may cast a card from their hand as a spell with mana value `max` or
+/// less without paying its mana cost: they choose a card (or none), then, if it could be
+/// cast as more than one such spell (each half of a split card, each door of a Room),
+/// which one. "If you do" after it asks whether a spell was cast.
+fn cast_from_hand(g: &mut Game, ctx: &mut Ctx, max: u32) {
+    let p = ctx.controller;
+    ctx.prev_happened = false;
     // CR 702.61a: no spell can be cast while a spell with split second is on the stack.
     if g.split_second_on_stack() {
         return;
@@ -53,17 +59,44 @@ fn cast_from_hand(g: &mut Game, p: crate::types::PlayerId, max: u32) {
             options.push((card, label, opt));
         }
     }
-    if options.is_empty() {
+    let mut cards: Vec<ObjectId> = Vec::new();
+    for (card, _, _) in &options {
+        if !cards.contains(card) {
+            cards.push(*card);
+        }
+    }
+    // Choosing none (the default) is declining: it's "you may".
+    let prompt =
+        format!("Cast a spell with mana value {max} or less from your hand for free (or none)");
+    let Some(card) = g
+        .ask_objects(p, ctx.source, &prompt, cards, 0, 1)
+        .into_iter()
+        .next()
+    else {
+        return;
+    };
+    let mut ways: Vec<_> = options
+        .into_iter()
+        .filter(|(c, _, _)| *c == card)
+        .map(|(_, label, opt)| (label, opt))
+        .collect();
+    if ways.is_empty() {
         return;
     }
-    // Declining is the first option (and the default): it's "you may".
-    let mut labels = vec!["Don't cast a spell".to_string()];
-    labels.extend(options.iter().map(|(_, label, _)| format!("Cast {label}")));
-    let prompt = format!("Cast a spell with mana value {max} or less from your hand for free?");
-    let i = g.ask_option(p, None, &prompt, labels);
-    if i >= 1 && i <= options.len() {
-        let (card, _, opt) = options.swap_remove(i - 1);
-        let _ = g.cast_with_option(p, card, opt);
+    let i = if ways.len() > 1 {
+        let labels = ways
+            .iter()
+            .map(|(label, _)| format!("Cast {label}"))
+            .collect();
+        g.ask_option(p, Some(card), "Choose which spell to cast", labels)
+    } else {
+        0
+    };
+    let (_, opt) = ways.swap_remove(i.min(ways.len() - 1));
+    if let Ok(spell) = g.cast_with_option(p, card, opt) {
+        ctx.prev_happened = true;
+        // CR 400.7h: other parts of the effect can find the spell cast this way.
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
     }
 }
 

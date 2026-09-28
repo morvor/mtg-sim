@@ -4,6 +4,8 @@
 //! casts it (CR 608.2g) without paying its mana cost (CR 118.9) — or chooses none. Any
 //! additional costs may (or, if mandatory, must) still be paid, and no alternative cost
 //! can be chosen (CR 118.9a). "If you do" after it asks whether a spell was cast.
+//! (The plain "a spell with mana value N or less" form is `r601_cast_from_hand_free.rs`'s,
+//! which judges the mana value on each spell the card could be cast as, CR 601.3e.)
 
 use super::EffectPattern;
 use crate::ability::*;

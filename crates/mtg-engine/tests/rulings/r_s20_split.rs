@@ -135,10 +135,13 @@ fn sram_expertise_can_cast_fuss_but_not_bother() {
     supported("Sram's Expertise");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.hand(P0, "Fuss // Bother");
-    // Fuss (mana value 3) can be cast this way; Bother (6) can't. P0 casts Fuss.
-    let options = sram_expertise(&mut t, 1);
-    assert_eq!(options, vec!["Don't cast a spell", "Cast Fuss"]);
+    let fb = t.hand(P0, "Fuss // Bother");
+    t.hand(P0, "Hill Giant");
+    // In hand, Fuss // Bother has mana value 9; Fuss (3) can be cast this way, Bother (6)
+    // can't: P0 isn't asked which to cast. (Hill Giant, 4, isn't offered.)
+    let (offered, ways) = sram_expertise(&mut t, Some(fb), 0);
+    assert_eq!(offered, vec![Entity::Object(fb)]);
+    assert!(ways.is_empty());
     assert_eq!(t.stack_len(), 1);
     let fuss = t.g.stack[0];
     assert_eq!(t.obj(fuss).chars.name, "Fuss");
@@ -150,14 +153,32 @@ fn sram_expertise_can_cast_fuss_but_not_bother() {
     assert!(t.in_graveyard(P0, "Fuss // Bother"));
     // "Put a +1/+1 counter on each attacking creature you control": none attacking.
     assert_eq!(t.counters(bears, "+1/+1"), 0);
+
+    // Fire // Ice has mana value 4 in hand, but each half is a spell with mana value 2:
+    // either can be cast this way. P0 casts Ice ("Tap target permanent. Draw a card.").
+    supported("Fire // Ice");
+    let mut t = TestGame::new(2);
+    let fire_ice = t.hand(P0, "Fire // Ice");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let (offered, ways) = sram_expertise(&mut t, Some(fire_ice), 1);
+    assert_eq!(offered, vec![Entity::Object(fire_ice)]);
+    assert_eq!(ways, vec!["Cast Fire", "Cast Ice"]);
+    assert_eq!(t.obj(t.g.stack[0]).chars.name, "Ice");
+    t.resolve_all();
+    assert!(t.obj_now(giant).tapped);
 }
 
 #[test]
 fn sram_expertise_can_cast_expansion_but_not_explosion() {
-    cr!("601.3e", "709.3a");
+    cr!("601.3e", "709.3a", "608.2b");
     ruling!(
         "Expansion // Explosion",
         "If an effect allows you to cast a spell with certain characteristics, consider only the characteristics of the half you're casting. For example, if an effect allows you to cast a sorcery spell with mana value 2 or less from among cards in your graveyard, you could cast Assault this way, but not Battery."
+    );
+    ruling!(
+        "Sram's Expertise",
+        "It can target the Expertise spell on the stack, but the Expertise spell will become an illegal target before the free spell resolves."
     );
     supported("Expansion // Explosion");
     supported("Sram's Expertise");
@@ -167,9 +188,28 @@ fn sram_expertise_can_cast_expansion_but_not_explosion() {
     // but Expansion is a spell with mana value 2; Explosion's is at least 4.
     t.g.recompute();
     assert_eq!(mana_value(&t, ee), 6);
-    let options = sram_expertise(&mut t, 0);
-    assert_eq!(options, vec!["Don't cast a spell", "Cast Expansion"]);
-    // P0 declined: nothing was cast.
+    // It's offered, and P0 isn't asked which spell to cast it as: only Expansion ("Copy
+    // target instant or sorcery spell with mana value 4 or less.") qualifies. (Explosion,
+    // with X = 0, would be a spell with mana value 4.)
+    let (offered, ways) = sram_expertise(&mut t, Some(ee), 0);
+    assert_eq!(offered, vec![Entity::Object(ee)]);
+    assert!(ways.is_empty());
+    assert_eq!(t.stack_len(), 1);
+    let expansion = t.g.stack[0];
+    assert_eq!(t.obj(expansion).chars.name, "Expansion");
+    // It could target only the Expertise spell, still on the stack as Expansion was cast;
+    // that spell is gone by the time Expansion resolves: nothing is copied.
+    let si = t.obj(expansion).stack.as_ref().expect("a spell");
+    let target = si.chosen[0].targets[0][0].object().expect("a spell target");
+    assert_eq!(t.obj(target).chars.name, "Sram's Expertise");
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Servo").len(), 3);
+    assert!(t.in_graveyard(P0, "Expansion // Explosion"));
+    // Declining: nothing is cast.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Expansion // Explosion");
+    let (offered, _) = sram_expertise(&mut t, None, 0);
+    assert_eq!(offered.len(), 1);
     assert_eq!(t.stack_len(), 0);
     assert!(t.in_hand(P0, "Expansion // Explosion"));
 }
@@ -185,11 +225,11 @@ fn a_spell_with_x_cast_with_sram_expertise_has_x_zero() {
     supported("Endless One");
     let mut t = TestGame::new(2);
     // Endless One {X}: "This creature enters with X +1/+1 counters on it." (A 0/0.)
-    t.hand(P0, "Endless One");
+    let one = t.hand(P0, "Endless One");
     // P0 would choose X = 5 if the choice were P0's.
     t.answer(P0, DecisionKind::X, Answer::Number(5));
-    let options = sram_expertise(&mut t, 1);
-    assert_eq!(options, vec!["Don't cast a spell", "Cast Endless One"]);
+    let (offered, _) = sram_expertise(&mut t, Some(one), 0);
+    assert_eq!(offered, vec![Entity::Object(one)]);
     assert_eq!(t.stack_len(), 1);
     let spell = t.g.stack[0];
     let cast = &t.obj(spell).stack.as_ref().expect("a spell").cast;

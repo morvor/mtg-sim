@@ -63,35 +63,50 @@ pub fn controlled_named(t: &TestGame, p: PlayerId, name: &str) -> Vec<ObjectId> 
         .collect()
 }
 
-/// The options offered by the last "cast a spell ... from your hand" choice asked of P0.
-pub fn expertise_options(t: &TestGame) -> Vec<String> {
-    t.asked()
-        .iter()
-        .rev()
-        .find_map(|(p, d)| match d {
-            Decision::ChooseOption {
-                prompt, options, ..
-            } if *p == P0 && prompt.contains("from your hand") => Some(options.clone()),
-            _ => None,
-        })
-        .unwrap_or_default()
-}
-
 /// P0 casts Sram's Expertise ("Create three 1/1 colorless Servo artifact creature tokens.
 /// You may cast a spell with mana value 3 or less from your hand without paying its mana
-/// cost.") and it resolves, P0 answering the choice of a spell with option `pick` (0 is
-/// declining). The spell cast this way (if any) is left on the stack. Returns the options
-/// offered.
-pub fn sram_expertise(t: &mut TestGame, pick: usize) -> Vec<String> {
+/// cost.") and it resolves, P0 choosing the card `choice` from their hand (`None`:
+/// declining) and, if asked which spell to cast it as, the one listed `way` (0 is the
+/// first). The spell cast this way (if any) is left on the stack. Returns the cards
+/// offered and the spells P0 was asked to choose among (empty if the chosen card could be
+/// cast as only one such spell).
+pub fn sram_expertise(
+    t: &mut TestGame,
+    choice: Option<ObjectId>,
+    way: usize,
+) -> (Vec<Entity>, Vec<String>) {
     t.g.players[P0.idx()]
         .mana_pool
         .add_type(mtg_engine::mana::ManaType::W, 4);
     let expertise = t.hand(P0, "Sram's Expertise");
+    let from = t.asked().len();
     let spell = t.cast(P0, expertise).go();
-    t.answer(P0, DecisionKind::Option, Answer::Index(pick));
+    let chosen: Vec<Entity> = choice.map(Entity::Object).into_iter().collect();
+    t.answer_choose(P0, &chosen);
+    t.answer(P0, DecisionKind::Option, Answer::Index(way));
     t.settle();
     t.g.resolve_top();
     t.settle();
+    t.clear_answers();
     assert!(!t.g.stack.contains(&spell));
-    expertise_options(t)
+    let asked = &t.asked()[from..];
+    let offered = asked
+        .iter()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseEntities {
+                prompt, candidates, ..
+            } if *p == P0 && prompt.contains("from your hand") => Some(candidates.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let ways = asked
+        .iter()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if *p == P0 && prompt == "Choose which spell to cast" => Some(options.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    (offered, ways)
 }

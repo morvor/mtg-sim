@@ -1,7 +1,10 @@
 //! "You may cast a spell with mana value N or less from your hand without paying its mana
 //! cost." (Sram's Expertise and the rest of the Expertise cycle): casting a spell as the
 //! spell resolves; the mana value is that of the spell as it would be cast (CR 601.3e,
-//! 709.3a). See `kw/cast_from_hand_free.rs`.
+//! 709.3a). See `kw/cast_from_hand_free.rs`. This form comes before the general "cast a[n]
+//! [quality] spell from your hand without paying its mana cost" (`cast_from_hand_free.rs`),
+//! which judges the quality on the card in hand: a split card's combined mana value isn't
+//! the mana value of the half being cast.
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -19,4 +22,4 @@ fn cast_from_hand_free(l: &str, _b: &mut Builder) -> Option<Effect> {
     Some(Effect::Custom(effect_name(max).into()))
 }
 
-inventory::submit! { EffectPattern { name: "you may cast a spell with mana value N or less from your hand without paying its mana cost", priority: 100, parse: cast_from_hand_free } }
+inventory::submit! { EffectPattern { name: "you may cast a spell with mana value N or less from your hand without paying its mana cost", priority: 99, parse: cast_from_hand_free } }
