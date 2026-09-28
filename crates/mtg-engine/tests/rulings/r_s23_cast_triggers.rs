@@ -7,6 +7,7 @@ use crate::r_s01_common::*;
 use crate::r_s04_common::stack_items;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 #[test]
@@ -149,4 +150,182 @@ fn phantasmagorian_each_player_in_turn_order_gets_the_option() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Phantasmagorian").len(), 1);
     assert_eq!(t.hand_size(P1), 3);
+}
+
+#[test]
+fn in_the_eye_of_chaos_triggers_when_the_spell_is_cast() {
+    cr!("603.2", "603.3", "118.12a", "107.3");
+    ruling!(
+        "In the Eye of Chaos",
+        "This ability triggers when the spell is cast."
+    );
+    supported("In the Eye of Chaos");
+    // "Whenever a player casts an instant spell, counter it unless that player pays {X},
+    // where X is its mana value."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "In the Eye of Chaos");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.settle();
+    // The trigger is on the stack above the Bolt as soon as it's cast.
+    let items = stack_items(&t);
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0], "Lightning Bolt");
+    assert!(items[1].starts_with("ability: Whenever a player casts an instant spell"));
+    // P1 has no mana left to pay {1}: the Bolt is countered.
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    // With {1} to spare, P1 pays and the Bolt resolves.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "In the Eye of Chaos");
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P1), 0);
+    // A sorcery doesn't trigger it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "In the Eye of Chaos");
+    t.lands(P0, "Island", 3);
+    let divination = t.hand(P0, "Divination");
+    t.cast(P0, divination).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+}
+
+#[test]
+fn rhystic_study_the_player_decides_to_pay_before_you_decide_to_draw() {
+    cr!("118.12a", "603.3");
+    ruling!(
+        "Rhystic Study",
+        "You don't have to decide whether or not to draw a card until after the player decides whether or not to pay."
+    );
+    ruling!(
+        "Rhystic Study",
+        "Rhystic Study's triggered ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
+    );
+    supported("Rhystic Study");
+    // "Whenever an opponent casts a spell, you may draw a card unless that player pays
+    // {1}."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rhystic Study");
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    let from = t.asked().len();
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(false));
+    t.answer_yes(P0, true);
+    let hand = t.hand_size(P0);
+    t.resolve();
+    // The trigger resolved first: the Bolt is still on the stack.
+    assert_eq!(stack_items(&t), vec!["Lightning Bolt".to_string()]);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    let yes_no: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(yes_no, vec![P1, P0]);
+    // If P1 pays, P0 isn't asked and doesn't draw.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rhystic Study");
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    let from = t.asked().len();
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    let hand = t.hand_size(P0);
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand);
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(p, d)| *p != P0 || !matches!(d, Decision::YesNo { .. })));
+    // The trigger resolves even if the spell is countered in response to it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rhystic Study");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.settle();
+    t.lands(P0, "Island", 2);
+    let counter = t.hand(P0, "Counterspell");
+    t.cast(P0, counter).target(Entity::Object(spell)).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    t.answer_yes(P0, true);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn esper_sentinel_uses_its_power_as_the_ability_resolves() {
+    cr!("118.12a", "608.2h", "107.3");
+    ruling!(
+        "Esper Sentinel",
+        "This ability checks Esper Sentinel's power when it resolves, not when the ability goes on the stack."
+    );
+    supported("Esper Sentinel");
+    // "Whenever an opponent casts their first noncreature spell each turn, draw a card
+    // unless that player pays {X}, where X is this creature's power." Esper Sentinel is a
+    // 1/1; Giant Growth makes it 4/4 in response: P1 can't pay {4}.
+    let mut t = TestGame::new(2);
+    let sentinel = t.battlefield(P0, "Esper Sentinel");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 4);
+    let opt = t.hand(P1, "Opt");
+    t.cast(P1, opt).go();
+    t.settle();
+    t.lands(P0, "Forest", 1);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(Entity::Object(sentinel)).go();
+    t.resolve();
+    assert_eq!(t.pt(sentinel), (4, 4));
+    let hand = t.hand_size(P0);
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P1), 3);
+    // Without the pump, P1 pays {1} and P0 doesn't draw.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Esper Sentinel");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 2);
+    let opt = t.hand(P1, "Opt");
+    t.cast(P1, opt).go();
+    let hand = t.hand_size(P0);
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P1), 0);
+}
+
+#[test]
+fn nether_void_triggers_for_any_player_including_its_controller() {
+    cr!("118.12a", "603.2");
+    ruling!(
+        "Nether Void",
+        "The ability triggers whenever any player (including you) casts a spell of any type."
+    );
+    supported("Nether Void");
+    // "Whenever a player casts a spell, counter it unless that player pays {3}."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nether Void");
+    t.lands(P0, "Forest", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // Paying {3} lets it resolve.
+    t.lands(P0, "Wastes", 3);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.cast(P0, bears).go();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
