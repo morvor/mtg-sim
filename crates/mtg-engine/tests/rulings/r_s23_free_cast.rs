@@ -567,3 +567,72 @@ fn reinterpret_free_spell_can_be_kicked_must_pay_additional_costs_and_cant_be_ev
             if candidates.contains(&Entity::Object(drifter))
     )));
 }
+
+/// Hidetsugu and Kairi (P0's, on the battlefield) dies with `top` on top of P0's library;
+/// its trigger targets P1, and `then` queues the answers for casting the card. Everything
+/// resolves.
+fn hidetsugu_dies(t: &mut TestGame, top: &str, then: impl FnOnce(&mut TestGame)) {
+    let hk = t.battlefield(P0, "Hidetsugu and Kairi");
+    t.library_top(P0, top);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    then(t);
+    crate::r_s02_common::destroy(t, hk);
+    t.resolve_all();
+}
+
+#[test]
+fn hidetsugu_and_kairi_free_card_pays_additional_costs_but_no_alternative_cost() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Hidetsugu and Kairi",
+        "If you cast a card “without paying its mana cost,” you can’t pay any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, those must be paid to cast the card."
+    );
+    ruling!(
+        "Hidetsugu and Kairi",
+        "You choose whether or not to cast the instant or sorcery card as the last triggered ability resolves."
+    );
+    supported("Hidetsugu and Kairi");
+    // "When Hidetsugu and Kairi dies, exile the top card of your library. Target opponent
+    // loses life equal to its mana value. If it's an instant or sorcery card, you may cast
+    // it without paying its mana cost."
+    // Burst Lightning (mana value 1) may be kicked.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    hidetsugu_dies(&mut t, "Burst Lightning", |t| {
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    });
+    assert_eq!(t.life(P1), 20 - 1 - 4);
+    assert_eq!(tapped_lands(&t, P0), 4);
+    // Tormenting Voice's discard must be paid.
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    hidetsugu_dies(&mut t, "Tormenting Voice", |t| {
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(forest)]);
+    });
+    assert_eq!(t.life(P1), 18);
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    // Fireblast (mana value 6) is cast for free, not by sacrificing two Mountains.
+    let mut t = TestGame::new(2);
+    let mountains = t.lands(P0, "Mountain", 2);
+    let from = t.asked().len();
+    hidetsugu_dies(&mut t, "Fireblast", |t| {
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    });
+    assert_eq!(t.life(P1), 20 - 6 - 4);
+    assert!(mountains.iter().all(|m| t.on_battlefield(*m)));
+    assert!(!casting_way_asked(&t, P0, from));
+    // Declined as the ability resolves, the card stays in exile: it can't be cast later.
+    let mut t = TestGame::new(2);
+    hidetsugu_dies(&mut t, "Lightning Bolt", |t| {
+        t.answer_yes(P0, false);
+    });
+    assert!(t.in_exile("Lightning Bolt"));
+    let bolt = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Lightning Bolt")[0];
+    t.lands(P0, "Mountain", 1);
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, bolt).is_empty());
+}
