@@ -51,8 +51,9 @@ pub fn times_cast_commanders(g: &Game, p: PlayerId) -> u32 {
     pl.commander_casts
         .iter()
         .filter(|(k, _)| {
+            let k = k.split(COPY_KEY).next().unwrap_or(k);
             let front = k.split(" // ").next().unwrap_or(k);
-            pl.commander_names.iter().any(|n| n == *k || n == front)
+            pl.commander_names.iter().any(|n| n == k || n == front)
         })
         .map(|(_, n)| *n)
         .sum()
@@ -321,13 +322,36 @@ pub fn commander_tax(g: &Game, p: PlayerId, card: ObjectId) -> u32 {
 
 /// The key under which casts of the commander `id` from the command zone are counted
 /// (`Player::commander_casts`, see `Game::cast_spell`): the card's name, whichever face
-/// was cast (a modal double-faced commander is one commander, CR 903.8).
+/// was cast (a modal double-faced commander is one commander, CR 903.8). Two commanders
+/// with the same name (two copies of a partner commander in Commander Draft, CR 903.13f)
+/// are still counted separately (CR 702.124d): each is keyed by its name and the card's
+/// first object as well.
 pub fn commander_key(g: &Game, id: ObjectId) -> SmolStr {
     let o = g.obj(id);
-    o.card
+    let name = o
+        .card
         .as_ref()
-        .map_or_else(|| o.chars.name.clone(), |c| c.name.clone())
+        .map_or_else(|| o.chars.name.clone(), |c| c.name.clone());
+    let front = name.split(" // ").next().unwrap_or(&name);
+    let same_name = g
+        .player(o.owner)
+        .commander_names
+        .iter()
+        .filter(|n| **n == name || *n == front)
+        .count();
+    if same_name < 2 {
+        return name;
+    }
+    let mut first = id;
+    while let Some(p) = g.obj(first).prev {
+        first = p;
+    }
+    SmolStr::new(format!("{name}{COPY_KEY}{}", first.0))
 }
+
+/// Separates a commander's name from the card it is in the key of one of two commanders
+/// with the same name (see [`commander_key`]).
+const COPY_KEY: char = '#';
 
 /// The commanders `p` owns in the command zone, which they may cast from there (CR 903.8).
 pub fn castable_commanders(g: &Game, p: PlayerId) -> Vec<ObjectId> {

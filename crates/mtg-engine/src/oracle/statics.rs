@@ -662,6 +662,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some(v) = crate::oracle::patterns::a701_choices_votes::word_votes(r) {
             return Some(v);
         }
+        // "the number of spells you've cast this turn [from anywhere other than your
+        // hand]" (paradox).
+        if let Some(v) = super::patterns::spells_cast_this_turn::spells_you_cast_value(r) {
+            return Some(v);
+        }
         // "the number of differently named lands you control" (CR 201.2b).
         if let Some(r) = r.strip_prefix("differently named ") {
             let (f, _, rest) = parse_object_phrase(r)?;

@@ -39,6 +39,32 @@ pub fn attackers_at(t: &TestGame, target: Entity) -> Vec<ObjectId> {
         .unwrap_or_default()
 }
 
+/// A game that hasn't begun (no commanders designated, no opening hands), with the given
+/// decks and scripted agents.
+pub fn pregame(
+    config: mtg_engine::game::GameConfig,
+    decks: Vec<Vec<std::sync::Arc<mtg_engine::card::CardDef>>>,
+) -> TestGame {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+    let n = decks.len();
+    let script = Arc::new(Mutex::new(Script {
+        queues: vec![VecDeque::new(); n],
+        asked: vec![],
+    }));
+    let agents: Vec<Box<dyn mtg_engine::decision::Agent>> = (0..n)
+        .map(|i| {
+            Box::new(ScriptedAgent {
+                player: PlayerId(i as u8),
+                script: script.clone(),
+            }) as Box<dyn mtg_engine::decision::Agent>
+        })
+        .collect();
+    let mut g = mtg_engine::game::Game::new(config, decks, agents);
+    g.logging = true;
+    TestGame { g, script }
+}
+
 /// What `id` is attacking now, if it's attacking.
 pub fn attack_target(t: &TestGame, id: ObjectId) -> Option<Entity> {
     let id = t.g.current(id);
