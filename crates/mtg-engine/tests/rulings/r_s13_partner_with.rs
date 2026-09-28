@@ -195,38 +195,47 @@ fn partner_with_still_triggers_in_a_commander_game() {
         "Okaun, Eye of Chaos",
         "The triggered ability of the “partner with” keyword still triggers in a Commander game. If your other commander has somehow ended up in your library, you can find it. You can also target another player who might have that card in their library."
     );
-    supported("Merry, Warden of Isengard");
+    ruling!(
+        "Evie Frye",
+        "The triggered ability of the “partner with” keyword still triggers in a Commander game. If your other commander has somehow ended up in your library, you can find it. You can also target another player, whether or not they have that card in their library."
+    );
     supported("Okaun, Eye of Chaos");
-    // Merry and Pippin are P0's commanders; Pippin ended up in P0's library.
-    let mut t = commander_game();
-    t.g.players[0].commander_names.push("Merry, Warden of Isengard".into());
-    t.g.players[0].commander_names.push("Pippin, Warden of Isengard".into());
-    let pippin = t.library_top(P0, "Pippin, Warden of Isengard");
-    t.g.objects[pippin.0 as usize].is_commander = true;
-    t.answer_targets(P0, &[Entity::Player(P0)]);
-    t.answer_yes(P0, true);
-    // (It stays in the hand rather than going to the command zone, CR 903.9b.)
-    t.answer_yes(P0, false);
-    let merry = t.enter(P0, "Merry, Warden of Isengard");
-    t.g.objects[merry.0 as usize].is_commander = true;
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
-    t.resolve_all();
-    assert!(t.in_hand(P0, "Pippin, Warden of Isengard"));
-    // Targeting the opponent, who has no Pippin in their library: a legal target; they
-    // search and find nothing.
-    let mut t = commander_game();
-    let from = t.asked().len();
-    t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.answer_yes(P1, true);
-    t.enter(P0, "Merry, Warden of Isengard");
-    t.resolve_all();
-    let asked = asked_since(&t, from);
-    assert!(asked
-        .iter()
-        .any(|(p, d)| *p == P1 && matches!(d, decision::Decision::YesNo { .. })));
-    assert!(shuffled(&t, P1));
-    assert_eq!(t.hand_size(P1), 0);
+    for (entering, other) in [
+        ("Merry, Warden of Isengard", "Pippin, Warden of Isengard"),
+        ("Evie Frye", "Jacob Frye"),
+    ] {
+        supported(entering);
+        // Both are P0's commanders; the other one ended up in P0's library.
+        let mut t = commander_game();
+        t.g.players[0].commander_names.push(entering.into());
+        t.g.players[0].commander_names.push(other.into());
+        let in_library = t.library_top(P0, other);
+        t.g.objects[in_library.0 as usize].is_commander = true;
+        t.answer_targets(P0, &[Entity::Player(P0)]);
+        t.answer_yes(P0, true);
+        // (It stays in the hand rather than going to the command zone, CR 903.9b.)
+        t.answer_yes(P0, false);
+        let c = t.enter(P0, entering);
+        t.g.objects[c.0 as usize].is_commander = true;
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "{entering}");
+        t.resolve_all();
+        assert!(t.in_hand(P0, other), "{entering}");
+        // Targeting the opponent, who doesn't have that card in their library: a legal
+        // target; they search and find nothing.
+        let mut t = commander_game();
+        let from = t.asked().len();
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.answer_yes(P1, true);
+        t.enter(P0, entering);
+        t.resolve_all();
+        let asked = asked_since(&t, from);
+        assert!(asked
+            .iter()
+            .any(|(p, d)| *p == P1 && matches!(d, decision::Decision::YesNo { .. })));
+        assert!(shuffled(&t, P1));
+        assert_eq!(t.hand_size(P1), 0);
+    }
     // Okaun targeting the opponent, who has Zndrsplt in their library: they may find it.
     let mut t = commander_game();
     t.library_top(P1, "Zndrsplt, Eye of Wisdom");
