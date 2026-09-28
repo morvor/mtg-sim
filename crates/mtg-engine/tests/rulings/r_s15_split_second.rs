@@ -25,7 +25,7 @@ fn only_mana_abilities_and_special_actions(t: &TestGame, actions: &[Action]) -> 
 
 #[test]
 fn players_get_priority_but_may_only_activate_mana_abilities_and_take_special_actions() {
-    cr!("702.61a", "702.61b", "117.3b");
+    cr!("702.61a", "702.61b", "117.3d");
     ruling!(
         "Siege Smash",
         "Players still get priority while a spell with split second is on the stack; their options are just limited to mana abilities and certain special actions."
@@ -111,13 +111,16 @@ fn split_second_doesnt_stop_triggered_abilities() {
 
 #[test]
 fn inventory_management_attaches_only_where_each_can_legally_be_attached() {
-    cr!("701.3a", "701.3b");
+    cr!("701.3a", "702.16d");
     supported("Inventory Management");
-    // Each Aura and Equipment P0 controls may be attached to a creature P0 controls it
-    // could legally be attached to; P0 may also leave one where it is.
+    supported("Tel-Jilad Chosen");
+    // Each Aura and Equipment P0 controls may be attached to a creature P0 controls that
+    // it could legally be attached to; P0 may also leave one where it is.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P0, "Hill Giant");
+    // Protection from artifacts: it can't be equipped by Bonesplitter.
+    let chosen = t.battlefield(P0, "Tel-Jilad Chosen");
     let theirs = t.battlefield(P1, "Savannah Lions");
     let rancor = attach_new(&mut t, P0, "Rancor", bears);
     let bonesplitter = attach_new(&mut t, P0, "Bonesplitter", bears);
@@ -131,9 +134,10 @@ fn inventory_management_attaches_only_where_each_can_legally_be_attached() {
     t.resolve_all();
     assert_eq!(attached_to(&t, rancor), Some(Entity::Object(bears)));
     assert_eq!(attached_to(&t, bonesplitter), Some(Entity::Object(giant)));
-    // Only creatures P0 controls were offered, never P1's.
+    // Bonesplitter could go to the creatures P0 controls other than Tel-Jilad Chosen.
     let offered = choice_candidates(&t, from, "");
-    assert!(!offered.is_empty());
-    assert!(offered.iter().all(|c| !c.contains(&Entity::Object(theirs))));
-    assert!(offered.iter().all(|c| c.contains(&Entity::Object(giant))));
+    assert_eq!(offered.len(), 1);
+    assert!(offered[0].contains(&Entity::Object(giant)));
+    assert!(!offered[0].contains(&Entity::Object(chosen)));
+    assert!(!offered[0].contains(&Entity::Object(theirs)));
 }

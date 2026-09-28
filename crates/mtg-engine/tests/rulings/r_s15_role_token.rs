@@ -205,7 +205,7 @@ fn there_are_seven_role_tokens() {
 
 #[test]
 fn hexproof_and_shroud_dont_stop_a_role_from_being_attached_without_targeting() {
-    cr!("702.18a", "303.4i");
+    cr!("702.18a", "111.10k", "111.10r");
     ruling!(
         "Gylwain, Casting Director",
         "Hexproof and shroud won't prevent a Role from becoming attached to a permanent if the ability creating that Role attached to that permanent doesn't target it."
