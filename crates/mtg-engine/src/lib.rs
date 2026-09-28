@@ -55,6 +55,7 @@ pub mod draft;
 pub mod draw_rules;
 pub mod dungeons;
 pub mod end_turn;
+pub mod entry_costs;
 pub mod eval;
 pub mod events;
 pub mod excess_damage;

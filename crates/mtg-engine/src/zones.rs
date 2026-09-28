@@ -56,6 +56,12 @@ pub struct ZoneState {
     /// [`Game::move_objects`]).
     #[serde(default)]
     pub entry_sacrifices: Vec<(ObjectId, PlayerId)>,
+    /// Costs chosen to be paid as the objects of the move being performed enter the
+    /// battlefield at the same time ("as this land enters, you may pay 2 life"). They're
+    /// paid once every entering object's replacement effects have been applied (CR 614.12b;
+    /// see [`crate::entry_costs`]).
+    #[serde(default)]
+    pub entry_payments: Vec<crate::entry_costs::EntryPayment>,
 }
 
 /// `Event::Custom` name: the top card of a player's library became revealed (CR 401.5).

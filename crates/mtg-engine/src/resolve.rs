@@ -91,7 +91,7 @@ impl Game {
                     if crate::multiplayer::cant_pay(self, p) {
                         continue;
                     }
-                    if !self.can_pay_cost(p, cost, ctx.source, ctx) {
+                    if !crate::entry_costs::can_pay(self, p, cost, ctx) {
                         continue;
                     }
                     let pays = self.ask_yes_no(
@@ -100,7 +100,7 @@ impl Game {
                         &format!("Pay {}?", describe_cost(cost)),
                         false,
                     );
-                    if pays && self.pay_cost(p, cost, ctx.source, ctx) {
+                    if pays && crate::entry_costs::pay(self, p, cost, ctx) {
                         paid = true;
                         break;
                     }

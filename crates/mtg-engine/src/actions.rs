@@ -70,6 +70,7 @@ impl Game {
                 .collect(),
         );
         let prev_entry_sacrifices = std::mem::take(&mut self.zones.entry_sacrifices);
+        let prev_entry_payments = std::mem::take(&mut self.zones.entry_payments);
         // CR 616.1: when several players choose among replacement effects for
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
@@ -123,6 +124,10 @@ impl Game {
         }
         // Permanents sacrificed as these objects enter (devour) are sacrificed at the same
         // time, before any of them enters (CR 702.82a).
+        // CR 614.12b: the costs chosen for objects entering at the same time are paid once
+        // all the choices have been made.
+        let payments = std::mem::replace(&mut self.zones.entry_payments, prev_entry_payments);
+        crate::entry_costs::pay_deferred(self, payments);
         let sacrifices = std::mem::replace(&mut self.zones.entry_sacrifices, prev_entry_sacrifices);
         if !sacrifices.is_empty() {
             self.sacrifice_simultaneously(&sacrifices);
