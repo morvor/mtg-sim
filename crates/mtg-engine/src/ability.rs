@@ -2833,6 +2833,14 @@ pub enum Effect {
         of: Sel,
         duration: Duration,
     },
+    /// `BecomeCopy` with the copy effect's exceptions ("..., except those creatures aren't
+    /// legendary", CR 707.9), which become part of the copiable values.
+    BecomeCopyExcept {
+        what: Sel,
+        of: Sel,
+        duration: Duration,
+        exceptions: Vec<Modification>,
+    },
     Transform {
         what: Sel,
     },

@@ -407,6 +407,9 @@ fn single_quality(s: &str) -> Option<Filter> {
         "the chosen player" => return Some(Filter::ControlledBy(PlayerRel::Chosen)),
         // CR 702.16a: a quality is a card name only if the ability says it's a name.
         "the chosen card name" | "the chosen name" => return Some(Filter::ChosenName),
+        // "protection from each mana value of the chosen quality" (odd or even, CR
+        // 607.2d; Lavabrink Venturer).
+        "each mana value of the chosen quality" => return Some(Filter::ManaValueOfChosenQuality),
         "each of your opponents" | "your opponents" => {
             return Some(Filter::ControlledBy(PlayerRel::Opponent))
         }

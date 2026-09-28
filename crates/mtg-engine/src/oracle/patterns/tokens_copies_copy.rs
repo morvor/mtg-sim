@@ -183,6 +183,7 @@ pub(crate) fn copy_exceptions(
                 | "it is not legendary"
                 | "they're not legendary"
                 | "they aren't legendary"
+                | "those creatures aren't legendary"
                 | "the token isn't legendary"
                 | "the token is not legendary"
                 | "the tokens aren't legendary"

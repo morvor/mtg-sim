@@ -85,6 +85,42 @@ pub fn copy_spell(
     Some(id)
 }
 
+/// "[objects] become(s) a copy of [object] [for the duration], [except ...]" (CR 707.2,
+/// 613.2a): a layer-1 copy effect giving the objects the other object's copiable values
+/// with the exceptions (CR 707.9b), which are part of their copiable values then.
+pub fn become_copy(
+    g: &mut Game,
+    what: &crate::ability::Sel,
+    of: &crate::ability::Sel,
+    duration: &crate::ability::Duration,
+    exceptions: &[crate::ability::Modification],
+    ctx: &mut crate::eval::Ctx,
+) {
+    use crate::game::{Affected, ContinuousEffect, Layer1};
+    let targets = g.resolve_objects(what, ctx);
+    let Some(src) = g.resolve_objects(of, ctx).into_iter().next() else {
+        return;
+    };
+    let values = Box::new(g.obj(src).copiable.clone());
+    let id = g.new_effect_id();
+    let ts = g.new_timestamp();
+    g.effects.push(ContinuousEffect {
+        id,
+        source: ctx.source,
+        controller: ctx.controller,
+        timestamp: ts,
+        duration: duration.clone(),
+        affected: Affected::Objects(targets),
+        mods: vec![],
+        layer1: Some(Layer1::Copy {
+            values,
+            exceptions: exceptions.to_vec(),
+        }),
+        created_turn: g.turn.number,
+    });
+    g.dirty = true;
+}
+
 /// Whether the spell or ability `id` on the stack has any chosen targets. Only those can
 /// be changed (CR 707.10c, 115.7), so a copy without targets offers no "choose new
 /// targets" choice.

@@ -885,28 +885,15 @@ impl Game {
                 ctx.prev_happened = changed;
             }
             Effect::BecomeCopy { what, of, duration } => {
-                let targets = self.resolve_objects(what, ctx);
-                let Some(src) = self.resolve_objects(of, ctx).into_iter().next() else {
-                    return;
-                };
-                let values = Box::new(self.obj(src).copiable.clone());
-                let id = self.new_effect_id();
-                let ts = self.new_timestamp();
-                self.effects.push(ContinuousEffect {
-                    id,
-                    source: ctx.source,
-                    controller: ctx.controller,
-                    timestamp: ts,
-                    duration: duration.clone(),
-                    affected: Affected::Objects(targets),
-                    mods: vec![],
-                    layer1: Some(Layer1::Copy {
-                        values,
-                        exceptions: vec![],
-                    }),
-                    created_turn: self.turn.number,
-                });
-                self.dirty = true;
+                crate::copy::become_copy(self, what, of, duration, &[], ctx);
+            }
+            Effect::BecomeCopyExcept {
+                what,
+                of,
+                duration,
+                exceptions,
+            } => {
+                crate::copy::become_copy(self, what, of, duration, exceptions, ctx);
             }
             Effect::Transform { what } => {
                 for o in self.resolve_objects(what, ctx) {

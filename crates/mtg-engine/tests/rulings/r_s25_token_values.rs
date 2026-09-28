@@ -243,3 +243,51 @@ fn a_copy_of_a_devastation_powerstone_doesnt_enter_tapped() {
     let stone = powerstones(&t)[0];
     copy_of_a_tapped_powerstone_is_untapped(&mut t, stone);
 }
+
+#[test]
+fn a_copy_of_a_karn_powerstone_doesnt_enter_tapped() {
+    cr!("707.2", "111.10h", "606.3");
+    ruling!(
+        "Karn, Living Legacy",
+        "Although all the cards in the Dominaria United set that create Powerstone tokens create a tapped Powerstone token, entering the battlefield tapped isn’t part of the token’s definition."
+    );
+    // Karn's "+1: Create a tapped Powerstone token." is supported (its -1 isn't).
+    let karn = mtg_engine::card::card("Karn, Living Legacy");
+    assert!(karn
+        .unsupported_text()
+        .iter()
+        .all(|a| !a.contains("Powerstone")));
+    let mut t = TestGame::new(2);
+    let karn = t.battlefield(P0, "Karn, Living Legacy");
+    activate_containing(&mut t, P0, karn, "Powerstone").unwrap();
+    t.resolve_all();
+    let stone = powerstones(&t)[0];
+    copy_of_a_tapped_powerstone_is_untapped(&mut t, stone);
+}
+
+#[test]
+fn protection_from_a_mana_value_sees_tokens_mana_values() {
+    cr!("202.3a", "707.2", "702.16f");
+    ruling!(
+        "Lavabrink Venturer",
+        "The mana value of a token that isn't a copy of another object is 0. A token that is a copy of another object has the same mana value as that object."
+    );
+    supported("Lavabrink Venturer");
+    // "As this creature enters, choose odd or even. (Zero is even.) This creature has
+    // protection from each mana value of the chosen quality." P0 chooses odd.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let venturer = t.enter(P0, "Lavabrink Venturer");
+    // (It has been under P0's control since the turn began.)
+    t.g.objects[venturer.0 as usize].summoning_sick = false;
+    // P1's Soldier token (mana value 0) and token copy of Llanowar Elves (mana value 1).
+    let soldier = two_soldiers(&mut t, P1)[0];
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let elf_token = token_copy(&mut t, P1, elves)[0];
+    assert_eq!(mana_value(&t, soldier), 0);
+    assert_eq!(mana_value(&t, elf_token), 1);
+    crate::r_s01_common::attack_with(&mut t, &[(venturer, Entity::Player(P1))]);
+    assert!(t.g.can_block(soldier, venturer));
+    assert!(!t.g.can_block(elf_token, venturer));
+    assert!(!t.g.can_block(elves, venturer));
+}
