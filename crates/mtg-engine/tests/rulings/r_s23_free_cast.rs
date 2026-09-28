@@ -1468,3 +1468,112 @@ fn fevered_suspicion_cards_are_cast_in_any_order_now_or_never() {
     t.lands(P0, "Mountain", 1);
     assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, burst[0]).is_empty());
 }
+
+/// P0 casts Invoke Calamity from their hand (with the answers queued) and it resolves.
+fn invoke_calamity(t: &mut TestGame) {
+    give_mana_for(t, P0, "Invoke Calamity");
+    let card = t.hand(P0, "Invoke Calamity");
+    t.answer_yes(P0, true);
+    t.cast(P0, card).go();
+    t.resolve();
+}
+
+#[test]
+fn invoke_calamity_free_spells_may_be_kicked_and_pay_mandatory_additional_costs() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Invoke Calamity",
+        "If you cast a spell without paying its mana cost, you can't choose to cast it for any alternative costs. You can, however, pay any additional costs. If the spell has any mandatory additional costs, you must pay those."
+    );
+    supported("Invoke Calamity");
+    // "You may cast up to two instant and/or sorcery spells with total mana value 6 or
+    // less from your graveyard and/or hand without paying their mana costs. If those
+    // spells would be put into your graveyard, exile them instead. Exile Invoke Calamity."
+    // Burst Lightning from the graveyard, kicked for {4}; Tormenting Voice from the hand,
+    // discarding a Forest.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    let burst = t.graveyard(P0, "Burst Lightning");
+    let voice = t.hand(P0, "Tormenting Voice");
+    let forest = t.hand(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(burst)]);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(voice)]);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    invoke_calamity(&mut t);
+    assert!(t.in_graveyard(P0, "Forest"));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(tapped_lands(&t, P0), 5 + 4);
+    // Those spells and Invoke Calamity are exiled.
+    assert!(t.in_exile("Burst Lightning"));
+    assert!(t.in_exile("Tormenting Voice"));
+    assert!(t.in_exile("Invoke Calamity"));
+    // Cyclonic Rift can't be cast for its overload cost.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let rift = t.graveyard(P0, "Cyclonic Rift");
+    t.answer_choose(P0, &[Entity::Object(rift)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    invoke_calamity(&mut t);
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(elves));
+    assert_eq!(tapped_lands(&t, P0), 5);
+}
+
+#[test]
+fn invoke_calamity_casts_one_after_the_other_judging_the_spells() {
+    cr!("608.2g", "405.2", "601.3e", "709.3a", "202.3d");
+    ruling!(
+        "Invoke Calamity",
+        "The spells are cast one after the other during the resolution of Invoke Calamity. The one you cast second will be the first one to resolve."
+    );
+    ruling!(
+        "Invoke Calamity",
+        "Invoke Calamity looks for the mana values and types of the spells on the stack, not the mana values and types of the cards in your graveyard."
+    );
+    supported("Invoke Calamity");
+    supported("Hieroglyphic Illumination");
+    // Fire // Ice (mana value 4 in the graveyard) is cast as Ice (mana value 2), then
+    // Hieroglyphic Illumination (mana value 4): a total of 6.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let fire_ice = t.graveyard(P0, "Fire // Ice");
+    let illumination = t.hand(P0, "Hieroglyphic Illumination");
+    t.answer_choose(P0, &[Entity::Object(fire_ice)]);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(illumination)]);
+    invoke_calamity(&mut t);
+    let names: Vec<String> = t
+        .g
+        .stack
+        .iter()
+        .map(|s| t.g.obj(*s).chars.name.to_string())
+        .collect();
+    assert_eq!(names, vec!["Ice", "Hieroglyphic Illumination"]);
+    // Hieroglyphic Illumination, cast second, resolves first.
+    let hand = t.hand_size(P0);
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    assert!(t.obj_now(bears).tapped);
+    assert_eq!(t.hand_size(P0), hand + 3);
+    // After Hieroglyphic Illumination (4), a spell with mana value 3 can't be cast too:
+    // only spells with mana value 2 or less.
+    let mut t = TestGame::new(2);
+    let illumination = t.graveyard(P0, "Hieroglyphic Illumination");
+    let divination = t.hand(P0, "Divination");
+    t.answer_choose(P0, &[Entity::Object(illumination)]);
+    t.answer_choose(P0, &[Entity::Object(divination)]);
+    invoke_calamity(&mut t);
+    assert_eq!(t.stack_len(), 1);
+    assert!(t.in_hand(P0, "Divination"));
+}
