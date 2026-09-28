@@ -1096,6 +1096,15 @@ impl Game {
         if let Some(t) = opt.tag {
             cast_info.paid.push(t.into());
         }
+        // Which alternative cost it's cast for ("If the {2}{U} cost was paid").
+        if let (CastMethod::Alternative(_), Some(m)) = (
+            &opt.method,
+            opt.alt_cost.as_ref().and_then(|c| c.mana.as_ref()),
+        ) {
+            cast_info
+                .paid
+                .push(crate::spell_costs::alternative_cost_name(m));
+        }
         self.objects[id.0 as usize].stack = Some(Box::new(StackInfo {
             kind: StackKind::Spell,
             chosen: vec![],

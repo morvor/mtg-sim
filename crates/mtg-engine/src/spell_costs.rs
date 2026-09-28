@@ -142,3 +142,10 @@ pub fn alternative_cost_allowed(g: &Game, p: PlayerId, card: ObjectId, s: &Stati
         Some(c) => g.eval_cond(c, &Ctx::new(Some(card), p)),
     }
 }
+
+/// The name recorded among the costs paid for a spell cast for an alternative cost with
+/// this mana component ("If the {2}{U} cost was paid", the Masteries, CR 118.9). It names
+/// the cost chosen, however much was actually paid after cost increases and reductions.
+pub fn alternative_cost_name(m: &crate::mana::ManaCost) -> smol_str::SmolStr {
+    smol_str::SmolStr::new(format!("alternative cost {m}"))
+}
