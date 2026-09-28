@@ -246,7 +246,7 @@ fn a_copy_of_a_devastation_powerstone_doesnt_enter_tapped() {
 
 #[test]
 fn a_copy_of_a_karn_powerstone_doesnt_enter_tapped() {
-    cr!("707.2", "111.10h", "606.3");
+    cr!("707.2", "111.10h");
     ruling!(
         "Karn, Living Legacy",
         "Although all the cards in the Dominaria United set that create Powerstone tokens create a tapped Powerstone token, entering the battlefield tapped isn’t part of the token’s definition."

@@ -63,7 +63,7 @@ fn a_cast_trigger_copy_has_the_same_x() {
 
 #[test]
 fn kitsa_s_copy_has_the_same_x() {
-    cr!("707.10", "107.3", "702.108a");
+    cr!("707.10", "107.3");
     ruling!(
         "Kitsa, Otterball Elite",
         "If the spell that’s copied has an X whose value was determined as it was cast, the copy will have the same value of X."

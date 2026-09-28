@@ -54,8 +54,12 @@ fn cast_or_activate_targeting_only_source(r: &str) -> Option<(TriggerCond, Sel, 
         .strip_prefix("a ")
         .or_else(|| spell.strip_prefix("an "))
         .unwrap_or(spell);
+    // "an instant or sorcery spell", "a creature spell": a description of a spell.
+    if !spell.ends_with(" spell") {
+        return None;
+    }
     let (f, _, tail) = parse_object_phrase(spell)?;
-    if !end(tail).is_empty() || !format!("{f:?}").contains("Spell") {
+    if !end(tail).is_empty() {
         return None;
     }
     let only_source = Filter::StackTargets(Box::new(TargetsFilter::Only {

@@ -162,7 +162,7 @@ fn a_copy_returned_to_hand_ceases_to_exist() {
 
 #[test]
 fn a_copy_of_an_adventure_isnt_exiled_to_be_cast_later() {
-    cr!("707.10a", "715.4", "715.3d");
+    cr!("707.10a", "715.3d");
     ruling!(
         "Lucky Clover",
         "If an effect copies an Adventure spell, that copy is exiled as it resolves. It ceases to exist as a state-based action; it's not possible to cast the copy as a creature."

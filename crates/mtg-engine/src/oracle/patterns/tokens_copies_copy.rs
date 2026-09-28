@@ -234,6 +234,46 @@ pub(crate) fn copy_exceptions(
     (!out.is_empty()).then_some(out)
 }
 
+/// Which card "a copy of the exiled card" ("copies of ...") means, judging by what the
+/// ability says before it (the face's raw text; the first ability that says it).
+enum ExiledBy {
+    /// The ability doesn't exile anything: the cards a linked ability exiled (CR 607.2a).
+    LinkedAbility,
+    /// "Then you may exile a card from your hand. If you do, create a token that's a copy
+    /// of the exiled card" (Nexus of Becoming): the card this ability exiled as it
+    /// resolved, not also those it exiled earlier (CR 608.2c).
+    ThisAbility,
+    /// It exiles a card as a cost or much earlier in its text: not handled here.
+    Unclear,
+}
+
+fn exiled_by() -> ExiledBy {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let exiles = |s: &str| {
+        s.split(|c: char| !c.is_alphabetic())
+            .any(|w| w == "exile" || w == "exiles")
+    };
+    let Some((line, i)) = raw
+        .lines()
+        .find_map(|l| l.find(" of the exiled card").map(|i| (l, i)))
+    else {
+        return ExiledBy::Unclear;
+    };
+    let before = &line[..i];
+    if !exiles(before) {
+        return ExiledBy::LinkedAbility;
+    }
+    let (cost, effect) = before.rsplit_once(": ").unwrap_or(("", before));
+    // Only an exile in the effect, in the sentence saying it or the one before it.
+    let sentences: Vec<&str> = effect.split(". ").collect();
+    let (earlier, recent) = sentences.split_at(sentences.len().saturating_sub(2));
+    if !exiles(cost) && !earlier.iter().any(|s| exiles(s)) && recent.iter().any(|s| exiles(s)) {
+        ExiledBy::ThisAbility
+    } else {
+        ExiledBy::Unclear
+    }
+}
+
 /// The object a token copies: "~", "it", "that creature", "enchanted creature", a target.
 fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(rest) = r.strip_prefix('~') {
@@ -265,11 +305,18 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
         }
     }
     // "the exiled card": the card(s) a linked ability of the permanent exiled (CR 607.2a,
-    // 607.3: a token for each of them).
+    // 607.3: a token for each of them), or the card this ability just exiled (CR 608.2c).
     if !b.ctx.is_spell() {
         if let Some(rest) = r.strip_prefix("the exiled card") {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
-                let of = super::imprint::exiled_card_ref("the exiled card")?;
+                let of = match exiled_by() {
+                    ExiledBy::LinkedAbility => {
+                        super::imprint::exiled_card_ref("the exiled card")?
+                    }
+                    // Exile records the cards it exiled as "it".
+                    ExiledBy::ThisAbility => Sel::Var(vars::IT),
+                    ExiledBy::Unclear => return None,
+                };
                 return Some((of, rest.to_string()));
             }
         }

@@ -236,7 +236,7 @@ fn the_token_a_copied_spell_becomes_isnt_created() {
 
 #[test]
 fn a_copy_of_a_linked_ability_is_linked_too() {
-    cr!("707.10", "607.2a", "707.7");
+    cr!("707.10", "607.2a", "607.3");
     ruling!(
         "Virtue of Knowledge // Vantress Visions",
         "If an ability is linked to a second ability, copies of that ability are also linked to that second ability. If the second ability refers to \"the exiled card,\" it refers to all cards exiled by the ability and the copy."
