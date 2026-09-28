@@ -2294,10 +2294,24 @@ pub fn put_onto_battlefield_attacking(g: &mut Game, id: ObjectId, target: Entity
 /// 508.4): its controller chooses a defending player, a planeswalker a defending player
 /// controls, or a battle a defending player protects.
 pub fn choose_attack_target_for_new_attacker(g: &mut Game, controller: PlayerId) -> Option<Entity> {
-    let targets: Vec<Entity> = attack_targets(g)
+    choose_attack_target_preferring(g, controller, None)
+}
+
+/// [`choose_attack_target_for_new_attacker`] with `preferred` (if it can be attacked)
+/// offered first, as the default answer.
+pub fn choose_attack_target_preferring(
+    g: &mut Game,
+    controller: PlayerId,
+    preferred: Option<Entity>,
+) -> Option<Entity> {
+    let mut targets: Vec<Entity> = attack_targets(g)
         .into_iter()
         .filter(|t| g.valid_attack_target(*t))
         .collect();
+    if let Some(i) = preferred.and_then(|p| targets.iter().position(|t| *t == p)) {
+        let p = targets.remove(i);
+        targets.insert(0, p);
+    }
     if targets.len() <= 1 {
         return targets.first().copied();
     }

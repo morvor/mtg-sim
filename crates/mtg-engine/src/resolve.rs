@@ -2185,17 +2185,13 @@ impl Game {
         self.move_objects(moves).into_iter().flatten().collect()
     }
 
-    /// Default attack target for "put onto the battlefield attacking": the defending
-    /// player of the source if it's attacking, else a defending player (CR 508.4).
+    /// What a creature put onto the battlefield attacking attacks when the effect doesn't
+    /// say: its controller chooses (CR 508.4), by default what the source is attacking if
+    /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
     fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
         let combat = self.combat.as_ref()?;
-        if let Some(src) = ctx.source {
-            if let Some(t) = combat.attack_target(src) {
-                return Some(t);
-            }
-        }
-        // CR 508.4: otherwise its controller chooses what it's attacking.
-        crate::combat::choose_attack_target_for_new_attacker(self, ctx.controller)
+        let preferred = ctx.source.and_then(|src| combat.attack_target(src));
+        crate::combat::choose_attack_target_preferring(self, ctx.controller, preferred)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).
