@@ -766,9 +766,7 @@ impl Game {
                 count,
                 ..
             } => {
-                for _ in 0..count {
-                    self.perform_create_token(controller, &spec);
-                }
+                self.perform_create_tokens(controller, &spec, count);
             }
             ReplEvent::Destroy { obj, .. } => {
                 let owner = self.obj(obj).owner;
@@ -1670,11 +1668,24 @@ impl Game {
         out
     }
 
-    fn perform_create_token(
-        &mut self,
-        controller: PlayerId,
-        spec: &TokenCreate,
-    ) -> Option<ObjectId> {
+    /// Creates `count` tokens: they enter the battlefield at the same time, so their
+    /// controller orders their timestamps (CR 613.7m) — which decides, for example, which
+    /// of several Roles attached at once is kept (CR 303.7a).
+    fn perform_create_tokens(&mut self, controller: PlayerId, spec: &TokenCreate, count: u32) {
+        let moves: Vec<MoveEv> = (0..count)
+            .map(|_| self.token_entry(controller, spec))
+            .collect();
+        for new in self.move_objects(moves).into_iter().flatten() {
+            *self.history.tokens_created.entry(controller).or_insert(0) += 1;
+            self.emit(Event::TokenCreated {
+                obj: new,
+                controller,
+            });
+        }
+    }
+
+    /// A new token object for `spec` and its move onto the battlefield.
+    fn token_entry(&mut self, controller: PlayerId, spec: &TokenCreate) -> MoveEv {
         let tok = self.create_token_object(spec.chars.clone(), controller);
         if let Some(card) = &spec.card {
             self.objects[tok.0 as usize].card = Some(card.clone());
@@ -1702,7 +1713,7 @@ impl Game {
             }
         }
         etb.attacking = spec.attacking;
-        let new = self.move_object_ev(MoveEv {
+        MoveEv {
             obj: tok,
             to: Zone::Battlefield,
             pos: LibraryPosition::Top,
@@ -1710,13 +1721,7 @@ impl Game {
             by: Some(controller),
             etb,
             source: None,
-        })?;
-        *self.history.tokens_created.entry(controller).or_insert(0) += 1;
-        self.emit(Event::TokenCreated {
-            obj: new,
-            controller,
-        });
-        Some(new)
+        }
     }
 
     // ------------------------------------------------------------------
