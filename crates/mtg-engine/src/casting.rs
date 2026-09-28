@@ -970,12 +970,22 @@ impl Game {
         // Several instances of a keyword give several ways to cast it the same way (e.g.
         // two blitz costs): only one may be used, the player's choice (CR 702.152b).
         let i = if opts.len() > 1 {
+            // The same way of casting it with different faces (e.g. escape for the
+            // creature or its Adventure) is named with the face.
+            let faces_differ = opts.iter().any(|o| o.face != opts[0].face);
             let options = opts
                 .iter()
-                .map(|o| match (&o.tag, &o.alt_cost) {
-                    (Some(t), _) => t.to_string(),
-                    (None, Some(c)) => format!("{c:?}"),
-                    (None, None) => format!("{:?}", o.method),
+                .map(|o| {
+                    let way = match (&o.tag, &o.alt_cost) {
+                        (Some(t), _) => t.to_string(),
+                        (None, Some(c)) => format!("{c:?}"),
+                        (None, None) => format!("{:?}", o.method),
+                    };
+                    if faces_differ {
+                        format!("{way}: {}", self.face_characteristics(card, o.face).name)
+                    } else {
+                        way
+                    }
                 })
                 .collect();
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
