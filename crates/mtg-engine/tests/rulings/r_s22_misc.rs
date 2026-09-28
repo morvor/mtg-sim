@@ -454,3 +454,46 @@ fn anrakyr_a_spell_with_x_cast_by_paying_life_has_x_zero() {
     assert_eq!(t.life(P0), 20);
     assert_eq!(tapped_lands(&t, P0), 0);
 }
+
+#[test]
+fn comply_names_one_half_of_a_split_card_and_the_other_can_still_be_cast() {
+    cr!("709.3", "201.2", "611.2a", "702.127a");
+    ruling!(
+        "Failure // Comply",
+        "If you choose the name of a split card, you choose one name, not both. For example, you could name Failure or Comply, but not Failure // Comply. Opponents are still allowed to cast the half you didn't choose."
+    );
+    supported("Failure // Comply");
+    supported("Fire // Ice");
+    // Comply (aftermath, {W}): "Choose a card name. Until your next turn, your opponents
+    // can't cast spells with the chosen name." P0 names Fire.
+    let comply = |named: &str| {
+        let mut t = TestGame::new(2);
+        let fc = t.graveyard(P0, "Failure // Comply");
+        crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::W, 1);
+        t.answer(P0, DecisionKind::Name, Answer::Text(named.into()));
+        t.cast(P0, fc)
+            .method(CastMethod::Keyword(KeywordKind::Aftermath))
+            .go();
+        t.resolve_all();
+        assert!(t.in_exile("Failure // Comply"));
+        let fi = t.hand(P1, "Fire // Ice");
+        t.lands(P1, "Volcanic Island", 2);
+        t.set_step(P1, Step::PrecombatMain);
+        (t, fi)
+    };
+    let (mut t, fi) = comply("Fire");
+    let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, fi);
+    assert!(!methods.contains(&CastMethod::Half(0)), "Fire can't be cast");
+    assert!(methods.contains(&CastMethod::Half(1)), "Ice can");
+    t.cast(P1, fi)
+        .method(CastMethod::Half(1))
+        .target(Entity::Player(P0))
+        .go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Fire // Ice"));
+    // "Fire // Ice" isn't a name that can be chosen: nothing is named.
+    let (mut t, fi) = comply("Fire // Ice");
+    let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, fi);
+    assert!(methods.contains(&CastMethod::Half(0)));
+    assert!(methods.contains(&CastMethod::Half(1)));
+}
