@@ -151,14 +151,15 @@ fn split_ok(all: &[ObjectId], a: &[ObjectId], b: &[ObjectId]) -> bool {
     v == w
 }
 
-/// Custom effects: [`OPT_IN`].
+/// Custom effects: [`OPT_IN`]. The choice is public: the players choosing after this one
+/// know it (CR 101.4b).
 pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-    let _ = g;
     if name != OPT_IN {
         return false;
     }
     if let Some(p) = ctx.iter_player {
         ctx.vars.entry(OPTED).or_default().push(Entity::Player(p));
+        g.log(|_| format!("{p} chooses to take part"));
     }
     true
 }
