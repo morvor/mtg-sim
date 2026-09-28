@@ -82,3 +82,45 @@ fn demonstrate_copies_of_a_spell_have_its_value_of_x() {
         .count();
     assert_eq!(p1, 1);
 }
+
+#[test]
+fn show_of_confidence_counts_spells_cast_before_its_trigger_resolves() {
+    cr!("707.10", "603.3", "608.2h");
+    ruling!(
+        "Show of Confidence",
+        "The triggered ability counts all instants and sorceries that were cast before it resolves. If you cast instant spells in response to the ability, those spells will count."
+    );
+    supported("Show of Confidence");
+    // "When you cast this spell, copy it for each other instant and sorcery spell you've
+    // cast this turn. You may choose new targets for the copies. / Put a +1/+1 counter on
+    // target creature. It gains vigilance until end of turn."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Plains", 2);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    let show = t.hand(P0, "Show of Confidence");
+    t.cast(P0, show).target(Entity::Object(bears)).go();
+    t.settle();
+    // In response to the trigger, P0 casts another instant: it counts too.
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::U, 1);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    // Two copies and the original: three counters.
+    assert_eq!(t.counters(bears, "+1/+1"), 3);
+    // Without the response: one copy.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Plains", 2);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    let show = t.hand(P0, "Show of Confidence");
+    t.cast(P0, show).target(Entity::Object(bears)).go();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 2);
+}
