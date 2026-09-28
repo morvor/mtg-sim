@@ -1206,6 +1206,15 @@ impl Game {
                 }
             }
         }
+        // Cost modifiers resolved effects created for players ("Until your next turn,
+        // spells that player casts cost {2} less to cast"), relative to each such player.
+        for e in &self.player_effects {
+            if let (PlayerModification::CostModifier(cm), Some(src)) = (&e.effect, e.source) {
+                for p in &e.players {
+                    st.cost_modifiers.push((src, *p, cm.clone()));
+                }
+            }
+        }
         crate::special_actions::apply_ignoring(self, &mut st.restrictions);
         self.statics = st;
     }

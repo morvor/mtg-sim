@@ -12,7 +12,7 @@ use crate::oracle::CompileContext;
 /// Parses the text of a reflexive (or similar immediately-created) triggered ability into
 /// its own body: it has its own targets. "That creature" refers to the objects the
 /// preceding instruction acted on.
-fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
+pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
     let text = text
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");
