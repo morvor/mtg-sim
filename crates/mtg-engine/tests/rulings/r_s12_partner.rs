@@ -264,3 +264,32 @@ fn partner_character_select_pairs_only_with_partner_character_select() {
     assert!(!can_pair("Splinter, the Mentor", "Pippin, Warden of Isengard"));
     assert!(!can_pair("Splinter, the Mentor", "Wernog, Rider's Chaplain"));
 }
+
+#[test]
+fn two_of_the_same_partner_commander_deal_commander_damage_separately() {
+    cr!("702.124d", "903.10a", "903.13f");
+    // Commander Draft: two copies of Kraum, Ludevic's Opus (a legendary 4/4) are P0's
+    // commanders; one is in the command zone, the other on the battlefield.
+    let name = "Kraum, Ludevic's Opus";
+    let mut t = commander_game();
+    t.g.players[1].life = 40;
+    let a = t.command(P0, name);
+    let b = t.battlefield(P0, name);
+    for id in [a, b] {
+        t.g.objects[id.0 as usize].is_commander = true;
+        t.g.players[0].commander_names.push(name.into());
+    }
+    let key_a = mtg_engine::kw::partner::commander_key(&t.g, a);
+    assert_ne!(key_a, mtg_engine::kw::partner::commander_key(&t.g, b));
+    // The first one has already dealt P1 18 combat damage; the second deals 4 now: 22
+    // from the two together, but less than 21 from either one.
+    t.g.players[1].commander_damage.insert(key_a, 18);
+    attack_with(&mut t, &[(b, Entity::Player(P1))]);
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    t.settle();
+    assert_eq!(t.life(P1), 36);
+    assert!(!t.has_lost(P1));
+    let mut dealt: Vec<u32> = t.player(P1).commander_damage.values().copied().collect();
+    dealt.sort();
+    assert_eq!(dealt, vec![4, 18]);
+}

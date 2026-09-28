@@ -2297,13 +2297,10 @@ pub fn choose_attack_target_for_new_attacker(g: &mut Game, controller: PlayerId)
     choose_attack_target_preferring(g, controller, None)
 }
 
-/// [`choose_attack_target_for_new_attacker`] with `preferred` (if it can be attacked)
-/// offered first, as the default answer.
-pub fn choose_attack_target_preferring(
-    g: &mut Game,
-    controller: PlayerId,
-    preferred: Option<Entity>,
-) -> Option<Entity> {
+/// What a creature put onto the battlefield attacking may attack (CR 508.4): a defending
+/// player, a planeswalker a defending player controls, or a battle a defending player
+/// protects, with `preferred` (if it can be attacked) first.
+pub fn attack_target_options(g: &Game, preferred: Option<Entity>) -> Vec<Entity> {
     let mut targets: Vec<Entity> = attack_targets(g)
         .into_iter()
         .filter(|t| g.valid_attack_target(*t))
@@ -2312,6 +2309,17 @@ pub fn choose_attack_target_preferring(
         let p = targets.remove(i);
         targets.insert(0, p);
     }
+    targets
+}
+
+/// [`choose_attack_target_for_new_attacker`] with `preferred` (if it can be attacked)
+/// offered first, as the default answer.
+pub fn choose_attack_target_preferring(
+    g: &mut Game,
+    controller: PlayerId,
+    preferred: Option<Entity>,
+) -> Option<Entity> {
+    let targets = attack_target_options(g, preferred);
     if targets.len() <= 1 {
         return targets.first().copied();
     }

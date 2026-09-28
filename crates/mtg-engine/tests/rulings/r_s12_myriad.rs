@@ -158,8 +158,40 @@ fn doubled_myriad_tokens_each_choose_what_they_attack() {
 }
 
 #[test]
+fn doubled_tokens_put_onto_the_battlefield_attacking_each_choose_what_they_attack() {
+    cr!("508.4", "614.1a");
+    supported("Geist of Saint Traft");
+    // Geist of Saint Traft: "Whenever this creature attacks, create a 4/4 white Angel
+    // creature token with flying that's tapped and attacking." With Parallel Lives, two
+    // Angels are created; each one's attack is chosen as it's created.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Parallel Lives");
+    let jace = t.battlefield(P2, "Jace Beleren");
+    let geist = t.battlefield(P0, "Geist of Saint Traft");
+    attack_with(&mut t, &[(geist, Entity::Player(P1))]);
+    let from = t.asked().len();
+    t.answer_choose(P0, &[Entity::Object(jace)]);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.resolve_all();
+    let angels = with_subtype(&t, P0, "Angel");
+    assert_eq!(angels.len(), 2);
+    let mut want = vec![Entity::Player(P2), Entity::Object(jace)];
+    want.sort();
+    assert_eq!(targets_of(&t, &angels), want);
+    // Each choice offered every defending player and planeswalker, what Geist attacks
+    // first.
+    let offered = crate::r_s03_common::choice_candidates(&t, from, "attacking");
+    assert_eq!(offered.len(), 2);
+    for o in offered {
+        assert_eq!(o.len(), 3);
+        assert_eq!(o[0], Entity::Player(P1));
+    }
+    assert_eq!(attack_target(&t, geist), Some(Entity::Player(P1)));
+}
+
+#[test]
 fn myriad_tokens_werent_declared_as_attackers_and_pay_no_attack_costs() {
-    cr!("702.116a", "508.4", "508.4c", "508.1g");
+    cr!("702.116a", "508.4", "508.4c", "508.1h");
     ruling!(
         "Wizards of Thay",
         "Although the tokens enter the battlefield attacking, they were never declared as attackers. Abilities that trigger whenever a creature attacks won’t trigger, including the myriad ability of the tokens. If there are any costs to have a creature attack, those costs won’t apply to the tokens."

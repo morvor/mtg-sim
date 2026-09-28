@@ -583,9 +583,11 @@ pub struct Game {
     /// While tokens are being created that "enter with" counters (incubate, CR 701.53a):
     /// the counters each of them enters with (CR 122.6).
     pub token_counters: Vec<(CounterKind, u32)>,
-    /// While tokens are being created "attacking that player or a planeswalker they
-    /// control" (myriad, CR 702.116a): what each of them may attack, chosen by its
-    /// controller separately for each token as it's created (CR 508.4). Empty otherwise.
+    /// While tokens are being created attacking ("tapped and attacking"; myriad's
+    /// "attacking that player or a planeswalker they control", CR 702.116a): what each of
+    /// them may attack, chosen by its controller separately for each token as it's
+    /// created (CR 508.4), also for tokens an effect such as Parallel Lives adds. The
+    /// first is the default. Empty otherwise.
     pub token_attack_options: Vec<Entity>,
     /// State kept by keyword actions (CR 701): see `kwa/`.
     pub kwa: crate::kwa::KwaState,

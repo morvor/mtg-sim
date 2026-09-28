@@ -159,7 +159,10 @@ fn that_much_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
-    if matches!(source, Sel::None) {
+    // "That much" is an amount the trigger event has; a "whenever you cast" trigger's
+    // "it" (the spell) has none ("If eight or more mana was spent to cast that spell,
+    // sacrifice ~ and it deals that much damage", see `opus.rs`).
+    if matches!(source, Sel::None | Sel::TriggerSpell) {
         return None;
     }
     let to = match rest {
