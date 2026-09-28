@@ -436,7 +436,7 @@ impl Game {
             Filter::Monocolored => c.colors.is_monocolored(),
             Filter::Permanent => o.zone == Zone::Battlefield,
             Filter::PermanentCard => c.card_types.has_permanent_type(),
-            Filter::Spell => o.is_spell(),
+            Filter::Spell | Filter::SpellOnStack => o.is_spell(),
             Filter::Token => o.kind == ObjKind::Token,
             Filter::Card => o.kind == ObjKind::Card,
             Filter::Copy => matches!(o.kind, ObjKind::CardCopy | ObjKind::SpellCopy),

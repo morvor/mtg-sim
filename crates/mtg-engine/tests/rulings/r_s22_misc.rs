@@ -355,3 +355,72 @@ fn discontinuity_triggers_while_ending_the_turn_go_on_the_stack_in_cleanup() {
         "{seen:?}"
     );
 }
+
+#[test]
+fn cast_through_time_a_spell_gained_control_of_has_rebound_that_does_nothing() {
+    cr!("702.88a", "110.2", "115.7");
+    ruling!(
+        "Cast Through Time",
+        "if you gain control of an instant or sorcery spell with Commandeer, it will have rebound, but the ability won’t do anything because that spell wasn’t cast from your hand."
+    );
+    supported("Cast Through Time");
+    supported("Commandeer");
+    // P1 casts Lightning Bolt at P0; P0 gains control of it with Commandeer ("Gain
+    // control of target noncreature spell. You may choose new targets for it.") and
+    // changes its target to P1.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cast Through Time");
+    crate::r_s04_common::add_mana(&mut t, P1, mtg_engine::mana::ManaType::R, 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    assert!(!t
+        .obj_now(bolt)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Rebound));
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::U, 7);
+    let commandeer = t.hand(P0, "Commandeer");
+    t.cast(P0, commandeer).target(Entity::Object(bolt)).go();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    assert_eq!(t.obj_now(bolt).controller, P0);
+    assert!(
+        t.obj_now(bolt)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Rebound),
+        "a spell P0 controls has rebound"
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+    // It wasn't cast from P0's hand: it goes to its owner's graveyard, not exile.
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert!(!t.in_exile("Lightning Bolt"));
+}
+
+#[test]
+fn spells_you_control_have_deathtouch_applies_to_a_spell_gained_control_of() {
+    cr!("611.3a", "702.2b", "110.2");
+    supported("Pestilent Spirit");
+    supported("Commandeer");
+    // "Instant and sorcery spells you control have deathtouch." is a continuous effect
+    // (not one spells gain as they're cast, CR 610.5): P1's Shock, now controlled by P0,
+    // has deathtouch, and its 2 damage destroys P1's Hill Giant.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pestilent Spirit");
+    let giant = t.battlefield(P1, "Hill Giant");
+    crate::r_s04_common::add_mana(&mut t, P1, mtg_engine::mana::ManaType::R, 1);
+    let shock = t.hand(P1, "Shock");
+    let shock = t.cast(P1, shock).target(Entity::Player(P0)).go();
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::U, 7);
+    let commandeer = t.hand(P0, "Commandeer");
+    t.cast(P0, commandeer).target(Entity::Object(shock)).go();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.resolve();
+    assert!(t
+        .obj_now(shock)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Deathtouch));
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.life(P0), 20);
+}

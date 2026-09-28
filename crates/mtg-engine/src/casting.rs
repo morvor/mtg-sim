@@ -2785,12 +2785,12 @@ impl crate::eval::View for WithChars<'_> {
 /// a card that would become such a spell: the "is on the stack" parts are dropped.
 pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     match f {
-        Filter::Spell | Filter::InZone(ZoneKind::Stack) => Filter::Any,
+        Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(as_spell_filter).collect()),
         Filter::Not(x) => match **x {
             // "nonspell" stays as written.
-            Filter::Spell | Filter::InZone(ZoneKind::Stack) => f.clone(),
+            Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => f.clone(),
             _ => Filter::Not(Box::new(as_spell_filter(x))),
         },
         other => other.clone(),

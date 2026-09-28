@@ -45,7 +45,8 @@ pub fn exec_next_spell(
 
 /// Static abilities of the form "[filter] spells you cast have [ability]" create
 /// one-shot effects that make spells gain the ability as they're cast (CR 610.5), rather
-/// than applying continuously to spells on the stack.
+/// than applying continuously to spells on the stack ("[filter] spells you control have
+/// [ability]", `Filter::SpellOnStack`, CR 611.3a).
 pub fn is_cast_grant(s: &StaticAbility) -> bool {
     if s.is_cda {
         return false;
@@ -54,11 +55,20 @@ pub fn is_cast_grant(s: &StaticAbility) -> bool {
         return false;
     };
     affected.zone() == Some(ZoneKind::Stack)
+        && !mentions(affected, &Filter::SpellOnStack)
         && !mentions_source(affected)
         && !mods.is_empty()
         && mods
             .iter()
             .all(|m| matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_)))
+}
+
+/// Whether the filter has `part` among its conjuncts.
+fn mentions(f: &Filter, part: &Filter) -> bool {
+    match f {
+        Filter::And(v) => v.iter().any(|x| mentions(x, part)),
+        _ => std::mem::discriminant(f) == std::mem::discriminant(part),
+    }
 }
 
 fn mentions_source(f: &Filter) -> bool {
