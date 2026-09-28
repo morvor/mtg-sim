@@ -136,3 +136,42 @@ pub fn pool(t: &mut TestGame, n: u32) {
 pub fn zone_now(t: &TestGame, id: ObjectId) -> Zone {
     t.zone(id)
 }
+
+/// Wraps `p`'s agent: the first "choose" decision offering an object named `name` is
+/// answered with that object (a card that has changed zones is a new object by then,
+/// CR 400.7, so its id can't be scripted in advance); every other decision gets the
+/// scripted answer.
+pub fn choose_named_when_offered(t: &mut TestGame, p: PlayerId, name: &str) {
+    struct PickNamed {
+        inner: Box<dyn mtg_engine::decision::Agent>,
+        name: String,
+        done: bool,
+    }
+    impl mtg_engine::decision::Agent for PickNamed {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            if !self.done {
+                if let Decision::ChooseEntities { candidates, .. } = d {
+                    let hit = candidates.iter().find(|e| match e {
+                        Entity::Object(o) => g.obj(*o).chars.name == self.name.as_str(),
+                        _ => false,
+                    });
+                    if let Some(e) = hit {
+                        self.done = true;
+                        return Answer::Entities(vec![*e]);
+                    }
+                }
+            }
+            self.inner.decide(g, p, d)
+        }
+    }
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(PickNamed {
+        inner,
+        name: name.to_string(),
+        done: false,
+    });
+}
