@@ -280,6 +280,9 @@ pub fn reveal_until(
             g.move_to_destination(vec![f], found_to, ctx)
         };
         ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
+    } else {
+        // No card was found: "that card" doesn't exist.
+        ctx.set_var(vars::IT, vec![]);
     }
     if rest_to.zone == ZoneKind::Library {
         place_rest(g, p, revealed, rest_to, ctx);

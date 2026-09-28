@@ -4,8 +4,8 @@
 
 use crate::r_s01_common::*;
 use crate::r_s04_common::spell_targets;
-use crate::r_s06_common::activate_containing;
 use crate::r_s05_common::enter;
+use crate::r_s06_common::activate_containing;
 use crate::r_s14_common::cast_from_hand;
 use crate::r_s23_common::*;
 use mtg_engine::decision::{Answer, Decision};
@@ -206,8 +206,7 @@ fn a_keyrune_is_colorless_until_its_ability_resolves() {
     assert!(colors_now(&mut t, keyrune).is_colorless());
     t.lands(P0, "Island", 1);
     t.lands(P0, "Swamp", 1);
-    activate_containing(&mut t, P0, keyrune, "becomes a")
-    .unwrap();
+    activate_containing(&mut t, P0, keyrune, "becomes a").unwrap();
     // While the ability is on the stack, it's still a colorless noncreature artifact.
     assert_eq!(t.stack_len(), 1);
     assert!(colors_now(&mut t, keyrune).is_colorless());
@@ -282,8 +281,7 @@ fn a_dragonlord_monument_is_colorless_until_its_ability_makes_it_two_colors() {
     t.lands(P0, "Mountain", 1);
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Wastes", 4);
-    activate_containing(&mut t, P0, monument, "becomes a")
-    .unwrap();
+    activate_containing(&mut t, P0, monument, "becomes a").unwrap();
     t.resolve_all();
     assert_eq!(
         colors_now(&mut t, monument),
@@ -309,8 +307,7 @@ fn a_creature_land_is_colorless_until_its_ability_gives_it_colors() {
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Island", 1);
     t.lands(P0, "Wastes", 2);
-    activate_containing(&mut t, P0, falls, "becomes a")
-    .unwrap();
+    activate_containing(&mut t, P0, falls, "becomes a").unwrap();
     assert!(colors_now(&mut t, falls).is_colorless());
     t.resolve_all();
     assert_eq!(
@@ -480,7 +477,9 @@ fn turn_to_frog_keeps_other_card_types_and_supertypes() {
     assert!(!o.chars.has_subtype("Sphinx"));
     assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
     assert!(o.chars.supertypes.contains(Supertype::Legendary));
-    assert!(!o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(!o
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     assert_eq!(t.pt(sharuum), (1, 1));
     // Until end of turn.
     t.advance_to(P1, Step::Upkeep);
@@ -515,7 +514,9 @@ fn okos_elk_loses_other_card_types_but_keeps_supertypes_indefinitely() {
     assert!(o.chars.has_subtype("Elk") && !o.chars.has_subtype("Sphinx"));
     assert!(o.is(CardType::Creature) && !o.is(CardType::Artifact));
     assert!(o.chars.supertypes.contains(Supertype::Legendary));
-    assert!(!o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(!o
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     assert_eq!(t.pt(sharuum), (3, 3));
 }
 
@@ -537,13 +538,7 @@ fn color_choices(t: &TestGame, from: usize) -> Vec<Vec<String>> {
 fn colors_idx(words: &str) -> usize {
     (1..32u8)
         .map(ColorSet)
-        .position(|s| {
-            s.iter()
-                .map(|c| c.word())
-                .collect::<Vec<_>>()
-                .join(" and ")
-                == words
-        })
+        .position(|s| s.iter().map(|c| c.word()).collect::<Vec<_>>().join(" and ") == words)
         .unwrap()
 }
 
@@ -586,11 +581,7 @@ fn quickchange_any_single_color_or_combination_but_not_colorless() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer_targets(P0, &[Entity::Object(bears)]);
-    t.answer(
-        P0,
-        DecisionKind::Option,
-        Answer::Index(colors_idx("red")),
-    );
+    t.answer(P0, DecisionKind::Option, Answer::Index(colors_idx("red")));
     enter(&mut t, P0, "Prismwake Merrow");
     t.resolve_all();
     assert_eq!(colors_now(&mut t, bears), colors_of(&[Color::Red]));
@@ -624,7 +615,9 @@ fn shyft_cant_become_colorless() {
     );
     let offered = color_choices(&t, from);
     assert_eq!(offered.len(), 1);
-    assert!(offered[0].iter().all(|o| !o.is_empty() && !o.contains("colorless")));
+    assert!(offered[0]
+        .iter()
+        .all(|o| !o.is_empty() && !o.contains("colorless")));
     // It lasts indefinitely.
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(

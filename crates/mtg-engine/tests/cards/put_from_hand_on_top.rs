@@ -1,7 +1,7 @@
 //! "Draw three cards, then put two cards from your hand on top of your library in any
 //! order." (Brainstorm, Cavalier of Gales, Hidetsugu and Kairi; CR 401.4, 608.2c).
 
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -46,6 +46,27 @@ fn brainstorm_draws_then_puts_two_cards_back_while_resolving() {
     assert!(t.asked()[from..]
         .iter()
         .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
+    // P0 was asked to arrange them (CR 401.4); arranged the other way, the other card
+    // ends up on top.
+    let orders = t.asked()[from..]
+        .iter()
+        .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
+        .count();
+    assert_eq!(orders, 1);
+    let top_of = |t: &TestGame| {
+        let c = *t.g.player(P0).library.last().unwrap();
+        t.obj(c).chars.name.to_string()
+    };
+    let mut u = TestGame::new(2);
+    u.lands(P0, "Island", 1);
+    let forest = u.hand(P0, "Forest");
+    let bolt = u.library_top(P0, "Lightning Bolt");
+    let brainstorm = u.hand(P0, "Brainstorm");
+    u.answer_choose(P0, &[Entity::Object(forest), Entity::Object(bolt)]);
+    u.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
+    u.cast(P0, brainstorm).go();
+    u.resolve();
+    assert_ne!(top_of(&t), top_of(&u));
 }
 
 #[test]

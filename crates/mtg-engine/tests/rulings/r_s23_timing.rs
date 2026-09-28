@@ -21,7 +21,7 @@ const JUMP_START: CastMethod = CastMethod::Keyword(KeywordKind::JumpStart);
 
 #[test]
 fn mystic_forge_spells_from_the_library_keep_their_normal_timing() {
-    cr!("601.3", "307.1", "117.1a", "401.5");
+    cr!("601.3", "307.1", "117.1a");
     ruling!(
         "Mystic Forge",
         "You must follow the normal timing permissions and restrictions of the spells you cast from your library."
@@ -97,7 +97,8 @@ fn moria_marauder_cards_follow_normal_timing_and_spells_cost_their_costs() {
     block_and_finish(&mut t, P1, &[]);
     // (Moria Marauder is a 1/1 with double strike.)
     assert_eq!(t.life(P1), 18);
-    let divination = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Divination")[0];
+    let divination =
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Divination")[0];
     let forest = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest")[0];
     t.lands(P0, "Island", 3);
     // During combat, the sorcery can't be cast and the land can't be played.
@@ -120,7 +121,8 @@ fn moria_marauder_cards_follow_normal_timing_and_spells_cost_their_costs() {
     attack_with(&mut t, &[(marauder, Entity::Player(P1))]);
     block_and_finish(&mut t, P1, &[]);
     t.advance_to(P0, Step::PostcombatMain);
-    let divination = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Divination")[0];
+    let divination =
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Divination")[0];
     assert!(!can_cast(&mut t, P0, divination, NORMAL));
 }
 
@@ -231,7 +233,7 @@ fn nothing_happens_between_merfolk_looters_draw_and_discard() {
 
 #[test]
 fn wavebreak_hippocamp_triggers_only_on_the_first_spell_during_the_turn() {
-    cr!("603.2", "603.2h");
+    cr!("603.2");
     ruling!(
         "Wavebreak Hippocamp",
         "This ability triggers only on your very first spell during an opponent's turn, not the first spell after the card is on the battlefield."
@@ -443,7 +445,10 @@ fn the_belligerent_can_cast_an_adventure_from_the_top_of_the_library() {
     assert!(!methods.is_empty());
     assert!(!methods.contains(&NORMAL));
     let stomp = methods[0].clone();
-    t.cast(P0, top).method(stomp).target(Entity::Player(P1)).go();
+    t.cast(P0, top)
+        .method(stomp)
+        .target(Entity::Player(P1))
+        .go();
     t.resolve();
     assert_eq!(t.life(P1), 18);
     // The card goes on an adventure (exile).

@@ -70,7 +70,11 @@ fn lyse_hext_reduces_only_generic_mana_of_noncreature_spells() {
     t.resolve_all();
     // Lightning Bolt ({R}) still costs {R}: without red mana it can't be cast.
     let bolt = t.hand(P0, "Lightning Bolt");
-    assert!(t.cast(P0, bolt).target(Entity::Player(P1)).try_go().is_err());
+    assert!(t
+        .cast(P0, bolt)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_err());
     // Burst Lightning kicked: the total cost {4}{R} is reduced to {3}{R}.
     t.lands(P0, "Mountain", 1);
     t.lands(P0, "Wastes", 3);
@@ -178,7 +182,8 @@ fn conduit_of_ruin_the_first_creature_spell_neednt_be_the_first_spell() {
     // Next turn, the discount is back.
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::PrecombatMain);
-    let bears = t.g.find_in_zone(mtg_engine::object::Zone::Hand(P0), "Grizzly Bears")[0];
+    let bears =
+        t.g.find_in_zone(mtg_engine::object::Zone::Hand(P0), "Grizzly Bears")[0];
     let untapped_before = crate::r_s04_common::untapped_lands(&t, P0);
     t.cast(P0, bears).go();
     assert_eq!(
@@ -198,7 +203,8 @@ fn sage_of_the_beyond_reduces_only_generic_mana_of_spells_cast_from_elsewhere() 
     supported("Think Twice");
     supported("Lingering Souls");
     // "Spells you cast from anywhere other than your hand cost {2} less to cast."
-    let flashback = mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback);
+    let flashback =
+        mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sage of the Beyond");
     // Think Twice's flashback cost {2}{U} is reduced to {U}.
@@ -209,7 +215,11 @@ fn sage_of_the_beyond_reduces_only_generic_mana_of_spells_cast_from_elsewhere() 
     t.resolve_all();
     // Lingering Souls' flashback cost {1}{B} is reduced to {B}, not less.
     let souls = t.graveyard(P0, "Lingering Souls");
-    assert!(t.cast(P0, souls).method(flashback.clone()).try_go().is_err());
+    assert!(t
+        .cast(P0, souls)
+        .method(flashback.clone())
+        .try_go()
+        .is_err());
     t.lands(P0, "Swamp", 1);
     t.cast(P0, souls).method(flashback).go();
     assert_eq!(tapped_lands(&t, P0), 2);

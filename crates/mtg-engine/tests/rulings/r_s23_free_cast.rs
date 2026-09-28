@@ -632,7 +632,8 @@ fn hidetsugu_and_kairi_free_card_pays_additional_costs_but_no_alternative_cost()
         t.answer_yes(P0, false);
     });
     assert!(t.in_exile("Lightning Bolt"));
-    let bolt = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Lightning Bolt")[0];
+    let bolt =
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Lightning Bolt")[0];
     t.lands(P0, "Mountain", 1);
     assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, bolt).is_empty());
 }
@@ -743,7 +744,9 @@ fn stolen_goods_free_spell_pays_additional_costs_but_no_alternative_cost() {
     // battlefield.
     let mut t = TestGame::new(2);
     let drifter = stolen_goods(&mut t, "Mulldrifter");
-    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free));
+    assert!(
+        crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free)
+    );
     let spell = t.cast(P0, drifter).method(CastMethod::Free).go();
     assert!(!t
         .obj(spell)
@@ -757,7 +760,9 @@ fn stolen_goods_free_spell_pays_additional_costs_but_no_alternative_cost() {
     let drifter = stolen_goods(&mut t, "Mulldrifter");
     t.advance_to(P1, Step::Upkeep);
     t.set_step(P0, Step::PrecombatMain);
-    assert!(!crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free));
+    assert!(
+        !crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free)
+    );
 }
 
 /// Narset, Enlightened Master attacks P1 with `top` on top of P0's library (the top four
@@ -783,7 +788,10 @@ fn narset_free_spells_have_x_zero_and_follow_timing_rules() {
         "Narset, Enlightened Master",
         "You must follow all applicable timing rules. For example, if one of the exiled cards is a sorcery card, you can cast it only during your main phase while the stack is empty."
     );
-    ruling!("Narset, Enlightened Master", "You can't play any land cards exiled with Narset.");
+    ruling!(
+        "Narset, Enlightened Master",
+        "You can't play any land cards exiled with Narset."
+    );
     supported("Narset, Enlightened Master");
     // "Whenever Narset attacks, exile the top four cards of your library. Until end of
     // turn, you may cast noncreature spells from among those cards without paying their
@@ -815,7 +823,13 @@ fn narset_free_spells_have_x_zero_and_follow_timing_rules() {
 /// P1, the active player, casts `spell` (with X = `x`, targeting `target` if given) while
 /// P0 controls Powerbalance with `top` on top of their library; the trigger resolves with
 /// the answers queued.
-fn powerbalance_trigger(t: &mut TestGame, spell: &str, x: Option<i64>, target: Option<Entity>, top: &str) -> ObjectId {
+fn powerbalance_trigger(
+    t: &mut TestGame,
+    spell: &str,
+    x: Option<i64>,
+    target: Option<Entity>,
+    top: &str,
+) -> ObjectId {
     t.battlefield(P0, "Powerbalance");
     let top = t.library_top(P0, top);
     t.set_step(P1, Step::PrecombatMain);
@@ -857,7 +871,13 @@ fn powerbalance_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
     t.answer_yes(P0, true);
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    powerbalance_trigger(&mut t, "Lightning Bolt", None, Some(Entity::Player(P0)), "Burst Lightning");
+    powerbalance_trigger(
+        &mut t,
+        "Lightning Bolt",
+        None,
+        Some(Entity::Player(P0)),
+        "Burst Lightning",
+    );
     t.resolve_all();
     assert_eq!(tapped_lands(&t, P0), 4);
     assert_eq!(t.life(P1), 16);
@@ -879,7 +899,13 @@ fn powerbalance_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
     t.answer_yes(P0, true);
     powerbalance_trigger(&mut t, "Grizzly Bears", None, None, "Tormenting Voice");
     t.resolve_all();
-    assert_eq!(t.g.player(P0).library.last().map(|c| t.g.obj(*c).chars.name.as_str()), Some("Tormenting Voice"));
+    assert_eq!(
+        t.g.player(P0)
+            .library
+            .last()
+            .map(|c| t.g.obj(*c).chars.name.as_str()),
+        Some("Tormenting Voice")
+    );
     // Cyclonic Rift (mana value 2) can't be cast for its overload cost.
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 7);
@@ -913,14 +939,26 @@ fn powerbalance_compares_the_x_chosen_for_the_opponents_spell() {
     let mut t = TestGame::new(2);
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
-    powerbalance_trigger(&mut t, "Blaze", Some(1), Some(Entity::Player(P0)), "Grizzly Bears");
+    powerbalance_trigger(
+        &mut t,
+        "Blaze",
+        Some(1),
+        Some(Entity::Player(P0)),
+        "Grizzly Bears",
+    );
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     // Blaze with X = 2 has mana value 3: it can't.
     let mut t = TestGame::new(2);
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
-    powerbalance_trigger(&mut t, "Blaze", Some(2), Some(Entity::Player(P0)), "Grizzly Bears");
+    powerbalance_trigger(
+        &mut t,
+        "Blaze",
+        Some(2),
+        Some(Entity::Player(P0)),
+        "Grizzly Bears",
+    );
     t.resolve_all();
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
     // A revealed Blaze has mana value 1 (X is 0) and is cast with X = 0 in response to a
@@ -929,7 +967,13 @@ fn powerbalance_compares_the_x_chosen_for_the_opponents_spell() {
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    powerbalance_trigger(&mut t, "Lightning Bolt", None, Some(Entity::Player(P0)), "Blaze");
+    powerbalance_trigger(
+        &mut t,
+        "Lightning Bolt",
+        None,
+        Some(Entity::Player(P0)),
+        "Blaze",
+    );
     assert!(t.g.stack.iter().any(|s| t.g.obj(*s).chars.name == "Blaze"));
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Blaze"));
@@ -973,8 +1017,12 @@ fn powerbalance_compares_the_spell_the_card_would_become() {
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
     powerbalance_trigger(&mut t, "Hill Giant", None, None, "Fire // Ice");
-    assert!(!t.g.stack.iter().any(|s| t.g.obj(*s).chars.name.contains("Fire")
-        || t.g.obj(*s).chars.name.contains("Ice")));
+    assert!(
+        !t.g.stack
+            .iter()
+            .any(|s| t.g.obj(*s).chars.name.contains("Fire")
+                || t.g.obj(*s).chars.name.contains("Ice"))
+    );
 }
 
 /// P0 controls Jodah, the Unifier with `top` on top of their library (top first) and
@@ -1056,7 +1104,8 @@ fn jodah_card_not_cast_stays_exiled_and_the_rest_go_to_the_bottom() {
     t.answer_yes(P0, false);
     jodah_trigger(&mut t, &["Grizzly Bears", "Forest", "Verix Bladewing"]);
     t.resolve_all();
-    let verix = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Verix Bladewing");
+    let verix =
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Verix Bladewing");
     assert_eq!(verix.len(), 1);
     assert_eq!(t.g.exile.len(), 1);
     let bottom: Vec<String> = t.g.player(P0).library[..2]
@@ -1302,7 +1351,12 @@ fn kiora_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
     t.lands(P0, "Wastes", 4);
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    kiora_trigger(&mut t, &["Grizzly Bears", "Burst Lightning"], Some("Burst Lightning"), &[]);
+    kiora_trigger(
+        &mut t,
+        &["Grizzly Bears", "Burst Lightning"],
+        Some("Burst Lightning"),
+        &[],
+    );
     // The other five cards looked at are the bottom five, in a random order.
     assert!(in_bottom(&t, P0, 5, "Grizzly Bears"));
     t.resolve_all();
@@ -1311,7 +1365,12 @@ fn kiora_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
     // Tormenting Voice: a card is discarded to cast it.
     let mut t = TestGame::new(2);
     let forest = t.hand(P0, "Forest");
-    kiora_trigger(&mut t, &["Tormenting Voice"], Some("Tormenting Voice"), &[forest]);
+    kiora_trigger(
+        &mut t,
+        &["Tormenting Voice"],
+        Some("Tormenting Voice"),
+        &[forest],
+    );
     assert!(t.in_graveyard(P0, "Forest"));
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Tormenting Voice"));
@@ -1443,17 +1502,20 @@ fn fevered_suspicion_cards_are_cast_in_any_order_now_or_never() {
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.answer_targets(P0, &[Entity::Player(P2)]);
     fevered_suspicion(&mut t, &["Lightning Bolt", "Burst Lightning"]);
-    let names: Vec<String> = t
-        .g
-        .stack
-        .iter()
-        .map(|s| t.g.obj(*s).chars.name.to_string())
-        .collect();
+    let names: Vec<String> =
+        t.g.stack
+            .iter()
+            .map(|s| t.g.obj(*s).chars.name.to_string())
+            .collect();
     assert_eq!(names, vec!["Lightning Bolt", "Burst Lightning"]);
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.life(P2), 18);
-    assert_eq!(t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest").len(), 1);
+    assert_eq!(
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest")
+            .len(),
+        1
+    );
     // Only the bolt is cast: Burst Lightning stays in exile and can't be cast later.
     let mut t = TestGame::new(3);
     stack_library(&mut t, P1, &["Forest", "Burst Lightning"]);
@@ -1462,9 +1524,14 @@ fn fevered_suspicion_cards_are_cast_in_any_order_now_or_never() {
     fevered_suspicion(&mut t, &["Lightning Bolt"]);
     t.resolve_all();
     assert_eq!(t.life(P2), 17);
-    let burst = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Burst Lightning");
+    let burst =
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Burst Lightning");
     assert_eq!(burst.len(), 1);
-    assert_eq!(t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest").len(), 1);
+    assert_eq!(
+        t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest")
+            .len(),
+        1
+    );
     t.lands(P0, "Mountain", 1);
     assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, burst[0]).is_empty());
 }
@@ -1551,12 +1618,11 @@ fn invoke_calamity_casts_one_after_the_other_judging_the_spells() {
     t.answer_targets(P0, &[Entity::Object(bears)]);
     t.answer_choose(P0, &[Entity::Object(illumination)]);
     invoke_calamity(&mut t);
-    let names: Vec<String> = t
-        .g
-        .stack
-        .iter()
-        .map(|s| t.g.obj(*s).chars.name.to_string())
-        .collect();
+    let names: Vec<String> =
+        t.g.stack
+            .iter()
+            .map(|s| t.g.obj(*s).chars.name.to_string())
+            .collect();
     assert_eq!(names, vec!["Ice", "Hieroglyphic Illumination"]);
     // Hieroglyphic Illumination, cast second, resolves first.
     let hand = t.hand_size(P0);

@@ -44,6 +44,30 @@ fn shivan_wumpus_any_player_may_sacrifice_a_land_of_their_choice() {
     assert!(!t.on_battlefield(wumpus));
     let top = *t.g.player(P0).library.last().unwrap();
     assert_eq!(t.obj(top).chars.name, "Shivan Wumpus");
+    // Three players: once P1 has sacrificed a land, P2 still gets the option (and may
+    // sacrifice one too); the creature is put on top of the library once.
+    let mut t = TestGame::new(3);
+    let forest = t.battlefield(P1, "Forest");
+    let island = t.battlefield(P2, "Island");
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer_choose(P1, &[Entity::Object(forest)]);
+    t.answer(P2, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer_choose(P2, &[Entity::Object(island)]);
+    let from = t.asked().len();
+    let library = t.library_size(P0);
+    let wumpus = t.enter(P0, "Shivan Wumpus");
+    t.g.flush_events();
+    t.resolve_all();
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P1, P2]);
+    assert!(t.in_graveyard(P1, "Forest"));
+    assert!(t.in_graveyard(P2, "Island"));
+    assert!(!t.on_battlefield(wumpus));
+    assert_eq!(t.library_size(P0), library + 1);
     // Nobody sacrifices: it stays.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Forest");

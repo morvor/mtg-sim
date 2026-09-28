@@ -39,12 +39,11 @@ fn storm_copies_arent_cast_and_dont_count_for_later_storm() {
     // The third Bolt's storm counts the two Bolts cast before it, not the copy.
     assert_eq!(copies, vec![0, 1, 2]);
     assert_eq!(t.life(P1), 40 - 3 * 6);
-    let cast = t
-        .g
-        .turn_events
-        .iter()
-        .filter(|e| matches!(e, Event::SpellCast { .. }))
-        .count();
+    let cast =
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::SpellCast { .. }))
+            .count();
     assert_eq!(cast, 3);
     // Only the three cast spells triggered Young Pyromancer.
     assert_eq!(t.named_on_battlefield("Elemental Token").len(), 3);

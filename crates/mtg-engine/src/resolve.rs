@@ -1431,10 +1431,13 @@ impl Game {
                 rest_to,
             } => {
                 let players = self.eval_players(who, ctx);
-                if players.len() > 1 {
+                if let [p] = players[..] {
+                    crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
+                } else {
                     // "Each opponent exiles cards from the top of their library until they
                     // exile a nonland card.": the cards found, and the others, of all of
-                    // them.
+                    // them. With no player (an illegal target player isn't affected, CR
+                    // 608.2b; no opponent left), nothing happens.
                     let (mut found, mut rest) = (Vec::new(), Vec::new());
                     for p in players {
                         ctx.set_var(vars::IT, vec![]);
@@ -1445,9 +1448,6 @@ impl Game {
                     }
                     ctx.set_var(vars::IT, found);
                     ctx.set_var(vars::REVEALED, rest);
-                } else {
-                    let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                    crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
                 }
             }
             Effect::ExtraTurn { who } => {
