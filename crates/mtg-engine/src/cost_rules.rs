@@ -71,6 +71,33 @@ fn reduce_one_colorless(cost: &mut ManaCost, colored_only: bool) {
     }
 }
 
+/// Reduces the generic component of `cost` by `n` (CR 118.7a). What the generic mana
+/// can't absorb reduces monocolored hybrid symbols ({2/W}) the player pays with their
+/// generic half (CR 601.2b: the nonhybrid equivalent is announced before the total cost
+/// is determined): with a reduction, paying such a symbol with generic mana is never
+/// harder than with its colored half, so that's the half used. Returns what's left of
+/// the reduction.
+pub fn reduce_generic_and_hybrid(cost: &mut ManaCost, n: u32) -> u32 {
+    let mut left = n.saturating_sub(cost.generic_amount());
+    cost.reduce_generic(n);
+    while left > 0 {
+        let Some(i) = cost
+            .symbols
+            .iter()
+            .position(|s| matches!(s, ManaSymbol::TwoHybrid(_)))
+        else {
+            break;
+        };
+        cost.symbols.remove(i);
+        let rest = 2u32.saturating_sub(left);
+        left = left.saturating_sub(2);
+        if rest > 0 {
+            cost.add(&ManaCost::generic(rest));
+        }
+    }
+    left
+}
+
 /// The half of a hybrid reduction symbol that reduces `cost` the most, used when the
 /// player hasn't chosen.
 pub fn default_half(cost: &ManaCost, s: ManaSymbol) -> Half {

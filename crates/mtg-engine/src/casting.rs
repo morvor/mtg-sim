@@ -1279,18 +1279,19 @@ impl Game {
         // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
         // cost is reduced (CR 118.7e).
         crate::cost_rules::choose_reduction_halves(self, p, id);
-        let mut total = self.base_total_cost(p, id, &chars, opt, x as u32);
-        add_cost(&mut total, &extra);
-        // Mode costs (spree, etc.).
+        // The additional costs chosen (kicker etc.) and mode costs (spree, etc.) are part
+        // of the total before cost reductions apply (CR 601.2f).
+        let mut additional = extra.clone();
         if let (Some(modal), Some(si)) = (&body.modal, self.obj(id).stack.as_deref()) {
             for cm in &si.chosen {
                 if let Some(m) = cm.mode {
                     if let Some(c) = &modal.modes[m].cost {
-                        add_cost(&mut total, c);
+                        add_cost(&mut additional, c);
                     }
                 }
             }
         }
+        let mut total = self.total_cost_with(p, id, &chars, opt, x as u32, &additional);
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
@@ -1384,6 +1385,21 @@ impl Game {
         opt: &CastOption,
         x: u32,
     ) -> Cost {
+        self.total_cost_with(p, card, chars, opt, x, &Cost::free())
+    }
+
+    /// The total cost (CR 601.2f) with the additional costs `additional` the player chose
+    /// to pay (kicker, spree mode costs, ...): the mana cost or alternative cost, plus
+    /// those and all cost increases, minus all cost reductions.
+    pub fn total_cost_with(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        opt: &CastOption,
+        x: u32,
+        additional: &Cost,
+    ) -> Cost {
         let mut cost = match &opt.alt_cost {
             Some(c) => c.clone(),
             None => Cost {
@@ -1403,6 +1419,8 @@ impl Game {
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
         }
+        // Additional costs the player chose to pay (CR 601.2b).
+        add_cost(&mut cost, additional);
         // CR 903.8: the commander tax (each commander separately, CR 702.124d).
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
@@ -1497,18 +1515,20 @@ impl Game {
             }
         }
         for (n, color) in reductions {
-            // CR 601.2f: what the mana cost's generic mana can't absorb reduces the
-            // generic mana of a waterbend cost, which is part of the total cost too.
-            let left = match (color, &cost.mana) {
-                (None, Some(m)) => n.saturating_sub(m.generic_amount()),
-                (None, None) => n,
-                (Some(_), _) => 0,
-            };
-            crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
-            if let Some(m) = cost.mana.as_mut() {
-                match color {
-                    None => m.reduce_generic(n),
-                    Some(c) => {
+            match color {
+                None => {
+                    // CR 118.7a: the generic component (and monocolored hybrid symbols
+                    // paid with generic mana, CR 601.2b) ...
+                    let left = match cost.mana.as_mut() {
+                        Some(m) => crate::cost_rules::reduce_generic_and_hybrid(m, n),
+                        None => n,
+                    };
+                    // CR 601.2f: ... then the generic mana of a waterbend cost, which is
+                    // part of the total cost too.
+                    crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
+                }
+                Some(c) => {
+                    if let Some(m) = cost.mana.as_mut() {
                         for _ in 0..n {
                             if !m.reduce_colored(c) {
                                 m.reduce_generic(1);
