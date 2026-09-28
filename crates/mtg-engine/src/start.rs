@@ -115,7 +115,9 @@ impl Game {
             .library
             .iter()
             .copied()
-            .find(|id| self.obj(*id).base.name == name)
+            // A second card with the same name can be a second commander (Commander
+            // Draft, CR 903.13f).
+            .find(|id| self.obj(*id).base.name == name && !self.obj(*id).is_commander)
         else {
             return false;
         };
