@@ -76,6 +76,7 @@ pub mod layers;
 pub mod legend_rule;
 pub mod library;
 pub mod life_totals;
+pub mod loyalty_abilities;
 pub mod mana;
 pub mod mana_abilities;
 pub mod mana_value;

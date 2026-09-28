@@ -42,6 +42,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::zones::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "a loyalty ability" being activated (CR 606).
+    if let Some(b) = crate::loyalty_abilities::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
