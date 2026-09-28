@@ -52,3 +52,29 @@ pub fn unearthed(t: &mut TestGame, p: PlayerId, name: &str, cost: &str) -> Objec
     assert_eq!(t.g.obj(now).zone, Zone::Battlefield, "{name} wasn't unearthed");
     now
 }
+
+/// Casting an adventurer card as its Adventure.
+pub const ADVENTURE: mtg_engine::object::CastMethod = mtg_engine::object::CastMethod::Half(1);
+
+/// Whether the object (followed across zone changes) "has an Adventure" (CR 715.2a).
+pub fn has_adventure(t: &mut TestGame, id: ObjectId) -> bool {
+    t.g.recompute();
+    let id = t.g.current(id);
+    t.g.matches(
+        id,
+        &mtg_engine::ability::Filter::Custom(mtg_engine::adventure::HAS_ADVENTURE.into()),
+        &mtg_engine::eval::Ctx::new(None, P0),
+    )
+}
+
+/// Lands of every basic type, `n` of each, for `p`: mana for anything.
+pub fn rainbow_lands(t: &mut TestGame, p: PlayerId, n: usize) {
+    for l in ["Plains", "Island", "Swamp", "Mountain", "Forest"] {
+        t.lands(p, l, n);
+    }
+}
+
+/// The objects in exile named `name`.
+pub fn exiled_named(t: &TestGame, name: &str) -> Vec<ObjectId> {
+    t.g.find_in_zone(Zone::Exile, name)
+}
