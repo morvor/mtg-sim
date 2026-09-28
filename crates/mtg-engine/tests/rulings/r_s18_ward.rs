@@ -120,3 +120,39 @@ fn an_exiled_double_faced_card_returns_front_face_up() {
     assert_eq!(t.obj_now(back).face, FaceState::Front);
     assert_eq!(t.obj_now(back).chars.name, "Delver of Secrets");
 }
+
+#[test]
+fn the_token_copies_the_creature_as_it_last_existed_on_the_battlefield() {
+    cr!("707.2", "608.2h", "603.10a");
+    ruling!(
+        "Ratadrabik of Urborg",
+        "The token copies the creature as it last existed on the battlefield before it died, not as it exists in the graveyard."
+    );
+    supported("Ratadrabik of Urborg");
+    // Ratadrabik of Urborg: "Whenever another legendary creature you control dies, create a
+    // token that's a copy of that creature, except it's not legendary and it's a 2/2
+    // black Zombie in addition to its other colors and types." P0's Clone copying Thalia,
+    // Guardian of Thraben (a legendary 2/1 white Human Soldier with first strike) dies:
+    // the token is a Thalia, not a Clone.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ratadrabik of Urborg");
+    let thalia = t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.answer_choose(P0, &[Entity::Object(thalia)]);
+    t.answer_yes(P0, true);
+    let clone = t.enter(P0, "Clone");
+    t.g.recompute();
+    assert_eq!(t.obj_now(clone).chars.name, "Thalia, Guardian of Thraben");
+    destroy(&mut t, clone);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Clone"));
+    let tokens = tokens(&t, P0);
+    assert_eq!(tokens.len(), 1);
+    let c = t.obj_now(tokens[0]).chars.clone();
+    assert_eq!(c.name, "Thalia, Guardian of Thraben");
+    assert!(!c.supertypes.contains(mtg_engine::types::Supertype::Legendary));
+    assert!(c.has_subtype("Human") && c.has_subtype("Soldier") && c.has_subtype("Zombie"));
+    assert!(c.has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+    assert!(c.colors.contains(mtg_engine::types::Color::White));
+    assert!(c.colors.contains(mtg_engine::types::Color::Black));
+    assert_eq!(t.pt(tokens[0]), (2, 2));
+}
