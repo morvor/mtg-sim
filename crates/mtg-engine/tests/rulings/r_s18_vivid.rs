@@ -8,7 +8,7 @@ use mtg_engine::*;
 
 #[test]
 fn lands_are_colorless_even_if_they_tap_for_colored_mana() {
-    cr!("105.2c", "305.7", "604.3");
+    cr!("105.2c", "202.2b", "604.3");
     ruling!(
         "Squawkroaster",
         "Lands are normally colorless permanents, even if they tap for mana of a certain color."

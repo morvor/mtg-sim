@@ -149,7 +149,7 @@ fn exiled_another_way(name: &str, setup: fn(&mut TestGame) -> Vec<Entity>) {
 
 #[test]
 fn an_adventurer_card_exiled_another_way_cant_be_cast_from_exile() {
-    cr!("715.3d", "406.3");
+    cr!("715.3d");
     ruling!(
         "Bonecrusher Giant // Stomp",
         "If an adventurer card ends up in exile for any other reason than by exiling itself while resolving, it won't give you permission to cast it as a permanent spell."
@@ -302,7 +302,7 @@ fn permanent_card_in_the_graveyard(name: &str, mv: u32) {
 
 #[test]
 fn outside_the_stack_an_adventurer_card_is_a_permanent_card() {
-    cr!("715.4", "115.1", "202.3");
+    cr!("715.4", "202.3");
     ruling!(
         "Two-Headed Hunter // Twice the Rage",
         "An adventurer card is a permanent card in every zone except the stack, as well as while on the stack if not cast as an Adventure. Ignore its alternative characteristics in those cases. For example, while it’s in your graveyard, Questing Druid is a green creature card whose mana value is 2."

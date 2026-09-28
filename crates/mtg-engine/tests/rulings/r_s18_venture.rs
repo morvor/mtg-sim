@@ -80,7 +80,7 @@ fn venturing_enters_a_new_dungeon_or_moves_to_the_next_room() {
 
 #[test]
 fn no_one_can_respond_between_the_venture_choice_and_the_room_ability_triggering() {
-    cr!("701.49a", "309.4c", "603.3", "117.3b");
+    cr!("701.49a", "309.4c", "603.3");
     ruling!(
         "Radiant Solar",
         "Choosing the dungeon or room to venture into is part of resolving the venture into the dungeon keyword action. Once that choice is made, players may not respond until after the appropriate room ability has triggered."

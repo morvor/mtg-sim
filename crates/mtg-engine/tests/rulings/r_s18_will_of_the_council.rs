@@ -59,7 +59,7 @@ fn every_player_must_vote_for_one_of_the_options() {
 
 #[test]
 fn no_one_can_act_between_the_votes_and_the_end_of_the_resolution() {
-    cr!("701.38a", "608.2", "117.3");
+    cr!("701.38a", "608.2");
     ruling!(
         "Bite of the Black Rose",
         "Players can't do anything after they finish voting but before the spell or ability that included the vote finishes resolving."
