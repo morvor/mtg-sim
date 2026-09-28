@@ -63,3 +63,63 @@ fn until_end_of_turn_cast_it_free(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r406 until end of turn, you may cast that card for free", priority: 80, parse: until_end_of_turn_cast_it_free } }
+
+/// Whether the effect ends by exiling the top cards of your library.
+fn exiles_your_top_cards(e: &Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::TopOfLibrary(PlayerRef::You, _),
+            face_down: false,
+            ..
+        } => true,
+        Effect::Seq(v) => v.last().is_some_and(exiles_your_top_cards),
+        _ => false,
+    }
+}
+
+/// "Until end of turn, you may cast noncreature spells from among those cards without
+/// paying their mana costs." after exiling the top cards of your library (Narset,
+/// Enlightened Master): the exiled cards of that kind may be cast this turn for free.
+fn until_end_of_turn_cast_those_free(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l
+        .strip_prefix("until end of turn, you may cast ")
+        .and_then(|r| {
+            r.strip_suffix(" from among those cards without paying their mana costs")
+                .or_else(|| r.strip_suffix(" from among them without paying their mana costs"))
+        })
+    else {
+        return false;
+    };
+    if !exiles_your_top_cards(prev) {
+        return false;
+    }
+    // Cards that can be cast: a permission to cast spells doesn't let lands be played.
+    let exiled = Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+        Filter::not(Filter::Type(crate::types::CardType::Land)),
+    ]);
+    let what = if r == "spells" {
+        exiled
+    } else {
+        let Some(kind) = r.strip_suffix(" spells") else {
+            return false;
+        };
+        let Some(f) = card_filter(&format!("{kind} cards"), b) else {
+            return false;
+        };
+        Filter::and(vec![exiled, f])
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::All(what),
+            duration: Duration::EndOfTurn,
+            free: true,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "r406 until end of turn, you may cast spells from among those cards for free", priority: 80, apply: until_end_of_turn_cast_those_free } }

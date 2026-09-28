@@ -759,3 +759,55 @@ fn stolen_goods_free_spell_pays_additional_costs_but_no_alternative_cost() {
     t.set_step(P0, Step::PrecombatMain);
     assert!(!crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free));
 }
+
+/// Narset, Enlightened Master attacks P1 with `top` on top of P0's library (the top four
+/// cards are exiled), and combat ends; returns the exiled cards named `top`.
+fn narset_attacks(t: &mut TestGame, top: &[&str]) -> Vec<ObjectId> {
+    let narset = t.battlefield(P0, "Narset, Enlightened Master");
+    stack_library(t, P0, top);
+    attack_with(t, &[(narset, Entity::Player(P1))]);
+    block_and_finish(t, P1, &[]);
+    top.iter()
+        .map(|n| t.g.find_in_zone(mtg_engine::object::Zone::Exile, n)[0])
+        .collect()
+}
+
+#[test]
+fn narset_free_spells_have_x_zero_and_follow_timing_rules() {
+    cr!("107.3b", "118.9", "601.3", "307.1");
+    ruling!(
+        "Narset, Enlightened Master",
+        "If the card has {X} in its mana cost, you must choose 0 as the value for X when casting it."
+    );
+    ruling!(
+        "Narset, Enlightened Master",
+        "You must follow all applicable timing rules. For example, if one of the exiled cards is a sorcery card, you can cast it only during your main phase while the stack is empty."
+    );
+    ruling!("Narset, Enlightened Master", "You can't play any land cards exiled with Narset.");
+    supported("Narset, Enlightened Master");
+    // "Whenever Narset attacks, exile the top four cards of your library. Until end of
+    // turn, you may cast noncreature spells from among those cards without paying their
+    // mana costs."
+    let mut t = TestGame::new(2);
+    let cards = narset_attacks(&mut t, &["Blaze", "Grizzly Bears", "Forest", "Opt"]);
+    let (blaze, bears, forest, opt) = (cards[0], cards[1], cards[2], cards[3]);
+    // During combat, the sorcery can't be cast; the instant can.
+    let methods = |t: &mut TestGame, c| crate::r_s08_common::legal_cast_methods(t, P0, c);
+    assert!(methods(&mut t, blaze).is_empty());
+    assert_eq!(methods(&mut t, opt), vec![CastMethod::Free]);
+    // Neither the creature card nor the land can be played.
+    assert!(methods(&mut t, bears).is_empty());
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    // In the postcombat main phase, Blaze is cast for free with X = 0.
+    t.advance_to(P0, Step::PostcombatMain);
+    assert!(!crate::r_s02_common::can_play_land(&mut t, P0, forest));
+    let life = t.life(P1);
+    t.cast(P0, blaze)
+        .method(CastMethod::Free)
+        .x(3)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), life);
+    assert!(t.in_graveyard(P0, "Blaze"));
+}
