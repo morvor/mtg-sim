@@ -636,3 +636,62 @@ fn hidetsugu_and_kairi_free_card_pays_additional_costs_but_no_alternative_cost()
     t.lands(P0, "Mountain", 1);
     assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, bolt).is_empty());
 }
+
+/// P0's Djinn of Wishes (entered with its wish counters) activates with `top` on top of
+/// P0's library; `then` queues the answers for playing it. Everything resolves.
+fn wish(t: &mut TestGame, top: &str, then: impl FnOnce(&mut TestGame)) {
+    let djinn = enter(t, P0, "Djinn of Wishes");
+    t.resolve_all();
+    assert_eq!(t.counters(djinn, "wish"), 3);
+    t.library_top(P0, top);
+    t.lands(P0, "Island", 4);
+    then(t);
+    t.activate(P0, djinn, 0, &[]).unwrap();
+    t.resolve_all();
+}
+
+#[test]
+fn djinn_of_wishes_free_card_pays_additional_costs_but_no_alternative_cost() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Djinn of Wishes",
+        "If you cast a spell \"without paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the card has any mandatory additional costs, such as that of Tormenting Voice, those must be paid to cast the card."
+    );
+    supported("Djinn of Wishes");
+    // "{2}{U}{U}, Remove a wish counter from this creature: Reveal the top card of your
+    // library. You may play that card without paying its mana cost. If you don't, exile
+    // it."
+    // Burst Lightning may be kicked.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    wish(&mut t, "Burst Lightning", |t| {
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    });
+    assert_eq!(t.life(P1), 16);
+    assert!(t.in_graveyard(P0, "Burst Lightning"));
+    // Tormenting Voice's discard must be paid.
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    wish(&mut t, "Tormenting Voice", |t| {
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(forest)]);
+    });
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    // Mulldrifter isn't cast for its evoke cost: it stays on the battlefield.
+    let mut t = TestGame::new(2);
+    let from = t.asked().len();
+    wish(&mut t, "Mulldrifter", |t| {
+        t.answer_yes(P0, true);
+    });
+    assert_eq!(t.named_on_battlefield("Mulldrifter").len(), 1);
+    assert!(!casting_way_asked(&t, P0, from));
+    // Not played: it's exiled.
+    let mut t = TestGame::new(2);
+    wish(&mut t, "Lightning Bolt", |t| {
+        t.answer_yes(P0, false);
+    });
+    assert!(t.in_exile("Lightning Bolt"));
+}
