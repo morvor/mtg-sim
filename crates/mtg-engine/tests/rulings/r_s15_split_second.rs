@@ -112,6 +112,10 @@ fn split_second_doesnt_stop_triggered_abilities() {
 #[test]
 fn inventory_management_attaches_only_where_each_can_legally_be_attached() {
     cr!("701.3a", "702.16d");
+    ruling!(
+        "Inventory Management",
+        "You can’t try to attach an Aura or Equipment to a creature if that Aura or Equipment can’t legally be attached to it."
+    );
     supported("Inventory Management");
     supported("Tel-Jilad Chosen");
     // Each Aura and Equipment P0 controls may be attached to a creature P0 controls that
