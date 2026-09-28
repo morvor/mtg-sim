@@ -4,23 +4,12 @@
 
 #![allow(dead_code)]
 
-use crate::r_s01_common::give_mana_for;
 use mtg_engine::ability::{Duration, Effect, Sel};
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::text_change::TextWords;
 use mtg_engine::types::*;
 use mtg_engine::*;
-
-/// Casts the real instant or sorcery `name` from `p`'s hand (with the lands to pay for it)
-/// targeting `targets` (one per target slot), and resolves it.
-pub fn cast_and_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) {
-    give_mana_for(t, p, name);
-    let card = t.hand(p, name);
-    t.cast_with(p, card, targets)
-        .unwrap_or_else(|e| panic!("casting {name} failed: {e:?}"));
-    t.resolve_all();
-}
 
 /// The colors of the object (followed across zone changes) now, after recomputing.
 pub fn colors_now(t: &mut TestGame, id: ObjectId) -> ColorSet {

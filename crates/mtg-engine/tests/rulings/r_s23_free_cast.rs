@@ -4,7 +4,7 @@
 //! additional costs must be paid; an {X} in the mana cost is 0 (CR 107.3b).
 
 use crate::r_s01_common::*;
-use crate::r_s04_common::{asked_of_since, spell_targets, stack_items};
+use crate::r_s04_common::{asked_of_since, stack_items};
 use crate::r_s05_common::enter;
 use crate::r_s07_common::{cast_methods, graveyard_n};
 use crate::r_s23_common::*;
