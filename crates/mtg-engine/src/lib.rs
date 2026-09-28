@@ -73,6 +73,7 @@ pub mod keywords;
 pub mod kw;
 pub mod kwa;
 pub mod layers;
+pub mod legend_rule;
 pub mod library;
 pub mod life_totals;
 pub mod mana;

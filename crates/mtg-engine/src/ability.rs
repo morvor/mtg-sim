@@ -2192,6 +2192,10 @@ pub enum StaticEffect {
         what: Filter,
         mods: Vec<Modification>,
     },
+    /// "The "legend rule" doesn't apply [to tokens you control]" (CR 704.5j): legendary
+    /// permanents matching the filter (relative to the source) are left out of the legend
+    /// rule (see `legend_rule.rs`).
+    LegendRuleExempt(Filter),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
