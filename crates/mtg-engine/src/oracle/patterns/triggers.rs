@@ -949,6 +949,18 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
             rest = r;
             continue;
         }
+        // "a spell that's both red and white" (the Shadowmoor Mimics): both colors, and
+        // maybe others.
+        if let Some(r) = t.strip_prefix("that's both ") {
+            let (a, r) = split_word(r);
+            let r = r.trim_start().strip_prefix("and ")?;
+            let (b, r) = split_word(r);
+            for w in [a, b] {
+                parts.push(Filter::Color(Color::from_word(w.trim_end_matches(','))?));
+            }
+            rest = r;
+            continue;
+        }
         if let Some(r) = t.strip_prefix("you don't own") {
             parts.push(Filter::OwnedBy(PlayerRel::NotYou));
             rest = r;
