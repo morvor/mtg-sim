@@ -50,9 +50,12 @@ fn each_friend_or_foe(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let targets = b.targets.len();
-    let mut e = crate::oracle::effects::parse_clause(&format!("each player {rest}"), b)?;
-    if b.targets.len() != targets || !retarget(&mut e, var) {
+    let parsed = crate::oracle::effects::parse_clause(&format!("each player {rest}"), b);
+    let Some(mut e) = parsed.filter(|_| b.targets.len() == targets) else {
         b.targets.truncate(targets);
+        return None;
+    };
+    if !retarget(&mut e, var) {
         return None;
     }
     // Only if there's such a player (an instruction with no player to perform it does
