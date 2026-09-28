@@ -85,10 +85,14 @@ fn one_of_each(s: &str) -> Option<Vec<Filter>> {
 /// "each player chooses from among the permanents they control an artifact, a creature, an
 /// enchantment, and a land, then sacrifices the rest" and "each player chooses an
 /// artifact, a creature, an enchantment, and a planeswalker from among the nonland
-/// permanents they control, then sacrifices the rest".
+/// permanents they control, then sacrifices the rest" ("each opponent chooses ..." too).
 fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let r = l.strip_prefix("each player chooses ")?;
+    let (who, r) = if let Some(r) = l.strip_prefix("each player chooses ") {
+        (PlayerRef::EachPlayer, r)
+    } else {
+        (PlayerRef::EachOpponent, l.strip_prefix("each opponent chooses ")?)
+    };
     let r = r.strip_suffix(", then sacrifices the rest")?;
     let (among, list) = if let Some(list) = r.strip_prefix("from among the permanents they control ") {
         (Filter::Any, list)
@@ -100,7 +104,7 @@ fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     };
     Some(Effect::KeepAndSacrificeRest {
-        who: PlayerRef::EachPlayer,
+        who,
         among,
         keep: one_of_each(list)?,
     })
