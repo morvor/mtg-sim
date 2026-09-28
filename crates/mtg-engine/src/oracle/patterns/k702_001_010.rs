@@ -642,7 +642,7 @@ inventory::submit! {
 
 /// The spells of "you may cast [spells] as though they had flash": "spells", "creature
 /// spells", "creature and enchantment spells", "Sliver spells".
-fn spells_phrase(s: &str) -> Option<Filter> {
+pub(crate) fn spells_phrase(s: &str) -> Option<Filter> {
     if s == "spells" {
         return Some(Filter::Any);
     }

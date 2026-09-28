@@ -2211,6 +2211,11 @@ pub enum PlayerModification {
     /// relative to the affected player. Applied with the static cost modifiers (see
     /// `layers.rs`, `collect_statics`).
     CostModifier(CostModifier),
+    /// "You may cast [spells] this turn as though they had flash" (CR 601.3b): a timing
+    /// permission for the affected player's spells matching the filter, created by a
+    /// resolved effect for a duration. Applied with the static flash permissions (see
+    /// `layers.rs`, `collect_statics`).
+    FlashPermission(Filter),
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.

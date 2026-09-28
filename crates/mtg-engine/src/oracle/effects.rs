@@ -349,8 +349,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
-    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay".
-    if l.starts_with("you may pay ") {
+    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay";
+    // "you may cast [spells] this turn as though they had flash" is a permission.
+    if l.starts_with("you may pay ")
+        || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
+    {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);
         }

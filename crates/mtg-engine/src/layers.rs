@@ -1214,6 +1214,13 @@ impl Game {
                     st.cost_modifiers.push((src, *p, cm.clone()));
                 }
             }
+            // "You may cast sorcery spells this turn as though they had flash."
+            if let (PlayerModification::FlashPermission(f), Some(src)) = (&e.effect, e.source) {
+                for p in &e.players {
+                    st.flash_permissions
+                        .push((src, *p, PlayerRel::You, f.clone()));
+                }
+            }
         }
         crate::special_actions::apply_ignoring(self, &mut st.restrictions);
         self.statics = st;
