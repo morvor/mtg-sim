@@ -811,3 +811,168 @@ fn narset_free_spells_have_x_zero_and_follow_timing_rules() {
     assert_eq!(t.life(P1), life);
     assert!(t.in_graveyard(P0, "Blaze"));
 }
+
+/// P1, the active player, casts `spell` (with X = `x`, targeting `target` if given) while
+/// P0 controls Powerbalance with `top` on top of their library; the trigger resolves with
+/// the answers queued.
+fn powerbalance_trigger(t: &mut TestGame, spell: &str, x: Option<i64>, target: Option<Entity>, top: &str) -> ObjectId {
+    t.battlefield(P0, "Powerbalance");
+    let top = t.library_top(P0, top);
+    t.set_step(P1, Step::PrecombatMain);
+    give_mana_for(t, P1, spell);
+    t.lands(P1, "Wastes", x.unwrap_or(0) as usize);
+    let card = t.hand(P1, spell);
+    let mut c = t.cast(P1, card);
+    if let Some(x) = x {
+        c = c.x(x);
+    }
+    if let Some(e) = target {
+        c = c.target(e);
+    }
+    c.go();
+    // The trigger resolves.
+    t.resolve();
+    top
+}
+
+#[test]
+fn powerbalance_free_spell_may_be_kicked_and_pays_mandatory_additional_costs() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Powerbalance",
+        "If you cast a spell \"without paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the spell has any mandatory additional costs, those must be paid to cast it."
+    );
+    ruling!(
+        "Powerbalance",
+        "You choose whether or not to cast the exiled card as Powerbalance's triggered ability resolves. If you do, you do so as part of the resolution of that ability. You can't wait to cast it later in the turn. Timing restrictions based on the card's type are ignored."
+    );
+    supported("Powerbalance");
+    // "Whenever an opponent casts a spell, you may reveal the top card of your library.
+    // If you do, you may cast that card without paying its mana cost if the two spells
+    // have the same mana value."
+    // Burst Lightning (mana value 1) cast kicked for {4} in response to Lightning Bolt.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    powerbalance_trigger(&mut t, "Lightning Bolt", None, Some(Entity::Player(P0)), "Burst Lightning");
+    t.resolve_all();
+    assert_eq!(tapped_lands(&t, P0), 4);
+    assert_eq!(t.life(P1), 16);
+    assert!(t.in_graveyard(P0, "Burst Lightning"));
+    // Tormenting Voice (mana value 2), a sorcery, in response to Grizzly Bears during
+    // P1's turn: a card is discarded to cast it.
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    powerbalance_trigger(&mut t, "Grizzly Bears", None, None, "Tormenting Voice");
+    assert!(t.in_graveyard(P0, "Forest"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    // Without a card to discard, it can't be cast.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    powerbalance_trigger(&mut t, "Grizzly Bears", None, None, "Tormenting Voice");
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).library.last().map(|c| t.g.obj(*c).chars.name.as_str()), Some("Tormenting Voice"));
+    // Cyclonic Rift (mana value 2) can't be cast for its overload cost.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    let from = t.asked().len();
+    powerbalance_trigger(&mut t, "Grizzly Bears", None, None, "Cyclonic Rift");
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert!(t.in_hand(P1, "Llanowar Elves"));
+    assert!(t.on_battlefield(bears));
+    assert_eq!(tapped_lands(&t, P0), 0);
+}
+
+#[test]
+fn powerbalance_compares_the_x_chosen_for_the_opponents_spell() {
+    cr!("202.3e", "107.3b", "118.9", "608.2g");
+    ruling!(
+        "Powerbalance",
+        "If an opponent casts a spell with {X} in its mana cost, use the value of X that was chosen when it was cast to determine its mana value."
+    );
+    ruling!(
+        "Powerbalance",
+        "If the revealed card has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Powerbalance");
+    // Blaze with X = 1 has mana value 2: Grizzly Bears can be cast (during P1's turn).
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    powerbalance_trigger(&mut t, "Blaze", Some(1), Some(Entity::Player(P0)), "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Blaze with X = 2 has mana value 3: it can't.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    powerbalance_trigger(&mut t, "Blaze", Some(2), Some(Entity::Player(P0)), "Grizzly Bears");
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    // A revealed Blaze has mana value 1 (X is 0) and is cast with X = 0 in response to a
+    // mana value 1 spell: it deals no damage.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    powerbalance_trigger(&mut t, "Lightning Bolt", None, Some(Entity::Player(P0)), "Blaze");
+    assert!(t.g.stack.iter().any(|s| t.g.obj(*s).chars.name == "Blaze"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Blaze"));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn powerbalance_compares_the_spell_the_card_would_become() {
+    cr!("601.3e", "718.3a", "202.3d", "709.3a");
+    ruling!(
+        "Powerbalance",
+        "In some unusual cases, the card you reveal from the top of your library may not have the same mana value as the spell your opponent cast, but you can still cast that card because the resulting spell does have the same mana value."
+    );
+    ruling!(
+        "Powerbalance",
+        "Otherwise, while a split card is on the stack, its mana value is determined by the mana cost of the half that was chosen to be cast."
+    );
+    supported("Powerbalance");
+    supported("Frogmyr Enforcer");
+    supported("Fire // Ice");
+    // Frogmyr Enforcer (mana value 7, prototype {3}{R}) in response to Hill Giant (mana
+    // value 4): it's cast as a prototyped 2/2.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    powerbalance_trigger(&mut t, "Hill Giant", None, None, "Frogmyr Enforcer");
+    t.resolve_all();
+    let frog = t.named_on_battlefield("Frogmyr Enforcer");
+    assert_eq!(frog.len(), 1);
+    assert_eq!(t.pt(frog[0]), (2, 2));
+    // Fire // Ice (mana value 4 in the library) in response to Grizzly Bears (mana value
+    // 2): either half, a spell with mana value 2, can be cast. Ice taps the Bears.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    powerbalance_trigger(&mut t, "Grizzly Bears", None, None, "Fire // Ice");
+    assert!(t.g.stack.iter().any(|s| t.g.obj(*s).chars.name == "Ice"));
+    // In response to a mana value 4 spell (Hill Giant), neither half can be cast.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    powerbalance_trigger(&mut t, "Hill Giant", None, None, "Fire // Ice");
+    assert!(!t.g.stack.iter().any(|s| t.g.obj(*s).chars.name.contains("Fire")
+        || t.g.obj(*s).chars.name.contains("Ice")));
+}
