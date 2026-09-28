@@ -893,10 +893,13 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
         }
     }
     // "with mana value equal to the number of charge counters on ~" (read as the effect
-    // checks each object; the source's last known information if it's gone).
+    // checks each object; the source's last known information if it's gone); "less than
+    // the number of eyestalk counters on ~" (Underdark Beholder).
     for (p, cmp) in [
         ("equal to the number of ", Cmp::Eq),
         ("less than or equal to the number of ", Cmp::Le),
+        ("less than the number of ", Cmp::Lt),
+        ("greater than the number of ", Cmp::Gt),
     ] {
         if let Some(r) = rest.strip_prefix(p) {
             let (kind, r) = split_word(r);

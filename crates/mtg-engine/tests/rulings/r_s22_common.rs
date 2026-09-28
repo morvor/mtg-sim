@@ -86,7 +86,8 @@ pub fn check_free_cast_costs(fc: &FreeCaster) {
     } else {
         t.hand(P0, fodder);
     }
-    let lib = t.library_size(P0);
+    // (The spell itself leaves P0's library when it's cast from there.)
+    let lib = t.library_size(P0) - usize::from(t.zone(spell) == Zone::Library(P0));
     (fc.run)(&mut t, spell, &|_| {});
     assert!(t.in_graveyard(P0, fodder), "the additional cost was paid");
     assert_eq!(t.library_size(P0), lib - 2, "the spell resolved");

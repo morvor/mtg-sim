@@ -103,7 +103,9 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{2014}', "—")
         .replace('\u{2019}', "'")
         .replace('\u{201C}', "\"")
-        .replace('\u{201D}', "\"");
+        .replace('\u{201D}', "\"")
+        // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
+        .replace("converted mana cost", "mana value");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
