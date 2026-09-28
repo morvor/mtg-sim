@@ -189,7 +189,7 @@ fn nobody_accepting_means_the_effect_happens_only_once_for_you() {
 
 #[test]
 fn tempt_with_reflections_copies_the_target_for_each_player() {
-    cr!("101.4", "111.10");
+    cr!("101.4", "111.2");
     supported("Tempt with Reflections");
     // "Choose target creature you control. Create a token that's a copy of that creature.
     // Each opponent may create a token that's a copy of that creature. For each opponent
@@ -202,9 +202,11 @@ fn tempt_with_reflections_copies_the_target_for_each_player() {
     let spell = t.hand(P0, "Tempt with Reflections");
     t.cast(P0, spell).target(bears).go();
     t.resolve_all();
+    // Each player who creates a copy owns and controls it (CR 111.2).
     let copies = |p: PlayerId| {
         t.g.permanents()
-            .filter(|o| o.controller == p && o.is_token() && o.chars.name == "Grizzly Bears")
+            .filter(|o| o.owner == p && o.is_token() && o.chars.name == "Grizzly Bears")
+            .inspect(|o| assert_eq!(o.controller, p))
             .count()
     };
     assert_eq!((copies(P0), copies(P1), copies(P2)), (2, 1, 0));
@@ -239,9 +241,28 @@ fn tempt_with_discovery_searches_for_each_player_who_accepted() {
     assert_eq!((mountains(P0), mountains(P1), mountains(P2)), (2, 0, 1));
 }
 
+/// The Rabbits each player controls, by player.
+fn rabbits_by_player(g: &Game) -> Vec<usize> {
+    (0..g.players.len())
+        .map(|i| {
+            g.permanents()
+                .filter(|o| o.controller.idx() == i && o.chars.has_subtype("Rabbit"))
+                .count()
+        })
+        .collect()
+}
+
 #[test]
 fn tempt_with_bunnies_draws_and_makes_rabbits_for_each_player() {
-    cr!("101.4");
+    cr!("101.4", "101.4b");
+    ruling!(
+        "Tempt with Bunnies",
+        "Your opponents decide in turn order whether or not they accept the offer, starting with the next opponent in turn order. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+    );
+    ruling!(
+        "Tempt with Bunnies",
+        "After each opponent has decided, the effect happens simultaneously for each one who accepted the offer. Then the effect happens again for you a number of times equal to the number of opponents who accepted."
+    );
     supported("Tempt with Bunnies");
     // "Draw a card and create a 1/1 white Rabbit creature token. Then each opponent may
     // draw a card and create a 1/1 white Rabbit creature token. For each opponent who
@@ -249,16 +270,27 @@ fn tempt_with_bunnies_draws_and_makes_rabbits_for_each_player() {
     let mut t = TestGame::new(3);
     t.answer_yes(P1, true);
     t.answer_yes(P2, true);
+    // What P2, the last to decide, sees: P1's acceptance, and only P0's first Rabbit.
+    let seen = watch(&mut t, P2, is_yes_no, |g| {
+        (acceptances(g), rabbits_by_player(g))
+    });
     t.lands(P0, "Plains", 3);
     let spell = t.hand(P0, "Tempt with Bunnies");
     let hands: Vec<usize> = [P0, P1, P2].iter().map(|p| t.hand_size(*p)).collect();
+    let from = t.asked().len();
     t.cast(P0, spell).go();
     t.resolve_all();
-    let rabbits: Vec<usize> = [P0, P1, P2]
+    let order: Vec<PlayerId> = t.asked()[from..]
         .iter()
-        .map(|p| with_subtype(&t, *p, "Rabbit").len())
+        .filter(|(_, d)| is_yes_no(d))
+        .map(|(p, _)| *p)
         .collect();
-    assert_eq!(rabbits, vec![3, 1, 1]);
+    assert_eq!(order, vec![P1, P2]);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![(vec!["P1 chooses to take part".to_string()], vec![1, 0, 0])]
+    );
+    assert_eq!(rabbits_by_player(&t.g), vec![3, 1, 1]);
     // P0 cast the spell (one card fewer) and drew three.
     assert_eq!(t.hand_size(P0), hands[0] - 1 + 3);
     assert_eq!(t.hand_size(P1), hands[1] + 1);
@@ -282,6 +314,16 @@ fn tempting_contract_gives_you_a_treasure_for_each_opponent_who_takes_one() {
         .map(|p| with_subtype(&t, *p, "Treasure").len())
         .collect();
     assert_eq!(treasures, vec![1, 1, 0]);
+    // Each is a predefined Treasure: a colorless Treasure artifact token with a mana
+    // ability (CR 111.10a).
+    for p in [P0, P1] {
+        for tr in with_subtype(&t, p, "Treasure") {
+            let o = t.obj(tr);
+            assert!(o.is_token() && o.owner == p);
+            assert!(o.chars.is(CardType::Artifact) && o.chars.colors.is_colorless());
+            assert!(o.chars.abilities.iter().any(|a| a.is_mana_ability()));
+        }
+    }
 }
 
 #[test]
