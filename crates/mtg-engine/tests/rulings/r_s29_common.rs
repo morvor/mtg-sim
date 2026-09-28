@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
@@ -41,4 +41,38 @@ pub fn divide(t: &mut TestGame, p: PlayerId, amounts: &[i64]) {
 /// The damage marked on the object (followed across zone changes).
 pub fn damage_marked(t: &TestGame, id: ObjectId) -> u32 {
     t.obj_now(id).damage
+}
+
+/// A scripted answer for some decisions (see `r_s03_common::respond`).
+pub type Responder = fn(&mtg_engine::game::Game, &Decision) -> Option<Answer>;
+
+/// Answers a replacement-order choice (CR 616.1) with the option whose text contains
+/// `needle`.
+fn pick_replacement(d: &Decision, needle: &str) -> Option<Answer> {
+    match d {
+        Decision::ChooseReplacement { options } => options
+            .iter()
+            .position(|o| o.contains(needle))
+            .map(Answer::Index),
+        _ => None,
+    }
+}
+
+/// Applies a "that many plus one" replacement effect first.
+pub fn plus_one_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    pick_replacement(d, "plus one")
+}
+
+/// Applies a "twice that many" replacement effect first.
+pub fn twice_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    pick_replacement(d, "twice")
+}
+
+/// The players asked to order replacement effects since decision `from`.
+pub fn replacement_choosers(t: &TestGame, from: usize) -> Vec<PlayerId> {
+    t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseReplacement { .. }))
+        .map(|(p, _)| *p)
+        .collect()
 }

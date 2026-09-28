@@ -853,16 +853,21 @@ impl Game {
             (
                 ReplacementEvent::PutCountersBy { by, kind },
                 ReplEvent::AddCounters {
-                    target: Entity::Object(o),
+                    target,
                     kind: k,
                     n,
                     source,
                 },
             ) => {
+                let putter = match target {
+                    Entity::Object(o) => crate::counter_rules::who_puts_counters(self, *o, *source),
+                    // Counters put on a player are put by the controller of the spell or
+                    // ability putting them.
+                    Entity::Player(_) => source.map(|s| self.obj(s).controller),
+                };
                 *n > 0
                     && kind.as_ref().is_none_or(|x| x == k)
-                    && crate::counter_rules::who_puts_counters(self, *o, *source)
-                        .is_some_and(|p| self.player_rel_matches(*by, p, ctx))
+                    && putter.is_some_and(|p| self.player_rel_matches(*by, p, ctx))
             }
             (
                 ReplacementEvent::CreateTokens(pf),
@@ -1243,7 +1248,10 @@ impl Game {
                 ]
             }
             (ReplacementAction::Subtract(v), ev) => {
-                let d = self.eval_value(&v, &ctx).max(0) as u32;
+                // The amount may depend on the event's ("half that many, rounded down").
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                let d = self.eval_value(&v, &c).max(0) as u32;
                 let e = scale_event(ev, |n| n.saturating_sub(d));
                 if event_amount(&e) == Some(0) {
                     vec![]
