@@ -229,6 +229,9 @@ impl Game {
                 let res = crate::merge::found_all(self, res);
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                // "Exile a creature card from your graveyard. If you do, ...": whether
+                // anything was exiled (as for moving it, CR 608.2c).
+                ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Sacrifice { who, filter, count } => {

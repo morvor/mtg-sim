@@ -238,6 +238,15 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(rest) = r.strip_prefix('~') {
         return Some((Sel::This, rest.to_string()));
     }
+    // A phrase an earlier instruction named ("that card": the card it exiled).
+    let named = b.named.iter().find_map(|(p, sel)| {
+        let rest = r.strip_prefix(p.as_str())?;
+        (rest.is_empty() || rest.starts_with(' ') || rest.starts_with(','))
+            .then(|| (sel.clone(), rest.to_string()))
+    });
+    if named.is_some() {
+        return named;
+    }
     for p in [
         "enchanted creature",
         "equipped creature",
