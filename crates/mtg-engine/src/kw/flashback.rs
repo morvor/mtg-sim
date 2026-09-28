@@ -60,32 +60,39 @@ impl KeywordRules for Flashback {
         if !crate::as_though::in_graveyard_for(g, p, card) {
             return vec![];
         }
-        let mut opt = CastOption::normal(FaceState::Front);
-        opt.method = CastMethod::Keyword(KeywordKind::Flashback);
-        // CR 702.34a: only if the resulting spell is an instant or sorcery spell.
-        let chars = g.option_characteristics(card, &opt);
-        if !chars.is(CardType::Instant) && !chars.is(CardType::Sorcery) {
-            return vec![];
+        // One way per face or half it could be cast as: a split card is cast as one of
+        // its halves (CR 709.3), and a flashback cost equal to its mana cost is that
+        // half's.
+        let mut out = Vec::new();
+        for face in crate::casting::castable_faces(g, card) {
+            let mut opt = CastOption::normal(face);
+            opt.method = CastMethod::Keyword(KeywordKind::Flashback);
+            // CR 702.34a: only if the resulting spell is an instant or sorcery spell.
+            let chars = g.option_characteristics(card, &opt);
+            if !chars.is(CardType::Instant) && !chars.is(CardType::Sorcery) {
+                continue;
+            }
+            let cost = match &kw.cost {
+                Some(c) => c.clone(),
+                // A card with no mana cost has an unpayable flashback cost (CR 118.6).
+                None => Cost::mana(
+                    chars
+                        .mana_cost
+                        .clone()
+                        .unwrap_or_else(crate::cost_rules::unpayable),
+                ),
+            };
+            // "Flashback costs you pay cost {2} less."
+            opt.alt_cost = Some(super::modified_keyword_cost(
+                g,
+                p,
+                KeywordKind::Flashback,
+                &cost,
+            ));
+            opt.tag = Some(FLASHBACK);
+            out.push(opt);
         }
-        let cost = match &kw.cost {
-            Some(c) => c.clone(),
-            // A card with no mana cost has an unpayable flashback cost (CR 118.6).
-            None => Cost::mana(
-                chars
-                    .mana_cost
-                    .clone()
-                    .unwrap_or_else(crate::cost_rules::unpayable),
-            ),
-        };
-        // "Flashback costs you pay cost {2} less."
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Flashback,
-            &cost,
-        ));
-        opt.tag = Some(FLASHBACK);
-        vec![opt]
+        out
     }
 
     /// "Exile it instead of putting it anywhere else" applies wherever the card would go,

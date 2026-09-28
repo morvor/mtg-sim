@@ -103,7 +103,9 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{2014}', "—")
         .replace('\u{2019}', "'")
         .replace('\u{201C}', "\"")
-        .replace('\u{201D}', "\"");
+        .replace('\u{201D}', "\"")
+        // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
+        .replace("converted mana cost", "mana value");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
@@ -444,9 +446,16 @@ pub(crate) fn without_quotes(s: &str) -> String {
 fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
     let (c, e) = (cost.to_lowercase(), without_quotes(&effect.to_lowercase()));
     let moves_self_from = |s: &str, zone: &str| {
-        ["~", "this card", "this creature"]
-            .iter()
-            .any(|me| s.contains(&format!("{me} from your {zone}")))
+        ["~", "this card", "this creature"].iter().any(|me| {
+            s.match_indices(&format!("{me} from your {zone}"))
+                .any(|(i, _)| {
+                    // Not "counters on ~ from your graveyard" (Wishing Well: "... card
+                    // with mana value equal to the number of coin counters on ~ from
+                    // your graveyard"), where the zone is another card's.
+                    let before = s[..i].trim_end();
+                    !(before.ends_with(" on") || before.ends_with(" of"))
+                })
+        })
     };
     if moves_self_from(&c, "hand") || c.contains("discard ~") || c.contains("discard this card") {
         FunctionZone::Hand

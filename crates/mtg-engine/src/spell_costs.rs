@@ -133,6 +133,26 @@ pub fn spells_change_applies(
     g.matches(card, &f, ctx)
 }
 
+/// [`spells_change_applies`] for `card` cast as a spell with the characteristics `chars`
+/// (one of its faces or halves, or an Adventure): only those characteristics are
+/// considered (CR 601.3e, 715.3a). A Dragon creature card's Adventure isn't a Dragon
+/// spell.
+pub fn spells_change_applies_as(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    f: &Filter,
+    change: &CostChange,
+    ctx: &Ctx,
+) -> bool {
+    let f = crate::casting::as_spell_filter(f);
+    if g.obj(card).zone != Zone::Stack && filter_has_targets(&f) {
+        return is_reduction(change)
+            && crate::casting::matches_with_chars(g, card, chars, &assume_targets(&f, true), ctx);
+    }
+    crate::casting::matches_with_chars(g, card, chars, &f, ctx)
+}
+
 /// Whether an alternative cost with this condition may be chosen for `card` now
 /// ("If you control a Swamp, you may pay 4 life rather than pay this spell's mana cost").
 /// The condition is checked as the spell is proposed (CR 601.2b).
@@ -141,4 +161,11 @@ pub fn alternative_cost_allowed(g: &Game, p: PlayerId, card: ObjectId, s: &Stati
         None => true,
         Some(c) => g.eval_cond(c, &Ctx::new(Some(card), p)),
     }
+}
+
+/// The name recorded among the costs paid for a spell cast for an alternative cost with
+/// this mana component ("If the {2}{U} cost was paid", the Masteries, CR 118.9). It names
+/// the cost chosen, however much was actually paid after cost increases and reductions.
+pub fn alternative_cost_name(m: &crate::mana::ManaCost) -> smol_str::SmolStr {
+    smol_str::SmolStr::new(format!("alternative cost {m}"))
 }

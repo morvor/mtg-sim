@@ -59,6 +59,12 @@ pub struct PlayGrant {
     pub turn: u32,
 }
 
+/// Recorded in `CastInfo::paid` for a spell cast from where an effect's permission for
+/// that card ([`PlayGrant`], "you may cast that card this turn") let its controller cast
+/// it: another permission (such as "once during each of your turns, you may cast a
+/// creature spell from your graveyard") wasn't needed for it.
+pub const CAST_WITH_GRANT: &str = "cast with an effect's permission for the card";
+
 pub fn grant_play_permission(
     g: &mut Game,
     p: PlayerId,
@@ -346,13 +352,30 @@ impl Game {
 
     /// Whether a rule or effect allows player `p` to play `card` from where it is, as a
     /// land (`land`) or as a spell with the characteristics `chars` it would have
-    /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed.
+    /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed. A
+    /// permission to cast the card only without paying its mana cost doesn't allow
+    /// casting it any other way, such as for another alternative cost (CR 118.9a); see
+    /// [`Game::permission_allows_with`].
     pub fn permission_allows(
         &self,
         p: PlayerId,
         card: ObjectId,
         chars: &Characteristics,
         land: bool,
+    ) -> bool {
+        self.permission_allows_with(p, card, chars, land, land)
+    }
+
+    /// [`Game::permission_allows`], counting permissions to play the card without paying
+    /// its mana cost ("you may cast that card without paying its mana cost") only if
+    /// `free_grants`: they allow it to be cast only that way (CR 118.9a).
+    pub fn permission_allows_with(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+        free_grants: bool,
     ) -> bool {
         let o = self.obj(card);
         if o.zone == Zone::Hand(p) {
@@ -362,7 +385,7 @@ impl Game {
         if self
             .play_grants
             .iter()
-            .any(|g| g.player == p && g.object == card)
+            .any(|g| g.player == p && g.object == card && (free_grants || !g.free))
         {
             return true;
         }
@@ -632,7 +655,8 @@ impl Game {
             if !in_hand {
                 out.retain(|opt| {
                     let chars = self.option_characteristics(card, opt);
-                    self.permission_allows(p, card, &chars, false)
+                    let free = opt.method == CastMethod::Free;
+                    self.permission_allows_with(p, card, &chars, false, free)
                 });
             }
         }
@@ -1111,6 +1135,10 @@ impl Game {
             }
         }
         self.stack.push(id);
+        let by_grant = self
+            .play_grants
+            .iter()
+            .any(|g| g.object == card && g.player == p);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1123,6 +1151,18 @@ impl Game {
         };
         if let Some(t) = opt.tag {
             cast_info.paid.push(t.into());
+        }
+        if by_grant {
+            cast_info.paid.push(CAST_WITH_GRANT.into());
+        }
+        // Which alternative cost it's cast for ("If the {2}{U} cost was paid").
+        if let (CastMethod::Alternative(_), Some(m)) = (
+            &opt.method,
+            opt.alt_cost.as_ref().and_then(|c| c.mana.as_ref()),
+        ) {
+            cast_info
+                .paid
+                .push(crate::spell_costs::alternative_cost_name(m));
         }
         self.objects[id.0 as usize].stack = Some(Box::new(StackInfo {
             kind: StackKind::Spell,
@@ -1289,6 +1329,22 @@ impl Game {
             si.x = Some(x as i32);
             si.cast = cast_info.clone();
         }
+        // CR 601.2b: how each Phyrexian symbol of the cost will be paid is announced now.
+        let mut announced = match &opt.alt_cost {
+            Some(c) => c.mana.clone(),
+            None => chars.mana_cost.clone(),
+        }
+        .unwrap_or_default();
+        for m in [
+            &extra.mana,
+            &opt.extra_cost.as_ref().and_then(|c| c.mana.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            announced.add(m);
+        }
+        crate::cost_rules::announce_phyrexian(self, p, id, &announced);
 
         // 601.2c–d: modes and targets.
         let body = self.spell_body(id);
@@ -1343,7 +1399,7 @@ impl Game {
         // CR 118.14: mana of any type may be spent to cast it.
         crate::cost_rules::spend_any_type(self, p, id, &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
-        crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
+        crate::cost_rules::choose_payment_ways_for(self, p, Some(id), Some(id), &mut total);
         // CR 702.51a–b: once the total cost is determined, keywords such as convoke may
         // pay part of it other than with mana.
         crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
@@ -1561,18 +1617,20 @@ impl Game {
             }
         }
         for (n, color) in reductions {
-            // CR 601.2f: what the mana cost's generic mana can't absorb reduces the
-            // generic mana of a waterbend cost, which is part of the total cost too.
-            let left = match (color, &cost.mana) {
-                (None, Some(m)) => n.saturating_sub(m.generic_amount()),
-                (None, None) => n,
-                (Some(_), _) => 0,
-            };
-            crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
-            if let Some(m) = cost.mana.as_mut() {
-                match color {
-                    None => m.reduce_generic(n),
-                    Some(c) => {
+            match color {
+                None => {
+                    // CR 118.7a: the generic component (and monocolored hybrid symbols
+                    // paid with generic mana, CR 601.2b) ...
+                    let left = match cost.mana.as_mut() {
+                        Some(m) => crate::cost_rules::reduce_generic_and_hybrid(m, n),
+                        None => n,
+                    };
+                    // CR 601.2f: ... then the generic mana of a waterbend cost, which is
+                    // part of the total cost too.
+                    crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
+                }
+                Some(c) => {
+                    if let Some(m) = cost.mana.as_mut() {
                         for _ in 0..n {
                             if !m.reduce_colored(c) {
                                 m.reduce_generic(1);
@@ -1983,6 +2041,10 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
+        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost will be paid.
+        if let Some(m) = &act.cost.mana {
+            crate::cost_rules::announce_phyrexian(self, p, id, m);
+        }
         // 602.2b: modes, targets.
         if !self.choose_modes_and_targets(id, &act.body, &mut ctx) {
             return Err(Illegal("no legal targets".into()));
@@ -1993,7 +2055,7 @@ impl Game {
             *m = m.with_x(x as u32);
         }
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
-        crate::cost_rules::choose_payment_ways(self, p, Some(src), &mut cost);
+        crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
@@ -2816,6 +2878,18 @@ impl Game {
     }
 }
 
+/// Whether `card` matches `f` with the characteristics `chars` it would have as the
+/// spell being proposed (CR 601.3e).
+pub(crate) fn matches_with_chars(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    f: &Filter,
+    ctx: &Ctx,
+) -> bool {
+    g.matches_view(&WithChars { id: card, chars }, card, f, ctx)
+}
+
 /// A view of the game in which one object has substitute characteristics — used to check
 /// rules and effects against the characteristics a card would have as the spell being
 /// proposed (CR 601.3a–e).
@@ -2841,12 +2915,12 @@ impl crate::eval::View for WithChars<'_> {
 /// a card that would become such a spell: the "is on the stack" parts are dropped.
 pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     match f {
-        Filter::Spell | Filter::InZone(ZoneKind::Stack) => Filter::Any,
+        Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(as_spell_filter).collect()),
         Filter::Not(x) => match **x {
             // "nonspell" stays as written.
-            Filter::Spell | Filter::InZone(ZoneKind::Stack) => f.clone(),
+            Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => f.clone(),
             _ => Filter::Not(Box::new(as_spell_filter(x))),
         },
         other => other.clone(),

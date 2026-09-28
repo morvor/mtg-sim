@@ -124,22 +124,28 @@ fn player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 /// "destroy target artifact that player controls", "goad target creature that player
-/// controls": objects controlled by the trigger's player ("whenever a player casts …",
-/// "whenever ~ deals combat damage to a player"). The phrase is rewritten to "the
-/// triggering player controls", which the phrase parser reads as the trigger's player.
-/// Only when the clause has no player target of its own and "that player" is still the
-/// trigger's player.
+/// controls", "cast target instant or sorcery card from that player's graveyard" (Deluxe
+/// Dragster): objects controlled by (cards in the graveyard of) the trigger's player
+/// ("whenever a player casts …", "whenever ~ deals combat damage to a player"). The
+/// phrase is rewritten to "the triggering player controls" ("... player's graveyard"),
+/// which the phrase parser reads as the trigger's player. Only when the clause has no
+/// player target of its own and "that player" is still the trigger's player.
 fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if !b.in_trigger
         || !matches!(b.it_player, PlayerRef::TriggerPlayer)
-        || !l.contains("that player controls")
+        || !(l.contains("that player controls") || l.contains("from that player's graveyard"))
         || l.contains("target player")
         || l.contains("target opponent")
     {
         return None;
     }
-    let s = l.replace("that player controls", "the triggering player controls");
+    let s = l
+        .replace("that player controls", "the triggering player controls")
+        .replace(
+            "from that player's graveyard",
+            "from the triggering player's graveyard",
+        );
     let e = crate::oracle::effects::parse_clause(&s, b)?;
     b.it_player = PlayerRef::TriggerPlayer;
     Some(e)

@@ -182,7 +182,8 @@ fn spells_have_cascade(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 inventory::submit! { StaticPattern { name: "[quality] spells you cast have cascade", priority: 100, parse: spells_have_cascade } }
 
 /// "Instant and sorcery spells you control have rebound." (Cast Through Time): the spells
-/// have rebound while they're on the stack (CR 702.88a).
+/// have rebound while they're on the stack (CR 702.88a), including one whose control
+/// changed (CR 611.3a).
 fn spells_have_rebound(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     if l != "instant and sorcery spells you control have rebound" {
         return None;
@@ -192,7 +193,7 @@ fn spells_have_rebound(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
             Filter::Type(CardType::Instant),
             Filter::Type(CardType::Sorcery),
         ]),
-        Filter::Spell,
+        Filter::SpellOnStack,
         Filter::ControlledBy(PlayerRel::You),
     ]);
     Some(grant(

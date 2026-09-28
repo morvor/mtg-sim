@@ -57,6 +57,14 @@ fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
     (s, None)
 }
 
+/// Whether target slot `n` is a spell or ability on the stack.
+fn is_stack_target(b: &Builder, n: u8) -> bool {
+    matches!(
+        b.targets.get(n as usize).map(|t| &t.what),
+        Some(TargetKind::Spell(_) | TargetKind::Ability(_) | TargetKind::SpellOrAbility(_))
+    )
+}
+
 /// "target spell [or ability] [with a single target | that targets only ...]".
 fn stack_target(s: &str, b: &mut Builder) -> Option<Sel> {
     let (head, qualifier) = split_targets_qualifier(end(s));
@@ -95,7 +103,12 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(r) => (r, Some(Sel::This)),
         None => (rest, None),
     };
-    let what = stack_target(what, b)?;
+    // "Gain control of target noncreature spell. You may choose new targets for it."
+    // (Commandeer): "it" is the target spell of the sentence before.
+    let what = match (what, &b.it) {
+        ("it", Sel::Target(n)) if is_stack_target(b, *n) => Sel::Target(*n),
+        _ => stack_target(what, b)?,
+    };
     Some(Effect::ChangeTargets {
         what,
         who: PlayerRef::You,

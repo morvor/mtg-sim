@@ -424,9 +424,13 @@ impl Game {
             }
             Effect::AddCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
+                let mut placed = 0;
                 for t in self.resolve_sel(what, ctx) {
-                    self.add_counters(t, kind, k, ctx.source);
+                    placed += self.add_counters(t, kind, k, ctx.source);
                 }
+                // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
+                // whether any counter was put.
+                ctx.prev_happened = placed > 0;
             }
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
@@ -550,6 +554,7 @@ impl Game {
                         None => vec![(None, fixed)],
                     }
                 };
+                let first = self.effects.len();
                 for (o, part) in parts {
                     let id = self.new_effect_id();
                     self.effects.push(ContinuousEffect {
@@ -568,6 +573,8 @@ impl Game {
                     });
                 }
                 self.dirty = true;
+                // CR 113.11: not for an object that can't have an ability it adds.
+                crate::kw::cant_have::drop_ungrantable_keywords(self, first);
             }
             Effect::AddRestriction {
                 restriction,
@@ -812,10 +819,25 @@ impl Game {
             }
             Effect::CounterSpell { what } => {
                 let mut any = false;
+                let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    any |= self.counter(o, ctx.source);
+                    if self.counter(o, ctx.source) {
+                        any = true;
+                        // CR 400.7j: other parts of the effect can find the countered card
+                        // in the public zone it moved to ("exile it instead ... You may
+                        // cast that card ...").
+                        let now = self.current(o);
+                        if now != o
+                            && matches!(self.obj(now).zone, Zone::Graveyard(_) | Zone::Exile)
+                        {
+                            moved.push(Entity::Object(now));
+                        }
+                    }
                 }
                 ctx.prev_happened = any;
+                if !moved.is_empty() {
+                    ctx.set_var(vars::IT, moved);
+                }
             }
             Effect::CopySpell {
                 what,

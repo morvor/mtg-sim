@@ -505,6 +505,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("from a graveyard"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t.strip_prefix("from the triggering player's graveyard") {
+            // Internal form of "from that player's graveyard" inside a trigger whose
+            // player is the triggering player (`triggers_effects::that_player_controls`).
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::TriggerPlayer),
+                ]),
+                r,
+            )
         } else if let Some(r) = t
             .strip_prefix("in an opponent's graveyard")
             .or_else(|| t.strip_prefix("from an opponent's graveyard"))
@@ -849,7 +859,7 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::Power(cmp, Box::new(v)), r));
         }
     }
-    // "with mana value less than ~'s power" (Narset, Enlightened Exile).
+    // "with mana value less than ~'s power" (Narset, Enlightened Exile; Arcane Proxy).
     for (p, cmp) in [
         ("with mana value less than or equal to ~'s power", Cmp::Le),
         ("with mana value less than ~'s power", Cmp::Lt),
@@ -894,10 +904,13 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
         }
     }
     // "with mana value equal to the number of charge counters on ~" (read as the effect
-    // checks each object; the source's last known information if it's gone).
+    // checks each object; the source's last known information if it's gone); "less than
+    // the number of eyestalk counters on ~" (Underdark Beholder).
     for (p, cmp) in [
         ("equal to the number of ", Cmp::Eq),
         ("less than or equal to the number of ", Cmp::Le),
+        ("less than the number of ", Cmp::Lt),
+        ("greater than the number of ", Cmp::Gt),
     ] {
         if let Some(r) = rest.strip_prefix(p) {
             let (kind, r) = split_word(r);
@@ -989,6 +1002,24 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (
             TargetKind::ObjectOrPlayer(
                 Filter::Type(CardType::Planeswalker),
+                PlayerFilter::Opponent,
+            ),
+            r,
+        )
+    } else if let Some(r) = strip(
+        s,
+        "opponent, creature an opponent controls, or planeswalker an opponent controls",
+    ) {
+        // Nicol Bolas, God-Pharaoh: an opponent or a creature or planeswalker they control.
+        (
+            TargetKind::ObjectOrPlayer(
+                Filter::and(vec![
+                    Filter::Or(vec![
+                        Filter::creature(),
+                        Filter::Type(CardType::Planeswalker),
+                    ]),
+                    Filter::ControlledBy(PlayerRel::Opponent),
+                ]),
                 PlayerFilter::Opponent,
             ),
             r,

@@ -266,7 +266,9 @@ fn spells_you_control_have(l: &str, text: &str, _ctx: &CompileContext) -> Option
         1 => parts.push(types.pop().unwrap()),
         _ => parts.push(Filter::Or(types)),
     }
-    parts.push(Filter::Spell);
+    // The spells have the keywords while they're on the stack under your control, a
+    // continuous effect (CR 611.3a) rather than one they gain as they're cast.
+    parts.push(Filter::SpellOnStack);
     parts.push(Filter::ControlledBy(PlayerRel::You));
     Some(vec![static_ability(
         StaticEffect::Continuous {

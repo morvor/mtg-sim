@@ -71,6 +71,33 @@ fn reduce_one_colorless(cost: &mut ManaCost, colored_only: bool) {
     }
 }
 
+/// Reduces the generic component of `cost` by `n` (CR 118.7a). What the generic mana
+/// can't absorb reduces monocolored hybrid symbols ({2/W}) the player pays with their
+/// generic half (CR 601.2b: the nonhybrid equivalent is announced before the total cost
+/// is determined): with a reduction, paying such a symbol with generic mana is never
+/// harder than with its colored half, so that's the half used. Returns what's left of
+/// the reduction.
+pub fn reduce_generic_and_hybrid(cost: &mut ManaCost, n: u32) -> u32 {
+    let mut left = n.saturating_sub(cost.generic_amount());
+    cost.reduce_generic(n);
+    while left > 0 {
+        let Some(i) = cost
+            .symbols
+            .iter()
+            .position(|s| matches!(s, ManaSymbol::TwoHybrid(_)))
+        else {
+            break;
+        };
+        cost.symbols.remove(i);
+        let rest = 2u32.saturating_sub(left);
+        left = left.saturating_sub(2);
+        if rest > 0 {
+            cost.add(&ManaCost::generic(rest));
+        }
+    }
+    left
+}
+
 /// The half of a hybrid reduction symbol that reduces `cost` the most, used when the
 /// player hasn't chosen.
 pub fn default_half(cost: &ManaCost, s: ManaSymbol) -> Half {
@@ -226,34 +253,111 @@ pub fn chosen_half(g: &Game, spell: ObjectId, i: usize, cost: &ManaCost, s: Mana
     }
 }
 
+/// Keys in the `chosen_values` of a spell or activated ability on the stack recording how
+/// its controller announced they'll pay the k-th Phyrexian mana symbol of its cost
+/// (CR 601.2b, 602.2b): `PHYREXIAN_WAY_KEY + k`, the option index of the question
+/// [`choose_payment_ways`] asks.
+pub const PHYREXIAN_WAY_KEY: u16 = 0x7d00;
+
+/// The ways a mana symbol can be paid (CR 118.13): its halves (or its color, for a
+/// Phyrexian symbol) and whether 2 life can pay it; `None` for a symbol paid one way.
+fn payment_options(s: ManaSymbol) -> Option<(Vec<Half>, bool)> {
+    Some(match s {
+        ManaSymbol::Phyrexian(c) => (vec![Half::Color(c)], true),
+        ManaSymbol::PhyrexianHybrid(..) => (halves(s)?.to_vec(), true),
+        _ => (halves(s)?.to_vec(), false),
+    })
+}
+
+/// The labels of the question "How will you pay {s}?": "either way" (left to the
+/// automatic payment), each half, and "2 life" for a Phyrexian symbol.
+fn payment_labels(s: ManaSymbol, options: &[Half], phyrexian: bool) -> Vec<String> {
+    let mut labels = vec![format!("{s}: either way")];
+    labels.extend(options.iter().map(|h| half_label(*h)));
+    if phyrexian {
+        labels.push("2 life".into());
+    }
+    labels
+}
+
+/// CR 601.2b, 602.2b: as a spell or activated ability is proposed — as its modes and the
+/// value of X are announced, before its targets — its controller announces whether they
+/// intend to pay 2 life or mana for each Phyrexian mana symbol of the cost that will be
+/// paid (`cost`). The answers are recorded on `stack_obj` and used as the total cost is
+/// paid (see [`choose_payment_ways_for`]).
+pub fn announce_phyrexian(g: &mut Game, p: PlayerId, stack_obj: ObjectId, cost: &ManaCost) {
+    let mut k = 0u16;
+    for s in cost.symbols.clone() {
+        let Some((options, true)) = payment_options(s) else {
+            continue;
+        };
+        let labels = payment_labels(s, &options, true);
+        let pick = g.ask_option(
+            p,
+            Some(stack_obj),
+            &format!("How will you pay {s}?"),
+            labels,
+        );
+        if let Some(si) = g.objects[stack_obj.0 as usize].stack.as_mut() {
+            si.chosen_values.insert(PHYREXIAN_WAY_KEY + k, pick as i64);
+        }
+        k += 1;
+    }
+}
+
+/// The announced way to pay the k-th Phyrexian symbol of the cost of `stack_obj`.
+fn announced_phyrexian(g: &Game, stack_obj: Option<ObjectId>, k: u16) -> Option<usize> {
+    let v = g
+        .obj(stack_obj?)
+        .stack
+        .as_deref()?
+        .chosen_values
+        .get(&(PHYREXIAN_WAY_KEY + k))
+        .copied()?;
+    Some(v.max(0) as usize)
+}
+
 /// CR 118.13a–c: for each mana symbol of a cost that can be paid in more than one way
 /// (hybrid and Phyrexian symbols), the player chooses how they'll pay for it before
 /// paying. The cost is rewritten accordingly; paying 2 life for a Phyrexian symbol
 /// becomes a life payment. The first option leaves the choice to the automatic payment.
 pub fn choose_payment_ways(g: &mut Game, p: PlayerId, source: Option<ObjectId>, cost: &mut Cost) {
+    choose_payment_ways_for(g, p, source, None, cost)
+}
+
+/// [`choose_payment_ways`] for the cost of the spell or ability `announced` on the stack:
+/// its Phyrexian symbols are paid the way announced as it was proposed
+/// ([`announce_phyrexian`]).
+pub fn choose_payment_ways_for(
+    g: &mut Game,
+    p: PlayerId,
+    source: Option<ObjectId>,
+    announced: Option<ObjectId>,
+    cost: &mut Cost,
+) {
     let Some(mana) = cost.mana.as_mut() else {
         return;
     };
     let mut life = 0;
     let mut out: Vec<ManaSymbol> = Vec::new();
+    let mut k = 0u16;
     for s in mana.symbols.clone() {
-        let (mut options, phyrexian): (Vec<Half>, bool) = match s {
-            ManaSymbol::Phyrexian(c) => (vec![Half::Color(c)], true),
-            ManaSymbol::PhyrexianHybrid(..) => (halves(s).unwrap().to_vec(), true),
-            _ => match halves(s) {
-                Some(hs) => (hs.to_vec(), false),
-                None => {
-                    out.push(s);
-                    continue;
-                }
-            },
+        let Some((mut options, phyrexian)) = payment_options(s) else {
+            out.push(s);
+            continue;
         };
-        let mut labels = vec![format!("{s}: either way")];
-        labels.extend(options.iter().map(|h| half_label(*h)));
-        if phyrexian {
-            labels.push("2 life".into());
-        }
-        let pick = g.ask_option(p, source, &format!("How will you pay {s}?"), labels);
+        let labels = payment_labels(s, &options, phyrexian);
+        let n = labels.len();
+        let before = if phyrexian {
+            k += 1;
+            announced_phyrexian(g, announced, k - 1).filter(|i| *i < n)
+        } else {
+            None
+        };
+        let pick = match before {
+            Some(i) => i,
+            None => g.ask_option(p, source, &format!("How will you pay {s}?"), labels),
+        };
         if pick == 0 {
             out.push(s);
         } else if pick <= options.len() {

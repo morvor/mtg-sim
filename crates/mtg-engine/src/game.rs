@@ -440,6 +440,10 @@ pub struct TurnHistory {
     /// "crewed" it (CR 702.122b–c). Recorded by `kw/crew.rs`.
     #[serde(default)]
     pub crewed: Vec<crate::kw::crew::CrewRecord>,
+    /// Objects whose "once during each of your turns, you may cast ..." permission was
+    /// used this turn. Recorded by `kw/once_each_turn_cast.rs`.
+    #[serde(default)]
+    pub once_permissions_used: Vec<ObjectId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

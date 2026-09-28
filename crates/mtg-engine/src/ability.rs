@@ -963,6 +963,13 @@ pub enum Filter {
     PermanentCard,
     /// A spell on the stack.
     Spell,
+    /// A spell on the stack, described by a static ability that affects spells
+    /// continuously ("Instant and sorcery spells you control have lifelink", CR 611.3a):
+    /// it applies to whichever spells match while they're on the stack, including one
+    /// whose control changed. (A static ability granting abilities to `Spell`s makes them
+    /// gain the abilities as they're cast instead, CR 610.5; see
+    /// `next_spell::is_cast_grant`.)
+    SpellOnStack,
     /// Nonland permanents / cards etc. are expressed with Not(Type(Land)).
     Token,
     /// A card (not a token, not a copy of a card on the stack).
@@ -1151,7 +1158,7 @@ impl Filter {
     pub fn zone(&self) -> Option<ZoneKind> {
         match self {
             Filter::InZone(z) => Some(*z),
-            Filter::Spell => Some(ZoneKind::Stack),
+            Filter::Spell | Filter::SpellOnStack => Some(ZoneKind::Stack),
             Filter::Permanent => Some(ZoneKind::Battlefield),
             Filter::And(v) => v.iter().find_map(|f| f.zone()),
             _ => None,

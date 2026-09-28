@@ -430,8 +430,13 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
                 {
                     return Some(Effect::seq(store.into_iter().chain([ea]).collect()));
                 }
-                // Second half may omit the subject: "draw a card and lose 1 life".
-                if let Some(ec) = parse_simple(c, b).or_else(|| parse_clause(c, b)) {
+                // Second half may omit the subject: "draw a card and lose 1 life"; or be
+                // optional: "draw a card, then you may cast a spell ...".
+                let optional = matches!(sep, ", then " | " and then ") && c.starts_with("you may ");
+                if let Some(ec) = parse_simple(c, b)
+                    .or_else(|| parse_clause(c, b))
+                    .or_else(|| optional.then(|| parse_sentence(c, b)).flatten())
+                {
                     return Some(Effect::seq(store.into_iter().chain([ea, ec]).collect()));
                 }
             }

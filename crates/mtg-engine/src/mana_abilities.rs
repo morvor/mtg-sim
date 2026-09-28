@@ -1757,12 +1757,18 @@ pub fn pay_mana(
     let mut idxs = plan.pool_indices.clone();
     idxs.sort_unstable_by(|a, b| b.cmp(a));
     let mut riders = Vec::new();
+    let mut snow = 0;
     for i in idxs {
         let m = g.players[p.idx()].mana_pool.mana.remove(i);
         spent.push(m.ty);
+        snow += m.snow as u32;
         if let Some(r) = m.rider {
             riders.push(r);
         }
+    }
+    // "The amount of {S} spent to cast this spell" (CR 107.4h).
+    if let (true, Some(spell)) = (spend.is_spell, spend.source) {
+        crate::kw::snow_mana::record(g, spell, snow);
     }
     // "When that mana is spent to cast ..." (CR 106.6): the delayed triggers trigger now
     // and are put on the stack the next time a player would receive priority.
