@@ -168,11 +168,20 @@ fn copy_targeting(
     Some(copy)
 }
 
+/// Whether `spell` can be copied: it's on the stack, or it's a spell that has left the
+/// stack (countered in response to the ability that copies it), which is copied as it last
+/// existed there (CR 608.2h), as `copy::copy_spell` does.
+fn copyable(g: &Game, spell: ObjectId) -> bool {
+    let o = g.obj(spell);
+    o.zone == Zone::Stack
+        && (g.is_live(spell) || (o.kind != ObjKind::StackAbility && o.stack.is_some()))
+}
+
 /// CR 707.10d: copies `spell` for each other object or player it could target; each copy
 /// targets a different one of them. The copies are put onto the stack in the order their
 /// controller chooses.
 pub fn copy_for_each_target(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
-    if !g.is_live(spell) || g.obj(spell).zone != Zone::Stack {
+    if !copyable(g, spell) {
         return vec![];
     }
     if g.dirty {
@@ -232,7 +241,7 @@ pub fn copy_with_target(
     controller: PlayerId,
     targets: Vec<Entity>,
 ) -> Option<ObjectId> {
-    if !g.is_live(spell) || g.obj(spell).zone != Zone::Stack {
+    if !copyable(g, spell) {
         return None;
     }
     if g.dirty {
