@@ -420,6 +420,29 @@ impl Game {
         false
     }
 
+    /// Whether a static permission lets `p` cast `card` from their hand without paying its
+    /// mana cost, as a spell with the characteristics `chars` (CR 601.3e).
+    fn free_from_hand_permitted(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        self.statics
+            .play_permissions
+            .iter()
+            .any(|(src, ctl, perm)| {
+                let free = perm.cost.as_ref().is_some_and(Cost::is_free);
+                if !free || !perm.spells || perm.zone != ZoneKind::Hand {
+                    return false;
+                }
+                let ctx = Ctx::new(Some(*src), *ctl);
+                let view = WithChars { id: card, chars };
+                self.player_rel_matches(perm.who, p, &ctx)
+                    && self.matches_view(&view, card, &as_spell_filter(&perm.what), &ctx)
+            })
+    }
+
     fn card_has_land_face(&self, c: ObjectId) -> bool {
         let o = self.obj(c);
         o.chars.is_land()
@@ -588,6 +611,19 @@ impl Game {
                             }
                             _ => {}
                         }
+                    }
+                }
+            }
+            // "You may cast spells from your hand without paying their mana costs"
+            // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
+            if in_hand {
+                for face in castable_faces(self, card) {
+                    let chars = self.face_characteristics(card, face);
+                    if self.free_from_hand_permitted(p, card, &chars) {
+                        let mut opt = CastOption::normal(face);
+                        opt.method = CastMethod::Free;
+                        opt.alt_cost = Some(Cost::free());
+                        out.push(opt);
                     }
                 }
             }

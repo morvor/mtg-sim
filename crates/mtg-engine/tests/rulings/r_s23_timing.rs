@@ -321,3 +321,39 @@ fn the_new_top_card_cant_be_looked_at_until_the_spell_is_cast() {
     assert_eq!(t.g.library_top(P0), Some(cards[1]));
     assert!(sees_top(&t.g));
 }
+
+#[test]
+fn omniscience_spells_keep_their_normal_timing() {
+    cr!("601.3", "307.1", "117.1a", "118.9");
+    ruling!(
+        "Omniscience",
+        "You must follow the normal timing permissions and restrictions of each spell you cast."
+    );
+    supported("Omniscience");
+    // "You may cast spells from your hand without paying their mana costs."
+    let free = CastMethod::Free;
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    let divination = t.hand(P0, "Divination");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    // In P0's main phase with an empty stack, the sorcery can be cast for free.
+    assert!(can_cast(&mut t, P0, divination, free.clone()));
+    // Not during P1's turn: only the instant can.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!can_cast(&mut t, P0, divination, free.clone()));
+    assert!(can_cast(&mut t, P0, bolt, free.clone()));
+    // Nor in P0's main phase while a spell is on the stack.
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, bolt)
+        .method(free.clone())
+        .target(Entity::Player(P1))
+        .go();
+    assert!(!can_cast(&mut t, P0, divination, free.clone()));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // With the stack empty again, P0 casts Divination without paying its mana cost.
+    let hand = t.hand_size(P0);
+    t.cast(P0, divination).method(free).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+}

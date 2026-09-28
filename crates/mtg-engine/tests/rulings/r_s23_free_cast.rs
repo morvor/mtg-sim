@@ -445,3 +445,59 @@ fn an_adventurer_or_split_card_with_escape_is_cast_as_the_chosen_part_for_its_co
     assert!(t.obj_now(bears).tapped);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn omniscience_free_spells_have_x_zero_and_pay_additional_costs() {
+    cr!("107.3b", "118.9", "118.8", "601.2b", "601.2f");
+    ruling!(
+        "Omniscience",
+        "If a spell has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    ruling!(
+        "Omniscience",
+        "If you cast a spell \"without paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the card has any mandatory additional costs, such as that of Tormenting Voice, those must be paid to cast the spell."
+    );
+    let free = CastMethod::Free;
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    // Blaze ({X}{R}) cast for free: X is 0, whatever is answered.
+    let blaze = t.hand(P0, "Blaze");
+    t.cast(P0, blaze)
+        .method(free.clone())
+        .x(3)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    // Tormenting Voice's discard must be paid: with no other card in hand, it can't be
+    // cast.
+    let voice = t.hand(P0, "Tormenting Voice");
+    assert!(t.cast(P0, voice).method(free.clone()).try_go().is_err());
+    let forest = t.hand(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.cast(P0, voice).method(free.clone()).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"));
+    // Kicker may be paid: Burst Lightning deals 4.
+    t.lands(P0, "Wastes", 4);
+    let burst = t.hand(P0, "Burst Lightning");
+    t.cast(P0, burst)
+        .method(free.clone())
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(tapped_lands(&t, P0), 4);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    // An alternative cost can't be combined with it: Fireblast is cast either for free or
+    // by sacrificing two Mountains, not both.
+    let mountains = t.lands(P0, "Mountain", 2);
+    let fireblast = t.hand(P0, "Fireblast");
+    t.cast(P0, fireblast)
+        .method(free)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert!(mountains.iter().all(|m| t.on_battlefield(*m)));
+    assert_eq!(t.life(P1), 12);
+}
