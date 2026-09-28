@@ -186,3 +186,39 @@ fn conduit_of_ruin_the_first_creature_spell_neednt_be_the_first_spell() {
         untapped_before - 1
     );
 }
+
+#[test]
+fn sage_of_the_beyond_reduces_only_generic_mana_of_spells_cast_from_elsewhere() {
+    cr!("601.2f", "118.7a", "702.34a");
+    ruling!(
+        "Sage of the Beyond",
+        "The cost reduction applies only to generic mana in the costs of spells you cast from anywhere other than your hand. It can't reduce requirements of a specific color of mana."
+    );
+    supported("Sage of the Beyond");
+    supported("Think Twice");
+    supported("Lingering Souls");
+    // "Spells you cast from anywhere other than your hand cost {2} less to cast."
+    let flashback = mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sage of the Beyond");
+    // Think Twice's flashback cost {2}{U} is reduced to {U}.
+    t.lands(P0, "Island", 1);
+    let tt = t.graveyard(P0, "Think Twice");
+    t.cast(P0, tt).method(flashback.clone()).go();
+    assert_eq!(tapped_lands(&t, P0), 1);
+    t.resolve_all();
+    // Lingering Souls' flashback cost {1}{B} is reduced to {B}, not less.
+    let souls = t.graveyard(P0, "Lingering Souls");
+    assert!(t.cast(P0, souls).method(flashback.clone()).try_go().is_err());
+    t.lands(P0, "Swamp", 1);
+    t.cast(P0, souls).method(flashback).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
+    t.resolve_all();
+    // Cast from the hand, Think Twice costs its full {1}{U}.
+    t.lands(P0, "Island", 1);
+    let tt = t.hand(P0, "Think Twice");
+    assert!(t.cast(P0, tt).try_go().is_err());
+    t.lands(P0, "Island", 1);
+    t.cast(P0, tt).go();
+    assert_eq!(tapped_lands(&t, P0), 4);
+}
