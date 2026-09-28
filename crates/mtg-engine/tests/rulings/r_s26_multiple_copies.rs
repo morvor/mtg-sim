@@ -170,3 +170,42 @@ fn complete_the_circuit_copies_have_the_same_mode() {
     assert_eq!(t.life(P1), 8);
     assert!(t.on_battlefield(bears));
 }
+
+#[test]
+fn thousand_year_storm_copies_have_the_effects_of_the_kicker_paid() {
+    cr!("707.10", "707.2", "702.33d");
+    ruling!(
+        "Thousand-Year Storm",
+        "You can't choose to pay any additional costs for the copies. However, effects based on any additional costs that were paid for the original spell are copied as though those same costs were paid for the copy too."
+    );
+    supported("Thousand-Year Storm");
+    supported("Burst Lightning");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thousand-Year Storm");
+    t.lands(P0, "Volcanic Island", 7);
+    // The first instant this turn: no copies.
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    assert!(spell_copies(&t).is_empty());
+    // The second, kicked: one copy, kicked too (4 damage each).
+    let burst = t.hand(P0, "Burst Lightning");
+    t.cast(P0, burst).kicked(true).target(P1).go();
+    t.answer_yes(P0, false);
+    t.settle();
+    t.resolve();
+    assert_eq!(spell_copies(&t).len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 12);
+    // Not kicked: the copies (two now) aren't kicked either.
+    t.lands(P0, "Volcanic Island", 1);
+    let burst = t.hand(P0, "Burst Lightning");
+    t.cast(P0, burst).kicked(false).target(P1).go();
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, false);
+    t.settle();
+    t.resolve();
+    assert_eq!(spell_copies(&t).len(), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 6);
+}

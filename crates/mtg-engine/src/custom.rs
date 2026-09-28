@@ -94,6 +94,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     if let Some(v) = crate::commander_rules::custom_value(g, name, ctx) {
         return v;
     }
+    // "for each other instant and sorcery spell you've cast before it this turn".
+    if let Some(v) = crate::spells_cast_before::custom_value(g, name, ctx) {
+        return v;
+    }
     // Information noted during the draft (CR 905.2b).
     if let Some(v) = crate::draft::custom_value(g, name, ctx) {
         return v;
