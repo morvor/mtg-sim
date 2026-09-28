@@ -200,7 +200,7 @@ fn timing_from_exile(name: &str, setup: fn(&mut TestGame) -> Vec<Entity>) {
 
 #[test]
 fn the_permanent_cast_from_exile_follows_the_normal_timing_rules() {
-    cr!("715.3d", "307.1", "302.1");
+    cr!("715.3d", "302.1");
     ruling!(
         "Bonecrusher Giant // Stomp",
         "You must still follow any timing restrictions and permissions for the permanent spell you cast from exile. Normally, you'll be able to cast it only during your main phase while the stack is empty."
@@ -403,8 +403,11 @@ fn a_milled_adventurer_card_is_a_creature_card() {
     // Dig Deep ({1}{G} sorcery): "Choose target creature. Mill four cards, then put a
     // +1/+1 counter on that creature for each creature card milled this way." The milled
     // Two-Headed Hunter is a creature card in the graveyard, like the Grizzly Bears; the
-    // Shock and the Forest aren't.
+    // Shock and the Forest aren't. The creature cards already in the graveyards weren't
+    // milled this way.
     let mut t = TestGame::new(2);
+    t.graveyard(P0, "Serra Angel");
+    t.graveyard(P1, "Grizzly Bears");
     stack_library(
         &mut t,
         P0,
@@ -422,6 +425,6 @@ fn a_milled_adventurer_card_is_a_creature_card() {
     assert_eq!(t.obj(spell).chars.name, "Dig Deep");
     t.resolve_all();
     assert_eq!(t.counters(giant, mtg_engine::types::counters::PLUS1), 2);
-    assert_eq!(t.graveyard_size(P0), 4);
+    assert_eq!(t.graveyard_size(P0), 5);
     assert_eq!(exiled_named(&t, "Colossal Badger").len(), 1);
 }

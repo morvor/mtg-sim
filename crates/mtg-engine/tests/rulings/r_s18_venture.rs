@@ -123,7 +123,7 @@ fn no_one_can_respond_between_the_venture_choice_and_the_room_ability_triggering
 
 #[test]
 fn only_one_dungeon_and_a_completed_one_is_removed_as_a_state_based_action() {
-    cr!("309.2a", "309.6", "704.5t", "701.49c");
+    cr!("309.2a", "309.5b", "309.6", "704.5t", "701.49c");
     ruling!(
         "Radiant Solar",
         "A player may only have one dungeon in the command zone at a time."

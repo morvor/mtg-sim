@@ -46,7 +46,7 @@ fn unearth_after_the_card_left(name: &str, cost: &str) {
 
 #[test]
 fn unearth_does_nothing_if_the_card_left_the_graveyard() {
-    cr!("702.84a", "608.2b", "400.7");
+    cr!("702.84a", "400.7");
     ruling!(
         "Phyrexian Dragon Engine",
         "If you activate a card's unearth ability but that card is removed from your graveyard before the ability resolves, that unearth ability will do nothing as it resolves."

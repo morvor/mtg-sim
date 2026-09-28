@@ -556,13 +556,15 @@ impl Game {
         // so the effect doesn't apply — a spell or ability exiling it succeeds, and the
         // card is exiled with (linked to) that spell or ability, not the replacement's
         // source (CR 607.2a). Library and battlefield destinations may still change the
-        // position or the way it enters.
+        // position or the way it enters, and one that exiles it face down or with
+        // counters still changes the event.
         if let ReplEvent::Move(m) = ev {
             out.retain(|c| {
                 !matches!(&c.def.action, ReplacementAction::MoveInstead(d)
                     if !matches!(d.zone, ZoneKind::Library | ZoneKind::Battlefield)
                         && m.to.kind() == Some(d.zone)
-                        && !d.face_down)
+                        && !d.face_down
+                        && d.with_counters.is_empty())
             });
         }
         out
