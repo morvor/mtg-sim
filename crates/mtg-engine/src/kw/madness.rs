@@ -34,7 +34,13 @@ fn madness_cost(g: &Game, card: ObjectId) -> Option<Cost> {
         .find(|k| k.kind == KeywordKind::Madness)
         .map(|k| match &k.cost {
             Some(c) => c.clone(),
-            None => Cost::mana(o.chars.mana_cost.clone().unwrap_or_default()),
+            // A card with no mana cost has an unpayable madness cost (CR 118.6).
+            None => Cost::mana(
+                o.chars
+                    .mana_cost
+                    .clone()
+                    .unwrap_or_else(crate::cost_rules::unpayable),
+            ),
         })
 }
 

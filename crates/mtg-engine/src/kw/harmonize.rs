@@ -100,8 +100,14 @@ impl KeywordRules for Harmonize {
         let cost = match &kw.cost {
             Some(c) => c.clone(),
             None => {
+                // A card with no mana cost has an unpayable harmonize cost (CR 118.6).
                 let chars = g.option_characteristics(card, &opt);
-                Cost::mana(chars.mana_cost.clone().unwrap_or_default())
+                Cost::mana(
+                    chars
+                        .mana_cost
+                        .clone()
+                        .unwrap_or_else(crate::cost_rules::unpayable),
+                )
             }
         };
         opt.alt_cost = Some(super::modified_keyword_cost(

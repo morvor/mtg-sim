@@ -5,7 +5,8 @@
 //! alternative costs (CR 601.2b, 601.2f–h); timing restrictions still apply.
 //!
 //! A flashback ability granted with "The flashback cost is equal to its mana cost" has no
-//! cost of its own ([`Keyword::cost`] is `None`): the card's mana cost is paid.
+//! cost of its own ([`Keyword::cost`] is `None`): the card's mana cost is paid, and for a
+//! card with no mana cost that's an unpayable cost (CR 118.6).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -68,7 +69,13 @@ impl KeywordRules for Flashback {
         }
         let cost = match &kw.cost {
             Some(c) => c.clone(),
-            None => Cost::mana(chars.mana_cost.clone().unwrap_or_default()),
+            // A card with no mana cost has an unpayable flashback cost (CR 118.6).
+            None => Cost::mana(
+                chars
+                    .mana_cost
+                    .clone()
+                    .unwrap_or_else(crate::cost_rules::unpayable),
+            ),
         };
         // "Flashback costs you pay cost {2} less."
         opt.alt_cost = Some(super::modified_keyword_cost(
