@@ -1173,3 +1173,84 @@ fn mindleech_mass_permanent_spell_enters_under_the_casters_control() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     assert!(!t.in_graveyard(P0, "Lightning Bolt"));
 }
+
+/// P0's Anrakyr the Traveller attacks P1 and isn't blocked; its trigger resolves with the
+/// answers queued (P0 casts `pick`, choosing the cards in `discard` for its cost) and
+/// combat ends.
+fn anrakyr_attacks(t: &mut TestGame, pick: ObjectId, discard: &[ObjectId]) {
+    let anrakyr = t.battlefield(P0, "Anrakyr the Traveller");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(pick)]);
+    if !discard.is_empty() {
+        let d: Vec<Entity> = discard.iter().map(|c| Entity::Object(*c)).collect();
+        t.answer_choose(P0, &d);
+    }
+    attack_with(t, &[(anrakyr, Entity::Player(P1))]);
+    block_and_finish(t, P1, &[]);
+}
+
+#[test]
+fn anrakyr_spells_are_cast_only_by_paying_life_plus_additional_costs() {
+    cr!("118.9", "118.9a", "118.8", "119.4", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Anrakyr the Traveller",
+        "You may only cast a spell this way by paying the appropriate amount of life. You may not pay its normal cost and may not pay any other alternative costs. You may still pay for additional costs, such as kicker costs. If the spell has mandatory additional costs, you must pay those."
+    );
+    supported("Anrakyr the Traveller");
+    supported("Skyclave Sentinel");
+    supported("Lesser Masticore");
+    supported("Salvage Titan");
+    // "Whenever Anrakyr the Traveller attacks, you may cast an artifact spell from your
+    // hand or graveyard by paying life equal to its mana value rather than paying its
+    // mana cost."
+    // Skyclave Sentinel (mana value 3) for 3 life, kicked for {4}: the lands pay only the
+    // kicker.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 7);
+    let sentinel = t.hand(P0, "Skyclave Sentinel");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    anrakyr_attacks(&mut t, sentinel, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(tapped_lands(&t, P0), 4);
+    let on = t.named_on_battlefield("Skyclave Sentinel");
+    assert_eq!(on.len(), 1);
+    assert_eq!(t.counters(on[0], "+1/+1"), 2);
+    // Lesser Masticore (mana value 2) from the graveyard for 2 life: a card must be
+    // discarded too.
+    let mut t = TestGame::new(2);
+    let masticore = t.graveyard(P0, "Lesser Masticore");
+    let forest = t.hand(P0, "Forest");
+    anrakyr_attacks(&mut t, masticore, &[forest]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert_eq!(t.named_on_battlefield("Lesser Masticore").len(), 1);
+    // Without a card to discard, it can't be cast.
+    let mut t = TestGame::new(2);
+    let masticore = t.graveyard(P0, "Lesser Masticore");
+    anrakyr_attacks(&mut t, masticore, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_graveyard(P0, "Lesser Masticore"));
+    // Salvage Titan (mana value 6) costs 6 life: its own alternative cost (sacrificing
+    // three artifacts) can't be used instead.
+    let mut t = TestGame::new(2);
+    let thopters: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Ornithopter")).collect();
+    let titan = t.hand(P0, "Salvage Titan");
+    let from = t.asked().len();
+    anrakyr_attacks(&mut t, titan, &[]);
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert_eq!(t.life(P0), 14);
+    assert_eq!(t.named_on_battlefield("Salvage Titan").len(), 1);
+    assert!(thopters.iter().all(|o| t.on_battlefield(*o)));
+    // With less life than its mana value, the life can't be paid.
+    let mut t = TestGame::new(2);
+    t.g.players[0].life = 5;
+    let titan = t.hand(P0, "Salvage Titan");
+    anrakyr_attacks(&mut t, titan, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 5);
+    assert!(t.in_hand(P0, "Salvage Titan"));
+}
