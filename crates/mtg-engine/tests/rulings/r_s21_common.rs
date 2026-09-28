@@ -78,3 +78,31 @@ pub fn genesis_wave(t: &mut TestGame, top_first: &[&str], yes: &[bool]) -> Vec<O
     t.clear_answers();
     cards
 }
+
+/// Puts the real card `name` onto the battlefield under `p`'s control blocking `attacker`
+/// (as "create a token that's blocking target creature" would, CR 509.4).
+pub fn enter_blocking(t: &mut TestGame, p: PlayerId, name: &str, attacker: ObjectId) -> ObjectId {
+    let id = t.custom(
+        p,
+        (*mtg_engine::card::card(name)).clone(),
+        mtg_engine::object::Zone::Exile,
+    );
+    let new =
+        t.g.move_object_ev(mtg_engine::replacement::MoveEv {
+            obj: id,
+            to: mtg_engine::object::Zone::Battlefield,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: mtg_engine::events::MoveCause::Effect,
+            by: Some(p),
+            etb: mtg_engine::replacement::EtbInfo {
+                controller: Some(p),
+                blocking: Some(attacker),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .expect("entered");
+    t.g.flush_events();
+    t.settle();
+    new
+}
