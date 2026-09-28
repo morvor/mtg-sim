@@ -918,7 +918,17 @@ impl Game {
         });
         // The card is discarded even if a replacement effect puts it elsewhere (madness).
         if let Some(n) = new {
-            self.emit(Event::Discarded { player: p, card: n });
+            // Discarding to pay a cost, while a spell is cast or an ability activated,
+            // isn't caused by a spell or ability's effect.
+            let by = match source {
+                Some(s) if self.special.casting == 0 => Some(self.obj(s).controller),
+                _ => None,
+            };
+            self.emit(Event::Discarded {
+                player: p,
+                card: n,
+                by,
+            });
         }
         new
     }
