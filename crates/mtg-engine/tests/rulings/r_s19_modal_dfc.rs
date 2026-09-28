@@ -263,6 +263,37 @@ fn an_mdfcs_mana_value_is_that_of_the_face_up_or_its_front_face() {
 }
 
 #[test]
+fn an_mdfcs_mana_value_is_that_of_the_face_up_or_its_front_face_curly_quotes() {
+    cr!("712.8a", "712.8f", "202.3");
+    ruling!(
+        "Birgi, God of Storytelling // Harnfel, Horn of Bounty",
+        "The mana value of a modal double-faced card is based on the characteristics of the face that’s being considered. On the stack and battlefield, consider whichever face is up. In all other zones, consider only the front face."
+    );
+    // Birgi, God of Storytelling {2}{R} // Harnfel, Horn of Bounty {4}{R}.
+    let mut t = TestGame::new(2);
+    let b = t.hand(P0, BIRGI);
+    assert_eq!(mana_value(&t, b), 3);
+    t.lands(P0, "Mountain", 5);
+    let spell = t.cast(P0, b).method(CastMethod::Half(1)).go();
+    assert_eq!(mana_value(&t, spell), 5);
+    t.resolve_all();
+    let harnfel = t.g.current(spell);
+    assert_eq!(t.obj(harnfel).chars.name, "Harnfel, Horn of Bounty");
+    assert_eq!(mana_value(&t, harnfel), 5);
+    // In the graveyard: its front face, 3.
+    let gy = t.graveyard(P0, BIRGI);
+    assert_eq!(mana_value(&t, gy), 3);
+    // Bala Ged Recovery {2}{G} in the library is 3; played as Bala Ged Sanctuary it's 0.
+    let lib = t.library_top(P0, BALA_GED);
+    assert_eq!(mana_value(&t, lib), 3);
+    let sanctuary = t.hand(P0, BALA_GED);
+    t.play_land(P0, sanctuary).unwrap();
+    let sanctuary = t.g.current(sanctuary);
+    assert_eq!(t.obj(sanctuary).chars.name, "Bala Ged Sanctuary");
+    assert_eq!(mana_value(&t, sanctuary), 0);
+}
+
+#[test]
 fn putting_an_mdfc_onto_the_battlefield_looks_at_its_front_face() {
     cr!("712.8a", "712.14", "712.14b");
     ruling!(
