@@ -334,3 +334,39 @@ fn an_ability_copier_can_be_limited_to_abilities_from_certain_sources() {
     assert!(!c.contains(&Entity::Object(charge)));
     assert!(!c.contains(&Entity::Object(ping)));
 }
+
+#[test]
+fn a_dynamo_copy_of_a_linked_trigger_is_linked_too() {
+    cr!("707.10", "607.2a", "607.3");
+    ruling!(
+        "The Peregrine Dynamo",
+        "If an ability is linked to a second ability, copies of that ability are also linked to that second ability. If the second ability refers to “the exiled card,” it refers to all cards exiled by the ability and the copy."
+    );
+    supported("Leyline of Singularity");
+    // Leyline of Singularity: "All nonland permanents are legendary." — so Fiend Hunter
+    // ("When this creature enters, you may exile another target creature. When this
+    // creature leaves the battlefield, return the exiled card to the battlefield under its
+    // owner's control.") is another legendary source for The Peregrine Dynamo.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Singularity");
+    let dynamo = t.battlefield(P0, "The Peregrine Dynamo");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    let hunter = t.enter(P0, "Fiend Hunter");
+    t.settle();
+    assert!(legendary(&t, hunter));
+    t.lands(P0, "Wastes", 1);
+    copy_top_ability(&mut t, dynamo, "Copy target");
+    change_copy_targets(&mut t, P0, &[Some(Entity::Object(b))]);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.zone(a), Zone::Exile);
+    assert_eq!(t.zone(b), Zone::Exile);
+    // Both exiled cards return when Fiend Hunter leaves.
+    destroy(&mut t, hunter);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}

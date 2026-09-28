@@ -572,6 +572,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             (Filter::DealtDamageThisTurn, r)
         } else if let Some(r) = t
+            .strip_prefix("that entered the battlefield this turn")
+            .or_else(|| t.strip_prefix("that entered this turn"))
+        {
+            // "target token that entered this turn" (Romana II, Octomancer).
+            (Filter::EnteredThisTurn, r)
+        } else if let Some(r) = t
             .strip_prefix("that was activated this turn")
             .or_else(|| t.strip_prefix("that were activated this turn"))
         {

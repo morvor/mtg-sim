@@ -10,6 +10,7 @@ use crate::r_s25_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -152,4 +153,73 @@ fn a_token_copy_of_an_artifact_copies_only_what_was_printed() {
     assert_eq!(t.pt(token), (0, 2));
     assert!(!t.obj_now(token).tapped);
     assert_eq!(t.counters(token, counters::PLUS1), 0);
+}
+
+#[test]
+fn octomancer_copies_the_original_characteristics_of_a_token() {
+    cr!("707.2", "111.4");
+    ruling!(
+        "Octomancer",
+        "The token you create copies the original characteristics of the token as stated by the effect that created that token (unless that token is copying something else; see below). It doesn't copy whether that token is tapped or untapped"
+    );
+    supported("Octomancer");
+    // "At the beginning of each end step, create a token that's a copy of target creature
+    // token that entered the battlefield this turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Octomancer");
+    let soldier = modified_soldier_token(&mut t);
+    let before = tokens(&t, P0);
+    t.answer_targets(P0, &[Entity::Object(soldier)]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    // (Giant Growth still pumps the original.)
+    assert_eq!(t.pt(soldier), (5, 5));
+    let new = new_tokens(&t, &before);
+    assert_eq!(new.len(), 1);
+    plain_soldier(&t, new[0]);
+}
+
+#[test]
+fn romana_ii_copies_only_a_token_that_entered_this_turn() {
+    cr!("707.2", "111.4", "115.1");
+    ruling!(
+        "Romana II",
+        "The token you create copies the original characteristics of the token as stated by the effect that created that token"
+    );
+    supported("Romana II");
+    // "{1}, {T}: Create a tapped token that's a copy of target token that entered this
+    // turn."
+    let mut t = TestGame::new(2);
+    let romana = t.battlefield(P0, "Romana II");
+    // A token from an earlier turn isn't a legal target.
+    cast_new(&mut t, P0, "Raise the Alarm", &[]);
+    t.resolve_all();
+    let old = tokens(&t, P0);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    cast_new(&mut t, P0, "Raise the Alarm", &[]);
+    t.resolve_all();
+    let soldier = new_tokens(&t, &old)[0];
+    tap_counter_and_pump(&mut t, soldier);
+    assert_eq!(t.pt(soldier), (5, 5));
+    let before = tokens(&t, P0);
+    t.lands(P0, "Wastes", 1);
+    let from = t.asked().len();
+    t.answer_targets(P0, &[Entity::Object(soldier)]);
+    activate_containing(&mut t, P0, romana, "Create a tapped token").unwrap();
+    let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(offered[0].contains(&Entity::Object(soldier)));
+    for o in &old {
+        assert!(!offered[0].contains(&Entity::Object(*o)));
+    }
+    t.resolve_all();
+    let new = new_tokens(&t, &before);
+    assert_eq!(new.len(), 1);
+    let token = new[0];
+    let o = t.obj_now(token);
+    assert_eq!(o.chars.name, "Soldier Token");
+    assert_eq!(t.pt(token), (1, 1));
+    assert_eq!(t.counters(token, counters::PLUS1), 0);
+    // Romana II creates it tapped.
+    assert!(o.tapped);
 }

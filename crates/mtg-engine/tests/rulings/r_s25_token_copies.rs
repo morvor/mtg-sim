@@ -8,6 +8,7 @@ use crate::r_s17_common::token_copy;
 use crate::r_s25_common::*;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -314,4 +315,69 @@ fn worldwalker_helm_copies_what_a_token_copied() {
         assert_eq!(t.pt(id), (0, 2));
         assert!(t.obj_now(id).has_keyword(KeywordKind::Flying));
     }
+}
+
+#[test]
+fn octomancer_copies_what_a_token_copied() {
+    cr!("707.3", "707.2");
+    ruling!(
+        "Octomancer",
+        "If the copied token is copying something else (for example, if the copied token is one previously created by this ability), then the token enters as whatever that token copied."
+    );
+    supported("Octomancer");
+    // "At the beginning of each end step, create a token that's a copy of target creature
+    // token that entered the battlefield this turn." This turn, Cackling Counterpart made
+    // a token copy of P0's Serra Angel.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Octomancer");
+    let angel = t.battlefield(P0, "Serra Angel");
+    cast_new(&mut t, P0, "Cackling Counterpart", &[Entity::Object(angel)]);
+    t.resolve_all();
+    let first = tokens(&t, P0);
+    assert_eq!(first.len(), 1);
+    t.answer_targets(P0, &[Entity::Object(first[0])]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 2);
+    for tok in toks {
+        assert_eq!(name_now(&t, tok), "Serra Angel");
+        assert_eq!(t.pt(tok), (4, 4));
+        assert!(t.obj_now(tok).has_keyword(KeywordKind::Flying));
+    }
+}
+
+#[test]
+fn a_copy_of_an_impostor_syndrome_token_isnt_legendary() {
+    cr!("707.2", "707.9b", "704.5j");
+    ruling!(
+        "Impostor Syndrome",
+        "If something becomes a copy of the token, the copy also isn't legendary."
+    );
+    supported("Impostor Syndrome");
+    // "Whenever a nontoken creature you control deals combat damage to a player, create a
+    // token that's a copy of it, except it isn't legendary." Isamaru, Hound of Konda is a
+    // legendary 2/2.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Impostor Syndrome");
+    let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
+    assert!(legendary(&t, isamaru));
+    crate::r_s01_common::attack_with(&mut t, &[(isamaru, Entity::Player(P1))]);
+    crate::r_s01_common::block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    let token = toks[0];
+    assert_eq!(name_now(&t, token), "Isamaru, Hound of Konda");
+    assert!(!legendary(&t, token));
+    // P0's Clone enters as a copy of the token: not legendary either, so the legend rule
+    // doesn't apply to any of the three.
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(token)]);
+    let clone = t.enter(P0, "Clone");
+    t.settle();
+    assert_eq!(name_now(&t, clone), "Isamaru, Hound of Konda");
+    assert!(!legendary(&t, clone));
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 3);
 }

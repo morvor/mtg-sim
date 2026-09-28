@@ -38,6 +38,28 @@ fn copying_a_spell_with_a_spell_doesnt_trigger_cast_abilities() {
 }
 
 #[test]
+fn flare_of_duplication_s_copy_doesnt_trigger_cast_abilities() {
+    cr!("707.10", "603.2");
+    ruling!(
+        "Flare of Duplication",
+        "The copy is created on the stack, so it's not \"cast.\" Abilities that trigger when a player casts a spell won't trigger."
+    );
+    supported("Flare of Duplication");
+    // "Copy target instant or sorcery spell you control. You may choose new targets for
+    // the copy."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Young Pyromancer");
+    let bolt = cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    cast_new(&mut t, P0, "Flare of Duplication", &[Entity::Object(bolt)]);
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    // Lightning Bolt and Flare of Duplication were cast; the copy wasn't.
+    assert_eq!(elementals(&t), 2);
+    assert_eq!(t.g.history.spells_cast.len(), 2);
+}
+
+#[test]
 fn the_mirari_conjecture_s_copies_dont_trigger_it_again() {
     cr!("707.10", "603.2", "714.2b");
     ruling!(
