@@ -1598,6 +1598,8 @@ pub fn apply_mod(
         }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
+        // Replaced by the ability itself as the effect is created (`Game::fix_mods`).
+        Modification::AddThisAbility => {}
         Modification::AddKeyword(k) => {
             // "Protection from the chosen color": the choice is the granting ability's,
             // not the object gaining it's (CR 607.2d); an undefined linked choice grants

@@ -1516,6 +1516,12 @@ pub enum Modification {
     SetChosenColors,
     // Layer 6
     AddAbility(Ability),
+    /// "... becomes a copy of [object], except it has this ability" (CR 707.9a): the
+    /// ability whose resolution creates the effect. Replaced by an [`AddAbility`] of that
+    /// ability as the effect is created (see `Game::fix_mods`); on its own it adds nothing.
+    ///
+    /// [`AddAbility`]: Modification::AddAbility
+    AddThisAbility,
     AddKeyword(Keyword),
     /// Adds a keyword whose variable is defined by the effect ("~ has bushido X, where X
     /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
@@ -1573,6 +1579,7 @@ impl Modification {
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
             | SetChosenColors => Layer::L5Color,
             AddAbility(_)
+            | AddThisAbility
             | AddKeyword(_)
             | AddKeywordX(..)
             | AddKeywordsOf { .. }

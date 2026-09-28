@@ -194,8 +194,22 @@ pub(crate) fn copy_exceptions(
             .iter()
             .find_map(|p| c.strip_prefix(p))
         {
-            if r.starts_with("this ability") || r.contains(" this ability") {
+            // "it has this ability", "it has flying and this ability" (CR 707.9a): the
+            // ability creating the copy effect.
+            let r = if r == "this ability" {
+                out.push(Modification::AddThisAbility);
+                ""
+            } else if let Some(x) = r.strip_suffix(" and this ability") {
+                out.push(Modification::AddThisAbility);
+                x
+            } else {
+                r
+            };
+            if r.contains("this ability") {
                 return None;
+            }
+            if r.is_empty() {
+                continue;
             }
             for a in ability_list(r, quotes, &[CardType::Creature], ctx)? {
                 match &a.kind {

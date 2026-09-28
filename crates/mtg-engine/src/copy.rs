@@ -102,6 +102,8 @@ pub fn become_copy(
         return;
     };
     let values = Box::new(g.obj(src).copiable.clone());
+    // "except it has this ability": the resolving ability (CR 707.9a).
+    let exceptions = g.fix_mods(exceptions, ctx);
     let id = g.new_effect_id();
     let ts = g.new_timestamp();
     g.effects.push(ContinuousEffect {
@@ -112,10 +114,7 @@ pub fn become_copy(
         duration: duration.clone(),
         affected: Affected::Objects(targets),
         mods: vec![],
-        layer1: Some(Layer1::Copy {
-            values,
-            exceptions: exceptions.to_vec(),
-        }),
+        layer1: Some(Layer1::Copy { values, exceptions }),
         created_turn: g.turn.number,
     });
     g.dirty = true;

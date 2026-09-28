@@ -2021,6 +2021,22 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                // "except it has this ability" (CR 707.9a): the resolving ability.
+                Modification::AddThisAbility => {
+                    let ability = ctx.stack_obj.and_then(|id| {
+                        match self.obj(id).stack.as_deref().map(|si| &si.kind) {
+                            Some(
+                                StackKind::Activated { ability, .. }
+                                | StackKind::Triggered { ability, .. },
+                            ) => Some(ability.clone()),
+                            _ => None,
+                        }
+                    });
+                    match ability {
+                        Some(a) => Modification::AddAbility(a),
+                        None => m.clone(),
+                    }
+                }
                 other => other.clone(),
             })
             .collect()
