@@ -1,7 +1,8 @@
 //! Exiling cards from the top of a library until a card with some quality is exiled:
 //! "Exile cards from the top of your library until you exile a nonland card.", "Target
-//! opponent exiles cards from the top of their library until they exile a nonland card."
-//! Every card is exiled (CR 406); "that card" is the last one (`vars::IT`). Followed by
+//! opponent exiles cards from the top of their library until they exile a nonland card.",
+//! "Each opponent exiles ..." (each of them, in turn). Every card is exiled (CR 406); "that
+//! card" is the last one (`vars::IT`; with each opponent, the last one of each). Followed by
 //! what may be done with it: "You may cast that card without paying its mana cost.",
 //! "Until end of turn, you may cast that card without paying its mana cost." (Stolen
 //! Goods, Nicol Bolas, God-Pharaoh): a permission its controller may use this turn.
@@ -27,6 +28,10 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         );
         b.it_player = PlayerRef::Target(slot);
         (PlayerRef::Target(slot), r)
+    } else if let Some(r) = l.strip_prefix(
+        "each opponent exiles cards from the top of their library until they exile ",
+    ) {
+        (PlayerRef::EachOpponent, r)
     } else {
         return None;
     };
@@ -170,3 +175,41 @@ fn put_the_rest_on_the_bottom(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r406 put the rest of the cards exiled until on the bottom in a random order", priority: 80, parse: put_the_rest_on_the_bottom } }
+
+/// "You may cast any number of spells from among those nonland cards without paying their
+/// mana costs." after each opponent exiled cards until exiling a nonland card (Fevered
+/// Suspicion): as the spell resolves, its controller casts those they choose, in the
+/// order they choose (CR 608.2g); the others stay in exile.
+fn cast_any_number_of_those_free(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let l = l.strip_prefix("you may ").unwrap_or(l);
+    let kind = l
+        .strip_prefix("cast any number of spells from among those ")?
+        .strip_suffix(" without paying their mana costs")?;
+    if !matches!(b.it, Sel::Var(vars::IT)) || !b.named.iter().any(|(n, _)| n == THE_REST) {
+        return None;
+    }
+    let quality = match kind {
+        "cards" => Filter::Any,
+        _ => card_filter(kind, b)?,
+    };
+    Some(Effect::CastCard {
+        who: PlayerRef::You,
+        // Choosing none is casting none ("you may"); a land can't be cast.
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(vars::IT))),
+                Filter::not(Filter::Type(crate::types::CardType::Land)),
+                quality,
+            ]),
+            count: Value::c(999),
+            up_to: true,
+            store: None,
+        },
+        free: true,
+        optional: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "r406 you may cast any number of spells from among those cards for free", priority: 80, parse: cast_any_number_of_those_free } }

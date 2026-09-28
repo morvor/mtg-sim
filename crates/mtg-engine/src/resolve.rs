@@ -1430,8 +1430,25 @@ impl Game {
                 found_to,
                 rest_to,
             } => {
-                let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
+                let players = self.eval_players(who, ctx);
+                if players.len() > 1 {
+                    // "Each opponent exiles cards from the top of their library until they
+                    // exile a nonland card.": the cards found, and the others, of all of
+                    // them.
+                    let (mut found, mut rest) = (Vec::new(), Vec::new());
+                    for p in players {
+                        ctx.set_var(vars::IT, vec![]);
+                        ctx.set_var(vars::REVEALED, vec![]);
+                        crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
+                        found.extend(ctx.vars.get(&vars::IT).cloned().unwrap_or_default());
+                        rest.extend(ctx.vars.get(&vars::REVEALED).cloned().unwrap_or_default());
+                    }
+                    ctx.set_var(vars::IT, found);
+                    ctx.set_var(vars::REVEALED, rest);
+                } else {
+                    let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                    crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
+                }
             }
             Effect::ExtraTurn { who } => {
                 // CR 500.7: most recently created extra turn is taken first. With shared

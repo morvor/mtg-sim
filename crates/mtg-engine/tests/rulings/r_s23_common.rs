@@ -59,3 +59,47 @@ pub fn color_word_idx(c: Color, without: Option<Color>) -> usize {
         .position(|x| *x == c)
         .unwrap()
 }
+
+/// Wraps `p`'s agent so that the first time `p` is asked to choose objects among which
+/// some are named in `names`, those are chosen, in the order of `names` (for cards whose
+/// ids aren't known in advance, e.g. cards exiled by the resolving effect); every other
+/// decision gets the scripted answer.
+pub fn choose_named_once(t: &mut TestGame, p: PlayerId, names: &[&str]) {
+    use mtg_engine::decision::{Agent, Decision};
+    struct Pick {
+        inner: Box<dyn Agent>,
+        names: Vec<String>,
+        done: bool,
+    }
+    impl Agent for Pick {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            if let (false, Decision::ChooseEntities { candidates, .. }) = (self.done, d) {
+                let picked: Vec<Entity> = self
+                    .names
+                    .iter()
+                    .filter_map(|n| {
+                        candidates
+                            .iter()
+                            .find(|e| e.object().is_some_and(|o| g.obj(o).chars.name == *n))
+                            .copied()
+                    })
+                    .collect();
+                if !picked.is_empty() {
+                    self.done = true;
+                    return Answer::Entities(picked);
+                }
+            }
+            self.inner.decide(g, p, d)
+        }
+    }
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Pick {
+        inner,
+        names: names.iter().map(|n| n.to_string()).collect(),
+        done: false,
+    });
+}

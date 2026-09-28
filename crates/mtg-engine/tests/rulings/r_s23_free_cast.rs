@@ -1361,3 +1361,110 @@ fn kiora_free_spell_resolves_first_ignoring_timing_with_x_zero() {
     assert_eq!(t.stack_len(), 1);
     assert!(in_bottom(&t, P0, 6, "Sea Monster"));
 }
+
+/// P0 casts Fevered Suspicion from their hand (with the answers queued, choosing the
+/// exiled cards named `cast`, in that order) and it resolves.
+fn fevered_suspicion(t: &mut TestGame, cast: &[&str]) {
+    give_mana_for(t, P0, "Fevered Suspicion");
+    let card = t.hand(P0, "Fevered Suspicion");
+    t.answer_yes(P0, true);
+    choose_named_once(t, P0, cast);
+    t.cast(P0, card).go();
+    t.resolve();
+}
+
+#[test]
+fn fevered_suspicion_free_spells_may_be_kicked_but_not_overloaded() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f", "608.2g");
+    ruling!(
+        "Fevered Suspicion",
+        "If you cast a spell “without paying its mana cost,” you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, you must pay those to cast the spell."
+    );
+    supported("Fevered Suspicion");
+    // "Each opponent exiles cards from the top of their library until they exile a
+    // nonland card. You may cast any number of spells from among those nonland cards
+    // without paying their mana costs."
+    // P1's Burst Lightning, kicked for {4}.
+    let mut t = TestGame::new(2);
+    stack_library(&mut t, P1, &["Forest", "Burst Lightning"]);
+    t.lands(P0, "Wastes", 4);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    fevered_suspicion(&mut t, &["Burst Lightning"]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert!(t.in_graveyard(P1, "Burst Lightning"));
+    // P1's Tormenting Voice: P0 discards a card to cast it.
+    let mut t = TestGame::new(2);
+    stack_library(&mut t, P1, &["Tormenting Voice"]);
+    let forest = t.hand(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    fevered_suspicion(&mut t, &["Tormenting Voice"]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P1, "Tormenting Voice"));
+    // P1's Cyclonic Rift can't be cast for its overload cost.
+    let mut t = TestGame::new(2);
+    stack_library(&mut t, P1, &["Cyclonic Rift"]);
+    t.lands(P0, "Island", 7);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    fevered_suspicion(&mut t, &["Cyclonic Rift"]);
+    t.resolve_all();
+    assert!(!casting_way_asked(&t, P0, from));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(elves));
+    assert_eq!(tapped_lands(&t, P0), 8);
+}
+
+#[test]
+fn fevered_suspicion_cards_are_cast_in_any_order_now_or_never() {
+    cr!("608.2g", "406.1");
+    ruling!(
+        "Fevered Suspicion",
+        "You may cast the exiled cards in any order, not just the order they were exiled."
+    );
+    ruling!(
+        "Fevered Suspicion",
+        "You cast the cards exiled with Fevered Suspicion as it is resolving. If you choose not to cast them, you cannot cast them later."
+    );
+    ruling!(
+        "Fevered Suspicion",
+        "Cards you don't cast this way, including any exiled land cards, will remain in exile indefinitely."
+    );
+    supported("Fevered Suspicion");
+    // P1 exiles a Forest and Burst Lightning, then P2 exiles Lightning Bolt. P0 casts the
+    // bolt first, then Burst Lightning (on top of it).
+    let mut t = TestGame::new(3);
+    stack_library(&mut t, P1, &["Forest", "Burst Lightning"]);
+    stack_library(&mut t, P2, &["Lightning Bolt"]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    fevered_suspicion(&mut t, &["Lightning Bolt", "Burst Lightning"]);
+    let names: Vec<String> = t
+        .g
+        .stack
+        .iter()
+        .map(|s| t.g.obj(*s).chars.name.to_string())
+        .collect();
+    assert_eq!(names, vec!["Lightning Bolt", "Burst Lightning"]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest").len(), 1);
+    // Only the bolt is cast: Burst Lightning stays in exile and can't be cast later.
+    let mut t = TestGame::new(3);
+    stack_library(&mut t, P1, &["Forest", "Burst Lightning"]);
+    stack_library(&mut t, P2, &["Lightning Bolt"]);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    fevered_suspicion(&mut t, &["Lightning Bolt"]);
+    t.resolve_all();
+    assert_eq!(t.life(P2), 17);
+    let burst = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Burst Lightning");
+    assert_eq!(burst.len(), 1);
+    assert_eq!(t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest").len(), 1);
+    t.lands(P0, "Mountain", 1);
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, burst[0]).is_empty());
+}
