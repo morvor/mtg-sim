@@ -695,3 +695,67 @@ fn djinn_of_wishes_free_card_pays_additional_costs_but_no_alternative_cost() {
     });
     assert!(t.in_exile("Lightning Bolt"));
 }
+
+/// P0 casts Stolen Goods targeting P1, whose library has `top` (a nonland card) under a
+/// Forest; returns the exiled card.
+fn stolen_goods(t: &mut TestGame, top: &str) -> ObjectId {
+    stack_library(t, P1, &["Forest", top]);
+    give_mana_for(t, P0, "Stolen Goods");
+    let goods = t.hand(P0, "Stolen Goods");
+    t.cast(P0, goods).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(t.in_exile("Forest"));
+    t.g.find_in_zone(mtg_engine::object::Zone::Exile, top)[0]
+}
+
+#[test]
+fn stolen_goods_free_spell_pays_additional_costs_but_no_alternative_cost() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "601.2f");
+    ruling!(
+        "Stolen Goods",
+        "If you cast a card \"without paying its mana cost,\" you can't pay any alternative costs. You can pay additional costs, such as kicker costs. If the card has mandatory additional costs, you must pay those."
+    );
+    supported("Stolen Goods");
+    // "Target opponent exiles cards from the top of their library until they exile a
+    // nonland card. Until end of turn, you may cast that card without paying its mana
+    // cost."
+    // P1's Burst Lightning may be kicked.
+    let mut t = TestGame::new(2);
+    let burst = stolen_goods(&mut t, "Burst Lightning");
+    t.lands(P0, "Wastes", 4);
+    t.cast(P0, burst)
+        .method(CastMethod::Free)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(tapped_lands(&t, P0), 4 + 4);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    // Tormenting Voice's discard must be paid.
+    let mut t = TestGame::new(2);
+    let voice = stolen_goods(&mut t, "Tormenting Voice");
+    assert!(t.cast(P0, voice).method(CastMethod::Free).try_go().is_err());
+    let island = t.hand(P0, "Island");
+    t.answer_choose(P0, &[Entity::Object(island)]);
+    t.cast(P0, voice).method(CastMethod::Free).go();
+    assert!(t.in_graveyard(P0, "Island"));
+    // Mulldrifter cast without paying its mana cost isn't evoked: it stays on the
+    // battlefield.
+    let mut t = TestGame::new(2);
+    let drifter = stolen_goods(&mut t, "Mulldrifter");
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free));
+    let spell = t.cast(P0, drifter).method(CastMethod::Free).go();
+    assert!(!t
+        .obj(spell)
+        .cast
+        .as_deref()
+        .is_some_and(|c| c.paid.iter().any(|p| p == "evoke")));
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Mulldrifter").len(), 1);
+    // The permission lasts until end of turn.
+    let mut t = TestGame::new(2);
+    let drifter = stolen_goods(&mut t, "Mulldrifter");
+    t.advance_to(P1, Step::Upkeep);
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(!crate::r_s08_common::legal_cast_methods(&mut t, P0, drifter).contains(&CastMethod::Free));
+}
