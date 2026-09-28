@@ -17,6 +17,76 @@ fn sram(t: &mut TestGame, name: &str) -> ObjectId {
     t.hand(P0, name)
 }
 
+fn glamdring(t: &mut TestGame, name: &str) -> ObjectId {
+    // Grizzly Bears equipped with Glamdring (first strike): 2 combat damage.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(t, P0, "Glamdring", bears);
+    t.hand(P0, name)
+}
+
+fn run_glamdring(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&mut TestGame)) {
+    let bears = crate::r_s20_common::controlled_named(t, P0, "Grizzly Bears")[0];
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    answers(t);
+    attack_p1_unblocked(t, bears);
+    t.clear_answers();
+}
+
+#[test]
+fn glamdring_casts_without_paying_but_additional_costs_are_paid() {
+    cr!("118.9a", "118.9b", "118.8a", "601.2b", "608.2g");
+    ruling!(
+        "Glamdring",
+        "If you cast a spell \"without paying its mana cost\", you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the card has any mandatory additional costs, those must be paid to cast the spell."
+    );
+    supported("Glamdring");
+    // "Whenever equipped creature deals combat damage to a player, you may cast an instant
+    // or sorcery spell from your hand with mana value less than or equal to that damage
+    // without paying its mana cost."
+    check_free_cast_costs(&FreeCaster {
+        instants_only: false,
+        place: glamdring,
+        run: run_glamdring,
+    });
+    // A spell with a greater mana value than the damage can't be cast this way.
+    let mut t = TestGame::new(2);
+    let wrath = glamdring(&mut t, "Act on Impulse");
+    run_glamdring(&mut t, wrath, &|_| {});
+    assert!(t.in_hand(P0, "Act on Impulse"));
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn a_spell_with_x_cast_by_buster_sword_has_x_zero() {
+    cr!("107.3b", "118.9");
+    ruling!(
+        "Buster Sword",
+        "If a spell you cast has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Buster Sword");
+    // "Equipped creature gets +3/+2. Whenever equipped creature deals combat damage to a
+    // player, draw a card, then you may cast a spell from your hand with mana value less
+    // than or equal to that damage without paying its mana cost." Grizzly Bears deals 5;
+    // Blaze (mana value 1) is cast with X = 0 at P1's Hill Giant.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P0, "Buster Sword", bears);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let blaze = t.hand(P0, "Blaze");
+    t.lands(P0, "Mountain", 6);
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(blaze)]);
+    t.answer(P0, DecisionKind::X, Answer::Number(5));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    attack_p1_unblocked(&mut t, bears);
+    assert_eq!(t.life(P1), 15);
+    assert!(t.in_graveyard(P0, "Blaze"));
+    assert_eq!(t.hand_size(P0), hand - 1 + 1);
+    assert_eq!(tapped_lands(&t, P0), 0);
+    assert!(t.on_battlefield(giant));
+    assert_eq!(crate::r_s07_common::damage_on(&t, giant), 0);
+}
+
 fn run_sram(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&mut TestGame)) {
     crate::r_s04_common::add_mana(t, P0, ManaType::W, 4);
     let expertise = t.hand(P0, "Sram's Expertise");
