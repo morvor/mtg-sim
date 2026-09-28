@@ -8,6 +8,7 @@ use crate::r_s05_common::enter;
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -125,4 +126,63 @@ fn mishras_workshop_mana_cant_pay_a_cost_imposed_after_casting() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Memnite").len(), 1);
     assert!(t.g.player(P0).mana_pool.is_empty());
+}
+
+#[test]
+fn conduit_of_ruin_x_is_chosen_before_the_first_creature_spells_discount() {
+    cr!("601.2f", "107.3b", "118.7a");
+    ruling!(
+        "Conduit of Ruin",
+        "If the first creature spell you cast in a turn has {X} in its mana cost, you choose the value of X before calculating the spell's total cost. For example, if the first creature spell you cast in a turn has a mana cost of {X}{G}, you could choose 2 as the value of X and pay {G} to cast the spell."
+    );
+    supported("Conduit of Ruin");
+    supported("Mistcutter Hydra");
+    // "The first creature spell you cast each turn costs {2} less to cast." Mistcutter
+    // Hydra ({X}{G}, "enters with X +1/+1 counters") with X = 2 costs {G}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Conduit of Ruin");
+    t.lands(P0, "Forest", 1);
+    let hydra = t.hand(P0, "Mistcutter Hydra");
+    t.cast(P0, hydra).x(2).go();
+    assert_eq!(tapped_lands(&t, P0), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(hydra, "+1/+1"), 2);
+}
+
+#[test]
+fn conduit_of_ruin_the_first_creature_spell_neednt_be_the_first_spell() {
+    cr!("601.2f", "118.7a");
+    ruling!(
+        "Conduit of Ruin",
+        "The first creature spell you cast each turn doesn't necessarily have to be the first spell you cast. You could cast a sorcery spell and then cast a creature spell that would get the discount."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Conduit of Ruin");
+    // A sorcery first: Divination ({2}{U}) isn't discounted.
+    t.lands(P0, "Island", 3);
+    let divination = t.hand(P0, "Divination");
+    t.cast(P0, divination).go();
+    assert_eq!(tapped_lands(&t, P0), 3);
+    t.resolve_all();
+    // Then Hill Giant ({3}{R}) costs {1}{R}.
+    t.lands(P0, "Mountain", 2);
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, giant).go();
+    assert_eq!(tapped_lands(&t, P0), 5);
+    t.resolve_all();
+    // The second creature spell costs its full cost: Grizzly Bears ({1}{G}) can't be
+    // cast with one Forest.
+    t.lands(P0, "Forest", 1);
+    let bears = t.hand(P0, "Grizzly Bears");
+    assert!(t.cast(P0, bears).try_go().is_err());
+    // Next turn, the discount is back.
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.g.find_in_zone(mtg_engine::object::Zone::Hand(P0), "Grizzly Bears")[0];
+    let untapped_before = crate::r_s04_common::untapped_lands(&t, P0);
+    t.cast(P0, bears).go();
+    assert_eq!(
+        crate::r_s04_common::untapped_lands(&t, P0),
+        untapped_before - 1
+    );
 }
