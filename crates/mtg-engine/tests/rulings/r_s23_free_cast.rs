@@ -976,3 +976,103 @@ fn powerbalance_compares_the_spell_the_card_would_become() {
     assert!(!t.g.stack.iter().any(|s| t.g.obj(*s).chars.name.contains("Fire")
         || t.g.obj(*s).chars.name.contains("Ice")));
 }
+
+/// P0 controls Jodah, the Unifier with `top` on top of their library (top first) and
+/// casts Sivitri Scarzam (a legendary spell with mana value 7) from their hand; Jodah's
+/// trigger resolves with the answers queued.
+fn jodah_trigger(t: &mut TestGame, top: &[&str]) {
+    t.battlefield(P0, "Jodah, the Unifier");
+    stack_library(t, P0, top);
+    give_mana_for(t, P0, "Sivitri Scarzam");
+    let sivitri = t.hand(P0, "Sivitri Scarzam");
+    t.cast(P0, sivitri).go();
+    t.resolve();
+}
+
+/// The name of the card on the bottom of `p`'s library.
+fn bottom_card(t: &TestGame, p: PlayerId) -> String {
+    let c = t.g.player(p).library[0];
+    t.g.obj(c).chars.name.to_string()
+}
+
+#[test]
+fn jodah_free_spell_may_be_kicked_but_not_dashed() {
+    cr!("118.9", "118.9a", "118.8", "601.2b", "608.2g", "702.33a", "702.109a");
+    ruling!(
+        "Jodah, the Unifier",
+        "If you cast a spell “without paying its mana cost,” you can’t choose to cast it for any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, you must pay those to cast the spell."
+    );
+    supported("Jodah, the Unifier");
+    supported("Verix Bladewing");
+    supported("Kolaghan, the Storm's Fury");
+    // "Whenever you cast a legendary spell from your hand, exile cards from the top of
+    // your library until you exile a legendary nonland card with lesser mana value. You
+    // may cast that card without paying its mana cost. Put the rest on the bottom of your
+    // library in a random order."
+    // Verix Bladewing (mana value 4) is cast kicked for {3}: Karox Bladewing is created.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 3);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    jodah_trigger(&mut t, &["Grizzly Bears", "Verix Bladewing"]);
+    assert_eq!(bottom_card(&t, P0), "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Verix Bladewing").len(), 1);
+    assert_eq!(t.named_on_battlefield("Karox Bladewing").len(), 1);
+    assert_eq!(tapped_lands(&t, P0), 10);
+    // Kolaghan (mana value 5) can't be cast for its dash cost: no way to cast it is
+    // offered, and it doesn't have haste.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    t.answer_yes(P0, true);
+    let from = t.asked().len();
+    jodah_trigger(&mut t, &["Kolaghan, the Storm's Fury"]);
+    assert!(!casting_way_asked(&t, P0, from));
+    t.resolve_all();
+    let kolaghan = t.named_on_battlefield("Kolaghan, the Storm's Fury");
+    assert_eq!(kolaghan.len(), 1);
+    assert!(!t.obj_now(kolaghan[0]).has_keyword(KeywordKind::Haste));
+}
+
+#[test]
+fn jodah_card_not_cast_stays_exiled_and_the_rest_go_to_the_bottom() {
+    cr!("406.1", "608.2g");
+    ruling!(
+        "Jodah, the Unifier",
+        "If you choose not to cast the card, it remains in exile. The rest of the cards will be put on the bottom of your library in a random order."
+    );
+    ruling!(
+        "Jodah, the Unifier",
+        "The legendary nonland card exiled may be cast immediately. If you do not cast it immediately, you don’t get to cast it at a later time."
+    );
+    ruling!(
+        "Jodah, the Unifier",
+        "If you exile your entire library without exiling a legendary nonland card with lesser mana value, you will randomize the exiled cards and they again become your library, ending the effect."
+    );
+    supported("Jodah, the Unifier");
+    // Declined: Verix Bladewing stays in exile and can't be cast later; Grizzly Bears
+    // (not legendary) and a Forest (a land) go to the bottom of the library.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, false);
+    jodah_trigger(&mut t, &["Grizzly Bears", "Forest", "Verix Bladewing"]);
+    t.resolve_all();
+    let verix = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Verix Bladewing");
+    assert_eq!(verix.len(), 1);
+    assert_eq!(t.g.exile.len(), 1);
+    let bottom: Vec<String> = t.g.player(P0).library[..2]
+        .iter()
+        .map(|c| t.g.obj(*c).chars.name.to_string())
+        .collect();
+    assert!(bottom.contains(&"Grizzly Bears".to_string()));
+    assert!(bottom.contains(&"Forest".to_string()));
+    t.lands(P0, "Mountain", 4);
+    assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, verix[0]).is_empty());
+    // A legendary card with an equal mana value (Sivitri Scarzam) doesn't stop it; with
+    // none to find, the whole library is exiled and becomes the library again.
+    let mut t = TestGame::new(2);
+    let library = t.library_size(P0);
+    jodah_trigger(&mut t, &["Sivitri Scarzam"]);
+    t.resolve_all();
+    assert!(t.g.exile.is_empty());
+    assert_eq!(t.library_size(P0), library + 1);
+}

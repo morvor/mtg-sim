@@ -281,5 +281,15 @@ pub fn reveal_until(
         };
         ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     }
-    place_rest(g, p, revealed, rest_to, ctx);
+    if rest_to.zone == ZoneKind::Library {
+        place_rest(g, p, revealed, rest_to, ctx);
+    } else {
+        // A later instruction can find the other cards ("put the rest on the bottom of
+        // your library in a random order" after exiling them).
+        let moved = g.move_to_destination(revealed, rest_to, ctx);
+        ctx.set_var(
+            vars::REVEALED,
+            moved.into_iter().map(Entity::Object).collect(),
+        );
+    }
 }

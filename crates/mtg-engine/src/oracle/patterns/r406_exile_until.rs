@@ -31,8 +31,31 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let desc = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an "))?;
-    let filter = card_filter(desc, b)?;
+    // "with lesser mana value" in a "whenever you cast a [kind of] spell" trigger (Jodah,
+    // the Unifier): less than that spell's mana value (as it last existed, with its X).
+    let (desc, lesser) = match desc.strip_suffix(" with lesser mana value") {
+        Some(d) if b.in_trigger && matches!(b.it, Sel::TriggerSpell) => (
+            d,
+            Some(Filter::ManaValue(
+                Cmp::Lt,
+                Box::new(Value::ManaValueOf(Box::new(Sel::TriggerSpell))),
+            )),
+        ),
+        Some(_) => return None,
+        None => (desc, None),
+    };
+    let mut filter = card_filter(desc, b)?;
+    if let Some(l) = lesser {
+        filter = Filter::and(vec![filter, l]);
+    }
     b.it = Sel::Var(vars::IT);
+    b.named.push((
+        THE_REST.into(),
+        Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::REVEALED))),
+            Filter::InZone(ZoneKind::Exile),
+        ])),
+    ));
     let exile = Destination::zone(ZoneKind::Exile);
     Some(Effect::RevealUntil {
         who,
@@ -123,3 +146,24 @@ fn until_end_of_turn_cast_those_free(l: &str, prev: &mut Effect, b: &mut Builder
 }
 
 inventory::submit! { super::FollowupPattern { name: "r406 until end of turn, you may cast spells from among those cards for free", priority: 80, apply: until_end_of_turn_cast_those_free } }
+
+/// What "the rest" means after exiling cards until one is exiled: the other exiled cards
+/// still in exile (the one exiled last stays there if it isn't cast).
+const THE_REST: &str = "the rest";
+
+/// "Put the rest on the bottom of your library in a random order." after exiling cards
+/// until one is exiled (and what's done with that card, Jodah, the Unifier).
+fn put_the_rest_on_the_bottom(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l.trim()) != "put the rest on the bottom of your library in a random order" {
+        return None;
+    }
+    let (_, rest) = b.named.iter().rev().find(|(n, _)| n == THE_REST)?;
+    let mut to = Destination::zone(ZoneKind::Library);
+    to.position = LibraryPosition::BottomRandom;
+    Some(Effect::Move {
+        what: rest.clone(),
+        to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "r406 put the rest of the cards exiled until on the bottom in a random order", priority: 80, parse: put_the_rest_on_the_bottom } }
