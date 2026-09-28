@@ -89,3 +89,38 @@ pub fn chapters_on_stack(t: &TestGame, saga: ObjectId) -> Vec<u32> {
         })
         .collect()
 }
+
+/// A Planechase game with `n` players (each with their own planar deck, CR 901).
+pub fn planechase_game(n: usize) -> TestGame {
+    TestGame::with_config(
+        n,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::Planechase,
+            ..Default::default()
+        },
+    )
+}
+
+/// Puts plane cards into `p`'s planar deck (face down in the command zone), top first,
+/// and turns the top one face up as the starting plane.
+pub fn start_planar_deck(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
+    let ids: Vec<ObjectId> = names
+        .iter()
+        .map(|n| {
+            let id = t.command(p, n);
+            t.g.objects[id.0 as usize].face_down = true;
+            id
+        })
+        .collect();
+    t.g.recompute();
+    mtg_engine::planechase::set_starting_plane(&mut t.g);
+    t.g.recompute();
+    ids
+}
+
+/// Chaos ensues for `p` (CR 311.7), and the abilities that trigger go on the stack.
+pub fn chaos(t: &mut TestGame, p: PlayerId) {
+    mtg_engine::planechase::chaos_ensues(&mut t.g, p);
+    t.g.flush_events();
+    t.settle();
+}
