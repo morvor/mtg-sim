@@ -201,12 +201,9 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
         return true;
     };
     g.recompute();
-    // "Cast it transformed": only a double-faced card can be (CR 712.8c, 712.11a).
-    let dfc = g
-        .obj(card)
-        .card
-        .as_ref()
-        .is_some_and(|d| d.layout.is_double_faced() && d.faces.len() > 1);
+    // "Cast it transformed": only a double-faced card can be (CR 712.8c, 712.11a) — not a
+    // token or a single-faced card that was a copy of a Siege (it stays in exile).
+    let dfc = crate::transform_rules::can_be_cast_transformed(g, card);
     if !dfc || g.obj(card).zone != Zone::Exile {
         return true;
     }
