@@ -1,4 +1,4 @@
-//! "Until your next turn, whenever …" delayed triggered abilities (CR 603.7b, 611.2b): they
+//! "Until your next turn, whenever …" delayed triggered abilities (CR 603.7b): they
 //! trigger through the other players' turns and end as their controller's next turn
 //! begins.
 
@@ -17,7 +17,7 @@ fn assert_supported(name: &str) {
 
 #[test]
 fn dont_move_destroys_creatures_that_become_tapped_until_your_next_turn() {
-    cr!("603.7b", "611.2b");
+    cr!("603.7b");
     assert_supported("Don't Move");
     // "Destroy all tapped creatures. Until your next turn, whenever a creature becomes
     // tapped, destroy it."

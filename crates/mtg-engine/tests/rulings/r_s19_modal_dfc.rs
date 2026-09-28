@@ -211,7 +211,7 @@ fn a_restriction_on_creature_spells_doesnt_stop_a_noncreature_back_face() {
 
 #[test]
 fn a_chosen_name_is_one_faces_name_and_applies_only_to_that_face() {
-    cr!("712.19", "201.3");
+    cr!("712.19", "201.4d");
     ruling!(
         "Birgi, God of Storytelling // Harnfel, Horn of Bounty",
         "If an effect instructs a player to choose a card name, the name of either face may be chosen. If that effect or a linked ability refers to a spell with the chosen name being cast and/or a land with the chosen name being played, it considers only the chosen name, not the other face’s name."

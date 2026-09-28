@@ -59,7 +59,7 @@ const OTHERS: usize = 1;
 
 #[test]
 fn the_targeted_player_may_choose_self_even_if_it_does_nothing() {
-    cr!("314.5", "608.2d");
+    cr!("608.2d");
     ruling!(
         "Feed the Machine",
         "The targeted player may choose “self” even if they can’t perform the resulting action."
@@ -99,7 +99,7 @@ fn the_targeted_player_may_choose_self_even_if_it_does_nothing() {
 
 #[test]
 fn the_targeted_player_may_choose_others_even_if_there_are_none() {
-    cr!("314.5", "608.2d");
+    cr!("608.2d");
     ruling!(
         "The Fate of the Flammable",
         "The targeted player may choose “others” even if there are no others"
@@ -140,7 +140,7 @@ fn the_targeted_player_may_choose_others_even_if_there_are_none() {
 
 #[test]
 fn in_a_supervillain_rumble_others_are_everyone_but_the_archenemy_and_the_target() {
-    cr!("904.12", "314.5");
+    cr!("904.12b", "904.12c");
     ruling!(
         "Surrender Your Thoughts",
         "In a Supervillain Rumble game, the targeted player may still choose “others.” Each player who isn't the active player or the targeted player will thus be affected."
@@ -202,7 +202,7 @@ fn duskmourn_end_step(t: &mut TestGame) {
 
 #[test]
 fn a_spell_cast_without_paying_its_mana_cost_may_have_additional_but_not_alternative_costs() {
-    cr!("118.9a", "118.9d", "608.2g", "701.33a");
+    cr!("118.9a", "118.9d", "608.2g", "701.33b");
     ruling!(
         "I Am Duskmourn",
         "If you cast a spell for another cost \"rather than pay its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the spell has any mandatory additional costs, such as that of Abhorrent Oculus, those must be paid to cast the spell."
@@ -269,7 +269,7 @@ fn a_spell_cast_without_paying_its_mana_cost_may_have_additional_but_not_alterna
 
 #[test]
 fn an_until_your_next_turn_effect_lasts_until_just_before_your_next_untap_step() {
-    cr!("611.2b", "603.7b", "502.1");
+    cr!("603.7b");
     ruling!(
         "A Display of My Dark Power",
         "The effect doesn't wear off until just before your next untap step (even if an effect will cause that untap step to be skipped)."

@@ -151,7 +151,7 @@ fn a_chapter_doesnt_trigger_again_for_a_later_lore_counter() {
 
 #[test]
 fn chapters_that_trigger_together_are_ordered_and_targeted_as_they_go_on_the_stack() {
-    cr!("603.3b", "714.2b", "601.2c");
+    cr!("603.3b", "714.2b", "603.3d");
     ruling!(
         "Binding the Old Gods",
         "If multiple chapter abilities trigger at the same time, their controller puts them on the stack in any order. If any of them require targets, those targets are chosen as you put the abilities on the stack, before any of those abilities resolve."
@@ -245,7 +245,7 @@ fn a_chapter_ability_on_the_stack_is_independent_of_the_saga_curly_quotes() {
 
 #[test]
 fn a_chapter_ability_uses_the_stack_and_can_be_countered() {
-    cr!("714.2b", "603.3", "701.6b");
+    cr!("714.2b", "603.3", "701.6a");
     ruling!(
         "Summon: Primal Odin",
         "Chapter abilities are put onto the stack and may be responded to."
@@ -265,7 +265,7 @@ fn a_chapter_ability_uses_the_stack_and_can_be_countered() {
 
 #[test]
 fn a_chapter_ability_uses_the_stack_and_can_be_countered_curly_quotes() {
-    cr!("714.2b", "603.3", "701.6b");
+    cr!("714.2b", "603.3", "701.6a");
     ruling!(
         "Kiora Bests the Sea God",
         "Each symbol on the left of a Saga’s text box represents a chapter ability. A chapter ability is a triggered ability that triggers when a lore counter that is put on the Saga causes the number of lore counters on the Saga to become equal to or greater than the ability’s chapter number. Chapter abilities are put onto the stack and may be responded to."

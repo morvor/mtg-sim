@@ -225,7 +225,7 @@ fn a_meld_cards_commander_color_identity_is_its_front_faces() {
 
 #[test]
 fn a_player_may_name_the_combined_back_face() {
-    cr!("712.4", "201.3");
+    cr!("201.4e", "712.19");
     ruling!(
         "The Mightstone and Weakstone",
         "A player prompted to name a card may name the combined back face"
@@ -252,7 +252,7 @@ fn a_player_may_name_the_combined_back_face() {
 
 #[test]
 fn the_combined_back_face_has_a_color_indicator() {
-    cr!("712.4", "204.1", "105.2");
+    cr!("712.8g", "202.2e", "105.2");
     ruling!(
         "The Mightstone and Weakstone",
         "Note that the permanent represented by the combined back faces has a color indicator."
@@ -267,7 +267,7 @@ fn the_combined_back_face_has_a_color_indicator() {
 
 #[test]
 fn the_combined_back_face_is_colorless_unless_it_has_a_color_indicator() {
-    cr!("712.4", "204.1", "105.2c");
+    cr!("712.8g", "202.2e", "202.2b", "105.2c");
     ruling!(
         "Fang, Fearless l'Cie",
         "Note that the permanent represented by the combined back faces is colorless unless it has a color indicator."
@@ -470,7 +470,7 @@ fn an_attack_triggers_targets_are_chosen_before_the_tokens_exist() {
 
 #[test]
 fn each_token_may_attack_a_different_player() {
-    cr!("508.4", "506.2");
+    cr!("508.4");
     ruling!(
         "Hanweir Garrison",
         "the tokens don’t both have to attack the same player, planeswalker, or battle"

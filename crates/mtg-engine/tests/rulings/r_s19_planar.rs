@@ -60,7 +60,7 @@ fn you_on_a_plane_is_its_current_planar_controller() {
 
 #[test]
 fn a_copy_of_a_spell_with_x_has_the_same_x() {
-    cr!("707.10", "901.6", "107.3b");
+    cr!("707.10", "901.6");
     ruling!(
         "Izzet Steam Maze",
         "If the spell that's copied has an X whose value was determined as it was cast (like Earthquake does), the copy has the same value of X."

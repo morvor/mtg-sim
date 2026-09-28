@@ -164,9 +164,12 @@ fn several_class_permanents_each_track_their_own_level() {
     assert_eq!(level(&t, hunter), 1);
     // Only the first one's level 3 ability applies.
     assert_eq!(t.pt(soldier), (3, 3));
-    // The second one can still gain its first level.
-    assert!(gain_level(&mut t, P0, second, 2).is_ok());
+    // The second one is still level 1: it can't gain level 3, only its first level.
     assert!(gain_level(&mut t, P0, second, 3).is_err());
+    assert!(gain_level(&mut t, P0, second, 2).is_ok());
+    t.resolve_all();
+    assert_eq!((level(&t, first), level(&t, second)), (3, 2));
+    assert_eq!(t.pt(soldier), (3, 3));
 }
 
 #[test]
