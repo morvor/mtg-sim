@@ -370,3 +370,53 @@ fn a_dynamo_copy_of_a_linked_trigger_is_linked_too() {
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
 }
+
+#[test]
+fn a_linked_ability_makes_a_token_copy_of_each_card_the_copies_exiled() {
+    cr!("707.10", "607.3", "607.2a");
+    ruling!(
+        "The Peregrine Dynamo",
+        "If an ability attempts to create a token that is a copy of “the exiled card,” it creates a token for each card exiled this way that is a copy of that card."
+    );
+    supported("Phantom Steed");
+    // Phantom Steed (legendary under Leyline of Singularity): "When this creature enters,
+    // exile another target creature you control until this creature leaves the
+    // battlefield. Whenever this creature attacks, create a tapped and attacking token
+    // that's a copy of the exiled card, except it's an Illusion in addition to its other
+    // types. Sacrifice that token at end of combat."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Singularity");
+    let dynamo = t.battlefield(P0, "The Peregrine Dynamo");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let steed = t.enter(P0, "Phantom Steed");
+    t.settle();
+    t.lands(P0, "Wastes", 1);
+    copy_top_ability(&mut t, dynamo, "Copy target");
+    change_copy_targets(&mut t, P0, &[Some(Entity::Object(giant))]);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(t.zone(giant), Zone::Exile);
+    t.g.objects[steed.0 as usize].summoning_sick = false;
+    crate::r_s01_common::attack_with(&mut t, &[(steed, Entity::Player(P1))]);
+    t.resolve_all();
+    // A token for each exiled card (Phantom Steed itself is an Illusion too).
+    let illusions: Vec<ObjectId> = crate::r_s01_common::with_subtype(&t, P0, "Illusion")
+        .into_iter()
+        .filter(|i| t.obj_now(*i).is_token())
+        .collect();
+    assert_eq!(illusions.len(), 2);
+    let mut names: Vec<String> = illusions.iter().map(|i| name_now(&t, *i)).collect();
+    names.sort();
+    assert_eq!(names, vec!["Grizzly Bears", "Hill Giant"]);
+    // The tokens are sacrificed at end of combat; both exiled cards return when Phantom
+    // Steed leaves.
+    crate::r_s01_common::block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
+    destroy(&mut t, steed);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}

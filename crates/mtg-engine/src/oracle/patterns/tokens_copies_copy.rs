@@ -264,6 +264,16 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
             }
         }
     }
+    // "the exiled card": the card(s) a linked ability of the permanent exiled (CR 607.2a,
+    // 607.3: a token for each of them).
+    if !b.ctx.is_spell() {
+        if let Some(rest) = r.strip_prefix("the exiled card") {
+            if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
+                let of = super::imprint::exiled_card_ref("the exiled card")?;
+                return Some((of, rest.to_string()));
+            }
+        }
+    }
     if let Some((spec, rest)) = parse_target(r) {
         let text = r[..r.len() - rest.len()].trim().to_string();
         let slot = b.add_target(spec, &text);
