@@ -1497,6 +1497,14 @@ impl Game {
             }
         }
         for (n, color) in reductions {
+            // CR 601.2f: what the mana cost's generic mana can't absorb reduces the
+            // generic mana of a waterbend cost, which is part of the total cost too.
+            let left = match (color, &cost.mana) {
+                (None, Some(m)) => n.saturating_sub(m.generic_amount()),
+                (None, None) => n,
+                (Some(_), _) => 0,
+            };
+            crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
             if let Some(m) = cost.mana.as_mut() {
                 match color {
                     None => m.reduce_generic(n),

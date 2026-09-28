@@ -55,6 +55,32 @@ fn pt(w: &str) -> Option<(i32, i32)> {
     Some((p.parse().ok()?, t.parse().ok()?))
 }
 
+/// "a 2/2 black Zombie" (in addition to its other colors and types): the colors are added
+/// too (CR 105.3, 205.1b).
+fn added_colors_and_types(s: &str) -> Option<Vec<Modification>> {
+    let s = s
+        .strip_prefix("a ")
+        .or_else(|| s.strip_prefix("an "))
+        .unwrap_or(s);
+    let mut colors = ColorSet::NONE;
+    let rest: Vec<&str> = s
+        .split_whitespace()
+        .filter(|w| match Color::from_word(w) {
+            Some(c) => {
+                colors.insert(c);
+                false
+            }
+            None => true,
+        })
+        .collect();
+    if colors.is_colorless() {
+        return None;
+    }
+    let mut out = added_types(&rest.join(" "))?;
+    out.push(Modification::AddColors(colors));
+    Some(out)
+}
+
 /// "a 1/1 Fractal creature", "an artifact", "a Spirit" (in addition to its other types).
 fn added_types(s: &str) -> Option<Vec<Modification>> {
     let s = s
@@ -185,6 +211,11 @@ pub(crate) fn copy_exceptions(
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
             {
                 out.extend(added_types(types)?);
+            } else if let Some(x) = r
+                .strip_suffix(" in addition to its other colors and types")
+                .or_else(|| r.strip_suffix(" in addition to their other colors and types"))
+            {
+                out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
             } else {
