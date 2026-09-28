@@ -320,8 +320,8 @@ fn sram_expertise_can_cast_prop_room_but_not_dazzling_theater() {
     let mut t = TestGame::new(2);
     let card = t.hand(P0, THEATER);
     // Prop Room has mana value 3; Dazzling Theater has 4.
-    let options = sram_expertise(&mut t, 0);
-    assert_eq!(options, vec!["Cast Prop Room", "Don't cast a spell"]);
+    let options = sram_expertise(&mut t, 1);
+    assert_eq!(options, vec!["Don't cast a spell", "Cast Prop Room"]);
     t.resolve_all();
     let room = t.g.current(card);
     assert!(t.on_battlefield(room));

@@ -166,8 +166,8 @@ fn sram_expertise_can_cast_fuss_but_not_bother() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.hand(P0, "Fuss // Bother");
     // Fuss (mana value 3) can be cast this way; Bother (6) can't. P0 casts Fuss.
-    let options = sram_expertise(&mut t, 0);
-    assert_eq!(options, vec!["Cast Fuss", "Don't cast a spell"]);
+    let options = sram_expertise(&mut t, 1);
+    assert_eq!(options, vec!["Don't cast a spell", "Cast Fuss"]);
     assert_eq!(t.stack_len(), 1);
     let fuss = t.g.stack[0];
     assert_eq!(t.obj(fuss).chars.name, "Fuss");
@@ -196,8 +196,8 @@ fn sram_expertise_can_cast_expansion_but_not_explosion() {
     // without paying its mana cost: mana value 4.
     t.g.recompute();
     assert_eq!(mana_value(&t, ee), 6);
-    let options = sram_expertise(&mut t, 1);
-    assert_eq!(options, vec!["Cast Expansion", "Don't cast a spell"]);
+    let options = sram_expertise(&mut t, 0);
+    assert_eq!(options, vec!["Don't cast a spell", "Cast Expansion"]);
     // P0 declined: nothing was cast.
     assert_eq!(t.stack_len(), 0);
     assert!(t.in_hand(P0, "Expansion // Explosion"));

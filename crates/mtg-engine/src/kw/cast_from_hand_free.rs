@@ -56,15 +56,13 @@ fn cast_from_hand(g: &mut Game, p: crate::types::PlayerId, max: u32) {
     if options.is_empty() {
         return;
     }
-    let mut labels: Vec<String> = options
-        .iter()
-        .map(|(_, label, _)| format!("Cast {label}"))
-        .collect();
-    labels.push("Don't cast a spell".into());
+    // Declining is the first option (and the default): it's "you may".
+    let mut labels = vec!["Don't cast a spell".to_string()];
+    labels.extend(options.iter().map(|(_, label, _)| format!("Cast {label}")));
     let prompt = format!("Cast a spell with mana value {max} or less from your hand for free?");
     let i = g.ask_option(p, None, &prompt, labels);
-    if i < options.len() {
-        let (card, _, opt) = options.swap_remove(i);
+    if i >= 1 && i <= options.len() {
+        let (card, _, opt) = options.swap_remove(i - 1);
         let _ = g.cast_with_option(p, card, opt);
     }
 }
