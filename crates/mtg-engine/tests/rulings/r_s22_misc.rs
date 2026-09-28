@@ -424,3 +424,33 @@ fn spells_you_control_have_deathtouch_applies_to_a_spell_gained_control_of() {
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn anrakyr_a_spell_with_x_cast_by_paying_life_has_x_zero() {
+    cr!("107.3b", "118.9", "601.2f");
+    ruling!(
+        "Anrakyr the Traveller",
+        "If you cast a spell with {X} in its mana cost this way, the only legal choice for X is 0."
+    );
+    supported("Anrakyr the Traveller");
+    supported("Chalice of the Void");
+    // "Whenever Anrakyr the Traveller attacks, you may cast an artifact spell from your
+    // hand or graveyard by paying life equal to its mana value rather than paying its
+    // mana cost." Chalice of the Void ({X}{X}, "enters with X charge counters on it") is
+    // cast with X = 0: 0 life, no counters.
+    let mut t = TestGame::new(2);
+    let anrakyr = t.battlefield(P0, "Anrakyr the Traveller");
+    let chalice = t.hand(P0, "Chalice of the Void");
+    t.lands(P0, "Wastes", 6);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(chalice)]);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    attack_with(&mut t, &[(anrakyr, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    let on = t.named_on_battlefield("Chalice of the Void");
+    assert_eq!(on.len(), 1, "Chalice of the Void was cast");
+    assert_eq!(t.counters(on[0], "charge"), 0);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(tapped_lands(&t, P0), 0);
+}
