@@ -282,9 +282,12 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
             });
         let (x, put) = x?;
         let x = strip_pronoun(x)?.trim_start();
+        // "put it into your hand, shuffle, then discard a card at random": the clause
+        // before a later ", then" (split off by `parse_clause`) ends with ", shuffle".
         let (dest, shuffle) = match x
             .strip_suffix(", then shuffle")
             .or_else(|| x.strip_suffix(" then shuffle"))
+            .or_else(|| x.strip_suffix(", shuffle"))
         {
             Some(d) => (d, true),
             None => (x, false),

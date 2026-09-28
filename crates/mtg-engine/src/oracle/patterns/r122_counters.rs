@@ -100,11 +100,12 @@ fn put_its_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(Effect::PutCountersOf { from, to, kind })
 }
 
-/// "it had counters on it" (an object that left the battlefield, CR 122.8).
+/// "it had counters on it" / "it had a counter on it" (an object that left the
+/// battlefield, CR 122.8).
 fn had_counters(c: &str) -> Option<Condition> {
     matches!(
         c,
-        "it had counters on it" | "it had one or more counters on it"
+        "it had counters on it" | "it had one or more counters on it" | "it had a counter on it"
     )
     .then(|| Condition::SelMatches(Sel::TriggerLki, Filter::HasCounter(None)))
 }
