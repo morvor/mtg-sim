@@ -515,7 +515,7 @@ fn delayed_trigger_countered(name: &str, cost: &str, counter: &str, mode: Option
 
 #[test]
 fn the_delayed_trigger_can_be_countered_by_defabricate() {
-    cr!("702.84a", "603.7", "701.6b");
+    cr!("702.84a", "603.7", "701.6a");
     ruling!(
         "Phyrexian Dragon Engine",
         "At the beginning of the next end step, a permanent returned to the battlefield with unearth is exiled. This is a delayed triggered ability, and it can be countered by effects such as Defabricate that counter triggered abilities. If the ability is countered, the permanent will stay on the battlefield and the delayed triggered ability won't trigger again. However, the replacement effect will still exile the permanent if it eventually leaves the battlefield."
@@ -525,7 +525,7 @@ fn the_delayed_trigger_can_be_countered_by_defabricate() {
 
 #[test]
 fn the_delayed_trigger_can_be_countered() {
-    cr!("702.84a", "603.7", "701.6b");
+    cr!("702.84a", "603.7", "701.6a");
     ruling!(
         "Royal Warden",
         "At the beginning of the end step, a permanent returned to the battlefield with unearth is exiled. This is a delayed triggered ability, and it can be countered by effects that counter triggered abilities. If the ability is countered, the permanent will stay on the battlefield and the delayed trigger won't trigger again. However, the replacement effect will still exile it if it eventually leaves the battlefield."
@@ -540,7 +540,7 @@ fn the_delayed_trigger_can_be_countered() {
 
 #[test]
 fn the_delayed_trigger_can_be_countered_by_stifle_or_voidslime() {
-    cr!("702.84a", "603.7", "701.6b");
+    cr!("702.84a", "603.7", "701.6a");
     ruling!(
         "Vithian Stinger",
         "At the beginning of the end step, a creature returned to the battlefield with unearth is exiled. This is a delayed triggered ability, and it can be countered by effects such as Stifle or Voidslime that counter triggered abilities. If the ability is countered, the creature will stay on the battlefield and the delayed trigger won't trigger again. However, the replacement effect will still exile the creature when it eventually leaves the battlefield."

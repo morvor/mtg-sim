@@ -195,20 +195,60 @@ inventory::submit! { KeywordActionRegistration(&Earthbend) }
 // Waterbend
 // ---------------------------------------------------------------------------
 
-/// The untapped artifacts and creatures `p` controls.
-fn tappable(g: &Game, p: PlayerId) -> Vec<ObjectId> {
-    g.permanents()
+/// The untapped artifacts and creatures `p` controls, split into those that couldn't make
+/// mana now (`source` last among them) and those with a mana ability that taps or
+/// sacrifices them (fewest mana first). Tapping one of the latter for waterbend pays {1}
+/// but gives up the mana it would make: a permanent tapped for mana, or sacrificed for
+/// mana, can't also be tapped for waterbend (CR 118.3, 701.67a).
+fn tappable(g: &Game, p: PlayerId, source: Option<ObjectId>) -> (Vec<ObjectId>, Vec<ObjectId>) {
+    let sources = crate::mana_abilities::mana_sources(g, p, None);
+    let mana_made = |id: ObjectId| {
+        sources
+            .iter()
+            .filter(|s| s.obj == id && (s.taps() || s.sacrifices()))
+            .map(|s| s.units.len())
+            .max()
+    };
+    let (mut free, mut makers): (Vec<ObjectId>, Vec<ObjectId>) = g
+        .permanents()
         .filter(|o| {
             o.controller == p && !o.tapped && (o.is_creature() || o.is(CardType::Artifact))
         })
         .map(|o| o.id)
-        .collect()
+        .partition(|id| mana_made(*id).is_none());
+    free.sort_by_key(|c| Some(*c) == source);
+    makers.sort_by_key(|c| mana_made(*c));
+    (free, makers)
+}
+
+/// Whether `p` could pay {n} with mana.
+fn can_pay_generic(g: &Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
+    n == 0 || g.can_pay_cost(p, &Cost::mana(ManaCost::generic(n)), ctx.source, ctx)
 }
 
 /// Whether `p` could pay "waterbend {n}".
 pub fn can_waterbend(g: &Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
-    let rest = n.saturating_sub(tappable(g, p).len() as u32);
-    rest == 0 || g.can_pay_cost(p, &Cost::mana(ManaCost::generic(rest)), ctx.source, ctx)
+    let (free, makers) = tappable(g, p, ctx.source);
+    let rest = n.saturating_sub(free.len() as u32);
+    if can_pay_generic(g, p, rest, ctx) {
+        return true;
+    }
+    if makers.is_empty() {
+        return false;
+    }
+    // Tapping a permanent that could make mana helps only if its mana couldn't pay (a
+    // restriction on spending it, say): try it on a copy of the game.
+    let mut h = g.clone();
+    let mut rest = rest;
+    for c in makers {
+        if can_pay_generic(&h, p, rest, ctx) {
+            break;
+        }
+        if h.tap(c) {
+            rest -= 1;
+        }
+    }
+    can_pay_generic(&h, p, rest, ctx)
 }
 
 /// `p` pays "waterbend {n}" (CR 701.67a). Returns false if they couldn't.
@@ -216,11 +256,12 @@ pub fn waterbend(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
     if g.dirty {
         g.recompute();
     }
-    let cands = tappable(g, p);
+    let (free, makers) = tappable(g, p, ctx.source);
+    let cands: Vec<ObjectId> = free.into_iter().chain(makers).collect();
     let max = (n as usize).min(cands.len());
     let entities: Vec<Entity> = cands.iter().map(|c| Entity::Object(*c)).collect();
-    let chosen: Vec<ObjectId> = if max == 0 {
-        vec![]
+    let chosen: Option<Vec<ObjectId>> = if max == 0 {
+        Some(vec![])
     } else {
         match g.ask(
             p,
@@ -239,31 +280,37 @@ pub fn waterbend(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
                     && v.iter().all(|e| entities.contains(e))
                     && v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len() =>
             {
-                v.iter().filter_map(|e| e.object()).collect()
-            }
-            // By default, tap only what the mana available can't pay, sparing the source.
-            _ => {
-                let mut need = 0;
-                while need < max
-                    && !g.can_pay_cost(
-                        p,
-                        &Cost::mana(ManaCost::generic(n - need as u32)),
-                        ctx.source,
-                        ctx,
-                    )
-                {
-                    need += 1;
+                let v: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();
+                // The rest must still be payable with mana once these are tapped.
+                let mut h = g.clone();
+                for c in &v {
+                    h.tap(*c);
                 }
-                let mut order = cands.clone();
-                order.sort_by_key(|c| Some(*c) == ctx.source);
-                order.into_iter().take(need).collect()
+                can_pay_generic(&h, p, n - v.len() as u32, ctx).then_some(v)
             }
+            _ => None,
         }
     };
     let mut tapped = 0;
-    for c in chosen {
-        if g.tap(c) {
-            tapped += 1;
+    match chosen {
+        Some(v) => {
+            for c in v {
+                if g.tap(c) {
+                    tapped += 1;
+                }
+            }
+        }
+        // By default, tap only what the mana available can't pay: first artifacts and
+        // creatures that couldn't make mana (sparing the source), then the others.
+        None => {
+            for c in cands {
+                if tapped as usize >= max || can_pay_generic(g, p, n - tapped, ctx) {
+                    break;
+                }
+                if g.tap(c) {
+                    tapped += 1;
+                }
+            }
         }
     }
     let rest = n.saturating_sub(tapped);
@@ -281,6 +328,29 @@ pub fn waterbend(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
     g.log(|_| format!("{p} waterbends {{{n}}} (tapping {tapped})"));
     emit(g, WATERBENT_EVENT, p, None, n as i32);
     true
+}
+
+/// CR 601.2f, 701.67b: the generic mana of a waterbend cost is part of the total cost, so
+/// a generic cost reduction that the rest of the total cost can't absorb reduces it.
+/// Returns how much of `n` was used.
+pub fn reduce_waterbend_generic(cost: &mut Cost, n: u32) -> u32 {
+    let mut used = 0;
+    for part in cost.parts.iter_mut() {
+        let CostPart::Effect(e) = part else {
+            continue;
+        };
+        if let Effect::KeywordAction {
+            action: KeywordAction::Waterbend,
+            n: Value::Const(k),
+            ..
+        } = &mut **e
+        {
+            let take = ((*k).max(0) as u32).min(n - used);
+            *k -= take as i32;
+            used += take;
+        }
+    }
+    used
 }
 
 pub struct Waterbend;
