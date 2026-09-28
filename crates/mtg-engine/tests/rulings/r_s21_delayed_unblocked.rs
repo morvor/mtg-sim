@@ -46,7 +46,7 @@ fn cone(before: bool) -> (i32, i32) {
 
 #[test]
 fn delifs_cone_used_before_blockers_triggers_as_the_creature_is_unblocked() {
-    cr!("603.7a", "603.7b", "509.3g");
+    cr!("603.7a", "509.3g");
     // The Bears weren't blocked: P0 gains 2 life and the Bears deal no combat damage.
     assert_eq!(cone(true), (22, 20));
 }
@@ -60,4 +60,42 @@ fn delifs_cone_used_after_blockers_are_declared_never_triggers() {
     );
     // Too late: no life gained, and the Bears deal their combat damage.
     assert_eq!(cone(false), (20, 18));
+}
+
+#[test]
+fn delifs_cone_triggers_in_each_combat_of_the_turn() {
+    cr!("603.7b", "509.3g");
+    supported("Delif's Cone");
+    // "This turn, when ..." has a stated duration: in a turn with two combat phases, the
+    // delayed ability triggers each time the creature attacks and isn't blocked.
+    let mut t = TestGame::new(2);
+    let cone = t.battlefield(P0, "Delif's Cone");
+    // Serra Angel (4/4, vigilance) attacks in both combats.
+    let angel = t.battlefield(P0, "Serra Angel");
+    to_beginning_of_combat(&mut t, P0);
+    t.activate(P0, cone, 0, &[Entity::Object(angel)])
+        .expect("activate");
+    t.resolve_all();
+    for n in 1..=2 {
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(angel, Entity::Player(P1))]),
+        );
+        t.answer_yes(P0, true);
+        go_to(&mut t, Step::DeclareBlockers);
+        assert!(t.g.combat.as_ref().unwrap().is_unblocked(angel));
+        t.resolve_all();
+        assert_eq!(t.life(P0), 20 + 4 * n, "combat {n}");
+        if n == 1 {
+            t.g.add_extra_combat(false);
+        }
+        go_to(&mut t, Step::EndOfCombat);
+        // The Angel assigned no combat damage.
+        assert_eq!(t.life(P1), 20, "combat {n}");
+        if n == 1 {
+            go_to(&mut t, Step::BeginningOfCombat);
+        }
+    }
+    assert_eq!(t.life(P0), 28);
 }

@@ -59,7 +59,7 @@ fn two_combats(t: &mut TestGame, mut check: impl FnMut(&mut TestGame, Point)) {
 
 #[test]
 fn after_blockers_are_declared_means_in_the_current_combat_phase() {
-    cr!("506.8b", "506.8c", "506.8f");
+    cr!("506.8b", "506.8c");
     ruling!(
         "Chaotic Strike",
         "If a turn has multiple combat phases, this spell can be cast during any of them as long as it’s after the beginning of that phase’s Declare Blockers Step."
@@ -151,4 +151,22 @@ fn before_blockers_are_declared_means_in_the_current_combat_phase_panic() {
         }
     });
     assert!(cast);
+}
+
+#[test]
+fn after_blockers_are_declared_never_comes_in_a_combat_without_attackers() {
+    cr!("506.8f", "508.8");
+    supported("Chaotic Strike");
+    // No creature attacks: the declare blockers step is skipped, and so Chaotic Strike
+    // ("Cast this spell only during combat after blockers are declared") can't be cast
+    // during that combat phase.
+    let mut t = TestGame::new(2);
+    let strike = t.hand(P0, "Chaotic Strike");
+    t.lands(P0, "Mountain", 2);
+    t.battlefield(P0, "Grizzly Bears");
+    to_beginning_of_combat(&mut t, P0);
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    go_to(&mut t, Step::EndOfCombat);
+    assert!(t.g.combat.as_ref().is_none_or(|c| !c.blockers_declared));
+    assert!(!castable(&mut t, P0, strike));
 }

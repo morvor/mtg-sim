@@ -1,8 +1,9 @@
 //! "This turn, when target creature you control attacks and isn't blocked, [effect]"
 //! (Delif's Cone, Delif's Cube): the resolving ability creates a delayed triggered ability
-//! that triggers the next time that creature attacks and isn't blocked this turn
-//! (CR 603.7b–c, 509.3g). Created after blockers are declared, it has nothing left to
-//! trigger on that turn.
+//! that triggers whenever that creature attacks and isn't blocked this turn (CR 509.3g,
+//! 603.7a, 603.7c). It has a stated duration, "this turn", so it can trigger in each
+//! combat phase of the turn (CR 603.7b). Created after blockers are declared, it has
+//! nothing left to trigger on in that combat.
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -30,7 +31,8 @@ fn this_turn_when_target_attacks_unblocked(l: &str, b: &mut Builder) -> Option<E
             Box::new(what),
         )))),
         body: Box::new(body),
-        once: true,
+        // CR 603.7b: "this turn" is a stated duration.
+        once: false,
     })
 }
 

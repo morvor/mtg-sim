@@ -122,12 +122,12 @@ impl Game {
                 finals.push((i, e));
             }
         }
-        // Permanents sacrificed as these objects enter (devour) are sacrificed at the same
-        // time, before any of them enters (CR 702.82a).
-        // CR 614.12b: the costs chosen for objects entering at the same time are paid once
-        // all the choices have been made.
+        // CR 614.12b: the life and energy chosen to be paid for objects entering at the same
+        // time are paid once all the choices have been made.
         let payments = std::mem::replace(&mut self.zones.entry_payments, prev_entry_payments);
         crate::entry_costs::pay_deferred(self, payments);
+        // Permanents sacrificed as these objects enter (devour) are sacrificed at the same
+        // time, before any of them enters (CR 702.82a).
         let sacrifices = std::mem::replace(&mut self.zones.entry_sacrifices, prev_entry_sacrifices);
         if !sacrifices.is_empty() {
             self.sacrifice_simultaneously(&sacrifices);
