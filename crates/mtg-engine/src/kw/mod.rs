@@ -165,6 +165,16 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
+    /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
+    /// spell being put into its owner's graveyard ("instead of putting it into your
+    /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
+    /// apply to that event, its controller chooses which to apply (CR 616.1). Not so for
+    /// an effect that applies wherever the card would go ("exile it instead of putting it
+    /// anywhere else", which still applies after any other), nor for a spell whose own
+    /// instruction puts it somewhere ("Exile this spell.").
+    fn resolved_destination_replaces(&self) -> bool {
+        true
+    }
     /// After an instant or sorcery spell with this keyword resolved and was put where it
     /// goes (`new` is the card there, e.g. in exile after
     /// [`KeywordRules::resolved_destination`] sent it there), e.g. rebound's delayed
@@ -622,17 +632,31 @@ pub fn cost_reductions(
 }
 
 pub fn resolved_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
+    resolved_destination_by(g, spell).map(|(d, _)| d)
+}
+
+/// Like [`resolved_destination`], with a description of the replacement effect that
+/// sends the spell there, if it is one (see [`KeywordRules::resolved_destination_replaces`];
+/// effects applying to the spell, [`KeywordRules::global_resolved_destination`], are).
+pub fn resolved_destination_by(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<((Zone, LibraryPosition), Option<String>)> {
     let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
     for kw in &kws {
         for r in impls_for(kw.kind) {
             if let Some(d) = r.resolved_destination(g, spell, kw) {
-                return Some(d);
+                let label = r
+                    .resolved_destination_replaces()
+                    .then(|| format!("{}: put it into {:?} instead", kw.kind.name(), d.0));
+                return Some((d, label));
             }
         }
     }
     registry()
         .iter()
         .find_map(|r| r.global_resolved_destination(g, spell))
+        .map(|d| (d, Some(format!("Put it into {:?} instead", d.0))))
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {

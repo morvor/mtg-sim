@@ -10,10 +10,16 @@
 //! * A player with several votes casts them all at the time they'd otherwise vote
 //!   (CR 701.38d).
 //!
+//! * In a secret vote ("each player secretly votes for ..., then those votes are
+//!   revealed", secret council), no player learns another's vote while voting: the votes
+//!   are revealed together once every player has voted.
+//!
 //! The result is stored for the instructions that follow: the number of votes for each
 //! word (`Value::Var(word_var(word))`), the most votes any choice got ([`MOST_VOTES`]),
-//! how many choices got that many ([`CHOICES_WITH_MOST`]), and the objects with the most
-//! votes or tied for most ([`WINNERS`]).
+//! how many choices got that many ([`CHOICES_WITH_MOST`]), the objects with the most
+//! votes or tied for most ([`WINNERS`]), and each object voted for once per vote it got
+//! ([`VOTES_CAST`]; "for each creature with one or more votes, put that many stun
+//! counters on it": [`GOT_VOTES`], [`VOTES_FOR_IT`]).
 
 use super::*;
 
@@ -32,6 +38,16 @@ pub const FINISHED_VOTING: &str = "finished voting";
 pub const MOST_VOTES: Var = vars::USER + 1038;
 pub const CHOICES_WITH_MOST: Var = vars::USER + 1039;
 pub const WINNERS: Var = vars::USER + 1040;
+/// Each object voted for, once per vote it got.
+pub const VOTES_CAST: Var = vars::USER + 1041;
+/// The object an instruction about "each [object] with one or more votes" is performed
+/// for.
+pub const VOTED_FOR: Var = vars::USER + 1042;
+/// `Filter::Custom`: an object that got one or more votes in the vote earlier in the
+/// spell or ability.
+pub const GOT_VOTES: &str = "vote: got one or more votes";
+/// `Value::Custom`: the number of votes the object in [`VOTED_FOR`] got.
+pub const VOTES_FOR_IT: &str = "vote: votes for it";
 
 /// The variable holding the number of votes for `word`.
 pub fn word_var(word: &str) -> Var {
@@ -87,19 +103,21 @@ impl KeywordActionRules for Vote {
             order.push(p);
             p = g.next_player(p);
         }
+        let secret = a.spec.is_some_and(|s| s.secret);
         let mut word_votes = vec![0i64; words.len()];
         let mut object_votes: Vec<(ObjectId, i64)> = objects.iter().map(|o| (*o, 0)).collect();
+        // The votes cast: (voter, word index, object voted for).
+        let mut cast: Vec<(PlayerId, usize, Option<ObjectId>)> = Vec::new();
         for voter in order {
             if !g.player(voter).in_game() {
                 continue;
             }
             for _ in 0..votes_of(g, voter, ctx.source) {
-                if !words.is_empty() {
+                let vote = if !words.is_empty() {
                     let i = g.ask_option(voter, ctx.source, "Vote", words.clone());
                     let i = i.min(words.len() - 1);
                     word_votes[i] += 1;
-                    g.log(|_| format!("{voter} votes for {}", words[i]));
-                    emit(g, VOTED, voter, None, i as i32);
+                    (voter, i, None)
                 } else if !objects.is_empty() {
                     let pick = g
                         .ask_objects(voter, ctx.source, "Vote", objects.clone(), 1, 1)
@@ -109,11 +127,29 @@ impl KeywordActionRules for Vote {
                     if let Some(e) = object_votes.iter_mut().find(|(o, _)| *o == pick) {
                         e.1 += 1;
                     }
-                    g.log(|g| format!("{voter} votes for {}", g.describe(pick)));
-                    emit(g, VOTED, voter, Some(pick), -1);
+                    (voter, 0, Some(pick))
+                } else {
+                    continue;
+                };
+                cast.push(vote);
+                if !secret {
+                    reveal(g, &words, vote);
                 }
             }
         }
+        // A secret vote: all the votes are revealed at the same time.
+        if secret {
+            g.log(|_| "The votes are revealed".to_string());
+            for vote in &cast {
+                reveal(g, &words, *vote);
+            }
+        }
+        ctx.set_var(
+            VOTES_CAST,
+            cast.iter()
+                .filter_map(|(_, _, o)| o.map(Entity::Object))
+                .collect(),
+        );
         let counts: Vec<i64> = if words.is_empty() {
             object_votes.iter().map(|(_, n)| *n).collect()
         } else {
@@ -137,3 +173,48 @@ impl KeywordActionRules for Vote {
 }
 
 inventory::submit! { KeywordActionRegistration(&Vote) }
+
+/// Logs and reports one vote (`words` are the choices of a vote on words).
+fn reveal(g: &mut Game, words: &[String], (voter, i, pick): (PlayerId, usize, Option<ObjectId>)) {
+    match pick {
+        Some(o) => {
+            g.log(|g| format!("{voter} votes for {}", g.describe(o)));
+            emit(g, VOTED, voter, Some(o), -1);
+        }
+        None => {
+            g.log(|_| format!("{voter} votes for {}", words[i]));
+            emit(g, VOTED, voter, None, i as i32);
+        }
+    }
+}
+
+/// The objects in `ctx`'s [`VOTES_CAST`], once per vote.
+fn votes_cast(ctx: &Ctx) -> &[Entity] {
+    ctx.vars.get(&VOTES_CAST).map_or(&[], |v| v.as_slice())
+}
+
+/// The results of a vote on objects, for the instructions that follow it: [`GOT_VOTES`]
+/// and [`VOTES_FOR_IT`].
+pub struct VoteResults;
+
+impl crate::kw::KeywordRules for VoteResults {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, _g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        (name == GOT_VOTES).then(|| votes_cast(ctx).contains(&Entity::Object(id)))
+    }
+
+    fn custom_value(&self, _g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != VOTES_FOR_IT {
+            return None;
+        }
+        let it = ctx.vars.get(&VOTED_FOR).and_then(|v| v.first().copied());
+        Some(it.map_or(0, |it| {
+            votes_cast(ctx).iter().filter(|e| **e == it).count() as i64
+        }))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&VoteResults) }

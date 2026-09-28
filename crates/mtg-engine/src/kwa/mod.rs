@@ -54,6 +54,11 @@ pub struct Spec {
     /// (CR 701.60a).
     #[serde(default)]
     pub undo: bool,
+    /// A secret vote ("each player secretly votes for ..., then those votes are
+    /// revealed"): no player learns another's vote until all the votes are revealed at
+    /// the same time.
+    #[serde(default)]
+    pub secret: bool,
 }
 
 impl Spec {
@@ -66,6 +71,7 @@ impl Spec {
             subtype: None,
             options: vec![],
             undo: false,
+            secret: false,
         }
     }
     pub fn effect(self) -> Effect {

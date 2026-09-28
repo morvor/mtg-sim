@@ -262,6 +262,20 @@ impl Game {
         out
     }
 
+    /// Descriptions of the replacement effects that would apply to the proposed event
+    /// `ev` (without applying any), e.g. to offer them alongside a replacement effect
+    /// that's applied outside the pipeline (CR 616.1).
+    pub fn applicable_replacements(&mut self, ev: &ReplEvent) -> Vec<String> {
+        if self.dirty {
+            self.recompute();
+        }
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
+    }
+
     /// The player who chooses among replacement effects for an event (CR 616.1).
     fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {
