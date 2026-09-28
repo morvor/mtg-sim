@@ -1,6 +1,7 @@
 //! Oracle patterns for life totals (CR 119): setting a life total ("Target player's life
 //! total becomes 20", CR 119.5), exchanging life totals (CR 119.7, 119.8), and "Your life
-//! total can't change".
+//! total can't change" (as a static ability, or for a duration: "Until your next turn,
+//! your life total can't change and you gain protection from everything.").
 
 use super::{EffectPattern, StaticPattern};
 use crate::ability::*;
@@ -90,6 +91,48 @@ fn life_cant_change(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     )
 }
 
+/// "Until your next turn, your life total can't change [and you gain protection from
+/// everything]" (Teferi's Protection): you can neither gain nor lose life for that long
+/// (CR 119.7, 119.8); the rest of the sentence lasts as long.
+fn life_cant_change_for(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (duration, text, r) = [
+        (
+            "until your next turn, ",
+            Duration::UntilYourNextTurn,
+            "until your next turn",
+        ),
+        ("until end of turn, ", Duration::EndOfTurn, "until end of turn"),
+    ]
+    .into_iter()
+    .find_map(|(p, d, t)| l.strip_prefix(p).map(|r| (d, t, r)))?;
+    let (first, rest) = match r.split_once(" and ") {
+        Some((a, c)) => (a, Some(c)),
+        None => (r, None),
+    };
+    if first != "your life total can't change" {
+        return None;
+    }
+    let mut effects: Vec<Effect> = [
+        Restriction::CantGainLife(PlayerFilter::You),
+        Restriction::CantLoseLife(PlayerFilter::You),
+    ]
+    .into_iter()
+    .map(|restriction| Effect::AddRestriction {
+        restriction,
+        duration: duration.clone(),
+    })
+    .collect();
+    if let Some(rest) = rest {
+        effects.push(crate::oracle::effects::parse_clause(
+            &format!("{rest} {text}"),
+            b,
+        )?);
+    }
+    Some(Effect::seq(effects))
+}
+
 inventory::submit! { EffectPattern { name: "life total becomes", priority: 0, parse: set_life } }
+inventory::submit! { EffectPattern { name: "life total can't change for a duration", priority: 0, parse: life_cant_change_for } }
 inventory::submit! { EffectPattern { name: "exchange life totals", priority: 0, parse: exchange_life } }
 inventory::submit! { StaticPattern { name: "life total can't change", priority: 0, parse: life_cant_change } }

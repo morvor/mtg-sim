@@ -1,6 +1,8 @@
 //! Rulings batch S20 — attacking: phased-out permanents are treated as though they don't
 //! exist (CR 702.26b): they can't be targeted, their static abilities don't apply, their
-//! triggered abilities don't trigger, and they can't attack or block.
+//! triggered abilities don't trigger, and they can't attack or block; permanents that
+//! phase in during their controller's untap step can attack that turn (Teferi's
+//! Protection).
 
 use crate::r_s01_common::*;
 use crate::r_s04_common::{add_mana, spell_targets};
@@ -11,6 +13,100 @@ use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
+
+/// P0 casts Teferi's Protection ("Until your next turn, your life total can't change and
+/// you gain protection from everything. All permanents you control phase out.") in P0's
+/// main phase, and it resolves.
+fn teferis_protection(t: &mut TestGame) {
+    add_mana(t, P0, ManaType::W, 1);
+    add_mana(t, P0, ManaType::C, 2);
+    let tp = t.hand(P0, "Teferi's Protection");
+    t.cast(P0, tp).go();
+    t.resolve_all();
+}
+
+#[test]
+fn creatures_phasing_in_with_the_untap_step_can_attack_and_tap_that_turn() {
+    cr!("702.26a", "702.26d", "302.6");
+    ruling!(
+        "Teferi's Protection",
+        "Any creatures that phase in under your control as your next untap step begins will be able to attack and pay a cost of {T} during that turn."
+    );
+    supported("Teferi's Protection");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Llanowar Elves entered this turn: summoning sick now.
+    let elves = entered_this_turn(&mut t, P0, "Llanowar Elves");
+    teferis_protection(&mut t);
+    assert!(phased_out(&t, bears) && phased_out(&t, elves));
+    t.advance_to(P1, Step::PrecombatMain);
+    assert!(phased_out(&t, bears) && phased_out(&t, elves));
+    // They phase in as P0's untap step begins: the same objects, which P0 has controlled
+    // continuously since the turn began.
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(!phased_out(&t, bears) && !phased_out(&t, elves));
+    assert!(tap_for_mana(&mut t, P0, elves, "Add {G}"));
+    to_beginning_of_combat(&mut t, P0);
+    assert!(legal_attack(&mut t, &[(bears, Entity::Player(P1))]));
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(t.g.is_attacking(bears));
+}
+
+#[test]
+fn life_gain_and_loss_have_no_effect_while_your_life_total_cant_change() {
+    cr!("119.3", "608.2c");
+    ruling!(
+        "Teferi's Protection",
+        "Spells and abilities that would normally cause you to gain or lose life still resolve while your life total can't change, but the life-gain or life-loss part simply has no effect."
+    );
+    supported("Teferi's Protection");
+    supported("Revitalize");
+    let mut t = TestGame::new(2);
+    teferis_protection(&mut t);
+    // Revitalize: "You gain 3 life. Draw a card." The card is drawn; no life is gained.
+    let hand = t.hand_size(P0);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    let revitalize = t.hand(P0, "Revitalize");
+    t.cast(P0, revitalize).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // On P0's next turn, the life total can change again.
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    let revitalize = t.hand(P0, "Revitalize");
+    t.cast(P0, revitalize).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+}
+
+#[test]
+fn a_spell_targeting_you_has_an_illegal_target_once_you_gain_protection_from_everything() {
+    cr!("702.16b", "702.16j", "608.2b");
+    ruling!(
+        "Teferi's Protection",
+        "Gaining protection from everything causes a spell or ability on the stack to have an illegal target if it targets you."
+    );
+    supported("Teferi's Protection");
+    let mut t = TestGame::new(2);
+    // P1's Lightning Bolt targets P0; P0 responds with Teferi's Protection.
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    let tp = t.hand(P0, "Teferi's Protection");
+    t.cast(P0, tp).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    // P0 can't be targeted now.
+    let targets = spell_targets(&mut t, P1, "Lightning Bolt");
+    assert!(!targets.contains(&Entity::Player(P0)));
+}
 
 fn phased_out(t: &TestGame, id: ObjectId) -> bool {
     t.obj_now(id).phased_out
