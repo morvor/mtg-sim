@@ -2,7 +2,9 @@
 //! intervening "if it isn't a mana ability" (CR 603.4; mana abilities never trigger
 //! these): "Whenever you activate an ability of an artifact, if it isn't a mana ability,
 //! ..." (Kurkesh, Onakke Ancient), "Whenever an ability of equipped creature is
-//! activated, if it isn't a mana ability, ..." (Illusionist's Bracers). The body's "that
+//! activated, if it isn't a mana ability, ..." (Illusionist's Bracers), "Whenever you
+//! activate an ability of an artifact or creature that isn't a mana ability, ..."
+//! (Crackdown Construct). The body's "that
 //! ability" is the ability activated. Also "Whenever you activate a loyalty ability of a
 //! Chandra planeswalker" (Chandra's Regulator).
 
@@ -11,7 +13,10 @@ use crate::ability::*;
 use crate::oracle::phrases::{end, parse_object_phrase};
 
 fn ability_of_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
-    let r = end(r).strip_suffix(", if it isn't a mana ability")?;
+    let r = end(r);
+    let r = r
+        .strip_suffix(", if it isn't a mana ability")
+        .or_else(|| r.strip_suffix(" that isn't a mana ability"))?;
     let (who, source) = if let Some(x) = r.strip_prefix("you activate an ability of ") {
         let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
         let (f, plural, tail) = parse_object_phrase(x)?;
