@@ -349,8 +349,12 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
-    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay".
-    if l.starts_with("you may pay ") {
+    // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay";
+    // so is "you may [effect] unless that player pays [cost]", where that player decides
+    // whether to pay first (CR 118.12a).
+    if l.starts_with("you may pay ")
+        || (l.starts_with("you may ") && l.contains(" unless that player pays "))
+    {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);
         }

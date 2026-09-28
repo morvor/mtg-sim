@@ -346,7 +346,12 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
 pub fn strip_ability_word(text: &str) -> &str {
     if let Some((head, rest)) = text.split_once(" — ") {
         let words = head.split_whitespace().count();
-        let looks_like_word = words <= 4
+        // Flavor words can be longer ("Lord of the Pyrrhian Legions — Whenever ..."):
+        // up to six words before a triggered ability (not a list of Saga chapters).
+        let long_flavor_word = words <= 6
+            && !head.contains(',')
+            && (rest.starts_with("When") || rest.starts_with("At "));
+        let looks_like_word = (words <= 4 || long_flavor_word)
             // An ability word starts its line: not a mode's name on a later line
             // ("Tiered\n• Thunder — {0} — ...", CR 702.183a).
             && !head.contains('\n')

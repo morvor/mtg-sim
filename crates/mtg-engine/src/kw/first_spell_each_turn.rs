@@ -1,7 +1,8 @@
 //! "The first [quality] spell you cast each turn has [keyword]" (Anhelo, the Painter's
-//! casualty, CR 702.153a; also convoke, cascade, demonstrate, improvise): a static ability
-//! affecting the spell that is the first spell with that quality its controller cast this
-//! turn.
+//! casualty, CR 702.153a; also convoke, cascade, demonstrate, improvise) and "... costs
+//! {N} less to cast" (Conduit of Ruin, CR 601.2f): a static ability affecting the spell
+//! that is the first spell with that quality its controller cast this turn — not
+//! necessarily the first spell they cast.
 //!
 //! The static ability's affected filter is `[quality] spell you control` and'ed with
 //! [`FIRST_THIS_TURN`]; that filter finds the quality in the static ability of its source
@@ -30,12 +31,18 @@ fn quality(g: &Game, src: ObjectId) -> Option<Filter> {
         let AbilityKind::Static(s) = &a.kind else {
             return None;
         };
-        let StaticEffect::Continuous {
-            affected: Filter::And(parts),
-            ..
-        } = &s.effect
-        else {
-            return None;
+        // "The first [quality] spell you cast each turn has [keyword]" / "costs {N} less
+        // to cast".
+        let parts = match &s.effect {
+            StaticEffect::Continuous {
+                affected: Filter::And(parts),
+                ..
+            } => parts,
+            StaticEffect::CostModifier(CostModifier {
+                applies_to: CostTarget::Spells(Filter::And(parts)),
+                ..
+            }) => parts,
+            _ => return None,
         };
         if !parts.iter().any(is_marker) {
             return None;
