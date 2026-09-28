@@ -8,7 +8,7 @@
 use crate::r_s01_common::*;
 use crate::r_s07_common::cast_methods;
 use mtg_engine::decision::Answer;
-use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::object::{CastMethod, FaceState, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -121,4 +121,31 @@ fn omniscience_spells_from_hand_are_free_with_x_zero_and_normal_timing() {
     let giant = t.hand(P0, "Hill Giant");
     t.set_step(P1, Step::PrecombatMain);
     assert!(!cast_methods(&mut t, P0, giant).contains(&FREE));
+}
+
+#[test]
+fn dracogenesis_a_dragon_cards_adventure_isnt_a_dragon_spell() {
+    cr!("118.9", "601.3e", "715.3a", "715.3b");
+    supported("Dracogenesis");
+    supported("Young Red Dragon // Bathe in Gold");
+    // Young Red Dragon ({3}{R}, Creature — Dragon) // Bathe in Gold ({1}{R}, Instant —
+    // Adventure: "Create a Treasure token."): only the Dragon may be cast without paying
+    // its mana cost; the Adventure is an instant spell, not a Dragon spell.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Dracogenesis");
+    let card = t.hand(P0, "Young Red Dragon // Bathe in Gold");
+    let free: Vec<FaceState> = t
+        .g
+        .cast_options(P0, card)
+        .into_iter()
+        .filter(|o| o.method == FREE)
+        .map(|o| o.face)
+        .collect();
+    assert_eq!(free, vec![FaceState::Front]);
+    // With no mana, the Adventure can't be cast; the Dragon is cast for free.
+    assert!(t.cast(P0, card).method(CastMethod::Half(1)).try_go().is_err());
+    assert_eq!(t.zone(card), Zone::Hand(P0));
+    t.cast(P0, card).method(FREE).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Young Red Dragon").len(), 1);
 }

@@ -47,6 +47,11 @@ fn karador_the_spell_is_cast_paying_its_costs_or_an_alternative_cost() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 2, "Mulldrifter's enters trigger drew two");
     assert!(t.in_graveyard(P0, "Mulldrifter"), "evoked: sacrificed");
+    // Cast for its evoke cost, it was still cast with Karador's permission: no other
+    // creature spell from the graveyard this turn.
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    assert!(legal_cast_methods(&mut t, P0, bears).is_empty());
 }
 
 #[test]
@@ -89,4 +94,31 @@ fn karador_once_during_each_of_your_turns() {
     // On P0's next turn, again.
     t.advance_to(P0, Step::PrecombatMain);
     assert!(!legal_cast_methods(&mut t, P0, bears).is_empty());
+}
+
+#[test]
+fn karador_a_card_cast_with_an_effects_permission_doesnt_use_it() {
+    cr!("601.3");
+    supported("Karador, Ghost Chieftain");
+    supported("Emry, Lurker of the Loch");
+    // Emry ("{T}: Choose target artifact card in your graveyard. You may cast that card
+    // this turn.") lets P0 cast Ornithopter, an artifact creature card, from the
+    // graveyard: that uses Emry's permission, and Karador's is still there for Grizzly
+    // Bears.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Karador, Ghost Chieftain");
+    let emry = t.battlefield(P0, "Emry, Lurker of the Loch");
+    let thopter = t.graveyard(P0, "Ornithopter");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.activate(P0, emry, 0, &[Entity::Object(thopter)])
+        .expect("activate Emry");
+    t.resolve_all();
+    t.cast(P0, thopter).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    t.lands(P0, "Forest", 2);
+    assert_eq!(legal_cast_methods(&mut t, P0, bears), vec![CastMethod::Normal]);
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }

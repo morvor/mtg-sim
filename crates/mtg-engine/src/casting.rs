@@ -59,6 +59,12 @@ pub struct PlayGrant {
     pub turn: u32,
 }
 
+/// Recorded in `CastInfo::paid` for a spell cast from where an effect's permission for
+/// that card ([`PlayGrant`], "you may cast that card this turn") let its controller cast
+/// it: another permission (such as "once during each of your turns, you may cast a
+/// creature spell from your graveyard") wasn't needed for it.
+pub const CAST_WITH_GRANT: &str = "cast with an effect's permission for the card";
+
 pub fn grant_play_permission(
     g: &mut Game,
     p: PlayerId,
@@ -1129,6 +1135,10 @@ impl Game {
             }
         }
         self.stack.push(id);
+        let by_grant = self
+            .play_grants
+            .iter()
+            .any(|g| g.object == card && g.player == p);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1141,6 +1151,9 @@ impl Game {
         };
         if let Some(t) = opt.tag {
             cast_info.paid.push(t.into());
+        }
+        if by_grant {
+            cast_info.paid.push(CAST_WITH_GRANT.into());
         }
         // Which alternative cost it's cast for ("If the {2}{U} cost was paid").
         if let (CastMethod::Alternative(_), Some(m)) = (
@@ -2849,6 +2862,18 @@ impl Game {
         self.player(p).mana_pool.total() as u32
             + crate::mana_abilities::potential_mana_count(self, p, None)
     }
+}
+
+/// Whether `card` matches `f` with the characteristics `chars` it would have as the
+/// spell being proposed (CR 601.3e).
+pub(crate) fn matches_with_chars(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    f: &Filter,
+    ctx: &Ctx,
+) -> bool {
+    g.matches_view(&WithChars { id: card, chars }, card, f, ctx)
 }
 
 /// A view of the game in which one object has substitute characteristics — used to check

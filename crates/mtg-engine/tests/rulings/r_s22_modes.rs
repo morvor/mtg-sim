@@ -59,21 +59,52 @@ fn no_player_can_act_between_the_modes_of_a_resolving_confluence() {
         "Fiery Confluence",
         "No player can cast spells or activate abilities in between the modes of a resolving spell."
     );
-    // Three times "1 damage to each creature": a 2/3 creature with a +1/+1 ability can't
-    // be pumped between the modes; it dies (3 damage).
+    // Three times "1 damage to each creature" at P1's Hill Giant (3/3), cast and resolved
+    // through the priority loop with both players passing: whenever a player gets
+    // priority, the Giant has no damage marked (before the spell resolves) or is gone
+    // (after) — never 1 or 2, as it would between the modes.
     let mut t = TestGame::new(2);
-    let giant = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Hill Giant");
     t.lands(P0, "Mountain", 4);
     let conf = t.hand(P0, "Fiery Confluence");
-    t.cast(P0, conf).modes(&[0, 0, 0]).go();
-    let from = t.asked().len();
-    t.resolve();
-    // No player was asked for priority while it resolved.
-    assert!(!t.asked()[from..]
+    /// The stack size and the damage marked on Hill Giant (if it's on the battlefield).
+    fn snapshot(g: &mtg_engine::game::Game) -> (usize, Option<u32>) {
+        let giant = g.find_in_zone(mtg_engine::object::Zone::Battlefield, "Hill Giant");
+        (g.stack.len(), giant.first().map(|id| g.obj(*id).damage))
+    }
+    fn is_priority(d: &Decision) -> bool {
+        matches!(d, Decision::Priority { .. })
+    }
+    let seen = [
+        watch(&mut t, P0, is_priority, snapshot),
+        watch(&mut t, P1, is_priority, snapshot),
+    ];
+    t.answer(
+        P0,
+        DecisionKind::Priority,
+        Answer::Action(mtg_engine::decision::Action::Cast {
+            card: conf,
+            method: mtg_engine::object::CastMethod::Normal,
+        }),
+    );
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 0, 0]));
+    let ok = t.g.run_until(1000, |g| {
+        g.stack.is_empty()
+            && !g
+                .find_in_zone(mtg_engine::object::Zone::Graveyard(P1), "Hill Giant")
+                .is_empty()
+    });
+    assert!(ok);
+    let seen: Vec<(usize, Option<u32>)> = seen
         .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-    assert!(t.in_graveyard(P1, "Hill Giant"));
-    let _ = giant;
+        .flat_map(|s| s.lock().unwrap().clone())
+        .collect();
+    // P1 got priority with the Confluence on the stack, the Giant undamaged.
+    assert!(seen.contains(&(1, Some(0))), "{seen:?}");
+    assert!(
+        seen.iter().all(|(_, d)| matches!(d, None | Some(0))),
+        "a player got priority between the modes: {seen:?}"
+    );
 }
 
 #[test]

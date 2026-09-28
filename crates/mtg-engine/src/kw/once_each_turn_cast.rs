@@ -7,8 +7,11 @@
 //! alternative cost instead (CR 118.9); the usual timing rules apply.
 //!
 //! A spell cast from its controller's graveyard by a way the permission is needed for
-//! (not a keyword that is its own permission, such as flashback) uses the permission of
-//! the first such object that allows it.
+//! uses the permission of the first such object that allows it: normally, or for an
+//! alternative cost such as evoke — but not with a keyword that is its own permission to
+//! cast the card from a graveyard ([`OWN_GRAVEYARD_PERMISSION`], e.g. flashback), nor
+//! with a permission a resolved effect gave for that card ("You may cast that card this
+//! turn").
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -21,6 +24,21 @@ use crate::types::ObjectId;
 
 /// `Condition::Custom`: this object's once-each-turn permission hasn't been used this turn.
 pub const ONCE_UNUSED: &str = "once each turn: permission unused";
+
+/// Keywords that let a card be cast from a graveyard by themselves (CR 702.34a, 702.81a,
+/// 702.127a, 702.133a, 702.138a, 702.146a, 702.180a, 702.187a): a spell cast with one of
+/// them doesn't use another permission. (Other alternative costs, such as evoke,
+/// are paid for a spell cast with that permission.)
+const OWN_GRAVEYARD_PERMISSION: &[KeywordKind] = &[
+    KeywordKind::Flashback,
+    KeywordKind::Retrace,
+    KeywordKind::Aftermath,
+    KeywordKind::JumpStart,
+    KeywordKind::Escape,
+    KeywordKind::Disturb,
+    KeywordKind::Harmonize,
+    KeywordKind::Mayhem,
+];
 
 /// Whether the static ability is a once-each-turn permission to cast spells from a
 /// graveyard; its permission if so.
@@ -68,12 +86,21 @@ impl KeywordRules for OnceEachTurnCast {
         }
         // A keyword that is its own permission to cast the card from a graveyard
         // (flashback, escape, ...) doesn't use this one.
-        let method = g
-            .obj(spell)
-            .stack
-            .as_ref()
-            .map(|si| si.cast.method.clone());
-        if matches!(method, Some(CastMethod::Keyword(_)) | None) {
+        let Some(cast) = g.obj(spell).stack.as_ref().map(|si| &si.cast) else {
+            return;
+        };
+        if let CastMethod::Keyword(k) = cast.method {
+            if OWN_GRAVEYARD_PERMISSION.contains(&k) {
+                return;
+            }
+        }
+        // Nor does a card an effect let its controller cast ("You may cast that card this
+        // turn").
+        if cast
+            .paid
+            .iter()
+            .any(|x| x.as_str() == crate::casting::CAST_WITH_GRANT)
+        {
             return;
         }
         let mut sources: Vec<ObjectId> = Vec::new();

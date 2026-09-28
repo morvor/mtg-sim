@@ -33,13 +33,10 @@ impl super::KeywordRules for CastWithoutPaying {
         if !any {
             return vec![];
         }
-        let o = g.obj(card);
         // "Spells you cast": from the hand, or from wherever else the player may cast the
         // card (CR 601.3).
-        let castable_here = o.zone == Zone::Hand(p)
-            || (g.permitted_cards(p).contains(&card)
-                && g.permission_allows(p, card, &o.chars, false));
-        if !castable_here {
+        let in_hand = g.obj(card).zone == Zone::Hand(p);
+        if !in_hand && !g.permitted_cards(p).contains(&card) {
             return vec![];
         }
         // A permission to cast it without paying its mana cost already offers that.
@@ -49,28 +46,33 @@ impl super::KeywordRules for CastWithoutPaying {
         {
             return vec![];
         }
-        let applies = g.statics.cost_modifiers.iter().any(|(src, ctl, cm)| {
-            let (CostTarget::Spells(f), CostChange::AlternativeCost(c)) =
-                (&cm.applies_to, &cm.change)
-            else {
-                return false;
-            };
-            let ctx = Ctx::new(Some(*src), *ctl);
-            c.mana.as_ref().map_or(true, |m| m.is_zero())
-                && c.parts.is_empty()
-                && g.player_rel_matches(cm.who, p, &ctx)
-                && crate::spell_costs::spells_change_applies(g, card, f, &cm.change, &ctx)
-        });
-        if !applies {
-            return vec![];
-        }
+        // Whether the spell the card would become, with the characteristics `chars` of the
+        // face or half cast (CR 601.3e), is one of the spells described.
+        let applies = |chars: &Characteristics| {
+            g.statics.cost_modifiers.iter().any(|(src, ctl, cm)| {
+                let (CostTarget::Spells(f), CostChange::AlternativeCost(c)) =
+                    (&cm.applies_to, &cm.change)
+                else {
+                    return false;
+                };
+                let ctx = Ctx::new(Some(*src), *ctl);
+                c.mana.as_ref().map_or(true, |m| m.is_zero())
+                    && c.parts.is_empty()
+                    && g.player_rel_matches(cm.who, p, &ctx)
+                    && crate::spell_costs::spells_change_applies_as(
+                        g, card, chars, f, &cm.change, &ctx,
+                    )
+            })
+        };
         crate::casting::castable_faces(g, card)
             .into_iter()
-            .map(|face| {
+            .filter_map(|face| {
                 let mut opt = CastOption::normal(face);
                 opt.method = CastMethod::Free;
                 opt.alt_cost = Some(Cost::free());
-                opt
+                let chars = g.option_characteristics(card, &opt);
+                let castable_here = in_hand || g.permission_allows(p, card, &chars, false);
+                (castable_here && applies(&chars)).then_some(opt)
             })
             .collect()
     }

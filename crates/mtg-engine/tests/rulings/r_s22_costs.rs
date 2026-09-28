@@ -59,21 +59,29 @@ fn expend_counts_only_the_mana_actually_spent() {
     t.cast(P0, bolt).target(Entity::Player(P1)).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 20 - 4 - 2);
-    // A spell cast without paying its mana cost spends nothing.
+    // A spell cast for an alternative cost of nothing spends nothing: Fiery Confluence
+    // (mana value 4) cast with Omniscience ("You may cast spells from your hand without
+    // paying their mana costs.") doesn't expend 4. The next three mana spent (Lightning
+    // Strike and Shock) don't either; the fourth (another Shock) does.
+    supported("Omniscience");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Teapot Slinger");
-    add_mana(&mut t, P0, ManaType::W, 4);
+    t.battlefield(P0, "Omniscience");
+    t.lands(P0, "Mountain", 4);
     let conf = t.hand(P0, "Fiery Confluence");
-    let expertise = t.hand(P0, "Rishkar's Expertise");
-    let _ = expertise;
-    t.g.players[P0.idx()].mana_pool.mana.clear();
-    add_mana(&mut t, P0, ManaType::G, 6);
-    t.answer_choose(P0, &[Entity::Object(conf)]);
-    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1, 1, 1]));
-    t.cast(P0, expertise).go();
+    t.cast(P0, conf)
+        .method(CastMethod::Free)
+        .modes(&[1, 1, 1])
+        .go();
+    assert_eq!(tapped_lands(&t, P0), 0);
     t.resolve_all();
-    // Rishkar's Expertise spent 6 (expend 4: 2 damage); the Confluence spent nothing.
-    assert_eq!(t.life(P1), 20 - 2 - 6);
+    assert_eq!(t.life(P1), 20 - 6);
+    cast_and_resolve(&mut t, "Lightning Strike", &[Entity::Player(P1)]);
+    cast_and_resolve(&mut t, "Shock", &[Entity::Player(P1)]);
+    assert_eq!(tapped_lands(&t, P0), 3);
+    assert_eq!(t.life(P1), 20 - 6 - 3 - 2);
+    cast_and_resolve(&mut t, "Shock", &[Entity::Player(P1)]);
+    assert_eq!(t.life(P1), 20 - 6 - 3 - 2 - 2 - 2);
 }
 
 #[test]

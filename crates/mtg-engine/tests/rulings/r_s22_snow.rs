@@ -7,7 +7,7 @@ use crate::r_s01_common::*;
 use crate::r_s22_common::*;
 use mtg_engine::ability::*;
 use mtg_engine::card::CardDef;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Decision;
 use mtg_engine::object::{Characteristics, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
@@ -158,5 +158,4 @@ fn a_generic_cost_reduction_doesnt_reduce_snow_costs() {
     assert_eq!(tapped_named(&t, P0, "Forest"), 0);
     t.resolve_all();
     assert_eq!(t.pt(troll), (4, 3));
-    let _ = Answer::Default;
 }

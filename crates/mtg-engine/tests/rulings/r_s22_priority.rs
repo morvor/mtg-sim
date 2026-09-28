@@ -103,9 +103,9 @@ fn whirlwind_of_thought_players_may_respond_after_the_trigger_resolves() {
         "Players can cast spells and activate abilities after the triggered ability resolves but before the spell that caused it to trigger does."
     );
     supported("Whirlwind of Thought");
-    // "Whenever you cast a noncreature spell, draw a card." P0 casts Shock at P1's Hill
-    // Giant... no: at P1's Grizzly Bears; the trigger resolves first (P0 draws); then P1
-    // responds to Shock with Giant Growth, and the Bears survives.
+    // "Whenever you cast a noncreature spell, draw a card." P0 casts Shock at P1's
+    // Grizzly Bears; the trigger resolves first (P0 draws); then P1 responds to Shock
+    // with Giant Growth, and the Bears survives.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Whirlwind of Thought");
     let bears = t.battlefield(P1, "Grizzly Bears");

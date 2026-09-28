@@ -12,7 +12,6 @@ use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::types::*;
 use mtg_engine::*;
 
 const OVERLOAD: CastMethod = CastMethod::Keyword(KeywordKind::Overload);
@@ -358,5 +357,4 @@ fn allosaurus_rider_cast_for_its_alternative_cost_follows_creature_timing() {
     assert_eq!(alternative_methods(&mut t, P0, rider), 0);
     t.set_step(P0, Step::PostcombatMain);
     assert_eq!(alternative_methods(&mut t, P0, rider), 1);
-    let _ = CardType::Creature;
 }

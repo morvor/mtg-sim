@@ -65,7 +65,7 @@ fn nicol_bolas_casts_without_paying_but_additional_costs_are_paid() {
 
 #[test]
 fn nicol_bolas_exiles_face_up_until_a_nonland_card() {
-    cr!("406.3", "701.20a");
+    cr!("406.3");
     ruling!(
         "Nicol Bolas, God-Pharaoh",
         "The cards exiled by Nicol Bolas's first and second abilities are exiled face up."

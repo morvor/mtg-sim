@@ -76,7 +76,7 @@ fn a_card_chosen_by_emry_follows_the_timing_rules() {
     cr!("307.1", "601.3");
     ruling!(
         "Emry, Lurker of the Loch",
-        "You'll still pay all costs for a spell cast this way"
+        "You must follow the normal timing permissions and restrictions for the target artifact card. Unless it has flash, you'll most likely only be able to cast it during your main phase while the stack is empty."
     );
     supported("Emry, Lurker of the Loch");
     let mut t = TestGame::new(2);

@@ -482,15 +482,20 @@ fn comply_names_one_half_of_a_split_card_and_the_other_can_still_be_cast() {
         (t, fi)
     };
     let (mut t, fi) = comply("Fire");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, fi);
     assert!(!methods.contains(&CastMethod::Half(0)), "Fire can't be cast");
     assert!(methods.contains(&CastMethod::Half(1)), "Ice can");
+    // Ice: "Tap target permanent. Draw a card."
+    let hand = t.hand_size(P1);
     t.cast(P1, fi)
         .method(CastMethod::Half(1))
-        .target(Entity::Player(P0))
+        .target(Entity::Object(bears))
         .go();
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Fire // Ice"));
+    assert!(t.obj_now(bears).tapped);
+    assert_eq!(t.hand_size(P1), hand - 1 + 1);
     // "Fire // Ice" isn't a name that can be chosen: nothing is named.
     let (mut t, fi) = comply("Fire // Ice");
     let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, fi);

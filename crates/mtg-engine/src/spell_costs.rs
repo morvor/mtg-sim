@@ -133,6 +133,26 @@ pub fn spells_change_applies(
     g.matches(card, &f, ctx)
 }
 
+/// [`spells_change_applies`] for `card` cast as a spell with the characteristics `chars`
+/// (one of its faces or halves, or an Adventure): only those characteristics are
+/// considered (CR 601.3e, 715.3a). A Dragon creature card's Adventure isn't a Dragon
+/// spell.
+pub fn spells_change_applies_as(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    f: &Filter,
+    change: &CostChange,
+    ctx: &Ctx,
+) -> bool {
+    let f = crate::casting::as_spell_filter(f);
+    if g.obj(card).zone != Zone::Stack && filter_has_targets(&f) {
+        return is_reduction(change)
+            && crate::casting::matches_with_chars(g, card, chars, &assume_targets(&f, true), ctx);
+    }
+    crate::casting::matches_with_chars(g, card, chars, &f, ctx)
+}
+
 /// Whether an alternative cost with this condition may be chosen for `card` now
 /// ("If you control a Swamp, you may pay 4 life rather than pay this spell's mana cost").
 /// The condition is checked as the spell is proposed (CR 601.2b).
