@@ -269,6 +269,8 @@ fn that_spell_exiled_instead(l: &str, _b: &mut Builder) -> Option<Effect> {
         l,
         "if that spell would be put into your graveyard, exile it instead"
             | "if that spell would be put into a graveyard, exile it instead"
+            // Arcane Heist: its owner's graveyard, where a spell would go (CR 404.1).
+            | "if that spell would be put into their graveyard, exile it instead"
             | "if that spell would be put into your graveyard, exile that card instead"
     ) {
         return None;

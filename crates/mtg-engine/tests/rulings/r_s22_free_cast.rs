@@ -17,6 +17,48 @@ fn sram(t: &mut TestGame, name: &str) -> ObjectId {
     t.hand(P0, name)
 }
 
+fn arcane_heist(t: &mut TestGame, name: &str) -> ObjectId {
+    t.graveyard(P1, name)
+}
+
+fn run_arcane_heist(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&mut TestGame)) {
+    crate::r_s04_common::add_mana(t, P0, ManaType::U, 4);
+    let heist = t.hand(P0, "Arcane Heist");
+    t.answer_targets(P0, &[Entity::Object(card)]);
+    answers(t);
+    t.cast(P0, heist).go();
+    t.resolve_all();
+    t.clear_answers();
+}
+
+#[test]
+fn arcane_heist_casts_without_paying_but_additional_costs_are_paid() {
+    cr!("118.9a", "118.9b", "118.8a", "601.2b", "608.2g");
+    ruling!(
+        "Arcane Heist",
+        "If you cast a spell “without paying its mana cost,” you can’t choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the spell has any mandatory additional costs, those must be paid to cast the spell."
+    );
+    supported("Arcane Heist");
+    // "You may cast target instant or sorcery card from an opponent's graveyard without
+    // paying its mana cost. If that spell would be put into their graveyard, exile it
+    // instead."
+    check_free_cast_costs(&FreeCaster {
+        instants_only: false,
+        place: arcane_heist,
+        run: run_arcane_heist,
+    });
+    // The spell cast this way is exiled rather than put into its owner's graveyard.
+    let mut t = TestGame::new(2);
+    let bolt = arcane_heist(&mut t, "Burst Lightning");
+    run_arcane_heist(&mut t, bolt, &|t| {
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(false));
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    });
+    assert_eq!(t.life(P1), 18);
+    assert!(t.in_exile("Burst Lightning"));
+    assert!(!t.in_graveyard(P1, "Burst Lightning"));
+}
+
 fn glamdring(t: &mut TestGame, name: &str) -> ObjectId {
     // Grizzly Bears equipped with Glamdring (first strike): 2 combat damage.
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -54,6 +96,65 @@ fn glamdring_casts_without_paying_but_additional_costs_are_paid() {
     run_glamdring(&mut t, wrath, &|_| {});
     assert!(t.in_hand(P0, "Act on Impulse"));
     assert_eq!(t.stack_len(), 0);
+}
+
+/// Grizzly Bears equipped with Buster Sword ("Equipped creature gets +3/+2. Whenever
+/// equipped creature deals combat damage to a player, draw a card, then you may cast a
+/// spell from your hand with mana value less than or equal to that damage without paying
+/// its mana cost.") attacks P1: 5 damage. P0 casts `card` from their hand, `answers`
+/// queued for casting it.
+fn buster_sword_attack(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&mut TestGame)) {
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(t, P0, "Buster Sword", bears);
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    answers(t);
+    attack_p1_unblocked(t, bears);
+    t.clear_answers();
+}
+
+#[test]
+fn buster_sword_casts_without_paying_but_additional_costs_are_paid() {
+    cr!("118.9a", "118.9b", "118.8a", "601.2b", "608.2g");
+    ruling!(
+        "Buster Sword",
+        "If you cast a spell \"without paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the card has any mandatory additional costs, those must be paid to cast the spell."
+    );
+    supported("Buster Sword");
+    // Kicker may be paid: kicked Burst Lightning kills Hill Giant.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bolt = t.hand(P0, "Burst Lightning");
+    t.lands(P0, "Wastes", 4);
+    buster_sword_attack(&mut t, bolt, &|t| {
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+        t.answer_targets(P0, &[Entity::Object(giant)]);
+    });
+    assert_eq!(tapped_named(&t, P0, "Wastes"), 4);
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    // Tormenting Voice's discard must be paid: P0 discards the Forest (the card drawn by
+    // Buster Sword stays).
+    let mut t = TestGame::new(2);
+    let voice = t.hand(P0, "Tormenting Voice");
+    let forest = t.hand(P0, "Forest");
+    let lib = t.library_size(P0);
+    buster_sword_attack(&mut t, voice, &|t| {
+        t.answer_choose(P0, &[Entity::Object(forest)]);
+    });
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_graveyard(P0, "Tormenting Voice"));
+    assert_eq!(t.library_size(P0), lib - 1 - 2);
+    // Cyclonic Rift isn't overloaded.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Llanowar Elves");
+    let rift = t.hand(P0, "Cyclonic Rift");
+    t.lands(P0, "Island", 7);
+    buster_sword_attack(&mut t, rift, &|t| {
+        t.answer_targets(P0, &[Entity::Object(giant)]);
+    });
+    assert!(t.in_hand(P1, "Hill Giant"));
+    assert!(t.on_battlefield(other));
+    assert_eq!(tapped_named(&t, P0, "Island"), 0);
 }
 
 #[test]
