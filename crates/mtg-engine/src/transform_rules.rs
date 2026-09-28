@@ -104,6 +104,18 @@ pub fn can_enter_transformed(g: &Game, id: ObjectId) -> bool {
         .is_some_and(|c| transforming_layout(c.layout) && c.faces.len() >= 2)
 }
 
+/// Whether the object `id` (off the battlefield) can be cast "transformed", with its back
+/// face up (CR 712.11a): a double-faced card or a copy of one, but not a meld card, whose
+/// back face is only part of a combined face (CR 712.4b, 712.8b), and never a token, which
+/// can't move to the stack (CR 111.8).
+pub fn can_be_cast_transformed(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    matches!(o.kind, ObjKind::Card | ObjKind::CardCopy)
+        && o.card
+            .as_ref()
+            .is_some_and(|c| transforming_layout(c.layout) && c.faces.len() >= 2)
+}
+
 /// Records that `id` transformed, with the new timestamp it got.
 pub fn record(g: &mut Game, id: ObjectId, ts: Timestamp) {
     g.transforms.last.insert(id, ts);

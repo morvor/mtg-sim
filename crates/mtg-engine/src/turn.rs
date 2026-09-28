@@ -958,6 +958,11 @@ impl Game {
             .retain(|e| !until(&e.duration, e.controller));
         self.replacements
             .retain(|e| !until(&e.duration, e.controller));
+        // "Until your next turn, whenever …" delayed triggered abilities.
+        self.delayed_triggers.retain(|d| {
+            !(matches!(d.trigger, crate::ability::TriggerCond::UntilYourNextTurn(_))
+                && d.controller == active)
+        });
         // "until the end of your next turn" becomes "until end of turn" once that turn starts.
         let turn = self.turn.number;
         for e in self.effects.iter_mut() {

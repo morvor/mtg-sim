@@ -623,6 +623,12 @@ impl Game {
         if o.chars.has_keyword(k) || o.base.keywords().any(|x| x.kind == k) {
             return;
         }
+        // The card's own ability wasn't granted by an effect: disturb, printed on the front
+        // face of a card cast with its back face up, isn't an ability of that spell
+        // (CR 702.146a, 712.8c).
+        if self.obj(card).base.keywords().any(|x| x.kind == k) {
+            return;
+        }
         let controller = o.controller;
         let Some(kw) = self
             .obj(card)
@@ -1491,6 +1497,14 @@ impl Game {
             }
         }
         for (n, color) in reductions {
+            // CR 601.2f: what the mana cost's generic mana can't absorb reduces the
+            // generic mana of a waterbend cost, which is part of the total cost too.
+            let left = match (color, &cost.mana) {
+                (None, Some(m)) => n.saturating_sub(m.generic_amount()),
+                (None, None) => n,
+                (Some(_), _) => 0,
+            };
+            crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
             if let Some(m) = cost.mana.as_mut() {
                 match color {
                     None => m.reduce_generic(n),

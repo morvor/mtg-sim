@@ -53,10 +53,20 @@ fn parse_triggered_at(
             let mentions_it = c
                 .split(|ch: char| !ch.is_alphanumeric() && ch != '\'')
                 .any(|w| matches!(w, "it" | "its" | "it's"));
-            if mentions_it && !matches!(it, Sel::This) {
+            let parsed = super::statics::parse_condition(c, ctx);
+            // A condition read as being about the triggering object ("if it had counters
+            // on it", CR 603.10a) has the trigger's referent.
+            let about_trigger_object = matches!(
+                parsed,
+                Some(Condition::SelMatches(
+                    Sel::TriggerLki | Sel::TriggerObject,
+                    _
+                ))
+            );
+            if mentions_it && !matches!(it, Sel::This) && !about_trigger_object {
                 return None;
             }
-            if let Some(cond) = super::statics::parse_condition(c, ctx) {
+            if let Some(cond) = parsed {
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];
                 // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the

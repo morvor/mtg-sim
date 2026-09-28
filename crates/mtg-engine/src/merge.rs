@@ -721,46 +721,78 @@ pub fn meld(
     Some(new)
 }
 
-/// The meld result of the card `src` is, and its meld partner on the battlefield that
-/// `p` both owns and controls, if `src` is also a permanent `p` owns and controls.
+/// The meld result of `src`, and the permanents on the battlefield that `p` both owns and
+/// controls named as its meld partner, if `src` is also a permanent `p` owns and
+/// controls. "If you both own and control [this] and a creature named [partner]" looks at
+/// names (CR 201.2): a token or a copy with the partner's name counts, though it can't be
+/// melded (CR 701.42b).
 fn meld_pair(
     g: &Game,
     src: ObjectId,
     p: PlayerId,
     result_name: &str,
-) -> Option<(Arc<CardDef>, ObjectId)> {
+) -> Option<(Arc<CardDef>, Vec<ObjectId>)> {
     let owned_and_controlled =
         |x: ObjectId| g.is_live(x) && g.obj(x).owner == p && g.obj(x).controller == p;
     if !owned_and_controlled(src) || g.obj(src).zone != Zone::Battlefield {
         return None;
     }
-    let card = g.obj(src).card.clone()?;
-    let result = card
-        .related
-        .iter()
-        .find(|(k, _)| k == "meld_result")
+    let result = g
+        .obj(src)
+        .card
+        .as_ref()
+        .and_then(|c| c.related.iter().find(|(k, _)| k == "meld_result"))
         .and_then(|(_, n)| CardDb::global().get(n))
         .or_else(|| CardDb::global().get(result_name))?;
-    if !is_meld_part(&result, &card.name) {
+    // The ability names its own source (CR 201.5); the other name is the partner's.
+    let own = g.obj(src).chars.name.clone();
+    if !is_meld_part(&result, &own) {
         return None;
     }
-    let partner = g.battlefield.iter().copied().find(|x| {
-        *x != src
-            && owned_and_controlled(*x)
-            && card_name(g, *x).is_some_and(|n| n != card.name && is_meld_part(&result, &n))
-    })?;
-    Some((result, partner))
+    let partner = result
+        .related
+        .iter()
+        .find(|(k, n)| k == "meld_part" && !n.eq_ignore_ascii_case(&own))
+        .map(|(_, n)| n.clone())?;
+    let partners: Vec<ObjectId> = g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|x| {
+            *x != src
+                && owned_and_controlled(*x)
+                && g.obj(*x).chars.name.eq_ignore_ascii_case(&partner)
+        })
+        .collect();
+    (!partners.is_empty()).then_some((result, partners))
 }
 
 /// "If you both own and control [this] and [its meld partner], exile them, then meld
-/// them into [result]" (CR 701.42a).
+/// them into [result]" (CR 701.42a). With more than one permanent with the partner's
+/// name, the player chooses which one to exile. Cards that can't be melded (a token, a
+/// card that isn't of the pair) stay in exile (CR 701.42c).
 pub fn meld_effect(g: &mut Game, result_name: &str, ctx: &Ctx) {
     let Some(src) = ctx.source else {
         return;
     };
     let p = ctx.controller;
-    let Some((result, partner)) = meld_pair(g, src, p, result_name) else {
+    let Some((result, partners)) = meld_pair(g, src, p, result_name) else {
         return;
+    };
+    let partner = if partners.len() > 1 {
+        g.ask_objects(
+            p,
+            Some(src),
+            "Choose the permanent to meld",
+            partners.clone(),
+            1,
+            1,
+        )
+        .first()
+        .copied()
+        .unwrap_or(partners[0])
+    } else {
+        partners[0]
     };
     let a = g.move_object(src, Zone::Exile, MoveCause::Effect, Some(p));
     let b = g.move_object(partner, Zone::Exile, MoveCause::Effect, Some(p));

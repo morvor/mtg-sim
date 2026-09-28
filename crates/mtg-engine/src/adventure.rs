@@ -53,9 +53,11 @@ pub fn inset_of(card: &CardDef) -> Option<Inset> {
 
 /// The inset spell the object `id` has — even if it doesn't currently use those
 /// characteristics (CR 715.2a, 720.2a) — from its copiable values (CR 715.2b, 720.2b).
+/// A spell on the stack as its inset spell has only those characteristics (CR 715.3b,
+/// 720.3b): it's an instant or sorcery spell that doesn't "have" an Adventure or Omen.
 pub fn inset(g: &Game, id: ObjectId) -> Option<Inset> {
     let o = g.obj(id);
-    if o.face_down {
+    if o.face_down || on_stack_as(g, id).is_some() {
         return None;
     }
     let printed = o.chars.printed.as_ref().map(|p| &p.0);
@@ -131,6 +133,19 @@ impl KeywordRules for AdventureRules {
         } else {
             vec![]
         }
+    }
+
+    /// CR 715.3d: "that player may play it" — an adventurer card whose normal
+    /// characteristics are a land's is played as a land, following the usual rules for
+    /// playing lands (a main phase of their turn, an empty stack, a land play left).
+    fn playable_lands(&self, g: &Game, p: PlayerId) -> Vec<ObjectId> {
+        g.special
+            .adventures
+            .exiled
+            .iter()
+            .filter(|(c, _)| on_an_adventure_for(g, *c, p))
+            .map(|(c, _)| *c)
+            .collect()
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {

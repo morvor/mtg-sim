@@ -1587,6 +1587,8 @@ impl Game {
                         cast.push(Entity::Object(spell));
                     }
                 }
+                // "You may cast ... If you do, ...": whether a spell was cast.
+                ctx.prev_happened = !cast.is_empty();
                 // CR 400.7h: other parts of the effect can find the spells cast this way.
                 ctx.set_var(vars::IT, cast);
             }

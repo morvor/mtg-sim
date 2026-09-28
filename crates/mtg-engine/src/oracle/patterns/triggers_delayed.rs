@@ -167,8 +167,14 @@ inventory::submit! {
 /// to its own trigger event ("it", "that player") and chooses its own targets.
 fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // "Until your next turn, whenever ...": it lasts until its controller's next turn.
+    let mut until_next_turn = false;
     let (cond_s, eff) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
         let (c, e) = split_at_comma(r)?;
+        (c.to_string(), e)
+    } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {
+        let (c, e) = split_at_comma(r)?;
+        until_next_turn = true;
         (c.to_string(), e)
     } else {
         let r = l.strip_prefix("whenever ")?;
@@ -181,8 +187,13 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let trigger = if until_next_turn {
+        TriggerCond::UntilYourNextTurn(Box::new(trigger))
+    } else {
+        TriggerCond::ThisTurn(Box::new(trigger))
+    };
     Some(Effect::DelayedTrigger {
-        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+        trigger,
         body: Box::new(body),
         once: false,
     })

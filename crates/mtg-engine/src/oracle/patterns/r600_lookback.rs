@@ -33,9 +33,43 @@ fn lookback_triggers(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 fn sacrifice_that(l: &str, b: &mut Builder) -> Option<Effect> {
     match l {
         "sacrifice that permanent" | "sacrifice it" | "sacrifice that creature" => {
-            Some(Effect::SacrificeObjects { what: b.it.clone() })
+            Some(Effect::SacrificeObjects {
+                what: sacrificed_referent(b),
+            })
         }
         _ => None,
+    }
+}
+
+/// What "it" is in "sacrifice it". A player sacrifices only permanents they control
+/// (CR 701.21a): after "Target creature you control deals damage equal to its power to any
+/// other target." (Burn Together), "it" is the creature you control, not the target that
+/// was dealt damage.
+fn sacrificed_referent(b: &Builder) -> Sel {
+    let yours = |k: usize| {
+        b.targets.get(k).is_some_and(|t| match &t.what {
+            TargetKind::Object(f) => controlled_by_you(f),
+            _ => false,
+        })
+    };
+    match b.it {
+        Sel::Target(k) if !yours(k as usize) => {
+            let mine: Vec<usize> = (0..b.targets.len()).filter(|j| yours(*j)).collect();
+            match mine[..] {
+                [j] => Sel::Target(j as u8),
+                _ => b.it.clone(),
+            }
+        }
+        _ => b.it.clone(),
+    }
+}
+
+/// Whether the filter only matches objects controlled by "you".
+fn controlled_by_you(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(PlayerRel::You) => true,
+        Filter::And(fs) => fs.iter().any(controlled_by_you),
+        _ => false,
     }
 }
 

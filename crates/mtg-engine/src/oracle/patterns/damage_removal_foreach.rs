@@ -105,7 +105,11 @@ fn count_of(s: &str, b: &mut Builder) -> Option<Value> {
 
 fn p_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
     let (clause, thing) = l.rsplit_once(" for each ")?;
-    if thing.ends_with("destroyed this way") || thing.contains(" this way") {
+    // "for each creature card milled this way" counts the cards the preceding mill
+    // instruction milled (CR 701.17c); other "this way" counts are handled elsewhere.
+    if thing.ends_with("destroyed this way")
+        || (thing.contains(" this way") && !end(thing).ends_with(" milled this way"))
+    {
         return None;
     }
     let count = count_of(thing, b)?;
