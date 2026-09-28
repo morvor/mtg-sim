@@ -17,11 +17,19 @@ use crate::keywords::KeywordKind;
 use crate::types::{Entity, ObjectId};
 
 const PREFIX: &str = "cast from hand free with mana value at most:";
+const PREFIX_TARGET: &str = "cast from hand free with mana value at most that of target:";
 
 /// The `Effect::Custom` name of "you may cast a spell with mana value `max` or less from
 /// your hand without paying its mana cost".
 pub fn effect_name(max: u32) -> String {
     format!("{PREFIX}{max}")
+}
+
+/// The `Effect::Custom` name of "you may cast a spell with equal or lesser mana value
+/// from your hand without paying its mana cost" (Reinterpret): at most the mana value of
+/// the object chosen in target slot `slot` (as it last existed, if it's gone).
+pub fn effect_name_target(slot: u8) -> String {
+    format!("{PREFIX_TARGET}{slot}")
 }
 
 pub struct CastFromHandFree;
@@ -32,6 +40,21 @@ impl KeywordRules for CastFromHandFree {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if let Some(slot) = name
+            .strip_prefix(PREFIX_TARGET)
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            let target = ctx
+                .targets
+                .get(slot)
+                .and_then(|t| t.iter().find_map(|e| e.object()));
+            // The spell may have left the stack: its last known mana value.
+            let Some(max) = target.map(|o| g.mana_value_of(o)) else {
+                return true;
+            };
+            cast_from_hand(g, ctx, max);
+            return true;
+        }
         let Some(max) = name.strip_prefix(PREFIX).and_then(|n| n.parse::<u32>().ok()) else {
             return false;
         };

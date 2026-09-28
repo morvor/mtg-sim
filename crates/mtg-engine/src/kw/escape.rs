@@ -47,32 +47,41 @@ impl KeywordRules for Escape {
         let Some(cost) = kw.cost.clone() else {
             return vec![];
         };
-        let mut opt = CastOption::normal(FaceState::Front);
-        opt.method = CastMethod::Keyword(KeywordKind::Escape);
-        let cost = if kw.text.as_deref() == Some(MANA_COST_PLUS) {
-            // The card's mana cost (an unpayable cost if it has none, CR 118.6) plus the
-            // rest.
-            let chars = g.option_characteristics(card, &opt);
-            Cost {
-                mana: Some(
-                    chars
-                        .mana_cost
-                        .clone()
-                        .unwrap_or_else(crate::cost_rules::unpayable),
-                ),
-                parts: cost.parts,
-            }
-        } else {
-            cost
-        };
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Escape,
-            &cost,
-        ));
-        opt.tag = Some(ESCAPE);
-        vec![opt]
+        // An adventurer card, a split card, or a modal double-faced card is cast as the
+        // face or half its caster chooses, paying that one's cost (the card's mana cost
+        // for "equal to its mana cost plus ...") plus the rest (CR 601.2b, 601.2f,
+        // 709.3, 715.3).
+        crate::casting::castable_faces(g, card)
+            .into_iter()
+            .map(|face| {
+                let mut opt = CastOption::normal(face);
+                opt.method = CastMethod::Keyword(KeywordKind::Escape);
+                let cost = if kw.text.as_deref() == Some(MANA_COST_PLUS) {
+                    // That face's mana cost (an unpayable cost if it has none, CR 118.6)
+                    // plus the rest.
+                    let chars = g.option_characteristics(card, &opt);
+                    Cost {
+                        mana: Some(
+                            chars
+                                .mana_cost
+                                .clone()
+                                .unwrap_or_else(crate::cost_rules::unpayable),
+                        ),
+                        parts: cost.parts.clone(),
+                    }
+                } else {
+                    cost.clone()
+                };
+                opt.alt_cost = Some(super::modified_keyword_cost(
+                    g,
+                    p,
+                    KeywordKind::Escape,
+                    &cost,
+                ));
+                opt.tag = Some(ESCAPE);
+                opt
+            })
+            .collect()
     }
 }
 

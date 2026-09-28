@@ -420,6 +420,29 @@ impl Game {
         false
     }
 
+    /// Whether a static permission lets `p` cast `card` from their hand without paying its
+    /// mana cost, as a spell with the characteristics `chars` (CR 601.3e).
+    fn free_from_hand_permitted(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        self.statics
+            .play_permissions
+            .iter()
+            .any(|(src, ctl, perm)| {
+                let free = perm.cost.as_ref().is_some_and(Cost::is_free);
+                if !free || !perm.spells || perm.zone != ZoneKind::Hand {
+                    return false;
+                }
+                let ctx = Ctx::new(Some(*src), *ctl);
+                let view = WithChars { id: card, chars };
+                self.player_rel_matches(perm.who, p, &ctx)
+                    && self.matches_view(&view, card, &as_spell_filter(&perm.what), &ctx)
+            })
+    }
+
     fn card_has_land_face(&self, c: ObjectId) -> bool {
         let o = self.obj(c);
         o.chars.is_land()
@@ -588,6 +611,19 @@ impl Game {
                             }
                             _ => {}
                         }
+                    }
+                }
+            }
+            // "You may cast spells from your hand without paying their mana costs"
+            // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
+            if in_hand {
+                for face in castable_faces(self, card) {
+                    let chars = self.face_characteristics(card, face);
+                    if self.free_from_hand_permitted(p, card, &chars) {
+                        let mut opt = CastOption::normal(face);
+                        opt.method = CastMethod::Free;
+                        opt.alt_cost = Some(Cost::free());
+                        out.push(opt);
                     }
                 }
             }
@@ -970,12 +1006,22 @@ impl Game {
         // Several instances of a keyword give several ways to cast it the same way (e.g.
         // two blitz costs): only one may be used, the player's choice (CR 702.152b).
         let i = if opts.len() > 1 {
+            // The same way of casting it with different faces (e.g. escape for the
+            // creature or its Adventure) is named with the face.
+            let faces_differ = opts.iter().any(|o| o.face != opts[0].face);
             let options = opts
                 .iter()
-                .map(|o| match (&o.tag, &o.alt_cost) {
-                    (Some(t), _) => t.to_string(),
-                    (None, Some(c)) => format!("{c:?}"),
-                    (None, None) => format!("{:?}", o.method),
+                .map(|o| {
+                    let way = match (&o.tag, &o.alt_cost) {
+                        (Some(t), _) => t.to_string(),
+                        (None, Some(c)) => format!("{c:?}"),
+                        (None, None) => format!("{:?}", o.method),
+                    };
+                    if faces_differ {
+                        format!("{way}: {}", self.face_characteristics(card, o.face).name)
+                    } else {
+                        way
+                    }
                 })
                 .collect();
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
@@ -1129,7 +1175,8 @@ impl Game {
                     cast_info.times_kicked += n;
                     cast_info.paid.push("kicker".into());
                 }
-            } else if self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
+            } else if (self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
+                || self.total_payable_with(p, id, &chars, opt, &extra, &cost))
                 && matches!(
                     self.ask(
                         p,
@@ -1279,18 +1326,17 @@ impl Game {
         // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
         // cost is reduced (CR 118.7e).
         crate::cost_rules::choose_reduction_halves(self, p, id);
-        let mut total = self.base_total_cost(p, id, &chars, opt, x as u32);
-        add_cost(&mut total, &extra);
-        // Mode costs (spree, etc.).
+        // Mode costs (spree, etc.) are additional costs too.
         if let (Some(modal), Some(si)) = (&body.modal, self.obj(id).stack.as_deref()) {
             for cm in &si.chosen {
                 if let Some(m) = cm.mode {
                     if let Some(c) = &modal.modes[m].cost {
-                        add_cost(&mut total, c);
+                        add_cost(&mut extra, c);
                     }
                 }
             }
         }
+        let mut total = self.total_cost_with(p, id, &chars, opt, x as u32, &extra);
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
@@ -1384,6 +1430,22 @@ impl Game {
         opt: &CastOption,
         x: u32,
     ) -> Cost {
+        self.total_cost_with(p, card, chars, opt, x, &Cost::free())
+    }
+
+    /// The total cost (CR 601.2f): the mana cost or alternative cost, plus `extra` (the
+    /// additional costs announced as the spell is cast, such as kicker and mode costs)
+    /// and the other additional costs and cost increases, minus the cost reductions, which
+    /// apply after every increase.
+    pub fn total_cost_with(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        opt: &CastOption,
+        x: u32,
+        extra: &Cost,
+    ) -> Cost {
         let mut cost = match &opt.alt_cost {
             Some(c) => c.clone(),
             None => Cost {
@@ -1403,6 +1465,8 @@ impl Game {
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
         }
+        // Additional costs announced as it's cast (CR 601.2b).
+        add_cost(&mut cost, extra);
         // CR 903.8: the commander tax (each commander separately, CR 702.124d).
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
@@ -2031,6 +2095,24 @@ impl Game {
 
     /// Optimistic check that a cost could be paid (counts potential mana from untapped
     /// sources without solving colors exactly).
+    /// Whether the total cost of the spell `id` being cast, with the additional costs
+    /// announced so far (`extra`) and `more`, could be paid (optimistically): cost
+    /// reductions apply to the additional costs too (CR 601.2f).
+    fn total_payable_with(
+        &self,
+        p: PlayerId,
+        id: ObjectId,
+        chars: &Characteristics,
+        opt: &CastOption,
+        extra: &Cost,
+        more: &Cost,
+    ) -> bool {
+        let mut with = extra.clone();
+        add_cost(&mut with, more);
+        let total = self.total_cost_with(p, id, chars, opt, 0, &with);
+        self.can_pay_cost_optimistic(p, &total, Some(id), chars)
+    }
+
     pub fn can_pay_cost_optimistic(
         &self,
         p: PlayerId,
