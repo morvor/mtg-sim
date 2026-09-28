@@ -30,6 +30,7 @@ pub mod attach;
 pub mod attraction_cards;
 pub mod battle;
 pub mod behold;
+pub mod block_choice;
 pub mod card;
 pub mod cases;
 pub mod casting;
