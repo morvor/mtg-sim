@@ -24,7 +24,7 @@ fn splice(t: &mut TestGame, p: PlayerId, yes: bool) {
 
 #[test]
 fn targets_for_spliced_text_are_chosen_after_the_reveal_and_may_differ() {
-    cr!("702.47b", "702.47d", "601.2c");
+    cr!("601.2b", "702.47d", "601.2c");
     ruling!(
         "Strange Inversion",
         "You choose all targets for the spell after revealing cards you want to splice, including any targets required by the text of any of those cards. You may choose a different target for each instance of the word \"target\" on the resulting spell."
@@ -126,7 +126,7 @@ fn a_spliced_spell_whose_targets_are_all_illegal_does_nothing() {
 
 #[test]
 fn a_card_cant_be_spliced_onto_itself() {
-    cr!("702.47a", "702.47b");
+    cr!("702.47a");
     ruling!(
         "Strange Inversion",
         "A card with a splice ability can't be spliced onto itself because the spell is on the stack (and not in your hand) when you reveal the cards you want to splice onto it."

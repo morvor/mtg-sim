@@ -8,10 +8,11 @@ use crate::r_s03_common::{in_hand_with_mana, run_effect};
 use crate::r_s05_common::enter;
 use crate::r_s15_common::*;
 use mtg_engine::ability::*;
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -183,8 +184,37 @@ fn there_are_seven_role_tokens() {
         );
         assert!(o.has_keyword(KeywordKind::Enchant), "{name}");
         assert_eq!(t.pt(bears), pt, "{name}");
+        // What each Role grants beyond its power and toughness.
+        let role = roles[0];
+        match name {
+            "Monster" => assert!(t.obj(bears).has_keyword(KeywordKind::Trample)),
+            "Royal" => assert!(t.obj(bears).has_keyword(KeywordKind::Ward)),
+            // "When this token is put into a graveyard from the battlefield, each opponent
+            // loses 1 life."
+            "Wicked" => {
+                destroy(&mut t, role);
+                t.resolve_all();
+                assert_eq!(t.life(P1), 19);
+            }
+            // Sorcerer: "Whenever this creature attacks, scry 1." Young Hero: "Whenever
+            // this creature attacks, if its toughness is 3 or less, put a +1/+1 counter on
+            // it."
+            "Sorcerer" | "Young Hero" => {
+                t.set_step(P0, Step::PrecombatMain);
+                t.attack(&[(bears, Entity::Player(P1))], &[]);
+                t.resolve_all();
+                let scried = t
+                    .asked()
+                    .iter()
+                    .any(|(p, d)| *p == P0 && matches!(d, Decision::Scry { .. }));
+                assert_eq!(scried, name == "Sorcerer");
+                let counters = t.counters(bears, mtg_engine::types::counters::PLUS1);
+                assert_eq!(counters, (name == "Young Hero") as u32);
+            }
+            _ => {}
+        }
     }
-    // Monster: trample; Royal: ward {1}.
+    // Monstrous Rage creates a Monster Role.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     monstrous_rage(&mut t, P0, bears);

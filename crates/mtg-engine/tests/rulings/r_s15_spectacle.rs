@@ -18,9 +18,20 @@ fn the_spectacle_cost_doesnt_depend_on_how_much_life_or_how_many_opponents_lost(
         "A card's spectacle cost is the same no matter how much life your opponents lost or how many opponents lost life."
     );
     supported("Light Up the Stage");
-    // Light Up the Stage: {2}{R} sorcery, spectacle {R}. Its opponents lose 1 life, 10
-    // life, or (in a four-player game) each of three opponents loses 5 life: casting it
-    // for its spectacle cost always costs {R}.
+    // Light Up the Stage: {2}{R} sorcery, spectacle {R}. With no opponent having lost life
+    // this turn, it can't be cast for its spectacle cost.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let lus = t.hand(P0, "Light Up the Stage");
+    assert!(!can_cast(&mut t, P0, lus, SPECTACLE));
+    assert!(can_cast(
+        &mut t,
+        P0,
+        lus,
+        mtg_engine::object::CastMethod::Normal
+    ));
+    // Its opponents lose 1 life, 10 life, or (in a four-player game) each of three
+    // opponents loses 5 life: casting it for its spectacle cost always costs {R}.
     for (players, losses) in [
         (2, vec![(P1, 1)]),
         (2, vec![(P1, 10)]),
