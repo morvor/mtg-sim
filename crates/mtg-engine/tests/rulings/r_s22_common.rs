@@ -149,22 +149,34 @@ pub fn zone_now(t: &TestGame, id: ObjectId) -> Zone {
 /// CR 400.7, so its id can't be scripted in advance); every other decision gets the
 /// scripted answer.
 pub fn choose_named_when_offered(t: &mut TestGame, p: PlayerId, name: &str) {
+    choose_names_when_offered(t, p, &[name]);
+}
+
+/// Like [`choose_named_when_offered`], answering with every object offered whose name is
+/// among `names`.
+pub fn choose_names_when_offered(t: &mut TestGame, p: PlayerId, names: &[&str]) {
     struct PickNamed {
         inner: Box<dyn mtg_engine::decision::Agent>,
-        name: String,
+        names: Vec<String>,
         done: bool,
     }
     impl mtg_engine::decision::Agent for PickNamed {
         fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
             if !self.done {
                 if let Decision::ChooseEntities { candidates, .. } = d {
-                    let hit = candidates.iter().find(|e| match e {
-                        Entity::Object(o) => g.obj(*o).chars.name == self.name.as_str(),
-                        _ => false,
-                    });
-                    if let Some(e) = hit {
+                    let hits: Vec<Entity> = candidates
+                        .iter()
+                        .filter(|e| match e {
+                            Entity::Object(o) => {
+                                self.names.iter().any(|n| g.obj(*o).chars.name == n.as_str())
+                            }
+                            _ => false,
+                        })
+                        .copied()
+                        .collect();
+                    if !hits.is_empty() {
                         self.done = true;
-                        return Answer::Entities(vec![*e]);
+                        return Answer::Entities(hits);
                     }
                 }
             }
@@ -178,7 +190,7 @@ pub fn choose_named_when_offered(t: &mut TestGame, p: PlayerId, name: &str) {
     );
     agents[p.idx()] = Box::new(PickNamed {
         inner,
-        name: name.to_string(),
+        names: names.iter().map(|n| n.to_string()).collect(),
         done: false,
     });
 }
