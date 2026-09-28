@@ -692,6 +692,12 @@ impl Game {
                         .as_ref()
                         .is_some_and(|si| si.cast.paid.iter().any(|p| p == name))
             }
+            Filter::AbilityFrom(inner) => match o.stack.as_deref().map(|si| &si.kind) {
+                Some(StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }) => {
+                    self.matches_view(view, *source, inner, ctx)
+                }
+                _ => false,
+            },
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }

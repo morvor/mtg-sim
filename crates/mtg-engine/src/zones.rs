@@ -683,6 +683,9 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
         order_simultaneous_stack_objects(g, &copies);
         if new_targets {
             for c in &copies {
+                if !crate::copy::has_chosen_targets(g, *c) {
+                    continue;
+                }
                 let p = g.obj(*c).controller;
                 if g.ask_yes_no(p, Some(*c), "Choose new targets for the copy?", false) {
                     crate::target_rules::change_targets(g, p, *c, TargetChange::ChooseNew, None);

@@ -1106,6 +1106,9 @@ pub enum Filter {
     /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
     /// ability (CR 607.2f).
     ManaValueOfChosenQuality,
+    /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
+    /// filter: "activated or triggered ability ... from an artifact source".
+    AbilityFrom(Box<Filter>),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }

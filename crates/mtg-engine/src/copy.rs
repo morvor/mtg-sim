@@ -63,7 +63,7 @@ pub fn copy_spell(
             player: controller,
         });
     }
-    if new_targets {
+    if new_targets && has_chosen_targets(g, id) {
         let keep = g.ask(
             controller,
             Decision::YesNo {
@@ -83,6 +83,17 @@ pub fn copy_spell(
         }
     }
     Some(id)
+}
+
+/// Whether the spell or ability `id` on the stack has any chosen targets. Only those can
+/// be changed (CR 707.10c, 115.7), so a copy without targets offers no "choose new
+/// targets" choice.
+pub fn has_chosen_targets(g: &Game, id: ObjectId) -> bool {
+    g.obj(id).stack.as_deref().is_some_and(|si| {
+        si.chosen
+            .iter()
+            .any(|m| m.targets.iter().any(|t| !t.is_empty()))
+    })
 }
 
 /// CR 707.9d: when a copy effect provides specific values for a characteristic (its
