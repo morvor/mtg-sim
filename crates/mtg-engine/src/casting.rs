@@ -1242,6 +1242,22 @@ impl Game {
             si.x = Some(x as i32);
             si.cast = cast_info.clone();
         }
+        // CR 601.2b: how each Phyrexian symbol of the cost will be paid is announced now.
+        let mut announced = match &opt.alt_cost {
+            Some(c) => c.mana.clone(),
+            None => chars.mana_cost.clone(),
+        }
+        .unwrap_or_default();
+        for m in [
+            &extra.mana,
+            &opt.extra_cost.as_ref().and_then(|c| c.mana.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            announced.add(m);
+        }
+        crate::cost_rules::announce_phyrexian(self, p, id, &announced);
 
         // 601.2c–d: modes and targets.
         let body = self.spell_body(id);
@@ -1298,7 +1314,7 @@ impl Game {
         // CR 118.14: mana of any type may be spent to cast it.
         crate::cost_rules::spend_any_type(self, p, id, &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
-        crate::cost_rules::choose_payment_ways(self, p, Some(id), &mut total);
+        crate::cost_rules::choose_payment_ways_for(self, p, Some(id), Some(id), &mut total);
         // CR 702.51a–b: once the total cost is determined, keywords such as convoke may
         // pay part of it other than with mana.
         crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
@@ -1939,6 +1955,10 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
+        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost will be paid.
+        if let Some(m) = &act.cost.mana {
+            crate::cost_rules::announce_phyrexian(self, p, id, m);
+        }
         // 602.2b: modes, targets.
         if !self.choose_modes_and_targets(id, &act.body, &mut ctx) {
             return Err(Illegal("no legal targets".into()));
@@ -1949,7 +1969,7 @@ impl Game {
             *m = m.with_x(x as u32);
         }
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
-        crate::cost_rules::choose_payment_ways(self, p, Some(src), &mut cost);
+        crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
