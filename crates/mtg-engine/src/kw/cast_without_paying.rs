@@ -1,7 +1,8 @@
-//! Static abilities that let a player cast spells without paying their mana costs
-//! (Omniscience: "You may cast spells from your hand without paying their mana costs.";
-//! Dracogenesis: "You may cast Dragon spells without paying their mana costs."), compiled
-//! as an alternative cost of {0} for the spells they affect
+//! Static abilities that let a player cast spells without paying their mana costs from
+//! wherever they may cast them (Dracogenesis: "You may cast Dragon spells without paying
+//! their mana costs."; "... from your hand ...", Omniscience, is a `PlayPermission`, see
+//! `oracle/patterns/r601_cast_free_from_hand.rs`), compiled as an alternative cost of {0}
+//! for the spells they affect
 //! (`CostChange::AlternativeCost` for `CostTarget::Spells`, see
 //! `oracle/patterns/cast_without_paying_static.rs`). Each such spell the player could cast
 //! gets a way of casting it without paying its mana cost ([`CastMethod::Free`], CR 118.9):
