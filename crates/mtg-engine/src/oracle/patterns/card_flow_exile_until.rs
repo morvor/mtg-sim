@@ -67,10 +67,13 @@ fn effect(who: PlayerRef, filter: Filter) -> Effect {
     }
 }
 
-/// Whether the effect ends by exiling cards until one was found.
+/// Whether the effect ends by exiling cards until one was found, or by exiling a card
+/// from among the top cards looked at ("You may exile a legendary creature card from
+/// among them.", Djeru and Hazoret).
 fn ends_with_exile_until(e: &Effect) -> bool {
     match e {
         Effect::RevealUntil { found_to, .. } => found_to.zone == ZoneKind::Exile,
+        Effect::Dig { take_to, .. } => take_to.zone == ZoneKind::Exile,
         Effect::Seq(v) => v.last().is_some_and(ends_with_exile_until),
         _ => false,
     }
@@ -80,8 +83,13 @@ fn ends_with_exile_until(e: &Effect) -> bool {
 /// exiling cards until one was found.
 fn may_cast_that_card(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let free = match end(l) {
-        "until end of turn, you may cast that card without paying its mana cost" => true,
-        "until end of turn, you may cast that card" => false,
+        "until end of turn, you may cast that card without paying its mana cost"
+        | "until end of turn, you may cast the exiled card without paying its mana cost" => {
+            true
+        }
+        "until end of turn, you may cast that card" | "until end of turn, you may cast the exiled card" => {
+            false
+        }
         _ => return false,
     };
     if !ends_with_exile_until(prev) {
