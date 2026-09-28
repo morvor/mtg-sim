@@ -134,11 +134,17 @@ fn battles_cant_attack_or_block_and_a_creature_that_becomes_a_battle_leaves_comb
     modify(
         &mut t,
         theirs,
-        vec![Modification::AddTypes(vec![CardType::Creature])],
+        vec![
+            Modification::AddTypes(vec![CardType::Creature]),
+            Modification::SetPT(Some(Value::c(4)), Some(Value::c(4))),
+        ],
     );
+    let hill_giant = t.battlefield(P1, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(t.on_battlefield(theirs) && t.obj(theirs).is_creature());
     assert!(!t.g.can_block(theirs, bears));
+    assert!(t.g.can_block(hill_giant, bears));
     // An attacking creature that becomes a battle is removed from combat.
     modify(
         &mut t,
