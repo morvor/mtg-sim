@@ -1614,7 +1614,8 @@ pub fn declare_blockers_step(g: &mut Game) {
             group[0]
         };
         // "You choose which creatures block this combat and how those creatures block."
-        let decider = crate::block_choice::block_decider(g, &group).unwrap_or(decider);
+        let chosen_by = crate::block_choice::block_decider(g, &group);
+        let decider = chosen_by.unwrap_or(decider);
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;
@@ -1645,7 +1646,7 @@ pub fn declare_blockers_step(g: &mut Game) {
             };
             // Blocks chosen by another player (Odric): if a player declines to pay the
             // costs to block, a new set of blocks is proposed.
-            if crate::block_choice::costs_accepted(g, decider, &v) {
+            if chosen_by.is_none() || crate::block_choice::costs_accepted(g, decider, &v) {
                 break v;
             }
             if proposals >= 3 {
