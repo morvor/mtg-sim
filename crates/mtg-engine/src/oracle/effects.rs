@@ -1048,7 +1048,7 @@ fn p_exile(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 /// "return target creature to its owner's hand", "return target creature card from your
-/// graveyard to your hand", "... to the battlefield [tapped]".
+/// graveyard to your hand", "... to the battlefield [tapped [and attacking]]".
 fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("return ")?;
     let (what, tail) = object_ref(r, b)?;
@@ -1073,6 +1073,11 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         || t == "to the battlefield tapped under your control"
     {
         Destination::battlefield().under_your_control().tapped()
+    } else if t == "to the battlefield tapped and attacking" {
+        // CR 508.4: it's attacking without having been declared as an attacker.
+        let mut d = Destination::battlefield().under_your_control().tapped();
+        d.attacking = true;
+        d
     } else if t == "to the battlefield under its owner's control" {
         let mut d = Destination::battlefield();
         d.controller = Some(PlayerRef::OwnerOf(Box::new(what.clone())));
