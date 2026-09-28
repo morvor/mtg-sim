@@ -687,6 +687,9 @@ impl Game {
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
+        if opt.any_time && !crate::combat::spell_cast_restrictions_ok(self, p, card, &chars) {
+            return false;
+        }
         if self.legendary_spell_prohibited(p, &chars) {
             return false;
         }
@@ -996,6 +999,15 @@ impl Game {
         card: ObjectId,
         opt: CastOption,
     ) -> Result<ObjectId, Illegal> {
+        // A spell cast while another spell or ability resolves ignores only the timing
+        // permissions based on its card type (CR 608.2g); its own "Cast this spell only
+        // ..." restrictions still apply (CR 601.3).
+        if opt.any_time {
+            let chars = self.option_characteristics(card, &opt);
+            if !crate::combat::spell_cast_restrictions_ok(self, p, card, &chars) {
+                return Err(Illegal("restriction".into()));
+            }
+        }
         let snapshot = self.clone();
         self.special.casting += 1;
         match self.cast_inner(p, card, &opt) {

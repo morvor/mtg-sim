@@ -195,6 +195,54 @@ pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosit
         .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }
 
+/// Where a resolving instant/sorcery goes (CR 608.2n), letting its controller choose
+/// between a replacement effect tied to how it was cast (e.g. rebound, buyback) and other
+/// replacement effects that would apply to it being put into its owner's graveyard (e.g.
+/// Rest in Peace), CR 616.1. Returns the destination, and whether the player chose one
+/// of those other effects instead (they then apply as it moves to the graveyard, and the
+/// keyword's effect doesn't happen).
+pub fn choose_resolved_spell_destination(
+    g: &mut Game,
+    id: ObjectId,
+) -> ((Zone, LibraryPosition), bool) {
+    let o = g.obj(id);
+    let (owner, controller) = (o.owner, o.controller);
+    let graveyard = (Zone::Graveyard(owner), LibraryPosition::Top);
+    if crate::adventure::resolved_destination(g, id).is_some() {
+        return (resolved_spell_destination(g, id), false);
+    }
+    let Some((dest, label)) = crate::kw::resolved_destination_by(g, id) else {
+        return (graveyard, false);
+    };
+    let Some(label) = label else {
+        return (dest, false);
+    };
+    let others = g.applicable_replacements(&crate::replacement::ReplEvent::Move(
+        crate::replacement::MoveEv {
+            obj: id,
+            to: graveyard.0,
+            pos: graveyard.1,
+            cause: crate::events::MoveCause::Resolve,
+            by: Some(controller),
+            etb: Default::default(),
+            source: None,
+        },
+    ));
+    if others.is_empty() {
+        return (dest, false);
+    }
+    let n = others.len() + 1;
+    let mut options = vec![label];
+    options.extend(others);
+    match g.ask(
+        controller,
+        crate::decision::Decision::ChooseReplacement { options },
+    ) {
+        crate::decision::Answer::Index(i) if i > 0 && i < n => (graveyard, true),
+        _ => (dest, false),
+    }
+}
+
 /// After a resolved instant/sorcery was put where it goes (`new`), e.g. rebound's delayed
 /// triggered ability (CR 702.88a).
 pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {

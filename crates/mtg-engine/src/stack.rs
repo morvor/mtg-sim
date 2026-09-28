@@ -1160,7 +1160,8 @@ impl Game {
         self.exec_chosen(&body, &chosen, &mut ctx);
         // CR 608.2n: put into owner's graveyard (or wherever a replacement sends it).
         if self.is_live(id) && self.obj(id).zone == Zone::Stack {
-            let dest = crate::keyword_impls::resolved_spell_destination(self, id);
+            let (dest, declined) =
+                crate::keyword_impls::choose_resolved_spell_destination(self, id);
             let moved = self.move_object_ev(MoveEv {
                 obj: id,
                 to: dest.0,
@@ -1170,7 +1171,9 @@ impl Game {
                 etb: EtbInfo::default(),
                 source: None,
             });
-            if let Some(new) = moved {
+            // The keyword's replacement effect (e.g. rebound's delayed trigger) happens
+            // only if it was applied.
+            if let (Some(new), false) = (moved, declined) {
                 crate::keyword_impls::after_spell_resolved(self, id, new);
             }
         }
