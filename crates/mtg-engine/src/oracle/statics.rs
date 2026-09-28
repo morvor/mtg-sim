@@ -531,6 +531,11 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
 /// Value phrases: "the number of creatures you control", "its power", "X", "twice X".
 pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
+    // "twice the number of profit votes" (Emissary Green).
+    if let Some(r) = s.strip_prefix("twice the number of ") {
+        let (v, rest) = parse_value_phrase(&format!("the number of {r}"), b)?;
+        return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
+    }
     // CR 702.167c: "the total power of the exiled cards used to craft it".
     if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
         return Some(v);
