@@ -7,44 +7,15 @@
 use crate::r_s01_common::*;
 use crate::r_s04_common::add_mana;
 use crate::r_s08_common::mana_value;
+use crate::r_s20_common::sram_expertise;
 use mtg_engine::ability::{Cmp, Filter, Value};
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Answer;
 use mtg_engine::eval::Ctx;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
-
-/// The options offered by the last "cast a spell ... from your hand" choice asked of P0.
-pub fn expertise_options(t: &TestGame) -> Vec<String> {
-    t.asked()
-        .iter()
-        .rev()
-        .find_map(|(p, d)| match d {
-            Decision::ChooseOption {
-                prompt, options, ..
-            } if *p == P0 && prompt.contains("from your hand") => Some(options.clone()),
-            _ => None,
-        })
-        .unwrap_or_default()
-}
-
-/// P0 casts Sram's Expertise ("Create three 1/1 colorless Servo artifact creature tokens.
-/// You may cast a spell with mana value 3 or less from your hand without paying its mana
-/// cost.") and it resolves, P0 answering the choice of a spell with option `pick`. The
-/// spell cast this way (if any) is left on the stack. Returns the options offered.
-pub fn sram_expertise(t: &mut TestGame, pick: usize) -> Vec<String> {
-    add_mana(t, P0, ManaType::W, 4);
-    let expertise = t.hand(P0, "Sram's Expertise");
-    let spell = t.cast(P0, expertise).go();
-    t.answer(P0, DecisionKind::Option, Answer::Index(pick));
-    t.settle();
-    t.g.resolve_top();
-    t.settle();
-    assert!(!t.g.stack.contains(&spell));
-    expertise_options(t)
-}
 
 /// The value of `v` for P0 now.
 fn value(t: &mut TestGame, v: Value) -> i64 {
@@ -171,9 +142,10 @@ fn sram_expertise_can_cast_fuss_but_not_bother() {
     assert_eq!(t.stack_len(), 1);
     let fuss = t.g.stack[0];
     assert_eq!(t.obj(fuss).chars.name, "Fuss");
-    // It was cast without paying its mana cost: P0's mana pool was emptied by the
-    // Expertise, and nothing else paid for it.
-    assert_eq!(t.player(P0).mana_pool.total(), 0);
+    // It was cast from P0's hand without paying its mana cost: no mana was spent on it.
+    let cast = &t.obj(fuss).stack.as_ref().expect("a spell").cast;
+    assert_eq!(cast.method, CastMethod::Free);
+    assert!(cast.mana_spent.is_empty());
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Fuss // Bother"));
     // "Put a +1/+1 counter on each attacking creature you control": none attacking.

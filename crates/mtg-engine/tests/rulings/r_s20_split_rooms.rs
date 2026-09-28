@@ -7,7 +7,7 @@ use crate::r_s01_common::*;
 use crate::r_s04_common::add_mana;
 use crate::r_s06_common::activate_containing;
 use crate::r_s08_common::mana_value;
-use crate::r_s20_split::sram_expertise;
+use crate::r_s20_common::sram_expertise;
 use mtg_engine::ability::{AbilityKind, Cmp, Filter, PlayerRef, Value};
 use mtg_engine::decision::{Action, Answer, SpecialAction};
 use mtg_engine::eval::Ctx;
