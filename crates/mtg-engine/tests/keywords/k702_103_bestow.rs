@@ -336,7 +336,7 @@ fn a_copy_of_a_bestowed_aura_spell_is_bestowed() {
     t.lands(P0, "Wastes", 4);
     let (_, spell) = bestow_rollicker(&mut t, bears);
     // "{4}, {T}: Copy target permanent spell you control. (The copy becomes a token.)"
-    t.activate(P0, engine, 1, &[Entity::Object(spell)]).unwrap();
+    t.activate(P0, engine, 2, &[Entity::Object(spell)]).unwrap();
     t.resolve();
     let copy = *t.g.stack.last().unwrap();
     assert_ne!(copy, spell);
