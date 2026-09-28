@@ -53,6 +53,11 @@ impl KeywordRules for Paradigm {
         Some((Zone::Exile, LibraryPosition::Top))
     }
 
+    /// The spell's own instruction, not a replacement effect.
+    fn resolved_destination_replaces(&self) -> bool {
+        false
+    }
+
     /// "If this is the first time a spell you control with this spell's name has resolved
     /// this game, at the beginning of each of your precombat main phases for the rest of
     /// the game, create a copy of this object in exile."
@@ -112,9 +117,13 @@ impl KeywordRules for Paradigm {
             return true;
         };
         let o = g.obj(spell).clone();
-        let Some(copy) =
-            crate::copy_rules::new_card_copy(g, o.card.clone(), o.copiable.clone(), ctx.controller, Zone::Exile)
-        else {
+        let Some(copy) = crate::copy_rules::new_card_copy(
+            g,
+            o.card.clone(),
+            o.copiable.clone(),
+            ctx.controller,
+            Zone::Exile,
+        ) else {
             return true;
         };
         g.recompute();

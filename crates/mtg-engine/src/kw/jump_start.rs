@@ -86,6 +86,12 @@ impl KeywordRules for JumpStart {
         vec![opt]
     }
 
+    /// "Exile it instead of putting it anywhere else" applies wherever the card would go,
+    /// after any other replacement effect: its controller has nothing to choose.
+    fn resolved_destination_replaces(&self) -> bool {
+        false
+    }
+
     fn resolved_destination(
         &self,
         g: &Game,

@@ -338,7 +338,17 @@ impl Game {
                     let before = self.events.len();
                     self.deal_damage_batch(evs, false);
                     self.record_damaged(src, before, ctx);
-                    ctx.prev_value = n as i64;
+                    // "The damage dealt this way": the total actually dealt to all the
+                    // recipients, as modified by replacement and prevention (CR 120.4b).
+                    ctx.prev_value = self.events[before.min(self.events.len())..]
+                        .iter()
+                        .map(|e| match e {
+                            Event::Damage { source, amount, .. } if *source == src => {
+                                *amount as i64
+                            }
+                            _ => 0,
+                        })
+                        .sum();
                 }
             }
             Effect::DealDamageExcess {
