@@ -623,6 +623,12 @@ impl Game {
         if o.chars.has_keyword(k) || o.base.keywords().any(|x| x.kind == k) {
             return;
         }
+        // The card's own ability wasn't granted by an effect: disturb, printed on the front
+        // face of a card cast with its back face up, isn't an ability of that spell
+        // (CR 702.146a, 712.8c).
+        if self.obj(card).base.keywords().any(|x| x.kind == k) {
+            return;
+        }
         let controller = o.controller;
         let Some(kw) = self
             .obj(card)
