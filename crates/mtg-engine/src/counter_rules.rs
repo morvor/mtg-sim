@@ -34,23 +34,22 @@ fn def(action: ReplacementAction) -> ReplacementDef {
     }
 }
 
-fn remove_shield() -> ReplacementAction {
-    ReplacementAction::Instead(Box::new(Effect::RemoveCounters {
+fn remove_a_shield_counter() -> Effect {
+    Effect::RemoveCounters {
         what: Sel::This,
         kind: Some(counters::SHIELD.into()),
         n: Value::c(1),
-    }))
+    }
 }
 
-/// Whether damage can't be prevented (then prevention effects don't apply).
-pub fn damage_cant_be_prevented(g: &Game) -> bool {
-    g.statics
-        .restrictions
-        .iter()
-        .any(|(_, _, r)| matches!(r, Restriction::DamageCantBePrevented))
-        || g.rule_effects
-            .iter()
-            .any(|e| matches!(e.restriction, Restriction::DamageCantBePrevented))
+fn remove_shield() -> ReplacementAction {
+    ReplacementAction::Instead(Box::new(remove_a_shield_counter()))
+}
+
+/// "Prevent that damage and remove a shield counter from it": a prevention effect, so if
+/// the damage can't be prevented, the counter is still removed (CR 615.12).
+fn prevent_and_remove_shield() -> ReplacementAction {
+    ReplacementAction::PreventAndThen(None, Box::new(remove_a_shield_counter()))
 }
 
 /// The replacement and prevention effects counters create that apply to a proposed event:
@@ -81,16 +80,12 @@ pub fn counter_replacements(g: &Game, ev: &ReplEvent) -> Vec<CounterReplacement>
             target: Entity::Object(o),
             amount,
             ..
-        } if *amount > 0
-            && on_bf(*o)
-            && g.obj(*o).counter(counters::SHIELD) > 0
-            && !damage_cant_be_prevented(g) =>
-        {
+        } if *amount > 0 && on_bf(*o) && g.obj(*o).counter(counters::SHIELD) > 0 => {
             out.push((
                 ReplKey::Static(*o, SHIELD_DAMAGE_UID),
                 *o,
                 g.obj(*o).controller,
-                def(remove_shield()),
+                def(prevent_and_remove_shield()),
                 "Shield counter: prevent the damage and remove it".into(),
             ));
         }
