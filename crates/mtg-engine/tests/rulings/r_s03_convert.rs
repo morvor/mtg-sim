@@ -232,8 +232,9 @@ fn more_than_meets_the_eye_is_an_alternative_cost_and_additional_costs_still_app
     supported(CYCLONUS);
     supported("Raiding Schemes");
     // An effect lets P0 cast Cyclonus from exile without paying its mana cost: that's
-    // casting it normally (front face up) for free, or converted for {5}{U}{B}, never
-    // converted for free.
+    // casting it normally (front face up) for free, never converted — that would be
+    // another alternative cost, for free or for {5}{U}{B} (the permission is to cast it
+    // without paying its mana cost, an alternative cost itself, CR 118.9a).
     let mut t = TestGame::new(2);
     let cy = t.exile(P0, CYCLONUS);
     mtg_engine::casting::grant_play_permission(
@@ -248,17 +249,14 @@ fn more_than_meets_the_eye_is_an_alternative_cost_and_additional_costs_still_app
     assert!(opts
         .iter()
         .any(|o| o.face == FaceState::Front && o.method == CastMethod::Free));
-    let converted = converted_options(&t, P0, cy);
-    assert_eq!(converted.len(), 1);
-    assert!(opts
-        .iter()
-        .filter(|o| o.face == FaceState::Back)
-        .all(|o| o.method == MTMTE && o.alt_cost.as_ref().is_some_and(|c| c.mana.is_some())));
+    assert!(converted_options(&t, P0, cy).is_empty());
+    assert!(opts.iter().all(|o| o.face != FaceState::Back));
     t.lands(P0, "Island", 1);
     t.lands(P0, "Swamp", 1);
-    t.lands(P0, "Wastes", 4);
-    // Six lands aren't enough for the converted spell.
+    t.lands(P0, "Wastes", 5);
+    // Not even with mana for the converted spell's cost.
     assert!(t.cast(P0, cy).method(MTMTE).try_go().is_err());
+    assert_eq!(tapped_lands(&t, P0), 0);
 
     // Raiding Schemes: "Each noncreature spell you cast has conspire." The converted
     // spell is a blue and black noncreature spell: P0 pays its conspire cost (an

@@ -63,7 +63,13 @@ pub fn check_free_cast_costs(fc: &FreeCaster) {
     });
     assert_eq!(tapped_named(&t, P0, "Wastes"), 0);
     assert!(t.on_battlefield(giant));
-    assert!(t.in_graveyard(P0, "Burst Lightning") || t.in_exile("Burst Lightning"));
+    // It resolved (the card may be P1's, cast from P1's library or graveyard).
+    assert!(
+        t.in_graveyard(P0, "Burst Lightning")
+            || t.in_graveyard(P1, "Burst Lightning")
+            || t.in_exile("Burst Lightning")
+    );
+    assert_eq!(t.stack_len(), 0);
 
     // A mandatory additional cost must be paid.
     let (name, fodder) = if fc.instants_only {
@@ -91,7 +97,8 @@ pub fn check_free_cast_costs(fc: &FreeCaster) {
     let lib = t.library_size(P0);
     (fc.run)(&mut t, spell, &|_| {});
     assert_eq!(t.library_size(P0), lib, "the spell wasn't cast");
-    assert_eq!(t.zone(spell), zone);
+    // It stays where it was (or where the effect exiled it before offering to cast it).
+    assert!(t.zone(spell) == zone || t.zone(spell) == Zone::Exile);
     assert_eq!(t.stack_len(), 0);
 
     // No alternative cost: Cyclonic Rift can't be cast for its overload cost {6}{U}.

@@ -346,13 +346,30 @@ impl Game {
 
     /// Whether a rule or effect allows player `p` to play `card` from where it is, as a
     /// land (`land`) or as a spell with the characteristics `chars` it would have
-    /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed.
+    /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed. A
+    /// permission to cast the card only without paying its mana cost doesn't allow
+    /// casting it any other way, such as for another alternative cost (CR 118.9a); see
+    /// [`Game::permission_allows_with`].
     pub fn permission_allows(
         &self,
         p: PlayerId,
         card: ObjectId,
         chars: &Characteristics,
         land: bool,
+    ) -> bool {
+        self.permission_allows_with(p, card, chars, land, land)
+    }
+
+    /// [`Game::permission_allows`], counting permissions to play the card without paying
+    /// its mana cost ("you may cast that card without paying its mana cost") only if
+    /// `free_grants`: they allow it to be cast only that way (CR 118.9a).
+    pub fn permission_allows_with(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+        free_grants: bool,
     ) -> bool {
         let o = self.obj(card);
         if o.zone == Zone::Hand(p) {
@@ -362,7 +379,7 @@ impl Game {
         if self
             .play_grants
             .iter()
-            .any(|g| g.player == p && g.object == card)
+            .any(|g| g.player == p && g.object == card && (free_grants || !g.free))
         {
             return true;
         }
@@ -596,7 +613,8 @@ impl Game {
             if !in_hand {
                 out.retain(|opt| {
                     let chars = self.option_characteristics(card, opt);
-                    self.permission_allows(p, card, &chars, false)
+                    let free = opt.method == CastMethod::Free;
+                    self.permission_allows_with(p, card, &chars, false, free)
                 });
             }
         }

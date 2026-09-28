@@ -171,10 +171,24 @@ fn more_than_meets_the_eye_is_an_alternative_cost() {
     let card = t.g.current(card);
     let spell = t.cast(P0, card).method(CastMethod::Free).go();
     assert_eq!(t.g.obj(spell).face, FaceState::Front);
-    // With {2}{B}, it can be cast converted instead, paying that cost.
+    // Even with {2}{B}, it can't be cast converted instead: the permission is to cast
+    // it without paying its mana cost, which is itself an alternative cost (see the
+    // Nicol Bolas, God-Pharaoh ruling in tests/rulings/r_s22_exile_until.rs).
     let mut t = TestGame::new(2);
     let card = t.exile(P0, "Starscream, Power Hungry");
     grant(&mut t, card);
+    t.lands(P0, "Swamp", 3);
+    assert!(t.cast(P0, card).method(MTMTE).try_go().is_err());
+    assert_eq!(
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).tapped)
+            .count(),
+        0
+    );
+    // From the hand, it can be cast converted for {2}{B}.
+    let mut t = TestGame::new(2);
+    let card = t.hand(P0, "Starscream, Power Hungry");
     t.lands(P0, "Swamp", 3);
     let spell = t.cast(P0, card).method(MTMTE).go();
     assert_eq!(t.g.obj(spell).face, FaceState::Back);

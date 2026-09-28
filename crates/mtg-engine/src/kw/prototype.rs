@@ -108,9 +108,11 @@ impl KeywordRules for Prototype {
         let o = g.obj(card);
         if o.zone != Zone::Hand(p) {
             // A permission to cast it looks at the characteristics it would have
-            // (CR 601.3e, 718.3a).
+            // (CR 601.3e, 718.3a). Casting it prototyped isn't an alternative cost, so a
+            // permission to cast it without paying its mana cost counts (see below).
             let chars = g.option_characteristics(card, &opt);
-            if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
+            if !g.permitted_cards(p).contains(&card)
+                || !g.permission_allows_with(p, card, &chars, false, true)
             {
                 return vec![];
             }

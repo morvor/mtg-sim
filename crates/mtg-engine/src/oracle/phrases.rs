@@ -976,6 +976,24 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             ),
             r,
         )
+    } else if let Some(r) = strip(
+        s,
+        "opponent, creature an opponent controls, or planeswalker an opponent controls",
+    ) {
+        // Nicol Bolas, God-Pharaoh: an opponent or a creature or planeswalker they control.
+        (
+            TargetKind::ObjectOrPlayer(
+                Filter::and(vec![
+                    Filter::Or(vec![
+                        Filter::creature(),
+                        Filter::Type(CardType::Planeswalker),
+                    ]),
+                    Filter::ControlledBy(PlayerRel::Opponent),
+                ]),
+                PlayerFilter::Opponent,
+            ),
+            r,
+        )
     } else if let Some(r) = strip(s, "creature or player") {
         (
             TargetKind::ObjectOrPlayer(Filter::creature(), PlayerFilter::Any),
