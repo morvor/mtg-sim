@@ -90,11 +90,15 @@ fn parse_triggered_at(
     } else {
         it
     };
-    // A trigger condition with no single referent for "it"/"that player" (e.g. several
-    // conditions joined by "and whenever") can't be used with a body that refers to one.
-    if matches!(it, Sel::None) && mentions_object_pronoun(eff) {
-        return None;
-    }
+    // A trigger condition with no single referent for "it" (e.g. several conditions
+    // joined by "and whenever", or "whenever chaos ensues") gives the body's pronouns no
+    // antecedent, as in a spell's text, until an instruction introduces one ("choose
+    // target creature. ... that creature"); a pronoun left without one isn't understood.
+    let it = if matches!(it, Sel::None) && mentions_object_pronoun(eff) {
+        super::patterns::oracle_hardening_referents::no_referent()
+    } else {
+        it
+    };
     if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
         return None;
     }
