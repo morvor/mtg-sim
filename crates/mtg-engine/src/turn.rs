@@ -804,7 +804,9 @@ impl Game {
 
     /// "Doesn't untap during its controller's next untap step": that untap step has now
     /// passed for the permanents the active player controls (and the effect no longer
-    /// applies to objects that left the battlefield, CR 400.7).
+    /// applies to objects that left the battlefield, CR 400.7). An effect on a group not
+    /// locked to objects ("lands you control don't untap during your next untap step")
+    /// lasts through its controller's next untap step.
     fn expire_through_next_untap_step(&mut self, active: PlayerId) {
         let objects = &self.objects;
         let battlefield = &self.battlefield;
@@ -818,7 +820,10 @@ impl Game {
         }
         self.rule_effects.retain(|e| {
             !matches!(e.duration, Duration::ThroughNextUntapStep)
-                || e.objects.as_ref().is_some_and(|v| !v.is_empty())
+                || match &e.objects {
+                    Some(v) => !v.is_empty(),
+                    None => e.controller != active,
+                }
         });
         self.dirty = true;
     }
