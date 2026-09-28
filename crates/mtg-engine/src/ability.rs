@@ -2205,6 +2205,12 @@ pub enum PlayerModification {
     /// "You may play an additional land on each of your turns."
     AdditionalLandPlays(u32),
     CantLoseGame,
+    /// A cost modifier (CR 601.2f) for the affected player's spells or abilities, created
+    /// by a resolved effect for a duration ("Until your next turn, instant, sorcery, and
+    /// planeswalker spells that player casts cost {2} less to cast."). Its `who` is
+    /// relative to the affected player. Applied with the static cost modifiers (see
+    /// `layers.rs`, `collect_statics`).
+    CostModifier(CostModifier),
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.
