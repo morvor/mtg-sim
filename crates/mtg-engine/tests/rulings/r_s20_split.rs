@@ -154,7 +154,7 @@ fn sram_expertise_can_cast_fuss_but_not_bother() {
 
 #[test]
 fn sram_expertise_can_cast_expansion_but_not_explosion() {
-    cr!("601.3e", "709.3a", "107.3b");
+    cr!("601.3e", "709.3a");
     ruling!(
         "Expansion // Explosion",
         "If an effect allows you to cast a spell with certain characteristics, consider only the characteristics of the half you're casting. For example, if an effect allows you to cast a sorcery spell with mana value 2 or less from among cards in your graveyard, you could cast Assault this way, but not Battery."
@@ -164,8 +164,7 @@ fn sram_expertise_can_cast_expansion_but_not_explosion() {
     let mut t = TestGame::new(2);
     let ee = t.hand(P0, "Expansion // Explosion");
     // Off the stack, Expansion // Explosion has mana value 6 ({U/R}{U/R} + {X}{U}{U}{R}{R}),
-    // but Expansion is a spell with mana value 2. Explosion's X is 0 when it's cast
-    // without paying its mana cost: mana value 4.
+    // but Expansion is a spell with mana value 2; Explosion's is at least 4.
     t.g.recompute();
     assert_eq!(mana_value(&t, ee), 6);
     let options = sram_expertise(&mut t, 0);
@@ -173,4 +172,29 @@ fn sram_expertise_can_cast_expansion_but_not_explosion() {
     // P0 declined: nothing was cast.
     assert_eq!(t.stack_len(), 0);
     assert!(t.in_hand(P0, "Expansion // Explosion"));
+}
+
+#[test]
+fn a_spell_with_x_cast_with_sram_expertise_has_x_zero() {
+    cr!("107.3b");
+    ruling!(
+        "Sram's Expertise",
+        "If the card has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Sram's Expertise");
+    supported("Endless One");
+    let mut t = TestGame::new(2);
+    // Endless One {X}: "This creature enters with X +1/+1 counters on it." (A 0/0.)
+    t.hand(P0, "Endless One");
+    // P0 would choose X = 5 if the choice were P0's.
+    t.answer(P0, DecisionKind::X, Answer::Number(5));
+    let options = sram_expertise(&mut t, 1);
+    assert_eq!(options, vec!["Don't cast a spell", "Cast Endless One"]);
+    assert_eq!(t.stack_len(), 1);
+    let spell = t.g.stack[0];
+    let cast = &t.obj(spell).stack.as_ref().expect("a spell").cast;
+    assert_eq!(cast.x.unwrap_or(0), 0);
+    // It enters with no counters and dies as a 0/0.
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Endless One"));
 }

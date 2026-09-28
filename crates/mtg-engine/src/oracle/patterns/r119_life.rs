@@ -91,21 +91,30 @@ fn life_cant_change(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     )
 }
 
-/// "Until your next turn, your life total can't change [and you gain protection from
-/// everything]" (Teferi's Protection): you can neither gain nor lose life for that long
-/// (CR 119.7, 119.8); the rest of the sentence lasts as long.
+/// "[Until your next turn, ]your life total can't change[ and you gain protection from
+/// everything]" (Teferi's Protection, Flare of Fortitude): you can neither gain nor lose
+/// life (CR 119.7, 119.8) for as long as stated, and the rest of the sentence lasts as
+/// long; with no duration stated, for the rest of the game (CR 611.2a). A leading duration
+/// over a longer sentence ("Until end of turn, your life total can't change, and
+/// permanents you control gain hexproof and indestructible.") is the "leading duration"
+/// pattern's: it gives the duration to each part, which this parses without one.
 fn life_cant_change_for(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (duration, text, r) = [
         (
             "until your next turn, ",
             Duration::UntilYourNextTurn,
-            "until your next turn",
+            " until your next turn",
         ),
-        ("until end of turn, ", Duration::EndOfTurn, "until end of turn"),
+        (
+            "until end of turn, ",
+            Duration::EndOfTurn,
+            " until end of turn",
+        ),
     ]
     .into_iter()
-    .find_map(|(p, d, t)| l.strip_prefix(p).map(|r| (d, t, r)))?;
+    .find_map(|(p, d, t)| l.strip_prefix(p).map(|r| (d, t, r)))
+    .unwrap_or((Duration::Permanent, "", l));
     let (first, rest) = match r.split_once(" and ") {
         Some((a, c)) => (a, Some(c)),
         None => (r, None),
@@ -125,7 +134,7 @@ fn life_cant_change_for(l: &str, b: &mut Builder) -> Option<Effect> {
     .collect();
     if let Some(rest) = rest {
         effects.push(crate::oracle::effects::parse_clause(
-            &format!("{rest} {text}"),
+            &format!("{rest}{text}"),
             b,
         )?);
     }
@@ -133,6 +142,6 @@ fn life_cant_change_for(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "life total becomes", priority: 0, parse: set_life } }
-inventory::submit! { EffectPattern { name: "life total can't change for a duration", priority: 0, parse: life_cant_change_for } }
+inventory::submit! { EffectPattern { name: "your life total can't change [for a duration]", priority: 0, parse: life_cant_change_for } }
 inventory::submit! { EffectPattern { name: "exchange life totals", priority: 0, parse: exchange_life } }
 inventory::submit! { StaticPattern { name: "life total can't change", priority: 0, parse: life_cant_change } }

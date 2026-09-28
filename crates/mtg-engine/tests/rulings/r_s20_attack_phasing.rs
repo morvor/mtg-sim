@@ -6,9 +6,11 @@
 
 use crate::r_s01_common::*;
 use crate::r_s04_common::{add_mana, spell_targets};
+use crate::r_s06_common::has_kw;
 use crate::r_s09_common::legal_attack;
 use crate::r_s20_common::*;
 use mtg_engine::combat::block_options;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -27,7 +29,7 @@ fn teferis_protection(t: &mut TestGame) {
 
 #[test]
 fn creatures_phasing_in_with_the_untap_step_can_attack_and_tap_that_turn() {
-    cr!("702.26a", "702.26d", "302.6");
+    cr!("502.1", "702.26a", "702.26d", "302.6");
     ruling!(
         "Teferi's Protection",
         "Any creatures that phase in under your control as your next untap step begins will be able to attack and pay a cost of {T} during that turn."
@@ -54,7 +56,7 @@ fn creatures_phasing_in_with_the_untap_step_can_attack_and_tap_that_turn() {
 
 #[test]
 fn life_gain_and_loss_have_no_effect_while_your_life_total_cant_change() {
-    cr!("119.3", "608.2c");
+    cr!("101.2", "119.3", "608.2c");
     ruling!(
         "Teferi's Protection",
         "Spells and abilities that would normally cause you to gain or lose life still resolve while your life total can't change, but the life-gain or life-loss part simply has no effect."
@@ -81,6 +83,47 @@ fn life_gain_and_loss_have_no_effect_while_your_life_total_cant_change() {
     t.cast(P0, revitalize).go();
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
+}
+
+#[test]
+fn flare_of_fortitudes_effects_all_last_until_end_of_turn() {
+    cr!("611.2a", "101.2");
+    ruling!(
+        "Flare of Fortitude",
+        "Spells and abilities that would normally cause you to gain or lose life still resolve while your life total can't change, but the life-gain or life-loss part simply has no effect."
+    );
+    supported("Flare of Fortitude");
+    supported("Revitalize");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // "Until end of turn, your life total can't change, and permanents you control gain
+    // hexproof and indestructible."
+    add_mana(&mut t, P0, ManaType::W, 2);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    let flare = t.hand(P0, "Flare of Fortitude");
+    t.cast(P0, flare).go();
+    t.resolve_all();
+    assert!(has_kw(&t, bears, KeywordKind::Hexproof));
+    assert!(has_kw(&t, bears, KeywordKind::Indestructible));
+    // Revitalize ("You gain 3 life. Draw a card."): the card is drawn; no life is gained.
+    let hand = t.hand_size(P0);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    let revitalize = t.hand(P0, "Revitalize");
+    t.cast(P0, revitalize).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // In the next turn, both parts of the sentence have ended.
+    t.advance_to(P1, Step::PrecombatMain);
+    t.g.recompute();
+    assert!(!has_kw(&t, bears, KeywordKind::Hexproof));
+    assert!(!has_kw(&t, bears, KeywordKind::Indestructible));
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
 }
 
 #[test]
@@ -129,7 +172,7 @@ fn could_block(t: &mut TestGame, attacker: ObjectId, blocker: ObjectId) -> bool 
 
 #[test]
 fn creatures_phased_out_by_the_moment_dont_exist_until_it_leaves() {
-    cr!("702.26b", "610.4");
+    cr!("702.26b", "610.4", "610.4a");
     ruling!(
         "The Moment",
         "While a permanent is phased out, it's treated as though it doesn't exist. It can't be the target of spells or abilities, its static abilities have no effect on the game, its triggered abilities can't trigger, it can't attack or block, and so on."

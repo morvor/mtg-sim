@@ -264,7 +264,7 @@ fn a_room_entering_from_another_zone_than_the_stack_has_both_doors_locked() {
 
 #[test]
 fn a_room_has_two_names_and_only_one_can_be_chosen() {
-    cr!("709.4a", "201.3");
+    cr!("709.4a", "201.4b");
     ruling!(
         "Glassworks // Shattered Yard",
         "Each Room card has two names. If an effect instructs you to choose a card name, you may choose one of those names, but not both."

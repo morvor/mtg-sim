@@ -306,7 +306,7 @@ fn a_creature_whose_blocker_left_combat_is_still_a_blocked_creature() {
 
 #[test]
 fn the_controller_of_an_attacked_planeswalker_is_the_defending_player_for_lurking_green_dragon() {
-    cr!("506.2", "508.1c");
+    cr!("506.2", "508.1c", "508.5");
     ruling!(
         "Lurking Green Dragon",
         "If a creature attacks a planeswalker, that planeswalker's controller is the defending player."
@@ -328,7 +328,7 @@ fn the_controller_of_an_attacked_planeswalker_is_the_defending_player_for_lurkin
 
 #[test]
 fn storm_the_citadel_destroys_a_permanent_of_the_attacked_planeswalkers_controller() {
-    cr!("506.2", "510.2");
+    cr!("508.5", "508.5a");
     ruling!(
         "Storm the Citadel",
         "If a creature is attacking a planeswalker, the controller of the planeswalker is the defending player."
