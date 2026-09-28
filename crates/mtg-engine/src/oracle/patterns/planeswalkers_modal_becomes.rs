@@ -4,6 +4,8 @@
 //!   still a planeswalker." (Gideon), "Untap target Mountain. It becomes a 4/4 red
 //!   Elemental creature until end of turn. It's still a land." (Koth, animated lands);
 //! * "[objects] become 1/1 Elemental creatures. They're still lands.";
+//! * "... becomes an artifact creature with base power and toughness 2/2 and gains flying
+//!   until end of turn" (keywords gained for the same duration);
 //! * "you may have it become ...".
 //!
 //! The type words mean what they mean in the "is [a ...]" static predicate: new card types
@@ -123,12 +125,17 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
     // aren't type predicates.
     if pred.starts_with("a copy")
         || pred.starts_with("the ")
-        || pred.contains(" and gains ")
         || pred.contains(" and loses ")
         || pred.contains(" and has ")
     {
         return None;
     }
+    // "becomes an artifact creature with base power and toughness 2/2 and gains flying":
+    // keywords it gains for the same duration.
+    let (pred, gained) = match pred.split_once(" and gains ") {
+        Some((p, k)) => (p, crate::oracle::effects::keyword_mods(k)?),
+        None => (pred, vec![]),
+    };
     // "that's still a planeswalker" (CR 205.1b).
     let (pred, still) = match pred
         .strip_suffix(" that's still a planeswalker")
@@ -202,6 +209,7 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
     if makes_creature(&mods) && !mods.iter().any(|m| matches!(m, Modification::SetPT(..))) {
         return None;
     }
+    mods.extend(gained);
     b.it = what.clone();
     Some(Effect::Modify {
         what,

@@ -255,3 +255,41 @@ fn lands_made_creatures_by_natural_emergence_are_subject_to_summoning_sickness()
     t.g.untap(old);
     assert_eq!(attack_all(&mut t, &[old, new]), vec![old]);
 }
+
+#[test]
+fn an_artifact_animated_by_synthesizer_labship_attacks_if_controlled_since_the_turn_began() {
+    cr!("302.6", "508.1a", "721.2a");
+    ruling!(
+        "Synthesizer Labship",
+        "The resulting artifact creature will be able to attack if it’s been under your control continuously since the turn began. That is, it doesn’t matter how long it’s been a creature, just how long it’s been on the battlefield."
+    );
+    supported("Synthesizer Labship");
+    // Synthesizer Labship with two charge counters: "At the beginning of combat on your
+    // turn, up to one other target artifact you control becomes an artifact creature with
+    // base power and toughness 2/2 and gains flying until end of turn."
+    let labship_on = |t: &mut TestGame, artifact: ObjectId| {
+        let ship = t.battlefield(P0, "Synthesizer Labship");
+        crate::r_s16_common::add_charge(t, ship, 2);
+        t.answer_targets(P0, &[Entity::Object(artifact)]);
+        t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+        t.resolve_all();
+        assert!(creature_now(t, artifact));
+        assert_eq!(t.pt(artifact), (2, 2));
+        assert!(t
+            .obj_now(artifact)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    };
+    // A Mind Stone P0 has controlled since the turn began can attack, although it just
+    // became a creature.
+    let mut t = TestGame::new(2);
+    let old = t.battlefield(P0, "Mind Stone");
+    labship_on(&mut t, old);
+    assert!(legal_attack(&mut t, &[(old, Entity::Player(P1))]));
+    attack_with(&mut t, &[(old, Entity::Player(P1))]);
+    assert!(t.g.is_attacking(old));
+    // One that entered this turn can't.
+    let mut t = TestGame::new(2);
+    let new = entered_this_turn(&mut t, P0, "Mind Stone");
+    labship_on(&mut t, new);
+    assert!(!legal_attack(&mut t, &[(new, Entity::Player(P1))]));
+}
