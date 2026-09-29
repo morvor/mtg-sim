@@ -8,7 +8,7 @@ use crate::r_s01_common::{supported, tokens};
 use crate::r_s04_common::next_upkeep;
 use crate::r_s06_common::damage;
 use crate::r_s28_common::*;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Answer;
 use mtg_engine::object::FaceState;
 use mtg_engine::testing::*;
 use mtg_engine::*;
