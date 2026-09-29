@@ -52,6 +52,10 @@ fn the_copy_of_an_x_spell_has_the_same_x() {
 fn the_copy_of_an_x_ability_has_the_same_x() {
     cr!("707.10", "107.3", "602.2b");
     ruling!("Magus Lucea Kane", "The copy has the same value of X.");
+    ruling!(
+        "Magus Lucea Kane",
+        "Magus Lucea Kane's ability will copy any spell or activated ability whose mana cost or activation cost contains {X}, not just one with targets."
+    );
     supported("Oracle of Nectars");
     // Oracle of Nectars: "{X}, {T}: You gain X life."
     let mut t = TestGame::new(2);
@@ -174,4 +178,25 @@ fn the_delayed_trigger_copies_only_the_next_x_spell() {
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(t.life(P1), 11);
+}
+
+#[test]
+fn the_magus_mana_doesnt_have_to_be_spent_on_the_copied_spell() {
+    cr!("603.7c", "500.4");
+    ruling!(
+        "Magus Lucea Kane",
+        "That spell or ability will be copied even if that mana is spent on something else or not spent on anything at all."
+    );
+    let mut t = TestGame::new(2);
+    magus_taps(&mut t);
+    // The {C}{C} empties from the pool unspent (as a step ends).
+    mtg_engine::mana_abilities::empty_pool(&mut t.g, P0);
+    t.lands(P0, "Mountain", 3);
+    let blaze = t.hand(P0, "Blaze");
+    t.cast(P0, blaze).x(2).target(P1).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
 }
