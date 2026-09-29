@@ -128,3 +128,39 @@ fn a_scavenged_card_s_x_is_0() {
     assert!(t.in_exile("Slumbering Trudge"));
     assert_eq!(t.counters(bears, "+1/+1"), 6);
 }
+
+#[test]
+fn narset_a_discarded_card_s_x_is_0() {
+    cr!("107.3g", "202.3e", "603.12");
+    ruling!(
+        "Narset of the Ancient Way",
+        "If a card you discard has {X} in its mana cost, X is considered to be 0."
+    );
+    supported("Narset of the Ancient Way");
+    // "−2: Draw a card, then you may discard a card. When you discard a nonland card this
+    // way, Narset deals damage equal to that card's mana value to target creature or
+    // planeswalker." Blaze ({X}{R}) has mana value 1.
+    let mut t = TestGame::new(2);
+    let narset = t.battlefield(P0, "Narset of the Ancient Way");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let blaze = t.hand(P0, "Blaze");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(blaze)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.activate(P0, narset, 1, &[]).expect("activate −2");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Blaze"));
+    assert_eq!(crate::r_s07_common::damage_on(&t, giant), 1);
+    assert_eq!(t.counters(narset, "loyalty"), 2);
+    // Discarding a land: no damage.
+    let mut t = TestGame::new(2);
+    let narset = t.battlefield(P0, "Narset of the Ancient Way");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let forest = t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.activate(P0, narset, 1, &[]).expect("activate −2");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert_eq!(crate::r_s07_common::damage_on(&t, giant), 0);
+}
