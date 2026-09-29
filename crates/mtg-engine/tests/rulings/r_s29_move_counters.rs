@@ -311,12 +311,23 @@ fn the_ozolith_moves_all_its_counters_or_none() {
     t.resolve_all();
     assert_eq!(t.counters(ozolith, counters::PLUS1), 2);
     assert_eq!(t.counters(ozolith, "flying"), 1);
-    // First combat: P0 declines as the ability resolves.
+    // First combat: P0 declines as the ability resolves (not as it's put on the stack).
     let giant = t.battlefield(P0, "Hill Giant");
     t.answer_targets(P0, &[Entity::Object(giant)]);
     t.answer_yes(P0, false);
+    let yes_no = |t: &TestGame, from: usize| {
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+            .count()
+    };
+    let from = t.asked().len();
     t.advance_to(P0, Step::BeginningOfCombat);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(yes_no(&t, from), 0);
     t.resolve_all();
+    assert_eq!(yes_no(&t, from), 1);
     assert_eq!(t.counters(ozolith, counters::PLUS1), 2);
     // Next turn's combat: all of them move.
     t.answer_targets(P0, &[Entity::Object(giant)]);

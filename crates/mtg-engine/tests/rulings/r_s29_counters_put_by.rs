@@ -158,3 +158,29 @@ fn you_order_vorinclex_and_another_counter_effect_for_your_permanent() {
         assert_eq!(replacement_choosers(&t, from), vec![P0]);
     }
 }
+
+#[test]
+fn a_player_who_moves_a_counter_puts_it_on_the_second_permanent() {
+    cr!("122.5", "122.6", "614.1a");
+    ruling!(
+        "Simic Fluxmage",
+        "Any abilities that care about a counter being placed on the second creature will apply."
+    );
+    supported("Simic Fluxmage");
+    // P0's Simic Fluxmage ("{1}{U}, {T}: Move a +1/+1 counter from this creature onto
+    // target creature.") moves its counter onto P1's Grizzly Bears while P0 controls
+    // Vorinclex: P0 puts the counter on the Bears, so it's doubled (not halved, as it
+    // would be if P1, the Bears' controller, put it).
+    let mut t = TestGame::new(2);
+    let fluxmage = t.battlefield(P0, "Simic Fluxmage");
+    put_counters(&mut t, fluxmage, counters::PLUS1, 1);
+    t.battlefield(P0, "Vorinclex, Monstrous Raider");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::U, 1);
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::C, 1);
+    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, fluxmage, "Move").unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(fluxmage, counters::PLUS1), 0);
+    assert_eq!(t.counters(theirs, counters::PLUS1), 2);
+}

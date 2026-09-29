@@ -36,7 +36,7 @@ fn attack(t: &mut TestGame, attacker: ObjectId, target: Option<ObjectId>) {
 
 #[test]
 fn pumps_and_counters_apply_after_the_new_base_power_and_toughness() {
-    cr!("613.4", "613.4b", "613.4c", "613.7");
+    cr!("613.4", "613.4b", "613.4c");
     ruling!(
         "Galion, Elvenking's Butler",
         "Any effects that modify a creature's power and/or toughness without setting them to a specific value (i.e. ones that don't affect base power and/or toughness) will apply after its base power and toughness are set, regardless of the order those effects were created. The same is true for counters that modify its power and toughness."

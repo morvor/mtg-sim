@@ -259,6 +259,20 @@ pub fn counter_limits(g: &Game, id: ObjectId) -> Vec<(CounterKind, u32)> {
 /// the same object, the first doesn't have such a counter, or either is no longer on the
 /// battlefield — no counter is moved. Returns the number moved.
 pub fn move_counters(g: &mut Game, from: ObjectId, to: Entity, kind: &str, n: u32) -> u32 {
+    move_counters_by(g, from, to, kind, n, None)
+}
+
+/// [`move_counters`] as instructed by the spell or ability of `source`: its controller
+/// puts the counters on the second object (CR 122.5, 122.6), which replacement effects
+/// that care who puts counters see (Halving Season, Vorinclex, Monstrous Raider).
+pub fn move_counters_by(
+    g: &mut Game,
+    from: ObjectId,
+    to: Entity,
+    kind: &str,
+    n: u32,
+    source: Option<ObjectId>,
+) -> u32 {
     if to == Entity::Object(from) || !g.is_live(from) || g.obj(from).zone != Zone::Battlefield {
         return 0;
     }
@@ -272,22 +286,29 @@ pub fn move_counters(g: &mut Game, from: ObjectId, to: Entity, kind: &str, n: u3
         return 0;
     }
     let removed = g.remove_counters(Entity::Object(from), kind, k);
-    g.add_counters(to, kind, removed, None);
+    g.add_counters(to, kind, removed, source);
     removed
 }
 
 /// CR 122.8, 122.9: "put [its] counters on [another object]" when the object with the
 /// counters has left the battlefield (it was sacrificed to pay the cost, or the trigger
 /// checks that it left): the same number of each kind of counter it had (or only of the
-/// listed kind) is put on the other object. Nothing is moved.
-pub fn put_counters_of(g: &mut Game, from: ObjectId, to: Entity, kind: Option<&str>) -> u32 {
+/// listed kind) is put on the other object, by the controller of `source` (the spell or
+/// ability doing it). Nothing is moved.
+pub fn put_counters_of(
+    g: &mut Game,
+    from: ObjectId,
+    to: Entity,
+    kind: Option<&str>,
+    source: Option<ObjectId>,
+) -> u32 {
     let counters: BTreeMap<CounterKind, u32> = g.obj(from).counters.clone();
     let mut total = 0;
     for (k, n) in counters {
         if n == 0 || kind.is_some_and(|x| x != k.as_str()) {
             continue;
         }
-        total += g.add_counters(to, &k, n, None);
+        total += g.add_counters(to, &k, n, source);
     }
     total
 }

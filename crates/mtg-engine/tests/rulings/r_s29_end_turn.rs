@@ -122,3 +122,48 @@ fn a_next_end_step_trigger_waits_for_the_next_turns_end_step() {
     assert!(!t.on_battlefield(bears));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn a_cast_copy_of_a_card_is_a_spell_youve_cast_a_copied_spell_isnt() {
+    cr!("707.12", "707.10", "701.6a");
+    supported("Isochron Scepter");
+    supported("Twincast");
+    // Multani's Presence (P0): "Whenever a spell you've cast is countered, draw a card."
+    // P0 casts a copy of the Lightning Bolt imprinted on Isochron Scepter; P1 counters
+    // it: it was cast, so P0 draws.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Multani's Presence");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    let scepter = t.enter(P0, "Isochron Scepter");
+    t.resolve_all();
+    add_mana(&mut t, P0, ManaType::C, 2);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, scepter, "copy").unwrap();
+    t.resolve();
+    let copy = crate::r_s04_common::top_of_stack(&t);
+    assert!(t.g.obj(copy).kind == mtg_engine::object::ObjKind::CardCopy);
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P1, "Counterspell", &[Entity::Object(copy)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20, "the copy was countered");
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // A copy of a spell put onto the stack by Twincast ("Copy target instant or sorcery
+    // spell.") wasn't cast: countering it doesn't make P0 draw.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Multani's Presence");
+    let bolt = cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    cast_new(&mut t, P0, "Twincast", &[Entity::Object(bolt)]);
+    t.resolve();
+    let copies = crate::r_s25_common::spell_copies(&t);
+    assert_eq!(copies.len(), 1);
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P1, "Counterspell", &[Entity::Object(copies[0])]);
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}

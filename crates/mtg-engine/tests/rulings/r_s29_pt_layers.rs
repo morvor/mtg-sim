@@ -25,7 +25,7 @@ fn modified_bears(t: &mut TestGame, pump: &str, switch: bool) -> ObjectId {
 
 #[test]
 fn retro_mutations_base_0_1_keeps_earlier_pumps_counters_and_switches() {
-    cr!("613.4", "613.4b", "613.4c", "613.4d", "613.7");
+    cr!("613.4", "613.4b", "613.4c", "613.4d");
     ruling!(
         "Retro-Mutation",
         "Effects that modify the creature's power and/or toughness, such as the effect of Karai's Technique, will apply to the creature no matter when they started to take effect. The same is true for counters that change its power and/or toughness and effects that switch its power and toughness."
@@ -105,7 +105,7 @@ fn startling_developments_base_4_4_keeps_earlier_pumps_and_counters() {
 
 #[test]
 fn wrecking_ball_arms_base_7_7_keeps_earlier_pumps_counters_and_switches() {
-    cr!("613.4", "613.4b", "613.4c", "613.4d", "613.7");
+    cr!("613.4", "613.4b", "613.4c", "613.4d");
     ruling!(
         "Wrecking Ball Arm",
         "Effects that modify the creature's power and/or toughness without setting base power and/or toughness will apply to the creature no matter when they started to take effect. The same is true for counters that change its power and/or toughness and effects that switch its power and toughness."

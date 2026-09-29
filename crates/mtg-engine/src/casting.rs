@@ -2521,17 +2521,22 @@ impl Game {
         // to a public zone are paid after all other costs.
         let (late, early): (Vec<&CostPart>, Vec<&CostPart>) =
             cost.parts.iter().partition(|c| cost_part_pays_last(c));
+        let untaps_src = source_flags(cost).1;
         for part in early.into_iter().chain(late) {
-            self.pay_cost_part(p, part, src, ctx, &mut paid)?;
+            self.pay_cost_part(p, part, src, untaps_src, ctx, &mut paid)?;
         }
         Ok(paid)
     }
 
+    /// Pays one part of a cost. `untaps_src`: the cost also has {Q}, so the source isn't
+    /// one of the permanents untapped for "Untap a tapped [permanent] you control" (even if
+    /// a stun counter kept it tapped, CR 122.1d).
     fn pay_cost_part(
         &mut self,
         p: PlayerId,
         part: &CostPart,
         src: Option<ObjectId>,
+        untaps_src: bool,
         ctx: &Ctx,
         paid: &mut PaidCost,
     ) -> Result<(), Illegal> {
@@ -2761,7 +2766,11 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p && self.obj(*o).tapped)
+                    .filter(|o| {
+                        self.obj(*o).controller == p
+                            && self.obj(*o).tapped
+                            && !(untaps_src && Some(*o) == src)
+                    })
                     .collect();
                 if (cands.len() as u32) < n {
                     return bad("not enough tapped permanents");

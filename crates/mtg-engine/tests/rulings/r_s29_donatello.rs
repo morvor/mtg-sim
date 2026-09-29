@@ -28,7 +28,7 @@ fn is_creature(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn a_station_artifact_stays_0_0_as_charge_counters_are_added() {
-    cr!("613.4b", "613.7", "721.2a");
+    cr!("613.4b", "613.7", "721.2a", "721.2b");
     ruling!(
         "Donatello, Mutant Mechanic",
         "If the target artifact has station, its base power and toughness will be set to 0/0. Adding charge counters to that artifact won't restore the power and toughness printed in any of its striations."
@@ -57,7 +57,7 @@ fn a_station_artifact_stays_0_0_as_charge_counters_are_added() {
 
 #[test]
 fn a_vehicle_stays_0_0_when_crewed() {
-    cr!("613.4b", "613.7", "702.122a");
+    cr!("613.4b", "205.1b", "702.122a");
     ruling!(
         "Donatello, Mutant Mechanic",
         "If the target artifact is a Vehicle, its base power and toughness will be set to 0/0. Crewing that Vehicle will not restore its power and toughness."
@@ -152,4 +152,101 @@ fn an_if_its_sentence_checks_the_target_as_it_resolves() {
     assert!(t.on_battlefield(bears));
     assert!(t.obj_now(bears).tapped);
     assert_eq!(t.hand_size(P0), hand + 2);
+}
+
+#[test]
+fn an_if_its_sentence_checks_the_returned_permanent_on_the_battlefield() {
+    cr!("608.2c", "400.7", "613.1d");
+    ruling!(
+        "Defy Death",
+        "If the creature is an Angel only on the battlefield (perhaps because it’s a non-Angel creature card and Xenograft is on the battlefield), it will get the +1/+1 counters."
+    );
+    ruling!(
+        "Return Upon the Tide",
+        "You check if the creature is an Elf once it’s on the battlefield. You’ll create tokens if it is, even if the card in the graveyard wasn’t an Elf card."
+    );
+    ruling!(
+        "Essence Flux",
+        "Essence Flux checks whether the creature is a Spirit after it has returned from exile."
+    );
+    supported("Xenograft");
+    // Xenograft (P0): "Each creature you control is the chosen type in addition to its
+    // other types."
+    let with_xenograft = |kind: &str| {
+        let mut t = TestGame::new(2);
+        crate::r_s24_common::choose_creature_type(&mut t, P0, kind);
+        t.enter(P0, "Xenograft");
+        t.resolve_all();
+        t
+    };
+    // Defy Death: "Return target creature card from your graveyard to the battlefield. If
+    // it's an Angel, put two +1/+1 counters on it." A Grizzly Bears card: two counters
+    // with Xenograft naming Angel, none without.
+    supported("Defy Death");
+    for (angel, expected) in [(true, 2), (false, 0)] {
+        let mut t = if angel {
+            with_xenograft("Angel")
+        } else {
+            TestGame::new(2)
+        };
+        let card = t.graveyard(P0, "Grizzly Bears");
+        crate::r_s29_common::cast_and_resolve(&mut t, P0, "Defy Death", &[Entity::Object(card)]);
+        let bears = t.named_on_battlefield("Grizzly Bears")[0];
+        assert_eq!(t.counters(bears, counters::PLUS1), expected, "angel: {angel}");
+    }
+    // Return Upon the Tide: "... If it's an Elf, create two 1/1 green Elf Warrior creature
+    // tokens."
+    supported("Return Upon the Tide");
+    let mut t = with_xenograft("Elf");
+    let card = t.graveyard(P0, "Grizzly Bears");
+    crate::r_s29_common::cast_and_resolve(
+        &mut t,
+        P0,
+        "Return Upon the Tide",
+        &[Entity::Object(card)],
+    );
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 2);
+    // Essence Flux: "Exile target creature you control, then return that card to the
+    // battlefield under its owner's control. If it's a Spirit, put a +1/+1 counter on it."
+    supported("Essence Flux");
+    let mut t = with_xenograft("Spirit");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s29_common::cast_and_resolve(&mut t, P0, "Essence Flux", &[Entity::Object(bears)]);
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+}
+
+#[test]
+fn cemetery_recruitment_draws_for_a_zombie_card_only_if_it_resolves() {
+    cr!("608.2b", "608.2c");
+    ruling!(
+        "Cemetery Recruitment",
+        "If the target creature card is an illegal target as Cemetery Recruitment tries to resolve, it won't resolve and none of its effects will happen. You won't draw a card even if the target creature card was a Zombie card."
+    );
+    supported("Cemetery Recruitment");
+    supported("Gravedigger");
+    // "Return target creature card from your graveyard to your hand. If it's a Zombie
+    // card, draw a card." Gravedigger is a Zombie; Grizzly Bears isn't.
+    for (name, drawn) in [("Gravedigger", 1), ("Grizzly Bears", 0)] {
+        let mut t = TestGame::new(2);
+        let card = t.graveyard(P0, name);
+        let hand = t.hand_size(P0);
+        crate::r_s29_common::cast_and_resolve(
+            &mut t,
+            P0,
+            "Cemetery Recruitment",
+            &[Entity::Object(card)],
+        );
+        assert!(t.in_hand(P0, name));
+        assert_eq!(t.hand_size(P0), hand + 1 + drawn, "{name}");
+    }
+    // The Gravedigger card leaves the graveyard before it resolves: no draw.
+    let mut t = TestGame::new(2);
+    let card = t.graveyard(P0, "Gravedigger");
+    crate::r_s25_common::cast_new(&mut t, P0, "Cemetery Recruitment", &[Entity::Object(card)]);
+    t.g.exile_object(card, None);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    assert!(t.in_graveyard(P0, "Cemetery Recruitment"));
 }

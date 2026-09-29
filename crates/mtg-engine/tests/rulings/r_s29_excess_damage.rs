@@ -34,16 +34,25 @@ fn excess_damage_to_a_planeswalker_or_battle_is_beyond_its_loyalty_or_defense() 
     let jace = t.battlefield(P1, "Jace Beleren");
     assert_eq!(t.counters(jace, counters::LOYALTY), 3);
     assert_eq!(blast(&mut t, Entity::Object(jace)), 2);
-    // With five loyalty counters: none.
+    // With five loyalty counters: none. The damage removed all five, and it was put into
+    // the graveyard.
     let mut t = TestGame::new(2);
     let jace = t.battlefield(P1, "Jace Beleren");
     put_counters(&mut t, jace, counters::LOYALTY, 2);
     assert_eq!(blast(&mut t, Entity::Object(jace)), 0);
+    assert!(!t.on_battlefield(jace));
+    assert!(t.in_graveyard(P1, "Jace Beleren"));
     // A battle with four defense counters (Invasion of Segovia): 1 excess.
     let mut t = TestGame::new(2);
     let battle = t.battlefield(P1, "Invasion of Segovia // Caetus, Sea Tyrant of Segovia");
     assert_eq!(t.counters(battle, counters::DEFENSE), 4);
     assert_eq!(blast(&mut t, Entity::Object(battle)), 1);
+    // With six: none, and five of them are removed.
+    let mut t = TestGame::new(2);
+    let battle = t.battlefield(P1, "Invasion of Segovia // Caetus, Sea Tyrant of Segovia");
+    put_counters(&mut t, battle, counters::DEFENSE, 2);
+    assert_eq!(blast(&mut t, Entity::Object(battle)), 0);
+    assert_eq!(t.counters(battle, counters::DEFENSE), 1);
     // A player can't be dealt excess damage.
     let mut t = TestGame::new(2);
     assert_eq!(blast(&mut t, Entity::Player(P1)), 0);

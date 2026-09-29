@@ -164,4 +164,60 @@ fn crackleburr_needs_two_other_creatures_for_its_untap_ability() {
     }
     t.resolve_all();
     assert!(t.in_hand(P1, "Grizzly Bears"));
+    // Crackleburr itself must have been under P0's control since the turn began.
+    let mut t = TestGame::new(2);
+    let crackleburr = t.battlefield_sick(P0, "Crackleburr");
+    let merfolk: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Coral Merfolk")).collect();
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    for id in merfolk.iter().chain([&crackleburr]) {
+        t.g.objects[id.0 as usize].tapped = true;
+    }
+    assert!(!crate::r_s02_common::can_activate(&mut t, P0, crackleburr));
+}
+
+#[test]
+fn a_stunned_crackleburr_still_isnt_one_of_the_creatures_it_untaps() {
+    cr!("118.3", "122.1d");
+    ruling!(
+        "Crackleburr",
+        "To activate either ability, you'll need Crackleburr plus two other creatures."
+    );
+    // A tapped Crackleburr with two stun counters pays {Q} by losing one (it stays
+    // tapped); it still isn't offered as one of the two tapped blue creatures to untap.
+    let mut t = TestGame::new(2);
+    let crackleburr = t.battlefield(P0, "Crackleburr");
+    let merfolk: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Coral Merfolk")).collect();
+    let target = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    for id in merfolk.iter().chain([&crackleburr]) {
+        t.g.objects[id.0 as usize].tapped = true;
+    }
+    put_counters(&mut t, crackleburr, STUN, 2);
+    let from = t.asked().len();
+    t.answer_choose(
+        P0,
+        &[Entity::Object(crackleburr), Entity::Object(merfolk[0])],
+    );
+    t.answer_targets(P0, &[Entity::Object(target)]);
+    activate_containing(&mut t, P0, crackleburr, "Return target").expect("activated");
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities {
+                prompt, candidates, ..
+            } if prompt.contains("untap") => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 1);
+    assert!(!offered[0].contains(&Entity::Object(crackleburr)));
+    // {Q} removed one stun counter; both Merfolk were untapped.
+    assert_eq!(t.counters(crackleburr, STUN), 1);
+    assert!(tapped(&t, crackleburr));
+    for id in &merfolk {
+        assert!(!tapped(&t, *id));
+    }
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
 }

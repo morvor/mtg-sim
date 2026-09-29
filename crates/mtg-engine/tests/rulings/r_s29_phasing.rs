@@ -119,3 +119,48 @@ fn choices_made_as_it_entered_are_remembered_when_it_phases_in() {
     assert!(!phased_out(&t, mimic));
     assert!(t.obj_now(mimic).chars.has_subtype("Elf"));
 }
+
+#[test]
+fn auras_equipment_and_counters_phase_out_and_in_with_the_permanent() {
+    cr!("702.26g", "702.26d", "610.4");
+    // The same ruling in two wordings (straight and curly apostrophes).
+    ruling!(
+        "The Moment",
+        "Each Aura and Equipment attached to a permanent that's phasing out also phases out. They will phase in with that permanent and still be attached to it. Similarly, permanents that phase out with counters phase in with those counters."
+    );
+    ruling!(
+        "Unyaro",
+        "Each Aura and Equipment attached to a permanent that’s phasing out also phases out. They will phase in with that permanent and still be attached to it. Similarly, permanents that phase out with counters phase in with those counters."
+    );
+    supported("The Moment");
+    supported("Bonesplitter");
+    supported("Holy Strength");
+    // P0's Grizzly Bears with a +1/+1 counter, Bonesplitter (+2/+0), and P1's Holy
+    // Strength (+1/+2). The Moment: "{2}, {T}: Untap target creature you control. It
+    // phases out until The Moment leaves the battlefield."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    put_counters(&mut t, bears, counters::PLUS1, 1);
+    let splitter = attach_new(&mut t, P0, "Bonesplitter", bears);
+    let aura = attach_new(&mut t, P1, "Holy Strength", bears);
+    assert_eq!(t.pt(bears), (6, 5));
+    let moment = t.battlefield(P0, "The Moment");
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::C, 2);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, moment, "phases out").unwrap();
+    t.resolve_all();
+    for id in [bears, splitter, aura] {
+        assert!(phased_out(&t, id));
+    }
+    // The Moment leaves the battlefield: they phase in together, still attached, and the
+    // Bears still has its counter.
+    crate::r_s02_common::destroy(&mut t, moment);
+    t.g.recompute();
+    for id in [bears, splitter, aura] {
+        assert!(!phased_out(&t, id));
+    }
+    assert_eq!(attached_to(&t, splitter), Some(Entity::Object(bears)));
+    assert_eq!(attached_to(&t, aura), Some(Entity::Object(bears)));
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+    assert_eq!(t.pt(bears), (6, 5));
+}

@@ -487,7 +487,9 @@ impl Game {
                             Some(v) => self.eval_value(v, ctx).max(0) as u32,
                             None => self.obj(from).counter(&k),
                         };
-                        total += crate::counter_rules::move_counters(self, from, to, &k, count);
+                        total += crate::counter_rules::move_counters_by(
+                            self, from, to, &k, count, ctx.source,
+                        );
                     }
                 }
                 ctx.prev_value = total as i64;
@@ -502,8 +504,13 @@ impl Game {
                 let mut total = 0;
                 if let Some(from) = from {
                     for t in self.resolve_sel(to, ctx) {
-                        total +=
-                            crate::counter_rules::put_counters_of(self, from, t, kind.as_deref());
+                        total += crate::counter_rules::put_counters_of(
+                            self,
+                            from,
+                            t,
+                            kind.as_deref(),
+                            ctx.source,
+                        );
                     }
                 }
                 ctx.prev_value = total as i64;

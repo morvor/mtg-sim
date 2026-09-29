@@ -15,6 +15,10 @@ pub const HAS_NONMANA_ACTIVATED_ABILITY: &str = "has_nonmana_activated_ability";
 /// "[it] attacked or blocked this combat" (see `Game::attacked_or_blocked_this_combat`).
 pub const ATTACKED_OR_BLOCKED_THIS_COMBAT: &str = "attacked_or_blocked_this_combat";
 
+/// A spell that was cast (CR 601.2i), including a copy of a card cast by an effect
+/// (CR 707.12), unlike a copy put onto the stack (CR 707.10): "a spell you've cast".
+pub const WAS_CAST: &str = "was_cast";
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
@@ -57,6 +61,11 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
         "saddled" => g.obj(id).saddled,
         // "if ~ attacked or blocked this combat".
         ATTACKED_OR_BLOCKED_THIS_COMBAT => g.attacked_or_blocked_this_combat(id),
+        WAS_CAST => g
+            .obj(id)
+            .stack
+            .as_deref()
+            .is_some_and(|si| si.cast.was_cast),
         // "Equipment attached to it" where "it" is each object an effect applies to.
         "attached_to_affected" => ctx
             .vars

@@ -64,8 +64,11 @@ fn naming_a_land_card_stops_it_from_being_played() {
     let island = t.hand(P1, "Island");
     assert!(!can_play_land(&mut t, P1, forest));
     assert!(can_play_land(&mut t, P1, island));
-    // P0 can't play one either.
+    // From P0's next turn on, it can be played again.
     t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert!(can_play_land(&mut t, P1, forest));
+    // P0 can't play one either.
     let mut t = TestGame::new(2);
     ban(&mut t, "Forest");
     t.resolve_all();

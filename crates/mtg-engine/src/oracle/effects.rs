@@ -408,10 +408,18 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     // land card, you may put it onto the battlefield").
     let r = l.strip_prefix("if ")?;
     let (c, rest) = r.split_once(", ")?;
-    let f = super::patterns::statics_conditions::pronoun_state(c)?;
-    if matches!(b.it, Sel::None) {
+    // "It" must refer to an object an earlier sentence mentioned (a target, the trigger's
+    // object, what an effect moved): not the source by default, when the earlier sentence
+    // didn't say what "it" is ("Target player exiles a card from their graveyard. If it's
+    // a creature card, ..."). An alternative of several words after "or" ("an enchanted
+    // creature or enchantment creature") isn't read as sharing the first one's adjectives.
+    if matches!(b.it, Sel::None | Sel::This)
+        || c.split_once(" or ")
+            .is_some_and(|(_, alt)| alt.contains(' '))
+    {
         return None;
     }
+    let f = super::patterns::statics_conditions::pronoun_state(c)?;
     let cond = Condition::SelMatches(b.it.clone(), f);
     let e = parse_clause(rest, b)?;
     Some(Effect::If {
