@@ -192,7 +192,11 @@ pub fn word_votes(r: &str) -> Option<(Value, String)> {
 fn vote_results(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     for verb in ["exile", "destroy"] {
-        if l == format!("{verb} each permanent with the most votes or tied for most votes") {
+        // "each permanent", "each creature" (the objects voted for).
+        let noun = l
+            .strip_prefix(&format!("{verb} each "))
+            .and_then(|r| r.strip_suffix(" with the most votes or tied for most votes"));
+        if noun.is_some_and(|n| matches!(n, "permanent" | "creature" | "artifact" | "land")) {
             let what = Sel::Var(WINNERS);
             return Some(if verb == "exile" {
                 Effect::Exile {

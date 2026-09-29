@@ -2250,6 +2250,20 @@ impl Game {
 
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
     pub fn pay_cost(&mut self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
+        // A cost is written from the paying player's point of view: when another player
+        // pays it ("counter it unless that player pays [cost]", CR 702.21a), "you" in it
+        // ("sacrifice a permanent" — one you control) is that player, as when checking
+        // whether it can be paid.
+        let payer_ctx;
+        let ctx = if ctx.controller == p {
+            ctx
+        } else {
+            payer_ctx = Ctx {
+                controller: p,
+                ..ctx.clone()
+            };
+            &payer_ctx
+        };
         let snapshot = self.clone();
         // CR 118.13b: the choice of how to pay hybrid and Phyrexian symbols is made
         // immediately before paying.

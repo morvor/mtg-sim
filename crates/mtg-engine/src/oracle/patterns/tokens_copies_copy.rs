@@ -194,8 +194,22 @@ pub(crate) fn copy_exceptions(
             .iter()
             .find_map(|p| c.strip_prefix(p))
         {
-            if r.starts_with("this ability") || r.contains(" this ability") {
+            // "it has this ability", "it has flying and this ability" (CR 707.9a): the
+            // ability creating the copy effect.
+            let r = if r == "this ability" {
+                out.push(Modification::AddThisAbility);
+                ""
+            } else if let Some(x) = r.strip_suffix(" and this ability") {
+                out.push(Modification::AddThisAbility);
+                x
+            } else {
+                r
+            };
+            if r.contains("this ability") {
                 return None;
+            }
+            if r.is_empty() {
+                continue;
             }
             for a in ability_list(r, quotes, &[CardType::Creature], ctx)? {
                 match &a.kind {
@@ -278,6 +292,26 @@ fn exiled_by() -> ExiledBy {
 fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(rest) = r.strip_prefix('~') {
         return Some((Sel::This, rest.to_string()));
+    }
+    // A phrase an earlier instruction named ("that card": the card it exiled).
+    let named = b.named.iter().find_map(|(p, sel)| {
+        let rest = r.strip_prefix(p.as_str())?;
+        (rest.is_empty() || rest.starts_with(' ') || rest.starts_with(','))
+            .then(|| (sel.clone(), rest.to_string()))
+    });
+    if named.is_some() {
+        return named;
+    }
+    // "Whenever you cast a spell that targets only a single artifact or creature you
+    // control, create a token that's a copy of that artifact or creature" (Vesuvan
+    // Duplimancy): the spell's target.
+    if matches!(b.it, Sel::TriggerSpell) {
+        if let Some(rest) = r.strip_prefix("that artifact or creature") {
+            return Some((
+                Sel::All(Filter::TargetOf(Box::new(Sel::TriggerSpell))),
+                rest.to_string(),
+            ));
+        }
     }
     for p in [
         "enchanted creature",

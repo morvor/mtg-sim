@@ -351,9 +351,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     }
     // "You may pay [cost]" is an optional cost as a whole (a pattern), not "you may" + "pay";
     // so is "you may [effect] unless that player pays [cost]", where that player decides
-    // whether to pay first (CR 118.12a).
+    // whether to pay first (CR 118.12a); "you may cast [spells] this turn as though they
+    // had flash" is a permission.
     if l.starts_with("you may pay ")
         || (l.starts_with("you may ") && l.contains(" unless that player pays "))
+        || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
     {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);

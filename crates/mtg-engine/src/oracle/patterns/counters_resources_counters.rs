@@ -130,7 +130,7 @@ fn double_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "counters_resources: double counters", priority: 100, parse: double_counters } }
 
 /// "[kind] counter(s)" or "counters" (any kind) at the start of `s`, then " on".
-fn kind_then_on(s: &str) -> Option<(Option<CounterKind>, &str)> {
+pub(crate) fn kind_then_on(s: &str) -> Option<(Option<CounterKind>, &str)> {
     if let Some(r) = strip(s, "counters on").or_else(|| strip(s, "counter on")) {
         return Some((None, r));
     }
@@ -144,7 +144,7 @@ fn counters(sel: Sel, kind: Option<CounterKind>) -> Value {
 }
 
 /// "N or more", "N or fewer", "no", "a"/"one or more", exactly "N" before a counter kind.
-fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
+pub(crate) fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
     if let Some(r) = strip(s, "no") {
         return Some((Cmp::Eq, Value::c(0), r));
     }

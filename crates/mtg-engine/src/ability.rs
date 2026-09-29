@@ -1523,6 +1523,12 @@ pub enum Modification {
     SetChosenColors,
     // Layer 6
     AddAbility(Ability),
+    /// "... becomes a copy of [object], except it has this ability" (CR 707.9a): the
+    /// ability whose resolution creates the effect. Replaced by an [`AddAbility`] of that
+    /// ability as the effect is created (see `Game::fix_mods`); on its own it adds nothing.
+    ///
+    /// [`AddAbility`]: Modification::AddAbility
+    AddThisAbility,
     AddKeyword(Keyword),
     /// Adds a keyword whose variable is defined by the effect ("~ has bushido X, where X
     /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
@@ -1580,6 +1586,7 @@ impl Modification {
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
             | SetChosenColors => Layer::L5Color,
             AddAbility(_)
+            | AddThisAbility
             | AddKeyword(_)
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
@@ -2206,6 +2213,10 @@ pub enum StaticEffect {
         what: Filter,
         mods: Vec<Modification>,
     },
+    /// "The "legend rule" doesn't apply [to tokens you control]" (CR 704.5j): legendary
+    /// permanents matching the filter (relative to the source) are left out of the legend
+    /// rule (see `legend_rule.rs`).
+    LegendRuleExempt(Filter),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2225,6 +2236,11 @@ pub enum PlayerModification {
     /// relative to the affected player. Applied with the static cost modifiers (see
     /// `layers.rs`, `collect_statics`).
     CostModifier(CostModifier),
+    /// "You may cast [spells] this turn as though they had flash" (CR 601.3b): a timing
+    /// permission for the affected player's spells matching the filter, created by a
+    /// resolved effect for a duration. Applied with the static flash permissions (see
+    /// `layers.rs`, `collect_statics`).
+    FlashPermission(Filter),
     /// A permission to play cards (CR 601.2, 305.1) created by a resolved effect for a
     /// duration ("Until end of turn, you may play lands and cast spells from the top of
     /// your library."). Its `who` is relative to the affected player. Collected with the
