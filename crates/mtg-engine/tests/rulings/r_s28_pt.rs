@@ -213,7 +213,9 @@ fn a_monuments_counters_stay_while_it_isnt_a_creature() {
     plus1(&mut t, monument, 1);
     assert_eq!(t.pt(monument), (5, 5));
     next_upkeep(&mut t, P1);
-    assert!(!t.obj_now(monument).is(mtg_engine::types::CardType::Creature));
+    assert!(!t
+        .obj_now(monument)
+        .is(mtg_engine::types::CardType::Creature));
     assert_eq!(t.counters(monument, "+1/+1"), 1);
     next_upkeep(&mut t, P0);
     t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);

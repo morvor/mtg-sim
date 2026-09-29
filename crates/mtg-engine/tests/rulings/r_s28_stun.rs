@@ -196,7 +196,8 @@ fn an_untap_cost_can_be_paid_by_removing_a_stun_counter() {
     let fountain = t.battlefield(P0, "Halo Fountain");
     t.lands(P0, "Plains", 1);
     t.answer_choose(P0, &[Entity::Object(bears)]);
-    t.activate(P0, fountain, 0, &[]).expect("pay the untap cost");
+    t.activate(P0, fountain, 0, &[])
+        .expect("pay the untap cost");
     assert!(tapped(&t, bears));
     assert_eq!(t.counters(bears, STUN), 1);
     t.resolve_all();
@@ -207,4 +208,62 @@ fn an_untap_cost_can_be_paid_by_removing_a_stun_counter() {
     let fountain = t.battlefield(P0, "Halo Fountain");
     t.lands(P0, "Plains", 1);
     assert!(t.activate(P0, fountain, 0, &[]).is_err());
+}
+
+#[test]
+fn an_untap_symbol_cost_can_be_paid_by_removing_a_stun_counter() {
+    cr!("122.1d", "107.6");
+    ruling!(
+        "Involuntary Cooldown",
+        "If untapping a permanent is part of a cost (such as that of Halo Fountain's first ability), you may pay that cost by \"untapping\" a tapped permanent with a stun counter on it. The stun counter will be removed and the creature will remain tapped. However, the cost will still be paid."
+    );
+    supported("Safehold Sentry");
+    // Safehold Sentry: "{2}{W}, {Q}: This creature gets +0/+2 until end of turn."
+    let mut t = TestGame::new(2);
+    let sentry = t.battlefield(P0, "Safehold Sentry");
+    t.g.tap(sentry);
+    t.g.add_counters(Entity::Object(sentry), STUN, 1, None);
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Wastes", 2);
+    t.activate(P0, sentry, 0, &[])
+        .expect("{Q} is paid by removing the stun counter");
+    assert!(tapped(&t, sentry));
+    assert_eq!(t.counters(sentry, STUN), 0);
+    t.resolve_all();
+    assert_eq!(t.pt(sentry), (2, 4));
+    // An untapped permanent can't pay {Q}.
+    let mut t = TestGame::new(2);
+    let sentry = t.battlefield(P0, "Safehold Sentry");
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Wastes", 2);
+    assert!(t.activate(P0, sentry, 0, &[]).is_err());
+}
+
+#[test]
+fn crackleburrs_untap_cost_needs_two_other_tapped_creatures() {
+    cr!("107.6", "118.3");
+    ruling!(
+        "Crackleburr",
+        "To activate either ability, you'll need Crackleburr plus two other creatures. Crackleburr must have been under your control since your most recent turn began (or have haste), but the other two creatures don't."
+    );
+    supported("Crackleburr");
+    // "{U/R}{U/R}, {Q}, Untap two tapped blue creatures you control: Return target creature
+    // to its owner's hand." Crackleburr is blue and red, but it can't be one of the two.
+    let mut t = TestGame::new(2);
+    let burr = t.battlefield(P0, "Crackleburr");
+    let merfolk = t.battlefield(P0, "Coral Merfolk");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.tap(burr);
+    t.g.tap(merfolk);
+    t.lands(P0, "Island", 2);
+    assert!(t.activate(P0, burr, 1, &[]).is_err());
+    assert!(tapped(&t, burr) && tapped(&t, merfolk));
+    // A second tapped blue creature, which just entered, is enough.
+    let drake = t.enter(P0, "Wind Drake");
+    t.g.tap(drake);
+    t.activate(P0, burr, 1, &[Entity::Object(bears)])
+        .expect("untap Crackleburr and two other blue creatures");
+    assert!(!tapped(&t, burr) && !tapped(&t, merfolk) && !tapped(&t, drake));
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
 }

@@ -59,7 +59,8 @@ fn a_shield_counter_doesnt_stop_state_based_destruction() {
         "A creature with a shield counter on it may still be destroyed by state-based actions if it has damage marked on it equal to its toughness or has been dealt unpreventable damage by a source with deathtouch."
     );
     supported("Protection Magic");
-    // Lethal damage: a 2/2 with 1 damage marked gets a shield counter, then -1/-1.
+    // Lethal damage: a 2/2 with 1 damage marked gets a shield counter, then -1/-1. The
+    // counter isn't removed: nothing destroys it "as the result of an effect".
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let pinger = t.battlefield(P1, "Hill Giant");
@@ -70,12 +71,16 @@ fn a_shield_counter_doesnt_stop_state_based_destruction() {
     assert_eq!(t.counters(bears, SHIELD), 1);
     p1_casts_at(&mut t, "Tragic Slip", Entity::Object(bears));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
-    // Deathtouch: with Leyline of Punishment, the damage can't be prevented.
+    // Deathtouch: with Leyline of Punishment, the damage can't be prevented. It removes
+    // one of two shield counters, and the other doesn't save the creature.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
-    t.answer_targets(P0, &[Entity::Object(giant)]);
-    cast_card(&mut t, P0, "Protection Magic");
-    t.resolve_all();
+    for _ in 0..2 {
+        t.answer_targets(P0, &[Entity::Object(giant)]);
+        cast_card(&mut t, P0, "Protection Magic");
+        t.resolve_all();
+    }
+    assert_eq!(t.counters(giant, SHIELD), 2);
     t.battlefield(P1, "Leyline of Punishment");
     let rats = t.battlefield(P1, "Typhoid Rats");
     damage(&mut t, rats, 1, giant);

@@ -22,7 +22,11 @@ fn blocked_by(t: &mut TestGame, name: &str, blocker: &str) -> (ObjectId, ObjectI
     let them = t.battlefield(P1, blocker);
     t.set_step(P0, Step::BeginningOfCombat);
     attack_with(t, &[(me, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(them, me)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(them, me)]),
+    );
     go_to(t, Step::DeclareBlockers);
     (me, them)
 }
@@ -52,11 +56,18 @@ fn sentinels_toughness_is_set_in_layer_7b_under_pumps_counters_and_switches() {
         .expect("activate Sentinel");
     t.resolve_all();
     assert_eq!(t.pt(sentinel), (5, 7));
+    // The Bears' power was determined as the ability resolved: a later counter on them
+    // doesn't change the Sentinel's toughness.
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (3, 3));
+    assert_eq!(t.pt(sentinel), (5, 7));
     // A switch applies on top of it.
     cast_at(&mut t, "Twisted Image", sentinel);
     assert_eq!(t.pt(sentinel), (7, 5));
-    // The new base toughness lasts indefinitely; the Bears' power was locked in.
+    // The new base toughness lasts indefinitely.
     t.advance_to(P1, Step::Upkeep);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(t.pt(sentinel), (2, 4));
 }
 
@@ -77,10 +88,15 @@ fn sworn_defenders_pt_is_set_in_layer_7b_under_pumps_and_counters() {
         .expect("activate Sworn Defender");
     t.resolve_all();
     assert_eq!(t.pt(defender), (5, 7));
+    // The Giant's power and toughness were determined as the ability resolved.
+    t.g.add_counters(Entity::Object(giant), "+1/+1", 1, None);
+    t.g.recompute();
+    assert_eq!(t.pt(giant), (4, 4));
+    assert_eq!(t.pt(defender), (5, 7));
     t.g.add_counters(Entity::Object(defender), "+1/+1", 1, None);
     t.g.recompute();
     assert_eq!(t.pt(defender), (6, 8));
-    // Combat damage: 6 to the Giant, 3 to the Defender (toughness 8).
+    // Combat damage: 6 to the Giant, 4 to the Defender (toughness 8).
     go_to(&mut t, Step::EndOfCombat);
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert!(t.on_battlefield(defender));

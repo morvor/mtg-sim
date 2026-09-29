@@ -69,7 +69,7 @@ fn energy_isnt_mana_and_doesnt_empty_between_steps() {
 
 #[test]
 fn energy_isnt_associated_with_the_permanent_that_gave_it() {
-    cr!("107.14", "122.1", "118.3");
+    cr!("107.14", "122.1");
     ruling!(
         "Aether Hub",
         "Energy counters are a kind of counter that a player may have. They're not associated with any specific permanents."

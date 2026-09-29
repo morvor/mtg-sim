@@ -12,6 +12,11 @@ fn untap_tapped_cost(p: &str) -> Option<CostPart> {
     let r = strip(p, "untap")?;
     let (n, r) = parse_number(r)?;
     let r = strip(r, "tapped")?;
+    // Only your own permanents: the cost can't untap another player's ("Untap a tapped land
+    // an opponent controls", Benthic Explorers).
+    if !end(r).ends_with(" you control") {
+        return None;
+    }
     let (f, _, tail) = parse_object_phrase(r)?;
     if !end(tail).is_empty() {
         return None;

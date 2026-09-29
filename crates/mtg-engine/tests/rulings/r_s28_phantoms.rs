@@ -29,9 +29,16 @@ fn unpreventable_damage_is_dealt_and_a_counter_is_still_removed() {
     damage(&mut t, giant, 2, tiger);
     assert_eq!(t.obj_now(tiger).damage, 0);
     assert_eq!(t.counters(tiger, PLUS1), 1);
-    // Leyline of Punishment: "Damage can't be prevented." 1 damage is dealt and the last
-    // counter removed, so the 1/0 with 1 damage dies.
+    // Leyline of Punishment: "Damage can't be prevented." With three counters (a 4/3),
+    // 1 damage is dealt and a counter is still removed.
+    t.g.add_counters(Entity::Object(tiger), PLUS1, 2, None);
     t.battlefield(P1, "Leyline of Punishment");
+    damage(&mut t, giant, 1, tiger);
+    assert!(t.on_battlefield(tiger));
+    assert_eq!(t.obj_now(tiger).damage, 1);
+    assert_eq!(t.counters(tiger, PLUS1), 2);
+    assert_eq!(t.pt(tiger), (3, 2));
+    // Again: 2 damage marked on what is now a 2/1, so it dies.
     damage(&mut t, giant, 1, tiger);
     assert!(t.in_graveyard(P0, "Phantom Tiger"));
 }

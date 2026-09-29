@@ -273,7 +273,6 @@ fn blue_elemental_blasts_mode_stays_when_its_target_changes() {
     t.answer_yes(P1, true);
     t.answer_targets(P1, &[Entity::Object(raging)]);
     t.resolve();
-    // Only red permanents were offered as new targets, not the red spell.
     // The only other red permanent was offered as a new target, not the red spell.
     let offered = target_candidates(&t, P1, from);
     assert_eq!(offered, vec![vec![Entity::Object(raging)]]);

@@ -78,14 +78,26 @@ fn the_rad_ability_has_no_source_and_is_the_active_players() {
     stack_library(
         &mut t,
         P1,
-        &["Grizzly Bears", "Forest", "Hill Giant", "Forest", "Hill Giant"],
+        &[
+            "Grizzly Bears",
+            "Forest",
+            "Hill Giant",
+            "Forest",
+            "Hill Giant",
+        ],
     );
     t.advance_to(P1, Step::PrecombatMain);
     t.settle();
     assert_eq!(t.stack_len(), 1);
     let ability = t.g.stack[0];
     assert_eq!(t.g.obj(ability).controller, P1);
-    assert!(t.g.permanents().all(|o| o.id != ability));
+    // Its source stands for no object: it's in no zone.
+    let source = match t.g.obj(ability).stack.as_deref().map(|s| &s.kind) {
+        Some(mtg_engine::object::StackKind::Triggered { source, .. }) => *source,
+        _ => panic!("not a triggered ability"),
+    };
+    assert_eq!(t.g.obj(source).zone, mtg_engine::object::Zone::Nowhere);
+    assert_eq!(t.g.obj(source).controller, P1);
     t.resolve_all();
     // Four milled, two nonland: 2 life, 2 counters.
     assert_eq!(t.graveyard_size(P1), 4);

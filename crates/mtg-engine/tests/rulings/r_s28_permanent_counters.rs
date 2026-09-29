@@ -17,7 +17,7 @@ const STORAGE: &str = "storage";
 
 #[test]
 fn lotus_blossoms_upkeep_counter_is_optional() {
-    cr!("603.5", "122.6");
+    cr!("603.5");
     ruling!(
         "Lotus Blossom",
         "Adding a counter is optional. If you forget to add one during your upkeep, you cannot back up and add one later."
@@ -50,7 +50,7 @@ fn silos(t: &mut TestGame, n: u32) -> ObjectId {
 
 #[test]
 fn a_storage_land_tapped_by_another_effect_keeps_its_counters() {
-    cr!("122.1", "118.3");
+    cr!("122.1");
     ruling!(
         "Sand Silos",
         "If the land is tapped by some external effect, no counters are removed from it."
@@ -94,7 +94,8 @@ fn a_storage_lands_counters_wait_while_its_land_type_is_changed() {
     // The Aura leaves: the counters can be used again.
     crate::r_s02_common::destroy(&mut t, presence);
     t.answer(P0, DecisionKind::X, Answer::Number(2));
-    t.activate(P0, silos, 0, &[]).expect("remove two storage counters");
+    t.activate(P0, silos, 0, &[])
+        .expect("remove two storage counters");
     assert_eq!(t.g.player(P0).mana_pool.total(), 2);
     assert_eq!(t.counters(silos, STORAGE), 0);
 }

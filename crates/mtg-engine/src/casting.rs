@@ -2185,7 +2185,7 @@ impl Game {
         let ctx = Ctx::new(src, p);
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), &ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx) {
                 return false;
             }
         }
@@ -2264,13 +2264,16 @@ impl Game {
 
     /// Whether `part` of a cost could be paid. `taps_src`: the cost also has {T}, so the
     /// source will be tapped and can't be one of the untapped permanents tapped for
-    /// "Tap an untapped [permanent] you control" (CR 118.3).
+    /// "Tap an untapped [permanent] you control" (CR 118.3). `untaps_src`: likewise, the
+    /// cost also has {Q}, so the source can't be one of the tapped permanents untapped for
+    /// "Untap a tapped [permanent] you control".
     fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
         src: Option<ObjectId>,
         taps_src: bool,
+        untaps_src: bool,
         ctx: &Ctx,
     ) -> bool {
         let so = src.map(|s| self.obj(s));
@@ -2379,7 +2382,10 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p && self.obj(*o).tapped)
+                    .filter(|o| {
+                        let ob = self.obj(*o);
+                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
+                    })
                     .count()
                     >= n
             }
@@ -2508,7 +2514,7 @@ impl Game {
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx) {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
@@ -2540,9 +2546,14 @@ impl Game {
             }
             CostPart::Untap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
-                if !self.untap(s) {
+                let o = self.obj(s);
+                if o.zone != Zone::Battlefield || !o.tapped {
                     return bad("can't untap");
                 }
+                // A stun counter's replacement effect may replace the untap (the counter is
+                // removed and the permanent stays tapped); the cost is still paid
+                // (CR 122.1d).
+                self.untap(s);
             }
             CostPart::PayLife(v) => {
                 let n = self.eval_value(v, ctx).max(0) as u32;
@@ -2754,8 +2765,13 @@ impl Game {
                     .into_iter()
                     .filter(|o| self.obj(*o).controller == p && self.obj(*o).tapped)
                     .collect();
+                if (cands.len() as u32) < n {
+                    return bad("not enough tapped permanents");
+                }
                 let pick =
                     self.ask_objects(p, src, "Choose permanents to untap (cost)", cands, n, n);
+                // A stun counter's replacement effect may replace an untap; the cost is still
+                // paid (CR 122.1d).
                 for o in pick {
                     self.untap(o);
                 }

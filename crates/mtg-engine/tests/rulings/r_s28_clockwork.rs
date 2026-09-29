@@ -50,7 +50,11 @@ fn a_clockwork_creature_with_no_counters_can_attack_and_block() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.set_step(P1, Step::BeginningOfCombat);
     attack_with(&mut t, &[(bears, Entity::Player(P0))]);
-    assert!(crate::r_s21_common::legal_blocks(&mut t, P0, &[(steed, bears)]));
+    assert!(crate::r_s21_common::legal_blocks(
+        &mut t,
+        P0,
+        &[(steed, bears)]
+    ));
 }
 
 #[test]
@@ -87,7 +91,8 @@ fn wind(t: &mut TestGame, id: ObjectId, x: i64, put: i64) {
     t.lands(P0, "Wastes", x as usize);
     t.answer(P0, DecisionKind::X, Answer::Number(x));
     t.answer(P0, DecisionKind::Number, Answer::Number(put));
-    t.activate(P0, id, 0, &[]).expect("activate during the upkeep");
+    t.activate(P0, id, 0, &[])
+        .expect("activate during the upkeep");
     t.resolve_all();
     let now = t.g.current(id);
     t.g.objects[now.0 as usize].tapped = false;

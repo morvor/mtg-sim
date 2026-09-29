@@ -185,7 +185,7 @@ fn stella_lees_copy_keeps_the_division_and_number_of_targets() {
 
 #[test]
 fn rals_copy_keeps_the_division() {
-    cr!("707.10c", "115.7f", "606.3");
+    cr!("707.10c", "115.7f");
     ruling!(
         "Ral, Storm Conduit",
         "If the spell that's copied has damage divided as it was cast, the division can't be changed (although the targets receiving that damage still can). The same is true of spells that distribute counters."
@@ -326,7 +326,7 @@ fn peter_parkers_cameras_copy_keeps_the_division_and_number_of_targets() {
 
 #[test]
 fn the_peregrine_dynamos_copy_keeps_how_counters_are_distributed() {
-    cr!("707.10", "707.10c", "115.7f", "606.3");
+    cr!("707.10", "707.10c", "115.7f");
     ruling!(
         "The Peregrine Dynamo",
         "If the ability divides damage or distributes counters among a number of targets, the division and number of targets can’t be changed. If you choose new targets, you must choose the same number of targets."
