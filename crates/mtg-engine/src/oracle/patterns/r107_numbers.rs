@@ -97,6 +97,11 @@ pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -
     if !end(&tail).is_empty() {
         return None;
     }
+    where_x_is_value(clause, v, b, it)
+}
+
+/// "[clause], where X is [value]" with the value already read.
+pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Option<Effect> {
     // An object the value named ("cards equal to the sacrificed creature's power") is
     // what a later "its" refers to, unless the clause names another.
     let value_it = std::mem::replace(&mut b.it, it.clone());

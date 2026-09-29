@@ -168,11 +168,20 @@ fn copy_targeting(
     Some(copy)
 }
 
+/// Whether `spell` can be copied: it's on the stack, or it's a spell that has left the
+/// stack (countered in response to the ability that copies it), which is copied as it last
+/// existed there (CR 608.2h), as `copy::copy_spell` does.
+fn copyable(g: &Game, spell: ObjectId) -> bool {
+    let o = g.obj(spell);
+    o.zone == Zone::Stack
+        && (g.is_live(spell) || (o.kind != ObjKind::StackAbility && o.stack.is_some()))
+}
+
 /// CR 707.10d: copies `spell` for each other object or player it could target; each copy
 /// targets a different one of them. The copies are put onto the stack in the order their
 /// controller chooses.
 pub fn copy_for_each_target(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
-    if !g.is_live(spell) || g.obj(spell).zone != Zone::Stack {
+    if !copyable(g, spell) {
         return vec![];
     }
     if g.dirty {
@@ -232,7 +241,7 @@ pub fn copy_with_target(
     controller: PlayerId,
     targets: Vec<Entity>,
 ) -> Option<ObjectId> {
-    if !g.is_live(spell) || g.obj(spell).zone != Zone::Stack {
+    if !copyable(g, spell) {
         return None;
     }
     if g.dirty {
@@ -452,4 +461,29 @@ pub fn copy_cards(
         out.iter().map(|o| Entity::Object(*o)).collect(),
     );
     out
+}
+
+/// `Effect::Custom` name: the controller puts the objects the previous instruction
+/// affected ("it") in the order they choose — the cards whose copies they'll cast one at
+/// a time, in any order ("For each card exiled this way, copy it, and you may cast the
+/// copy", CR 707.12, 707.12a; the last copy cast resolves first).
+pub const ORDER_AFFECTED: &str = "order the affected objects";
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    if name != ORDER_AFFECTED {
+        return false;
+    }
+    let items = ctx.vars.get(&vars::IT).cloned().unwrap_or_default();
+    if items.len() > 1 {
+        let names = items
+            .iter()
+            .map(|e| match e {
+                Entity::Object(o) => g.obj(*o).chars.name.to_string(),
+                Entity::Player(p) => format!("{p:?}"),
+            })
+            .collect();
+        let order = g.ask_order(ctx.controller, "Choose the order to copy them in", names);
+        ctx.set_var(vars::IT, order.into_iter().map(|i| items[i]).collect());
+    }
+    true
 }

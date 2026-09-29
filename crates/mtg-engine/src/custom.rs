@@ -42,6 +42,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::zones::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "a loyalty ability" being activated (CR 606).
+    if let Some(b) = crate::stack_ability_filters::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     match name {
         HAS_NONMANA_ACTIVATED_ABILITY => g.obj(id).chars.abilities.iter().any(
             |a| matches!(&a.kind, crate::ability::AbilityKind::Activated(x) if !x.is_mana_ability),
@@ -92,6 +96,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
     }
     // "Your commander's mana value" (CR 903.3e).
     if let Some(v) = crate::commander_rules::custom_value(g, name, ctx) {
+        return v;
+    }
+    // "for each other instant and sorcery spell you've cast before it this turn".
+    if let Some(v) = crate::spells_cast_before::custom_value(g, name, ctx) {
         return v;
     }
     // Information noted during the draft (CR 905.2b).
@@ -529,6 +537,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // Distributing counters among targets (CR 601.2d).
     if crate::counter_rules::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Ordering the cards whose copies are cast one at a time (CR 707.12a).
+    if crate::copy_rules::custom_effect(g, name, ctx) {
         return;
     }
     match name {

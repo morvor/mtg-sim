@@ -181,7 +181,10 @@ impl Game {
         let mut legends: Vec<(PlayerId, Vec<ObjectId>)> = Vec::new();
         for &id in &perms {
             let o = self.obj(id);
-            if !o.chars.is_legendary() || !o.chars.has_a_name() {
+            if !o.chars.is_legendary()
+                || !o.chars.has_a_name()
+                || crate::legend_rule::exempt(self, id)
+            {
                 continue;
             }
             let mut group = vec![id];

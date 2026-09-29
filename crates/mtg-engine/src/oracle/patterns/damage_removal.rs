@@ -974,10 +974,19 @@ inventory::submit! { EffectPattern { name: "damage_removal: delayed removal", pr
 /// creature card ... to the battlefield. Exile it at ...": the pronoun names the new
 /// objects the previous effect created or put onto the battlefield.
 fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    // "You may create a token that's a copy of that creature. Exile that token at end of
+    // combat." (Mirror Mockery): the tokens an optional instruction created.
+    let mut optional_create = false;
     let var = match last_effect(prev) {
         Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
-        _ => return false,
+        _ => {
+            if super::tokens_copies_create::last_create(prev).is_none() {
+                return false;
+            }
+            optional_create = true;
+            vars::CREATED
+        }
     };
     let Some((verb, r, step)) = delayed_parts(l) else {
         return false;
@@ -1006,6 +1015,9 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     // Later pronouns name the same new objects.
     b.it = Sel::Var(var);
+    if optional_create {
+        return super::tokens_copies_create::append_after_create(prev, e);
+    }
     let old = std::mem::take(prev);
     *prev = Effect::seq(vec![old, e]);
     true
