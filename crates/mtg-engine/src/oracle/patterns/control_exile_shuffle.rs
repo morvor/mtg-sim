@@ -41,7 +41,9 @@ fn p_choose_target(l: &str, b: &mut Builder) -> Option<Effect> {
     let TargetKind::Object(f) = &spec.what else {
         return None;
     };
-    if !end(tail).is_empty() || spec.min != 1 || !matches!(spec.max, Value::Const(1)) {
+    // "Choose target creature" or "choose up to one other target creature you control"
+    // (with no target chosen, the sentences about it do nothing).
+    if !end(tail).is_empty() || spec.min > 1 || !matches!(spec.max, Value::Const(1)) {
         return None;
     }
     let creature = is_creature(f) && f.zone().is_none_or(|z| z == ZoneKind::Battlefield);
