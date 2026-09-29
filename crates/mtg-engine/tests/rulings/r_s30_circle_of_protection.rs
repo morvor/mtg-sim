@@ -30,7 +30,7 @@ fn circle_choosing(t: &mut TestGame, circle: ObjectId, source: ObjectId) -> Vec<
 
 #[test]
 fn a_circle_can_be_used_with_no_damage_pending_and_prevents_only_the_next_damage() {
-    cr!("609.7a", "615.7");
+    cr!("609.7a", "615.8");
     ruling!(
         "Circle of Protection: Red",
         "Can be used even when there is no damage to prevent. It prevents the next damage (if any) from the source this turn."
