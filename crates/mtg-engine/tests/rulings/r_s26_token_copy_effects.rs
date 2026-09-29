@@ -68,7 +68,7 @@ fn blank_2_2(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn clone_legion_copies_a_face_down_creature_as_a_blank_2_2() {
-    cr!("708.2", "707.2", "708.10");
+    cr!("708.2", "707.2");
     ruling!(
         "Clone Legion",
         "A token that enters the battlefield as a copy of a face-down creature is a face-up colorless 2/2 creature with no name, abilities, or creature types."

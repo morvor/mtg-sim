@@ -319,7 +319,7 @@ fn a_copy_of_a_kiki_jiki_token_has_haste_but_isnt_sacrificed() {
 
 #[test]
 fn a_token_copy_of_a_face_down_creature_is_a_face_up_2_2_with_no_abilities() {
-    cr!("708.2", "707.2", "708.10");
+    cr!("708.2", "707.2");
     ruling!(
         "Soul-Strike Technique",
         "The face-down characteristics of a permanent are copiable values. If another object becomes a copy of a face-down creature or if a token is created that’s a copy of a face-down creature, that new object is a 2/2 colorless face-up creature with no abilities."

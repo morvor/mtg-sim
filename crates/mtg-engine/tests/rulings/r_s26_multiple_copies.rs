@@ -93,7 +93,7 @@ fn elementals(t: &TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn complete_the_circuit_copies_arent_cast() {
-    cr!("707.10", "601.2i", "601.3b");
+    cr!("707.10", "601.2i", "609.4", "702.8a");
     ruling!(
         "Complete the Circuit",
         "A copy of a spell is created on the stack, so it's not \"cast.\" Abilities that trigger when a player casts a spell won't trigger."

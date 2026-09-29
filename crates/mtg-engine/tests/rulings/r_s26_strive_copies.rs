@@ -34,7 +34,7 @@ fn clues(t: &TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn a_copy_keeps_the_number_of_targets() {
-    cr!("707.10c", "115.7", "608.2c");
+    cr!("707.10c", "115.7");
     ruling!(
         "Call the Coppercoats",
         "If this spell is copied and the effect that copies the spell allows a player to choose new targets for the copy, the number of targets can't be changed."

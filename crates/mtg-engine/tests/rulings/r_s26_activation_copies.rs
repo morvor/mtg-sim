@@ -25,6 +25,12 @@ fn kurkeshs_copy_of_a_modal_ability_has_the_same_mode() {
     // Bow of Nylea: "{1}{G}, {T}: Choose one — ... • You gain 3 life. ..."
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Kurkesh, Onakke Ancient");
+    // "If it isn't a mana ability": an artifact's mana ability doesn't trigger it.
+    let ring = t.battlefield(P0, "Sol Ring");
+    activate_containing(&mut t, P0, ring, "Add {C}{C}").expect("Sol Ring");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    mtg_engine::mana_abilities::empty_pool(&mut t.g, P0);
     let bow = t.battlefield(P0, "Bow of Nylea");
     t.lands(P0, "Taiga", 3);
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
@@ -51,7 +57,7 @@ fn kurkeshs_copy_of_a_modal_ability_has_the_same_mode() {
 
 #[test]
 fn illusionists_bracers_copy_of_a_modal_ability_has_the_same_mode() {
-    cr!("707.10", "700.2g", "603.4");
+    cr!("707.10", "700.2g");
     ruling!(
         "Illusionist's Bracers",
         "If the ability is modal (that is, it says \"Choose one —\" or the like), the copy will have the same mode. You can't choose a different one."

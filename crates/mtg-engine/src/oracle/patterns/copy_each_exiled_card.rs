@@ -1,8 +1,9 @@
 //! "Exile target card that's an instant or sorcery from your graveyard. For each card
 //! exiled this way, copy it, and you may cast the copy without paying its mana cost."
 //! (Mizzix's Mastery; overloaded, "each card"): each card the previous instruction exiled
-//! is copied in exile (CR 707.12) and the copy may be cast while the spell resolves; a copy
-//! that isn't cast ceases to exist (CR 707.12a, 704.5e).
+//! is copied in exile (CR 707.12) and the copy may be cast while the spell resolves, one
+//! at a time in the order the player chooses; a copy that isn't cast ceases to exist
+//! (CR 707.12a, 704.5e).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -51,7 +52,9 @@ fn copy_each_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             },
         ])),
     };
-    *prev = Effect::seq(vec![std::mem::take(prev), each]);
+    // Several copies are cast one at a time, in the order the player chooses.
+    let order = Effect::Custom(crate::copy_rules::ORDER_AFFECTED.into());
+    *prev = Effect::seq(vec![std::mem::take(prev), order, each]);
     true
 }
 

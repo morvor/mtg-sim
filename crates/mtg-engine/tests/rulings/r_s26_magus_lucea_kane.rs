@@ -1,7 +1,7 @@
 //! Rulings batch S26 — Magus Lucea Kane ("{T}: Add {C}{C}. When you next cast a spell with
 //! {X} in its mana cost or activate an ability with {X} in its activation cost this turn,
 //! copy that spell or ability. You may choose new targets for the copy."): a once-only
-//! delayed trigger (CR 603.7b, 603.7c) whose copy keeps the value of X (CR 707.10), isn't
+//! delayed trigger (CR 603.7a, 603.7b) whose copy keeps the value of X (CR 707.10), isn't
 //! cast or activated, and is made even if the original was countered (CR 608.2h).
 
 use crate::r_s01_common::supported;
@@ -30,7 +30,7 @@ fn blaze(t: &mut TestGame, target: impl Into<Entity>) -> ObjectId {
 
 #[test]
 fn the_copy_of_an_x_spell_has_the_same_x() {
-    cr!("707.10", "107.3", "603.7c");
+    cr!("707.10", "107.3");
     ruling!("Magus Lucea Kane", "The copy has the same value of X.");
     let mut t = TestGame::new(2);
     magus_taps(&mut t);
@@ -125,7 +125,7 @@ fn the_copy_isnt_cast_or_activated() {
 
 #[test]
 fn the_copy_is_made_even_if_the_original_was_countered() {
-    cr!("707.10", "608.2h", "603.7c");
+    cr!("707.10", "608.2h");
     ruling!(
         "Magus Lucea Kane",
         "A copy is created even if the spell or ability that caused the delayed triggered ability to trigger has been countered by the time that delayed triggered ability resolves. The copy resolves before the original spell."
@@ -152,7 +152,7 @@ fn the_copy_is_made_even_if_the_original_was_countered() {
 
 #[test]
 fn the_delayed_trigger_copies_only_the_next_x_spell() {
-    cr!("603.7c", "603.7b");
+    cr!("603.7b");
     let mut t = TestGame::new(2);
     magus_taps(&mut t);
     // A spell without {X} doesn't trigger it (and doesn't use it up).
@@ -182,7 +182,7 @@ fn the_delayed_trigger_copies_only_the_next_x_spell() {
 
 #[test]
 fn the_magus_mana_doesnt_have_to_be_spent_on_the_copied_spell() {
-    cr!("603.7c", "500.4");
+    cr!("603.7a");
     ruling!(
         "Magus Lucea Kane",
         "That spell or ability will be copied even if that mana is spent on something else or not spent on anything at all."

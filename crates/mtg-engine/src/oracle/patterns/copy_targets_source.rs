@@ -10,7 +10,7 @@ use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 
 /// "[a player casts] a spell that targets only a single creature other than ~".
-fn cast_targeting_only_a_single(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+pub(crate) fn cast_targeting_only_a_single(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let r = end(r);
     let (who, rest) = if let Some(x) = r.strip_prefix("you cast ") {
         (PlayerRel::You, x)

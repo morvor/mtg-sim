@@ -137,3 +137,56 @@ fn overloaded_mastery_copies_each_card_but_not_itself() {
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+#[test]
+fn overloaded_mastery_casts_the_copies_in_the_order_you_choose() {
+    cr!("707.12a", "405.5");
+    ruling!(
+        "Mizzix's Mastery",
+        "If Mizzix's Mastery exiled multiple cards, you may cast the copies in any order. The last copy you cast will be the first one to resolve."
+    );
+    let mut stacks = Vec::new();
+    for perm in [vec![0, 1], vec![1, 0]] {
+        let mut t = TestGame::new(2);
+        t.graveyard(P0, "Night's Whisper");
+        t.graveyard(P0, "Lightning Bolt");
+        t.lands(P0, "Mountain", 8);
+        supported("Mizzix's Mastery");
+        let m = t.hand(P0, "Mizzix's Mastery");
+        t.cast(P0, m).method(OVERLOAD).go();
+        t.answer(P0, DecisionKind::Order, Answer::Indices(perm.clone()));
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.resolve();
+        let items = t
+            .asked()
+            .into_iter()
+            .find_map(|(p, d)| match d {
+                mtg_engine::decision::Decision::Order { items, .. } if p == P0 => Some(items),
+                _ => None,
+            })
+            .expect("P0 orders the copies");
+        // The copies were cast in the chosen order: the first one cast is at the bottom,
+        // the last one cast on top (it resolves first).
+        let cast_order: Vec<String> = perm.iter().map(|i| items[*i].clone()).collect();
+        let stack: Vec<String> = t
+            .g
+            .stack
+            .iter()
+            .map(|s| t.obj(*s).chars.name.to_string())
+            .collect();
+        assert_eq!(stack, cast_order);
+        let top = *t.g.stack.last().unwrap();
+        let hand = t.hand_size(P0);
+        let life = t.life(P1);
+        t.resolve();
+        if t.obj(top).chars.name == "Lightning Bolt" {
+            assert_eq!((t.life(P1), t.hand_size(P0)), (life - 3, hand));
+        } else {
+            assert_eq!((t.life(P1), t.hand_size(P0)), (life, hand + 2));
+        }
+        stacks.push(stack);
+    }
+    assert_ne!(stacks[0], stacks[1]);
+}

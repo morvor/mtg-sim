@@ -462,3 +462,28 @@ pub fn copy_cards(
     );
     out
 }
+
+/// `Effect::Custom` name: the controller puts the objects the previous instruction
+/// affected ("it") in the order they choose — the cards whose copies they'll cast one at
+/// a time, in any order ("For each card exiled this way, copy it, and you may cast the
+/// copy", CR 707.12, 707.12a; the last copy cast resolves first).
+pub const ORDER_AFFECTED: &str = "order the affected objects";
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    if name != ORDER_AFFECTED {
+        return false;
+    }
+    let items = ctx.vars.get(&vars::IT).cloned().unwrap_or_default();
+    if items.len() > 1 {
+        let names = items
+            .iter()
+            .map(|e| match e {
+                Entity::Object(o) => g.obj(*o).chars.name.to_string(),
+                Entity::Player(p) => format!("{p:?}"),
+            })
+            .collect();
+        let order = g.ask_order(ctx.controller, "Choose the order to copy them in", names);
+        ctx.set_var(vars::IT, order.into_iter().map(|i| items[i]).collect());
+    }
+    true
+}
