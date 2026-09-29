@@ -1475,6 +1475,7 @@ impl Game {
         // CR 615.7: which simultaneous damage a prevention shield prevents.
         crate::prevention::order_for_shields(self, &mut events, combat);
         let first_event = self.events.len();
+        let outer = self.prevention_followups.replace(vec![]);
         for (s, t, a) in events {
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
@@ -1483,6 +1484,9 @@ impl Game {
                 combat,
             }));
         }
+        let followups = std::mem::replace(&mut self.prevention_followups, outer);
+        self.post_replacement_effects
+            .extend(followups.into_iter().flatten().map(|(_, c, e)| (c, e)));
         crate::prevention::merge_prevention_events(self, first_event);
         // CR 120.10: what would be excess damage, as the damage is about to be dealt.
         let excess_before = crate::excess_damage::thresholds_before(

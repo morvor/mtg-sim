@@ -362,6 +362,10 @@ impl Cost {
     pub fn has_tap(&self) -> bool {
         self.parts.iter().any(|p| matches!(p, CostPart::Tap))
     }
+    /// Whether the cost includes the untap symbol {Q} (CR 107.6).
+    pub fn has_untap(&self) -> bool {
+        self.parts.iter().any(|p| matches!(p, CostPart::Untap))
+    }
     pub fn is_free(&self) -> bool {
         self.mana.as_ref().is_none_or(|m| m.is_zero()) && self.parts.is_empty()
     }
