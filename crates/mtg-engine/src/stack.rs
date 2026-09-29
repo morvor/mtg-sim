@@ -1239,12 +1239,29 @@ impl Game {
 }
 
 /// Whether a spell-target filter explicitly allows permanents too ("target spell or
-/// permanent" compiles to `Or([Spell, Permanent])`).
+/// permanent" compiles to `Or([Spell, Permanent])`, and in "target spell or creature",
+/// `Or([Spell, Type(Creature)])`, the alternative that isn't a spell is a creature
+/// permanent).
 fn filter_allows_permanent(f: &Filter) -> bool {
+    fn mentions_spell(f: &Filter) -> bool {
+        match f {
+            Filter::Spell => true,
+            Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_spell),
+            _ => false,
+        }
+    }
+    fn names_permanent(f: &Filter) -> bool {
+        match f {
+            Filter::Permanent => true,
+            Filter::Or(v) | Filter::And(v) => v.iter().any(names_permanent),
+            _ => false,
+        }
+    }
     match f {
-        Filter::Permanent => true,
-        Filter::Or(v) | Filter::And(v) => v.iter().any(filter_allows_permanent),
-        _ => false,
+        Filter::Or(v) if v.iter().any(mentions_spell) => {
+            v.iter().any(|x| names_permanent(x) || !mentions_spell(x))
+        }
+        _ => names_permanent(f),
     }
 }
 
