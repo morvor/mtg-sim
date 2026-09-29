@@ -12,6 +12,9 @@ use crate::types::*;
 /// every zone, CR 702.29b).
 pub const HAS_NONMANA_ACTIVATED_ABILITY: &str = "has_nonmana_activated_ability";
 
+/// "[it] attacked or blocked this combat" (see `Game::attacked_or_blocked_this_combat`).
+pub const ATTACKED_OR_BLOCKED_THIS_COMBAT: &str = "attacked_or_blocked_this_combat";
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
@@ -48,6 +51,8 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
         ),
         // CR 702.171b: the saddled designation.
         "saddled" => g.obj(id).saddled,
+        // "if ~ attacked or blocked this combat".
+        ATTACKED_OR_BLOCKED_THIS_COMBAT => g.attacked_or_blocked_this_combat(id),
         // "Equipment attached to it" where "it" is each object an effect applies to.
         "attached_to_affected" => ctx
             .vars
