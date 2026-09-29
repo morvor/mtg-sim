@@ -10,7 +10,7 @@ use crate::r_s04_common::add_mana;
 use crate::r_s06_common::activate_containing;
 use crate::r_s25_common::cast_new;
 use crate::r_s29_common::*;
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -43,6 +43,15 @@ fn wind_up(t: &mut TestGame, id: ObjectId, x: i64) {
     activate_containing(t, P0, id, "Put up to X").expect("the ability");
 }
 
+/// The most counters P0 was offered to put on since decision `from` (`None` if P0 wasn't
+/// asked).
+fn offered_most(t: &TestGame, from: usize) -> Option<i64> {
+    t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::ChooseNumber { max, .. } => Some(*max),
+        _ => None,
+    })
+}
+
 #[test]
 fn counters_over_the_maximum_are_simply_not_added() {
     cr!("608.2h", "122.1");
@@ -52,26 +61,37 @@ fn counters_over_the_maximum_are_simply_not_added() {
     );
     supported("Clockwork Swarm");
     let mut t = TestGame::new(2);
+    // P0 always puts as many as it's allowed to.
+    crate::r_s03_common::respond(&mut t, P0, |_, d| match d {
+        Decision::ChooseNumber { max, .. } => Some(Answer::Number(*max)),
+        _ => None,
+    });
     let avian = clockwork(&mut t, "Clockwork Avian");
     assert_eq!(t.counters(avian, PLUS1_0), 4);
     remove(&mut t, avian, 3);
     // X = 3 with one counter: it gets three (four in all).
+    let from = t.asked().len();
     wind_up(&mut t, avian, 3);
     t.resolve_all();
+    assert_eq!(offered_most(&t, from), Some(3));
     assert_eq!(t.counters(avian, PLUS1_0), 4);
-    // X = 3 with two counters: only two are put on.
+    // X = 3 with two counters: only two can be put on.
     remove(&mut t, avian, 2);
     t.g.objects[avian.0 as usize].tapped = false;
+    let from = t.asked().len();
     wind_up(&mut t, avian, 3);
     t.resolve_all();
+    assert_eq!(offered_most(&t, from), Some(2));
     assert_eq!(t.counters(avian, PLUS1_0), 4);
     // Counters put on in response count: X = 2 with two counters, then two more are put on
     // before it resolves: none are added.
     remove(&mut t, avian, 2);
     t.g.objects[avian.0 as usize].tapped = false;
+    let from = t.asked().len();
     wind_up(&mut t, avian, 2);
     put_counters(&mut t, avian, PLUS1_0, 2);
     t.resolve_all();
+    assert_eq!(offered_most(&t, from), None);
     assert_eq!(t.counters(avian, PLUS1_0), 4);
 }
 

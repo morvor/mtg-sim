@@ -545,6 +545,10 @@ pub struct Game {
     pub repl_context: Vec<Vec<crate::replacement::ReplKey>>,
     /// Effects to run after an event that a replacement modified with "and also ...".
     pub post_replacement_effects: Vec<(crate::eval::Ctx, Effect)>,
+    /// While simultaneous damage events are being replaced: the additional instructions of
+    /// the prevention effects applied to them, one per prevention effect (keyed as in
+    /// `prevention::damage_prevented`), for all the damage it prevented (CR 615.5, 615.13).
+    pub prevention_followups: Option<Vec<(u64, crate::eval::Ctx, Effect)>>,
     /// Link id (CR 607) used when recording exiled cards on the source.
     pub current_link: u16,
     /// State triggers that have triggered and haven't left the stack (CR 603.8).
@@ -701,6 +705,7 @@ impl Game {
             planar_die_rolls: 0,
             repl_context: vec![],
             post_replacement_effects: vec![],
+            prevention_followups: None,
             current_link: 0,
             state_triggers_active: BTreeSet::new(),
             saved_ctx: BTreeMap::new(),

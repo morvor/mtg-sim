@@ -1,17 +1,19 @@
-//! Costs that untap other permanents (CR 118.1): "Untap a tapped creature you control",
-//! "Untap two tapped blue creatures you control" (Halo Fountain, Crackleburr). A tapped
-//! permanent with a stun counter can be chosen: untapping it is replaced by removing a
-//! stun counter (CR 122.1d), and the cost is still paid.
+//! Untapping permanents as a cost (CR 118.1): "Untap a tapped creature you control",
+//! "Untap two tapped creatures you control" (Halo Fountain). The permanents are untapped
+//! as the cost is paid; a stun counter's replacement effect can replace an untap (the
+//! counter is removed instead and the permanent stays tapped), and the cost is still paid
+//! (CR 122.1d).
 
 use super::CostPattern;
 use crate::ability::*;
 use crate::oracle::phrases::*;
 
-fn untap_tapped(p: &str) -> Option<CostPart> {
+fn untap_tapped_cost(p: &str) -> Option<CostPart> {
     let r = strip(p, "untap")?;
     let (n, r) = parse_number(r)?;
     let r = strip(r, "tapped")?;
-    // Only your own permanents ("an opponent controls" is another cost).
+    // Only your own permanents: the cost can't untap another player's ("Untap a tapped land
+    // an opponent controls", Benthic Explorers).
     if !end(r).ends_with(" you control") {
         return None;
     }
@@ -25,4 +27,4 @@ fn untap_tapped(p: &str) -> Option<CostPart> {
     })
 }
 
-inventory::submit! { CostPattern { name: "untap N tapped [permanents] you control", priority: 100, parse: untap_tapped } }
+inventory::submit! { CostPattern { name: "r118 untap N tapped [permanents] (cost)", priority: 60, parse: untap_tapped_cost } }

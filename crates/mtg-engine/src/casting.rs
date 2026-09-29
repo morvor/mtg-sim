@@ -1033,7 +1033,7 @@ impl Game {
             // The same way of casting it with different faces (e.g. escape for the
             // creature or its Adventure) is named with the face.
             let faces_differ = opts.iter().any(|o| o.face != opts[0].face);
-            let options = opts
+            let mut options: Vec<String> = opts
                 .iter()
                 .map(|o| {
                     let way = match (&o.tag, &o.alt_cost) {
@@ -1048,9 +1048,30 @@ impl Game {
                     }
                 })
                 .collect();
+            // Ways that would read the same (a card with two flashback abilities) are
+            // told apart by their costs.
+            let same: Vec<bool> = options
+                .iter()
+                .map(|w| options.iter().filter(|x| *x == w).count() > 1)
+                .collect();
+            for (w, o) in options
+                .iter_mut()
+                .zip(&opts)
+                .zip(same)
+                .filter_map(|(x, s)| s.then_some(x))
+            {
+                if let Some(c) = &o.alt_cost {
+                    *w = format!("{w} {}", cost_label(c));
+                }
+            }
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
                 Answer::Index(i) if i < opts.len() => i,
-                _ => 0,
+                // By default, the first way that could be begun (whose cost could be
+                // paid).
+                _ => opts
+                    .iter()
+                    .position(|o| self.can_begin_cast(p, card, o))
+                    .unwrap_or(0),
             }
         } else {
             0
@@ -2066,7 +2087,12 @@ impl Game {
             class_level: crate::classes::gains_a_level(act),
             ..Default::default()
         };
-        let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
+        // The costs are paid for the ability on the stack: a card revealed to pay them
+        // stays revealed until the ability leaves the stack (CR 701.20a).
+        let before = ctx.stack_obj.replace(id);
+        let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
+        ctx.stack_obj = before;
+        let paid = paid?;
         ctx.nums.insert(vars::USER + 90, paid.objects.len() as i64);
         if !paid.objects.is_empty() {
             ctx.vars.insert(
@@ -2185,7 +2211,7 @@ impl Game {
         let ctx = Ctx::new(src, p);
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, source_flags(cost), &ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx) {
                 return false;
             }
         }
@@ -2262,16 +2288,18 @@ impl Game {
         }
     }
 
-    /// Whether `part` of a cost could be paid. `(taps_src, untaps_src)`: the cost also has
-    /// {T} ({Q}), so the source will be tapped (untapped) and can't be one of the
-    /// permanents tapped for "Tap an untapped [permanent] you control" (untapped for
-    /// "Untap a tapped [permanent] you control") (CR 118.3).
+    /// Whether `part` of a cost could be paid. `taps_src`: the cost also has {T}, so the
+    /// source will be tapped and can't be one of the untapped permanents tapped for
+    /// "Tap an untapped [permanent] you control" (CR 118.3). `untaps_src`: likewise, the
+    /// cost also has {Q}, so the source can't be one of the tapped permanents untapped for
+    /// "Untap a tapped [permanent] you control".
     fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
         src: Option<ObjectId>,
-        (taps_src, untaps_src): (bool, bool),
+        taps_src: bool,
+        untaps_src: bool,
         ctx: &Ctx,
     ) -> bool {
         let so = src.map(|s| self.obj(s));
@@ -2381,9 +2409,8 @@ impl Game {
                 self.objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| {
-                        self.obj(*o).controller == p
-                            && self.obj(*o).tapped
-                            && !(untaps_src && Some(*o) == src)
+                        let ob = self.obj(*o);
+                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
                     })
                     .count()
                     >= n
@@ -2513,7 +2540,7 @@ impl Game {
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, source_flags(cost), ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx) {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
@@ -2521,7 +2548,7 @@ impl Game {
         // to a public zone are paid after all other costs.
         let (late, early): (Vec<&CostPart>, Vec<&CostPart>) =
             cost.parts.iter().partition(|c| cost_part_pays_last(c));
-        let untaps_src = source_flags(cost).1;
+        let untaps_src = cost.has_untap();
         for part in early.into_iter().chain(late) {
             self.pay_cost_part(p, part, src, untaps_src, ctx, &mut paid)?;
         }
@@ -2554,8 +2581,9 @@ impl Game {
                 if o.zone != Zone::Battlefield || !o.tapped {
                     return bad("can't untap");
                 }
-                // A stun counter replaces untapping it with removing a stun counter
-                // (CR 122.1d): it stays tapped, but the cost is still paid.
+                // A stun counter's replacement effect may replace the untap (the counter is
+                // removed and the permanent stays tapped); the cost is still paid
+                // (CR 122.1d).
                 self.untap(s);
             }
             CostPart::PayLife(v) => {
@@ -2767,9 +2795,8 @@ impl Game {
                     .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| {
-                        self.obj(*o).controller == p
-                            && self.obj(*o).tapped
-                            && !(untaps_src && Some(*o) == src)
+                        let ob = self.obj(*o);
+                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
                     })
                     .collect();
                 if (cands.len() as u32) < n {
@@ -2777,8 +2804,8 @@ impl Game {
                 }
                 let pick =
                     self.ask_objects(p, src, "Choose permanents to untap (cost)", cands, n, n);
-                // A stunned permanent loses a stun counter instead of untapping
-                // (CR 122.1d); the cost is still paid.
+                // A stun counter's replacement effect may replace an untap; the cost is still
+                // paid (CR 122.1d).
                 for o in pick {
                     self.untap(o);
                 }
@@ -2956,6 +2983,15 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
     chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
 }
 
+/// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.
+fn cost_label(c: &Cost) -> String {
+    match (&c.mana, c.parts.is_empty()) {
+        (Some(m), true) => format!("{m}"),
+        (Some(m), false) => format!("{m} + {:?}", c.parts),
+        (None, _) => format!("{:?}", c.parts),
+    }
+}
+
 /// What was paid for a cost.
 #[derive(Clone, Debug, Default)]
 pub struct PaidCost {
@@ -3001,9 +3037,16 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
         CostPart::Discard { count, .. }
         | CostPart::Exile { count, .. }
+        | CostPart::ReturnToHand { count, .. }
         | CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
-        | CostPart::TapUntapped { count, .. } => is_x(count),
+        | CostPart::AddCounters { count, .. }
+        | CostPart::TapUntapped { count, .. }
+        | CostPart::UntapTapped { count, .. }
+        | CostPart::PayPlayerCounters { count, .. }
+        // "Reveal X green cards from your hand" (Martyr of Spores).
+        | CostPart::RevealFromHand { count, .. }
+        | CostPart::PutFromHandOnLibrary { count, .. } => is_x(count),
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
@@ -3025,11 +3068,3 @@ fn filter_mentions_x(f: &Filter) -> bool {
 
 #[allow(dead_code)]
 fn _unused(_: SpecialAction) {}
-
-/// Whether a cost taps and whether it untaps its source ({T}, {Q}).
-fn source_flags(cost: &Cost) -> (bool, bool) {
-    (
-        cost.has_tap(),
-        cost.parts.iter().any(|p| matches!(p, CostPart::Untap)),
-    )
-}

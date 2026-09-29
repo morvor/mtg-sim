@@ -166,18 +166,6 @@ impl Game {
             .map(|c| c.blockers.iter().map(|b| b.id).collect())
             .unwrap_or_default()
     }
-    /// Whether the creature attacked or blocked this combat ("if ~ attacked or blocked
-    /// this combat"): it was an attacking or blocking creature at some point during the
-    /// current combat phase, even if it has since been removed from combat.
-    pub fn attacked_or_blocked_this_combat(&self, id: ObjectId) -> bool {
-        self.combat.as_ref().is_some_and(|c| {
-            c.attackers.iter().any(|a| a.id == id)
-                || c.declared_attackers.iter().any(|(a, _)| *a == id)
-                || c.removed_attackers.iter().any(|(a, _)| *a == id)
-                || c.blockers.iter().any(|b| b.id == id)
-                || c.declared_blockers.contains(&id)
-        })
-    }
     /// Whether the creature "had to attack" this combat (CR 506.7).
     pub fn had_to_attack(&self, id: ObjectId) -> bool {
         self.combat

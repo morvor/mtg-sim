@@ -385,7 +385,7 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
 /// "create a token that's a copy of target creature you control, except it isn't
 /// legendary", "create a tapped and attacking token that's a copy of it", "create two
 /// tokens that are copies of ~, except they're not legendary".
-fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l
         .strip_prefix("you create ")

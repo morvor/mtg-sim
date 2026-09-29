@@ -43,6 +43,43 @@ fn you_activate_an_ability(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "you activate an ability [that ...]", priority: 100, parse: you_activate_an_ability } }
 
+/// "Whenever you activate an ability, if it isn't a mana ability, ..." (Rings of
+/// Brighthearth), "Whenever you activate an ability of an artifact, if it isn't a mana
+/// ability, ..." (Kurkesh, Onakke Ancient), "Whenever an ability of equipped creature is
+/// activated, if it isn't a mana ability, ..." (Illusionist's Bracers): the condition
+/// read with the trigger (a mana ability never stops being one, so it can't trigger it).
+fn activate_an_ability_if_not_mana(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r).strip_suffix(", if it isn't a mana ability")?;
+    let (who, source) = if let Some(rest) = r.strip_prefix("you activate an ability") {
+        let source = match rest {
+            "" => Filter::Any,
+            " of an artifact" => Filter::Type(CardType::Artifact),
+            _ => return None,
+        };
+        (PlayerRel::You, source)
+    } else if r == "an ability of equipped creature is activated" {
+        // The creature it equips when the ability becomes activated, after its costs are
+        // paid: one sacrificed to pay them isn't equipped by it any more (CR 602.2b, 601.2i).
+        (
+            PlayerRel::Any,
+            Filter::In(Box::new(Sel::All(Filter::AttachedToSource))),
+        )
+    } else {
+        return None;
+    };
+    Some((
+        TriggerCond::AbilityActivated {
+            who,
+            source,
+            include_mana: false,
+        },
+        Sel::TriggerSpell,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "an ability is activated, if it isn't a mana ability", priority: 100, parse: activate_an_ability_if_not_mana } }
+
 /// "you cast an instant or sorcery spell that targets only ~ or activate an ability that
 /// targets only ~" (CR 115.9c: ~ is the only object or player chosen as its targets).
 fn cast_or_activate_targeting_only_source(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {

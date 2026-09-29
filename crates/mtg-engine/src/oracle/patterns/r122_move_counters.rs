@@ -98,3 +98,40 @@ fn move_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "move N [kind] counters from [object] onto [object]", priority: 100, parse: move_counters } }
+
+/// "Move a +1/+1 counter from ~ onto target creature" (Explorer's Cache, Weapon Rack),
+/// "move two +1/+1 counters from ~ onto target creature", "move all counters from ~ onto
+/// target creature", with any target phrase. Tried first (lower priority); the pattern
+/// above handles moves between targets, from "it", and "any number of" counters.
+fn move_counters_from_this(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("move ")?;
+    let (n, r) = match strip(r, "all") {
+        Some(r) => (None, r),
+        None => {
+            let (n, r) = parse_number(r)?;
+            (Some(n), r)
+        }
+    };
+    // "a counter" (of any kind) or "a +1/+1 counter".
+    let (kind, r) = match strip(r, "counters").or_else(|| strip(r, "counter")) {
+        Some(r) => (None, r),
+        None => {
+            let (k, r) = counter_kind(r)?;
+            (Some(k), strip(r, "counters").or_else(|| strip(r, "counter"))?)
+        }
+    };
+    let r = strip(r, "from ~ onto")?;
+    let (spec, tail) = parse_target(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let slot = b.add_target(spec, r);
+    Some(Effect::MoveCounters {
+        from: Sel::This,
+        to: Sel::Target(slot),
+        kind,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "r122 move counters from ~ onto target", priority: 60, parse: move_counters_from_this } }

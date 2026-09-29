@@ -1020,7 +1020,19 @@ impl Game {
                     });
                     info.amount = prevented as i32;
                     c.event = Some(info);
-                    self.post_replacement_effects.push((c, e));
+                    // Applied to simultaneous damage events, a prevention effect is
+                    // applied once: its instruction happens once, for all the damage.
+                    match self.prevention_followups.as_mut() {
+                        Some(list) => match list.iter_mut().find(|(k, _, _)| *k == key) {
+                            Some((_, first, _)) => {
+                                if let Some(ev) = first.event.as_mut() {
+                                    ev.amount += prevented as i32;
+                                }
+                            }
+                            None => list.push((key, c, e)),
+                        },
+                        None => self.post_replacement_effects.push((c, e)),
+                    }
                 }
                 let left = amount - prevented;
                 if left == 0 {

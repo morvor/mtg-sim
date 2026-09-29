@@ -445,6 +445,19 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         return None;
     }
     let _ = head_subtypes_only;
+    // "Assassin card or card with freerunning", "host card or card with augment": a bare
+    // "card" alternative would name every card, so the "with ..." qualifier after it
+    // describes that alternative alone.
+    if heads.len() > 1 && matches!(heads.last(), Some(Filter::Card)) {
+        let t = s.trim_start();
+        if t.starts_with("with") {
+            if let Some((f, r)) = parse_stat_suffix(t).or_else(|| parse_with_suffix(t)) {
+                let last = heads.pop().unwrap();
+                heads.push(Filter::and(vec![last, f]));
+                s = r;
+            }
+        }
+    }
     let head = if heads.len() == 1 {
         heads.pop().unwrap()
     } else {
