@@ -113,3 +113,43 @@ fn an_attached_equipment_becomes_unattached_and_cant_be_attached() {
     assert_eq!(attached_to(&t, splitter), None);
     assert_eq!(t.pt(bears), (2, 2));
 }
+
+#[test]
+fn an_if_its_sentence_checks_the_target_as_it_resolves() {
+    cr!("608.2c", "608.2h");
+    ruling!(
+        "Topple the Statue",
+        "If Topple the Statue targets an artifact, that artifact will be tapped if it's untapped, and then it'll be destroyed."
+    );
+    ruling!(
+        "Topple the Statue",
+        "If the target is legal but isn't tapped, isn't destroyed, or is neither tapped nor destroyed, you do draw a card."
+    );
+    supported("Topple the Statue");
+    // Sentences like "If it's a land card, you may put it onto the battlefield" are still
+    // understood whole by their patterns.
+    supported("Explorer's Scope");
+    supported("Into the Wilds");
+    // "Tap target permanent. If it's an artifact, destroy it. Draw a card."
+    let mut t = TestGame::new(2);
+    let mind_stone = t.battlefield(P1, "Mind Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    crate::r_s29_common::cast_and_resolve(
+        &mut t,
+        P0,
+        "Topple the Statue",
+        &[Entity::Object(mind_stone)],
+    );
+    assert!(t.in_graveyard(P1, "Mind Stone"));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    crate::r_s29_common::cast_and_resolve(
+        &mut t,
+        P0,
+        "Topple the Statue",
+        &[Entity::Object(bears)],
+    );
+    assert!(t.on_battlefield(bears));
+    assert!(t.obj_now(bears).tapped);
+    assert_eq!(t.hand_size(P0), hand + 2);
+}
