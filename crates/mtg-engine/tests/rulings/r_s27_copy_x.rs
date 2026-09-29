@@ -287,3 +287,31 @@ fn cogwork_assembler_s_copy_of_an_artifact_with_x_has_x_0() {
     assert_eq!(t.obj(copies[0]).controller, P0);
     chalice_copy_has_x_0(&t, copies[0]);
 }
+
+#[test]
+fn fractured_identity_s_copies_of_a_permanent_that_had_x_have_x_0() {
+    cr!("707.2", "107.3m", "608.2h", "111.2");
+    ruling!(
+        "Fractured Identity",
+        "If the copied permanent had {X} in its mana cost, X is 0."
+    );
+    supported("Fractured Identity");
+    // "Exile target nonland permanent. Each player other than its controller creates a
+    // token that's a copy of it." P1's Chalice of the Void (cast with X = 2) is exiled; P0
+    // and P2 each create a copy with no charge counters.
+    let mut t = TestGame::new(3);
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let chalice = chalice_x2(&mut t, P1);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    cast_new(&mut t, P0, "Fractured Identity", &[Entity::Object(chalice)]);
+    t.resolve_all();
+    assert!(t.in_exile("Chalice of the Void"));
+    let copies = tokens_named(&t, "Chalice of the Void");
+    assert_eq!(copies.len(), 2);
+    let mut controllers: Vec<PlayerId> = copies.iter().map(|c| t.obj(*c).controller).collect();
+    controllers.sort();
+    assert_eq!(controllers, vec![P0, P2]);
+    for c in copies {
+        chalice_copy_has_x_0(&t, c);
+    }
+}

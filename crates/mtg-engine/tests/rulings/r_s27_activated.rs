@@ -428,3 +428,37 @@ fn nyxbloom_ancient_multiplies_only_mana_from_abilities_with_the_tap_symbol() {
     assert_eq!(pool(&t, P0, ManaType::C), 2);
     assert_eq!(t.zone(elves), Zone::Battlefield);
 }
+
+#[test]
+fn granite_shard_s_ability_can_be_activated_by_paying_either_cost() {
+    cr!("602.2b", "601.2h", "118.3");
+    ruling!(
+        "Granite Shard",
+        "You can pay either of the two costs (but not both at the same time) to activate the ability."
+    );
+    supported("Granite Shard");
+    // "{3}, {T} or {R}, {T}: This artifact deals 1 damage to any target."
+    // With a Mountain, the {R} cost is paid; the {3} one can't be.
+    let mut t = TestGame::new(2);
+    let shard = t.battlefield(P0, "Granite Shard");
+    t.lands(P0, "Mountain", 1);
+    assert!(can_activate_containing(&mut t, P0, shard, "{R}, {T}"));
+    assert!(!can_activate_containing(&mut t, P0, shard, "{3}, {T}"));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, shard, "{R}, {T}").unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    // It's tapped: neither cost can be paid again.
+    t.lands(P0, "Mountain", 3);
+    assert!(activatable(&mut t, P0, shard).is_empty());
+    // With three Wastes, the {3} cost is paid.
+    let mut t = TestGame::new(2);
+    let shard = t.battlefield(P0, "Granite Shard");
+    t.lands(P0, "Wastes", 3);
+    assert!(!can_activate_containing(&mut t, P0, shard, "{R}, {T}"));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, shard, "{3}, {T}").unwrap();
+    assert_eq!(tapped_lands(&t, P0), 3);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
