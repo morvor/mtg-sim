@@ -15,13 +15,18 @@ pub fn copy_spell(
 ) -> Option<ObjectId> {
     // A spell that has left the stack (e.g. countered in response to storm's trigger) is
     // copied as it last existed there (CR 608.2h); its old object keeps that information.
+    // So is an ability that has left it (countered in response to Rings of Brighthearth's
+    // trigger): its object is kept, out of every zone.
     let o = g.obj(spell);
     let spell_lki = !g.is_live(spell) && o.kind != ObjKind::StackAbility && o.stack.is_some();
-    if o.zone != Zone::Stack || !(g.is_live(spell) || spell_lki) {
+    let ability_lki =
+        o.kind == ObjKind::StackAbility && o.zone == Zone::Nowhere && o.stack.is_some();
+    if !ability_lki && (o.zone != Zone::Stack || !(g.is_live(spell) || spell_lki)) {
         return None;
     }
     let orig = g.obj(spell).clone();
     let mut copy = orig.clone();
+    copy.zone = Zone::Stack;
     copy.kind = if orig.kind == ObjKind::StackAbility {
         ObjKind::StackAbility
     } else {

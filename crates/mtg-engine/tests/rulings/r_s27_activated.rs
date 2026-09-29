@@ -204,7 +204,7 @@ fn damping_matrix_stops_abilities_that_cost_mana_but_not_mana_abilities() {
 
 #[test]
 fn defabricate_counters_unearth_and_equip_abilities() {
-    cr!("701.6b", "702.84a", "702.6a", "602.1");
+    cr!("701.6a", "701.6b", "702.84a", "702.6a", "602.1");
     ruling!(
         "Defabricate",
         "Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" Some keyword abilities (such as equip and unearth) are activated abilities and will have colons in their reminder text."
@@ -225,6 +225,9 @@ fn defabricate_counters_unearth_and_equip_abilities() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Dregscape Zombie"));
     assert!(t.named_on_battlefield("Dregscape Zombie").is_empty());
+    // The {B} paid for it isn't refunded.
+    assert_eq!(tapped_lands(&t, P0), 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
     // Equip.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -243,7 +246,7 @@ fn defabricate_counters_unearth_and_equip_abilities() {
 
 #[test]
 fn disallow_counters_a_crew_ability() {
-    cr!("701.6b", "702.122a", "602.1");
+    cr!("701.6a", "701.6b", "702.122a", "602.1");
     ruling!(
         "Disallow",
         "Activated abilities are written in the form \"Cost: Effect.\" Some keyword abilities, such as equip and crew, are activated abilities and will have colons in their reminder texts."
@@ -264,6 +267,8 @@ fn disallow_counters_a_crew_ability() {
     t.cast(P1, disallow).target(crew).go();
     t.resolve_all();
     assert!(!t.obj_now(copter).is(CardType::Creature));
+    // The crew cost isn't refunded: the Bears stay tapped.
+    assert!(t.obj_now(bears).tapped);
 }
 
 #[test]

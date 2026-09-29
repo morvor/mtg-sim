@@ -58,7 +58,12 @@ fn activate_an_ability_if_not_mana(r: &str) -> Option<(TriggerCond, Sel, PlayerR
         };
         (PlayerRel::You, source)
     } else if r == "an ability of equipped creature is activated" {
-        (PlayerRel::Any, Filter::In(Box::new(Sel::AttachedTo)))
+        // The creature it equips when the ability becomes activated, after its costs are
+        // paid: one sacrificed to pay them isn't equipped by it any more (CR 602.2b, 601.2i).
+        (
+            PlayerRel::Any,
+            Filter::In(Box::new(Sel::All(Filter::AttachedToSource))),
+        )
     } else {
         return None;
     };

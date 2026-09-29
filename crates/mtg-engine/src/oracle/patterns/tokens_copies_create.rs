@@ -650,15 +650,7 @@ inventory::submit! { FollowupPattern { name: "tokens_copies: pronoun names creat
 /// combat" after an earlier sentence about the tokens just created ("That token gains
 /// haste."): the pronoun still names those tokens (CR 603.7).
 fn f_created_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    // "... create a token that's a copy of that card. Exile it at the beginning of the
-    // next end step." (Séance): right after a token copy of "it" is created, the pronoun
-    // names the token, not the object it copies.
-    let it = format!("{:?}", b.it);
-    let copy_of_it = last_create(prev).is_some_and(
-        |e| matches!(e, Effect::CreateTokenCopy { of, .. } if format!("{of:?}") == it),
-    );
-    if !(matches!(b.it, Sel::Var(v) if v == vars::CREATED) || copy_of_it) || !has_create(prev)
-    {
+    if !matches!(b.it, Sel::Var(v) if v == vars::CREATED) || !has_create(prev) {
         return false;
     }
     let Some((verb, r, step)) = super::damage_removal::delayed_parts(end(l)) else {
