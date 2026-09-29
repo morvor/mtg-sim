@@ -315,3 +315,35 @@ fn fractured_identity_s_copies_of_a_permanent_that_had_x_have_x_0() {
         chalice_copy_has_x_0(&t, c);
     }
 }
+
+#[test]
+fn seance_s_copy_of_a_card_with_x_has_x_0_and_is_exiled_at_end_of_turn() {
+    cr!("707.2", "107.3g", "107.3m", "603.7");
+    ruling!(
+        "Séance",
+        "If the copied card has {X} in its mana cost, X is considered to be 0."
+    );
+    supported("Séance");
+    // "At the beginning of each upkeep, you may exile target creature card from your
+    // graveyard. If you do, create a token that's a copy of that card, except it's a
+    // Spirit in addition to its other types. Exile it at the beginning of the next end
+    // step."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Séance");
+    let card = t.graveyard(P0, "Ingenious Prodigy");
+    // P1's upkeep is the next one.
+    t.answer_targets(P0, &[Entity::Object(card)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_exile("Ingenious Prodigy"));
+    let copies = tokens_named(&t, "Ingenious Prodigy");
+    assert_eq!(copies.len(), 1);
+    prodigy_copy_has_x_0(&t, copies[0]);
+    assert!(t.obj(copies[0]).chars.has_subtype("Spirit"));
+    // "It" is the token: it's exiled at the beginning of the end step.
+    t.advance_to(P1, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(tokens_named(&t, "Ingenious Prodigy").is_empty());
+    assert!(t.in_exile("Ingenious Prodigy"));
+}
