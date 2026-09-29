@@ -391,18 +391,39 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
-    parse_clause(l, b)
+    let saved = (
+        b.targets.clone(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    if let Some(e) = parse_clause(l, b) {
+        return Some(e);
+    }
+    (b.targets, b.it, b.it_player, b.group) = saved;
+    // "If it isn't a creature, it becomes ...": a state of the object "it" refers to,
+    // when the patterns didn't understand the sentence as a whole (as they do "If it's a
+    // land card, you may put it onto the battlefield").
+    let r = l.strip_prefix("if ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let f = super::patterns::statics_conditions::pronoun_state(c)?;
+    if matches!(b.it, Sel::None) {
+        return None;
+    }
+    let cond = Condition::SelMatches(b.it.clone(), f);
+    let e = parse_clause(rest, b)?;
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
 }
 
 /// "if [condition], [effect]"
 fn parse_leading_if<'a>(l: &'a str, b: &mut Builder) -> Option<(Condition, &'a str)> {
     let r = l.strip_prefix("if ")?;
     let (c, rest) = r.split_once(", ")?;
-    let cond = super::statics::parse_condition(c, b.ctx).or_else(|| {
-        // "If it isn't a creature, ...": a state of the object "it" refers to.
-        let f = super::patterns::statics_conditions::pronoun_state(c)?;
-        (!matches!(b.it, Sel::None)).then(|| Condition::SelMatches(b.it.clone(), f))
-    })?;
+    let cond = super::statics::parse_condition(c, b.ctx)?;
     Some((cond, rest))
 }
 
