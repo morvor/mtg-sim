@@ -1,5 +1,5 @@
 //! Rulings batch S33 — putting cards into and onto a library: with only one card to look
-//! at, that card is the one put into the hand (CR 701.18); a player putting several cards
+//! at, that card is the one put into the hand (CR 609.3); a player putting several cards
 //! on top of their library chooses their order, which isn't revealed (CR 401.4, 401.2);
 //! "then shuffle and put that card on top" is one action, so a revealed top card isn't
 //! the one the shuffle put there (CR 701.24b, 401.5).
@@ -17,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn sleight_of_hand_with_one_card_in_the_library_it_goes_to_hand() {
-    cr!("701.18a", "121.2");
+    cr!("609.3");
     ruling!(
         "Sleight of Hand",
         "If there is only one card in your library, you put it into your hand."
@@ -37,7 +37,7 @@ fn sleight_of_hand_with_one_card_in_the_library_it_goes_to_hand() {
 
 #[test]
 fn stress_dream_with_one_card_in_the_library_it_goes_to_hand() {
-    cr!("701.18a");
+    cr!("609.3");
     ruling!(
         "Stress Dream",
         "If there is only one card in your library, you put it into your hand."
@@ -204,7 +204,7 @@ fn tutor_with_revealed_top(name: &str, card: &str) -> (Vec<ObjectId>, ObjectId) 
 
 #[test]
 fn vampiric_tutor_shuffle_and_put_on_top_is_one_action() {
-    cr!("701.24b", "401.5", "401.6");
+    cr!("701.24b", "401.5");
     ruling!(
         "Vampiric Tutor",
         "The \"shuffle and put the card on top\" is a single action. If an effect causes the top card of the library to be face up, the second card down is not revealed."

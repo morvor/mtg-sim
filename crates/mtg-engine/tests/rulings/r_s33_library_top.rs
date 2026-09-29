@@ -1,7 +1,7 @@
 //! Rulings batch S33 — the top card of a library: a player allowed to look at it may do
 //! so any time, without priority (CR 401.5); a card played from the top of a library
-//! follows its normal timing (CR 601.3, 305.2) and a land played that way uses a land
-//! play (CR 305.2, 305.3); the top card isn't in its owner's hand, so it can't be cycled,
+//! follows its normal timing (CR 601.3) and a land played that way uses a land
+//! play (CR 305.2); the top card isn't in its owner's hand, so it can't be cycled,
 //! suspended, discarded or have its other hand abilities activated (CR 602.2, 702.29a,
 //! 702.62a, 701.9a).
 
@@ -254,7 +254,7 @@ fn emperor_mihail_merfolk_creature_spells_from_the_top_follow_sorcery_timing() {
 
 #[test]
 fn courser_of_kruphix_a_land_from_the_top_uses_the_land_play() {
-    cr!("305.2", "305.3", "305.2a");
+    cr!("305.2", "305.2a", "305.2b");
     ruling!(
         "Courser of Kruphix",
         "Playing a land from the top of your library counts as your land play for the turn. Once you play a land during your turn, you won't be able to play an additional land from the top of your library unless another effect (such as that of Azusa, Lost but Seeking) allows you to."
@@ -289,7 +289,7 @@ fn courser_of_kruphix_a_land_from_the_top_uses_the_land_play() {
 
 #[test]
 fn magus_of_the_future_a_land_from_the_top_uses_the_land_play() {
-    cr!("305.2", "305.3");
+    cr!("305.2", "305.2b");
     ruling!(
         "Magus of the Future",
         "Playing a land from the top of your library counts as your land play for the turn. Once you play a land during your turn, you won't be able to play an additional land from the top of your library unless another effect (such as that of Azusa, Lost but Seeking) allows you to."
