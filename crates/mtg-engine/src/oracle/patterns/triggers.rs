@@ -125,7 +125,25 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
     } else {
         rest.strip_prefix("counter is put on ")?
     };
-    let subj = parse_subject(rest)?;
+    let subj = match parse_subject(rest) {
+        Some(s) => s,
+        // "one or more loyalty counters are put on planeswalkers you control": counters
+        // put on any one of them.
+        None if plural => {
+            let (filter, true, tail) = parse_object_phrase(rest)? else {
+                return None;
+            };
+            if !end(tail).is_empty() {
+                return None;
+            }
+            Subject {
+                filter,
+                self_only: false,
+                one_or_more: false,
+            }
+        }
+        None => return None,
+    };
     if subj.one_or_more {
         return None;
     }
