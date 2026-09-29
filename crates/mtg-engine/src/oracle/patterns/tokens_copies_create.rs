@@ -53,10 +53,13 @@ pub(crate) fn token_quote_abilities(
     types: &[CardType],
     ctx: &CompileContext,
 ) -> Option<Vec<Ability>> {
-    let want = q_lower.trim();
+    // A comma inside the closing quote belongs to the sentence ("with "This token can't
+    // block," where X is ..."), not to the quoted ability.
+    let want = q_lower.trim().trim_end_matches(',');
     let orig = normalized_quotes(ctx)
         .into_iter()
-        .find(|q| q.to_lowercase().trim() == want)?;
+        .find(|q| q.to_lowercase().trim().trim_end_matches(',') == want)?;
+    let orig = orig.trim().trim_end_matches(',').to_string();
     if super::statics::quote_names_card(&orig, ctx) {
         return None;
     }

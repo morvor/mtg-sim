@@ -1254,6 +1254,10 @@ pub enum Value {
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),
+    /// "the number of different mana values among [objects]": how many distinct mana
+    /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
+    /// stack, CR 202.3e).
+    ManaValuesAmong(Filter),
     /// Number of different mana types spent to cast this spell (converge etc.).
     ColorsSpent,
     /// Amount of mana spent to cast this spell.

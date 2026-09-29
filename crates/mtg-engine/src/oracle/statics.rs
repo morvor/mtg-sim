@@ -689,6 +689,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             let (f, _, rest) = parse_object_phrase(r)?;
             return Some((Value::DistinctNames(f), rest.to_string()));
         }
+        // "the number of different mana values among cards in your graveyard" (also
+        // "for each different mana value among ...").
+        if let Some((v, rest)) = super::patterns::mana_values_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
         let (f, _, rest) = parse_object_phrase(r)?;
         // "the number of creatures blocking it"
         if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {

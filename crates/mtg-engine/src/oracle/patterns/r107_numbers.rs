@@ -84,9 +84,17 @@ fn subst(
 /// doesn't choose it; the value is determined as the effect is performed).
 fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (clause, value_s) = l.rsplit_once(", where x is ")?;
+    // The sentence's comma may sit inside a closing quote: "create X ... tokens with
+    // "This token can't block," where X is ...".
+    let (clause, value_s) = match l.rsplit_once(", where x is ") {
+        Some((c, v)) => (c.to_string(), v),
+        None => {
+            let (c, v) = l.rsplit_once(",\" where x is ")?;
+            (format!("{c}\""), v)
+        }
+    };
     let it = b.it.clone();
-    where_x_is_parts(clause, value_s, b, it)
+    where_x_is_parts(&clause, value_s, b, it)
 }
 
 /// "[clause], where X is [value]": the value is read first, with pronouns as they are

@@ -94,7 +94,8 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
     };
     for q in quoted_segments(&raw) {
         let with_name = crate::oracle::normalize(q, ctx);
-        if with_name.trim() == normalized.trim() {
+        // (A list's or sentence's comma may sit inside the closing quote.)
+        if with_name.trim().trim_end_matches(',') == normalized.trim().trim_end_matches(',') {
             return with_name != crate::oracle::normalize(q, &anonymous);
         }
     }
@@ -878,6 +879,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             _ => return None,
         };
         return Some(Value::Custom(format!("colors_of:{which}").into()));
+    }
+    // "different mana value among cards in your graveyard" (CR 202.3).
+    if let Some((v, "")) = super::mana_values_among::value(s) {
+        return Some(v);
     }
     // "color among permanents you control" (Vivid, CR 105.2).
     if let Some(r) = s.strip_prefix("color among ") {
