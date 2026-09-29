@@ -1033,7 +1033,7 @@ impl Game {
             // The same way of casting it with different faces (e.g. escape for the
             // creature or its Adventure) is named with the face.
             let faces_differ = opts.iter().any(|o| o.face != opts[0].face);
-            let options = opts
+            let mut options: Vec<String> = opts
                 .iter()
                 .map(|o| {
                     let way = match (&o.tag, &o.alt_cost) {
@@ -1048,9 +1048,30 @@ impl Game {
                     }
                 })
                 .collect();
+            // Ways that would read the same (a card with two flashback abilities) are
+            // told apart by their costs.
+            let same: Vec<bool> = options
+                .iter()
+                .map(|w| options.iter().filter(|x| *x == w).count() > 1)
+                .collect();
+            for (w, o) in options
+                .iter_mut()
+                .zip(&opts)
+                .zip(same)
+                .filter_map(|(x, s)| s.then_some(x))
+            {
+                if let Some(c) = &o.alt_cost {
+                    *w = format!("{w} {}", cost_label(c));
+                }
+            }
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
                 Answer::Index(i) if i < opts.len() => i,
-                _ => 0,
+                // By default, the first way that could be begun (whose cost could be
+                // paid).
+                _ => opts
+                    .iter()
+                    .position(|o| self.can_begin_cast(p, card, o))
+                    .unwrap_or(0),
             }
         } else {
             0
@@ -2066,7 +2087,12 @@ impl Game {
             class_level: crate::classes::gains_a_level(act),
             ..Default::default()
         };
-        let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
+        // The costs are paid for the ability on the stack: a card revealed to pay them
+        // stays revealed until the ability leaves the stack (CR 701.20a).
+        let before = ctx.stack_obj.replace(id);
+        let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
+        ctx.stack_obj = before;
+        let paid = paid?;
         ctx.nums.insert(vars::USER + 90, paid.objects.len() as i64);
         if !paid.objects.is_empty() {
             ctx.vars.insert(
@@ -2919,6 +2945,15 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
     chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
 }
 
+/// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.
+fn cost_label(c: &Cost) -> String {
+    match (&c.mana, c.parts.is_empty()) {
+        (Some(m), true) => format!("{m}"),
+        (Some(m), false) => format!("{m} + {:?}", c.parts),
+        (None, _) => format!("{:?}", c.parts),
+    }
+}
+
 /// What was paid for a cost.
 #[derive(Clone, Debug, Default)]
 pub struct PaidCost {
@@ -2964,9 +2999,16 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
         CostPart::Discard { count, .. }
         | CostPart::Exile { count, .. }
+        | CostPart::ReturnToHand { count, .. }
         | CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
-        | CostPart::TapUntapped { count, .. } => is_x(count),
+        | CostPart::AddCounters { count, .. }
+        | CostPart::TapUntapped { count, .. }
+        | CostPart::UntapTapped { count, .. }
+        | CostPart::PayPlayerCounters { count, .. }
+        // "Reveal X green cards from your hand" (Martyr of Spores).
+        | CostPart::RevealFromHand { count, .. }
+        | CostPart::PutFromHandOnLibrary { count, .. } => is_x(count),
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),

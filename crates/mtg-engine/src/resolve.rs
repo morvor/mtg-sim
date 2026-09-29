@@ -229,6 +229,9 @@ impl Game {
                 let res = crate::merge::found_all(self, res);
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                // "Exile up to one target card ... If you do, ...": whether anything was
+                // exiled.
+                ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Sacrifice { who, filter, count } => {
