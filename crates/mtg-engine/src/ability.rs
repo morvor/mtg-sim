@@ -680,6 +680,9 @@ pub mod vars {
     /// on it"), or a resolving effect's values are determined for (distinct from
     /// [`SACRIFICED`], which the same effect may use).
     pub const AFFECTED: Var = 8;
+    /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
+    /// this way", CR 120.10), as a number.
+    pub const EXCESS: Var = 7;
 }
 
 /// Selects players and/or objects.

@@ -349,6 +349,10 @@ impl Game {
                             _ => 0,
                         })
                         .sum();
+                    // "The excess damage dealt this way" (CR 120.10).
+                    let from = before.min(self.events.len());
+                    let excess = crate::excess_damage::excess_in(&self.events[from..]);
+                    ctx.nums.insert(vars::EXCESS, excess);
                 }
             }
             Effect::DealDamageExcess {

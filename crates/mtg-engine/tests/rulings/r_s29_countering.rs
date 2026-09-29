@@ -9,7 +9,6 @@ use crate::r_s04_common::{next_upkeep, top_of_stack};
 use crate::r_s07_common::chosen_modes;
 use crate::r_s25_common::cast_new;
 use crate::r_s29_common::*;
-use mtg_engine::decision::Decision;
 use mtg_engine::object::StackKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -189,7 +188,6 @@ fn a_countered_next_end_step_trigger_doesnt_trigger_again() {
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     // The next end steps (P1's, then P0's) pass without the ability triggering.
-    let from = t.asked().len();
     t.advance_to(P1, Step::End);
     t.settle();
     assert_eq!(t.stack_len(), 0);
@@ -197,7 +195,5 @@ fn a_countered_next_end_step_trigger_doesnt_trigger_again() {
     t.settle();
     assert_eq!(t.stack_len(), 0);
     assert!(t.on_battlefield(bears));
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
+    assert!(t.g.delayed_triggers.is_empty());
 }

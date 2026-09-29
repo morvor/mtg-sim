@@ -106,3 +106,15 @@ pub fn damage_events(finals: &[ReplEvent]) -> Vec<(ObjectId, Entity, u32)> {
         })
         .collect()
 }
+
+/// The total excess damage recorded among `events` (CR 120.10): "the excess damage dealt
+/// this way" for the events a damage effect produced.
+pub fn excess_in(events: &[Event]) -> i64 {
+    events
+        .iter()
+        .map(|e| match e {
+            Event::ExcessDamage { amount, .. } => *amount as i64,
+            _ => 0,
+        })
+        .sum()
+}
