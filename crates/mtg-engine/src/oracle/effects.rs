@@ -398,7 +398,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
 fn parse_leading_if<'a>(l: &'a str, b: &mut Builder) -> Option<(Condition, &'a str)> {
     let r = l.strip_prefix("if ")?;
     let (c, rest) = r.split_once(", ")?;
-    let cond = super::statics::parse_condition(c, b.ctx)?;
+    let cond = super::statics::parse_condition(c, b.ctx).or_else(|| {
+        // "If it isn't a creature, ...": a state of the object "it" refers to.
+        let f = super::patterns::statics_conditions::pronoun_state(c)?;
+        (!matches!(b.it, Sel::None)).then(|| Condition::SelMatches(b.it.clone(), f))
+    })?;
     Some((cond, rest))
 }
 
