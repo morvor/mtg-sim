@@ -135,15 +135,22 @@ fn p_copy_trigger_spell_times(l: &str, b: &mut Builder) -> Option<Effect> {
         .or_else(|| l.strip_prefix("copy it"))?;
     let n = match r.trim() {
         // The plain "copy it" is the core pattern's, unless new targets follow.
-        "" if new_targets => 1,
-        "an additional time" | "once" => 1,
-        "twice" => 2,
-        "three times" => 3,
-        _ => return None,
+        "" if new_targets => Value::c(1),
+        "an additional time" | "once" => Value::c(1),
+        "twice" => Value::c(2),
+        // "copy that spell X times" (Storm King's Thunder): X of the spell that created
+        // the delayed trigger.
+        r => {
+            let (n, rest) = parse_number(r.strip_suffix(" times")?)?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            n
+        }
     };
     Some(Effect::CopySpell {
         what: Sel::TriggerSpell,
-        count: Value::c(n),
+        count: n,
         new_targets,
     })
 }

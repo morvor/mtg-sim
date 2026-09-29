@@ -51,12 +51,28 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     ) {
         return false;
     }
-    match prev {
-        Effect::CopySpell { new_targets, .. } => {
+    match copy_in(prev) {
+        Some(new_targets) => {
             *new_targets = true;
             true
         }
-        _ => false,
+        None => false,
+    }
+}
+
+/// The `new_targets` flag of the spell copy the effect ends with: the copy itself, or an
+/// optional one ("you may copy it", "you may pay {1}. If you do, copy that spell", "you
+/// may remove two +1/+1 counters from ~. If you do, copy that spell").
+fn copy_in(e: &mut Effect) -> Option<&mut bool> {
+    match e {
+        Effect::CopySpell { new_targets, .. } => Some(new_targets),
+        Effect::May { effect, .. } => copy_in(effect),
+        Effect::PayOptional { then, .. } => copy_in(then),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => copy_in(then),
+        Effect::Seq(v) => v.last_mut().and_then(copy_in),
+        _ => None,
     }
 }
 

@@ -147,6 +147,20 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
         let r2 = r2.trim();
         let filter = if r2 == "card" || r2 == "cards" {
             Filter::Any
+        } else if let Some((a, b)) = r2
+            .split_once(" card or a ")
+            .or_else(|| r2.split_once(" card or an "))
+        {
+            // "discard a Mountain card or a red card".
+            let mut fs = Vec::new();
+            for part in [format!("{a} card"), b.to_string()] {
+                let (f, _, tail) = parse_object_phrase(&part)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                fs.push(f);
+            }
+            Filter::Or(fs)
         } else {
             let (f, _, tail) = parse_object_phrase(r2)?;
             if !end(tail).is_empty() {

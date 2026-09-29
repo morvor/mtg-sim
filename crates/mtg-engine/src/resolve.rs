@@ -229,6 +229,9 @@ impl Game {
                 let res = crate::merge::found_all(self, res);
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                // "Exile a creature card from your graveyard. If you do, ...": whether
+                // anything was exiled (as for moving it, CR 608.2c).
+                ctx.prev_happened = !res.is_empty();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Sacrifice { who, filter, count } => {
@@ -2041,6 +2044,22 @@ impl Game {
                         .and_then(|s| self.obj(s).choices.basic_land_type.clone())
                     {
                         Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
+                // "except it has this ability" (CR 707.9a): the resolving ability.
+                Modification::AddThisAbility => {
+                    let ability = ctx.stack_obj.and_then(|id| {
+                        match self.obj(id).stack.as_deref().map(|si| &si.kind) {
+                            Some(
+                                StackKind::Activated { ability, .. }
+                                | StackKind::Triggered { ability, .. },
+                            ) => Some(ability.clone()),
+                            _ => None,
+                        }
+                    });
+                    match ability {
+                        Some(a) => Modification::AddAbility(a),
                         None => m.clone(),
                     }
                 }
