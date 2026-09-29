@@ -50,3 +50,11 @@ pub fn library_top_first(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 pub fn set_life(t: &mut TestGame, p: PlayerId, life: i32) {
     t.g.players[p.idx()].life = life;
 }
+
+/// Puts the real card `name` into `p`'s hand with lands for its mana cost, then casts it
+/// with all of `targets` in its first target slot ("any number of target ...").
+pub fn cast_one_slot(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    crate::r_s25_common::lands_for_cost(t, p, name);
+    let card = t.hand(p, name);
+    t.cast(p, card).targets(targets).go()
+}
