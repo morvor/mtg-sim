@@ -335,7 +335,12 @@ fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(tail).is_empty() {
                 return None;
             }
-            Sel::All(f)
+            // Not a characteristic change, so the affected set isn't locked in (CR
+            // 611.2c): creatures that match later this turn can attack too.
+            return Some(Effect::AddRestriction {
+                restriction: Restriction::AttackDespiteDefender(f),
+                duration: Duration::EndOfTurn,
+            });
         }
     };
     Some(permission(sel))
