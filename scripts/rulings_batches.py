@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""Work plan for testing every Scryfall ruling on every card it applies to.
+"""Work plan for testing every Scryfall ruling.
 
-Each (card, ruling) pair needs its own test on that card: a ruling cited on one card
-does not cover another card with the same ruling text, because cards worded slightly
-differently can behave differently. This script splits every pair into batches of
-similar cards, deterministically from the data files alone, so a batch id (P001, ...)
-means the same thing on every machine:
+Coverage is counted per ruling text: a text shared by several cards is covered by a test
+on any card it applies to (choose a card with typical wording; when the cards word the
+relevant ability differently, test each wording). Whether every individual card compiles
+and behaves correctly is checked separately, on every card.
 
-  - pairs whose ruling text is shared by several cards stay together (one test can run
-    the same scenario over each card, with a ruling!() citation per card);
-  - texts are grouped by the keyword they discuss (Scryfall `keywords`) or, otherwise,
-    by the cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of
-    ability;
-  - batches are packed to a similar amount of work (an extra card for a text already
-    being tested costs less than a new text).
+This script splits every ruling text into batches of similar ones, deterministically from
+the data files alone, so a batch id (P001, ...) means the same thing on every machine.
+Texts are grouped by the keyword they discuss (Scryfall `keywords`) or, otherwise, by the
+cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of ability.
 
-Status comes from the repo: a pair is CITED when a test has ruling!("<card or face
-name>", "<substring of that ruling>"), EXEMPT when docs/rulings-exemptions/*.tsv lists
-the text as having no engine-testable content, OPEN otherwise.
+Status comes from the repo: a text is CITED when a test has ruling!("<card or face name>",
+"<substring of that ruling>") for any card with that ruling, EXEMPT when
+docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, OPEN otherwise.
 
 Usage (from the repo root):
-  python3 scripts/rulings_batches.py summary            # overall pair coverage
+  python3 scripts/rulings_batches.py summary            # overall coverage
   python3 scripts/rulings_batches.py list               # every batch with status counts
   python3 scripts/rulings_batches.py show P042 [--open] # one batch as JSON
   python3 scripts/rulings_batches.py card "Card Name"   # one card's rulings and status
@@ -34,8 +30,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUDGET = 150.0  # work units per batch: 1 per text plus EXTRA per additional card
-EXTRA = 0.35
+BUDGET = 150  # ruling texts per batch
 EXCLUDED_LAYOUTS = {'art_series', 'token', 'double_faced_token', 'emblem'}
 # Tagger tags about names, art, flavor or printing say nothing about what a card does.
 NONFUNCTIONAL = re.compile(
@@ -144,24 +139,7 @@ def plan():
                 key = type_key(cards[oids[0]])
         groups.append((key, t, oids))
     groups.sort(key=lambda g: (g[0], g[1]))
-    batches = []
-    cur, cur_w = [], 0.0
-    for key, t, oids in groups:
-        chunk = []
-        for o in oids:
-            w = 1.0 if not chunk else EXTRA
-            if cur_w + w > BUDGET and (cur or chunk):
-                if chunk:
-                    cur.append((key, t, chunk))
-                batches.append(cur)
-                cur, cur_w, chunk = [], 0.0, []
-                w = 1.0
-            chunk.append(o)
-            cur_w += w
-        if chunk:
-            cur.append((key, t, chunk))
-    if cur:
-        batches.append(cur)
+    batches = [groups[i:i + BUDGET] for i in range(0, len(groups), BUDGET)]
     ids = {f'P{i:03d}': b for i, b in enumerate(batches, 1)}
     return cards, names, ids, oos
 
@@ -198,9 +176,9 @@ def status_fn(names):
     cites = citations(names)
     ex = exemptions(names)
 
-    def status(oid, text):
+    def status(oids, text):
         n = normalize(text)
-        if any(c in n for c in cites.get(oid, ())):
+        if any(c in n for o in oids for c in cites.get(o, ())):
             return 'CITED'
         if any(e in n for e in ex):
             return 'EXEMPT'
@@ -217,34 +195,36 @@ def main():
     status = status_fn(names)
     cmd = args[0]
     if cmd == 'summary':
-        c = collections.Counter(status(o, t) for b in batches.values() for _, t, os_ in b for o in os_)
+        c = collections.Counter(status(os_, t) for b in batches.values() for _, t, os_ in b)
         tot = sum(c.values())
-        print(f'pairs {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
+        print(f'ruling texts {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
               f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}; out of scope (Contraptions, host/augment): {len(oos)}')
     elif cmd == 'list':
         for bid, b in batches.items():
-            c = collections.Counter(status(o, t) for _, t, os_ in b for o in os_)
+            c = collections.Counter(status(os_, t) for _, t, os_ in b)
             keys = sorted({k for k, _, _ in b})
-            print(f'{bid}\tpairs {sum(c.values())}\topen {c["OPEN"]}\ttexts {len(b)}\t{"; ".join(keys)[:150]}')
+            print(f'{bid}\ttexts {len(b)}\topen {c["OPEN"]}\t{"; ".join(keys)[:150]}')
     elif cmd == 'show':
         bid = args[1]
         only_open = '--open' in args
         out = []
         for key, t, os_ in batches[bid]:
-            cs = [{'card': cards[o]['name'], 'status': status(o, t)} for o in os_]
-            if only_open:
-                cs = [x for x in cs if x['status'] == 'OPEN']
-            if cs:
-                out.append({'group': key, 'ruling': t, 'cards': cs})
+            st = status(os_, t)
+            if only_open and st != 'OPEN':
+                continue
+            names_ = [cards[o]['name'] for o in os_]
+            more = f' (+{len(names_) - 60} more)' if len(names_) > 60 else ''
+            out.append({'group': key, 'ruling': t, 'status': st,
+                        'cards': names_[:60] + ([more.strip()] if more else [])})
         print(json.dumps(out, indent=1, ensure_ascii=False))
     elif cmd == 'card':
         oid = names.get(args[1].lower())
         if not oid:
             sys.exit(f'unknown card {args[1]!r}')
-        where = {(o, t): bid for bid, b in batches.items() for _, t, os_ in b for o in os_}
-        for (o, t), bid in sorted(where.items(), key=lambda kv: kv[0][1]):
-            if o == oid:
-                print(f'{status(o, t):6} {bid}  {t}')
+        for bid, b in batches.items():
+            for _, t, os_ in b:
+                if oid in os_:
+                    print(f'{status(os_, t):6} {bid}  {t}')
     else:
         sys.exit(__doc__)
 
