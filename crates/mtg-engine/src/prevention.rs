@@ -68,6 +68,11 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             kind: kind.clone(),
         },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
+        // "If target player would draw a card": the player is locked in too.
+        ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
+            Some(p) => ReplacementEvent::Draw(PlayerFilter::Is(p)),
+            None => d.event.clone(),
+        },
         other => other.clone(),
     };
     // The object or player damage is redirected to is locked in too.
