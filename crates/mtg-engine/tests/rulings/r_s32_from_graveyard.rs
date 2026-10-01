@@ -239,3 +239,31 @@ fn an_opponent_who_left_the_game_isnt_considered() {
     assert_eq!(t.pt(sneak), (3, 4));
     assert_eq!(t.pt(bears), (3, 2));
 }
+
+#[test]
+fn several_opponents_with_eight_cards_in_their_graveyards_give_no_extra_bonus() {
+    cr!("611.3a", "613.4c");
+    ruling!(
+        "Nimana Skitter-Sneak",
+        "An ability that offers a bonus if an opponent has eight or more cards in their graveyard won’t provide additional benefits if more than one opponent has eight or more cards in their graveyard. There are also no additional benefits no matter how many cards are in an opponent’s graveyard, as long as there are at least eight."
+    );
+    supported("Soaring Thought-Thief");
+    // Nimana Skitter-Sneak: "As long as an opponent has eight or more cards in their
+    // graveyard, this creature gets +1/+0 and has menace." Soaring Thought-Thief: "...
+    // Rogues you control get +1/+0."
+    let mut t = TestGame::new(3);
+    let sneak = t.battlefield(P0, "Nimana Skitter-Sneak");
+    let thief = t.battlefield(P1, "Soaring Thought-Thief");
+    graveyard_n(&mut t, P1, "Island", 7);
+    t.settle();
+    assert_eq!(t.pt(sneak), (3, 4));
+    graveyard_n(&mut t, P1, "Island", 13);
+    graveyard_n(&mut t, P2, "Island", 8);
+    graveyard_n(&mut t, P0, "Island", 8);
+    t.settle();
+    // P1 has twenty and P2 eight: +1/+0 once for the Skitter-Sneak (a Rogue) ...
+    assert_eq!(t.pt(sneak), (4, 4));
+    // ... and once for P1's Thought-Thief, whose opponents P0 and P2 both have eight.
+    assert_eq!(t.pt(thief), (2, 3));
+    assert!(t.obj(sneak).has_keyword(mtg_engine::keywords::KeywordKind::Menace));
+}
