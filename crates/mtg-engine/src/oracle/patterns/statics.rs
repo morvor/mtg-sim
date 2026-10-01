@@ -2634,6 +2634,10 @@ fn parse_player_body(s: &str) -> Option<Body> {
                     return None;
                 }
                 PlayerModification::HandSizeDelta(-n)
+            } else if let Some(x) = r.strip_prefix("equal to ") {
+                // "equal to the number of hour counters on ~" (Midnight Oil): the amount
+                // as it is now, recomputed continuously (CR 611.3a).
+                PlayerModification::MaxHandSize(Some(parse_amount(x, None)?))
             } else {
                 let (n, t) = parse_number(r)?;
                 if !t.trim().is_empty() || matches!(n, Value::X) || r.starts_with('a') {

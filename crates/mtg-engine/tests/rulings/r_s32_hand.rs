@@ -9,6 +9,7 @@ use crate::r_s06_common::has_kw;
 use crate::r_s05_common::move_to;
 use crate::r_s13_common::pregame;
 use crate::r_s25_common::cast_new;
+use crate::r_s29_common::put_counters;
 use mtg_engine::card::card;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::game::GameConfig;
@@ -243,4 +244,70 @@ fn protection_from_each_color_isnt_protection_from_colorless() {
         .expect("Rod of Ruin can target it");
     t.resolve_all();
     assert_eq!(t.obj(bears).damage, 1);
+}
+
+#[test]
+fn a_hand_over_the_maximum_is_fine_until_its_players_cleanup_step() {
+    cr!("402.2", "514.1", "611.3a");
+    ruling!(
+        "Twenty-Toed Toad",
+        "Your maximum hand size is only checked during the cleanup step of your turn. At other times, you may have more cards in hand than your maximum hand size."
+    );
+    supported("Midnight Oil");
+    // Midnight Oil: "Your maximum hand size is equal to the number of hour counters on
+    // this enchantment." and "Whenever you discard a card, you lose 1 life." It has one
+    // hour counter; P0 has four cards.
+    let mut t = TestGame::new(2);
+    let oil = t.battlefield(P0, "Midnight Oil");
+    put_counters(&mut t, oil, "hour", 1);
+    for name in ["Hill Giant", "Shock", "Forest", "Island"] {
+        t.hand(P0, name);
+    }
+    t.set_step(P0, Step::End);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 4, "more than the maximum until the cleanup step");
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.hand_size(P0), 1);
+    assert_eq!(t.life(P0), 17, "three discards");
+    // The maximum follows the counters: with three, P0 keeps three.
+    let mut t = TestGame::new(2);
+    let oil = t.battlefield(P0, "Midnight Oil");
+    put_counters(&mut t, oil, "hour", 3);
+    for name in ["Hill Giant", "Shock", "Forest", "Island"] {
+        t.hand(P0, name);
+    }
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.hand_size(P0), 3);
+}
+
+#[test]
+fn twenty_toed_toad_wins_with_twenty_counters_or_twenty_cards() {
+    cr!("104.2b", "603.4");
+    supported("Twenty-Toed Toad");
+    // "Your maximum hand size is twenty." and "Whenever this creature attacks, you win the
+    // game if there are twenty or more counters on it or you have twenty or more cards in
+    // hand."
+    for (counters, cards, wins) in [(20, 0, true), (0, 20, true), (19, 19, false)] {
+        let mut t = TestGame::new(2);
+        let toad = t.battlefield(P0, "Twenty-Toed Toad");
+        if counters > 0 {
+            put_counters(&mut t, toad, "+1/+1", counters);
+        }
+        for _ in 0..cards {
+            t.hand(P0, "Island");
+        }
+        attack_with(&mut t, &[(toad, Entity::Player(P1))]);
+        t.resolve_all();
+        assert_eq!(t.has_lost(P1), wins, "{counters} counters, {cards} cards");
+    }
+    // Twenty cards are kept through P0's cleanup step; a twenty-first is discarded.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Twenty-Toed Toad");
+    for _ in 0..21 {
+        t.hand(P0, "Island");
+    }
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.hand_size(P0), 20);
 }
