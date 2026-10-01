@@ -198,3 +198,32 @@ fn goblin_barrage_needs_a_creature_target_which_can_be_sacrificed_for_its_kicker
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
 }
+
+#[test]
+fn kicker_is_an_optional_additional_cost_paid_as_the_spell_is_cast() {
+    cr!("702.33a", "601.2b", "601.2f");
+    ruling!(
+        "Rite of Replication",
+        "\"Kicker [cost]\" means \"You may pay an additional [cost] as you cast this spell.\""
+    );
+    supported("Rite of Replication");
+    // "Kicker {5}. Create a token that's a copy of target creature. If this spell was
+    // kicked, create five of those tokens instead."
+    for kick in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Island", 9);
+        let rite = t.hand(P0, "Rite of Replication");
+        let from = t.asked().len();
+        t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Bool(kick));
+        t.cast(P0, rite).target(bears).go();
+        let offered = asked_of_since(&t, P0, from, |d| matches!(d, Decision::OptionalCost { .. }));
+        assert_eq!(offered, 1);
+        // The additional {5} is paid only when kicked.
+        let tapped = crate::r_s01_common::tapped_lands(&t, P0);
+        assert_eq!(tapped, if kick { 9 } else { 4 });
+        t.resolve_all();
+        let copies = t.named_on_battlefield("Grizzly Bears").len() - 1;
+        assert_eq!(copies, if kick { 5 } else { 1 });
+    }
+}
