@@ -273,6 +273,29 @@ impl Renderer<'_> {
                 let t = self.times(times);
                 format!("{inner} {t}")
             }
+            // "Put your choice of a flying counter or a first strike counter on it."
+            Effect::ChooseOne { who: PlayerRef::You, options }
+                if options.len() > 1
+                    && options.iter().all(|(_, e)| matches!(e, Effect::AddCounters { n: Value::Const(1), .. }))
+                    && options.windows(2).all(|w| match (&w[0].1, &w[1].1) {
+                        (Effect::AddCounters { what: a, .. }, Effect::AddCounters { what: b, .. }) => same_sel(a, b),
+                        _ => false,
+                    }) =>
+            {
+                let kinds: Vec<String> = options
+                    .iter()
+                    .filter_map(|(_, e)| match e {
+                        Effect::AddCounters { kind, .. } => Some(with_article(&counter_name(kind))),
+                        _ => None,
+                    })
+                    .collect();
+                let what = match &options[0].1 {
+                    Effect::AddCounters { what, .. } => what.clone(),
+                    _ => Sel::None,
+                };
+                let t = self.sel(&what, Case::Obj);
+                format!("put your choice of {} on {t}", join_list(&kinds, "or"))
+            }
             Effect::ChooseOne { who, options } => {
                 let w = self.player(who, Case::Subj);
                 let head = if w == "you" {
@@ -1268,6 +1291,30 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Put two +1/+1 counters and a flying counter on ~."
+            if let Effect::AddCounters { what, .. } = &v[i] {
+                let mut j = i + 1;
+                while let Some(Effect::AddCounters { what: w2, .. }) = v.get(j) {
+                    if same_sel(what, w2) {
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if j > i + 1 {
+                    let mut items = Vec::new();
+                    for e in &v[i..j] {
+                        if let Effect::AddCounters { kind, n, .. } = e {
+                            let (c, _) = self.counted(n, &counter_name(kind));
+                            items.push(c);
+                        }
+                    }
+                    let t = self.sel(what, Case::Obj);
+                    parts.push(format!("put {} on {t}", join_list(&items, "and")));
+                    i = j;
+                    continue;
+                }
+            }
             // "~ deals 1 damage to any target and 1 damage to you."
             if let Effect::DealDamage { source, .. } = &v[i] {
                 let mut j = i + 1;
@@ -1428,15 +1475,18 @@ impl Renderer<'_> {
             {
                 self.effect(then)
             }
+            // "X. If C, Y instead." (the comparison treats "If C, Y. Otherwise, X." the
+            // same): the default effect comes first, so it names the targets.
+            _ if !else_empty => {
+                let o = self.effect(otherwise);
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                format!("{o}. If {c}, {t} instead")
+            }
             _ => {
                 let c = self.condition(cond);
                 let t = self.effect(then);
-                let mut s = format!("if {c}, {t}");
-                if !else_empty {
-                    let o = self.effect(otherwise);
-                    s.push_str(&format!(". Otherwise, {o}"));
-                }
-                s
+                format!("if {c}, {t}")
             }
         }
     }
@@ -1827,6 +1877,17 @@ impl Renderer<'_> {
         }
         let status = st.join(" and ");
         let (head, tail) = desc;
+        // A named token: "create Scion of the Deep, a legendary 8/8 blue Octopus creature
+        // token".
+        if let Some(rest) = tail.strip_prefix(" named ") {
+            if matches!(count, Value::Const(1)) && status.is_empty() {
+                let (name, with) = match rest.split_once(" with ") {
+                    Some((n, w)) => (n.to_string(), format!(" with {w}")),
+                    None => (rest.to_string(), String::new()),
+                };
+                return format!("create {name}, {} token{with}", with_article(&head));
+            }
+        }
         let noun_one = join_words(&[status.clone(), head.clone(), "token".into()]);
         let noun_many = join_words(&[status, head, "tokens".into()]);
         let (c, w) = match count {
@@ -1874,6 +1935,10 @@ impl Renderer<'_> {
 
     fn token_desc_full(&mut self, spec: &TokenSpec) -> (String, String) {
         let mut words: Vec<String> = Vec::new();
+        // "a legendary 8/8 blue Octopus creature token".
+        for s in &spec.supertypes {
+            words.push(nouns::supertype_word(*s).to_string());
+        }
         if let (Some(p), Some(t)) = (spec.power, spec.toughness) {
             words.push(format!("{p}/{t}"));
         }
@@ -1882,9 +1947,6 @@ impl Renderer<'_> {
             words.push("colorless".into());
         } else {
             words.push(join_list(&colors, "and"));
-        }
-        for s in &spec.supertypes {
-            words.push(nouns::supertype_word(*s).to_string());
         }
         for s in &spec.subtypes {
             words.push(s.to_string());
@@ -2073,7 +2135,12 @@ impl Renderer<'_> {
                     }
                     parts.push(format!("gets {a}/{b}"));
                 }
-                Modification::AddKeyword(k) => keywords.push(self.keyword_lower(k)),
+                Modification::AddKeyword(k) => {
+                    if keywords.is_empty() && abilities.is_empty() {
+                        parts.push(GRANTS.into());
+                    }
+                    keywords.push(self.keyword_lower(k))
+                }
                 Modification::AddKeywordX(k, v) => {
                     let s = self.keyword_lower(k);
                     let v = self.value(v);
@@ -2220,12 +2287,29 @@ impl Renderer<'_> {
                 where_clauses.push(still);
             }
         } else {
+            // "protection from each color" (CR 702.16h).
+            let all_colors = ["white", "blue", "black", "red", "green"]
+                .iter()
+                .all(|c| keywords.contains(&format!("protection from {c}")));
+            if all_colors {
+                keywords.retain(|k| {
+                    !["white", "blue", "black", "red", "green"]
+                        .iter()
+                        .any(|c| *k == format!("protection from {c}"))
+                });
+                keywords.push("protection from each color".into());
+            }
             let mut grants = keywords.clone();
             grants.extend(abilities.iter().cloned());
             if !grants.is_empty() {
-                parts.push(format!("{has} {}", join_list(&grants, "and")));
+                let g = format!("{has} {}", join_list(&grants, "and"));
+                match parts.iter().position(|p| p == GRANTS) {
+                    Some(i) => parts[i] = g,
+                    None => parts.push(g),
+                }
             }
         }
+        parts.retain(|p| p != GRANTS);
         // An "isn't" part moves before the rest: cards list it first.
         parts.sort_by_key(|p| !p.starts_with("isn't"));
         let s = join_list(&parts, "and");
@@ -2812,6 +2896,9 @@ pub(crate) fn strip_controller(f: &Filter) -> Filter {
         other => other.clone(),
     }
 }
+
+/// Where the granted keywords and abilities go among the parts of a verb phrase.
+const GRANTS: &str = "\u{1}grants";
 
 fn unreachable_player() -> PlayerRef {
     PlayerRef::You

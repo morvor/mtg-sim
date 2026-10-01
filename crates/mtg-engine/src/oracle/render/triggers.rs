@@ -153,6 +153,11 @@ impl Renderer<'_> {
                             .unwrap_or_default();
                         format!("is put into exile{f}")
                     }
+                    // "enters from your graveyard".
+                    (Some(fz), Some(ZoneKind::Battlefield)) => {
+                        let fz_s = self.zone_from(*fz, filter);
+                        format!("enters from {fz_s}")
+                    }
                     (Some(fz), Some(tz)) => {
                         let tz_s = self.zone_into(*tz, filter);
                         let fz_s = self.zone_from(*fz, filter);
@@ -698,6 +703,10 @@ impl Renderer<'_> {
     /// "a graveyard", "your graveyard", "an opponent's graveyard".
     fn zone_into(&mut self, z: ZoneKind, f: &Filter) -> String {
         let zw = zone_word(z);
+        // The object itself goes to its owner's zones: "your graveyard".
+        if matches!(f, Filter::Source) {
+            return format!("your {zw}");
+        }
         match Self::zone_owner(f) {
             Some(r) => {
                 let p = self.rel_possessive(r, Num::One);

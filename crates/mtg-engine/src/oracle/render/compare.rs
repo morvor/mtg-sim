@@ -73,6 +73,16 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               choice\" restates it.",
     },
     Equivalence {
+        pattern: r"\bthat spell or ability\b",
+        replacement: "it",
+        why: "Anaphora: \"that spell or ability\" refers back to the one already named.",
+    },
+    Equivalence {
+        pattern: r"\bwould be dealt this turn (by|to) ([^.]+?)(\.|$)",
+        replacement: "would be dealt $1 $2 this turn$3",
+        why: "Word order of the duration in a prevention effect.",
+    },
+    Equivalence {
         pattern: r"\bthat (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)s?'s\b",
         replacement: "its",
         why: "Anaphora: \"that creature's\" and \"its\" both refer back to the object the \
@@ -379,8 +389,8 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
         .replace('\u{2019}', "'")
         .replace(['\u{201C}', '\u{201D}'], "\"")
         .to_lowercase();
-    s = s.replace('\n', " ").replace('•', " ");
     s = sentence_rewrites(&s);
+    s = s.replace('\n', " ").replace('•', " ");
     for e in EQUIVALENCES {
         let re = equivalence_regex(e.pattern);
         s = re.replace_all(&s, e.replacement).to_string();
@@ -446,6 +456,34 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
             }
             out.push(p);
         }
+    }
+    attached_anaphora(out)
+}
+
+/// After the first "enchanted creature" (or "equipped creature", ...) in a unit, later
+/// ones may be "it": both refer to the object the source is attached to (anaphora).
+fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
+    let heads = ["creature", "permanent", "land", "artifact", "planeswalker"];
+    let mut out: Vec<String> = Vec::new();
+    let mut seen = false;
+    let mut i = 0;
+    while i < tokens.len() {
+        let t = &tokens[i];
+        let is_attached = (t == "enchanted" || t == "equipped" || t == "fortified")
+            && tokens.get(i + 1).is_some_and(|n| heads.contains(&n.as_str()));
+        if is_attached {
+            if seen {
+                out.push("it".into());
+            } else {
+                out.push(t.clone());
+                out.push(tokens[i + 1].clone());
+                seen = true;
+            }
+            i += 2;
+            continue;
+        }
+        out.push(t.clone());
+        i += 1;
     }
     out
 }
@@ -533,6 +571,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
             (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
+            (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 $2x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),

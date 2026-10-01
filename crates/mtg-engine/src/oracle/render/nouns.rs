@@ -113,7 +113,15 @@ impl Renderer<'_> {
             return "fortified land".into();
         }
         match &self.info.enchant {
-            Some(n) => format!("enchanted {n}"),
+            // "Enchant artifact or creature" Auras say "enchanted permanent"; "Enchant
+            // nonland permanent" ones "enchanted permanent"; "Enchant opponent" ones
+            // "enchanted player".
+            Some(n) if n.contains(" or ") || n.contains(", ") => "enchanted permanent".into(),
+            Some(n) if n == "opponent" => "enchanted player".into(),
+            Some(n) => {
+                let head = n.rsplit(' ').next().unwrap_or(n);
+                format!("enchanted {head}")
+            }
             // A creature with bestow is an Aura with enchant creature (CR 702.103b).
             None if self.info.card_types.contains(CardType::Creature) => {
                 "enchanted creature".into()

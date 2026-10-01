@@ -504,6 +504,10 @@ impl Renderer<'_> {
                     format!("as an additional cost to cast {target}, {c}")
                 }
             }
+            CostChange::AlternativeCost(c) if c.is_free() => {
+                let m = self.me();
+                format!("you may cast {m} without paying its mana cost")
+            }
             CostChange::AlternativeCost(c) => {
                 let c = self.cost_as_payment(c);
                 format!("you may {c} rather than pay ~'s mana cost")
@@ -724,6 +728,20 @@ impl Renderer<'_> {
                 sources,
                 include_mana,
             } => {
+                // "Enchanted creature's activated abilities can't be activated."
+                if matches!(who, PlayerFilter::Any) && !matches!(sources, Filter::Any) {
+                    let s = match sources {
+                        Filter::AttachedToSource => self.attached_noun(),
+                        Filter::Source => self.me(),
+                        other => self.noun_det(other, Det::Plural),
+                    };
+                    let m = if *include_mana {
+                        ""
+                    } else {
+                        " unless they're mana abilities"
+                    };
+                    return format!("{} activated abilities can't be activated{m}", nouns::possessive(&s));
+                }
                 let w = self.player_filter_subject(who);
                 let s = if matches!(sources, Filter::Any) {
                     "abilities".to_string()
@@ -1101,10 +1119,10 @@ impl Renderer<'_> {
             (E::CreateTokens(p), action) => {
                 let w = self.player_filter_subject(p);
                 let w = if w == "players" { "a player".into() } else { w };
-                let then = match action {
+                let poss = nouns::possessive(&w);
+                match action {
                     A::Multiply(2) => format!(
-                        "{} create twice that many of those tokens instead",
-                        if w == "you" { "you" } else { "they" }
+                        "if an effect would create one or more tokens under {poss} control, it creates twice that many of those tokens instead"
                     ),
                     A::PlusTokens { spec, count } => {
                         let (d, tail) = self.token_desc(spec);
@@ -1112,11 +1130,13 @@ impl Renderer<'_> {
                             Value::EventAmount => "that many".to_string(),
                             other => self.value(other),
                         };
-                        format!("those tokens plus {c} {d} tokens{tail} are created instead")
+                        format!("if one or more tokens would be created under {poss} control, those tokens plus {c} {d} tokens{tail} are created instead")
                     }
-                    other => self.replacement_then(other, ""),
-                };
-                format!("if {w} would create one or more tokens, {then}")
+                    other => {
+                        let then = self.replacement_then(other, "");
+                        format!("if {w} would create one or more tokens, {then}")
+                    }
+                }
             }
             (E::CreateTokensMatching { who, tokens }, action) => {
                 let w = self.player_filter_subject(who);
@@ -1349,7 +1369,11 @@ impl Renderer<'_> {
         } else {
             "damage"
         };
-        let mut to = Vec::new();
+        let mut to: Vec<String> = Vec::new();
+        // "to you and creatures you control": you first.
+        if let Some(PlayerFilter::You) = to_players {
+            to.push("you".into());
+        }
         // Damage to anything: no recipient phrase.
         let (to_objects, to_players) = match (to_objects, to_players) {
             (Some(Filter::Any), Some(PlayerFilter::Any)) => (&None, &None),
@@ -1362,7 +1386,7 @@ impl Renderer<'_> {
                 other => self.noun_det(other, Det::A),
             });
         }
-        if let Some(p) = to_players {
+        if let Some(p) = to_players.as_ref().filter(|p| !matches!(p, PlayerFilter::You)) {
             to.push(self.player_filter_object(p));
         }
         let src = match source {

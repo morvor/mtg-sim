@@ -25,6 +25,8 @@ impl Renderer<'_> {
                     && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
                     && !n.contains(" you ")
                     && !n.contains("among")
+                    && !n.contains("attacking")
+                    && !n.contains("blocking")
                     && !n.ends_with(" ~");
                 if global {
                     format!("the number of {n} on the battlefield")
@@ -569,6 +571,12 @@ impl Renderer<'_> {
             PlayerFilter::Poisoned => "is poisoned".into(),
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::DealtDamageThisTurn => "was dealt damage this turn".into(),
+            // CR 122.1f: "poisoned" means having one or more poison counters.
+            PlayerFilter::Counters(k, Cmp::Ge, v)
+                if k.as_str() == "poison" && matches!(v.as_ref(), Value::Const(1)) =>
+            {
+                "is poisoned".into()
+            }
             PlayerFilter::Counters(k, c, v) => {
                 let v = self.value(v);
                 if v == "1" && matches!(c, Cmp::Ge) {
