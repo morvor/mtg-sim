@@ -1283,7 +1283,9 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let mut searchers = self.eval_players(who, ctx);
-                if searchers.is_empty() {
+                // The players who chose to search ("each player may search", a variable)
+                // can be no one.
+                if searchers.is_empty() && !matches!(who, PlayerRef::Var(_)) {
                     searchers.push(ctx.controller);
                 }
                 // CR 118.12b: "If you do" after a search checks whether the player
