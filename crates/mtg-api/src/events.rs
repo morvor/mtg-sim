@@ -359,7 +359,7 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
                 "step",
                 format!(
                     "{} step of {}'s turn",
-                    step_name(*step),
+                    step_name(*step).replace('_', " "),
                     player_name(*active)
                 ),
             );

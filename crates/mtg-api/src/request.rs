@@ -2,13 +2,14 @@
 //! conversion to and from the engine's [`Decision`] and [`Answer`].
 
 use crate::describe::{
-    action_text, cast_method_code, entity_name, object_name, player_name, visible_id,
+    action_text, cast_method_code, entity_name, object_name, player_name, revealed_name, visible_id,
 };
 use crate::events::EventView;
 use crate::legal::{priority_options, PriorityOptions};
-use crate::view::{observe, step_name, EntityRef, Observation};
+use crate::view::{observe, step_name, zone_name, CardView, EntityRef, Observation};
 use mtg_engine::decision::{Action, Answer, Decision, SpecialAction};
 use mtg_engine::eval::Ctx;
+use mtg_engine::object::Zone;
 use mtg_engine::{Entity, Game, ObjectId, PlayerId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -115,6 +116,10 @@ pub struct OptionView {
     /// Yes/no questions: the answer this option stands for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<bool>,
+    /// A card in a library or hand this decision lets the player look at: its
+    /// characteristics (the observation doesn't show it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<Box<CardView>>,
 }
 
 /// A decision for an agent: everything it needs to answer.
@@ -428,14 +433,43 @@ pub fn prepare(
 ) -> Prepared {
     let viewer = Some(seat);
     let ename = |e: Entity| entity_name(g, viewer, e);
-    let entity_option = |i: usize, e: Entity| OptionView {
-        index: i,
-        text: ename(e),
-        entity: match e {
-            Entity::Object(o) => visible_id(g, viewer, o).map(EntityRef::Object),
-            Entity::Player(p) => Some(EntityRef::Player(p.0)),
-        },
-        ..Default::default()
+    // A card in a library or hand offered as an option is one the decision lets the
+    // player look at (a search, scry, a card to discard or put back): it's named, and its
+    // characteristics come with it, since the observation doesn't show it. Face-down
+    // permanents and spells stay hidden from a player who can't look at them (CR 708.5).
+    let entity_option = |i: usize, e: Entity| {
+        let shown = match e {
+            Entity::Object(o) => {
+                (o.0 as usize) < g.objects.len()
+                    && matches!(
+                        g.obj(o).zone,
+                        Zone::Library(_) | Zone::Hand(_) | Zone::Outside(_)
+                    )
+                    && !g.obj(o).face_down
+            }
+            Entity::Player(_) => false,
+        };
+        match e {
+            Entity::Object(o) if shown => OptionView {
+                index: i,
+                text: format!("{} (in {})", revealed_name(g, o), zone_name(g.obj(o).zone)),
+                entity: Some(EntityRef::Object(o.0)),
+                card: Some(Box::new(CardView::from_chars(
+                    &g.obj(o).chars,
+                    g.obj(o).chars.mana_value(),
+                ))),
+                ..Default::default()
+            },
+            _ => OptionView {
+                index: i,
+                text: ename(e),
+                entity: match e {
+                    Entity::Object(o) => visible_id(g, viewer, o).map(EntityRef::Object),
+                    Entity::Player(p) => Some(EntityRef::Player(p.0)),
+                },
+                ..Default::default()
+            },
+        }
     };
     let entity_options = |es: &[Entity]| -> (Vec<OptionView>, Vec<Payload>) {
         (

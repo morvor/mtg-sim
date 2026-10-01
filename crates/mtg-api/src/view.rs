@@ -170,7 +170,11 @@ impl CardView {
                 }
             }
             let t = a.text.trim();
+            // Ability texts say "~" for the object's name.
+            let named = t.replace('~', &c.name);
+            let core = named.trim_end_matches('.');
             if !t.is_empty()
+                && !text.contains(core)
                 && !text.contains(t)
                 && !matches!(a.kind, AbilityKind::Unsupported(_))
                 && !granted.iter().any(|g: &String| g == t)
@@ -285,9 +289,7 @@ pub fn object_view(g: &Game, viewer: Viewer, id: ObjectId) -> ObjectView {
         o.chars.clone()
     };
     let mv = if o.face_down { 0 } else { g.mana_value_of(id) };
-    let face_down_card = (o.face_down && visible && viewer.is_some()
-        || o.face_down && viewer.is_none())
-    .then(|| {
+    let face_down_card = (o.face_down && visible).then(|| {
         let real = mtg_engine::facedown::revealed_characteristics(g, id);
         Box::new(CardView::from_chars(&real, real.mana_value()))
     });

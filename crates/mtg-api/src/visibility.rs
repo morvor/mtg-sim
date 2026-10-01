@@ -3,7 +3,6 @@
 //! A *viewer* is `Some(player)` for a player's view of the game, or `None` for the
 //! omniscient view used for logging and debugging.
 
-use mtg_engine::object::Zone;
 use mtg_engine::{Game, ObjectId, PlayerId};
 
 /// A player's point of view, or `None` for an omniscient one.
@@ -23,28 +22,4 @@ pub fn can_see(g: &Game, viewer: Viewer, id: ObjectId) -> bool {
         return false;
     }
     mtg_engine::player_control::can_see(g, p, id) || mtg_engine::reveal::is_revealed(g, id)
-}
-
-/// Whether the object's identity is public: anyone may see it.
-pub fn is_public(g: &Game, id: ObjectId) -> bool {
-    let o = g.obj(id);
-    !o.face_down && o.zone.is_public()
-}
-
-/// Whether `viewer` may see the cards in `owner`'s hand (all of them).
-pub fn sees_hand(g: &Game, viewer: Viewer, owner: PlayerId) -> bool {
-    match viewer {
-        None => true,
-        Some(p) => {
-            p == owner
-                || mtg_engine::reveal::hand_revealed(g, owner)
-                || g.player(owner).hand.iter().all(|c| can_see(g, viewer, *c))
-        }
-    }
-}
-
-/// Whether `id` is in a hidden zone (library, hand, outside the game) or face down.
-pub fn is_hidden_kind(g: &Game, id: ObjectId) -> bool {
-    let o = g.obj(id);
-    o.face_down || matches!(o.zone, Zone::Library(_) | Zone::Hand(_) | Zone::Outside(_))
 }
