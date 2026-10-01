@@ -566,7 +566,8 @@ inventory::submit! { FollowupPattern { name: "tokens_copies: the token has", pri
 
 /// Whether an effect refers to the tokens just created.
 fn mentions_created(e: &Effect) -> bool {
-    serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
+    serde_json::to_string(e)
+        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
 }
 
 /// "It gains haste until end of turn", "They gain haste", "Those tokens gain flying and
@@ -674,9 +675,12 @@ fn f_created_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(tail) = tail else {
         return false;
     };
-    let Some(e) =
-        super::damage_removal::delayed_removal(verb, Sel::Var(vars::CREATED), tail.trim(), step)
-    else {
+    let Some(e) = super::damage_removal::delayed_removal(
+        verb,
+        Sel::Var(vars::CREATED),
+        tail.trim(),
+        step,
+    ) else {
         return false;
     };
     append_after_create(prev, e)

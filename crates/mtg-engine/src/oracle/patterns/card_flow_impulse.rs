@@ -97,19 +97,13 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let Some(r) = r.strip_prefix("you may play ") else {
         return false;
     };
-    let Some(r) = [
-        "that card",
-        "those cards",
-        "them",
-        "it",
-        "the exiled card",
-        "the exiled cards",
-    ]
-    .iter()
-    .find_map(|p| {
-        r.strip_prefix(p)
-            .filter(|x| x.is_empty() || x.starts_with(' '))
-    }) else {
+    let Some(r) = ["that card", "those cards", "them", "it", "the exiled card", "the exiled cards"]
+        .iter()
+        .find_map(|p| {
+            r.strip_prefix(p)
+                .filter(|x| x.is_empty() || x.starts_with(' '))
+        })
+    else {
         return false;
     };
     let duration = match (duration, r.trim()) {
