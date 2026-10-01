@@ -367,3 +367,80 @@ fn krarks_thumb_sees_the_opponents_simultaneous_flip_before_choosing() {
     assert!(t.g.dice.loaded_coins.is_empty());
     assert_eq!(flip_results(&t).len(), 2);
 }
+
+// ---------------------------------------------------------------------------
+// Goblin Festival
+// ---------------------------------------------------------------------------
+
+/// P0 activates Goblin Festival targeting P1.
+fn festival_ping(t: &mut TestGame, festival: ObjectId) {
+    crate::r_s04_common::add_mana(t, P0, mtg_engine::mana::ManaType::R, 2);
+    t.activate(P0, festival, 0, &[Entity::Player(P1)])
+        .expect("activate");
+}
+
+#[test]
+fn goblin_festival_abilities_on_the_stack_resolve_after_losing_control() {
+    cr!("113.7a", "705.2", "613.1b");
+    ruling!(
+        "Goblin Festival",
+        "If you activate this multiple times in a row so the stack has more than one of this ability on it, the abilities will still resolve even if Goblin Festival leaves the battlefield or leaves your control before they resolve."
+    );
+    supported("Goblin Festival");
+    let mut t = TestGame::new(2);
+    let festival = t.battlefield(P0, "Goblin Festival");
+    festival_ping(&mut t, festival);
+    festival_ping(&mut t, festival);
+    // The first to resolve: P0 calls heads, it comes up tails; P1 gets the enchantment.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    load_coins(&mut t, &[false, true]);
+    t.resolve();
+    assert_eq!(t.obj_now(festival).controller, P1);
+    assert_eq!(t.life(P1), 19);
+    // The second still resolves: P0 flips again and P1 takes the damage.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.resolve_all();
+    assert_eq!(flip_results(&t), vec![false, true]);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.obj_now(festival).controller, P1);
+}
+
+#[test]
+fn goblin_festival_gives_it_to_an_opponent_of_the_abilitys_controller() {
+    cr!("113.8", "705.2", "613.1b");
+    ruling!(
+        "Goblin Festival",
+        "The controller of the ability chooses one of their opponents. If this card changes controllers before the ability resolves, you still pick an opponent of the player who controlled it when it was activated."
+    );
+    let mut t = TestGame::new(2);
+    let festival = t.battlefield(P0, "Goblin Festival");
+    festival_ping(&mut t, festival);
+    // In response, P1 gains control of it.
+    modify_no_settle(
+        &mut t,
+        festival,
+        vec![mtg_engine::ability::Modification::SetController(
+            mtg_engine::ability::PlayerRef::Player(P1),
+        )],
+    );
+    assert_eq!(t.obj_now(festival).controller, P1);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    load_coins(&mut t, &[false]);
+    t.resolve_all();
+    // P0 lost and chose an opponent of P0's: P1.
+    assert_eq!(flip_results(&t), vec![false]);
+    assert_eq!(t.obj_now(festival).controller, P1);
+    let chooser = t
+        .asked()
+        .iter()
+        .filter(|(_, d)| {
+            matches!(
+                d,
+                mtg_engine::decision::Decision::ChooseEntities { .. }
+                    | mtg_engine::decision::Decision::ChooseOption { .. }
+            )
+        })
+        .map(|(p, _)| *p)
+        .collect::<Vec<_>>();
+    assert!(chooser.iter().all(|p| *p == P0), "{chooser:?}");
+}

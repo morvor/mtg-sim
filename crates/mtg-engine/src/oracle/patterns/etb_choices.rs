@@ -881,7 +881,7 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "a card name" | "any card name" => ChoiceKind::CardName,
         "a nonland card name" => ChoiceKind::CardNameFiltered("nonland".into()),
         "a creature card name" => ChoiceKind::CardNameFiltered("creature".into()),
-        "an opponent" => ChoiceKind::Opponent,
+        "an opponent" | "one of your opponents" => ChoiceKind::Opponent,
         "a player" => ChoiceKind::Player,
         "a basic land type" => ChoiceKind::BasicLandType,
         "a card type" => ChoiceKind::CardType,
