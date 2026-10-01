@@ -38,7 +38,7 @@ fn in_place() -> Destination {
     d
 }
 
-fn is_in_place(d: &Destination) -> bool {
+pub(crate) fn is_in_place(d: &Destination) -> bool {
     d.zone == ZoneKind::Library && matches!(d.position, LibraryPosition::FromTop(0))
 }
 
@@ -125,7 +125,7 @@ fn put_them_back(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 /// Where the rest go: "on the bottom of your library in any order", "... in a random
 /// order", "on the bottom of your library" (one card), "into your graveyard", "back on top
 /// of your library in any order".
-fn rest_destination(s: &str, single: bool) -> Option<Destination> {
+pub(crate) fn rest_destination(s: &str, single: bool) -> Option<Destination> {
     let s = s.trim();
     Some(match s {
         "on the bottom of your library in any order" => Destination::library_bottom(),
@@ -147,7 +147,7 @@ fn rest_destination(s: &str, single: bool) -> Option<Destination> {
 }
 
 /// Where the chosen cards go.
-fn take_destination(s: &str) -> Option<(Destination, &str)> {
+pub(crate) fn take_destination(s: &str) -> Option<(Destination, &str)> {
     for (p, d) in [
         (
             "into your hand",
