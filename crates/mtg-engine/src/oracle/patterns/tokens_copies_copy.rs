@@ -224,6 +224,8 @@ pub(crate) fn copy_exceptions(
             if let Some(types) = r
                 .strip_suffix(" in addition to its other types")
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
+                .or_else(|| r.strip_suffix(" in addition to its other creature types"))
+                .or_else(|| r.strip_suffix(" in addition to their other creature types"))
             {
                 out.extend(added_types(types)?);
             } else if let Some(x) = r
