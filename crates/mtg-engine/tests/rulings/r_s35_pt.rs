@@ -116,6 +116,25 @@ fn a_negative_power_gives_x_of_zero() {
 }
 
 #[test]
+fn sword_of_the_squeak_counts_base_power_or_toughness_one() {
+    cr!("208.4b");
+    supported("Sword of the Squeak");
+    // "Equipped creature gets +1/+1 for each creature you control with base power or
+    // toughness 1." Llanowar Elves (1/1) and Aquamoeba (1/3) count, even pumped; Hill
+    // Giant (3/3) doesn't, nor does a 0/0 Nighthowler that's 1/1.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Aquamoeba");
+    t.battlefield(P0, "Nighthowler");
+    t.graveyard(P1, "Grizzly Bears");
+    crate::r_s13_common::add(&mut t, elves, "+1/+1", 2);
+    crate::r_s06_common::attach_new(&mut t, P0, "Sword of the Squeak", giant);
+    t.g.recompute();
+    assert_eq!(t.pt(giant), (5, 5));
+}
+
+#[test]
 fn a_bonus_from_a_creatures_own_ability_doesnt_change_its_base_power_and_toughness() {
     cr!("208.4b", "604.3", "613.4c");
     ruling!(

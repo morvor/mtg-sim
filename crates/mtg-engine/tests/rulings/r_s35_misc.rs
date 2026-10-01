@@ -212,6 +212,35 @@ fn an_energy_payment_is_made_once_as_the_ability_resolves() {
 }
 
 #[test]
+fn a_reflexive_ability_continues_with_the_token_it_created() {
+    cr!("603.12", "701.43a");
+    supported("Sandstorm Crasher");
+    // "You may exert this creature as it attacks. When you do, create a tapped and
+    // attacking token that's a copy of target creature you control. Sacrifice the token at
+    // the beginning of the next end step."
+    let mut t = TestGame::new(2);
+    let crasher = t.battlefield(P0, "Sandstorm Crasher");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    crate::r_s01_common::attack_with(&mut t, &[(crasher, Entity::Player(P1))]);
+    t.resolve_all();
+    let token: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token() && o.chars.name == "Grizzly Bears")
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(token.len(), 1);
+    assert!(t.obj_now(token[0]).tapped);
+    // The Bears stay; the token is sacrificed at the beginning of the end step.
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(token[0]));
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
 fn mana_added_by_a_triggered_ability_empties_at_the_end_of_the_step() {
     cr!("106.4", "500.5");
     ruling!(
