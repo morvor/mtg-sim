@@ -5,7 +5,7 @@
 use crate::r_s01_common::supported;
 use crate::r_s03_common::respond;
 use crate::r_s19_common::add_lore;
-use crate::r_s25_common::cast_new;
+use crate::r_s25_common::{cast_new, lands_for_cost};
 use crate::r_s29_common::replacement_choosers;
 use crate::r_s30_common::pick_replacement;
 use mtg_engine::decision::{Answer, Decision};
@@ -98,4 +98,83 @@ fn the_player_who_would_be_dealt_damage_orders_prevention_and_replacement() {
     // was prevented either way.
     assert_eq!(replacement_choosers(&t, from), vec![P0]);
     assert_eq!(t.life(P0), 20);
+}
+
+/// P1 casts Remedy ("Prevent the next 5 damage that would be dealt this turn to any
+/// number of targets, divided as you choose.") with this division, and it resolves.
+fn remedy(t: &mut TestGame, targets: &[Entity], division: &[i64]) {
+    lands_for_cost(t, P1, "Remedy");
+    let card = t.hand(P1, "Remedy");
+    t.answer_targets(P1, targets);
+    t.answer(P1, DecisionKind::Divide, Answer::Numbers(division.to_vec()));
+    t.cast_with(P1, card, &[]).unwrap();
+    t.resolve_all();
+}
+
+fn remedy_first(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    pick_replacement(g, d, "Remedy")
+}
+
+fn furnace_first(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    pick_replacement(g, d, "Furnace of Rath")
+}
+
+/// P1 casts Remedy ("Prevent the next 5 damage that would be dealt this turn to any
+/// number of targets, divided as you choose."): 1 to P1's Hill Giant and 4 to P1. Then
+/// P0, who controls Furnace of Rath, Shocks the Giant, P1 answering the order choice with
+/// `choice`. Returns the players asked to order replacement effects, and the Giant.
+fn shock_through_remedy_and_furnace(
+    t: &mut TestGame,
+    choice: fn(&mtg_engine::game::Game, &Decision) -> Option<Answer>,
+) -> (Vec<PlayerId>, ObjectId) {
+    t.battlefield(P0, "Furnace of Rath");
+    let giant = t.battlefield(P1, "Hill Giant");
+    remedy(t, &[Entity::Object(giant), Entity::Player(P1)], &[1, 4]);
+    t.resolve_all();
+    respond(t, P1, choice);
+    let from = t.asked().len();
+    cast_new(t, P0, "Shock", &[Entity::Object(giant)]);
+    t.resolve_all();
+    (replacement_choosers(t, from), giant)
+}
+
+#[test]
+fn remedy_and_angel_of_salvation_are_supported() {
+    cr!("601.2d", "615.1a");
+    supported("Remedy");
+    supported("Angel of Salvation");
+    // Each target's share of the prevention is its own shield.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    remedy(&mut t, &[Entity::Object(giant), Entity::Player(P1)], &[2, 3]);
+    t.resolve_all();
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).damage, 1);
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    cast_new(&mut t, P0, "Shock", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn the_permanents_controller_orders_prevention_and_doubling() {
+    cr!("616.1", "615.1a", "614.1a");
+    ruling!(
+        "Remedy",
+        "If multiple replacement effects apply to a player or permanent being dealt damage, that player or the controller of that permanent chooses the order to apply them, not the controller of the source of damage."
+    );
+    // Prevention first: 2 - 1 = 1, doubled to 2: the Giant survives.
+    let mut t = TestGame::new(2);
+    let (asked, giant) = shock_through_remedy_and_furnace(&mut t, remedy_first);
+    assert_eq!(asked, vec![P1]);
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj_now(giant).damage, 2);
+    // Doubling first: 4 - 1 = 3: the Giant dies.
+    let mut t = TestGame::new(2);
+    let (asked, _) = shock_through_remedy_and_furnace(&mut t, furnace_first);
+    assert_eq!(asked, vec![P1]);
+    assert!(t.in_graveyard(P1, "Hill Giant"));
 }

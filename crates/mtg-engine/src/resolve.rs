@@ -1722,6 +1722,29 @@ impl Game {
                     });
                 }
             }
+            Effect::PreventDividedDamage { slot, duration } => {
+                // Divisions are kept aligned with the targets that are still legal
+                // (CR 608.2b; see `recheck_targets`).
+                let targets = ctx.targets.get(*slot as usize).cloned().unwrap_or_default();
+                let div = ctx.divided.get(*slot as usize).cloned().unwrap_or_default();
+                for (i, t) in targets.into_iter().enumerate() {
+                    let n = div.get(i).copied().unwrap_or(0);
+                    if n == 0 {
+                        continue;
+                    }
+                    let to = match t {
+                        Entity::Player(p) => Sel::Players(PlayerRef::Player(p)),
+                        Entity::Object(o) => Sel::All(Filter::Objects(vec![o])),
+                    };
+                    let shield = Effect::PreventDamage {
+                        to,
+                        amount: Some(Value::c(n as i32)),
+                        duration: duration.clone(),
+                        combat_only: false,
+                    };
+                    self.exec(&shield, ctx);
+                }
+            }
             Effect::BecomeMonarch { who } => {
                 if let Some(p) = self.eval_player(who, ctx) {
                     crate::designations::become_monarch(self, p);

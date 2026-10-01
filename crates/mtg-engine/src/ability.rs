@@ -3226,6 +3226,13 @@ pub enum Effect {
         duration: Duration,
         combat_only: bool,
     },
+    /// "Prevent the next N damage that would be dealt this turn to any number of targets,
+    /// divided as you choose": a prevention shield for each target of the slot, of the
+    /// amount divided to it as the spell was cast (CR 601.2d, 615).
+    PreventDividedDamage {
+        slot: u8,
+        duration: Duration,
+    },
     /// Become the monarch (CR 725).
     BecomeMonarch {
         who: PlayerRef,
