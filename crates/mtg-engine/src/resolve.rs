@@ -2035,6 +2035,25 @@ impl Game {
                     Some(p) => Modification::SetController(player_const(p)),
                     None => m.clone(),
                 },
+                // "Protection from each of your opponents" (CR 702.16k): protection from
+                // players, who are determined as the effect is created; it doesn't follow
+                // the permanent's controller.
+                Modification::AddKeyword(k)
+                    if k.kind == KeywordKind::Protection
+                        && matches!(k.filter, Some(Filter::ControlledBy(PlayerRel::Opponent))) =>
+                {
+                    let opponents = self
+                        .player_ids()
+                        .into_iter()
+                        .filter(|q| self.are_opponents(ctx.controller, *q))
+                        .map(PlayerFilter::Is)
+                        .collect();
+                    let mut k = k.clone();
+                    k.filter = Some(Filter::ControllerMatches(Box::new(PlayerFilter::Or(
+                        opponents,
+                    ))));
+                    Modification::AddKeyword(k)
+                }
                 // Values chosen for the source are locked in as the effect is created
                 // (CR 608.2h, 607.2d).
                 Modification::AddKeyword(k)
