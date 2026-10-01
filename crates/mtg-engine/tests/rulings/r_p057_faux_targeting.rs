@@ -2,7 +2,8 @@
 //! 614.12, 607.2d) rather than targeted. Cursed Rack's chosen player gets a maximum hand
 //! size of four (CR 402.2, 514.1); the choice stays with the permanent when it changes
 //! controllers, and the permanent just does nothing once that player has left (CR 800.4a).
-//! Black Vise and The Rack trigger at the beginning of the chosen player's upkeep.
+//! Black Vise and The Rack trigger at the beginning of the chosen player's upkeep. Sandstone
+//! Oracle chooses its opponent as its ability resolves (CR 608.2c).
 
 use crate::r_s01_common::supported;
 use crate::r_s06_common::give_control;
@@ -142,4 +143,91 @@ fn black_vise_and_the_rack_keep_their_chosen_player() {
         assert_eq!(upkeep_of(&mut t, P0, 20).1, 0, "{name}");
         assert_eq!((t.life(P0), t.life(P2)), (20, 20), "{name}");
     }
+}
+
+#[test]
+fn sandstone_oracle_draws_the_difference_with_replacements_applied_to_each_draw() {
+    cr!("121.2", "121.6", "614.11");
+    ruling!(
+        "Sandstone Oracle",
+        "To draw cards equal to the difference, first determine how many cards you'll draw, then draw that many cards, as modified by replacement effects. For example, if you have two cards in hand and the chosen opponent has five, Thought Reflection will cause you to draw six cards instead of three."
+    );
+    supported("Sandstone Oracle");
+    supported("Thought Reflection");
+    // "When this creature enters, choose an opponent. If that player has more cards in
+    // hand than you, draw cards equal to the difference."
+    let mut t = TestGame::new(3);
+    give_cards(&mut t, P0, 2);
+    give_cards(&mut t, P1, 5);
+    give_cards(&mut t, P2, 1);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Sandstone Oracle");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 5);
+    // With Thought Reflection ("If you would draw a card, draw two cards instead."): 6.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Thought Reflection");
+    give_cards(&mut t, P0, 2);
+    give_cards(&mut t, P1, 5);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Sandstone Oracle");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 8);
+    // Choosing an opponent with fewer cards: nothing.
+    let mut t = TestGame::new(3);
+    give_cards(&mut t, P0, 2);
+    give_cards(&mut t, P1, 5);
+    give_cards(&mut t, P2, 1);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.enter(P0, "Sandstone Oracle");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2);
+}
+
+#[test]
+fn sandstone_oracle_chooses_the_opponent_as_its_ability_resolves() {
+    cr!("608.2c", "603.3");
+    ruling!(
+        "Sandstone Oracle",
+        "You choose an opponent while Sandstone Oracle's ability is resolving. No player may take actions between the time you make this choice and the time you draw cards."
+    );
+    supported("Sandstone Oracle");
+    let mut t = TestGame::new(3);
+    give_cards(&mut t, P1, 4);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    let from = t.asked().len();
+    crate::r_s05_common::enter(&mut t, P0, "Sandstone Oracle");
+    assert_eq!(t.stack_len(), 1);
+    // Not chosen yet: the trigger is on the stack.
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(_, d)| !matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })));
+    // P1 discards in response (as if): fewer cards to compare when it resolves.
+    let card = t.g.player(P1).hand.last().copied().unwrap();
+    crate::r_s05_common::run_from(
+        &mut t,
+        P1,
+        None,
+        mtg_engine::ability::Effect::Discard {
+            who: mtg_engine::ability::PlayerRef::You,
+            n: mtg_engine::ability::Value::c(1),
+            random: false,
+            filter: mtg_engine::ability::Filter::Objects(vec![card]),
+        },
+        &[],
+    );
+    assert_eq!(t.hand_size(P1), 3);
+    let at = t.asked().len();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 3);
+    // The choice was made during the resolution, and nobody got priority between it and
+    // the draws.
+    let during: Vec<_> = t.asked()[at..].to_vec();
+    let choose = during
+        .iter()
+        .position(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }))
+        .expect("chose during resolution");
+    assert!(during[choose..]
+        .iter()
+        .all(|(_, d)| !matches!(d, mtg_engine::decision::Decision::Priority { .. })));
 }
