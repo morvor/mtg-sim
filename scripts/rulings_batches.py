@@ -13,7 +13,9 @@ cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of abi
 
 Status comes from the repo: a text is CITED when a test has ruling!("<card or face name>",
 "<substring of that ruling>") for any card with that ruling, EXEMPT when
-docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, OPEN otherwise.
+docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, DEFERRED when
+every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets),
+OPEN otherwise.
 
 Usage (from the repo root):
   python3 scripts/rulings_batches.py summary            # overall coverage
@@ -58,6 +60,16 @@ def out_of_scope(c):
                    for f in faces(c))
     if 'Contraption' in txt or re.search(r'\bassemble\b', txt, re.I):
         return 'Contraptions'
+    return None
+
+
+def deferred(c):
+    """Cards the project has decided not to support for now (docs/DEFERRED.md)."""
+    games = c.get('games') or []
+    if games and 'paper' not in games:
+        return 'digital-only'
+    if 'Stickers' in (c.get('type_line') or ''):
+        return 'sticker sheet'
     return None
 
 
@@ -172,7 +184,7 @@ def exemptions(names):
     return out
 
 
-def status_fn(names):
+def status_fn(names, cards):
     cites = citations(names)
     ex = exemptions(names)
 
@@ -182,6 +194,8 @@ def status_fn(names):
             return 'CITED'
         if any(e in n for e in ex):
             return 'EXEMPT'
+        if all(deferred(cards[o]) for o in oids):
+            return 'DEFERRED'
         return 'OPEN'
     return status
 
@@ -192,13 +206,14 @@ def main():
         print(__doc__)
         return
     cards, names, batches, oos = plan()
-    status = status_fn(names)
+    status = status_fn(names, cards)
     cmd = args[0]
     if cmd == 'summary':
         c = collections.Counter(status(os_, t) for b in batches.values() for _, t, os_ in b)
         tot = sum(c.values())
         print(f'ruling texts {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
-              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}; out of scope (Contraptions, host/augment): {len(oos)}')
+              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only cards, sticker sheets) {c["DEFERRED"]}; '
+              f'out of scope (Contraptions, host/augment): {len(oos)}')
     elif cmd == 'list':
         for bid, b in batches.items():
             c = collections.Counter(status(os_, t) for _, t, os_ in b)
