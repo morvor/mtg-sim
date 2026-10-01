@@ -768,6 +768,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         ("its mana value", Value::ManaValueOf(Box::new(b.it.clone()))),
         ("that much", Value::EventAmount),
         ("the damage dealt this way", Value::Prev),
+        // CR 120.10: the excess damage the previous damage instruction dealt.
+        (
+            "the amount of excess damage dealt this way",
+            Value::Var(vars::EXCESS),
+        ),
         ("your life total", Value::LifeTotal(PlayerRef::You)),
         // CR 702.179f: 0 for a player who has no speed.
         ("your speed", Value::Speed(PlayerRef::You)),
