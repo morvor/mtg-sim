@@ -406,3 +406,45 @@ fn the_face_down_pile_put_into_your_hand_isnt_revealed() {
     assert!(!log.contains("reveals Grizzly Bears") && !log.contains("reveals Shock"));
     assert!(log.contains("reveals Hill Giant"));
 }
+
+#[test]
+fn an_opening_hand_is_the_hand_after_all_mulligans() {
+    cr!("103.6", "103.5", "103.8", "103.8a", "103.1c");
+    ruling!(
+        "Impatient Iguana",
+        "A player’s “opening hand” is the hand of cards the player has after all players have finished taking mulligans."
+    );
+    supported("Impatient Iguana");
+    // "If Impatient Iguana is in your opening hand and you're not the starting player, you
+    // may reveal it. If you do, you become the starting player." P0 would start; P1
+    // mulligans once, then reveals Impatient Iguana from the hand it keeps.
+    let mut t = pregame(
+        GameConfig {
+            starting_player: Some(P0),
+            ..Default::default()
+        },
+        vec![
+            vec![card("Grizzly Bears"); 40],
+            vec![card("Impatient Iguana"); 40],
+        ],
+    );
+    t.answer(P1, DecisionKind::Mulligan, Answer::Bool(true));
+    t.answer_yes(P1, true);
+    t.g.start();
+    let asked = t.asked();
+    let last_mulligan = asked
+        .iter()
+        .rposition(|(_, d)| matches!(d, Decision::Mulligan { .. }))
+        .unwrap();
+    let reveal = asked
+        .iter()
+        .position(|(p, d)| *p == P1 && matches!(d, Decision::YesNo { .. }))
+        .expect("asked to reveal");
+    assert!(reveal > last_mulligan, "after every mulligan");
+    // P1 took the first turn, keeping six cards (and, as the starting player of a
+    // two-player game, skipping the first draw, CR 103.8a).
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(t.g.turn.number, 1);
+    assert_eq!(t.g.turn.starting_player, P1);
+    assert_eq!(t.hand_size(P1), 6);
+}
