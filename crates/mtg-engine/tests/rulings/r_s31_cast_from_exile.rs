@@ -178,3 +178,49 @@ fn jodah_sees_only_the_front_face_of_a_double_faced_card_in_exile() {
     assert!(matches!(t.zone(cards[0]), Zone::Library(_)));
     assert!(matches!(t.zone(cards[1]), Zone::Library(_)));
 }
+
+#[test]
+fn blightwing_bandits_card_may_be_cast_for_an_alternative_cost() {
+    cr!("118.9", "601.2b", "702.74a", "609.4b");
+    ruling!(
+        "Blightwing Bandit",
+        "You pay the costs for an exiled card if you cast it. You may pay any alternative costs the card has rather than the card's mana cost."
+    );
+    supported("Blightwing Bandit");
+    supported("Mulldrifter");
+    // "Whenever you cast your first spell during each opponent's turn, look at the top card
+    // of that player's library, then exile it face down. You may play that card for as
+    // long as it remains exiled, and mana of any type can be spent to cast it." P0 casts
+    // Lightning Bolt during P1's turn: P1's Mulldrifter is exiled face down.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Blightwing Bandit");
+    let mulldrifter = t.library_top(P1, "Mulldrifter");
+    t.set_step(P1, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::R, 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.zone(mulldrifter), Zone::Exile);
+    assert!(t.obj_now(mulldrifter).face_down);
+    // In P0's turn, P0 casts it for its evoke cost {2}{U}, with red mana for the {U}.
+    t.set_step(P0, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::R, 3);
+    let c = t.g.current(mulldrifter);
+    let evoke = crate::r_s07_common::cast_methods(&mut t, P0, c)
+        .into_iter()
+        .find(|m| {
+            matches!(
+                m,
+                mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Evoke)
+            )
+        })
+        .expect("evoke is available");
+    let hand = t.hand_size(P0);
+    let c = t.g.current(mulldrifter);
+    t.cast(P0, c).method(evoke).go();
+    t.resolve_all();
+    // It entered, drew two cards, and was sacrificed: it's in P1's graveyard.
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.zone(mulldrifter), Zone::Graveyard(P1));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+}

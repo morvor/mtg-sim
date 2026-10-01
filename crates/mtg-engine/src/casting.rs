@@ -609,7 +609,8 @@ impl Game {
             }
             // Alternative costs from the card's own abilities ("You may pay X rather than pay
             // this spell's mana cost", evoke, dash, ...).
-            for a in &o.chars.abilities {
+            let own = self.characteristics_to_cast(card);
+            for a in &own.abilities {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
@@ -732,6 +733,19 @@ impl Game {
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
+    /// The characteristics whose abilities offer ways to cast `card` (alternative costs,
+    /// keywords such as evoke): its own, or those of its front face if it's a face-down
+    /// card outside the battlefield, as it's turned face up just before it's cast
+    /// (CR 406.3a, 702.143a).
+    pub fn characteristics_to_cast(&self, card: ObjectId) -> Characteristics {
+        let o = self.obj(card);
+        if o.face_down && o.zone != Zone::Battlefield {
+            self.face_characteristics(card, FaceState::Front)
+        } else {
+            o.chars.clone()
+        }
+    }
+
     pub fn face_characteristics(&self, card: ObjectId, face: FaceState) -> Characteristics {
         let o = self.obj(card);
         match (&o.card, face) {

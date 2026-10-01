@@ -1,6 +1,9 @@
 //! Cards exiled with a permanent (CR 607.2a), checked and then put into graveyards:
 //!
 //! * "if there are cards exiled with ~" — an intervening-if condition (CR 603.4).
+//! * "Whenever a player plays a land or casts a spell, if it shares a card type with the
+//!   exiled card, ..." (Cemetery Gatekeeper, Cemetery Protector): the land or spell has a
+//!   card type (CR 205.2a) that a card exiled with ~ has.
 //! * "At the beginning of your end step, if there are cards exiled with ~, put them into
 //!   their owner's graveyard, then ~ deals that much damage to each opponent." (Valakut
 //!   Exploration): "them" are the cards exiled with ~, and "that much" is the number of
@@ -28,6 +31,17 @@ fn there_are_cards_exiled_with(c: &str) -> Option<Condition> {
         "there are cards exiled with ~" | "there are one or more cards exiled with ~" => {
             Some(Condition::Exists(exiled_with_source()))
         }
+        _ => None,
+    }
+}
+
+fn shares_a_card_type_with_the_exiled_card(c: &str) -> Option<Condition> {
+    match end(c.trim()) {
+        "it shares a card type with the exiled card"
+        | "it shares a card type with a card exiled with ~" => Some(Condition::SelMatches(
+            Sel::TriggerObject,
+            Filter::SharesCardType(Box::new(Sel::All(exiled_with_source()))),
+        )),
         _ => None,
     }
 }
@@ -71,4 +85,5 @@ fn put_them_into_graveyards(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { ConditionPattern { name: "there are cards exiled with ~", priority: 100, parse: there_are_cards_exiled_with } }
+inventory::submit! { ConditionPattern { name: "it shares a card type with the exiled card", priority: 100, parse: shares_a_card_type_with_the_exiled_card } }
 inventory::submit! { EffectPattern { name: "put the cards exiled with ~ into their owners' graveyards", priority: 100, parse: put_them_into_graveyards } }

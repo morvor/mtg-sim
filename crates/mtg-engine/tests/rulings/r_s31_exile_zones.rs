@@ -126,3 +126,67 @@ fn beacon_bolt_doesnt_count_face_down_exiled_cards() {
     // 2 damage: the face-down card isn't counted (nor Beacon Bolt itself, on the stack).
     assert_eq!(t.obj_now(giant).damage, 2);
 }
+
+#[test]
+fn cemetery_gatekeeper_compares_card_types_not_supertypes() {
+    cr!("205.2a", "205.4a", "603.4", "607.2a");
+    ruling!(
+        "Cemetery Gatekeeper",
+        "Card types that can be exiled from a graveyard include artifact, creature, enchantment, land, planeswalker, instant, and sorcery. Legendary, basic, and snow are supertypes, not card types."
+    );
+    supported("Cemetery Gatekeeper");
+    supported("Gaea's Cradle");
+    // "When this creature enters, exile a card from a graveyard. Whenever a player plays a
+    // land or casts a spell, if it shares a card type with the exiled card, this creature
+    // deals 2 damage to that player." It exiles Isamaru, Hound of Konda (a legendary
+    // creature card).
+    let mut t = TestGame::new(2);
+    let isamaru = t.graveyard(P1, "Isamaru, Hound of Konda");
+    t.answer_choose(P0, &[Entity::Object(isamaru)]);
+    t.enter(P0, "Cemetery Gatekeeper");
+    t.resolve_all();
+    assert_eq!(t.zone(isamaru), Zone::Exile);
+    // P1 plays Gaea's Cradle, a legendary land: "legendary" is a supertype, not a card
+    // type, so nothing happens.
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let cradle = t.hand(P1, "Gaea's Cradle");
+    t.play_land(P1, cradle).expect("play a land");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    // P1 casts Grizzly Bears, a creature: 2 damage.
+    add_mana(&mut t, P1, ManaType::G, 2);
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.cast(P1, bears).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn cemetery_protector_makes_a_token_for_a_land_after_exiling_a_basic_land() {
+    cr!("205.2a", "205.4a", "603.4");
+    ruling!(
+        "Cemetery Protector",
+        "Card types that can be exiled from a graveyard include artifact, creature, enchantment, land, planeswalker, instant, and sorcery."
+    );
+    supported("Cemetery Protector");
+    // "When this creature enters, exile a card from a graveyard. Whenever you play a land
+    // or cast a spell, if it shares a card type with the exiled card, create a 1/1 white
+    // Human creature token." It exiles a Snow-Covered Forest: any land shares its card
+    // type (land), whatever its supertypes.
+    let mut t = TestGame::new(2);
+    let snowy = t.graveyard(P1, "Snow-Covered Forest");
+    t.answer_choose(P0, &[Entity::Object(snowy)]);
+    t.enter(P0, "Cemetery Protector");
+    t.resolve_all();
+    assert_eq!(t.zone(snowy), Zone::Exile);
+    let wastes = t.hand(P0, "Wastes");
+    t.play_land(P0, wastes).expect("play a land");
+    t.resolve_all();
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
+    // An instant isn't a land: no token.
+    add_mana(&mut t, P0, ManaType::R, 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
+}

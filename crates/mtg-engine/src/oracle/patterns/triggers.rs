@@ -763,6 +763,19 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             who,
             filter: Filter::Any,
         },
+        // "Whenever you play a land or cast a spell" (The Endstone, Cemetery Protector):
+        // either event; "it" is the land or the spell.
+        "play a land or cast a spell" | "plays a land or casts a spell" => {
+            let (cast, _, _) = parse_cast(who, "a spell")?;
+            let c = TriggerCond::AnyOf(vec![
+                TriggerCond::LandPlayed {
+                    who,
+                    filter: Filter::Any,
+                },
+                cast,
+            ]);
+            return Some((c, Sel::TriggerObject, tp()));
+        }
         "loses the game" if who == PlayerRel::Any => TriggerCond::PlayerLoses,
         "scry" | "scries" => action("scry"),
         "surveil" | "surveils" => action("surveil"),
@@ -844,10 +857,12 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
             // "your third spell in a turn" (Vance's Blasting Cannons): the same.
             "spell each turn" | "spell in a turn" => base,
             "spell during each opponent's turn" | "spell during an opponent's turn" => {
-                TriggerCond::Where {
+                // "That player" is the opponent whose turn it is (Blightwing Bandit).
+                let c = TriggerCond::Where {
                     trigger: Box::new(base),
                     cond: Condition::NotYourTurn,
-                }
+                };
+                return Some((c, spell(), PlayerRef::ActivePlayer));
             }
             "spell during your turn" | "spell each turn during your turn" => TriggerCond::Where {
                 trigger: Box::new(base),

@@ -97,3 +97,39 @@ fn edward_kenways_face_down_cards_stay_exiled_after_its_controller_leaves() {
         assert!(!facedown::can_look_at(&t.g, p, exiled));
     }
 }
+
+#[test]
+fn dream_thiefs_bandanas_face_down_cards_stay_exiled_after_its_controller_leaves() {
+    cr!("800.4a", "406.3", "702.6a");
+    ruling!(
+        "Dream-Thief's Bandana",
+        "If you leave the game, any remaining face-down exiled cards remain exiled face down indefinitely. No player may look at them."
+    );
+    supported("Dream-Thief's Bandana");
+    // "Whenever equipped creature deals combat damage to a player, look at the top card of
+    // their library, then exile it face down. For as long as it remains exiled, you may
+    // play it, and mana of any type can be spent to cast that spell. Equip {1}"
+    let mut t = TestGame::new(3);
+    let bandana = t.battlefield(P0, "Dream-Thief's Bandana");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let card = t.library_top(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::C, 1);
+    t.activate(P0, bandana, 0, &[Entity::Object(bears)])
+        .expect("equip");
+    t.resolve_all();
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.zone(card), Zone::Exile);
+    let exiled = t.g.current(card);
+    assert!(t.obj_now(card).face_down);
+    assert!(facedown::can_look_at(&t.g, P0, exiled));
+    concede(&mut t, P0);
+    assert_eq!(t.g.current(card), exiled);
+    assert!(t.obj_now(card).face_down);
+    for p in [P1, P2] {
+        assert!(!facedown::can_look_at(&t.g, p, exiled));
+    }
+}
