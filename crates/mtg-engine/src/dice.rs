@@ -486,6 +486,27 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
             })
             .count();
         let (mut wins, mut losses, mut heads, mut tails) = (0i64, 0i64, 0i64, 0i64);
+        // CR 705.2: the player who flips calls heads or tails; "flip two coins and ignore
+        // one" replaces each flip. Coins flipped at once are all called and flipped
+        // before any flip is ignored, so the results of all of them are known then.
+        let call_and_flip = |g: &mut Game| {
+            let call = spec.call.then(|| {
+                g.ask_option(
+                    p,
+                    ctx.source,
+                    "Call the coin flip",
+                    vec!["Heads".into(), "Tails".into()],
+                ) == 0
+            });
+            let flips: Vec<bool> = (0..=extra).map(|_| coin(g)).collect();
+            (call, flips)
+        };
+        let mut at_once: std::collections::VecDeque<(Option<bool>, Vec<bool>)> = if spec.until_lose
+        {
+            Default::default()
+        } else {
+            (0..n).map(|_| call_and_flip(g)).collect()
+        };
         let mut i = 0u32;
         loop {
             if spec.until_lose {
@@ -496,17 +517,11 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
                 break;
             }
             i += 1;
-            // CR 705.2: the player who flips calls heads or tails.
-            let call = spec.call.then(|| {
-                g.ask_option(
-                    p,
-                    ctx.source,
-                    "Call the coin flip",
-                    vec!["Heads".into(), "Tails".into()],
-                ) == 0
-            });
+            let (call, flips) = match at_once.pop_front() {
+                Some(x) => x,
+                None => call_and_flip(g),
+            };
             // "Flip two coins and ignore one": the ignored flip never happened.
-            let flips: Vec<bool> = (0..=extra).map(|_| coin(g)).collect();
             let up = if flips.len() > 1 {
                 // By default, keep a flip that wins (or comes up heads).
                 let prefer = call.unwrap_or(true);

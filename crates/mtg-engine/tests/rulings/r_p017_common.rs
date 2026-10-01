@@ -91,3 +91,19 @@ pub fn animate(t: &mut TestGame, id: ObjectId, p: i32) {
     );
     t.settle();
 }
+
+/// Loads the results of the next coin flips (true: heads).
+pub fn load_coins(t: &mut TestGame, heads: &[bool]) {
+    t.g.dice.loaded_coins.extend(heads.iter().copied());
+}
+
+/// Whether each coin flipped this turn came up heads.
+pub fn flip_results(t: &TestGame) -> Vec<bool> {
+    t.turn_events
+        .iter()
+        .filter_map(|e| match e {
+            mtg_engine::events::Event::CoinFlipped { heads, .. } => Some(*heads),
+            _ => None,
+        })
+        .collect()
+}
