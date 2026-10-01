@@ -782,3 +782,71 @@ fn guardian_project_a_returned_creature_is_a_new_object_sharing_the_name() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+// ---------------------------------------------------------------------------
+// Apostle's Blessing
+// ---------------------------------------------------------------------------
+
+/// P0 casts Apostle's Blessing on `target`; returns the spell.
+fn bless(t: &mut TestGame, target: ObjectId) -> ObjectId {
+    supported("Apostle's Blessing");
+    t.lands(P0, "Plains", 2);
+    let spell = t.hand(P0, "Apostle's Blessing");
+    t.cast(P0, spell).target(target).go()
+}
+
+#[test]
+fn apostles_blessing_from_artifacts_unattaches_equipment() {
+    cr!("702.16c", "704.5n");
+    ruling!(
+        "Apostle's Blessing",
+        "Any Equipment attached to a creature that gains protection from artifacts will become unattached."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(splitter, Entity::Object(bears)));
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (4, 2));
+    bless(&mut t, bears);
+    // "artifact" is the first option.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.resolve_all();
+    assert_eq!(t.obj_now(splitter).attached_to, None);
+    assert!(t.on_battlefield(splitter));
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn apostles_blessing_targets_on_casting_and_chooses_the_quality_on_resolution() {
+    cr!("601.2c", "608.2c", "702.16e");
+    ruling!(
+        "Apostle's Blessing",
+        "You choose the target as part of casting the spell. You choose what attribute the target gains protection from when the spell resolves."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let from = t.asked().len();
+    bless(&mut t, bears);
+    t.settle();
+    let chose_one = |t: &TestGame| {
+        t.asked()[from..].iter().any(|(_, d)| {
+            matches!(d, mtg_engine::decision::Decision::ChooseOption { prompt, .. } if prompt == "Choose one")
+        })
+    };
+    assert!(!chose_one(&t));
+    // Red is the fifth option (after "artifact", white, blue, black).
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    t.resolve_all();
+    assert!(chose_one(&t));
+    // Damage from a red source is prevented; a green one isn't.
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    t.g.deal_damage(goblin, Entity::Object(bears), 3, false);
+    t.settle();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.obj_now(bears).damage, 0);
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.g.deal_damage(elves, Entity::Object(bears), 1, false);
+    t.settle();
+    assert_eq!(t.obj_now(bears).damage, 1);
+}
