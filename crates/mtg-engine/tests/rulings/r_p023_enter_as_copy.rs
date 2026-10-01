@@ -538,3 +538,49 @@ fn dacks_duplicate_copying_a_creature_with_x_in_its_cost() {
     supported("Dack's Duplicate");
     copy_of_hydra_has_x_zero("Dack's Duplicate");
 }
+
+// --- Machine God's Effigy -----------------------------------------------------------------
+
+/// Machine God's Effigy is a noncreature artifact (its only card type) with the copied
+/// name, colors and abilities, plus "{T}: Add {U}" — which works the turn it enters.
+fn assert_effigy(t: &mut TestGame, effigy: ObjectId, name: &str, color: Color) {
+    let o = t.obj_now(effigy);
+    assert_eq!(o.chars.name, name);
+    assert!(o.is(CardType::Artifact) && !o.is(CardType::Creature));
+    assert!(o.chars.subtypes.is_empty(), "{:?}", o.chars.subtypes);
+    assert!(o.chars.colors.contains(color));
+    assert!(!o.is_token() && !o.tapped);
+    assert!(o.counters.values().all(|n| *n == 0));
+    crate::r_s06_common::activate_containing(t, P0, effigy, "Add {U}").expect("mana ability");
+    assert_eq!(t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::U), 1);
+}
+
+#[test]
+fn machine_gods_effigy_copying_a_token() {
+    cr!("707.2", "111.4", "707.9b", "205.1a");
+    ruling!(
+        "Machine God's Effigy",
+        "If the chosen creature is a token, Machine God’s Effigy copies the original characteristics of that token as stated by the effect that created the token, plus the listed exceptions. Machine God’s Effigy is not a token, even when copying one."
+    );
+    supported("Machine God's Effigy");
+    let mut t = TestGame::new(2);
+    let wolf = dressed_wolf(&mut t, P1);
+    let effigy = enter_copying(&mut t, P0, "Machine God's Effigy", wolf);
+    assert_effigy(&mut t, effigy, "Wolf", Color::Green);
+    assert!(!t.obj_now(effigy).chars.colors.contains(Color::Blue));
+}
+
+#[test]
+fn machine_gods_effigy_copying_a_clone() {
+    cr!("707.3", "707.9b", "205.1a");
+    ruling!(
+        "Machine God's Effigy",
+        "If the chosen creature is copying something else, then Machine God’s Effigy enters the battlefield as whatever the chosen creature is copying (with the listed exceptions)."
+    );
+    supported("Machine God's Effigy");
+    let mut t = TestGame::new(2);
+    let clone = cloned_angel(&mut t, P1);
+    let effigy = enter_copying(&mut t, P0, "Machine God's Effigy", clone);
+    assert_effigy(&mut t, effigy, "Serra Angel", Color::White);
+    assert!(t.obj_now(effigy).has_keyword(KeywordKind::Flying));
+}

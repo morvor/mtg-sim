@@ -58,6 +58,16 @@ fn only_colors(s: &str) -> Option<ColorSet> {
     (!colors.is_colorless()).then_some(colors)
 }
 
+/// "an artifact", "an artifact creature": card types only, replacing the copied ones.
+fn only_card_types(s: &str) -> Option<Vec<CardType>> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let types: Vec<CardType> = s
+        .split_whitespace()
+        .map(CardType::from_word)
+        .collect::<Option<_>>()?;
+    (!types.is_empty()).then_some(types)
+}
+
 /// "4/4" → (4, 4).
 fn pt(w: &str) -> Option<(i32, i32)> {
     let (p, t) = w.split_once('/')?;
@@ -251,6 +261,10 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(types) = only_card_types(r) {
+                // "except it's an artifact" (Machine God's Effigy): its only card types
+                // are these (CR 205.1a).
+                out.push(Modification::SetTypes { types, subtypes: vec![] });
             } else if let Some(colors) = only_colors(r) {
                 // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
