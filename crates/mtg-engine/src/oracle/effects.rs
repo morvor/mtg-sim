@@ -1228,6 +1228,27 @@ fn p_add_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
             return None;
         }
         ManaProduction::ChosenColor(Value::c(1))
+    } else if r.contains(" or ") && r.contains("}{") {
+        // "{W}{W}, {W}{B}, or {B}{B}" (CR 106.1): one of several combinations of mana.
+        let options: Option<Vec<(String, Effect)>> = r
+            .split([',', ' '])
+            .filter(|w| w.starts_with('{'))
+            .map(|w| {
+                let w = w.trim_end_matches('.');
+                match p_add_mana(&format!("add {w}"), _b)? {
+                    e @ Effect::AddMana {
+                        mana: ManaProduction::Fixed(_),
+                        ..
+                    } => Some((format!("Add {}", w.to_uppercase()), e)),
+                    _ => None,
+                }
+            })
+            .collect();
+        let options = options.filter(|o| o.len() >= 2)?;
+        return Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        });
     } else if r.contains(" or ") {
         // "{R} or {G}", "{W}, {U}, or {B}"
         let opts: Vec<ManaType> = r

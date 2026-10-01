@@ -631,7 +631,9 @@ pub fn cost_changing_keywords(
             let mut c = cost.clone();
             r.cost_reduction(g, p, card, kw, &mut c, x);
             if format!("{c:?}") != format!("{cost:?}")
-                && !out.iter().any(|k: &Keyword| format!("{k:?}") == format!("{kw:?}"))
+                && !out
+                    .iter()
+                    .any(|k: &Keyword| format!("{k:?}") == format!("{kw:?}"))
             {
                 out.push(kw.clone());
             }
