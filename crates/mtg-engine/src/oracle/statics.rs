@@ -587,6 +587,22 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // "one plus the number of spells cast this turn" (Magus of the Mind).
+    if let Some((n, r)) = s.split_once(" plus ") {
+        if let Some((Value::Const(k), tail)) = parse_number(n) {
+            if tail.trim().is_empty() {
+                let (v, rest) = parse_value_phrase(r, b)?;
+                return Some((Value::Sum(vec![Value::c(k), v]), rest));
+            }
+        }
+    }
+    // "the number of spells cast this turn": by all players.
+    if let Some(rest) = s.strip_prefix("the number of spells cast this turn") {
+        return Some((
+            Value::Custom("spells_cast_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
     if let Some(rest) = s.strip_prefix(
         "the number of creatures that were exiled under your opponents' control this turn",
     ) {

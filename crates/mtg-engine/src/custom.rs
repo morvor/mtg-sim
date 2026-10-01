@@ -219,6 +219,8 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
                         .is_some_and(|n| g.obj(n).zone == crate::object::Zone::Exile)
             })
             .count() as i64,
+        // "the number of spells cast this turn" (by all players).
+        "spells_cast_this_turn" => g.history.spells_cast.len() as i64,
         // Number of spells the controller has cast this turn.
         "spells_you_cast_this_turn" => g
             .history

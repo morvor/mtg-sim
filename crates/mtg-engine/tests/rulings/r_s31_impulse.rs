@@ -735,3 +735,65 @@ fn syr_carahs_card_stays_exiled_if_not_played() {
     assert_eq!(t.life(P1), 17);
     stays_exiled_after_this_turn(&mut t, cards[0]);
 }
+
+/// A game where P0's library is three Forests and P0 controls Magus of the Mind ("{U},
+/// {T}, Sacrifice this creature: Shuffle your library, then exile the top X cards, where X
+/// is one plus the number of spells cast this turn. Until end of turn, you may play lands
+/// and cast spells from among cards exiled this way without paying their mana costs.").
+fn magus_game() -> (TestGame, Vec<ObjectId>, ObjectId) {
+    supported("Magus of the Mind");
+    let mut t = TestGame::new(2);
+    let n = t.library_size(P0) as u32;
+    t.g.mill(P0, n);
+    t.settle();
+    let forests: Vec<ObjectId> = (0..3).map(|_| t.library_top(P0, "Forest")).collect();
+    let magus = t.battlefield(P0, "Magus of the Mind");
+    (t, forests, magus)
+}
+
+fn activate_magus(t: &mut TestGame, magus: ObjectId) {
+    add_mana(t, P0, ManaType::U, 1);
+    t.activate(P0, magus, 0, &[]).expect("activate");
+    t.resolve_all();
+}
+
+#[test]
+fn magus_of_the_minds_land_needs_an_available_land_play() {
+    cr!("305.2", "305.1", "116.2a");
+    ruling!(
+        "Magus of the Mind",
+        "You may play a land exiled this way only if you have an available land play this turn."
+    );
+    // One spell was cast this turn: X is 2. P0 already played a land: the exiled Forests
+    // can't be played.
+    let (mut t, forests, magus) = magus_game();
+    add_mana(&mut t, P0, ManaType::R, 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    let mountain = t.hand(P0, "Mountain");
+    t.play_land(P0, mountain).expect("play a land");
+    activate_magus(&mut t, magus);
+    let exiled: Vec<ObjectId> = forests
+        .iter()
+        .copied()
+        .filter(|f| t.zone(*f) == Zone::Exile)
+        .collect();
+    assert_eq!(exiled.len(), 2);
+    for f in &exiled {
+        assert!(!playable(&mut t, *f));
+    }
+    // No spell cast (X is 1) and a land play available: the exiled Forest may be played.
+    let (mut t, forests, magus) = magus_game();
+    activate_magus(&mut t, magus);
+    let exiled: Vec<ObjectId> = forests
+        .iter()
+        .copied()
+        .filter(|f| t.zone(*f) == Zone::Exile)
+        .collect();
+    assert_eq!(exiled.len(), 1);
+    assert!(playable(&mut t, exiled[0]));
+    let c = t.g.current(exiled[0]);
+    t.play_land(P0, c).expect("play the exiled Forest");
+    assert!(t.on_battlefield(exiled[0]));
+}

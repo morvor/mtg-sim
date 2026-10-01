@@ -21,6 +21,12 @@ inventory::submit! {
     FollowupPattern { name: "card_flow: you may cast that card (now)", priority: 90, apply: may_cast_it_now }
 }
 inventory::submit! {
+    EffectPattern { name: "card_flow: shuffle your library, then exile the top N cards", priority: 90, parse: shuffle_then_exile_top }
+}
+inventory::submit! {
+    FollowupPattern { name: "card_flow: until end of turn, you may play lands and cast spells from among cards exiled this way without paying their mana costs", priority: 90, apply: may_play_them_free }
+}
+inventory::submit! {
     EffectPattern { name: "card_flow: you may play that card until end of turn (the card just moved)", priority: 90, parse: may_play_that_card }
 }
 
@@ -219,4 +225,51 @@ fn may_play_that_card(l: &str, b: &mut Builder) -> Option<Effect> {
         duration,
         free: false,
     })
+}
+
+/// "Shuffle your library, then exile the top X cards" (Magus of the Mind): of that
+/// library.
+fn shuffle_then_exile_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("shuffle your library, then exile ")?;
+    let r = r.strip_prefix("the top ")?;
+    let (n, rest) = parse_number(r)?;
+    if !matches!(n, Value::X) {
+        n.as_const()?;
+    }
+    if !matches!(rest.trim(), "cards" | "card") {
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::seq(vec![
+        Effect::Shuffle {
+            who: PlayerRef::You,
+        },
+        Effect::Exile {
+            what: Sel::TopOfLibrary(PlayerRef::You, n),
+            face_down: false,
+            link: false,
+        },
+    ]))
+}
+
+/// "Until end of turn, you may play lands and cast spells from among cards exiled this way
+/// without paying their mana costs." after exiling the top cards of your library: lands
+/// are played with the normal rules (a land play, CR 305.2), spells cast without paying
+/// their mana costs (CR 118.9).
+fn may_play_them_free(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if l != "until end of turn, you may play lands and cast spells from among cards exiled this way without paying their mana costs"
+        || !exiles_your_top_cards(prev)
+    {
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: true,
+        },
+    ]);
+    true
 }
