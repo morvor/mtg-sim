@@ -229,3 +229,32 @@ fn part_the_waterveil_goes_to_the_graveyard_if_it_doesnt_resolve() {
     assert!(!t.in_exile("Part the Waterveil"));
     assert!(t.g.extra_turns.is_empty());
 }
+
+#[test]
+fn ondu_risings_delayed_trigger_covers_every_attacker_including_the_awakened_land() {
+    cr!("702.113a", "603.7b", "702.15b");
+    ruling!(
+        "Ondu Rising",
+        "Ondu Rising creates a delayed triggered ability. Any creature that attacks that turn will cause that ability to trigger, including creatures controlled by a teammate and creatures you didn’t control or that didn’t exist as Ondu Rising resolved. Notably, this includes the land creature created if Ondu Rising is cast for its awaken cost."
+    );
+    supported("Ondu Rising");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 5);
+    let land = t.battlefield(P0, "Forest");
+    let c = t.hand(P0, "Ondu Rising");
+    t.cast(P0, c).method(AWAKEN).target(land).go();
+    t.resolve_all();
+    // A creature that didn't exist as it resolved.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack_with(
+        &mut t,
+        &[(land, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert!(t.obj_now(land).chars.has_keyword(KeywordKind::Lifelink));
+    assert!(t.obj_now(bears).chars.has_keyword(KeywordKind::Lifelink));
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    assert_eq!(t.life(P1), 20 - 4 - 2);
+    assert_eq!(t.life(P0), 20 + 4 + 2);
+}

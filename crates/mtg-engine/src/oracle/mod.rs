@@ -327,7 +327,14 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     // Triggered abilities.
     let lower = text.to_lowercase();
     if lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at ") {
-        return triggers::parse_triggered(text, ctx).map(|a| vec![a]);
+        if let Some(a) = triggers::parse_triggered(text, ctx) {
+            return Some(vec![a]);
+        }
+        // An instant or sorcery's "Whenever a creature attacks this turn, ..." is a spell
+        // ability creating a delayed triggered ability (CR 603.7b).
+        if !ctx.is_spell() {
+            return None;
+        }
     }
     // Spell abilities for instants and sorceries.
     if ctx.is_spell() {
