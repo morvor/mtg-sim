@@ -33,6 +33,13 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         };
         return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
     }
+    // "the revealed card's mana value", after an instruction revealing a card (which "it"
+    // then names, e.g. "Target opponent reveals a card at random from their hand.").
+    if let Some(r) = s.strip_prefix("the revealed card's mana value") {
+        if matches!(b.it, Sel::Var(vars::IT)) && (r.is_empty() || r.starts_with([' ', ','])) {
+            return Some((Value::ManaValueOf(Box::new(b.it.clone())), r.to_string()));
+        }
+    }
     crate::oracle::statics::parse_value_phrase(s, b)
 }
 

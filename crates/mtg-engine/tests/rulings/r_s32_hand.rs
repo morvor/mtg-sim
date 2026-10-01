@@ -311,3 +311,46 @@ fn twenty_toed_toad_wins_with_twenty_counters_or_twenty_cards() {
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(t.hand_size(P0), 20);
 }
+
+#[test]
+fn a_card_revealed_at_random_from_an_empty_hand_has_mana_value_0() {
+    cr!("701.20a", "107.3c", "202.3");
+    ruling!(
+        "Planeswalker's Favor",
+        "If the opponent has no cards in hand, then X is zero."
+    );
+    supported("Planeswalker's Favor");
+    supported("Planeswalker's Scorn");
+    // "{3}{G}: Target opponent reveals a card at random from their hand. Target creature
+    // gets +X/+X until end of turn, where X is the revealed card's mana value."
+    for (p1_hand, expected) in [(None, (2, 2)), (Some("Hill Giant"), (6, 6))] {
+        let mut t = TestGame::new(2);
+        let favor = t.battlefield(P0, "Planeswalker's Favor");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        if let Some(name) = p1_hand {
+            t.hand(P1, name);
+        }
+        t.lands(P0, "Forest", 4);
+        t.activate(P0, favor, 0, &[Entity::Player(P1), Entity::Object(bears)])
+            .expect("activate Planeswalker's Favor");
+        t.resolve_all();
+        assert_eq!(t.pt(bears), expected, "{p1_hand:?}");
+        assert_eq!(t.hand_size(P1), usize::from(p1_hand.is_some()));
+    }
+    // Planeswalker's Scorn gives -X/-X: with an empty hand, -0/-0.
+    let mut t = TestGame::new(2);
+    let scorn = t.battlefield(P0, "Planeswalker's Scorn");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    t.activate(P0, scorn, 0, &[Entity::Player(P1), Entity::Object(bears)])
+        .expect("activate Planeswalker's Scorn");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (2, 2));
+    // With Shock (mana value 1) in P1's hand: -1/-1.
+    t.hand(P1, "Shock");
+    t.lands(P0, "Swamp", 4);
+    t.activate(P0, scorn, 0, &[Entity::Player(P1), Entity::Object(bears)])
+        .expect("activate Planeswalker's Scorn");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (1, 1));
+}
