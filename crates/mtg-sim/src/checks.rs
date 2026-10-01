@@ -5,14 +5,13 @@
 //!   priority decisions (state-based actions, zones, characteristics, damage, and the
 //!   life totals and counters against the events seen so far);
 //! * [`observe`] is called for every event (through an [`EventObserver`]) and checks what
-//!   must hold as a step or turn begins (the stack and mana pools emptied, damage
-//!   removed), and keeps the [`Ledger`] of life and counter changes.
+//!   must hold as a step ends or a turn begins (the stack and mana pools emptied,
+//!   damage removed), and keeps the [`Ledger`] of life and counter changes.
 
 use mtg_engine::decision::PassiveAgent;
 use mtg_engine::events::Event;
 use mtg_engine::game::{EventObserver, Variant};
 use mtg_engine::object::Zone;
-use mtg_engine::turn::Step;
 use mtg_engine::types::{CardType, CounterKind};
 use mtg_engine::*;
 use std::collections::{BTreeMap, HashMap};
@@ -174,10 +173,10 @@ pub fn observer(
     }))
 }
 
-/// Records `ev` in the ledger and checks what must hold as a step or turn begins:
+/// Records `ev` in the ledger and checks what must hold as a step ends or a turn begins:
 /// * the stack is empty, since a step or phase ends only when all players pass in
 ///   succession with an empty stack (CR 500.2);
-/// * mana pools are empty (CR 500.4, 500.5) except for mana an effect keeps;
+/// * mana pools are empty (CR 500.5) except for mana an effect keeps;
 /// * no permanent has damage marked when a turn begins: it's removed in the cleanup step
 ///   (CR 514.2).
 pub fn observe(g: &Game, ev: &Event, ledger: &mut Ledger) {
@@ -195,8 +194,8 @@ pub fn observe(g: &Game, ev: &Event, ledger: &mut Ledger) {
         return;
     }
     let what = match ev {
-        Event::StepBegan { step, .. } => {
-            step_began_problems(g).map(|w| format!("as {step:?} began: {w}"))
+        Event::StepEnded { step, .. } => {
+            step_ended_problems(g).map(|w| format!("as {step:?} ended: {w}"))
         }
         Event::TurnBegan { .. } => damage_left_over(g),
         _ => None,
@@ -209,12 +208,11 @@ pub fn observe(g: &Game, ev: &Event, ledger: &mut Ledger) {
     }
 }
 
-/// What's wrong as a step begins: the stack isn't empty (CR 500.2) or a mana pool holds
-/// mana that should have emptied as the last step ended (CR 500.4). The cleanup step's
-/// turn-based actions have ended "until end of turn" effects (CR 514.2), including those
-/// that kept mana from emptying; that mana empties as the cleanup step ends, so the pools
-/// are checked as the next step begins.
-pub fn step_began_problems(g: &Game) -> Option<String> {
+/// What's wrong as a step ends: the stack isn't empty (CR 500.2: a step or phase ends
+/// only when all players pass in succession with an empty stack) or a mana pool holds
+/// mana that should have emptied (CR 500.5): emptying the pools again must not
+/// change them, since what's left is what an effect keeps.
+pub fn step_ended_problems(g: &Game) -> Option<String> {
     if let Some(&top) = g.stack.last() {
         return Some(format!(
             "the stack isn't empty ({} #{} on top)",
@@ -222,21 +220,12 @@ pub fn step_began_problems(g: &Game) -> Option<String> {
             top.0
         ));
     }
-    if g.turn.step == Step::Cleanup {
-        return None;
-    }
     for p in &g.players {
         if p.mana_pool.is_empty() {
             continue;
         }
-        // Emptying the pool again must not change it: what's left is what an effect keeps.
         let mut copy = g.clone();
         copy.observer = None;
-        if g.turn.step == Step::EndOfCombat {
-            // Mana kept until end of combat stays as the combat damage step ends, and
-            // empties as this step ends (CR 702.189a): empty as after a combat step.
-            copy.turn.step = Step::CombatDamage;
-        }
         mtg_engine::mana_abilities::empty_pool(&mut copy, p.id);
         let before: Vec<_> = p.mana_pool.mana.iter().map(|m| m.ty).collect();
         let after: Vec<_> = copy.players[p.id.idx()]
@@ -500,6 +489,7 @@ mod tests {
     use mtg_engine::decision::Action;
     use mtg_engine::mana::{Mana, ManaType};
     use mtg_engine::testing::TestGame;
+    use mtg_engine::turn::Step;
 
     const P0: PlayerId = PlayerId(0);
     const P1: PlayerId = PlayerId(1);
@@ -606,35 +596,36 @@ mod tests {
     }
 
     #[test]
-    fn a_step_beginning_with_a_nonempty_stack_or_mana_pool_is_reported() {
+    fn a_step_ending_with_a_nonempty_stack_or_mana_pool_is_reported() {
         let mut t = TestGame::new(2);
-        assert_eq!(step_began_problems(&t.g), None);
+        assert_eq!(step_ended_problems(&t.g), None);
         t.g.players[0].mana_pool.add(Mana::new(ManaType::R));
-        let what = step_began_problems(&t.g).unwrap();
+        let what = step_ended_problems(&t.g).unwrap();
         assert!(what.contains("mana pool wasn't emptied"), "{what}");
-        // Mana an effect keeps is fine (CR 500.4: "unless an effect says otherwise").
+        // Mana an effect keeps is fine (CR 500.5, 106.4).
         t.g.players[0].mana_pool.mana[0].persistent = true;
-        assert_eq!(step_began_problems(&t.g), None);
-        // Mana kept until end of combat stays until the end of combat step ends
-        // (CR 702.189a).
+        assert_eq!(step_ended_problems(&t.g), None);
+        // Mana kept until end of combat stays as combat steps end, but not as the end of
+        // combat step ends (CR 702.189a).
         t.g.players[0].mana_pool.mana[0].persistent = false;
         t.g.players[0].mana_pool.mana[0].until_end_of_combat = true;
+        t.g.turn.step = Step::CombatDamage;
+        assert_eq!(step_ended_problems(&t.g), None);
         t.g.turn.step = Step::EndOfCombat;
-        assert_eq!(step_began_problems(&t.g), None);
-        t.g.turn.step = Step::PostcombatMain;
-        assert!(step_began_problems(&t.g).is_some());
+        assert!(step_ended_problems(&t.g).is_some());
         t.g.players[0].mana_pool.mana.clear();
+        t.g.turn.step = Step::PrecombatMain;
         let bolt = t.hand(P0, "Lightning Bolt");
         t.lands(P0, "Mountain", 1);
         t.cast(P0, bolt).target(Entity::Player(P1)).go();
-        let what = step_began_problems(&t.g).unwrap();
+        let what = step_ended_problems(&t.g).unwrap();
         assert!(what.contains("stack isn't empty"), "{what}");
         let mut ledger = Ledger::default();
         ledger.baseline(&t.g);
         observe(
             &t.g,
-            &Event::StepBegan {
-                step: Step::End,
+            &Event::StepEnded {
+                step: Step::PrecombatMain,
                 active: P0,
             },
             &mut ledger,

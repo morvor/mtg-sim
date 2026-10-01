@@ -591,6 +591,8 @@ impl Game {
             self.turn.stage = Stage::Begin;
             return;
         }
+        let active = self.turn.active;
+        self.emit(Event::StepEnded { step, active });
         self.flush_events();
         self.next_step();
     }
