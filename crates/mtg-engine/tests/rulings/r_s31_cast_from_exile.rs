@@ -1,0 +1,180 @@
+//! Rulings batch S31 — casting cards from exile (and a graveyard) during the resolution
+//! of an ability (CR 608.2g) without paying their mana costs (CR 118.9): the order of
+//! several casts, what can be targeted, the characteristics of the cards in exile
+//! (CR 712.8a, 709.4), {X} being 0 for a copy of an exiled card (CR 107.3b, 202.3e), and
+//! a replacement that applies only to the spell's way to the graveyard (CR 614.1a).
+
+use crate::r_s01_common::{attack_with, stack_library, supported};
+use crate::r_s04_common::add_mana;
+use crate::r_s22_common::choose_names_when_offered;
+use mtg_engine::mana::ManaType;
+use mtg_engine::object::Zone;
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::types::CardType;
+use mtg_engine::*;
+
+#[test]
+fn etali_casts_the_exiled_spells_in_the_order_its_controller_chooses() {
+    cr!("608.2g", "118.9", "601.2c", "115.1");
+    ruling!(
+        "Etali, Primal Storm",
+        "If you cast more than one of the exiled cards, you choose the order in which to cast them. A spell you cast this way can be the target of a later spell you cast this way."
+    );
+    supported("Etali, Primal Storm");
+    supported("Twincast");
+    // "Whenever Etali attacks, exile the top card of each player's library, then you may
+    // cast any number of spells from among those cards without paying their mana costs."
+    // Lightning Strike first, then Twincast copying it ("Copy target instant or sorcery
+    // spell. You may choose new targets for the copy.").
+    let mut t = TestGame::new(2);
+    let etali = t.battlefield(P0, "Etali, Primal Storm");
+    t.library_top(P0, "Lightning Strike");
+    t.library_top(P1, "Twincast");
+    choose_names_when_offered(&mut t, P0, &["Lightning Strike", "Twincast"]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    attack_with(&mut t, &[(etali, Entity::Player(P1))]);
+    t.resolve_all();
+    // Lightning Strike and its copy each dealt 3 damage.
+    assert_eq!(t.life(P1), 14);
+    assert!(t.in_graveyard(P0, "Lightning Strike"));
+    // Twincast is P1's card: it goes to P1's graveyard.
+    assert!(t.in_graveyard(P1, "Twincast"));
+}
+
+#[test]
+fn etalis_creature_spell_cant_be_enchanted_by_an_aura_cast_with_it() {
+    cr!("608.2g", "303.4a", "115.1");
+    ruling!(
+        "Etali, Primal Storm",
+        "However, permanent spells cast this way won't resolve until you're done casting spells, so the permanents they become can't be the target of spells cast this way."
+    );
+    supported("Pacifism");
+    // Grizzly Bears and Pacifism ("Enchant creature") exiled, the Bears cast first: it's
+    // still a spell on the stack as Pacifism is cast, so Pacifism can't target it (only
+    // Etali).
+    let mut t = TestGame::new(2);
+    let etali = t.battlefield(P0, "Etali, Primal Storm");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.library_top(P1, "Pacifism");
+    choose_names_when_offered(&mut t, P0, &["Grizzly Bears", "Pacifism"]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    attack_with(&mut t, &[(etali, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    let bears_now = t.g.current(bears);
+    let enchanted =
+        t.g.battlefield
+            .iter()
+            .any(|a| t.g.obj(*a).attached_to == Some(Entity::Object(bears_now)));
+    assert!(!enchanted, "Pacifism couldn't target the Bears spell");
+    if let Some(p) = t.named_on_battlefield("Pacifism").first() {
+        assert_eq!(t.obj_now(*p).attached_to, Some(Entity::Object(etali)));
+    }
+}
+
+#[test]
+fn goblin_dark_dwellers_spell_returned_to_hand_isnt_exiled_later() {
+    cr!("608.2g", "614.1a", "702.27a", "400.7");
+    ruling!(
+        "Goblin Dark-Dwellers",
+        "If an instant or sorcery card you cast this way goes to a zone other than exile or a graveyard, perhaps because one of its abilities says to put it into its owner's hand, it won't be exiled. This is true even if the card would be put into a graveyard later that turn."
+    );
+    supported("Goblin Dark-Dwellers");
+    supported("Capsize");
+    // "When this creature enters, you may cast target instant or sorcery card with mana
+    // value 3 or less from your graveyard without paying its mana cost. If that spell would
+    // be put into your graveyard, exile it instead." Capsize {1}{U}{U}, buyback {3}:
+    // "Return target permanent to its owner's hand."
+    let mut t = TestGame::new(2);
+    let capsize = t.graveyard(P0, "Capsize");
+    let giant = t.battlefield(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::C, 3);
+    t.answer_targets(P0, &[Entity::Object(capsize)]);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Goblin Dark-Dwellers");
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Hill Giant"));
+    // Buyback put Capsize into P0's hand instead.
+    assert_eq!(t.zone(capsize), Zone::Hand(P0));
+    // Discarded later this turn, it goes to the graveyard.
+    let c = t.g.current(capsize);
+    t.g.discard(P0, c, None);
+    t.settle();
+    assert_eq!(t.zone(capsize), Zone::Graveyard(P0));
+}
+
+#[test]
+fn nexus_of_becoming_copies_an_x_card_with_x_0() {
+    cr!("107.3b", "202.3e", "707.2", "122.6");
+    ruling!(
+        "Nexus of Becoming",
+        "If the exiled card has {X} in its mana cost, X is 0."
+    );
+    supported("Nexus of Becoming");
+    supported("Primordial Hydra");
+    // "At the beginning of combat on your turn, draw a card. Then you may exile an
+    // artifact or creature card from your hand. If you do, create a token that's a copy of
+    // the exiled card, except it's a 3/3 Golem artifact creature in addition to its other
+    // types." Primordial Hydra {X}{G}{G}: "This creature enters with X +1/+1 counters on
+    // it."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nexus of Becoming");
+    let hydra = t.hand(P0, "Primordial Hydra");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(hydra)]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert_eq!(t.zone(hydra), Zone::Exile);
+    let token = t.named_on_battlefield("Primordial Hydra");
+    assert_eq!(token.len(), 1);
+    let token = token[0];
+    assert!(t.obj_now(token).is_token());
+    // X is 0: mana value 2, and it entered with no +1/+1 counters.
+    assert_eq!(t.obj_now(token).chars.mana_value(), 2);
+    assert_eq!(t.counters(token, "+1/+1"), 0);
+    assert_eq!(t.pt(token), (3, 3));
+    assert!(t.obj_now(token).chars.is(CardType::Artifact));
+}
+
+#[test]
+fn jodah_sees_only_the_front_face_of_a_double_faced_card_in_exile() {
+    cr!("712.8a", "709.4b", "202.3");
+    ruling!(
+        "Jodah, the Unifier",
+        "The types and mana value of a double-faced card in exile are determined by the characteristics of its front face. The mana value of a split card is the total mana value of both halves of the split card added together."
+    );
+    supported("Jodah, the Unifier");
+    supported("Sun Quan, Lord of Wu");
+    // "Whenever you cast a legendary spell from your hand, exile cards from the top of your
+    // library until you exile a legendary nonland card with lesser mana value. You may
+    // cast that card without paying its mana cost. Put the rest on the bottom of your
+    // library in a random order." Invasion of Segovia (a nonlegendary Battle, {2}{U})
+    // transforms into Caetus, a legendary creature: in exile it's not legendary. Fire //
+    // Ice has mana value 4 there.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Jodah, the Unifier");
+    let cards = stack_library(
+        &mut t,
+        P0,
+        &[
+            "Invasion of Segovia // Caetus, Sea Tyrant of Segovia",
+            "Fire // Ice",
+            "Isamaru, Hound of Konda",
+        ],
+    );
+    assert_eq!(t.obj_now(cards[1]).chars.mana_value(), 4);
+    let sun_quan = t.hand(P0, "Sun Quan, Lord of Wu");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    add_mana(&mut t, P0, ManaType::C, 4);
+    t.answer_yes(P0, true);
+    t.cast(P0, sun_quan).go();
+    t.resolve_all();
+    // Jodah skipped the Invasion and Fire // Ice, and cast Isamaru (mana value 1).
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 1);
+    assert_eq!(t.named_on_battlefield("Sun Quan, Lord of Wu").len(), 1);
+    assert!(matches!(t.zone(cards[0]), Zone::Library(_)));
+    assert!(matches!(t.zone(cards[1]), Zone::Library(_)));
+}
