@@ -984,7 +984,21 @@ impl Game {
     /// (CR 305.1, 305.2a).
     fn perform_land_play(&mut self, p: PlayerId, card: ObjectId) {
         let o = self.obj(card);
-        let face = if o.chars.is_land() {
+        // CR 712.12: a modal double-faced card whose faces are both lands is played with
+        // the face its player chooses.
+        let both: Option<Vec<String>> = o.card.as_ref().and_then(|d| {
+            (d.layout == crate::card::Layout::ModalDfc
+                && !o.face_down
+                && d.faces.len() == 2
+                && d.faces.iter().all(|f| f.chars.is_land()))
+            .then(|| d.faces.iter().map(|f| f.chars.name.to_string()).collect())
+        });
+        let face = if let Some(names) = both {
+            match self.ask_option(p, Some(card), "Choose the face to play", names) {
+                1 => FaceState::Back,
+                _ => FaceState::Front,
+            }
+        } else if self.obj(card).chars.is_land() {
             FaceState::Front
         } else {
             FaceState::Back
