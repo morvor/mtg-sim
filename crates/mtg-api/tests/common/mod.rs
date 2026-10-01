@@ -102,3 +102,120 @@ pub fn simple_deck() -> Vec<Arc<CardDef>> {
     }
     v
 }
+
+/// A random valid-looking answer to a request (like `examples/random_client.py`): random
+/// legal options, preferring actions over passing at priority. Answers that break a
+/// rule only the engine checks (attack requirements, for example) are possible; the
+/// agent is then asked again.
+pub fn random_answer(req: &mtg_api::Request, rng: &mut ChaCha8Rng) -> mtg_api::JsonAnswer {
+    use mtg_api::{AnswerSpec, JsonAnswer};
+    let n = req.options.len();
+    match &req.answer {
+        AnswerSpec::ChooseOne => {
+            if req.kind == "priority" {
+                let acts: Vec<usize> = req
+                    .options
+                    .iter()
+                    .filter(|o| {
+                        o.action.as_ref().is_some_and(|a| {
+                            !matches!(a.kind.as_str(), "pass" | "concede" | "mana_ability")
+                        })
+                    })
+                    .map(|o| o.index)
+                    .collect();
+                if !acts.is_empty() && rng.gen_bool(0.6) {
+                    return JsonAnswer::index(*acts.choose(rng).unwrap());
+                }
+                return JsonAnswer::index(0);
+            }
+            JsonAnswer::index(rng.gen_range(0..n.max(1)))
+        }
+        AnswerSpec::YesNo => JsonAnswer::yes_no(req.kind != "mulligan" && rng.gen_bool(0.5)),
+        AnswerSpec::ChooseMany {
+            min,
+            max,
+            distinct,
+            budget,
+        } => {
+            let hi = if *distinct {
+                (*max as usize).min(n)
+            } else {
+                *max as usize
+            };
+            let want = rng.gen_range(*min as usize..=hi.max(*min as usize));
+            let mut order: Vec<usize> = (0..n).collect();
+            order.shuffle(rng);
+            if !distinct && n > 0 {
+                order = (0..want).map(|_| rng.gen_range(0..n)).collect();
+            }
+            let mut chosen = Vec::new();
+            let mut groups: std::collections::BTreeMap<u32, u32> = Default::default();
+            let mut spent = 0;
+            for i in order {
+                if chosen.len() >= want {
+                    break;
+                }
+                let o = &req.options[i];
+                if let (Some(g), Some(m)) = (o.group, o.group_max) {
+                    if groups.get(&g).copied().unwrap_or(0) >= m {
+                        continue;
+                    }
+                }
+                let c = o.cost.unwrap_or(0);
+                if budget.is_some_and(|b| spent + c > b) {
+                    continue;
+                }
+                spent += c;
+                if let Some(g) = o.group {
+                    *groups.entry(g).or_default() += 1;
+                }
+                chosen.push(i);
+            }
+            JsonAnswer::indices(chosen)
+        }
+        AnswerSpec::Order => {
+            let mut v: Vec<usize> = (0..n).collect();
+            v.shuffle(rng);
+            JsonAnswer::indices(v)
+        }
+        AnswerSpec::Number { min, max } => {
+            let hi = max.unwrap_or(min + 2).min(min + 10);
+            JsonAnswer::number(rng.gen_range(*min..=hi.max(*min)))
+        }
+        AnswerSpec::Divide { total, min_each } => {
+            let mut v = vec![*min_each as i64; n];
+            for _ in 0..(*total as i64 - *min_each as i64 * n as i64).max(0) {
+                v[rng.gen_range(0..n)] += 1;
+            }
+            JsonAnswer::numbers(v)
+        }
+        AnswerSpec::AssignDamage { total, trample } => {
+            let mut v = vec![0i64; n];
+            if !trample {
+                for _ in 0..*total {
+                    v[rng.gen_range(0..n)] += 1;
+                }
+                return JsonAnswer::numbers(v);
+            }
+            let mut left = *total as i64;
+            for (i, o) in req.options.iter().enumerate() {
+                let Some(l) = o.lethal else { break };
+                let give = (l as i64).min(left);
+                v[i] += give;
+                left -= give;
+            }
+            if left > 0 {
+                v[n - 1] += left;
+            }
+            JsonAnswer::numbers(v)
+        }
+        AnswerSpec::Split { .. } => {
+            let mut v: Vec<usize> = (0..n).collect();
+            v.shuffle(rng);
+            let k = rng.gen_range(0..=n);
+            let b = v.split_off(k);
+            JsonAnswer::split(v, b)
+        }
+        AnswerSpec::Text { .. } => JsonAnswer::text("Lightning Bolt"),
+    }
+}

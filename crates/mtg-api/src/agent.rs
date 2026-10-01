@@ -94,7 +94,6 @@ pub struct ProtocolAgent<T: Transport> {
     pub transport: T,
     pub options: ProtocolOptions,
     pub stats: AgentStats,
-    next_id: u64,
     cursor: usize,
     closed: Option<Closed>,
     name: String,
@@ -107,7 +106,6 @@ impl<T: Transport> ProtocolAgent<T> {
             transport,
             options,
             stats: AgentStats::default(),
-            next_id: 1,
             cursor: 0,
             closed: None,
             name: "external".into(),
@@ -152,8 +150,9 @@ impl<T: Transport> Agent for ProtocolAgent<T> {
             self.stats.fallbacks += 1;
             return Answer::Default;
         }
-        let id = self.next_id;
-        self.next_id += 1;
+        // Unique within the game (the engine counts the decisions it asks for), so the
+        // seats' requests don't share ids.
+        let id = g.actions_taken;
         let mut present = self.options.present.clone();
         if player != self.seat {
             // CR 723.6: the controller of another player can't make them concede.
