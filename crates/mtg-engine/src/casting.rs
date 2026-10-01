@@ -1487,6 +1487,7 @@ impl Game {
             crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
+        crate::next_spell::recheck_static_cast_grants(self, id);
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         self.emit(Event::SpellCast {
             spell: id,
