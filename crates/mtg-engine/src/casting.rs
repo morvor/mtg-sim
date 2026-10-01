@@ -248,6 +248,9 @@ impl Game {
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
             for c in self.playable_land_cards(p) {
+                if !self.can_pay_land_play_cost(p, c) {
+                    continue;
+                }
                 out.push(Action::PlayLand { card: c });
             }
         }
@@ -946,8 +949,46 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
+    }
+
+    /// The mana a player pays to play a land card that has a mana cost (Glade of the
+    /// Pump Spells: "You have to pay {2}{G} to play this land as your land drop"). Lands
+    /// normally have no mana cost; one put onto the battlefield by an effect isn't played,
+    /// so nothing is paid.
+    fn land_play_cost(&self, card: ObjectId) -> Option<ManaCost> {
+        let o = self.try_obj(card)?;
+        if !o.chars.is_land() {
+            return None;
+        }
+        o.chars.mana_cost.clone().filter(|m| !m.symbols.is_empty())
+    }
+
+    fn can_pay_land_play_cost(&self, p: PlayerId, card: ObjectId) -> bool {
+        let Some(m) = self.land_play_cost(card) else {
+            return true;
+        };
+        let spend = SpendContext {
+            check_only: true,
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::plan_payment(self, p, &m, &spend, Some(card)).is_some()
+    }
+
+    fn pay_land_play_cost(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
+        let Some(m) = self.land_play_cost(card) else {
+            return Ok(());
+        };
+        let spend = SpendContext {
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::pay_mana(self, p, &m, &spend, Some(card))
+            .map(|_| ())
+            .ok_or_else(|| Illegal("can't pay the land's mana cost".into()))
     }
 
     /// Plays a land during the resolution of a spell or ability that instructs `p` to
@@ -976,6 +1017,7 @@ impl Game {
         if self.land_play_prohibited(p, card) {
             return Err(Illegal("can't play that land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
     }
