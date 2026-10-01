@@ -1850,6 +1850,11 @@ pub enum ReplacementAction {
     Subtract(Value),
     /// Redirect damage to the selection.
     Redirect(Sel),
+    /// Redirect the next N damage to the selection: a redirection shield that is used up
+    /// ("the next 1 damage that would be dealt to ~ this turn is dealt to target creature
+    /// you control instead", CR 614.9). Damage beyond what's left of the shield is dealt
+    /// to the original recipient.
+    RedirectNext(Sel, Value),
     /// Do something else entirely instead.
     Instead(Box<Effect>),
     /// Perform the original event and then an additional effect.
@@ -3224,6 +3229,13 @@ pub enum Effect {
         amount: Option<Value>,
         duration: Duration,
         combat_only: bool,
+    },
+    /// "Prevent the next N damage that would be dealt this turn to any number of targets,
+    /// divided as you choose": a prevention shield for each target of the slot, of the
+    /// amount divided to it as the spell was cast (CR 601.2d, 615).
+    PreventDividedDamage {
+        slot: u8,
+        duration: Duration,
     },
     /// Become the monarch (CR 725).
     BecomeMonarch {

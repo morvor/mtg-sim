@@ -76,19 +76,28 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             kind: kind.clone(),
         },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
+        // "If target player would draw a card": the player is locked in too.
+        ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
+            Some(p) => ReplacementEvent::Draw(PlayerFilter::Is(p)),
+            None => d.event.clone(),
+        },
         other => other.clone(),
     };
+    // The object or player damage is redirected to is locked in too.
+    let lock_to = |sel: &Sel| {
+        let to = g.eval_sel(sel, ctx);
+        match to.first() {
+            Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
+            Some(Entity::Object(_)) => Sel::All(Filter::Objects(
+                to.iter().filter_map(|e| e.object()).collect(),
+            )),
+            None => Sel::None,
+        }
+    };
     let action = match &d.action {
-        // The object or player damage is redirected to is locked in too.
-        ReplacementAction::Redirect(sel) => {
-            let to = g.eval_sel(sel, ctx);
-            ReplacementAction::Redirect(match to.first() {
-                Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
-                Some(Entity::Object(_)) => Sel::All(Filter::Objects(
-                    to.iter().filter_map(|e| e.object()).collect(),
-                )),
-                None => Sel::None,
-            })
+        ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        ReplacementAction::RedirectNext(sel, n) => {
+            ReplacementAction::RedirectNext(lock_to(sel), n.clone())
         }
         other => other.clone(),
     };

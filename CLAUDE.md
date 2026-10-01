@@ -89,6 +89,13 @@ Key invariants:
 - Tests encoding a Scryfall ruling cite it: `ruling!("Card Name", "distinctive substring");`
   — fails if the card has no such ruling (so citations can't be invented). Copy the
   substring from the real ruling text (`zcat data/rulings.jsonl.gz | grep ...`).
+- Rulings coverage counts ruling texts: a text shared by several cards is covered by a
+  test on any card it applies to. Pick a card with typical wording, and when the cards
+  word the relevant ability differently, test each wording (cards worded slightly
+  differently can compile and behave differently). The `ruling!` macro needs literals,
+  so a test looping over cards has one `ruling!("Card", "...")` line per card.
+  `python3 scripts/rulings_batches.py summary|list|show P042|card "Name"` reports every
+  ruling text as CITED, EXEMPT or OPEN and splits them into batches of similar rulings.
 - Use `mtg_engine::testing::TestGame` (see its docs and `tests/smoke.rs`). Use real cards
   via `t.battlefield(P0, "Card Name")` etc. For rules that need a custom object, build a
   `CardDef::custom(...)`.

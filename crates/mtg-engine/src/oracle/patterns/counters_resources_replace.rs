@@ -51,7 +51,7 @@ fn amount_change(s: &str) -> Option<(ReplacementAction, &str)> {
 
 /// "If [you | a player | an opponent] would gain life, [you gain | that player gains]
 /// [that much life plus N | twice that much life | no life] instead."
-fn life_gain_replacement(l: &str) -> Option<(ReplacementEvent, ReplacementAction)> {
+pub(super) fn life_gain_replacement(l: &str) -> Option<(ReplacementEvent, ReplacementAction)> {
     let r = l.strip_prefix("if ")?;
     let (who, r) = if let Some(r) = r.strip_prefix("you would gain life, you gain ") {
         (PlayerFilter::You, r)
