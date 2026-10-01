@@ -12,6 +12,8 @@
 //!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
 //!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks).
 
+mod roundtrip;
+
 use mtg_data::rules::RuleKind;
 use regex::Regex;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -734,8 +736,9 @@ fn main() {
         Some("card-coverage") => card_coverage(&args[1..]),
         Some("rulings-coverage") => rulings_coverage(&args[1..]),
         Some("unsupported") => unsupported(&args[1..]),
+        Some("roundtrip") => roundtrip::run(&args[1..]),
         _ => {
-            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported> [--write PATH] [--check]");
+            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|roundtrip> [--write PATH] [--check]");
             std::process::exit(2);
         }
     }
