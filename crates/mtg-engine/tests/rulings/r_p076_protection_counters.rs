@@ -350,3 +350,47 @@ fn rhythm_of_the_wild_a_permanent_that_becomes_a_creature_later() {
     assert!(crate::r_s06_common::has_kw(&t, relic, KeywordKind::Riot));
     assert!(!rioted(&t, relic));
 }
+
+#[test]
+fn jailbreak_scheme_on_a_merged_permanent_moves_all_its_cards_together() {
+    cr!("721.3", "730.3d", "401.4");
+    ruling!(
+        "Jailbreak Scheme",
+        "If multiple cards are put into the library this way (such as when the spell targets a melded permanent), that permanent’s owner puts all the cards on top or all the cards on the bottom. They put them in whatever order they wish, and do not need to reveal the order."
+    );
+    supported("Jailbreak Scheme");
+    supported("Gemrazer");
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::object::CastMethod;
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    // P1 mutates Gemrazer onto their Grizzly Bears: one permanent, two cards.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let gem = t.hand(P1, "Gemrazer");
+    mana(&mut t, P1, ManaType::G, 2);
+    mana(&mut t, P1, ManaType::C, 1);
+    t.cast(P1, gem)
+        .method(CastMethod::Keyword(KeywordKind::Mutate))
+        .target(bears)
+        .go();
+    t.resolve_all();
+    let merged = t.g.current(bears);
+    assert!(!t.obj(merged).merged_with.is_empty());
+    // P0 casts Jailbreak Scheme's second mode on it; P1 picks the bottom.
+    t.set_step(P0, Step::PrecombatMain);
+    crate::r_s29_common::choose_modes(&mut t, P0, &[1]);
+    mana(&mut t, P0, ManaType::U, 1);
+    mana(&mut t, P0, ManaType::C, 2);
+    let card = t.hand(P0, "Jailbreak Scheme");
+    t.answer_targets(P0, &[Entity::Object(merged)]);
+    t.cast(P0, card).go();
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    t.resolve_all();
+    let lib = &t.g.player(P1).library;
+    let mut bottom: Vec<String> = lib[..2]
+        .iter()
+        .map(|c| t.g.obj(*c).chars.name.to_string())
+        .collect();
+    bottom.sort();
+    assert_eq!(bottom, vec!["Gemrazer".to_string(), "Grizzly Bears".to_string()]);
+}
