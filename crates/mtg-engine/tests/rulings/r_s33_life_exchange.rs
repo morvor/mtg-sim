@@ -199,3 +199,81 @@ fn soul_conduit_a_player_who_cant_gain_or_lose_life_cant_exchange() {
     conduit(&mut t);
     assert_eq!((t.life(P0), t.life(P1)), (7, 15));
 }
+
+/// P0 casts Profane Transfusion ("Two target players exchange life totals. You create an
+/// X/X colorless Horror artifact creature token, where X is the difference between those
+/// players' life totals.") targeting P0 and P1. Returns the Horror token's P/T.
+fn transfusion(t: &mut TestGame) -> (i32, i32) {
+    supported("Profane Transfusion");
+    crate::r_s29_common::cast_and_resolve(
+        t,
+        P0,
+        "Profane Transfusion",
+        &[Entity::Player(P0), Entity::Player(P1)],
+    );
+    let horrors: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P0 && o.is_token() && o.chars.has_subtype("Horror"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(horrors.len(), 1);
+    t.pt(horrors[0])
+}
+
+#[test]
+fn profane_transfusion_each_player_gains_or_loses_the_difference() {
+    cr!("119.5", "614.1a", "603.2", "107.3c");
+    ruling!(
+        "Profane Transfusion",
+        "When life totals are exchanged, each player gains or loses the amount of life necessary to equal the other player's life total. For example, if one player has 10 life and the other has 17 life, the first player gains 7 life and the other one loses 7 life. Replacement effects may modify these gains and losses, and triggered abilities may trigger on them."
+    );
+    ruling!(
+        "Profane Transfusion",
+        "Use the difference between the life totals after the exchange to determine the size of the Horror token. Because replacement effects can modify the life gain and life loss, this number may be different from what it was before the exchange."
+    );
+    // 10 and 17: P0 gains 7, P1 loses 7; a 7/7 Horror.
+    let mut t = TestGame::new(2);
+    set_life(&mut t, P0, 10);
+    set_life(&mut t, P1, 17);
+    let from = t.g.turn_events.len();
+    assert_eq!(transfusion(&mut t), (7, 7));
+    assert_eq!((t.life(P0), t.life(P1)), (17, 10));
+    assert_eq!(life_gains_since(&t, from, P0), vec![7]);
+    // P0's Cleric Class ("If you would gain life, you gain that much life plus 1
+    // instead.") and P1's Vengeful Warchief ("Whenever you lose life for the first time
+    // each turn, put a +1/+1 counter on this creature."): P0 gains 8; the Horror is 8/8,
+    // the difference after the exchange.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cleric Class");
+    let chief = t.battlefield(P1, "Vengeful Warchief");
+    set_life(&mut t, P0, 10);
+    set_life(&mut t, P1, 17);
+    assert_eq!(transfusion(&mut t), (8, 8));
+    assert_eq!((t.life(P0), t.life(P1)), (18, 10));
+    assert_eq!(t.counters(chief, "+1/+1"), 1);
+}
+
+#[test]
+fn profane_transfusion_a_player_who_cant_gain_life_cant_take_a_higher_total() {
+    cr!("119.7", "119.8");
+    ruling!(
+        "Profane Transfusion",
+        "If a player can't gain life, that player can't exchange life totals with a player with a higher life total. Similarly, a player who can't lose life can't exchange life totals with a player with a lower life total."
+    );
+    // Leyline of Punishment ("Players can't gain life."): P0 (5) can't take P1's 12. The
+    // Horror is still created, as big as the difference.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Leyline of Punishment");
+    set_life(&mut t, P0, 5);
+    set_life(&mut t, P1, 12);
+    assert_eq!(transfusion(&mut t), (7, 7));
+    assert_eq!((t.life(P0), t.life(P1)), (5, 12));
+    // P0 (12) can't lose life: no exchange with P1 (5).
+    let mut t = TestGame::new(2);
+    restrict_p0(&mut t, Restriction::CantLoseLife(PlayerFilter::You));
+    set_life(&mut t, P0, 12);
+    set_life(&mut t, P1, 5);
+    assert_eq!(transfusion(&mut t), (7, 7));
+    assert_eq!((t.life(P0), t.life(P1)), (12, 5));
+}

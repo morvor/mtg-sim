@@ -2805,6 +2805,19 @@ pub enum Effect {
         tapped: bool,
         attacking: bool,
     },
+    /// "Create an X/X [token]": a token whose power and toughness are numbers the effect
+    /// defines (CR 107.3c), determined as the token is created, so they're part of its
+    /// copiable values (CR 707.2); otherwise as [`Effect::CreateToken`] (`spec`'s own power
+    /// and toughness are replaced).
+    CreateTokenWithPT {
+        spec: TokenSpec,
+        power: Value,
+        toughness: Value,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
+    },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
     /// can't legally enchant it isn't created.

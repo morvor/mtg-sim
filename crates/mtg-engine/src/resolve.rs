@@ -767,6 +767,28 @@ impl Game {
                     created.into_iter().map(Entity::Object).collect(),
                 );
             }
+            Effect::CreateTokenWithPT {
+                spec,
+                power,
+                toughness,
+                count,
+                controller,
+                tapped,
+                attacking,
+            } => {
+                // CR 107.3c: the numbers are determined as the tokens are created.
+                let mut spec = spec.clone();
+                spec.power = Some(self.eval_value(power, ctx) as i32);
+                spec.toughness = Some(self.eval_value(toughness, ctx) as i32);
+                let create = Effect::CreateToken {
+                    spec,
+                    count: count.clone(),
+                    controller: controller.clone(),
+                    tapped: *tapped,
+                    attacking: *attacking,
+                };
+                self.exec(&create, ctx);
+            }
             Effect::CreateTokenAttached {
                 spec,
                 count,
