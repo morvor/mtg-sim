@@ -417,7 +417,12 @@ impl Game {
                     link: 0,
                     controller: inst.controller,
                     class: repl_class(&inst.def, ev),
-                    text: format!("effect #{}", inst.id),
+                    // Named after the object that created it, so a player choosing the
+                    // order (CR 616.1) can tell the effects apart.
+                    text: match inst.source {
+                        Some(s) => format!("{} (effect #{})", self.obj(s).chars.name, inst.id),
+                        None => format!("effect #{}", inst.id),
+                    },
                     def: inst.def.clone(),
                     instance: Some(inst.id),
                 });
