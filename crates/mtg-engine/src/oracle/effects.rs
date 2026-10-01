@@ -1109,6 +1109,9 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         || t == "to their owners' hands"
         || t == "to your hand"
         || t == "to their owner's hand"
+        // "two target cards from an opponent's graveyard to their hand": a card goes to
+        // its owner's hand (CR 400.3).
+        || t == "to their hand"
     {
         Destination::zone(ZoneKind::Hand)
     } else if t == "to the battlefield" || t == "to the battlefield under your control" {
