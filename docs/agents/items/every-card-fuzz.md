@@ -1,0 +1,12 @@
+# every-card-fuzz: Every-card fuzzing: play every supported card in real games under the rules checks
+
+WHY: random decks only reach a sample of cards. Every supported card should be cast or played, and have its abilities activated and triggered, in real games with the invariant checks running, so crashes, hangs and rules violations on any card are found.
+
+Current fuzzer: crates/mtg-sim (main.rs: --random-decks, per-game threads with catch_unwind, --slow/--timeout watchdog, --check invariants via checks.rs CheckingAgent: state-based actions pending at priority (CR 117.5) and zone consistency; decks.rs random_deck). RandomAgent in crates/mtg-engine/src/agents.rs.
+
+1. `mtg-sim --every-card [--games-per-card K] [--from N] [--count M] [--filter TEXT]`: iterate over every fully supported card in a deterministic order; for each, play K games (default 2) in which the card is actually used: e.g. both players' decks built around it (several copies plus on-color lands and random supported spells; for cards with special needs such as commanders, planes, schemes, attractions or dungeons, set up the right variant or zone), with copies in the opening hand and enough lands that it can be cast early. Seeds derived from the card index so any failure replays with one command.
+2. Track per card whether it was cast or played, and whether each of its activated and triggered abilities was activated or triggered and resolved at least once (counted through engine events). Report cards whose abilities never got used, grouped by likely reason, and improve the setup (or RandomAgent choices) so nearly every card gets exercised.
+3. Add useful invariant checks to checks.rs while there: e.g. no object in two zones; every permanent's characteristics computable without panicking; mana pools empty between steps (CR 500.4) unless an effect says otherwise; damage marked only on creatures/battles; the stack empty when a step or phase ends; life totals and counters consistent with events. Each check needs unit tests showing it detects a violation.
+4. Run the full sweep in release with all CPU threads and fix every panic, hang and rules violation it finds in the engine (general fixes, each with a regression test in crates/mtg-engine/tests). Summarize the sweep (cards, games, exercised share, failures fixed) in docs/EVERY_CARD.md; note the command in README.md.
+
+DONE when a full sweep over every supported card runs clean (or remaining failures are listed with causes in remaining_gaps), and nearly every card has been cast and had its abilities used.
