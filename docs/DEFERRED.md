@@ -50,19 +50,6 @@ Decided 2026-10-01.
   scheduled. Rulings that apply only to digital-only cards are DEFERRED in
   `scripts/rulings_batches.py`.
 
-## Deferred to later
-
-### Agents that play well
-
-Decided 2026-10-01: simulation quality comes at the end.
-
-- **Now:** `RandomAgent` (for fuzzing), plus the external decision interface (item
-  `agent-api`): what each player can see and every legal option, as JSON, so an outside
-  program or model can play any seat.
-- **Later:** heuristic, search-based or learned agents for meaningful game results.
-  `Game` is `Clone` and `Game::set_agents` swaps agents on a copy, so search agents can
-  play ahead.
-
 ### Cards not legal in any format
 
 Decided 2026-10-02.
@@ -77,3 +64,16 @@ Decided 2026-10-02.
 - **Status:** `card-coverage` and `unsupported` already skip them. Rulings that apply only
   to such cards are DEFERRED in `scripts/rulings_batches.py`. Together with digital-only
   cards and sticker sheets, that is 2,636 ruling texts.
+
+## Deferred to later
+
+### Agents that play well
+
+Decided 2026-10-01: simulation quality comes at the end.
+
+- **Now:** `RandomAgent` (for fuzzing), plus the external decision interface (item
+  `agent-api`): what each player can see and every legal option, as JSON, so an outside
+  program or model can play any seat.
+- **Later:** heuristic, search-based or learned agents for meaningful game results.
+  `Game` is `Clone` and `Game::set_agents` swaps agents on a copy, so search agents can
+  play ahead.
