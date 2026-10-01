@@ -670,8 +670,9 @@ pub fn read_logs(dir: &std::path::Path) -> HashMap<u64, Vec<(String, String)>> {
 }
 
 /// Records the keyword abilities of a spell that were used to cast it: a keyword's
-/// alternative cost or permission (flashback, morph, ...) or an optional additional cost
-/// that was paid (kicker, ...), convoke and delve. No-op unless the log is on.
+/// alternative cost or permission (flashback, morph, ...), an optional additional cost
+/// that was paid (kicker, ...), a keyword that changes its cost (affinity, ...), convoke,
+/// delve, and spree. No-op unless the log is on.
 pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
     if !enabled() {
         return;
@@ -684,6 +685,25 @@ pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
     };
     let cast = &si.cast;
     let norm = |s: &str| s.to_lowercase().replace([' ', '-', '_'], "");
+    // Keywords that change the cost of casting it (affinity, ...).
+    let cost_changing: Vec<String> = o
+        .chars
+        .mana_cost
+        .as_ref()
+        .map(|m| {
+            let cost = crate::ability::Cost::mana(m.clone());
+            let x = cast.x.unwrap_or(0).max(0) as u32;
+            crate::kw::cost_changing_keywords(g, o.controller, spell, &o.chars, &cost, x)
+                .iter()
+                .map(|k| format!("{k:?}"))
+                .collect()
+        })
+        .unwrap_or_default();
+    // Spree: modes with additional costs were chosen (CR 702.172a).
+    let spree = o.chars.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Spell(s)
+            if s.body.modal.as_ref().is_some_and(|m| m.per_mode_cost))
+    }) && si.chosen.iter().any(|c| c.mode.is_some());
     for a in &o.chars.abilities {
         let AbilityKind::Keyword(kw) = &a.kind else {
             continue;
@@ -693,7 +713,9 @@ pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
             CastMethod::Keyword(k) | CastMethod::FaceDown(k) if k == kw.kind)
             || cast.paid.iter().any(|p| norm(p).starts_with(&name))
             || (kw.kind == KeywordKind::Convoke && !cast.convoked.is_empty())
-            || (kw.kind == KeywordKind::Delve && !cast.delved.is_empty());
+            || (kw.kind == KeywordKind::Delve && !cast.delved.is_empty())
+            || (kw.kind == KeywordKind::Spree && spree)
+            || cost_changing.contains(&format!("{kw:?}"));
         if used {
             record(a, &o.chars.name, "keyword");
         }

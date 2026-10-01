@@ -460,7 +460,7 @@ impl Game {
             // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
             let ignore_hexproof =
                 crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
-            for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
+            for kw in c.keywords_of(KeywordKind::Hexproof) {
                 if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {
                         None => return true,
@@ -576,8 +576,7 @@ impl Game {
         // For abilities on the stack, the source of the ability is its source object.
         let src = self.ability_source_of(source);
         ob.chars
-            .keywords()
-            .filter(|k| k.kind == KeywordKind::Protection)
+            .keywords_of(KeywordKind::Protection)
             .any(|k| match &k.filter {
                 None => true,
                 Some(f) => self.matches(src, f, &src_ctx),

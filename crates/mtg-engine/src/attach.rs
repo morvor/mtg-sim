@@ -43,7 +43,7 @@ fn enchant_kw_player(k: &crate::keywords::Keyword) -> Option<PlayerFilter> {
 /// that match all of them (CR 702.5c).
 pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
     let mut fs = Vec::new();
-    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+    for k in chars.keywords_of(KeywordKind::Enchant) {
         if enchant_kw_player(k).is_some() {
             return None; // CR 702.5d: can't enchant permanents.
         }
@@ -59,7 +59,7 @@ pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
 /// "Enchant opponent"). Every instance must allow it (CR 702.5c, 702.5d).
 pub fn enchant_player(chars: &Characteristics) -> Option<PlayerFilter> {
     let mut out: Option<PlayerFilter> = None;
-    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+    for k in chars.keywords_of(KeywordKind::Enchant) {
         let pf = enchant_kw_player(k)?;
         out = Some(match (out, pf) {
             (Some(PlayerFilter::Opponent), _) | (_, PlayerFilter::Opponent) => {
