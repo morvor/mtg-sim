@@ -40,7 +40,11 @@ const SUBJECTS: [&str; 12] = [
 
 /// Splits "it isn't legendary and it has haste" into its clauses (quotes masked).
 fn exception_clauses(masked: &str) -> Vec<String> {
-    let mut s = masked.to_string();
+    // "it's a 5/5 artifact creature in addition to its other types and has haste"
+    // (Saheeli, Radiant Creator): the subject of the second clause is left out.
+    let mut s = masked
+        .replace(" other types and has ", " other types|it has ")
+        .replace(" other types and have ", " other types|they have ");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));

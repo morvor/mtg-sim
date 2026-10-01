@@ -114,3 +114,42 @@ fn a_negative_power_gives_x_of_zero() {
     t.resolve_all();
     assert_eq!(t.pt(spirit), (-2, 3));
 }
+
+#[test]
+fn a_bonus_from_a_creatures_own_ability_doesnt_change_its_base_power_and_toughness() {
+    cr!("208.4b", "604.3", "613.4c");
+    ruling!(
+        "Duskana, the Rage Mother",
+        "Some creatures have base power and toughness 0/0 and an ability that gives them a bonus based on some criteria. Those are not characteristic-defining abilities, and that ability doesn't change its base power and toughness."
+    );
+    supported("Duskana, the Rage Mother");
+    supported("Nighthowler");
+    // Nighthowler (0/0): "This creature and enchanted creature each get +X/+X, where X is
+    // the number of creature cards in all graveyards." With two, it's 2/2, but its base
+    // power and toughness are 0/0. A 1/1 with a +1/+1 counter isn't 2/2 at base either.
+    let mut t = TestGame::new(2);
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let howler = t.battlefield(P0, "Nighthowler");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    crate::r_s13_common::add(&mut t, elves, "+1/+1", 1);
+    t.g.recompute();
+    assert_eq!(t.pt(howler), (2, 2));
+    assert_eq!(t.pt(elves), (2, 2));
+    // Duskana: "When Duskana enters, draw a card for each creature you control with base
+    // power and toughness 2/2." Only the Bears.
+    let hand = t.hand_size(P0);
+    crate::r_s05_common::enter(&mut t, P0, "Duskana, the Rage Mother");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // "Whenever a creature you control with base power and toughness 2/2 attacks, it gets
+    // +3/+3 until end of turn."
+    attack_with(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (howler, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.pt(howler), (2, 2));
+}
