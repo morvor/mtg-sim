@@ -47,8 +47,8 @@ Decided 2026-10-01.
   a spellbook, intensity, specialize, boons and similar.
 - **Status:** `card-coverage` counts paper cards only. The plan for them is
   `docs/agents/items/cards-digital-alchemy.md` (939 unsupported texts), which is not
-  scheduled. Rulings that apply only to digital-only cards (759 texts, together with
-  sticker sheets) are DEFERRED in `scripts/rulings_batches.py`.
+  scheduled. Rulings that apply only to digital-only cards are DEFERRED in
+  `scripts/rulings_batches.py`.
 
 ## Deferred to later
 
@@ -63,9 +63,17 @@ Decided 2026-10-01: simulation quality comes at the end.
   `Game` is `Clone` and `Game::set_agents` swaps agents on a copy, so search agents can
   play ahead.
 
-## Not counted today, no decision yet
+### Cards not legal in any format
 
-Cards that aren't legal in any format don't appear in `card-coverage` or `unsupported`:
-Un-set cards with the acorn stamp, playtest cards, and cards banned everywhere such as
-the ante cards. The engine does implement the ante rules (CR 407). Whether these cards
-should count toward support hasn't been decided.
+Decided 2026-10-02.
+
+- **Scope:** about 2,050 paper cards with no format where they are legal or restricted:
+  playtest cards (737), Un-set cards that aren't legal anywhere (474, including the acorn
+  cards), planes and phenomena (212), schemes (102), cards banned everywhere such as the
+  ante cards and dexterity cards (77), vanguards, conspiracies and memorabilia.
+- **Already implemented:** the variant and ante rules themselves (Planechase, Archenemy,
+  Vanguard, Conspiracy draft, ante; CR 407 and 900-905) are in the engine and tested, and
+  stay supported. Only covering these individual cards is deferred.
+- **Status:** `card-coverage` and `unsupported` already skip them. Rulings that apply only
+  to such cards are DEFERRED in `scripts/rulings_batches.py`. Together with digital-only
+  cards and sticker sheets, that is 2,636 ruling texts.

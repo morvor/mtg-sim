@@ -14,7 +14,8 @@ cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of abi
 Status comes from the repo: a text is CITED when a test has ruling!("<card or face name>",
 "<substring of that ruling>") for any card with that ruling, EXEMPT when
 docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, DEFERRED when
-every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets),
+every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets,
+cards not legal in any format),
 OPEN otherwise.
 
 Usage (from the repo root):
@@ -70,6 +71,8 @@ def deferred(c):
         return 'digital-only'
     if 'Stickers' in (c.get('type_line') or ''):
         return 'sticker sheet'
+    if not any(v in ('legal', 'restricted') for v in (c.get('legalities') or {}).values()):
+        return 'not legal in any format'
     return None
 
 
@@ -212,7 +215,7 @@ def main():
         c = collections.Counter(status(os_, t) for b in batches.values() for _, t, os_ in b)
         tot = sum(c.values())
         print(f'ruling texts {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
-              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only cards, sticker sheets) {c["DEFERRED"]}; '
+              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only, sticker sheets, not legal anywhere) {c["DEFERRED"]}; '
               f'out of scope (Contraptions, host/augment): {len(oos)}')
     elif cmd == 'list':
         for bid, b in batches.items():
