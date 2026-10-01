@@ -1046,6 +1046,8 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
+        // "Each land played this way enters tapped" (CR 614.1c).
+        let tapped = crate::kw::play_permission_terms::lands_enter_tapped(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let new = self.move_object_ev(MoveEv {
             obj: card,
@@ -1056,6 +1058,7 @@ impl Game {
             etb: EtbInfo {
                 controller: Some(p),
                 face: Some(face),
+                tapped,
                 ..Default::default()
             },
             source: None,
@@ -1216,6 +1219,9 @@ impl Game {
             .play_grants
             .iter()
             .any(|g| g.object == card && g.player == p);
+        // "A spell cast this way costs {2} more to cast" (CR 601.2f).
+        let permission_cost_increase =
+            crate::kw::play_permission_terms::grant_cost_increase(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1224,6 +1230,7 @@ impl Game {
             turn: self.turn.number,
             instant_timing: !sorcery_time,
             main_phase: self.turn.step.is_main() && self.turn.active == p,
+            permission_cost_increase,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
@@ -1604,6 +1611,12 @@ impl Game {
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
             add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+        }
+        // "A spell cast this way costs {2} more to cast": an increase that comes with the
+        // permission it's cast with.
+        let more = crate::kw::play_permission_terms::cost_increase(self, p, card);
+        if more > 0 {
+            add_cost(&mut cost, &Cost::mana(ManaCost::generic(more)));
         }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
         if let Some(m) = cost.mana.as_mut() {

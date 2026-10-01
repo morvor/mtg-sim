@@ -277,6 +277,10 @@ pub struct CastInfo {
     /// main phase", addendum).
     #[serde(default)]
     pub main_phase: bool,
+    /// The generic cost increase that came with the permission it was cast with ("A spell
+    /// cast this way costs {2} more to cast", CR 601.2f).
+    #[serde(default)]
+    pub permission_cost_increase: u32,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that
