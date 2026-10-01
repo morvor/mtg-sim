@@ -100,9 +100,17 @@ impl Renderer<'_> {
             }
             TargetKind::Player(pf) => self.player_filter_noun(pf, num),
             TargetKind::AnyTarget => {
-                return match count {
-                    None => "any target".into(),
-                    Some(c) => format!("{c} targets"),
+                // "any number of targets" for divided damage up to X (CR 601.2d).
+                let count = if t.divide.is_some() && t.max.as_const().is_none() {
+                    Some("any number of".to_string())
+                } else {
+                    count
+                };
+                return match (count, other) {
+                    (None, false) => "any target".into(),
+                    (None, true) => "any other target".into(),
+                    (Some(c), false) => format!("{c} targets"),
+                    (Some(c), true) => format!("{c} other targets"),
                 };
             }
             TargetKind::ObjectOrPlayer(f, pf) => {

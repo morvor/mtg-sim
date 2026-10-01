@@ -332,11 +332,24 @@ impl Renderer<'_> {
             }
             TriggerCond::Draws { who } => Ev::new(self.rel_subject(*who), "draw a card"),
             TriggerCond::Discards { who, filter } => {
-                let n = if matches!(filter, Filter::Any) {
-                    "a card".to_string()
+                let many = matches!(det, Det::OneOrMore);
+                let n = if matches!(filter, Filter::Any | Filter::Card) {
+                    if many {
+                        "one or more cards".to_string()
+                    } else {
+                        "a card".to_string()
+                    }
                 } else {
-                    let n = self.noun(&filter.clone().in_zone(ZoneKind::Hand), Num::One);
-                    with_article(n.trim_end_matches(" in a hand"))
+                    let n = self.noun(
+                        &filter.clone().in_zone(ZoneKind::Hand),
+                        if many { Num::Many } else { Num::One },
+                    );
+                    let n = n.trim_end_matches(" in a hand").trim_end_matches(" in hands");
+                    if many {
+                        format!("one or more {n}")
+                    } else {
+                        with_article(n)
+                    }
                 };
                 Ev::new(self.rel_subject(*who), format!("discard {n}"))
             }
@@ -560,10 +573,12 @@ impl Renderer<'_> {
                 Ev::new(e.subj, format!("{} for the first time each turn", e.vp))
             }
             TriggerCond::Batched { trigger, per } => {
-                let _ = per;
-                let d = match det {
-                    Det::A => Det::OneOrMore,
-                    other => other,
+                // Once per object (or per source) in a batch is how "whenever a creature is
+                // dealt damage" works anyway (CR 603.2c); once per batch or per player is
+                // "one or more".
+                let d = match (det, per) {
+                    (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
+                    (other, _) => other,
                 };
                 let e = self.trigger_event(trigger, d);
                 Ev::new(e.subj, plural_verb(&e.vp))

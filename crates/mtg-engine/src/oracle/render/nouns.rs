@@ -140,6 +140,16 @@ impl Renderer<'_> {
         }
     }
 
+    fn kind_of(f: &Filter) -> Option<&'static str> {
+        match f {
+            Filter::Card => Some("card"),
+            Filter::Token => Some("token"),
+            Filter::Spell => Some("spell"),
+            Filter::And(v) => v.iter().find_map(Self::kind_of),
+            _ => None,
+        }
+    }
+
     fn type_like_head(&mut self, f: &Filter) -> String {
         let mut np = Np::default();
         self.collect(f, &mut np);
@@ -181,7 +191,28 @@ impl Renderer<'_> {
                         .collect();
                     np.colors.push(join_list(&cs, "or"));
                 } else if v.iter().all(Self::is_type_like) {
-                    let alts: Vec<String> = v.iter().map(|x| self.type_like_head(x)).collect();
+                    // A kind all the alternatives share is said once: "Merfolk and Druid
+                    // cards", "instant or sorcery card".
+                    let kinds: Vec<Option<&'static str>> = v.iter().map(Self::kind_of).collect();
+                    let shared = kinds[0].filter(|k| kinds.iter().all(|x| *x == Some(*k)));
+                    let alts: Vec<String> = v
+                        .iter()
+                        .map(|x| {
+                            let h = self.type_like_head(x);
+                            match shared {
+                                Some(k) if h != k => h
+                                    .strip_suffix(&format!(" {k}"))
+                                    .map(|s| s.to_string())
+                                    .unwrap_or(h),
+                                _ => h,
+                            }
+                        })
+                        .collect();
+                    if let Some(k) = shared {
+                        if np.kind.is_none() {
+                            np.kind = Some(k);
+                        }
+                    }
                     np.alts.extend(alts);
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
@@ -731,16 +762,32 @@ impl Renderer<'_> {
         if let Filter::In(sel) = f {
             return self.sel(sel, Case::Obj);
         }
-        // A complex union: each alternative gets the determiner ("~ or another creature").
+        // A complex union inside a conjunction: "basic land card or Gate card in your
+        // library" is "basic land card in your library or Gate card in your library".
+        let f = &distribute_or(f);
+        // A complex union: each alternative gets the determiner ("~ or another creature");
+        // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {
-                let parts: Vec<String> = v.iter().map(|x| self.noun_det(x, det.clone())).collect();
-                let conj = match det.num() {
-                    Num::One => "or",
-                    Num::Many => "and/or",
+                return match det.num() {
+                    Num::One => {
+                        let parts: Vec<String> =
+                            v.iter().map(|x| self.noun_det(x, det.clone())).collect();
+                        join_list(&parts, "or")
+                    }
+                    Num::Many => {
+                        let parts: Vec<String> =
+                            v.iter().map(|x| self.noun_det(x, Det::Plural)).collect();
+                        let list = join_list(&parts, "and/or");
+                        match det {
+                            Det::Count(n) => format!("{n} {list}"),
+                            Det::UpTo(n) => format!("up to {n} {list}"),
+                            Det::OneOrMore => format!("one or more {list}"),
+                            _ => list,
+                        }
+                    }
                 };
-                return join_list(&parts, conj);
             }
         }
         let mut np = Np::default();
@@ -868,6 +915,40 @@ impl Renderer<'_> {
             }
         }
     }
+}
+
+/// `And([Or([a, b]), c])` → `Or([And([a, c]), And([b, c])])` when the union isn't a
+/// simple list of types or colors.
+fn distribute_or(f: &Filter) -> Filter {
+    let Filter::And(v) = f else {
+        return f.clone();
+    };
+    let complex = |x: &Filter| {
+        matches!(x, Filter::Or(alts) if !alts.iter().all(Renderer::is_type_like)
+            && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
+            && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))
+    };
+    let Some(pos) = v.iter().position(complex) else {
+        return f.clone();
+    };
+    let Filter::Or(alts) = &v[pos] else {
+        return f.clone();
+    };
+    let rest: Vec<Filter> = v
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != pos)
+        .map(|(_, x)| x.clone())
+        .collect();
+    Filter::Or(
+        alts.iter()
+            .map(|a| {
+                let mut parts = vec![a.clone()];
+                parts.extend(rest.iter().cloned());
+                Filter::and(parts)
+            })
+            .collect(),
+    )
 }
 
 fn is_combat_keyword(w: &str) -> bool {

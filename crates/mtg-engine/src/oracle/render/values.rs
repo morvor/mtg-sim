@@ -571,6 +571,9 @@ impl Renderer<'_> {
             PlayerFilter::DealtDamageThisTurn => "was dealt damage this turn".into(),
             PlayerFilter::Counters(k, c, v) => {
                 let v = self.value(v);
+                if v == "1" && matches!(c, Cmp::Ge) {
+                    return format!("{have} {}", with_article(&counter_name(k)));
+                }
                 let n = match c {
                     Cmp::Ge => format!("{v} or more"),
                     _ => cmp_phrase(*c, &v),
@@ -613,8 +616,17 @@ impl Renderer<'_> {
         if let Value::Count(f) = a {
             if let Some((r, rest)) = split_controller(f).0.map(|r| (r, split_controller(f).1)) {
                 if f.zone().is_none_or(|z| z == ZoneKind::Battlefield) {
-                    let subj = self.rel_subject(r);
-                    let verb = if subj == "you" { "control" } else { "controls" };
+                    // A count of permanents your opponents control is over all of them.
+                    let subj = if r == PlayerRel::Opponent {
+                        "your opponents".to_string()
+                    } else {
+                        self.rel_subject(r)
+                    };
+                    let verb = if subj == "you" || subj == "your opponents" {
+                        "control"
+                    } else {
+                        "controls"
+                    };
                     let n = self.count_phrase(&rest, cmp, b);
                     return format!("{subj} {verb} {n}");
                 }
@@ -650,6 +662,9 @@ impl Renderer<'_> {
         // "there are seven or more cards in your graveyard".
         if let (Some(rest), Value::Const(n)) = (a.strip_prefix("the number of "), b) {
             let w = number_word(*n);
+            if matches!((cmp, n), (Cmp::Ge, 1) | (Cmp::Gt, 0)) {
+                return format!("there is a {rest}");
+            }
             let q = match cmp {
                 Cmp::Ge => Some(format!("{w} or more")),
                 Cmp::Gt if *n == 0 => None,

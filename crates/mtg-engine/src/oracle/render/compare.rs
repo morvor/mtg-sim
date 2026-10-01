@@ -341,6 +341,7 @@ fn singular(w: &str) -> String {
         };
     }
     match w {
+        "does" => return "do".into(),
         "doesn't" | "don't" => return "don't".into(),
         "isn't" | "aren't" => return "isn't".into(),
         "wasn't" | "weren't" => return "wasn't".into(),

@@ -868,6 +868,15 @@ impl Renderer<'_> {
                 };
                 format!("shuffle {w} into {p}")
             }
+            // "The owner of target artifact shuffles it into their library."
+            Effect::ShuffleIntoLibrary {
+                what,
+                library: PlayerRef::OwnerOf(s),
+            } if format!("{s:?}") == format!("{what:?}") => {
+                let w = self.sel(what, Case::Obj);
+                let it = if is_plural_sel(what) { "them" } else { "it" };
+                format!("the owner of {w} shuffles {it} into their library")
+            }
             Effect::ShuffleIntoLibrary { what, library } => {
                 let w = self.sel(what, Case::Obj);
                 let p = self.possessive_for(library);
