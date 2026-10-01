@@ -62,7 +62,15 @@ pub fn token_of(t: &mut TestGame, p: PlayerId, spec: TokenSpec) -> ObjectId {
     t.settle();
     let toks = new_tokens(t, p, &before);
     assert_eq!(toks.len(), 1);
+    // As if it had been under its controller's control since the turn began.
+    unsick(t, toks[0]);
     toks[0]
+}
+
+/// Clears the permanent's summoning sickness (CR 302.6).
+pub fn unsick(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.objects[id.0 as usize].summoning_sick = false;
 }
 
 /// Whether the object has the original characteristics of the Wolf token: named Wolf, a
@@ -133,3 +141,16 @@ pub fn has_subtype(t: &TestGame, id: ObjectId, s: &str) -> bool {
 pub fn mv_now(t: &mut TestGame, id: ObjectId) -> i64 {
     crate::r_s26_common::mv(t, id)
 }
+
+/// `p`'s Benevolent Hydra ({X}{G}{G}, enters with X +1/+1 counters), cast with X = 3.
+pub fn hydra_cast_with_x3(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    crate::r_s01_common::supported("Benevolent Hydra");
+    t.lands(p, "Forest", 5);
+    let h = t.hand(p, "Benevolent Hydra");
+    t.cast(p, h).x(3).go();
+    t.resolve_all();
+    let h = t.named_on_battlefield("Benevolent Hydra")[0];
+    assert_eq!(t.counters(h, counters::PLUS1), 3);
+    h
+}
+

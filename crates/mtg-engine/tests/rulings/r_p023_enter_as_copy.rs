@@ -507,18 +507,6 @@ fn jwari_shapeshifter_copying_a_clone_of_an_ally() {
 
 // --- {X} in the copied mana cost -------------------------------------------------------------
 
-/// `p`'s Benevolent Hydra ({X}{G}{G}, enters with X +1/+1 counters), cast with X = 3.
-pub fn hydra_cast_with_x3(t: &mut TestGame, p: PlayerId) -> ObjectId {
-    supported("Benevolent Hydra");
-    t.lands(p, "Forest", 5);
-    let h = t.hand(p, "Benevolent Hydra");
-    t.cast(p, h).x(3).go();
-    t.resolve_all();
-    let h = t.named_on_battlefield("Benevolent Hydra")[0];
-    assert_eq!(t.counters(h, counters::PLUS1), 3);
-    h
-}
-
 fn copy_of_hydra_has_x_zero(copier: &str) {
     let mut t = TestGame::new(2);
     let hydra = hydra_cast_with_x3(&mut t, P0);

@@ -49,6 +49,15 @@ fn exception_clauses(masked: &str) -> Vec<String> {
     s.split('|').map(|x| x.trim().to_string()).collect()
 }
 
+/// "black", "red and white": a color list replacing the copied colors (CR 105.3).
+fn only_colors(s: &str) -> Option<ColorSet> {
+    let mut colors = ColorSet::NONE;
+    for w in s.split_whitespace().filter(|w| *w != "and") {
+        colors.insert(Color::from_word(w.trim_end_matches(','))?);
+    }
+    (!colors.is_colorless()).then_some(colors)
+}
+
 /// "4/4" → (4, 4).
 fn pt(w: &str) -> Option<(i32, i32)> {
     let (p, t) = w.split_once('/')?;
@@ -235,6 +244,9 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(colors) = only_colors(r) {
+                // "except the token is black" (Penumbra Umbra).
+                out.push(Modification::SetColors(colors));
             } else {
                 out.extend(replaced_characteristics(r)?);
             }
