@@ -307,6 +307,16 @@ fn that_much_life(l: &str, b: &mut Builder) -> Option<Effect> {
         // Imperative: "gain that much life".
         let verb = &l[..l.len() - r.len()];
         (PlayerRef::You, format!("{}s {r}", verb.trim()))
+    } else if let Some(r) = l
+        .strip_prefix("its controller ")
+        .or_else(|| l.strip_prefix("their controller "))
+    {
+        // "Whenever a Sliver deals damage, its controller gains that much life.": the
+        // controller of the trigger's object (not a target).
+        if super::oracle_hardening_referents::is_no_referent(&b.it) {
+            return None;
+        }
+        (PlayerRef::ControllerOf(Box::new(b.it.clone())), r.to_string())
     } else {
         let with_space = format!("{l} ");
         let (who, spec, rest) = parse_player(&with_space)?;

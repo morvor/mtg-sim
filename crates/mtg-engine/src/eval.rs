@@ -1006,7 +1006,9 @@ impl Game {
             Value::LifeTotal(r) => self
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
-            Value::StartingLife => self.config.starting_life as i64,
+            // CR 119.1: "your starting life total" — the variant's (Two-Headed Giant team,
+            // Commander, Archenemy, ...), not only the configured default.
+            Value::StartingLife => crate::life_totals::starting_life(self, ctx.controller) as i64,
             // CR 800.4i: for a player who left the game, as last known.
             Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
                 crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64
