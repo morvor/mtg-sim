@@ -1846,6 +1846,11 @@ pub enum ReplacementAction {
     Subtract(Value),
     /// Redirect damage to the selection.
     Redirect(Sel),
+    /// Redirect the next N damage to the selection: a redirection shield that is used up
+    /// ("the next 1 damage that would be dealt to ~ this turn is dealt to target creature
+    /// you control instead", CR 614.9). Damage beyond what's left of the shield is dealt
+    /// to the original recipient.
+    RedirectNext(Sel, Value),
     /// Do something else entirely instead.
     Instead(Box<Effect>),
     /// Perform the original event and then an additional effect.

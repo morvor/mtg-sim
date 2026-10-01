@@ -1488,6 +1488,9 @@ impl Game {
         self.post_replacement_effects
             .extend(followups.into_iter().flatten().map(|(_, c, e)| (c, e)));
         crate::prevention::merge_prevention_events(self, first_event);
+        // Damage a source would deal to one recipient that redirection effects split
+        // (CR 614.9) and brought back together is still dealt at once, as one event.
+        let finals = merge_damage_events(finals);
         // CR 120.10: what would be excess damage, as the damage is about to be dealt.
         let excess_before = crate::excess_damage::thresholds_before(
             self,
@@ -1826,4 +1829,35 @@ impl Game {
         // CR 106.12a: "tapped for mana" is reported once the whole mana ability has
         // resolved, with all the mana it produced (see `Game::activate_ability`).
     }
+}
+
+/// Merges simultaneous damage events with the same source, recipient, and kind (combat or
+/// noncombat) into one, keeping the order of first occurrence.
+fn merge_damage_events(events: Vec<ReplEvent>) -> Vec<ReplEvent> {
+    let mut out: Vec<ReplEvent> = Vec::with_capacity(events.len());
+    for e in events {
+        if let ReplEvent::Damage {
+            source,
+            target,
+            amount,
+            combat,
+        } = &e
+        {
+            let same = out.iter_mut().find_map(|x| match x {
+                ReplEvent::Damage {
+                    source: s,
+                    target: t,
+                    amount: a,
+                    combat: c,
+                } if s == source && t == target && c == combat => Some(a),
+                _ => None,
+            });
+            if let Some(a) = same {
+                *a += *amount;
+                continue;
+            }
+        }
+        out.push(e);
+    }
+    out
 }

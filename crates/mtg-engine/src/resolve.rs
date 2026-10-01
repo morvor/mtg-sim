@@ -645,7 +645,8 @@ impl Game {
                 };
                 let remaining = match &def.action {
                     ReplacementAction::PreventAmount(v)
-                    | ReplacementAction::PreventAndThen(Some(v), _) => {
+                    | ReplacementAction::PreventAndThen(Some(v), _)
+                    | ReplacementAction::RedirectNext(_, v) => {
                         Some(self.eval_value(v, ctx).max(0) as u32)
                     }
                     _ => None,
