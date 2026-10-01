@@ -154,6 +154,9 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
+            if let Some(o) = self.observer.clone() {
+                (o.0)(self, ev);
+            }
             once_delayed.extend(self.detect_triggers(ev, &recent));
         }
         self.check_batch_triggers(&events[batch_start..]);

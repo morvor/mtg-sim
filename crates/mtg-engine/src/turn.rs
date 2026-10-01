@@ -236,6 +236,8 @@ impl Game {
         crate::planechase::shuffle_planar_decks(self);
         // CR 717.2, 103.3a: and Attraction decks.
         crate::attraction_cards::shuffle_attraction_decks(self);
+        // And scheme decks.
+        crate::variants::shuffle_scheme_decks(self);
         // CR 613.7i, 613.7j: vanguard and conspiracy card timestamps.
         crate::variants::begin_game(self);
         // CR 103.4, 119.1: each player's life total becomes their starting life total
@@ -244,6 +246,7 @@ impl Game {
         // CR 407.2: when playing for ante, each player antes a random card before any
         // cards are drawn.
         crate::ante::ante_at_start(self);
+        crate::library::stack_starting_libraries(self);
         // CR 103.5: draw opening hands, then mulligans.
         for p in self.apnap() {
             for _ in 0..self.starting_hand_size(p) {

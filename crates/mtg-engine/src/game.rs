@@ -115,6 +115,12 @@ pub struct GameConfig {
     /// rules.
     #[serde(default)]
     pub archenemy: bool,
+    /// A stacked start, for simulations and tests: after the libraries are shuffled to
+    /// start the game (CR 103.3), the cards with these names (per player, top first; each
+    /// name finds one more card) are put on top of that player's library, so they're
+    /// drawn in the opening hand.
+    #[serde(default)]
+    pub top_of_library: Vec<Vec<SmolStr>>,
 }
 
 impl Default for GameConfig {
@@ -144,6 +150,7 @@ impl Default for GameConfig {
             player_ranges: vec![],
             planechase: false,
             archenemy: false,
+            top_of_library: vec![],
         }
     }
 }
@@ -470,6 +477,19 @@ impl std::fmt::Debug for Agents {
     }
 }
 
+/// A callback that sees every event as [`Game::flush_events`] processes it, with the game
+/// as it is then (before triggered abilities are detected for it). For simulations and
+/// coverage tools: it doesn't change the game. Cloning a [`Game`] shares the observer;
+/// clear it on a clone used to look ahead.
+#[derive(Clone)]
+pub struct EventObserver(pub Arc<dyn Fn(&Game, &Event) + Send + Sync>);
+
+impl std::fmt::Debug for EventObserver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EventObserver")
+    }
+}
+
 /// Active static abilities after layer computation, for fast rule queries.
 #[derive(Clone, Debug, Default)]
 pub struct ActiveStatics {
@@ -638,6 +658,8 @@ pub struct Game {
     /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
     pub multiplayer: crate::multiplayer::MultiplayerState,
     pub planechase: crate::planechase::PlanarState,
+    /// Watches every event as it's processed (see [`EventObserver`]).
+    pub observer: Option<EventObserver>,
 }
 
 impl Game {
@@ -744,6 +766,7 @@ impl Game {
             modal_history: Default::default(),
             multiplayer: Default::default(),
             planechase: Default::default(),
+            observer: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
