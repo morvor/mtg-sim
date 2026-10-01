@@ -142,3 +142,31 @@ fn random_agents_pass_after_acting_repeatedly_in_a_step() {
     // With a constant 0.8 it would act about 160 times.
     assert!(acted < 40, "acted {acted} times in one step");
 }
+
+#[test]
+fn an_event_observer_sees_every_event_without_changing_the_game() {
+    use mtg_engine::events::Event;
+    use mtg_engine::game::EventObserver;
+    use std::sync::{Arc, Mutex};
+    let mut t = TestGame::new(2);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen2 = seen.clone();
+    t.g.observer = Some(EventObserver(Arc::new(move |g, ev| {
+        let what = match ev {
+            Event::SpellCast { spell, .. } => format!("cast {}", g.obj(*spell).chars.name),
+            Event::Damage { amount, .. } => format!("damage {amount}"),
+            Event::SpellResolved { .. } => "resolved".to_string(),
+            _ => return,
+        };
+        seen2.lock().unwrap().push(what);
+    })));
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["cast Lightning Bolt", "damage 3", "resolved"]
+    );
+}
