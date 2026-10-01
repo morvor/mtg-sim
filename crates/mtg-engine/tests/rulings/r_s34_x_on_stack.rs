@@ -227,3 +227,49 @@ fn phyrexian_symbols_count_1_each_toward_mana_value() {
     t.resolve();
     assert_eq!(t.life(P0), 14);
 }
+
+#[test]
+fn the_lord_of_pain_deals_the_first_spell_s_mana_value_with_x() {
+    cr!("202.3e", "107.3a", "115.1");
+    ruling!(
+        "The Lord of Pain",
+        "If a spell has {X} in its mana cost, use the value chosen for X when determining that spell's mana value."
+    );
+    ruling!(
+        "The Lord of Pain",
+        "The Lord of Pain's last ability must target a player other than the one who cast the spell that caused the ability to trigger. That means that if it's just you and one other player in the game, you'll have to target yourself"
+    );
+    supported("The Lord of Pain");
+    // "Whenever a player casts their first spell each turn, choose another target player.
+    // The Lord of Pain deals damage equal to that spell's mana value to the chosen
+    // player." P0 casts Blaze with X = 2 (mana value 3) as their first spell: P1 is the
+    // only other player and takes 3 (and Blaze's 2).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Lord of Pain");
+    let from = t.asked().len();
+    p0_blaze(&mut t, 2);
+    t.resolve();
+    let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert_eq!(offered.last().unwrap(), &vec![Entity::Player(P1)]);
+    assert_eq!(t.life(P1), 17);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+    // P0's second spell this turn doesn't trigger it.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 12);
+    // P1's first spell, Blaze with X = 3 (mana value 4): P0 must target themself.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Lord of Pain");
+    let from = t.asked().len();
+    p1_blaze(&mut t, 3);
+    t.resolve();
+    let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert_eq!(offered.last().unwrap(), &vec![Entity::Player(P0)]);
+    assert_eq!(t.life(P0), 16);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 13);
+    assert_eq!(t.life(P1), 20);
+}
