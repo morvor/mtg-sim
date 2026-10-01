@@ -221,6 +221,7 @@ pub fn free_cast_options(
         && o.card
             .as_ref()
             .is_some_and(|d| d.layout == crate::card::Layout::Split)
+        && !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, FaceState::Fused))
     {
         let mut f = CastOption::normal(FaceState::Fused);
         f.method = CastMethod::Keyword(KeywordKind::Fuse);

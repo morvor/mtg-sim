@@ -263,7 +263,7 @@ fn ruby_medallion_changes_only_the_total_cost() {
 
 #[test]
 fn sanctum_prelate_still_stops_a_spell_whose_cost_was_changed() {
-    cr!("601.2f", "202.3", "101.2");
+    cr!("601.2f", "202.3");
     ruling!(
         "Sanctum Prelate",
         "Effects that increase or reduce the cost to cast a spell don't affect that spell's mana value."
