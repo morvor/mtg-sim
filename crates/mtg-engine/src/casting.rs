@@ -213,6 +213,19 @@ pub fn free_cast_options(
             opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
         }
     }
+    // CR 702.102a: a split card with fuse cast from its caster's hand may be cast as both
+    // halves, a fused split spell with the combined mana value (CR 702.102b).
+    let o = g.obj(card);
+    if o.zone == Zone::Hand(p)
+        && o.chars.has_keyword(KeywordKind::Fuse)
+        && o.card
+            .as_ref()
+            .is_some_and(|d| d.layout == crate::card::Layout::Split)
+    {
+        let mut f = CastOption::normal(FaceState::Fused);
+        f.method = CastMethod::Keyword(KeywordKind::Fuse);
+        opts.push(f);
+    }
     opts.into_iter()
         .filter_map(|mut opt| {
             opt.alt_cost = Some(Cost::free());
