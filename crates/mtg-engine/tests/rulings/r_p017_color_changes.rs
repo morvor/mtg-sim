@@ -762,3 +762,68 @@ fn neurok_transmuter_on_a_march_of_the_machines_creature_leaves_no_types() {
     assert!(t.on_battlefield(ring));
     assert!(o.chars.card_types.is_empty(), "{:?}", o.chars.card_types);
 }
+
+// ---------------------------------------------------------------------------
+// Life and Limb
+// ---------------------------------------------------------------------------
+
+#[test]
+fn life_and_limb_makes_forests_and_saprolings_both() {
+    cr!("205.3d", "205.3i", "305.6", "613.1d");
+    ruling!(
+        "Life and Limb",
+        "Each Forest and Saproling will have the card types creature and land, and the subtypes Forest and Saproling."
+    );
+    ruling!(
+        "Life and Limb",
+        "Each Forest has the ability \"{T}: Add {G}.\""
+    );
+    supported("Life and Limb");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Life and Limb");
+    let forest = t.battlefield(P0, "Forest");
+    let sap = crate::r_s02_common::create_token(&mut t, P0, "Saproling");
+    for id in [forest, sap] {
+        let o = t.obj_now(id);
+        assert!(o.is(CardType::Creature) && o.is(CardType::Land));
+        assert!(o.chars.has_subtype("Forest") && o.chars.has_subtype("Saproling"));
+        assert_eq!(t.pt(id), (1, 1));
+        assert_eq!(colors(&mut t, id), of(&[Color::Green]));
+    }
+    // Once P0 has controlled it since the start of the turn, the Saproling taps for {G}.
+    next_turn(&mut t);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(tap_for_mana(&mut t, P0, sap, "{G}"));
+}
+
+#[test]
+fn life_and_limb_forests_enter_as_creatures() {
+    cr!("302.6", "603.6a");
+    ruling!(
+        "Life and Limb",
+        "Forests enter the battlefield as land creatures, and abilities that trigger whenever a creature enters the battlefield will trigger. Because you haven't controlled these creatures since your turn began, you can't pay the {T} cost of their mana ability."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Life and Limb");
+    t.battlefield(P0, "Soul Warden");
+    let forest = t.enter(P0, "Forest");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    assert!(!tap_for_mana(&mut t, P0, forest, "{G}"));
+}
+
+#[test]
+fn life_and_limb_saprolings_enter_as_lands() {
+    cr!("305.6", "603.6a");
+    ruling!(
+        "Life and Limb",
+        "Saprolings enter the battlefield as land creatures, and abilities that trigger whenever a land enters the battlefield will trigger."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Life and Limb");
+    let geopede = t.battlefield(P0, "Plated Geopede");
+    crate::r_s02_common::create_token(&mut t, P0, "Saproling");
+    t.resolve_all();
+    assert_eq!(t.pt(geopede), (3, 3));
+}
