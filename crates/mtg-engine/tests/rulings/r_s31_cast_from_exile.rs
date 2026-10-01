@@ -281,3 +281,48 @@ fn chandras_exiled_card_isnt_cast_without_paying_and_then_she_deals_damage() {
     assert!(t.on_battlefield(giant));
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn spark_of_creativity_counts_x_as_0_for_the_exiled_cards_mana_value() {
+    cr!("202.3e", "107.3b", "608.2h");
+    ruling!(
+        "Spark of Creativity",
+        "If a card in exile has {X} in its mana cost, X is considered to be 0."
+    );
+    supported("Spark of Creativity");
+    // "Choose target creature. Exile the top card of your library. You may have Spark of
+    // Creativity deal damage to that creature equal to the exiled card's mana value. If
+    // you don't, you may play that card until end of turn." Primordial Hydra ({X}{G}{G})
+    // has mana value 2 in exile.
+    let mut t = TestGame::new(2);
+    let hydra = t.library_top(P0, "Primordial Hydra");
+    let giant = t.battlefield(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    let spark = t.hand(P0, "Spark of Creativity");
+    t.answer_yes(P0, true);
+    t.cast(P0, spark).target(giant).go();
+    t.resolve_all();
+    assert_eq!(t.zone(hydra), Zone::Exile);
+    assert_eq!(t.obj_now(giant).damage, 2);
+    // P0 dealt the damage: no permission to play the Hydra.
+    add_mana(&mut t, P0, ManaType::G, 2);
+    t.g.turn.priority = Some(P0);
+    let c = t.g.current(hydra);
+    assert!(crate::r_s07_common::cast_methods(&mut t, P0, c).is_empty());
+    // Declining the damage, P0 may play it this turn instead.
+    let mut t = TestGame::new(2);
+    let hydra = t.library_top(P0, "Primordial Hydra");
+    let giant = t.battlefield(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    let spark = t.hand(P0, "Spark of Creativity");
+    t.answer_yes(P0, false);
+    t.cast(P0, spark).target(giant).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).damage, 0);
+    add_mana(&mut t, P0, ManaType::G, 3);
+    let c = t.g.current(hydra);
+    t.cast(P0, c).x(1).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(hydra));
+    assert_eq!(t.counters(hydra, "+1/+1"), 1);
+}

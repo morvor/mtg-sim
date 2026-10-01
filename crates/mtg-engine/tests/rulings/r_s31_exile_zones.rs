@@ -230,3 +230,35 @@ fn vren_exiles_only_dying_creatures_and_counts_them_at_end_step() {
     assert_eq!(rats.len(), 1);
     assert_eq!(t.pt(rats[0]), (2, 2));
 }
+
+/// P0's Summoner's Sending ("At the beginning of your end step, you may exile target
+/// creature card from a graveyard. If you do, create a 1/1 white Spirit creature token with
+/// flying. Put a +1/+1 counter on it if the exiled card's mana value is 4 or greater.")
+/// exiles `name` from P1's graveyard. Returns the Spirit token's P/T.
+fn summoners_sending_exiles(name: &str) -> (i32, i32) {
+    supported("Summoner's Sending");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Summoner's Sending");
+    let card = t.graveyard(P1, name);
+    t.answer_targets(P0, &[Entity::Object(card)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert_eq!(t.zone(card), Zone::Exile);
+    let spirits = crate::r_s01_common::tokens(&t, P0);
+    assert_eq!(spirits.len(), 1);
+    t.pt(spirits[0])
+}
+
+#[test]
+fn summoners_sending_counts_x_as_0_in_the_exiled_cards_mana_value() {
+    cr!("202.3e", "107.3b", "608.2h");
+    ruling!(
+        "Summoner's Sending",
+        "If the exiled card has {X} in its mana cost, X is 0 for the purpose of determining its mana value."
+    );
+    // Primordial Hydra ({X}{G}{G}) has mana value 2: no counter. Craw Wurm (mana value 6)
+    // gets one.
+    assert_eq!(summoners_sending_exiles("Primordial Hydra"), (1, 1));
+    assert_eq!(summoners_sending_exiles("Craw Wurm"), (2, 2));
+}

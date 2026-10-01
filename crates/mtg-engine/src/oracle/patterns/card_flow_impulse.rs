@@ -20,6 +20,9 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "card_flow: you may cast that card (now)", priority: 90, apply: may_cast_it_now }
 }
+inventory::submit! {
+    EffectPattern { name: "card_flow: you may play that card until end of turn (the card just moved)", priority: 90, parse: may_play_that_card }
+}
 
 /// "the top card of", "the top N cards of" + a library.
 fn top_cards_of<'a>(s: &'a str) -> Option<(Value, &'a str)> {
@@ -185,4 +188,25 @@ fn may_cast_it_now(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         },
     ]);
     true
+}
+
+/// "You may play that card until end of turn." as an instruction of its own, "that card"
+/// being the card the previous instruction moved ("If you don't, you may play that card
+/// until end of turn.", Spark of Creativity): a permission for that object (CR 400.7).
+fn may_play_that_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let duration = match end(l) {
+        "you may play that card until end of turn" | "you may play that card this turn" => {
+            Duration::EndOfTurn
+        }
+        _ => return None,
+    };
+    if !matches!(&b.it, Sel::Var(v) if *v == vars::IT) {
+        return None;
+    }
+    Some(Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: Sel::Var(vars::IT),
+        duration,
+        free: false,
+    })
 }
