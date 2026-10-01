@@ -104,6 +104,15 @@ impl KeywordRules for OnceEachTurnCast {
         {
             return;
         }
+        // Nor one cast with its own "you may cast this card from your graveyard by ..."
+        // ability.
+        if cast
+            .paid
+            .iter()
+            .any(|x| x.as_str() == super::cast_self_from_graveyard::TAG)
+        {
+            return;
+        }
         let mut sources: Vec<ObjectId> = Vec::new();
         for id in g.battlefield.clone() {
             let o = g.obj(id);
