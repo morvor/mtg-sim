@@ -9,6 +9,7 @@ use crate::r_s27_common::can_activate_containing;
 use crate::r_s04_common::add_mana;
 use crate::r_s06_common::attach_new;
 use crate::r_s20_common::tap_for_mana;
+use crate::r_s21_common::legal_blocks;
 use crate::r_s24_common::pool;
 use crate::r_s25_common::cast_new;
 use crate::r_s32_common::*;
@@ -457,4 +458,62 @@ fn lands_that_become_creatures_keep_their_other_types_and_abilities() {
     assert_eq!(subtypes_now(&t, land), vec!["Forest"]);
     assert_eq!(t.pt(land), (1, 1));
     assert_eq!(mana_from(&mut t, P0, land, "{G}"), vec![ManaType::G]);
+}
+
+#[test]
+fn a_chosen_land_type_may_be_any_existing_land_type() {
+    cr!("205.3i", "702.14a", "702.14c", "607.2d");
+    ruling!(
+        "Traveler's Cloak",
+        "Can affect basic or non-basic types, but it must be for a specific type. The chosen type must be an existing land type."
+    );
+    supported("Traveler's Cloak");
+    supported("Shimmer");
+    let types = mtg_engine::types::land_types();
+    let desert = types.iter().position(|x| x == "Desert").unwrap();
+    // Traveler's Cloak: "As this Aura enters, choose a land type." and "Enchanted creature
+    // has landwalk of the chosen type." P0 chooses Desert.
+    let setup = |p1_land: &str| {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let blocker = t.battlefield(P1, "Hill Giant");
+        t.battlefield(P1, p1_land);
+        t.lands(P0, "Island", 3);
+        let cloak = t.hand(P0, "Traveler's Cloak");
+        let from = t.asked().len();
+        t.answer(P0, DecisionKind::Option, Answer::Index(desert));
+        t.cast(P0, cloak).target(bears).go();
+        t.resolve_all();
+        (t, bears, blocker, from)
+    };
+    let (mut t, bears, blocker, from) = setup("Sunscorched Desert");
+    let offered = options_offered(&t, from);
+    assert_eq!(offered.len(), 1);
+    let offered = &offered[0];
+    // Basic and nonbasic land types; nothing else.
+    for ty in ["Forest", "Island", "Desert", "Gate", "Lair", "Town", "Urza's"] {
+        assert!(offered.iter().any(|o| o == ty), "{ty} in {offered:?}");
+    }
+    for not in ["Wastes", "Snow", "Basic", "Snarl", "Elf", "Aura"] {
+        assert!(!offered.iter().any(|o| o == not), "{not} in {offered:?}");
+    }
+    // Desertwalk: unblockable while P1 controls a Desert.
+    t.set_step(P0, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(!legal_blocks(&mut t, P1, &[(blocker, bears)]));
+    let (mut t, bears, blocker, _) = setup("Forest");
+    t.set_step(P0, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(legal_blocks(&mut t, P1, &[(blocker, bears)]));
+    // Shimmer: "As this enchantment enters, choose a land type." and "Each land of the
+    // chosen type has phasing." Gate.
+    let gate = types.iter().position(|x| x == "Gate").unwrap();
+    let mut t = TestGame::new(2);
+    let guildgate = t.battlefield(P1, "Simic Guildgate");
+    let forest = t.battlefield(P1, "Forest");
+    t.answer(P0, DecisionKind::Option, Answer::Index(gate));
+    t.enter(P0, "Shimmer");
+    t.g.recompute();
+    assert!(t.obj(guildgate).has_keyword(mtg_engine::keywords::KeywordKind::Phasing));
+    assert!(!t.obj(forest).has_keyword(mtg_engine::keywords::KeywordKind::Phasing));
 }

@@ -340,6 +340,8 @@ pub struct Choices {
     pub card_name: Option<SmolStr>,
     pub number: Option<i32>,
     pub player: Option<PlayerId>,
+    /// The chosen basic land type ("choose a basic land type"), or any land type ("choose
+    /// a land type").
     pub basic_land_type: Option<Subtype>,
     pub card_type: Option<CardType>,
     /// Modal permanent choices (anchor words, CR 614.12c), etc.
