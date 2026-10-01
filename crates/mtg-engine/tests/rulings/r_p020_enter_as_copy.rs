@@ -325,3 +325,107 @@ fn dacks_duplicate_copies_printed_values_plus_haste_and_dethrone() {
     assert_eq!(t.pt(c), (3, 3));
     assert!(crate::r_s26_common::fresh(&t, c));
 }
+
+#[test]
+fn evil_twin_has_the_copied_enters_abilities_and_destroys_its_namesake() {
+    cr!("707.2", "707.9a", "614.1c", "603.6a", "201.2");
+    ruling!(
+        "Evil Twin",
+        "Any enters-the-battlefield abilities of the copied creature will trigger when Evil Twin enters the battlefield. Any \"as [this creature] enters the battlefield\" or \"[this creature] enters the battlefield with\" abilities of the chosen creature will also work."
+    );
+    // "..., except it has \"{U}{B}, {T}: Destroy target creature with the same name as
+    // ~.\""
+    let (mut t, c) = clone_riftwatcher("Evil Twin", P1);
+    let rift = t.named_on_battlefield(RIFTWATCHER)
+        .into_iter()
+        .find(|id| *id != t.g.current(c))
+        .unwrap();
+    // (As if it had been under P0's control since the turn began.)
+    let now = t.g.current(c);
+    t.g.objects[now.0 as usize].summoning_sick = false;
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 1);
+    crate::r_s06_common::activate_containing(&mut t, P0, c, "Destroy target creature")
+        .map(|_| ())
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    t.resolve_all();
+    assert!(!t.on_battlefield(rift));
+    assert!(t.on_battlefield(t.g.current(c)));
+}
+
+#[test]
+fn mocking_doppelganger_has_the_copied_enters_abilities() {
+    cr!("707.2", "707.9a", "614.1c", "603.6a");
+    ruling!(
+        "Mocking Doppelganger",
+        "Any enters-the-battlefield abilities of the copied creature will trigger when Mocking Doppelganger enters the battlefield. Any “as [this creature] enters the battlefield” or “[this creature] enters the battlefield with” abilities of the chosen creature will also work."
+    );
+    // "..., except it has \"Other creatures with the same name as ~ are goaded.\"": the
+    // opponent's Aven Riftwatcher is goaded by P0, the copy isn't.
+    let (t, c) = clone_riftwatcher("Mocking Doppelganger", P1);
+    let c = t.g.current(c);
+    let rift = t.named_on_battlefield(RIFTWATCHER)
+        .into_iter()
+        .find(|id| *id != c)
+        .unwrap();
+    assert_eq!(t.g.goaders(rift), vec![P0]);
+    assert!(t.g.goaders(c).is_empty());
+}
+
+/// Callidus Assassin enters tapped as a copy of P1's Aven Riftwatcher; its own "When ~
+/// enters, destroy up to one other target creature with the same name as ~" triggers
+/// along with the copied enters trigger. Returns (game, Assassin, P1's Riftwatcher).
+fn callidus_copies_riftwatcher() -> (TestGame, ObjectId, ObjectId) {
+    supported("Callidus Assassin");
+    let mut t = TestGame::new(2);
+    let rift = t.battlefield(P1, RIFTWATCHER);
+    let life = t.life(P0);
+    t.answer_choose(P0, &[Entity::Object(rift)]);
+    t.answer_targets(P0, &[Entity::Object(rift)]);
+    let c = t.enter(P0, "Callidus Assassin");
+    t.settle();
+    // Both triggers are on the stack.
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    entered_as_riftwatcher(&t, c);
+    assert!(t.obj_now(c).tapped);
+    assert_eq!(t.life(P0), life + 2);
+    (t, c, rift)
+}
+
+#[test]
+fn callidus_assassin_has_the_copied_enters_abilities_and_its_own_trigger() {
+    cr!("707.2", "707.9a", "614.1c", "603.6a", "603.3b");
+    ruling!(
+        "Callidus Assassin",
+        "Any enters-the-battlefield abilities of the copied creature will trigger when Callidus Assassin enters the battlefield. You get to choose the order of those abilities and the triggered ability it has due to its copy effect."
+    );
+    let (t, _, rift) = callidus_copies_riftwatcher();
+    assert!(!t.on_battlefield(rift));
+}
+
+#[test]
+fn callidus_assassin_copies_printed_values_and_has_the_triggered_ability() {
+    cr!("707.2", "707.9a");
+    ruling!(
+        "Callidus Assassin",
+        "Callidus Assassin copies exactly what was printed on the original creature (unless that creature is copying something else or is a token; see below) and it has the triggered ability."
+    );
+    supported("Callidus Assassin");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    crate::r_s26_common::dress_up(&mut t, giant);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let c = t.enter(P0, "Callidus Assassin");
+    let o = t.obj_now(c);
+    assert_eq!(o.chars.name, "Hill Giant");
+    assert!(o.chars.colors.contains(Color::Red) && !o.chars.colors.contains(Color::Green));
+    assert_eq!(t.counters(c, counters::PLUS1), 0);
+    assert_eq!(t.pt(c), (3, 3));
+    assert!(o.chars.abilities.iter().any(|a| a.text.contains("same name")));
+    // Its trigger destroys the original Hill Giant (the "other" creature with its name).
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+    assert!(t.on_battlefield(t.g.current(c)));
+}

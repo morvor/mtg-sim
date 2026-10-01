@@ -215,7 +215,10 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
         }
     }
     // "named ~": the same name as this object (CR 201.2).
-    if let Some(r) = t.strip_prefix("named ~") {
+    if let Some(r) = t
+        .strip_prefix("named ~")
+        .or_else(|| t.strip_prefix("with the same name as ~"))
+    {
         if r.is_empty() || r.starts_with([' ', ',']) {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
