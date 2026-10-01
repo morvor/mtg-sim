@@ -531,3 +531,41 @@ fn protection_from_artifacts() {
         assert!(t.g.can_block(bears, me), "{name}");
     }
 }
+
+#[test]
+fn corruption_counters_stay_and_a_later_dihada_has_protection_from_them() {
+    cr!("702.16a", "702.16b", "702.16e", "122.1", "400.7");
+    ruling!(
+        "Geyadrone Dihada",
+        "When Dihada leaves the battlefield, permanents keep their corruption counters. If you later control another Geyadrone Dihada, it will have protection from those permanents."
+    );
+    supported("Geyadrone Dihada");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let dihada = t.enter(P0, "Geyadrone Dihada");
+    let corrupted = t.battlefield(P1, "Prodigal Pyromancer");
+    let clean = t.battlefield(P1, "Prodigal Pyromancer");
+    // +1: "... Put a corruption counter on up to one other target creature or
+    // planeswalker."
+    t.activate(P0, dihada, 0, &[Entity::Object(corrupted)])
+        .expect("+1");
+    t.resolve_all();
+    assert_eq!(t.counters(corrupted, "corruption"), 1);
+    assert!(!ability_can_target(&mut t, corrupted, dihada));
+    assert!(ability_can_target(&mut t, clean, dihada));
+    // Dihada leaves; the counter stays.
+    crate::r_s02_common::destroy(&mut t, dihada);
+    assert!(t.in_graveyard(P0, "Geyadrone Dihada"));
+    assert_eq!(t.counters(corrupted, "corruption"), 1);
+    // A later Dihada has protection from the corrupted permanent.
+    let again = t.enter(P0, "Geyadrone Dihada");
+    assert!(!ability_can_target(&mut t, corrupted, again));
+    assert!(ability_can_target(&mut t, clean, again));
+    let loyalty = t.counters(again, counters::LOYALTY);
+    t.g.deal_damage(corrupted, Entity::Object(again), 1, false);
+    t.settle();
+    assert_eq!(t.counters(again, counters::LOYALTY), loyalty);
+    t.g.deal_damage(clean, Entity::Object(again), 1, false);
+    t.settle();
+    assert_eq!(t.counters(again, counters::LOYALTY), loyalty - 1);
+}

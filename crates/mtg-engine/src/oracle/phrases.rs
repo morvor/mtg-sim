@@ -821,6 +821,19 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // "with corruption counters on them", "with +1/+1 counters on them" (a plural
+    // subject: each one with one or more counters of that kind).
+    if !negate {
+        let (kind, r2) = split_word(rest);
+        if let Some(tail) = r2.strip_prefix("counters on them") {
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || (!kind.is_empty() && kind.chars().all(|c| c.is_alphabetic()))
+            {
+                return Some((Filter::HasCounter(Some(kind.into())), tail));
+            }
+        }
+    }
     // Two-word keywords first ("first strike", "double strike").
     let words: Vec<&str> = rest.splitn(3, ' ').collect();
     for n in [2usize, 1] {
