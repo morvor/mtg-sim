@@ -4,7 +4,7 @@
 //! protection from each color (CR 702.16).
 
 use crate::r_s01_common::*;
-use crate::r_s04_common::{ability_targets, add_mana, spell_targets};
+use crate::r_s04_common::{ability_targets, add_mana, hand_names, spell_targets};
 use crate::r_s06_common::has_kw;
 use crate::r_s05_common::move_to;
 use crate::r_s13_common::pregame;
@@ -353,4 +353,56 @@ fn a_card_revealed_at_random_from_an_empty_hand_has_mana_value_0() {
         .expect("activate Planeswalker's Scorn");
     t.resolve_all();
     assert_eq!(t.pt(bears), (1, 1));
+}
+
+#[test]
+fn the_face_down_pile_put_into_your_hand_isnt_revealed() {
+    cr!("700.3a", "701.20a", "402.3");
+    ruling!(
+        "Atris, Oracle of Half-Truths",
+        "You don't have to reveal the cards in the face-down pile if you put it into your hand."
+    );
+    supported("Atris, Oracle of Half-Truths");
+    supported("Riddles in the Dark");
+    // Atris: "When Atris enters, target opponent looks at the top three cards of your
+    // library and separates them into a face-down pile and a face-up pile. Put one pile
+    // into your hand and the other into your graveyard." P1 puts Grizzly Bears face down.
+    let mut t = TestGame::new(2);
+    let top = stack_library(&mut t, P0, &["Grizzly Bears", "Shock", "Hill Giant"]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Object(top[0])]);
+    // P0 takes the face-down pile (pile 1).
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let from = t.asked().len();
+    t.enter(P0, "Atris, Oracle of Half-Truths");
+    t.resolve_all();
+    assert_eq!(hand_names(&t, P0), vec!["Grizzly Bears"]);
+    let mut gy = crate::r_s04_common::graveyard_names(&t, P0);
+    gy.sort();
+    assert_eq!(gy, vec!["Hill Giant", "Shock"]);
+    // The face-up cards were revealed; the face-down card wasn't, and P0 chose between a
+    // face-down pile and the face-up one.
+    let log = t.dump_log();
+    assert!(log.contains("reveals Shock"), "{log}");
+    assert!(!log.contains("reveals Grizzly Bears"), "{log}");
+    let offered = crate::r_s32_common::options_offered(&t, from);
+    assert!(
+        offered.iter().flatten().any(|o| o.contains("face-down pile of 1")),
+        "{offered:?}"
+    );
+    // Riddles in the Dark: "Look at the top four cards of your library and separate them
+    // into a face-down pile and a face-up pile. An opponent chooses one of the piles. Put
+    // that pile into your hand and the other into your graveyard."
+    let mut t = TestGame::new(2);
+    let top = stack_library(&mut t, P0, &["Grizzly Bears", "Shock", "Hill Giant", "Forest"]);
+    t.answer_choose(P0, &[Entity::Object(top[0]), Entity::Object(top[1])]);
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    cast_new(&mut t, P0, "Riddles in the Dark", &[]);
+    t.resolve_all();
+    let mut hand = hand_names(&t, P0);
+    hand.sort();
+    assert_eq!(hand, vec!["Grizzly Bears", "Shock"]);
+    let log = t.dump_log();
+    assert!(!log.contains("reveals Grizzly Bears") && !log.contains("reveals Shock"));
+    assert!(log.contains("reveals Hill Giant"));
 }
