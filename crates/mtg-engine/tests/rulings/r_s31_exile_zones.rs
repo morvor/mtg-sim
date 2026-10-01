@@ -190,3 +190,43 @@ fn cemetery_protector_makes_a_token_for_a_land_after_exiling_a_basic_land() {
     t.resolve_all();
     assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
 }
+
+#[test]
+fn vren_exiles_only_dying_creatures_and_counts_them_at_end_step() {
+    cr!("614.1a", "700.4", "701.9a", "701.17a");
+    ruling!(
+        "Vren, the Relentless",
+        "Cards that would go to your opponent's graveyard for reasons other than dying, such as being discarded or milled, will still go to the graveyard and will not be exiled instead."
+    );
+    supported("Vren, the Relentless");
+    // "If a creature an opponent controls would die, exile it instead. At the beginning of
+    // each end step, create X 1/1 black Rat creature tokens with "This token gets +1/+1
+    // for each other Rat you control," where X is the number of creatures that were
+    // exiled under your opponents' control this turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vren, the Relentless");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let discarded = t.hand(P1, "Hill Giant");
+    let milled = t.library_top(P1, "Craw Wurm");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    // P1's creature dies: exiled instead.
+    crate::r_s02_common::destroy(&mut t, bears);
+    assert_eq!(t.zone(bears), Zone::Exile);
+    // A creature card P1 discards, or that's milled, goes to the graveyard.
+    t.g.discard(P1, discarded, None);
+    t.settle();
+    assert_eq!(t.zone(discarded), Zone::Graveyard(P1));
+    t.g.mill(P1, 1);
+    t.settle();
+    assert_eq!(t.zone(milled), Zone::Graveyard(P1));
+    // P0's own creature dies normally.
+    crate::r_s02_common::destroy(&mut t, mine);
+    assert_eq!(t.zone(mine), Zone::Graveyard(P0));
+    // One creature was exiled under an opponent's control this turn: one Rat token, 2/2
+    // with Vren (a Rat) as the other Rat P0 controls.
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    let rats = crate::r_s01_common::tokens(&t, P0);
+    assert_eq!(rats.len(), 1);
+    assert_eq!(t.pt(rats[0]), (2, 2));
+}

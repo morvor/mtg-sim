@@ -92,9 +92,12 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
         power: None,
         toughness: None,
     };
+    // A comma before the closing quote may be the sentence's rather than the ability's
+    // (`with "[ability]," where X is ...`): compared without it.
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
     for q in quoted_segments(&raw) {
         let with_name = crate::oracle::normalize(q, ctx);
-        if with_name.trim() == normalized.trim() {
+        if bare(&with_name) == bare(normalized) {
             return with_name != crate::oracle::normalize(q, &anonymous);
         }
     }
@@ -579,7 +582,12 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
         ("enchanted land", CardType::Land, true, false),
         ("fortified land", CardType::Land, true, false),
         ("enchanted artifact", CardType::Artifact, false, false),
-        ("enchanted artifact creature", CardType::Creature, false, true),
+        (
+            "enchanted artifact creature",
+            CardType::Creature,
+            false,
+            true,
+        ),
         ("enchanted equipment", CardType::Artifact, false, false),
         ("enchanted enchantment", CardType::Enchantment, false, false),
         (
@@ -623,10 +631,7 @@ fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Optio
     // "~ and enchanted creature" (a bestowed Aura is not a creature, CR 702.103).
     if let Some(r) = s.strip_prefix("~ and ") {
         if matches!(r, "enchanted creature" | "equipped creature") {
-            let mut sub = group_subject(Filter::Or(vec![
-                Filter::Source,
-                Filter::AttachedToSource,
-            ]));
+            let mut sub = group_subject(Filter::Or(vec![Filter::Source, Filter::AttachedToSource]));
             sub.creatures = true;
             return Some(sub);
         }
@@ -960,7 +965,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         ])));
     }
     // "poison counter your opponents have"
-    for tail in [" counter your opponents have", " counters your opponents have"] {
+    for tail in [
+        " counter your opponents have",
+        " counters your opponents have",
+    ] {
         if let Some(kind) = s.strip_suffix(tail) {
             if kind.is_empty() || kind.contains(' ') {
                 return None;
@@ -988,7 +996,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             ])));
         }
     }
-    if matches!(s, "card in your opponents' hands" | "cards in your opponents' hands") {
+    if matches!(
+        s,
+        "card in your opponents' hands" | "cards in your opponents' hands"
+    ) {
         return Some(Value::Count(Filter::and(vec![
             Filter::InZone(ZoneKind::Hand),
             Filter::OwnedBy(PlayerRel::Opponent),
@@ -1024,9 +1035,7 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
                 // Attached to the object the source is attached to.
                 Sel::AttachedTo => Filter::Custom("attached_to_host".into()),
                 // Attached to each affected object.
-                Sel::Var(v) if v == vars::AFFECTED => {
-                    Filter::Custom("attached_to_affected".into())
-                }
+                Sel::Var(v) if v == vars::AFFECTED => Filter::Custom("attached_to_affected".into()),
                 _ => return None,
             };
             let (f, _) = whole_object_phrase(&union_nouns(body))?;
@@ -1315,8 +1324,7 @@ fn type_words(s: &str) -> Option<TypeWords> {
     if let Some(i) = s.find(" with base power and toughness ") {
         tw.pt = Some(base_pt(&s[i + " with base power and toughness ".len()..])?);
         s = &s[..i];
-    } else if let Some(r) =
-        s.strip_suffix(" with power and toughness each equal to its mana value")
+    } else if let Some(r) = s.strip_suffix(" with power and toughness each equal to its mana value")
     {
         // "Each noncreature artifact is an artifact creature with power and toughness
         // each equal to its mana value" (March of the Machines): each affected object's
@@ -1759,7 +1767,9 @@ fn targeting_sources(x: &str) -> Option<Filter> {
             return Some(Filter::Color(c));
         }
         let (f, _) = whole_object_phrase(w)?;
-        if mentions_other_zones(&f) || filter_mentions(&f, &|x| matches!(x, Filter::ControlledBy(_))) {
+        if mentions_other_zones(&f)
+            || filter_mentions(&f, &|x| matches!(x, Filter::ControlledBy(_)))
+        {
             return None;
         }
         Some(f)
@@ -1931,11 +1941,17 @@ fn parse_predicate(
                 // each equal to its mana value" (Opalescence): each affected object's own
                 // mana value (CR 613.4b).
                 let mv = Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED)));
-                return Some(vec![Out::Mod(Modification::SetPT(Some(mv.clone()), Some(mv)))]);
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(mv.clone()),
+                    Some(mv),
+                ))]);
             }
             if let Some(a) = pt.strip_prefix("each equal to ") {
                 let v = parse_amount(a, subj.it.as_ref())?;
-                return Some(vec![Out::Mod(Modification::SetPT(Some(v.clone()), Some(v)))]);
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(v.clone()),
+                    Some(v),
+                ))]);
             }
             let (bp, bt) = base_pt(pt)?;
             return Some(vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))]);
@@ -2152,10 +2168,10 @@ fn parse_body(
         }
         if ok && !outs.is_empty() {
             return Some(Body {
-            subject,
-            outs,
-            also: vec![],
-        });
+                subject,
+                outs,
+                also: vec![],
+            });
         }
     }
     None
@@ -2433,7 +2449,8 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
     }
     let mut sentences = masked.split(". ");
     let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
-    let same_subject = |a: &Body, b: &Body| format!("{:?}", a.subject.filter) == format!("{:?}", b.subject.filter);
+    let same_subject =
+        |a: &Body, b: &Body| format!("{:?}", a.subject.filter) == format!("{:?}", b.subject.filter);
     let mut otherwise = Vec::new();
     let mut first_unless: Option<Condition> = None;
     for sentence in sentences {
@@ -2589,10 +2606,14 @@ pub(crate) fn without_spell(f: Filter) -> Option<Filter> {
     match f {
         Filter::Spell => Some(Filter::Any),
         Filter::And(v) => Some(Filter::and(
-            v.into_iter().map(without_spell).collect::<Option<Vec<_>>>()?,
+            v.into_iter()
+                .map(without_spell)
+                .collect::<Option<Vec<_>>>()?,
         )),
         Filter::Or(v) => Some(Filter::Or(
-            v.into_iter().map(without_spell).collect::<Option<Vec<_>>>()?,
+            v.into_iter()
+                .map(without_spell)
+                .collect::<Option<Vec<_>>>()?,
         )),
         Filter::InZone(_) | Filter::Permanent => None,
         other => Some(other),
@@ -2619,7 +2640,11 @@ fn cast_from_zones(z: &str) -> Option<Filter> {
             _ => return None,
         }));
     }
-    Some(if v.len() == 1 { v.pop()? } else { Filter::Or(v) })
+    Some(if v.len() == 1 {
+        v.pop()?
+    } else {
+        Filter::Or(v)
+    })
 }
 
 /// "your opponents can't cast spells", "players have no maximum hand size", "you have
@@ -2630,7 +2655,10 @@ fn parse_player_body(s: &str) -> Option<Body> {
     // opponent's maximum hand size is reduced by two", "your maximum hand size is five".
     for (p, who) in [
         ("your maximum hand size is ", PlayerFilter::You),
-        ("each opponent's maximum hand size is ", PlayerFilter::Opponent),
+        (
+            "each opponent's maximum hand size is ",
+            PlayerFilter::Opponent,
+        ),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             let m = if let Some(x) = r.strip_prefix("increased by ") {
@@ -2736,12 +2764,11 @@ fn parse_player_body(s: &str) -> Option<Body> {
             // "can't cast [X] spells[ or activate abilities of Y]"
             let r = rest.strip_prefix("can't ")?;
             // "can't cast spells or activate abilities that aren't mana abilities"
-            let (r, non_mana) = match r
-                .strip_suffix(" or activate abilities that aren't mana abilities")
-            {
-                Some(c) => (c, true),
-                None => (r, false),
-            };
+            let (r, non_mana) =
+                match r.strip_suffix(" or activate abilities that aren't mana abilities") {
+                    Some(c) => (c, true),
+                    None => (r, false),
+                };
             let (cast, activate) = match r.split_once(" or activate abilities of ") {
                 Some((c, a)) => (Some(c), Some(a)),
                 None => match r.strip_prefix("activate abilities of ") {

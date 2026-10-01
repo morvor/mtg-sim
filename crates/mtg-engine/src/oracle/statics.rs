@@ -587,6 +587,14 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    if let Some(rest) = s.strip_prefix(
+        "the number of creatures that were exiled under your opponents' control this turn",
+    ) {
+        return Some((
+            Value::Custom("creatures_exiled_from_opponents_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
     // "the total number of instant and sorcery cards you own in exile and in your
     // graveyard" (Beacon Bolt): the cards in either zone.
     if let Some(r) = s
