@@ -516,3 +516,30 @@ fn while_conditions_are_checked_only_as_the_creature_attacks() {
     let _ = Step::Upkeep;
     let _ = Answer::Default;
 }
+
+#[test]
+fn turret_ogre_in_two_headed_giant_costs_the_opposing_team_4_life() {
+    cr!("810.9", "810.4");
+    ruling!(
+        "Turret Ogre",
+        "In a Two-Headed Giant game, Turret Ogre's ability causes the opposing team to lose 4 life."
+    );
+    supported("Turret Ogre");
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    let before = (t.life(P0), t.life(P2));
+    assert_eq!(before, (30, 30));
+    t.battlefield(P0, BIG);
+    enter(&mut t, P0, "Turret Ogre");
+    t.resolve_all();
+    // 2 damage to each of the two opponents: the shared total drops by 4.
+    assert_eq!(t.life(P2), 26);
+    assert_eq!(t.life(P3), 26);
+    assert_eq!(t.life(P0), 30);
+}

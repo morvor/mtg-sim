@@ -2613,6 +2613,12 @@ fn parse_player_body(s: &str) -> Option<Body> {
     for (p, who) in [
         ("your maximum hand size is ", PlayerFilter::You),
         ("each opponent's maximum hand size is ", PlayerFilter::Opponent),
+        // "As ~ enters, choose an opponent. / The chosen player's maximum hand size is
+        // four." (Cursed Rack, CR 607.2d)
+        (
+            "the chosen player's maximum hand size is ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ChosenOpponent)),
+        ),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             let m = if let Some(x) = r.strip_prefix("increased by ") {
