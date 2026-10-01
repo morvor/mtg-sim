@@ -61,7 +61,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "See \"from your graveyard\".",
     },
     Equivalence {
-        pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform)\b",
+        pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform|gain|lose|get|become|take|may|cast|pay|play|win|skip)\b",
         replacement: "$1",
         why: "An instruction without a subject is performed by the ability's controller \
               (CR 608.2c, 113.8): \"draw a card\" and \"you draw a card\" mean the same.",
@@ -87,6 +87,28 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
         replacement: "them",
         why: "Anaphora (plural).",
+    },
+    Equivalence {
+        pattern: r"\band/or\b",
+        replacement: "and",
+        why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
+              and enchantments\" both mean objects that are either.",
+    },
+    Equivalence {
+        pattern: r"\b(it|that|there|what)'s\b",
+        replacement: "$1 is",
+        why: "Contraction.",
+    },
+    Equivalence {
+        pattern: r"\b(adds?) an additional\b",
+        replacement: "$1",
+        why: "A triggered mana ability's mana is added in addition to the mana the \
+              permanent produced (CR 605.1b, 106.12a); \"additional\" restates it.",
+    },
+    Equivalence {
+        pattern: r"\bthem\b",
+        replacement: "it",
+        why: "Pronoun number (grammatical number is ignored).",
     },
     Equivalence {
         pattern: r"\bthey\b",
@@ -381,7 +403,7 @@ fn equivalence_regex(p: &'static str) -> &'static Regex {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Regex> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+), ([^.]+)\.")
+        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
             .unwrap()
     });
     let mut s = s.to_string();
@@ -411,6 +433,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(gets?) ([+-])1/([+-])0 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0, where x is the number of $4$5"),
             (r"\b(gets?) ([+-])0/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x, where x is the number of $4$5"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
+            (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
@@ -441,23 +464,18 @@ const NOT_FLAVOR: &[&str] = &[
 ];
 
 /// Strips a leading ability word (CR 207.2c) or flavor word (CR 207.2d): "Landfall — ".
-fn strip_ability_word(line: &str) -> &str {
+fn strip_ability_word(line: &str) -> String {
     let Some((head, rest)) = line.split_once(" — ") else {
-        return line;
+        return line.to_string();
     };
     // Saga chapters with a flavor word: "I — Aerial Blast — effect" (CR 714.2b, 207.2d).
     if head.split(", ").all(|n| !n.is_empty() && n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))) {
         let inner = strip_ability_word(rest);
-        if inner.len() != rest.len() {
-            let start = line.len() - inner.len();
-            let _ = start;
-            return Box::leak(format!("{head} — {inner}").into_boxed_str());
-        }
-        return line;
+        return format!("{head} — {inner}");
     }
     let h = head.trim().to_lowercase().replace('\u{2019}', "'");
     if ABILITY_WORDS.contains(&h.as_str()) {
-        return rest;
+        return rest.to_string();
     }
     let words: Vec<&str> = head.split_whitespace().collect();
     let flavor = !words.is_empty()
@@ -473,9 +491,9 @@ fn strip_ability_word(line: &str) -> &str {
             n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))
         });
     if flavor {
-        rest
+        rest.to_string()
     } else {
-        line
+        line.to_string()
     }
 }
 
@@ -497,7 +515,7 @@ pub fn oracle_units(text: &str, names: &[String]) -> Vec<String> {
                 continue;
             }
         }
-        lines.push(strip_ability_word(l).to_string());
+        lines.push(strip_ability_word(l));
     }
     let mut out = Vec::new();
     for l in lines {
@@ -665,7 +683,8 @@ pub fn check_card(def: &CardDef) -> CardCheck {
             // several abilities, or several lines to one).
             let all_o: Vec<String> = oracle.iter().flat_map(|u| normalize_unit(u)).collect();
             let all_m: Vec<String> = mine.iter().flat_map(|u| normalize_unit(u)).collect();
-            if !tokens_match(&all_o, &all_m) {
+            let units_m: Vec<Vec<String>> = mine.iter().map(|u| normalize_unit(u)).collect();
+            if !tokens_match(&all_o, &all_m) && !shared_subject_match(&all_o, &units_m) {
                 pass = false;
                 unmatched_oracle.extend(uo);
                 unmatched_rendered.extend(ur);
@@ -696,6 +715,36 @@ pub fn tokens_match(a: &[String], b: &[String]) -> bool {
                 || (x == "~it" && (y == "~" || y == "it"))
                 || (y == "~it" && (x == "~" || x == "it"))
         })
+}
+
+/// Whether the rendered units, in order, spell the Oracle tokens when a unit may drop
+/// the subject it shares with the previous unit: two abilities printed on one line with
+/// one subject ("Enchanted creature gets +1/+0 and can't be blocked.").
+fn shared_subject_match(oracle: &[String], units: &[Vec<String>]) -> bool {
+    let mut pos = 0;
+    for (i, u) in units.iter().enumerate() {
+        let fits = |t: &[String], pos: usize| {
+            pos + t.len() <= oracle.len() && tokens_match(&oracle[pos..pos + t.len()], t)
+        };
+        if fits(u, pos) {
+            pos += u.len();
+            continue;
+        }
+        let prev = if i > 0 { &units[i - 1] } else { return false };
+        let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
+        let mut ok = false;
+        for k in (1..=lcp.min(6)).rev() {
+            if fits(&u[k..], pos) {
+                pos += u.len() - k;
+                ok = true;
+                break;
+            }
+        }
+        if !ok {
+            return false;
+        }
+    }
+    pos == oracle.len()
 }
 
 /// Multiset difference of units by normalized tokens.

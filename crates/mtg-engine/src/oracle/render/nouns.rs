@@ -10,8 +10,6 @@ use crate::keywords::KeywordKind;
 pub enum Det {
     /// "a creature" / "another creature".
     A,
-    /// "target creature" / "another target creature".
-    Target,
     /// "each creature" / "each other creature".
     Each,
     /// "creatures" / "other creatures" (also used for "all").
@@ -22,8 +20,6 @@ pub enum Det {
     Count(String),
     /// "up to two creatures".
     UpTo(String),
-    /// "any number of creatures".
-    AnyNumber,
     /// "one or more creatures".
     OneOrMore,
 }
@@ -31,7 +27,7 @@ pub enum Det {
 impl Det {
     fn num(&self) -> Num {
         match self {
-            Det::A | Det::Target | Det::Each | Det::Bare => Num::One,
+            Det::A | Det::Each | Det::Bare => Num::One,
             Det::UpTo(n) | Det::Count(n) if n == "one" || n == "a" => Num::One,
             _ => Num::Many,
         }
@@ -430,7 +426,8 @@ impl Renderer<'_> {
         types.sort_by_key(|t| type_order(*t));
         words.extend(types.iter().map(|t| t.word().to_string()));
         if !np.alts.is_empty() {
-            words.push(join_list(&np.alts, "or"));
+            let conj = if self.alt_and { "and" } else { "or" };
+            words.push(join_list(&np.alts, conj));
         }
         match np.kind {
             Some("permanent") if !words.is_empty() => {}
@@ -562,10 +559,9 @@ impl Renderer<'_> {
         }
         let mut with: Vec<String> = np.with.clone();
         for w in &np.with_on {
-            with.push(match num {
-                Num::One => format!("{} on it", with_article(w)),
-                Num::Many => format!("{} on them", plural(w)),
-            });
+            // Cards say "creatures with a +1/+1 counter on it" in the plural too.
+            let _ = num;
+            with.push(format!("{} on it", with_article(w)));
         }
         if !with.is_empty() {
             s.push_str(" with ");
@@ -680,6 +676,7 @@ impl Renderer<'_> {
 
     /// "you control", "an opponent controls", "your opponents control".
     pub(crate) fn controls_phrase(&mut self, r: PlayerRel, num: Num) -> String {
+        let num = if self.each_mode { Num::Many } else { num };
         match r {
             PlayerRel::You => "you control".into(),
             PlayerRel::Opponent => match num {
@@ -732,20 +729,16 @@ impl Renderer<'_> {
         }
         let num = det.num();
         let other = np.other;
+        let saved = self.each_mode;
+        self.each_mode = matches!(det, Det::Each);
         let text = self.np_text(&np, num, other);
+        self.each_mode = saved;
         match det {
             Det::A => {
                 if other {
                     format!("another {text}")
                 } else {
                     with_article(&text)
-                }
-            }
-            Det::Target => {
-                if other {
-                    format!("another target {text}")
-                } else {
-                    format!("target {text}")
                 }
             }
             Det::Each => {
@@ -789,13 +782,6 @@ impl Renderer<'_> {
                     format!("up to {n} {text}")
                 }
             }
-            Det::AnyNumber => {
-                if other {
-                    format!("any number of other {text}")
-                } else {
-                    format!("any number of {text}")
-                }
-            }
             Det::OneOrMore => {
                 if other {
                     format!("one or more other {text}")
@@ -804,6 +790,15 @@ impl Renderer<'_> {
                 }
             }
         }
+    }
+
+    /// The noun after "for each": "for each instant and sorcery card in your graveyard".
+    pub(crate) fn for_each_noun(&mut self, f: &Filter) -> String {
+        let saved = self.alt_and;
+        self.alt_and = true;
+        let n = self.noun(f, Num::One);
+        self.alt_and = saved;
+        n
     }
 
     /// A determiner for a count value ("a", "two", "X").

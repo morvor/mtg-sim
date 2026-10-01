@@ -201,6 +201,10 @@ pub struct Renderer<'a> {
     pub(crate) self_salient: bool,
     /// Card types of the subject of a "becomes" effect, when known ("It's still a land").
     pub(crate) subject_types: Vec<CardType>,
+    /// Rendering an "each [noun]" phrase: "each creature your opponents control".
+    pub(crate) each_mode: bool,
+    /// Alternatives in a head noun join with "and" ("for each instant and sorcery card").
+    pub(crate) alt_and: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -214,6 +218,8 @@ impl<'a> Renderer<'a> {
             zone: FunctionZone::Battlefield,
             self_salient: false,
             subject_types: Vec::new(),
+            each_mode: false,
+            alt_and: false,
         }
     }
 
@@ -306,6 +312,7 @@ impl<'a> Renderer<'a> {
             let count = match (m.min.as_const(), m.max.as_const()) {
                 (Some(a), Some(b)) if a == b => self.count_word(a),
                 (Some(0), Some(b)) => format!("up to {}", self.count_word(b)),
+                (Some(1), Some(2)) if m.modes.len() == 2 => "one or both".to_string(),
                 (Some(1), Some(b)) if b as usize >= m.modes.len() && b > 1 => {
                     "one or more".to_string()
                 }

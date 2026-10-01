@@ -16,7 +16,10 @@ impl Renderer<'_> {
             Value::Const(n) => n.to_string(),
             Value::X => "X".into(),
             Value::Count(f) => {
+                let saved = self.alt_and;
+                self.alt_and = true;
                 let n = self.noun_det(f, Det::Plural);
+                self.alt_and = saved;
                 format!("the number of {n}")
             }
             Value::CountSel(s) => {
@@ -542,6 +545,17 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        if let (Value::CreaturesDiedThisTurn, Value::Const(n)) = (a, b) {
+            return match (cmp, n) {
+                (Cmp::Gt, 0) | (Cmp::Ge, 1) => "a creature died this turn".into(),
+                (Cmp::Eq, 0) => "no creatures died this turn".into(),
+                (Cmp::Ge, n) => format!("{} or more creatures died this turn", number_word(*n)),
+                _ => {
+                    let v = number_word(*n);
+                    format!("the number of creatures that died this turn is {}", cmp_phrase(cmp, &v))
+                }
+            };
+        }
         // "you control three or more creatures".
         if let Value::Count(f) = a {
             if let Some((r, rest)) = split_controller(f).0.map(|r| (r, split_controller(f).1)) {
@@ -580,6 +594,23 @@ impl Renderer<'_> {
             return format!("{subj} {pred}");
         }
         let a = self.value(a);
+        // "there are seven or more cards in your graveyard".
+        if let (Some(rest), Value::Const(n)) = (a.strip_prefix("the number of "), b) {
+            let w = number_word(*n);
+            let q = match cmp {
+                Cmp::Ge => Some(format!("{w} or more")),
+                Cmp::Gt if *n == 0 => None,
+                Cmp::Gt => Some(format!("more than {w}")),
+                Cmp::Le => Some(format!("{w} or fewer")),
+                Cmp::Lt => Some(format!("fewer than {w}")),
+                Cmp::Eq if *n == 0 => Some("no".to_string()),
+                Cmp::Eq => Some(format!("exactly {w}")),
+                Cmp::Ne => None,
+            };
+            if let Some(q) = q {
+                return format!("there are {q} {rest}");
+            }
+        }
         let b = self.value(b);
         let rel = match cmp {
             Cmp::Eq => format!("is {b}"),

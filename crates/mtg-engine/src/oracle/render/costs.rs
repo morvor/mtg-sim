@@ -1,7 +1,6 @@
 //! Costs ([`Cost`], CR 118) and activated abilities.
 
 use super::effects::{join_words, third_person};
-use super::nouns::Det;
 use super::*;
 
 impl Renderer<'_> {
@@ -200,8 +199,7 @@ impl Renderer<'_> {
                 let c = self.cost(cost);
                 let t = match times {
                     Value::Count(f) => {
-                        let n = self.noun_det(f, Det::A);
-                        let n = n.split_once(' ').map(|x| x.1.to_string()).unwrap_or(n);
+                        let n = self.for_each_noun(f);
                         format!("for each {n}")
                     }
                     other => {
@@ -240,7 +238,11 @@ impl Renderer<'_> {
         let saved = self.zone;
         self.zone = a.zone;
         let cost = self.cost(&a.cost);
+        let saved_salient = self.self_salient;
+        // "Sacrifice ~: It deals 2 damage to any target."
+        self.self_salient = cost.contains('~');
         let body = self.body(&a.body);
+        self.self_salient = saved_salient;
         let mut restr: Vec<String> = Vec::new();
         match a.timing {
             ActivationTiming::Instant => {}

@@ -39,6 +39,10 @@ impl Renderer<'_> {
         }
     }
 
+    pub(crate) fn restriction_subject(&mut self, f: &Filter) -> String {
+        self.affected_subject(f)
+    }
+
     /// The subject for a static effect on objects: "~", "enchanted creature", "creatures
     /// you control".
     fn affected_subject(&mut self, f: &Filter) -> String {
@@ -502,8 +506,7 @@ impl Renderer<'_> {
             Value::Const(n) => (format!("{{{n}}}"), String::new()),
             Value::X => ("{X}".into(), String::new()),
             Value::Count(f) => {
-                let n = self.noun_det(f, Det::A);
-                let n = n.split_once(' ').map(|x| x.1.to_string()).unwrap_or(n);
+                let n = self.for_each_noun(f);
                 ("{1}".into(), format!(" for each {n}"))
             }
             other => {

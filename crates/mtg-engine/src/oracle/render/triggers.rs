@@ -423,6 +423,20 @@ impl Renderer<'_> {
                     Ev::new("", join_list(&ts, "or"))
                 }
             }
+            // "Whenever you draw your second card each turn".
+            TriggerCond::Where { trigger, cond }
+                if matches!(trigger.as_ref(), TriggerCond::Draws { .. })
+                    && matches!(cond, Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(_))) =>
+            {
+                let (TriggerCond::Draws { who }, Condition::Compare(_, _, Value::Const(n))) =
+                    (trigger.as_ref(), cond)
+                else {
+                    return Ev::new("", self.gap("draws-nth"));
+                };
+                let w = self.rel_subject(*who);
+                let p = if w == "you" { "your" } else { "their" };
+                Ev::new(w, format!("draw {p} {} card each turn", ordinal_word(*n as u32)))
+            }
             TriggerCond::Where { trigger, cond } => {
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);

@@ -60,6 +60,13 @@ impl Renderer<'_> {
                 random,
                 filter,
             } => {
+                // "That player discards that card": the cards chosen earlier.
+                if let (Filter::In(sel), Value::CountSel(sel2)) = (filter, n) {
+                    if format!("{sel:?}") == format!("{sel2:?}") {
+                        let s = self.sel(sel, Case::Obj);
+                        return Some((who.clone(), format!("discard {s}"), false));
+                    }
+                }
                 let noun = self.card_noun(filter);
                 let (c, w) = self.counted(n, &noun);
                 let r = if *random { " at random" } else { "" };
@@ -226,7 +233,7 @@ impl Renderer<'_> {
             } => self.pay_optional(who, cost, then, otherwise),
             Effect::ForEach { sel, effect, .. } => {
                 let s = match sel {
-                    Sel::All(f) => self.noun_det(f, Det::A),
+                    Sel::All(f) => self.for_each_noun(f),
                     other => self.sel(other, Case::Obj),
                 };
                 let inner = self.effect(effect);
@@ -357,7 +364,17 @@ impl Renderer<'_> {
             }
             Effect::AddCounters { what, kind, n } => {
                 let (c, w) = self.counted(n, &counter_name(kind));
-                let t = self.sel(what, Case::Obj);
+                let mut t = self.sel(what, Case::Obj);
+                // "put a +1/+1 counter on each of up to two target creatures".
+                if let Sel::Target(i) = what {
+                    let many = self
+                        .targets
+                        .get(*i as usize)
+                        .is_some_and(|t| t.max.as_const() != Some(1));
+                    if many && t.contains("target") {
+                        t = format!("each of {t}");
+                    }
+                }
                 format!("put {c} on {t}{}", w.unwrap_or_default())
             }
             Effect::RemoveCounters { what, kind, n } => {
@@ -409,6 +426,12 @@ impl Renderer<'_> {
                 restriction,
                 duration,
             } => {
+                if let (Restriction::DoesntUntap(f), Duration::ThroughNextUntapStep) =
+                    (restriction, duration)
+                {
+                    let s = self.restriction_subject(f);
+                    return format!("{s} doesn't untap during its controller's next untap step");
+                }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
                 join_words(&[r, d])
@@ -890,8 +913,16 @@ impl Renderer<'_> {
                 let vp = format!("skip {p} next {s}");
                 self.with_subject(who, &vp, false)
             }
-            Effect::DelayedTrigger { trigger, body, .. } => {
+            Effect::DelayedTrigger { trigger, body, once } => {
                 let t = self.trigger_text(trigger);
+                // A one-shot delayed trigger at a step: "at the beginning of the next end
+                // step" (CR 603.7).
+                let t = if *once {
+                    t.replace("at the beginning of each ", "at the beginning of the next ")
+                        .replace("at the beginning of your ", "at the beginning of your next ")
+                } else {
+                    t
+                };
                 let b = self.body(body);
                 format!("{t}, {}", lower_first(&b))
             }
@@ -1297,6 +1328,23 @@ impl Renderer<'_> {
         }
         let p = self.player(who, Case::Subj);
         let inner = self.effect(effect);
+        // An effect with its own subject: "you may have ~ deal 3 damage to ...".
+        let has_subject = matches!(
+            effect,
+            Effect::DealDamage { .. }
+                | Effect::DealDamageExcess { .. }
+                | Effect::DealDividedDamage { .. }
+                | Effect::Fight { .. }
+                | Effect::BecomeCopy { .. }
+                | Effect::BecomeCopyExcept { .. }
+                | Effect::Modify { .. }
+                | Effect::PhaseOut { .. }
+                | Effect::AddRestriction { .. }
+        ) || matches!(effect, Effect::KeywordAction { action, .. }
+            if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure));
+        if has_subject && !inner.starts_with("gain control") && !inner.starts_with("switch") {
+            return format!("{p} may have {inner}");
+        }
         format!("{p} may {inner}")
     }
 
@@ -1357,7 +1405,17 @@ impl Renderer<'_> {
 
     /// Moving objects between zones.
     fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
-        let w = self.sel(what, Case::Obj);
+        let mut w = self.sel(what, Case::Obj);
+        // An ability that functions in a hidden or public zone moves the card from there
+        // ("Return ~ from your graveyard to your hand", CR 113.6m).
+        if matches!(what, Sel::This) {
+            match self.zone {
+                FunctionZone::Graveyard => w.push_str(" from your graveyard"),
+                FunctionZone::Hand if to.zone != ZoneKind::Hand => w.push_str(" from your hand"),
+                FunctionZone::Exile => w.push_str(" from exile"),
+                _ => {}
+            }
+        }
         let plural = is_plural_sel(what);
         let yours = self.sel_is_yours(what);
         let d = self.destination_phrase(to, plural, yours);
@@ -1595,7 +1653,11 @@ impl Renderer<'_> {
             (Value::Const(a), Value::Const(b)) if a - b == 1 => "the other",
             _ => "the rest",
         };
-        s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
+        if matches!(filter, Filter::Any) {
+            s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
+        } else {
+            s.push_str(&format!(". {}. Put {left} {rest}", capitalize(&take_s)));
+        }
         s
     }
 
@@ -1935,6 +1997,13 @@ impl Renderer<'_> {
                         .extend(subtypes.iter().map(|x| x.to_string()));
                 }
                 Modification::AllCreatureTypes => parts.push("is every creature type".into()),
+                // "becomes a 4/4 Dragon artifact creature": the new creature types replace
+                // the old ones (CR 205.1b), which the effect records as removing them.
+                Modification::RemoveAllCreatureTypes
+                    if mods.iter().any(|m| {
+                        matches!(m, Modification::AddSubtypes(v) if !v.is_empty())
+                            || matches!(m, Modification::SetTypes { subtypes, .. } if !subtypes.is_empty())
+                    }) => {}
                 Modification::RemoveAllCreatureTypes => {
                     parts.push("loses all creature types".into())
                 }
@@ -2095,10 +2164,10 @@ impl Renderer<'_> {
                 match v {
                     Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
                     Value::Count(f) => {
-                        let n = self.noun_det(f, Det::A);
+                        let n = self.for_each_noun(f);
                         format!(
                             "{sym} for each {}",
-                            n.split_once(' ').map(|x| x.1).unwrap_or(&n)
+                            n
                         )
                     }
                     other => {
