@@ -163,9 +163,18 @@ struct Candidate {
 
 /// The replacement effects that would modify how a permanent enters the battlefield,
 /// determined as the event is first proposed (CR 614.12).
+/// They still apply if applying one of them made a permanent leave the battlefield (an
+/// "as this enters, return a permanent you control" choice returning the permanent that
+/// grants riot), as long as the permanent still enters the same way: not once a copy,
+/// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
 struct EntrySnapshot {
     obj: ObjectId,
     copy_of: Option<ObjectId>,
+    controller: Option<PlayerId>,
+    face: Option<FaceState>,
+    transformed: bool,
+    face_down: Option<KeywordKind>,
+    battlefield: Vec<ObjectId>,
     cands: Vec<Candidate>,
 }
 
@@ -222,19 +231,32 @@ impl Game {
                     // Effects that applied to the permanent as the event was proposed
                     // still apply, even if applying another one (an "as this enters,
                     // return a permanent" choice) removed what generated them (Rhythm of
-                    // the Wild). Not once it's entering as a copy of something else
-                    // (CR 707.9): then the copied abilities apply instead.
-                    Some(sn) if sn.obj == m.obj && sn.copy_of == m.etb.copy_of => {
+                    // the Wild's riot). See [`EntrySnapshot`].
+                    Some(sn)
+                        if sn.obj == m.obj
+                            && sn.copy_of == m.etb.copy_of
+                            && sn.controller == m.etb.controller
+                            && sn.face == m.etb.face
+                            && sn.transformed == m.etb.transformed
+                            && sn.face_down == m.etb.face_down
+                            && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
+                    {
                         for c in &sn.cands {
                             if !applied.contains(&c.key) && !entry.iter().any(|e| e.key == c.key) {
                                 entry.push(c.clone());
                             }
                         }
                     }
+                    Some(sn) if sn.obj == m.obj => {}
                     _ => {
                         snap = Some(Rc::new(EntrySnapshot {
                             obj: m.obj,
                             copy_of: m.etb.copy_of,
+                            controller: m.etb.controller,
+                            face: m.etb.face,
+                            transformed: m.etb.transformed,
+                            face_down: m.etb.face_down,
+                            battlefield: self.battlefield.clone(),
                             cands: entry.clone(),
                         }));
                     }
