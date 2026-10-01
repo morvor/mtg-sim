@@ -3,7 +3,8 @@
 //! lethal damage (CR 603.10a, 704.5g) and deals noncombat damage (CR 510.2, 120.2); "{1}{R}:
 //! This creature gets +1/+0 until end of turn and deals 1 damage to you." Thran Forge:
 //! "{2}: Until end of turn, target nonartifact creature gets +1/+0 and becomes an artifact
-//! in addition to its other types." (CR 205.1b, 608.2b).
+//! in addition to its other types." (CR 205.1b, 608.2b). Bronze Cudgels: "+X/+0, where X
+//! is the number of times this ability has resolved this turn" (CR 603.7h).
 
 use crate::r_p057_common::pump;
 use crate::r_s01_common::supported;
@@ -92,4 +93,33 @@ fn thran_forge_adds_the_artifact_type_and_a_second_activation_makes_the_first_fi
     t.advance_to(P1, Step::Upkeep);
     assert!(!t.obj_now(bears).is(CardType::Artifact));
     assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn bronze_cudgels_counts_its_resolutions_this_turn_including_this_one() {
+    cr!("603.7h", "107.3c");
+    ruling!(
+        "Bronze Cudgels",
+        "As the first activated ability resolves, it counts the number of times that same ability from that same Bronze Cudgels has resolved that turn, including that activation."
+    );
+    supported("Bronze Cudgels");
+    // "{2}: Until end of turn, equipped creature gets +X/+0, where X is the number of
+    // times this ability has resolved this turn."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let cudgels = crate::r_s06_common::attach_new(&mut t, P0, "Bronze Cudgels", bears);
+    add_mana(&mut t, P0, ManaType::C, 8);
+    // +1/+0, then +2/+0, then +3/+0.
+    for total in [3, 5, 8] {
+        activate_containing(&mut t, P0, cudgels, "resolved").expect("activated");
+        t.resolve_all();
+        assert_eq!(t.pt(bears).0, total);
+    }
+    // A new turn starts the count over.
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.pt(bears), (2, 2));
+    add_mana(&mut t, P0, ManaType::C, 2);
+    activate_containing(&mut t, P0, cudgels, "resolved").expect("activated");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 2));
 }

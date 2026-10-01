@@ -33,6 +33,37 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         };
         return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
     }
+    // "the number of cards in their hand minus 4" (Black Vise).
+    if let Some((a, r)) = s.rsplit_once(" minus ") {
+        if let Some((n @ Value::Const(_), tail)) = parse_number(r) {
+            if end(tail).is_empty() {
+                if let Some((v, _)) = value_phrase(a, b).filter(|(_, r)| end(r).is_empty()) {
+                    return Some((Value::Diff(Box::new(v), Box::new(n)), tail.to_string()));
+                }
+            }
+        }
+    }
+    // CR 603.7h: "the number of times this ability has resolved this turn" (this
+    // resolution included).
+    if let Some(r) = s.strip_prefix("the number of times this ability has resolved this turn") {
+        return Some((Value::TimesResolvedThisTurn, r.to_string()));
+    }
+    // "the number of cards in their hand": "their" is "that player" (Black Vise).
+    for p in [
+        "the number of cards in their hand",
+        "the number of cards in that player's hand",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Value::HandSize(b.it_player.clone()), r.to_string()));
+        }
+    }
+    // "3 minus the number of cards in their hand" (The Rack).
+    if let Some((n, r)) = parse_number(s) {
+        if let (Value::Const(_), Some(r)) = (&n, r.trim_start().strip_prefix("minus ")) {
+            let (v, rest) = value_phrase(r, b)?;
+            return Some((Value::Diff(Box::new(n), Box::new(v)), rest));
+        }
+    }
     crate::oracle::statics::parse_value_phrase(s, b)
 }
 

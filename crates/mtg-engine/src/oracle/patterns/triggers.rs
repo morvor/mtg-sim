@@ -287,6 +287,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each opponent's ", Whose::Rel(PlayerRel::Opponent)),
         ("each other player's ", Whose::Rel(PlayerRel::NotYou)),
         ("each ", Whose::Rel(PlayerRel::Any)),
+        // "the chosen player's upkeep" (Black Vise; CR 607.2d)
+        ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
