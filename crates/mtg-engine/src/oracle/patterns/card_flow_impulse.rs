@@ -17,6 +17,9 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "card_flow: if it's a nonland card, you may cast that card this turn", priority: 90, apply: may_cast_if_nonland }
 }
+inventory::submit! {
+    FollowupPattern { name: "card_flow: you may cast that card (now)", priority: 90, apply: may_cast_it_now }
+}
 
 /// "the top card of", "the top N cards of" + a library.
 fn top_cards_of<'a>(s: &'a str) -> Option<(Value, &'a str)> {
@@ -162,5 +165,24 @@ fn may_cast_if_nonland(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         otherwise: Box::new(Effect::Noop),
     };
     *prev = Effect::seq(vec![std::mem::take(prev), grant]);
+    true
+}
+
+/// "You may cast that card." after exiling the top card of your library (Chandra, Torch of
+/// Defiance): it may be cast as the effect resolves, paying its costs (CR 608.2g, 601.2b);
+/// "If you don't, ..." then refers to whether it was cast.
+fn may_cast_it_now(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(l, "you may cast that card" | "you may cast it") || !exiles_your_top_cards(prev) {
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            free: false,
+            optional: true,
+        },
+    ]);
     true
 }

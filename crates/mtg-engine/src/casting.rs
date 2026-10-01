@@ -178,6 +178,20 @@ pub fn cast_during_resolution(
             }
         }
     }
+    // CR 608.2g, 601.2b: a spell cast with its costs paid while an effect resolves may be
+    // cast for an alternative cost the card has (evoke, emerge, ...) rather than its mana
+    // cost.
+    if method == CastMethod::Normal && !keyword_way && face == FaceState::Front {
+        let mut alts = resolution_alternative_costs(g, p, card);
+        if !alts.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(alts.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= alts.len() {
+                opt = alts.swap_remove(k - 1);
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
         if !keyword_way {
@@ -186,6 +200,34 @@ pub fn cast_during_resolution(
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
+}
+
+/// The alternative costs `card` could be cast for by `p` while an effect lets them cast it
+/// during its resolution: those its abilities offer wherever it is, as if an effect let
+/// them cast it from there (CR 608.2g, 601.2b, 118.9).
+fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let turn = g.turn.number;
+    g.play_grants.push(PlayGrant {
+        player: p,
+        object: card,
+        duration: Duration::EndOfTurn,
+        free: false,
+        source: None,
+        turn,
+    });
+    let alts: Vec<CastOption> = g
+        .cast_options(p, card)
+        .into_iter()
+        .filter(|o| {
+            matches!(
+                o.method,
+                CastMethod::Alternative(_) | CastMethod::Keyword(_)
+            ) && o.alt_cost.is_some()
+        })
+        .collect();
+    // The permission pushed above (finding the options doesn't change the grants).
+    g.play_grants.pop();
+    alts
 }
 
 /// The ways `card` could be cast without paying its mana cost as a spell whose mana value

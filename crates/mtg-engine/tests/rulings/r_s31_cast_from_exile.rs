@@ -224,3 +224,60 @@ fn blightwing_bandits_card_may_be_cast_for_an_alternative_cost() {
     assert_eq!(t.zone(mulldrifter), Zone::Graveyard(P1));
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
+
+/// P0 activates Chandra, Torch of Defiance's first ability ("+1: Exile the top card of
+/// your library. You may cast that card. If you don't, Chandra deals 2 damage to each
+/// opponent.") with Wretched Gryff on top of their library ({7}, emerge {5}{U}: "When
+/// you cast this spell, draw a card."). Returns the game, the Gryff, and a Hill Giant P0
+/// controls (mana value 4).
+fn chandra_exiles_gryff() -> (TestGame, ObjectId, ObjectId) {
+    supported("Chandra, Torch of Defiance");
+    supported("Wretched Gryff");
+    let mut t = TestGame::new(2);
+    let chandra = t.battlefield(P0, "Chandra, Torch of Defiance");
+    let gryff = t.library_top(P0, "Wretched Gryff");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.activate(P0, chandra, 0, &[]).expect("activate +1");
+    (t, gryff, giant)
+}
+
+#[test]
+fn chandras_exiled_card_may_be_cast_for_its_emerge_cost() {
+    cr!("608.2g", "601.2b", "118.9", "702.119a");
+    ruling!(
+        "Chandra, Torch of Defiance",
+        "You pay the costs for the exiled card if you cast it. You may pay alternative costs such as emerge rather than the card's mana cost."
+    );
+    // P0 casts the Gryff for its emerge cost, sacrificing the Giant: {5}{U} minus 4.
+    let (mut t, gryff, giant) = chandra_exiles_gryff();
+    add_mana(&mut t, P0, ManaType::U, 1);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert!(t.on_battlefield(gryff));
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    // It was cast: no damage.
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn chandras_exiled_card_isnt_cast_without_paying_and_then_she_deals_damage() {
+    cr!("608.2g", "601.2h", "608.2c");
+    ruling!(
+        "Chandra, Torch of Defiance",
+        "You pay the costs for the exiled card if you cast it."
+    );
+    // With no mana, P0 can't pay for the Gryff: it isn't cast, it stays in exile, and
+    // Chandra deals 2 damage to each opponent.
+    let (mut t, gryff, giant) = chandra_exiles_gryff();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.zone(gryff), Zone::Exile);
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.life(P1), 18);
+}
