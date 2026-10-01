@@ -1115,9 +1115,7 @@ impl Game {
             }
             Err(e) => {
                 // CR 733: return to the moment before casting was proposed.
-                let agents = self.agents.clone();
-                *self = snapshot;
-                self.agents = agents;
+                self.roll_back(snapshot);
                 Err(e)
             }
         }
@@ -1953,9 +1951,7 @@ impl Game {
                 Ok(r)
             }
             Err(e) => {
-                let agents = self.agents.clone();
-                *self = snapshot;
-                self.agents = agents;
+                self.roll_back(snapshot);
                 Err(e)
             }
         }
@@ -2280,9 +2276,7 @@ impl Game {
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
             Ok(_) => true,
             Err(_) => {
-                let agents = self.agents.clone();
-                *self = snapshot;
-                self.agents = agents;
+                self.roll_back(snapshot);
                 false
             }
         }

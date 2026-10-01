@@ -21,14 +21,14 @@ fn mana_has_emptied_when_a_step_ends() {
     // (step, mana left in P0's pool) as each step ends.
     let seen: Arc<Mutex<Vec<(Step, usize)>>> = Arc::default();
     let seen2 = seen.clone();
-    t.g.observer = Some(EventObserver(Arc::new(move |g, ev| {
+    t.g.observer = Some(EventObserver::new(move |g, ev| {
         if let Event::StepEnded { step, .. } = ev {
             seen2
                 .lock()
                 .unwrap()
                 .push((*step, g.players[0].mana_pool.total()));
         }
-    })));
+    }));
     t.advance_to_step(Step::BeginningOfCombat);
     let seen = seen.lock().unwrap();
     // The red mana emptied as the main phase ended; mana an effect keeps stayed.

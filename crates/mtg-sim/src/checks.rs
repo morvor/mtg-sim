@@ -44,7 +44,8 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    /// Takes the current life totals and counters as the starting point.
+    /// Takes the current life totals and counters, less the changes of events not yet
+    /// processed, as the starting point.
     pub fn baseline(&mut self, g: &Game) {
         self.started = true;
         self.turn = g.turn.number;
@@ -69,18 +70,25 @@ impl Ledger {
                     .collect(),
             );
         }
+        for ev in &g.events {
+            self.apply_signed(ev, -1);
+        }
     }
 
     fn apply(&mut self, ev: &Event) {
+        self.apply_signed(ev, 1)
+    }
+
+    fn apply_signed(&mut self, ev: &Event, sign: i64) {
         match ev {
             Event::LifeGained { player, amount } => {
                 if let Some(l) = self.life.get_mut(player.idx()) {
-                    *l += *amount as i64;
+                    *l += sign * *amount as i64;
                 }
             }
             Event::LifeLost { player, amount } => {
                 if let Some(l) = self.life.get_mut(player.idx()) {
-                    *l -= *amount as i64;
+                    *l -= sign * *amount as i64;
                 }
             }
             Event::CountersAdded { target, kind, n } => {
@@ -89,7 +97,7 @@ impl Ledger {
                     .entry(*target)
                     .or_default()
                     .entry(kind.clone())
-                    .or_default() += *n as i64;
+                    .or_default() += sign * *n as i64;
             }
             Event::CountersRemoved {
                 target, kind, n, ..
@@ -99,7 +107,7 @@ impl Ledger {
                     .entry(*target)
                     .or_default()
                     .entry(kind.clone())
-                    .or_default() -= *n as i64;
+                    .or_default() -= sign * *n as i64;
             }
             _ => {}
         }
@@ -165,12 +173,20 @@ pub fn observer(
     ledger: Arc<Mutex<Ledger>>,
     also: Option<Arc<dyn Fn(&Game, &Event) + Send + Sync>>,
 ) -> EventObserver {
-    EventObserver(Arc::new(move |g, ev| {
+    let ledger2 = ledger.clone();
+    EventObserver::new(move |g, ev| {
         observe(g, ev, &mut ledger.lock().unwrap_or_else(|e| e.into_inner()));
         if let Some(f) = &also {
             f(g, ev);
         }
-    }))
+    })
+    .with_rollback(move |g| {
+        // The events since the snapshot never happened (CR 733.1).
+        let mut l = ledger2.lock().unwrap_or_else(|e| e.into_inner());
+        if l.started && g.subgames.depth == 0 {
+            l.baseline(g);
+        }
+    })
 }
 
 /// Records `ev` in the ledger and checks what must hold as a step ends or a turn begins:
@@ -660,5 +676,19 @@ mod tests {
         t.g.players[0].counters.insert("poison".into(), 2);
         let what = ledger.lock().unwrap().check(&t.g).unwrap();
         assert!(what.contains("poison"), "{what}");
+        t.g.players[0].counters.clear();
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        // The events of an action that was reversed never happened (CR 733.1).
+        let snapshot = t.g.clone();
+        t.g.lose_life(P1, 2);
+        t.g.flush_events();
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        t.g.roll_back(snapshot);
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        // Life lost without being processed yet is counted.
+        t.g.lose_life(P1, 1);
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        t.g.roll_back(t.g.clone());
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
     }
 }

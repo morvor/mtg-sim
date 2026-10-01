@@ -477,12 +477,30 @@ impl std::fmt::Debug for Agents {
     }
 }
 
-/// A callback that sees every event as [`Game::flush_events`] processes it, with the game
-/// as it is then (before triggered abilities are detected for it). For simulations and
-/// coverage tools: it doesn't change the game. Cloning a [`Game`] shares the observer;
-/// clear it on a clone used to look ahead.
+/// Callbacks that see every event as [`Game::flush_events`] processes it, with the game
+/// as it is then (before triggered abilities are detected for it), and each return to an
+/// earlier state after an illegal action (CR 733.1), whose events never happened. For
+/// simulations and coverage tools: they don't change the game. Cloning a [`Game`] shares
+/// the observer; clear it on a clone used to look ahead.
 #[derive(Clone)]
-pub struct EventObserver(pub Arc<dyn Fn(&Game, &Event) + Send + Sync>);
+pub struct EventObserver {
+    pub on_event: Arc<dyn Fn(&Game, &Event) + Send + Sync>,
+    pub on_rollback: Option<Arc<dyn Fn(&Game) + Send + Sync>>,
+}
+
+impl EventObserver {
+    pub fn new(on_event: impl Fn(&Game, &Event) + Send + Sync + 'static) -> Self {
+        EventObserver {
+            on_event: Arc::new(on_event),
+            on_rollback: None,
+        }
+    }
+
+    pub fn with_rollback(mut self, f: impl Fn(&Game) + Send + Sync + 'static) -> Self {
+        self.on_rollback = Some(Arc::new(f));
+        self
+    }
+}
 
 impl std::fmt::Debug for EventObserver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -805,6 +823,17 @@ impl Game {
     }
 
     /// Replaces the agents (e.g. on a cloned game used for search).
+    /// Returns to `snapshot`, a copy of the game taken before an action that turned out
+    /// to be illegal (CR 733.1), keeping the agents.
+    pub fn roll_back(&mut self, snapshot: Game) {
+        let agents = self.agents.clone();
+        *self = snapshot;
+        self.agents = agents;
+        if let Some(f) = self.observer.as_ref().and_then(|o| o.on_rollback.clone()) {
+            f(self);
+        }
+    }
+
     pub fn set_agents(&mut self, agents: Vec<Box<dyn Agent>>) {
         self.agents = Agents(Arc::new(Mutex::new(agents)));
     }
