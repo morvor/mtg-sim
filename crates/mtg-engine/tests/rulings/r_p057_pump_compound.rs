@@ -4,12 +4,14 @@
 //! This creature gets +1/+0 until end of turn and deals 1 damage to you." Thran Forge:
 //! "{2}: Until end of turn, target nonartifact creature gets +1/+0 and becomes an artifact
 //! in addition to its other types." (CR 205.1b, 608.2b). Bronze Cudgels: "+X/+0, where X
-//! is the number of times this ability has resolved this turn" (CR 603.7h).
+//! is the number of times this ability has resolved this turn" (CR 603.7h), and
+//! Inner-Flame Igniter's "If this is the third time this ability has resolved this turn".
 
 use crate::r_p057_common::pump;
 use crate::r_s01_common::supported;
 use crate::r_s04_common::add_mana;
-use crate::r_s06_common::activate_containing;
+use crate::r_s06_common::{activate_containing, has_kw};
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::types::*;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
@@ -122,4 +124,37 @@ fn bronze_cudgels_counts_its_resolutions_this_turn_including_this_one() {
     activate_containing(&mut t, P0, cudgels, "resolved").expect("activated");
     t.resolve_all();
     assert_eq!(t.pt(bears), (3, 2));
+}
+
+#[test]
+fn inner_flame_igniter_counts_resolutions_not_activations() {
+    cr!("603.7h", "608.2c");
+    ruling!(
+        "Inner-Flame Igniter",
+        "Counts resolutions, not activations. Any such abilities that are still on the stack won’t count toward the total."
+    );
+    supported("Inner-Flame Igniter");
+    // "{2}{R}: Creatures you control get +1/+0 until end of turn. If this is the third
+    // time this ability has resolved this turn, creatures you control gain first strike
+    // until end of turn."
+    let mut t = TestGame::new(2);
+    let igniter = t.battlefield(P0, "Inner-Flame Igniter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    add_mana(&mut t, P0, ManaType::R, 9);
+    // Three activations on the stack at once.
+    for _ in 0..3 {
+        activate_containing(&mut t, P0, igniter, "third time").expect("activated");
+    }
+    assert_eq!(t.stack_len(), 3);
+    t.resolve();
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 2));
+    assert!(
+        !has_kw(&t, bears, KeywordKind::FirstStrike),
+        "only two have resolved"
+    );
+    t.resolve();
+    assert_eq!(t.pt(bears), (5, 2));
+    assert!(has_kw(&t, bears, KeywordKind::FirstStrike));
+    assert!(has_kw(&t, igniter, KeywordKind::FirstStrike));
 }

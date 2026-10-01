@@ -197,3 +197,28 @@ inventory::submit! { EffectPattern { name: "pay any number of times", priority: 
 inventory::submit! { EffectPattern { name: "reflexive: when you pay this cost", priority: 0, parse: when_you_pay_this_cost } }
 inventory::submit! { EffectPattern { name: "sacrifice another", priority: 0, parse: sacrifice_another } }
 inventory::submit! { AbilityPattern { name: "do this only once each turn", priority: 0, parse: do_this_only_once } }
+
+/// "this is the third time this ability has resolved this turn" (Inner-Flame Igniter; CR
+/// 603.7h counts this resolution).
+fn nth_time_resolved(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("this is the ")?;
+    let (w, rest) = split_word(r);
+    let n = match w {
+        "first" => 1,
+        "second" => 2,
+        "third" => 3,
+        "fourth" => 4,
+        "fifth" => 5,
+        _ => return None,
+    };
+    if end(rest) != "time this ability has resolved this turn" {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::TimesResolvedThisTurn,
+        Cmp::Eq,
+        Value::c(n),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "this is the nth time this ability has resolved this turn", priority: 0, parse: nth_time_resolved } }
