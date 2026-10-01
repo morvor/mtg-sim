@@ -587,6 +587,18 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // "the total number of instant and sorcery cards you own in exile and in your
+    // graveyard" (Beacon Bolt): the cards in either zone.
+    if let Some(r) = s
+        .strip_prefix("the total number of ")
+        .or_else(|| s.strip_prefix("the number of "))
+    {
+        const ZONES: &str = " you own in exile and in your graveyard";
+        if let Some((head, rest)) = r.split_once(ZONES) {
+            let v = super::patterns::statics::parse_for_each(&format!("{head}{ZONES}"), None)?;
+            return Some((v, rest.to_string()));
+        }
+    }
     if let Some(r) = s.strip_prefix("the number of ") {
         // "the number of +1/+1 counters on it", "the number of charge counters on ~",
         // "the number of counters on target permanent".

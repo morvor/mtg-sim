@@ -117,7 +117,11 @@ fn unite_the_coalition_phases_out_a_creature_with_its_aura_and_equipment() {
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Soul Warden");
     let set = equipped_bears(&mut t);
-    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 1, 1, 1, 1]));
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        Answer::Indices(vec![0, 1, 1, 1, 1]),
+    );
     let hand = t.hand_size(P0);
     cast(
         &mut t,

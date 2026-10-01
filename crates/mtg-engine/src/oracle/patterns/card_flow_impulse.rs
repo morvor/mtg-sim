@@ -78,8 +78,8 @@ fn exiles_your_top_cards(e: &Effect) -> bool {
 }
 
 /// "you may play that card this turn", "until end of turn, you may play those cards",
-/// "until the end of your next turn, you may play that card" after exiling the top cards
-/// of your library.
+/// "until the end of your next turn, you may play that card", "you may play it until your
+/// next end step" after exiling the top cards of your library.
 fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let (duration, r) = if let Some(r) = l.strip_prefix("until the end of your next turn, ") {
         (Some(Duration::UntilEndOfYourNextTurn), r)
@@ -94,19 +94,27 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let Some(r) = r.strip_prefix("you may play ") else {
         return false;
     };
-    let Some(r) = ["that card", "those cards", "them", "it", "the exiled card", "the exiled cards"]
-        .iter()
-        .find_map(|p| {
-            r.strip_prefix(p)
-                .filter(|x| x.is_empty() || x.starts_with(' '))
-        })
-    else {
+    let Some(r) = [
+        "that card",
+        "those cards",
+        "them",
+        "it",
+        "the exiled card",
+        "the exiled cards",
+    ]
+    .iter()
+    .find_map(|p| {
+        r.strip_prefix(p)
+            .filter(|x| x.is_empty() || x.starts_with(' '))
+    }) else {
         return false;
     };
     let duration = match (duration, r.trim()) {
         (Some(d), "") => d,
         (None, "this turn") => Duration::EndOfTurn,
         (None, "until the end of your next turn") => Duration::UntilEndOfYourNextTurn,
+        // Haste Magic: until your next end step begins (CR 500.4).
+        (None, "until your next end step") => Duration::UntilYourNextStep(TriggerStep::End),
         _ => return false,
     };
     if !exiles_your_top_cards(prev) {

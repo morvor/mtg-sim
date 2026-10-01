@@ -48,8 +48,16 @@ fn a_land_becoming_a_creature_doesnt_enter_the_battlefield() {
     t.battlefield(P0, "Soul Warden");
     let pit = t.battlefield(P0, "Creeping Tar Pit");
     let falls = t.battlefield(P0, "Lumbering Falls");
-    animate(&mut t, pit, &[(ManaType::C, 1), (ManaType::U, 1), (ManaType::B, 1)]);
-    animate(&mut t, falls, &[(ManaType::C, 2), (ManaType::G, 1), (ManaType::U, 1)]);
+    animate(
+        &mut t,
+        pit,
+        &[(ManaType::C, 1), (ManaType::U, 1), (ManaType::B, 1)],
+    );
+    animate(
+        &mut t,
+        falls,
+        &[(ManaType::C, 2), (ManaType::G, 1), (ManaType::U, 1)],
+    );
     assert!(t.obj_now(pit).is(CardType::Creature));
     assert!(t.obj_now(falls).is(CardType::Creature));
     assert_eq!(t.pt(pit), (3, 2));

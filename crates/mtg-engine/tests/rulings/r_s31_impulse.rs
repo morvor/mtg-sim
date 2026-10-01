@@ -316,7 +316,10 @@ fn a_card_played_from_exile_leaves_exile_and_cant_be_played_again() {
 fn act_on_impulse_exiles_the_cards_face_up_and_unplayed_ones_stay_exiled() {
     cr!("406.3", "611.2a");
     ruling!("Act on Impulse", "The cards are exiled face up.");
-    ruling!("Act on Impulse", "Any cards you don't play will remain exiled.");
+    ruling!(
+        "Act on Impulse",
+        "Any cards you don't play will remain exiled."
+    );
     supported("Act on Impulse");
     // "Exile the top three cards of your library. Until end of turn, you may play those
     // cards."
@@ -343,7 +346,10 @@ fn act_on_impulse_exiles_the_cards_face_up_and_unplayed_ones_stay_exiled() {
 #[test]
 fn commune_with_lavas_unplayed_cards_stay_exiled() {
     cr!("611.2a", "107.3a");
-    ruling!("Commune with Lava", "Any cards you don't play will remain exiled.");
+    ruling!(
+        "Commune with Lava",
+        "Any cards you don't play will remain exiled."
+    );
     supported("Commune with Lava");
     // "Exile the top X cards of your library. Until the end of your next turn, you may
     // play those cards."
@@ -435,4 +441,83 @@ fn hedron_detonators_card_stays_exiled_if_not_played() {
     t.resolve_all();
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
     stays_exiled_after_this_turn(&mut t, forest);
+}
+
+#[test]
+fn haste_magics_card_follows_timing_rules_until_your_next_end_step() {
+    cr!("305.1", "305.2", "500.4", "601.2f");
+    ruling!(
+        "Haste Magic",
+        "You pay all costs and follow all timing rules for cards played this way. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty and only if you have an available land play remaining."
+    );
+    supported("Haste Magic");
+    // "Target creature gets +3/+1 and gains haste until end of turn. Exile the top card of
+    // your library. You may play it until your next end step."
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let spell = t.hand(P0, "Haste Magic");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 3));
+    check_land_timing(&mut t, forest);
+    // A nonland card costs its mana cost, and can be played only until P0's end step
+    // begins.
+    let mut t = TestGame::new(2);
+    let card = t.library_top(P0, "Grizzly Bears");
+    let bears = t.battlefield(P0, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let spell = t.hand(P0, "Haste Magic");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve_all();
+    check_pays_costs(&mut t, card);
+    let mut t = TestGame::new(2);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let giant = t.battlefield(P0, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let spell = t.hand(P0, "Haste Magic");
+    t.cast(P0, spell).target(giant).go();
+    t.resolve_all();
+    add_mana(&mut t, P0, ManaType::R, 1);
+    assert!(playable(&mut t, bolt));
+    t.advance_to(P0, Step::End);
+    add_mana(&mut t, P0, ManaType::R, 1);
+    assert!(!playable(&mut t, bolt));
+    assert_eq!(t.zone(bolt), Zone::Exile);
+}
+
+#[test]
+fn snowslope_hunters_card_follows_timing_rules_and_costs() {
+    cr!("305.1", "305.2", "601.2f", "602.5b");
+    ruling!(
+        "Snowslope Hunter",
+        "You pay all costs and follow all timing rules for cards played this way. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty and only if you have an available land play remaining."
+    );
+    supported("Snowslope Hunter");
+    // "Sacrifice another creature or artifact: Exile the top card of your library. You may
+    // play it until the end of your next turn. Activate only during your turn and only
+    // once each turn."
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    let hunter = t.battlefield(P0, "Snowslope Hunter");
+    let a = t.battlefield(P0, "Ornithopter");
+    let b = t.battlefield(P0, "Ornithopter");
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    activate_containing(&mut t, P0, hunter, "Exile the top").expect("activate");
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    // Only once each turn.
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    assert!(activate_containing(&mut t, P0, hunter, "Exile the top").is_err());
+    t.clear_answers();
+    check_land_timing(&mut t, forest);
+    // On P0's next turn, a nonland card exiled with it costs its mana cost.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    activate_containing(&mut t, P0, hunter, "Exile the top").expect("activate");
+    t.resolve_all();
+    check_pays_costs(&mut t, bears);
 }

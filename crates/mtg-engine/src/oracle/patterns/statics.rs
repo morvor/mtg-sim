@@ -815,6 +815,14 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
+    // "instant and sorcery cards you own in exile and in your graveyard" (Crackling
+    // Drake): the cards in either zone.
+    if let Some(head) = s.strip_suffix(" you own in exile and in your graveyard") {
+        return Some(Value::Sum(vec![
+            parse_for_each(&format!("{head} you own in exile"), it)?,
+            parse_for_each(&format!("{head} in your graveyard"), it)?,
+        ]));
+    }
     // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
     let your_graveyard = || {
         Filter::and(vec![
@@ -1914,7 +1922,17 @@ fn parse_predicate(
     }
     if let Some(r) = p.strip_prefix("has ").or_else(|| p.strip_prefix("have ")) {
         // Base P/T (layer 7b).
-        if let Some(pt) = r.strip_prefix("base power and toughness ") {
+        if let Some(pt) = r
+            .strip_prefix("base power and toughness ")
+            .or_else(|| r.strip_prefix("base power and base toughness "))
+        {
+            if pt == "each equal to its mana value" && subj.it.is_none() {
+                // "Each other non-Aura enchantment ... has base power and base toughness
+                // each equal to its mana value" (Opalescence): each affected object's own
+                // mana value (CR 613.4b).
+                let mv = Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED)));
+                return Some(vec![Out::Mod(Modification::SetPT(Some(mv.clone()), Some(mv)))]);
+            }
             if let Some(a) = pt.strip_prefix("each equal to ") {
                 let v = parse_amount(a, subj.it.as_ref())?;
                 return Some(vec![Out::Mod(Modification::SetPT(Some(v.clone()), Some(v)))]);
