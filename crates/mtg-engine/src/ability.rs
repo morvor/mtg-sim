@@ -1240,6 +1240,9 @@ pub enum Value {
     /// "the number of colors among [objects]": how many of the five colors at least one
     /// matching object is (CR 105.2; colorless isn't a color, CR 105.2c).
     ColorsAmong(Filter),
+    /// "the number of different mana values among [objects]": how many distinct mana
+    /// values the matching objects have (CR 202.3; a land card's is 0, CR 202.3a).
+    ManaValuesAmong(Filter),
     /// The source permanent's class level (CR 716.2d: a permanent without a level is
     /// treated as level 1).
     ClassLevel,

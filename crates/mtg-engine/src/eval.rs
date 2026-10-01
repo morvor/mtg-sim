@@ -1149,6 +1149,16 @@ impl Game {
                 }
                 set.count() as i64
             }
+            Value::ManaValuesAmong(f) => {
+                let mut seen: Vec<u32> = Vec::new();
+                for o in self.objects_matching(f, ctx) {
+                    let mv = self.mana_value_of(o);
+                    if !seen.contains(&mv) {
+                        seen.push(mv);
+                    }
+                }
+                seen.len() as i64
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()

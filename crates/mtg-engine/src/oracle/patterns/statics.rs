@@ -879,6 +879,16 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
         };
         return Some(Value::Custom(format!("colors_of:{which}").into()));
     }
+    // "different mana value among cards in your graveyard" (CR 202.3).
+    if let Some(r) = s
+        .strip_prefix("different mana value among ")
+        .or_else(|| s.strip_prefix("different mana values among "))
+    {
+        let (f, true) = whole_object_phrase(r)? else {
+            return None;
+        };
+        return Some(Value::ManaValuesAmong(f));
+    }
     // "color among permanents you control" (Vivid, CR 105.2).
     if let Some(r) = s.strip_prefix("color among ") {
         let (f, true) = whole_object_phrase(r)? else {

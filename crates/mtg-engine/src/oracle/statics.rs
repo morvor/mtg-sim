@@ -666,6 +666,17 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             };
             return Some((Value::ColorsAmong(f), rest.to_string()));
         }
+        // "the number of different mana values among cards in your graveyard" (also "for
+        // each different mana value among ...", CR 202.3).
+        if let Some(r) = r
+            .strip_prefix("different mana values among ")
+            .or_else(|| r.strip_prefix("different mana value among "))
+        {
+            let (f, true, rest) = parse_object_phrase(r)? else {
+                return None;
+            };
+            return Some((Value::ManaValuesAmong(f), rest.to_string()));
+        }
         // Converge (CR 207.2c): "the number of colors of mana spent to cast ~" (also "for
         // each color of mana spent to cast ~"). A copy wasn't cast: no mana was spent.
         if let Some(rest) = r
