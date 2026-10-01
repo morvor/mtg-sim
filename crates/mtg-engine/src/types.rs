@@ -560,6 +560,13 @@ pub fn subtype_lists() -> &'static SubtypeLists {
                 }
             }
             v.push("Time Lord".to_string());
+            // Creature types printed on cards in the bundled Scryfall data but missing
+            // from this CR text's 205.3m list (sets released after the rules snapshot).
+            for extra in ["Athlete"] {
+                if !v.iter().any(|t| t == extra) {
+                    v.push(extra.to_string());
+                }
+            }
             v
         };
         SubtypeLists {

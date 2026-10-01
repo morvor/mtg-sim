@@ -1108,6 +1108,24 @@ impl Game {
                 crate::keyword_impls::resolve_mutate(self, id);
                 return;
             }
+            if let Some(dest) = crate::kw::permanent_resolved_destination(self, id) {
+                // A keyword puts the resolving permanent spell somewhere else instead
+                // (e.g. rebound on a creature spell, CR 702.88a).
+                let moved = self.move_object_ev(MoveEv {
+                    obj: id,
+                    to: dest.0,
+                    pos: dest.1,
+                    cause: MoveCause::Resolve,
+                    by: Some(controller),
+                    etb: EtbInfo::default(),
+                    source: None,
+                });
+                if let Some(new) = moved {
+                    crate::kw::after_spell_resolved(self, id, new);
+                }
+                self.emit(Event::SpellResolved { spell: id });
+                return;
+            }
             crate::kw::before_permanent_enters(self, id);
             crate::kw::permanent_spell_etb(self, id, &mut etb);
             let copy = o.kind == ObjKind::SpellCopy || o.kind == ObjKind::CardCopy;
