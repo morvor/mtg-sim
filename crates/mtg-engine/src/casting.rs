@@ -1593,7 +1593,9 @@ impl Game {
                             CostChange::AlternativeCost(_)
                             | CostChange::FlashForAdditionalCost(_)
                             | CostChange::OptionalAdditionalCost { .. }
-                            | CostChange::AdditionalCostChoice(_) => {}
+                            | CostChange::AdditionalCostChoice(_)
+                            // How it's paid, not what (see `cost_rules::spend_any_type`).
+                            | CostChange::SpendAnyType => {}
                         }
                     }
                 }
@@ -1634,7 +1636,8 @@ impl Game {
                 CostChange::AlternativeCost(_)
                 | CostChange::FlashForAdditionalCost(_)
                 | CostChange::OptionalAdditionalCost { .. }
-                | CostChange::AdditionalCostChoice(_) => {}
+                | CostChange::AdditionalCostChoice(_)
+                | CostChange::SpendAnyType => {}
             }
         }
         for (n, color) in reductions {

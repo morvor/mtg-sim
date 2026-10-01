@@ -2111,6 +2111,9 @@ pub enum CostChange {
     /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
     /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
     AdditionalCostChoice(Vec<(SmolStr, Cost)>),
+    /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
+    /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
+    SpendAnyType,
 }
 
 /// Static abilities (CR 604) and what they do.

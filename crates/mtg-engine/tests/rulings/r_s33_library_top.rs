@@ -317,3 +317,49 @@ fn magus_of_the_future_a_land_from_the_top_uses_the_land_play() {
     let last = t.library_top(P0, "Plains");
     assert!(!can_play_land(&mut t, P0, last));
 }
+
+#[test]
+fn vizier_of_the_menagerie_the_top_card_cant_be_cycled_or_discarded() {
+    cr!("702.29a", "701.9a", "602.2");
+    ruling!(
+        "Vizier of the Menagerie",
+        "The top card of your library isn't in your hand, so you can't cycle it, discard it, or activate any of its activated abilities."
+    );
+    supported("Vizier of the Menagerie");
+    // "You may look at the top card of your library any time. You may cast creature
+    // spells from the top of your library. You can spend mana of any type to cast creature
+    // spells."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Menagerie");
+    t.lands(P0, "Island", 5);
+    // Monstrous Carabid ({3}{B}{R}, cycling {B/R}): cast with Islands, never cycled.
+    let carabid = t.library_top(P0, "Monstrous Carabid");
+    let acts = actions_with(&mut t, P0, carabid);
+    assert!(acts.iter().any(|a| matches!(a, Action::Cast { .. })));
+    assert!(!activates_or_special(&acts));
+    opponent_mind_rots_p0(&mut t, carabid);
+}
+
+#[test]
+fn vizier_of_the_menagerie_any_type_of_mana_for_any_creature_spell() {
+    cr!("609.4b", "118.14");
+    ruling!(
+        "Vizier of the Menagerie",
+        "You may spend mana as though it were mana of any type to cast any creature spell, not just creature spells that you cast from the top of your library."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    let growth = t.hand(P0, "Giant Growth");
+    t.battlefield(P0, "Grizzly Bears");
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    t.battlefield(P0, "Vizier of the Menagerie");
+    t.g.recompute();
+    // A creature spell from the hand: {1}{G} paid with two Islands.
+    assert!(can_cast(&mut t, P0, bears, CastMethod::Normal));
+    // Not a noncreature spell.
+    assert!(!can_cast(&mut t, P0, growth, CastMethod::Normal));
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+}
