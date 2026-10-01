@@ -521,3 +521,180 @@ fn snowslope_hunters_card_follows_timing_rules_and_costs() {
     t.resolve_all();
     check_pays_costs(&mut t, bears);
 }
+
+#[test]
+fn valakut_explorations_card_follows_the_normal_timing_and_land_play_rules() {
+    cr!("305.1", "305.2", "116.2a");
+    ruling!(
+        "Valakut Exploration",
+        "You must follow the normal timing permissions and restrictions for the exiled card. If it's a land, you can't play it unless you have land plays available."
+    );
+    supported("Valakut Exploration");
+    // "Landfall — Whenever a land you control enters, exile the top card of your library.
+    // You may play that card for as long as it remains exiled."
+    // P0 plays a Mountain: the Forest exiled can't be played, as P0 has no land play left.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Valakut Exploration");
+    let forest = t.library_top(P0, "Forest");
+    let mountain = t.hand(P0, "Mountain");
+    t.play_land(P0, mountain).expect("play a land");
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Exile);
+    assert!(!playable(&mut t, forest));
+    // A land put onto the battlefield by an effect doesn't use the land play: the exiled
+    // land may be played, with the normal timing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Valakut Exploration");
+    let forest = t.library_top(P0, "Forest");
+    t.enter(P0, "Plains");
+    t.resolve_all();
+    check_land_timing(&mut t, forest);
+}
+
+#[test]
+fn valakut_explorations_card_played_and_exiled_again_cant_be_played() {
+    cr!("400.7", "611.2a", "607.2a", "603.4");
+    ruling!(
+        "Valakut Exploration",
+        "If you play a card this way, it leaves exile and becomes a new object. If it returns to exile later in the turn, you can't play it again."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Valakut Exploration");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.enter(P0, "Plains");
+    t.resolve_all();
+    add_mana(&mut t, P0, ManaType::G, 2);
+    let c = t.g.current(bears);
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    // Back in exile, it's a new object: not playable, and not exiled with Valakut
+    // Exploration (whose end step ability then does nothing).
+    let on_bf = t.g.current(bears);
+    t.g.exile_object(on_bf, None);
+    t.settle();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    add_mana(&mut t, P0, ManaType::G, 2);
+    assert!(!playable(&mut t, bears));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn valakut_exploration_puts_the_unplayed_cards_into_the_graveyard_at_end_step() {
+    cr!("607.2a", "603.4", "120.3a");
+    supported("Valakut Exploration");
+    // "At the beginning of your end step, if there are cards exiled with this enchantment,
+    // put them into their owner's graveyard, then this enchantment deals that much damage
+    // to each opponent." Two landfalls exile two cards; P0 plays neither.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Valakut Exploration");
+    let cards = stack_library(&mut t, P0, &["Grizzly Bears", "Hill Giant"]);
+    t.enter(P0, "Plains");
+    t.resolve_all();
+    t.enter(P0, "Plains");
+    t.resolve_all();
+    for c in &cards {
+        assert_eq!(t.zone(*c), Zone::Exile);
+    }
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    for c in &cards {
+        assert_eq!(t.zone(*c), Zone::Graveyard(P0));
+    }
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn vances_blasting_cannons_creature_card_waits_for_the_main_phase() {
+    cr!("307.1", "601.2f", "305.9");
+    ruling!(
+        "Vance's Blasting Cannons // Spitfire Bastion",
+        "Casting the exiled card follows the normal rules for casting that card. You must pay its costs, and you must follow all applicable timing rules. For example, if you exile a creature card this way, you must wait until your main phase to cast it."
+    );
+    supported("Vance's Blasting Cannons // Spitfire Bastion");
+    // "At the beginning of your upkeep, exile the top card of your library. If it's a
+    // nonland card, you may cast that card this turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vance's Blasting Cannons // Spitfire Bastion");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    // Not in the upkeep, even with the mana.
+    add_mana(&mut t, P0, ManaType::G, 2);
+    assert!(!playable(&mut t, bears));
+    // In P0's main phase: by paying its mana cost.
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(!playable(&mut t, bears));
+    add_mana(&mut t, P0, ManaType::G, 2);
+    assert!(playable(&mut t, bears));
+    let c = t.g.current(bears);
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    // A land card exiled this way can't be played.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vance's Blasting Cannons // Spitfire Bastion");
+    let forest = t.library_top(P0, "Forest");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.zone(forest), Zone::Exile);
+    assert!(!playable(&mut t, forest));
+}
+
+#[test]
+fn practiced_scrollsmiths_sorcery_is_cast_with_sorcery_timing_and_its_cost() {
+    cr!("307.1", "601.2f", "117.1a");
+    ruling!(
+        "Practiced Scrollsmith",
+        "You pay all costs and follow all timing rules for spells cast this way. For example, if the exiled card is a sorcery, you may cast it only during your main phase while the stack is empty."
+    );
+    supported("Practiced Scrollsmith");
+    // "When this creature enters, exile target noncreature, nonland card from your
+    // graveyard. Until the end of your next turn, you may cast that card." Divination
+    // {2}{U}: "Draw two cards."
+    let mut t = TestGame::new(2);
+    let divination = t.graveyard(P0, "Divination");
+    t.answer_targets(P0, &[Entity::Object(divination)]);
+    t.enter(P0, "Practiced Scrollsmith");
+    t.resolve_all();
+    assert_eq!(t.zone(divination), Zone::Exile);
+    // Its mana cost has to be paid.
+    assert!(!playable(&mut t, divination));
+    let with_mana = |t: &mut TestGame| {
+        add_mana(t, P0, ManaType::U, 1);
+        add_mana(t, P0, ManaType::C, 2);
+    };
+    with_mana(&mut t);
+    assert!(playable(&mut t, divination));
+    // Not while a spell is on the stack.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    assert!(!playable(&mut t, divination));
+    t.resolve_all();
+    // Not during combat, nor in the opponent's turn.
+    t.set_step(P0, Step::BeginningOfCombat);
+    with_mana(&mut t);
+    assert!(!playable(&mut t, divination));
+    t.g.combat = None;
+    t.set_step(P1, Step::PrecombatMain);
+    with_mana(&mut t);
+    assert!(!playable(&mut t, divination));
+    // In P0's next main phase, it's cast.
+    t.advance_to(P0, Step::PrecombatMain);
+    with_mana(&mut t);
+    let hand = t.hand_size(P0);
+    let c = t.g.current(divination);
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+}

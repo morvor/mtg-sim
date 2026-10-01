@@ -14,6 +14,9 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "card_flow: you may play those cards this turn", priority: 90, apply: may_play_them }
 }
+inventory::submit! {
+    FollowupPattern { name: "card_flow: if it's a nonland card, you may cast that card this turn", priority: 90, apply: may_cast_if_nonland }
+}
 
 /// "the top card of", "the top N cards of" + a library.
 fn top_cards_of<'a>(s: &'a str) -> Option<(Value, &'a str)> {
@@ -115,6 +118,11 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         (None, "until the end of your next turn") => Duration::UntilEndOfYourNextTurn,
         // Haste Magic: until your next end step begins (CR 500.4).
         (None, "until your next end step") => Duration::UntilYourNextStep(TriggerStep::End),
+        // Valakut Exploration, Rassilon: the permission is for those objects, so it ends
+        // when they leave exile (CR 400.7).
+        (None, "for as long as it remains exiled" | "for as long as they remain exiled") => {
+            Duration::Permanent
+        }
         _ => return false,
     };
     if !exiles_your_top_cards(prev) {
@@ -130,5 +138,35 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             free: false,
         },
     ]);
+    true
+}
+
+/// "If it's a nonland card, you may cast that card this turn." after exiling the top card
+/// of your library (Vance's Blasting Cannons): a permission to cast it, with the normal
+/// timing rules and costs; a land card gets none (CR 305.9).
+fn may_cast_if_nonland(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let duration = match l {
+        "if it's a nonland card, you may cast that card this turn"
+        | "if it's a nonland card, you may cast it this turn" => Duration::EndOfTurn,
+        _ => return false,
+    };
+    if !exiles_your_top_cards(prev) {
+        return false;
+    }
+    let card = Sel::Var(vars::IT);
+    let grant = Effect::If {
+        cond: Condition::SelMatches(
+            card.clone(),
+            Filter::Not(Box::new(Filter::Type(crate::types::CardType::Land))),
+        ),
+        then: Box::new(Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: card,
+            duration,
+            free: false,
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    *prev = Effect::seq(vec![std::mem::take(prev), grant]);
     true
 }

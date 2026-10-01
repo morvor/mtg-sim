@@ -841,7 +841,8 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         }
         let base = TriggerCond::NthSpellCast { who, n };
         let c = match x {
-            "spell each turn" => base,
+            // "your third spell in a turn" (Vance's Blasting Cannons): the same.
+            "spell each turn" | "spell in a turn" => base,
             "spell during each opponent's turn" | "spell during an opponent's turn" => {
                 TriggerCond::Where {
                     trigger: Box::new(base),
