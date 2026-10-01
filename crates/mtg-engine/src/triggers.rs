@@ -2046,6 +2046,12 @@ impl Game {
         ctx.source = Some(t.source);
         ctx.controller = t.controller;
         ctx.event = Some(t.event.clone());
+        // CR 605.4a: it resolves now; count it like a resolution from the stack.
+        if let Some(o) = self.objects.get_mut(t.source.0 as usize) {
+            *o.triggers_this_turn
+                .entry(t.ability.uid | turn_keys::RESOLVED)
+                .or_insert(0) += 1;
+        }
         self.exec(&body.effect, &mut ctx);
     }
 }

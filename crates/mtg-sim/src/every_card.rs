@@ -24,7 +24,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use smol_str::SmolStr;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -40,6 +40,9 @@ pub struct PoolCard {
     pub mana_value: u32,
     /// Legal in some format (filler cards are, to keep games ordinary).
     pub legal: bool,
+    /// Lowercase words of its type lines and its keywords ("goblin", "artifact",
+    /// "flying"), for finding cards that go with others.
+    pub words: Vec<String>,
 }
 
 impl PoolCard {
@@ -81,7 +84,7 @@ impl PoolCard {
 /// Every fully supported card: real (paper) playable cards, one per name, sorted by
 /// name. Compiled on `threads` threads.
 pub fn pool(threads: usize) -> Vec<PoolCard> {
-    let mut names: Vec<(String, bool, f64)> = Vec::new();
+    let mut names: Vec<(String, bool, f64, Vec<String>)> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for c in mtg_data::cards().iter() {
         if !c.is_playable_card() {
@@ -91,7 +94,27 @@ pub fn pool(threads: usize) -> Vec<PoolCard> {
             continue;
         }
         if seen.insert(c.name.to_lowercase()) {
-            names.push((c.name.clone(), c.is_legal_somewhere(), c.cmc.unwrap_or(0.0)));
+            let mut words: Vec<String> = c.keywords.iter().map(|k| k.to_lowercase()).collect();
+            for f in c.faces() {
+                let tl = f
+                    .type_line
+                    .clone()
+                    .or_else(|| c.type_line.clone())
+                    .unwrap_or_default();
+                words.extend(
+                    tl.split(|ch: char| !ch.is_alphanumeric() && ch != '\'')
+                        .filter(|w| !w.is_empty())
+                        .map(str::to_lowercase),
+                );
+            }
+            words.sort();
+            words.dedup();
+            names.push((
+                c.name.clone(),
+                c.is_legal_somewhere(),
+                c.cmc.unwrap_or(0.0),
+                words,
+            ));
         }
     }
     names.sort_by(|a, b| a.0.cmp(&b.0));
@@ -101,7 +124,7 @@ pub fn pool(threads: usize) -> Vec<PoolCard> {
         for _ in 0..threads.max(1) {
             s.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some((name, legal, cmc)) = names.get(i) else {
+                let Some((name, legal, cmc, words)) = names.get(i) else {
                     break;
                 };
                 let Some(def) = CardDb::global().get(name) else {
@@ -125,6 +148,7 @@ pub fn pool(threads: usize) -> Vec<PoolCard> {
                         mask,
                         mana_value: cmc.max(0.0).ceil() as u32,
                         legal: *legal,
+                        words: words.clone(),
                     },
                 ));
             });
@@ -171,7 +195,42 @@ pub struct Picker<'a> {
     /// Background.
     commanders: Vec<usize>,
     background_choosers: Vec<usize>,
+    /// Plain spells by the words of their type lines and keywords.
+    by_word: HashMap<String, Vec<usize>>,
+    /// Plain spells whose text has each [`PHRASES`] filler phrase.
+    by_phrase: Vec<Vec<usize>>,
 }
+
+/// Words of card text that don't call for particular cards (every deck has them).
+const STOP_WORDS: [&str; 8] = [
+    "creature",
+    "land",
+    "basic",
+    "card",
+    "spell",
+    "token",
+    "enchant",
+    "legendary",
+];
+
+/// Phrases of a card's text, and a phrase of the text of other cards that make them
+/// matter in a game: "whenever you discard" wants discard effects, and so on.
+const PHRASES: [(&str, &str); 14] = [
+    ("discard", "discards"),
+    ("gain life", "you gain"),
+    ("gains life", "you gain"),
+    ("+1/+1 counter", "+1/+1 counter"),
+    ("graveyard", "mill"),
+    ("sacrifice", "sacrifice a"),
+    ("{e}", "{e}"),
+    ("poison", "toxic"),
+    ("cycle", "cycling"),
+    ("draw", "draw a card"),
+    ("token", "create a"),
+    ("tapped", "tap target"),
+    ("lose life", "loses"),
+    ("counter target", "counter target"),
+];
 
 impl<'a> Picker<'a> {
     pub fn new(pool: &'a [PoolCard]) -> Self {
@@ -187,8 +246,20 @@ impl<'a> Picker<'a> {
             openers: vec![],
             commanders: vec![],
             background_choosers: vec![],
+            by_word: HashMap::new(),
+            by_phrase: vec![vec![]; PHRASES.len()],
         };
         for (i, c) in pool.iter().enumerate() {
+            if c.is_plain_spell() && c.mana_value <= 5 {
+                for w in &c.words {
+                    p.by_word.entry(w.clone()).or_default().push(i);
+                }
+                for (k, (_, has)) in PHRASES.iter().enumerate() {
+                    if c.text.contains(has) {
+                        p.by_phrase[k].push(i);
+                    }
+                }
+            }
             if c.is_plain_spell() && c.mana_value <= 4 {
                 if c.is_creature() && c.mana_value <= 3 {
                     p.creatures.push(i);
@@ -264,6 +335,64 @@ impl<'a> Picker<'a> {
             }
             for _ in 0..4.min(n - out.len()) {
                 out.push(self.def(i));
+            }
+        }
+        out
+    }
+
+    /// Cards that make the card's abilities matter: four copies each of up to four
+    /// cards with types or keywords its text names ("Goblin", "artifact", "flying"),
+    /// or that do what its text cares about ("whenever you discard ...").
+    fn synergy(&self, x: &PoolCard, mask: u8, rng: &mut StdRng) -> Vec<Arc<CardDef>> {
+        let mut picks: Vec<Vec<usize>> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for raw in x.text.split(|c: char| !c.is_alphanumeric() && c != '\'') {
+            let w = raw.to_lowercase();
+            let singular = match w.as_str() {
+                "elves" => "elf".to_string(),
+                "dwarves" => "dwarf".to_string(),
+                "wolves" => "wolf".to_string(),
+                "sorceries" => "sorcery".to_string(),
+                _ => w.strip_suffix('s').unwrap_or(&w).to_string(),
+            };
+            for cand in [w.clone(), singular] {
+                if cand.len() < 3
+                    || STOP_WORDS.contains(&cand.as_str())
+                    || !seen.insert(cand.clone())
+                {
+                    continue;
+                }
+                if let Some(v) = self.by_word.get(&cand) {
+                    let fit = self.fitting(v, mask);
+                    if !fit.is_empty() {
+                        picks.push(fit);
+                    }
+                }
+            }
+        }
+        for (k, (wants, _)) in PHRASES.iter().enumerate() {
+            if x.text.contains(wants) {
+                let fit = self.fitting(&self.by_phrase[k], mask);
+                if !fit.is_empty() {
+                    picks.push(fit);
+                }
+            }
+        }
+        picks.shuffle(rng);
+        let mut out = Vec::new();
+        let mut used: HashSet<usize> = HashSet::new();
+        for from in picks.iter().take(4) {
+            if let Some(&i) = from
+                .iter()
+                .filter(|i| !used.contains(i))
+                .collect::<Vec<_>>()
+                .choose(rng)
+                .copied()
+            {
+                used.insert(i);
+                for _ in 0..4 {
+                    out.push(self.def(i));
+                }
             }
         }
         out
@@ -379,6 +508,7 @@ impl<'a> Picker<'a> {
                 }
             }
         }
+        extra_filler.extend(self.synergy(x, mask, rng));
         let colors: Vec<usize> = (0..5).filter(|c| mask & (1 << c) != 0).collect();
         let land = |i: usize| -> SmolStr {
             if wastes && i % 3 == 2 {

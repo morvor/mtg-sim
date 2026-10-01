@@ -7,6 +7,7 @@ use mtg_engine::agents::RandomAgent;
 use mtg_engine::decision::SpecialAction;
 use mtg_engine::events::Event;
 use mtg_engine::object::StackKind;
+use mtg_engine::triggers::turn_keys;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 use rand::rngs::StdRng;
@@ -305,6 +306,22 @@ impl FocusAgent {
     fn priority(&mut self, g: &Game, p: PlayerId, actions: &[Action]) -> Option<Action> {
         let mut usage = self.usage.lock().unwrap_or_else(|e| e.into_inner());
         usage.offered(g, actions);
+        // Triggered mana abilities resolve without using the stack (CR 605.4a): they're
+        // seen in the resolution counts of their sources.
+        for &id in &g.battlefield {
+            if !self.focus.is_focus_card(g, id) {
+                continue;
+            }
+            for k in g.obj(id).triggers_this_turn.keys() {
+                if k & turn_keys::RESOLVED != 0 {
+                    let uid = k & !(turn_keys::RESOLVED | turn_keys::DONE_ONCE);
+                    if self.focus.uids.contains(&uid) && !usage.resolved.contains(&uid) {
+                        usage.triggered.insert(uid);
+                        usage.resolved.insert(uid);
+                    }
+                }
+            }
+        }
         if self.step != (g.turn.number, g.turn.step) {
             self.step = (g.turn.number, g.turn.step);
             self.taken.clear();
