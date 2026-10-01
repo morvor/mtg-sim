@@ -99,6 +99,7 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     let mut card_types = Vec::new();
     let mut subtypes = Vec::new();
+    let mut supertypes = Vec::new();
     for (i, w) in s.split_whitespace().enumerate() {
         if i == 0 {
             if let Some((p, t)) = pt(w) {
@@ -106,15 +107,21 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
                 continue;
             }
         }
-        if let Some(t) = CardType::from_word(w) {
+        if let Some(st) = Supertype::from_word(w) {
+            // "it's legendary in addition to its other types" (Sarkhan, Soul Aflame).
+            supertypes.push(st);
+        } else if let Some(t) = CardType::from_word(w) {
             card_types.push(t);
         } else {
             let sub = subtype_word(w)?;
             subtypes.push(sub);
         }
     }
-    if card_types.is_empty() && subtypes.is_empty() {
+    if card_types.is_empty() && subtypes.is_empty() && supertypes.is_empty() {
         return None;
+    }
+    if !supertypes.is_empty() {
+        out.push(Modification::AddSupertypes(supertypes));
     }
     if !card_types.is_empty() {
         out.push(Modification::AddTypes(card_types));
@@ -250,6 +257,9 @@ pub(crate) fn copy_exceptions(
             } else {
                 out.extend(replaced_characteristics(r)?);
             }
+        } else if matches!(c, "its name is ~" | "her name is ~" | "his name is ~") {
+            // The copy keeps this object's own name (Sunfrill Imitator, CR 707.9b).
+            out.push(Modification::SetName(SmolStr::new(ctx.card_name)));
         } else if let Some(n) = c.strip_prefix("its name is ") {
             if n.is_empty() || n.contains('~') || n.contains('"') || n.split(' ').count() > 4 {
                 return None;
