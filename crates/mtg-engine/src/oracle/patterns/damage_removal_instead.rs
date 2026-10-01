@@ -9,6 +9,8 @@
 //! - "Draw a card. If you control a Wizard, draw two cards instead."
 //! - "Exile the top two cards of your library. If ~'s additional cost was paid, exile the
 //!   top three cards instead." (of the same library)
+//! - "Create a token that's a copy of target creature. If ~ was kicked, create five of
+//!   those tokens instead." (the same tokens, more of them)
 //!
 //! Only a previous sentence that is a single effect is replaced, and the replacement
 //! can't introduce targets of its own.
@@ -76,6 +78,24 @@ fn top_cards_amount(x: &str, prev: &Effect) -> Option<Effect> {
         face_down: *face_down,
         link: *link,
     })
+}
+
+/// "create N of those tokens" with the tokens the previous effect creates ("Create a token
+/// that's a copy of target creature. If ~ was kicked, create five of those tokens
+/// instead.").
+fn token_amount(x: &str, prev: &Effect) -> Option<Effect> {
+    let (n, r) = parse_number(x.strip_prefix("create ")?)?;
+    if r.trim() != "of those tokens" {
+        return None;
+    }
+    let mut e = prev.clone();
+    match &mut e {
+        Effect::CreateToken { count, .. }
+        | Effect::CreateTokenAttached { count, .. }
+        | Effect::CreateTokenCopy { count, .. } => *count = n,
+        _ => return None,
+    }
+    Some(e)
 }
 
 /// Whether an effect refers to the objects the previous instruction produced (`vars::IT`).
@@ -165,7 +185,9 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Some(e) if b.targets.len() == targets => Some(e),
         _ => {
             b.targets.truncate(targets);
-            damage_amount(x, prev).or_else(|| top_cards_amount(x, prev))
+            damage_amount(x, prev)
+                .or_else(|| top_cards_amount(x, prev))
+                .or_else(|| token_amount(x, prev))
         }
     };
     let Some(e) = replacement else {
