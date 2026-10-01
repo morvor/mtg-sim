@@ -166,6 +166,8 @@ Each option has `index` and `text`, and, depending on the decision:
 * `card`: for a card in a library or hand that the decision lets the player look at (a
   search, a scry, a card to discard): its characteristics, since the observation
   doesn't show it.
+* `required` (attackers): choosing this option obeys an attack requirement ("attacks
+  each combat if able", goad); a declaration must obey as many requirements as possible.
 * `group`, `group_max`, `target` (attackers and blockers), `lethal` (combat damage),
   `cost` (pawprint modes), `value` (yes/no).
 

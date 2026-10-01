@@ -36,6 +36,10 @@ def choose_many(spec, options):
     want = rng.randint(lo, max(lo, hi))
     order = list(range(len(options)))
     rng.shuffle(order)
+    # Options that obey a requirement (creatures that must attack) first.
+    order.sort(key=lambda i: not options[i].get("required", False))
+    if any(o.get("required") for o in options):
+        want = max(want, min(hi, len({o.get("group") for o in options if o.get("required")})))
     chosen, groups, spent = [], {}, 0
     budget = spec.get("budget")
     if not spec["distinct"]:

@@ -107,6 +107,11 @@ pub struct OptionView {
     /// Attackers: what the creature would attack; blockers: the attacker it would block.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<EntityRef>,
+    /// Attackers: choosing this option obeys a requirement ("attacks each combat if
+    /// able", goad, CR 508.1d). The declaration must obey as many requirements as
+    /// possible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
     /// Combat damage: the damage that's lethal for this recipient.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lethal: Option<u32>,
@@ -560,7 +565,11 @@ pub fn prepare(
                 let avail: Vec<usize> = if available.is_empty() {
                     (0..modes.len()).collect()
                 } else {
-                    available.clone()
+                    available
+                        .iter()
+                        .copied()
+                        .filter(|m| *m < modes.len())
+                        .collect()
                 };
                 let views = avail
                     .iter()
@@ -702,6 +711,17 @@ pub fn prepare(
                 (vec![], vec![]),
             ),
             Decision::DeclareAttackers { options } => {
+                use mtg_engine::combat::AttackRequirement as R;
+                let reqs = mtg_engine::combat::attack_requirements(g);
+                let required = |a: ObjectId, t: Entity| {
+                    reqs.iter().any(|r| match r {
+                        R::Attacks(c) => *c == a,
+                        R::AttacksPlayerOtherThan(c, ps) => {
+                            *c == a && matches!(t, Entity::Player(p) if !ps.contains(&p))
+                        }
+                        R::AttacksPlayer(c, p) => *c == a && t == Entity::Player(*p),
+                    })
+                };
                 let mut views = Vec::new();
                 let mut pay = Vec::new();
                 for (a, ts) in options {
@@ -712,6 +732,7 @@ pub fn prepare(
                             group: Some(a.0),
                             group_max: Some(1),
                             target: Some(EntityRef::from(*t)),
+                            required: required(*a, *t).then_some(true),
                             ..Default::default()
                         });
                         pay.push(Payload::Pair(*a, *t));
