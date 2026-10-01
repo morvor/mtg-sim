@@ -82,7 +82,12 @@ impl Renderer<'_> {
             TargetKind::ObjectOrPlayer(f, pf) => {
                 let o = self.noun(f, num);
                 let p = self.player_filter_noun(pf, num);
-                format!("{o} or {p}")
+                // "target player or planeswalker", "target creature or player".
+                if o.starts_with("planeswalker") || o.starts_with("battle") {
+                    format!("{p} or {o}")
+                } else {
+                    format!("{o} or {p}")
+                }
             }
             TargetKind::Ability(f) => {
                 let base = match num {
@@ -152,6 +157,7 @@ impl Renderer<'_> {
         }
         if !self.introduced[idx] {
             self.introduced[idx] = true;
+            self.self_salient = false;
             let p = self.target_phrase(i);
             return decline(p, case);
         }
@@ -191,6 +197,7 @@ impl Renderer<'_> {
         };
         match s {
             Sel::None => self.gap("Sel::None"),
+            Sel::This if self.self_salient => decline("~it".into(), case),
             Sel::This => decline(self.me(), case),
             Sel::Target(i) => self.target_mention(*i, case),
             Sel::AllTargets => {
@@ -209,7 +216,10 @@ impl Renderer<'_> {
                 vars::CREATED => it(case),
                 _ => it(case),
             },
-            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell => it(case),
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell => {
+                self.self_salient = false;
+                it(case)
+            }
             Sel::TriggerOtherObject => it(case),
             Sel::TriggerObjects => them(case),
             Sel::TriggerPlayer => decline("that player".into(), case),

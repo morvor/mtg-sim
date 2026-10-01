@@ -120,7 +120,7 @@ impl Renderer<'_> {
             }
             Effect::Sacrifice { who, filter, count } => {
                 let det = self.det_for(count);
-                let n = self.noun_det(filter, det);
+                let n = self.noun_det(&strip_controller(filter), det);
                 (who.clone(), format!("sacrifice {n}"), false)
             }
             Effect::AddPlayerCounters { who, kind, n } => {
@@ -823,8 +823,8 @@ impl Renderer<'_> {
                 let p = self.possessive_for(who);
                 let f = self.card_noun(filter);
                 let f = with_article(&f);
-                let found = self.destination_phrase(found_to, false, "that card");
-                let rest = self.destination_phrase(rest_to, true, "the rest");
+                let found = self.destination_phrase(found_to, false, true);
+                let rest = self.destination_phrase(rest_to, true, true);
                 let vp = format!(
                     "reveal cards from the top of {p} library until {} reveal {f}. Put that card {found} and the rest {rest}",
                     if p == "your" { "you" } else { "they" }
@@ -1250,6 +1250,12 @@ impl Renderer<'_> {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
         match cond {
+            Condition::PrevHappened
+                if else_empty && matches!(then, Effect::Reflexive { .. }) =>
+            {
+                // "When you do, ..." already means "if you do" (CR 603.12).
+                self.effect(then)
+            }
             Condition::PrevHappened => {
                 let mut s = String::new();
                 if !then_empty {
@@ -1301,12 +1307,17 @@ impl Renderer<'_> {
         then: &Effect,
         otherwise: &Effect,
     ) -> String {
-        let p = self.player(who, Case::Subj);
-        let pays = self.cost_as_payment(cost);
         if matches!(then, Effect::Noop) && !matches!(otherwise, Effect::Noop) {
             let o = self.effect(otherwise);
+            let p = self.player(who, Case::Subj);
+            let pays = self.cost_as_payment(cost);
+            if p == "you" {
+                return format!("{o} unless you {pays}");
+            }
             return format!("{o} unless {p} {}", third_person(&pays));
         }
+        let p = self.player(who, Case::Subj);
+        let pays = self.cost_as_payment(cost);
         let mut s = format!("{p} may {pays}");
         let they = if p == "you" { "you" } else { "they" };
         if !matches!(then, Effect::Noop) {
@@ -1348,7 +1359,8 @@ impl Renderer<'_> {
     fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
         let w = self.sel(what, Case::Obj);
         let plural = is_plural_sel(what);
-        let d = self.destination_phrase(to, plural, "");
+        let yours = self.sel_is_yours(what);
+        let d = self.destination_phrase(to, plural, yours);
         let verb = match to.zone {
             ZoneKind::Hand | ZoneKind::Battlefield => "return",
             ZoneKind::Exile => "exile",
@@ -1377,7 +1389,7 @@ impl Renderer<'_> {
         &mut self,
         to: &Destination,
         plural: bool,
-        _what: &str,
+        yours: bool,
     ) -> String {
         let owner = if plural {
             "their owners'"
@@ -1422,9 +1434,19 @@ impl Renderer<'_> {
             if to.transformed {
                 s.push_str(" transformed");
             }
-            if let Some(c) = &to.controller {
-                let c = self.player(c, Case::Poss);
-                s.push_str(&format!(" under {c} control"));
+            // CR 110.2a: an object put onto the battlefield enters under the control of
+            // the player putting it there; cards still say "under your control" when the
+            // object isn't theirs, and "under its owner's control" when it goes back.
+            match &to.controller {
+                Some(PlayerRef::You) if yours => {}
+                Some(c) => {
+                    let c = self.player(c, Case::Poss);
+                    s.push_str(&format!(" under {c} control"));
+                }
+                None if !yours => {
+                    s.push_str(&format!(" under {owner} control"));
+                }
+                None => {}
             }
             if let Some(a) = &to.attached_to {
                 let a = self.sel(a, Case::Obj);
@@ -1477,7 +1499,7 @@ impl Renderer<'_> {
         if *reveal {
             s.push_str(&format!(", reveal {pron}"));
         }
-        let mut dest = self.destination_phrase(to, many, "");
+        let mut dest = self.destination_phrase(to, many, same_player(who, whose));
         if to.zone == ZoneKind::Battlefield {
             dest = dest.replacen("to the battlefield", "onto the battlefield", 1);
         }
@@ -1523,35 +1545,57 @@ impl Renderer<'_> {
         let look = if reveal { "reveal" } else { "look at" };
         let mut s = self.with_subject(who, &format!("{look} {top}"), false);
         let noun = self.card_noun(filter);
-        let take_s = match (take, take_up_to) {
-            (Value::Const(1), false) => with_article(&noun),
-            (Value::Const(1), true) => format!("up to one {noun}"),
-            (Value::Const(k), false) => format!("{} {}", number_word(*k), plural(&noun)),
-            (Value::Const(k), true) => format!("up to {} {}", number_word(*k), plural(&noun)),
-            (other, _) => {
-                let v = self.value(other);
-                format!("{v} {}", plural(&noun))
-            }
-        };
         let many = !matches!(take, Value::Const(1));
-        let mut d = self.destination_phrase(take_to, many, "");
+        let mut d = self.destination_phrase(take_to, many, true);
         if take_to.zone == ZoneKind::Hand {
             d = format!("into {p} hand");
         }
         if take_to.zone == ZoneKind::Battlefield {
             d = d.replacen("to the battlefield", "onto the battlefield", 1);
         }
-        let mut rest = self.destination_phrase(rest_to, true, "");
+        let count = match take {
+            Value::Const(k) => number_word(*k),
+            other => self.value(other),
+        };
+        let pron = if many { "them" } else { "it" };
+        let take_s = if matches!(filter, Filter::Any) {
+            if take_up_to {
+                format!("put up to {count} of them {d}")
+            } else {
+                format!("put {count} of them {d}")
+            }
+        } else {
+            let what = match take {
+                Value::Const(1) => with_article(&noun),
+                _ => format!("{count} {}", plural(&noun)),
+            };
+            let what = if take_up_to && many {
+                format!("up to {what}")
+            } else {
+                what
+            };
+            let may = if take_up_to { "you may " } else { "" };
+            if !reveal && take_to.zone == ZoneKind::Hand {
+                format!("{may}reveal {what} from among them and put {pron} {d}")
+            } else {
+                format!("{may}put {what} from among them {d}")
+            }
+        };
+        let mut rest = self.destination_phrase(rest_to, true, true);
         if rest_to.zone == ZoneKind::Library {
             rest = rest.replace("their owners' library", &format!("{p} library"));
+            if rest_to.position == LibraryPosition::Bottom {
+                rest.push_str(" in any order");
+            }
         }
         if rest_to.zone == ZoneKind::Graveyard {
             rest = format!("into {p} graveyard");
         }
-        let may = if take_up_to { "" } else { "" };
-        s.push_str(&format!(
-            ". {may}Put {take_s} from among them {d} and the rest {rest}"
-        ));
+        let left = match (n, take) {
+            (Value::Const(a), Value::Const(b)) if a - b == 1 => "the other",
+            _ => "the rest",
+        };
+        s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         s
     }
 
@@ -1590,18 +1634,25 @@ impl Renderer<'_> {
     pub(crate) fn token_desc(&mut self, spec: &TokenSpec) -> (String, String) {
         // Predefined tokens (CR 111.10) are named by their name ("a Treasure token", "a
         // Monster Role token"), when the spec is exactly that token.
-        if !spec.name.is_empty() {
-            if let Some(p) = crate::tokens_predefined::predefined(&spec.name) {
+        let candidates: Vec<String> = if spec.name.is_empty() {
+            spec.subtypes.iter().map(|s| s.to_string()).collect()
+        } else {
+            vec![spec.name.to_string()]
+        };
+        for cand in candidates {
+            if let Some(mut p) = crate::tokens_predefined::predefined(&cand) {
+                p.name = spec.name.clone();
+                p.scryfall_name = spec.scryfall_name.clone();
                 let saved = self.gaps.len();
                 let a = self.token_desc_full(&p);
                 let b = self.token_desc_full(spec);
                 self.gaps.truncate(saved);
                 if a == b {
                     let is_role = spec.subtypes.iter().any(|s| s == "Role");
-                    let n = if is_role {
-                        format!("{} Role", spec.name)
+                    let n = if is_role && cand != "Role" {
+                        format!("{cand} Role")
                     } else {
-                        spec.name.to_string()
+                        cand
                     };
                     return (n, String::new());
                 }
@@ -1694,15 +1745,76 @@ impl Renderer<'_> {
                 return self.with_subject(p, &vp, false);
             }
         }
+        self.subject_types = self.sel_types(what);
         let w = self.sel(what, Case::Subj);
-        let vp = self.mods_vp(mods, true);
+        let (vp, tail) = self.mods_vp_split(mods, true);
+        self.subject_types.clear();
         let d = self.duration(d);
-        join_words(&[format!("{w} {vp}"), d])
+        join_words(&[format!("{w} {vp}"), d]) + &tail
+    }
+
+    /// Whether the selected objects are known to be the controller's own (their own
+    /// graveyard's cards, the source).
+    pub(crate) fn sel_is_yours(&self, s: &Sel) -> bool {
+        fn owned(f: &Filter) -> bool {
+            match f {
+                Filter::OwnedBy(PlayerRel::You) | Filter::Source => true,
+                Filter::And(v) => v.iter().any(owned),
+                _ => false,
+            }
+        }
+        match s {
+            Sel::This => true,
+            Sel::Target(i) => match self.targets.get(*i as usize) {
+                Some(TargetSpec {
+                    what: TargetKind::Object(f),
+                    ..
+                }) => owned(f),
+                _ => false,
+            },
+            Sel::All(f) | Sel::Choose { filter: f, .. } => owned(f),
+            _ => false,
+        }
+    }
+
+    /// The card types a selection is known to have (from a target's or the source's
+    /// description), for "It's still a land".
+    pub(crate) fn sel_types(&self, s: &Sel) -> Vec<CardType> {
+        fn types_of(f: &Filter, out: &mut Vec<CardType>) {
+            match f {
+                Filter::Type(t) => out.push(*t),
+                Filter::And(v) => v.iter().for_each(|x| types_of(x, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        match s {
+            Sel::This => out.extend(self.info.card_types.iter()),
+            Sel::Target(i) => {
+                if let Some(TargetSpec {
+                    what: TargetKind::Object(f),
+                    ..
+                }) = self.targets.get(*i as usize)
+                {
+                    types_of(f, &mut out);
+                }
+            }
+            Sel::All(f) => types_of(f, &mut out),
+            _ => {}
+        }
+        out
     }
 
     /// Modifications as a verb phrase: "gets +1/+1 and has flying" (static) / "gains"
     /// (resolving, `gains = true`).
     pub(crate) fn mods_vp(&mut self, mods: &[Modification], gains: bool) -> String {
+        let (vp, tail) = self.mods_vp_split(mods, gains);
+        format!("{vp}{tail}")
+    }
+
+    /// [`Self::mods_vp`] with the trailing clauses ("where X is ...", ". It's still a
+    /// land") separate, so that a duration can go between.
+    pub(crate) fn mods_vp_split(&mut self, mods: &[Modification], gains: bool) -> (String, String) {
         let mut parts: Vec<String> = Vec::new();
         let mut keywords: Vec<String> = Vec::new();
         let mut abilities: Vec<String> = Vec::new();
@@ -1717,7 +1829,15 @@ impl Renderer<'_> {
                     if let Some(w) = pw.or(tw) {
                         where_clauses.push(w);
                     }
-                    parts.push(format!("gets {}/{}", signed(&ps), signed(&ts)));
+                    let (mut a, mut b) = (signed(&ps), signed(&ts));
+                    // "-2/-0": a zero next to a negative modifier is printed "-0".
+                    if a == "+0" && b.starts_with('-') {
+                        a = "-0".into();
+                    }
+                    if b == "+0" && a.starts_with('-') {
+                        b = "-0".into();
+                    }
+                    parts.push(format!("gets {a}/{b}"));
                 }
                 Modification::AddKeyword(k) => keywords.push(self.keyword_lower(k)),
                 Modification::AddKeywordX(k, v) => {
@@ -1851,8 +1971,11 @@ impl Renderer<'_> {
             }
         }
         let has = if gains { "gains" } else { "has" };
-        if let Some(b) = becomes.render(self, &keywords, &abilities, gains) {
+        if let Some((b, still)) = becomes.render(self, &keywords, &abilities, gains) {
             parts.insert(0, b);
+            if !still.is_empty() {
+                where_clauses.push(still);
+            }
         } else {
             let mut grants = keywords.clone();
             grants.extend(abilities.iter().cloned());
@@ -1860,11 +1983,8 @@ impl Renderer<'_> {
                 parts.push(format!("{has} {}", join_list(&grants, "and")));
             }
         }
-        let mut s = join_list(&parts, "and");
-        for w in where_clauses {
-            s.push_str(&w);
-        }
-        s
+        let s = join_list(&parts, "and");
+        (s, where_clauses.concat())
     }
 
     fn pt_amount(&mut self, v: &Value) -> (String, Option<String>) {
@@ -2338,7 +2458,7 @@ impl Becomes {
         keywords: &[String],
         abilities: &[String],
         gains: bool,
-    ) -> Option<String> {
+    ) -> Option<(String, String)> {
         if self.is_empty() {
             return None;
         }
@@ -2368,11 +2488,11 @@ impl Becomes {
                 let g = if gains { "gains" } else { "has" };
                 s.push_str(&format!(" and {g} {}", join_list(&grants, "and")));
             }
-            return Some(s);
+            return Some((s, String::new()));
         }
         if let Some(n) = &self.name {
             if self.pt.is_none() && self.add_types.is_empty() && self.subtypes.is_empty() {
-                return Some(format!("is named {n}"));
+                return Some((format!("is named {n}"), String::new()));
             }
         }
         let mut words: Vec<String> = Vec::new();
@@ -2408,10 +2528,39 @@ impl Becomes {
             s.push_str(&format!(" named {n}"));
         }
         s.push_str(&with);
+        let mut still = String::new();
         if self.additive && !self.land_type {
-            s.push_str(" in addition to its other types");
+            // An effect that adds types keeps the old ones: cards say "It's still a land"
+            // when they know what the object was, else "in addition to its other types".
+            let known: Vec<CardType> = r
+                .subject_types
+                .iter()
+                .copied()
+                .filter(|t| !self.add_types.contains(t))
+                .collect();
+            if r.subject_types.is_empty() {
+                s.push_str(" in addition to its other types");
+            } else if !known.is_empty() {
+                let w: Vec<String> = known.iter().map(|t| t.word().to_string()).collect();
+                still = format!(". It's still {}", with_article(&w.join(" ")));
+            }
         }
-        Some(s)
+        Some((s, still))
+    }
+}
+
+/// A filter without its "you control" part: a player can sacrifice only permanents they
+/// control (CR 701.21a), so "sacrifice a creature" needs no "you control".
+pub(crate) fn strip_controller(f: &Filter) -> Filter {
+    match f {
+        Filter::ControlledBy(_) => Filter::Any,
+        Filter::And(v) => Filter::and(
+            v.iter()
+                .filter(|x| !matches!(x, Filter::ControlledBy(_)))
+                .cloned()
+                .collect(),
+        ),
+        other => other.clone(),
     }
 }
 

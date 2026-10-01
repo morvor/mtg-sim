@@ -9,14 +9,28 @@ use super::*;
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        let saved = self.self_salient;
+        self.self_salient = false;
+        if let StaticEffect::Continuous { affected: Filter::Source, .. } = &s.effect {
+            self.subject_types = self.info.card_types.iter().collect();
+        }
         let e = self.static_effect(&s.effect);
+        self.subject_types.clear();
         let e = match &s.condition {
+            // Cost modifiers state their condition with "if" ("This spell costs {2} less
+            // to cast if ...").
+            Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
+                self.self_salient = e.starts_with('~');
+                let c = self.condition(c);
+                format!("{} if {c}", e.trim_end_matches('.'))
+            }
             Some(c) => {
                 let c = self.condition(c);
                 format!("as long as {c}, {}", lower_first(&e))
             }
             None => e,
         };
+        self.self_salient = saved;
         let e = capitalize(e.trim());
         if e.ends_with('.') || e.ends_with('"') {
             e
@@ -31,6 +45,7 @@ impl Renderer<'_> {
         match f {
             Filter::Source => self.me(),
             Filter::AttachedToSource => self.attached_noun(),
+            Filter::In(sel) => self.sel(sel, Case::Subj),
             other => self.noun_det(other, Det::Plural),
         }
     }
@@ -837,7 +852,7 @@ impl Renderer<'_> {
                     }
                     A::EnterTransformed => format!("{subj} enters transformed"),
                     A::MoveInstead(d) => {
-                        let d = self.destination_phrase(d, false, "");
+                        let d = self.destination_phrase(d, false, false);
                         format!("if {subj} would enter, put it {d} instead")
                     }
                     A::Instead(e) => {
@@ -1140,6 +1155,15 @@ impl Renderer<'_> {
                 cond,
                 then,
                 otherwise,
+            } if matches!(then.as_ref(), Effect::Noop) && !matches!(otherwise.as_ref(), Effect::Noop) => {
+                let t = self.as_enters_vp(otherwise);
+                let c = self.condition(cond);
+                format!("{subj} {t} unless {c}")
+            }
+            Effect::If {
+                cond,
+                then,
+                otherwise,
             } if matches!(otherwise.as_ref(), Effect::Noop) => {
                 let t = self.as_enters_vp(then);
                 match cond {
@@ -1201,7 +1225,7 @@ impl Renderer<'_> {
                 if d.zone == ZoneKind::Exile {
                     return format!("exile {it} instead");
                 }
-                let dest = self.destination_phrase(d, false, "");
+                let dest = self.destination_phrase(d, false, false);
                 let verb = if d.zone == ZoneKind::Hand {
                     "return"
                 } else {

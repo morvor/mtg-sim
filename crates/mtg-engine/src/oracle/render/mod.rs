@@ -195,6 +195,12 @@ pub struct Renderer<'a> {
     pub(crate) quote_depth: u32,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
+    /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
+    /// cards refer to it as "it": rendered as `~it`, which the comparison matches with
+    /// either "~" or "it".
+    pub(crate) self_salient: bool,
+    /// Card types of the subject of a "becomes" effect, when known ("It's still a land").
+    pub(crate) subject_types: Vec<CardType>,
 }
 
 impl<'a> Renderer<'a> {
@@ -206,6 +212,8 @@ impl<'a> Renderer<'a> {
             introduced: Vec::new(),
             quote_depth: 0,
             zone: FunctionZone::Battlefield,
+            self_salient: false,
+            subject_types: Vec::new(),
         }
     }
 

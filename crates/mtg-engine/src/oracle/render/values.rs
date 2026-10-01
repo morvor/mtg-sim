@@ -210,6 +210,8 @@ impl Renderer<'_> {
                 let b = self.value(b);
                 format!("the lesser of {a} and {b}")
             }
+            // "X can't be negative": a count clamped at zero (CR 107.1b) reads as the count.
+            Value::Max(a, b) if matches!(b.as_ref(), Value::Const(0)) => self.value(a),
             Value::Max(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);
@@ -228,6 +230,12 @@ impl Renderer<'_> {
     /// An amount before a noun: "3", "X", or "X" with a "where X is" clause to add.
     /// Returns (amount, where-clause).
     pub(crate) fn amount(&mut self, v: &Value) -> (String, Option<String>) {
+        if matches!(v, Value::EventAmount) {
+            return ("that much".into(), None);
+        }
+        if matches!(v, Value::Prev) {
+            return ("that many".into(), None);
+        }
         if Self::is_simple(v) {
             return (self.value(v), None);
         }
@@ -242,6 +250,9 @@ impl Renderer<'_> {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),
             Value::X => (format!("X {}", plural(noun)), None),
+            Value::EventAmount | Value::Prev | Value::Var(_) => {
+                (format!("that many {}", plural(noun)), None)
+            }
             other => {
                 let s = self.value(other);
                 (
@@ -260,11 +271,11 @@ impl Renderer<'_> {
             Condition::Not(inner) => self.negated_condition(inner),
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
-                join_list(&parts, "and")
+                merge_subject(&parts, "and")
             }
             Condition::Or(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
-                join_list(&parts, "or")
+                merge_subject(&parts, "or")
             }
             Condition::Compare(a, cmp, b) => self.compare_condition(a, *cmp, b),
             Condition::Exists(f) => self.exists(f, false),
@@ -432,6 +443,13 @@ impl Renderer<'_> {
                 Filter::Not(inner) => {
                     let p = self.is_predicate(inner, !negated);
                     return p;
+                }
+                Filter::Targets(f) => {
+                    let n = self.noun_det(f, Det::A);
+                    if negated {
+                        return format!("doesn't target {n}");
+                    }
+                    return format!("targets {n}");
                 }
                 other => {
                     let n = self.noun_det(other, Det::A);
@@ -641,6 +659,17 @@ impl Renderer<'_> {
             TriggerStep::Turn => "turn",
         }
     }
+}
+
+/// "you control a Plains or you control an Island" → "you control a Plains or an Island".
+fn merge_subject(parts: &[String], conj: &str) -> String {
+    for prefix in ["you control ", "you have ", "there are ", "there is "] {
+        if parts.len() > 1 && parts.iter().all(|p| p.starts_with(prefix)) {
+            let rest: Vec<String> = parts.iter().map(|p| p[prefix.len()..].to_string()).collect();
+            return format!("{prefix}{}", join_list(&rest, conj));
+        }
+    }
+    join_list(parts, conj)
 }
 
 /// Splits "… you control" off a filter: (controller, the rest).

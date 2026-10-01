@@ -156,7 +156,22 @@ impl Renderer<'_> {
                 }
             }
             Filter::Or(v) => {
-                if v.iter().all(|x| matches!(x, Filter::Color(_))) {
+                let status_word = |x: &Filter| -> Option<&'static str> {
+                    Some(match x {
+                        Filter::Attacking => "attacking",
+                        Filter::Blocking => "blocking",
+                        Filter::Tapped => "tapped",
+                        Filter::Untapped => "untapped",
+                        Filter::Blocked => "blocked",
+                        Filter::Unblocked => "unblocked",
+                        _ => return None,
+                    })
+                };
+                if v.iter().all(|x| status_word(x).is_some()) {
+                    let w: Vec<String> =
+                        v.iter().map(|x| status_word(x).unwrap().to_string()).collect();
+                    np.status.push(join_list(&w, "or"));
+                } else if v.iter().all(|x| matches!(x, Filter::Color(_))) {
                     let cs: Vec<String> = v
                         .iter()
                         .map(|x| match x {
@@ -458,11 +473,29 @@ impl Renderer<'_> {
     pub(crate) fn noun(&mut self, f: &Filter, num: Num) -> String {
         let mut np = Np::default();
         self.collect(f, &mut np);
-        self.np_text(&np, num, false)
+        let s = self.np_text(&np, num, false);
+        if np.other && !np.is_self {
+            format!("other {s}")
+        } else {
+            s
+        }
     }
 
     /// The default head when a filter names no type: depends on the zone.
     fn default_kind(np: &Np) -> &'static str {
+        // Only creatures attack, block, and have power and toughness (CR 506.4, 208.1):
+        // "attacking or blocking creature", "creatures with flying".
+        let combat = np.status.iter().any(|s| {
+            matches!(
+                s.as_str(),
+                "attacking" | "blocking" | "blocked" | "unblocked" | "attacking or blocking"
+                    | "nonattacking" | "nonblocking"
+            )
+        }) || np.with.iter().any(|w| w.starts_with("power") || w.starts_with("toughness") || is_combat_keyword(w))
+            || np.post.iter().any(|p| p.starts_with("attacking") || p.starts_with("blocking") || p.starts_with("blocked"));
+        if combat && matches!(np.zone, None | Some(ZoneKind::Battlefield)) {
+            return "creature";
+        }
         match np.zone {
             Some(ZoneKind::Battlefield) | None => "permanent",
             Some(ZoneKind::Stack) => "spell",
@@ -811,6 +844,15 @@ impl Renderer<'_> {
             }
         }
     }
+}
+
+fn is_combat_keyword(w: &str) -> bool {
+    matches!(
+        w,
+        "flying" | "reach" | "first strike" | "double strike" | "trample" | "deathtouch"
+            | "lifelink" | "vigilance" | "menace" | "defender" | "haste" | "shadow"
+            | "horsemanship" | "fear" | "intimidate" | "skulk" | "flanking" | "banding"
+    )
 }
 
 /// "X's" / "X'" possessive.

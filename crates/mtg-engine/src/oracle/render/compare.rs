@@ -50,6 +50,29 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"your hand\" on a card you own is its owner's hand.",
     },
     Equivalence {
+        pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
+        replacement: "in $1 $2$3",
+        why: "An object description says where the object is: \"a creature card from your \
+              graveyard\" and \"a creature card in your graveyard\" describe the same cards.",
+    },
+    Equivalence {
+        pattern: r"\bfrom exile\b",
+        replacement: "in exile",
+        why: "See \"from your graveyard\".",
+    },
+    Equivalence {
+        pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform)\b",
+        replacement: "$1",
+        why: "An instruction without a subject is performed by the ability's controller \
+              (CR 608.2c, 113.8): \"draw a card\" and \"you draw a card\" mean the same.",
+    },
+    Equivalence {
+        pattern: r"(sacrifices? [^.]*?) of (their|his or her|your) choice\b",
+        replacement: "$1",
+        why: "The player who sacrifices chooses what to sacrifice (CR 701.21a); \"of their \
+              choice\" restates it.",
+    },
+    Equivalence {
         pattern: r"\bthat (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)s?'s\b",
         replacement: "its",
         why: "Anaphora: \"that creature's\" and \"its\" both refer back to the object the \
@@ -362,6 +385,9 @@ fn sentence_rewrites(s: &str) -> String {
             .unwrap()
     });
     let mut s = s.to_string();
+    for (re, rep) in where_x_rewrites() {
+        s = re.replace_all(&s, *rep).to_string();
+    }
     for _ in 0..3 {
         let n = lead.replace_all(&s, "$1$3 $2.").to_string();
         if n == s {
@@ -370,6 +396,87 @@ fn sentence_rewrites(s: &str) -> String {
         s = n;
     }
     s
+}
+
+/// Amounts stated as "equal to V" or "for each F" are rewritten to the "X ..., where X is
+/// V" form (CR 107.3: X is defined by the text): both describe the same number.
+fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
+    static R: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+    R.get_or_init(|| {
+        [
+            (r"\bdeals? damage equal to ([^.]+?) to ([^.]+?)(\.|$)", "deals x damage to $2, where x is $1$3"),
+            (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
+            (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
+            (r"\b(gets?) ([+-])1/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x, where x is the number of $4$5"),
+            (r"\b(gets?) ([+-])1/([+-])0 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0, where x is the number of $4$5"),
+            (r"\b(gets?) ([+-])0/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x, where x is the number of $4$5"),
+            (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
+            (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
+            (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
+            (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
+        ]
+        .into_iter()
+        .map(|(p, r)| (Regex::new(p).unwrap(), r))
+        .collect()
+    })
+}
+
+/// Ability words (CR 207.2c): they have no rules meaning.
+const ABILITY_WORDS: &[&str] = &[
+    "adamant", "addendum", "alliance", "battalion", "bloodrush", "celebration", "channel",
+    "chroma", "cohort", "constellation", "converge", "council's dilemma", "coven", "delirium",
+    "descend 4", "descend 8", "disappear", "domain", "eerie", "eminence", "enrage",
+    "fateful hour", "fathomless descent", "ferocious", "flurry", "formidable", "grandeur",
+    "hellbent", "heroic", "imprint", "infusion", "inspired", "join forces", "kinship",
+    "landfall", "lieutenant", "magecraft", "metalcraft", "morbid", "opus", "pack tactics",
+    "paradox", "parley", "radiance", "raid", "rally", "renew", "repartee", "revolt",
+    "secret council", "spell mastery", "strive", "survival", "sweep", "tempting offer",
+    "threshold", "undergrowth", "valiant", "vivid", "void", "will of the council",
+];
+
+/// Labels before an em dash that aren't ability or flavor words.
+const NOT_FLAVOR: &[&str] = &[
+    "companion", "boast", "exhaust", "forecast", "max speed", "power-up", "to solve",
+    "solved", "choose", "level up", "ward", "equip", "cumulative upkeep", "echo",
+];
+
+/// Strips a leading ability word (CR 207.2c) or flavor word (CR 207.2d): "Landfall — ".
+fn strip_ability_word(line: &str) -> &str {
+    let Some((head, rest)) = line.split_once(" — ") else {
+        return line;
+    };
+    // Saga chapters with a flavor word: "I — Aerial Blast — effect" (CR 714.2b, 207.2d).
+    if head.split(", ").all(|n| !n.is_empty() && n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))) {
+        let inner = strip_ability_word(rest);
+        if inner.len() != rest.len() {
+            let start = line.len() - inner.len();
+            let _ = start;
+            return Box::leak(format!("{head} — {inner}").into_boxed_str());
+        }
+        return line;
+    }
+    let h = head.trim().to_lowercase().replace('\u{2019}', "'");
+    if ABILITY_WORDS.contains(&h.as_str()) {
+        return rest;
+    }
+    let words: Vec<&str> = head.split_whitespace().collect();
+    let flavor = !words.is_empty()
+        && words.len() <= 7
+        && head.chars().next().is_some_and(|c| c.is_uppercase())
+        && !head.contains(['{', ':', '"', ',', '~', '\n', '•', '|'])
+        && !head.chars().any(|c| c.is_ascii_digit())
+        && !NOT_FLAVOR.iter().any(|n| h.starts_with(n))
+        && !KeywordKind::ALL
+            .iter()
+            .any(|k| h.starts_with(&k.name().to_lowercase()))
+        && !head.split(", ").all(|n| {
+            n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))
+        });
+    if flavor {
+        rest
+    } else {
+        line
+    }
 }
 
 /// Splits a face's normalized Oracle text into comparison units: one per ability line,
@@ -390,7 +497,7 @@ pub fn oracle_units(text: &str, names: &[String]) -> Vec<String> {
                 continue;
             }
         }
-        lines.push(l.to_string());
+        lines.push(strip_ability_word(l).to_string());
     }
     let mut out = Vec::new();
     for l in lines {
@@ -558,7 +665,7 @@ pub fn check_card(def: &CardDef) -> CardCheck {
             // several abilities, or several lines to one).
             let all_o: Vec<String> = oracle.iter().flat_map(|u| normalize_unit(u)).collect();
             let all_m: Vec<String> = mine.iter().flat_map(|u| normalize_unit(u)).collect();
-            if all_o != all_m {
+            if !tokens_match(&all_o, &all_m) {
                 pass = false;
                 unmatched_oracle.extend(uo);
                 unmatched_rendered.extend(ur);
@@ -579,6 +686,18 @@ pub fn check_card(def: &CardDef) -> CardCheck {
     }
 }
 
+/// Whether two normalized token sequences are the same. The renderer's `~it` (the object
+/// itself, just mentioned) matches "~" or "it": cards refer to an object that a trigger
+/// condition just named either by its name or by "it".
+pub fn tokens_match(a: &[String], b: &[String]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| {
+            x == y
+                || (x == "~it" && (y == "~" || y == "it"))
+                || (y == "~it" && (x == "~" || x == "it"))
+        })
+}
+
 /// Multiset difference of units by normalized tokens.
 fn diff_units(oracle: &[String], mine: &[String]) -> (Vec<String>, Vec<String>) {
     let mut mine_left: Vec<(Vec<String>, &String)> =
@@ -586,7 +705,7 @@ fn diff_units(oracle: &[String], mine: &[String]) -> (Vec<String>, Vec<String>) 
     let mut uo = Vec::new();
     for o in oracle {
         let n = normalize_unit(o);
-        if let Some(pos) = mine_left.iter().position(|(m, _)| *m == n) {
+        if let Some(pos) = mine_left.iter().position(|(m, _)| tokens_match(&n, m)) {
             mine_left.remove(pos);
         } else {
             uo.push(o.clone());

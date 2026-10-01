@@ -38,12 +38,15 @@ impl Renderer<'_> {
             }
         }
         let trig = self.trigger_text(&t.trigger);
+        let saved_salient = self.self_salient;
+        self.self_salient = trig.contains('~');
         let mut s = trig;
         if let Some(c) = &t.intervening_if {
             let c = self.condition(c);
             s.push_str(&format!(", if {c}"));
         }
         let body = self.body(&t.body);
+        self.self_salient = saved_salient;
         s = format!("{s}, {}", lower_first(&body));
         if t.once_per_turn {
             s.push_str(" This ability triggers only once each turn.");

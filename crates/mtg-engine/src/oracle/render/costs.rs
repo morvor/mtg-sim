@@ -59,7 +59,7 @@ impl Renderer<'_> {
             CostPart::SacrificeSelf => "sacrifice ~".into(),
             CostPart::Sacrifice { filter, count } => {
                 let det = self.det_for(count);
-                let n = self.noun_det(filter, det);
+                let n = self.noun_det(&super::effects::strip_controller(filter), det);
                 format!("sacrifice {n}")
             }
             CostPart::DiscardSelf => "discard ~".into(),
