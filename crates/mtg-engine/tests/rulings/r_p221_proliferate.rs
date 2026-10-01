@@ -427,6 +427,7 @@ fn recon_craft_theta_proliferates_when_it_attacks() {
     let giant = t.battlefield(P0, "Hill Giant");
     t.set_step(P0, Step::BeginningOfCombat);
     assert!(crew(&mut t, P0, craft, &[giant]));
+    t.resolve_all();
     t.answer_choose(P0, &[Entity::Object(counted)]);
     attack_with(&mut t, &[(craft, Entity::Player(P1))]);
     t.resolve_all();
