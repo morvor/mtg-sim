@@ -23,6 +23,15 @@ pub fn endless_one(t: &mut TestGame, p: PlayerId, x: usize) -> ObjectId {
     id
 }
 
+/// P1's Endless One cast with X = `x` (in P1's main phase); then it's P0's main phase.
+pub fn p1_endless_one(t: &mut TestGame, x: usize) -> ObjectId {
+    use mtg_engine::turn::Step;
+    t.set_step(P1, Step::PrecombatMain);
+    let id = endless_one(t, P1, x);
+    t.set_step(P0, Step::PrecombatMain);
+    id
+}
+
 /// Kaervek the Merciless under P1's control: "Whenever an opponent casts a spell, Kaervek
 /// deals damage equal to that spell's mana value to any target." Call
 /// [`aim_kaervek_at_p0`] before each spell P0 casts.
