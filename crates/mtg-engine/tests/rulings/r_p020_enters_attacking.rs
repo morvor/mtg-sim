@@ -329,3 +329,30 @@ fn a_creature_becoming_a_copy_of_an_attacker_doesnt_trigger_its_attack_abilities
     assert_eq!(t.pt(wolves), (4, 3));
     assert_eq!(t.pt(skin), (2, 3));
 }
+
+#[test]
+fn sigiled_sword_of_valeron_knight_wasnt_declared_as_an_attacker() {
+    cr!("508.4", "508.3a", "603.2");
+    ruling!(
+        "Sigiled Sword of Valeron",
+        "Although the token is attacking, it was never declared as an attacking creature (for the purposes of abilities that trigger whenever a creature attacks, for example)."
+    );
+    // "Whenever equipped creature attacks, create a 2/2 white Knight creature token with
+    // vigilance that's attacking."
+    supported("Sigiled Sword of Valeron");
+    let mut t = TestGame::new(2);
+    gleam(&mut t);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P0, "Sigiled Sword of Valeron", bears);
+    t.set_step(P0, Step::PrecombatMain);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    // The declared attacker triggered Gleam of Battle; the Knight didn't.
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    assert!(t.obj_now(toks[0]).chars.has_subtype("Knight"));
+    // Attacking, untapped (it isn't "tapped and attacking").
+    assert!(!t.obj_now(toks[0]).tapped);
+    none_declared(&t, &toks);
+}
