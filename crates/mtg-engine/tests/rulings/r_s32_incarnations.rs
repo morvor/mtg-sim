@@ -108,3 +108,103 @@ fn removed_from_the_graveyard_or_never_put_there_it_isnt_shuffled_in() {
     assert_eq!(t.zone(t.g.current(dread)), Zone::Exile);
     assert!(!in_library(&t, P0, DREAD));
 }
+
+// Vigor: "If damage would be dealt to another creature you control, prevent that damage.
+// Put a +1/+1 counter on that creature for each 1 damage prevented this way." and the same
+// "When Vigor is put into a graveyard from anywhere, shuffle it into its owner's library."
+
+const VIGOR: &str = "Vigor";
+
+#[test]
+fn vigor_prevents_damage_to_each_other_creature_and_counts_it_for_each() {
+    cr!("615.5", "615.1a", "120.1");
+    supported(VIGOR);
+    // Pyroclasm deals 2 damage to each creature: P0's Grizzly Bears and Hill Giant each get
+    // two counters instead; Vigor itself is dealt the damage; P1's Bears die.
+    let mut t = TestGame::new(2);
+    let vigor = t.battlefield(P0, VIGOR);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    cast_new(&mut t, P1, "Pyroclasm", &[]);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 2);
+    assert_eq!(t.counters(giant, "+1/+1"), 2);
+    assert_eq!(t.obj(bears).damage, 0);
+    assert_eq!(t.obj(vigor).damage, 2);
+    assert_eq!(t.counters(vigor, "+1/+1"), 0);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn vigor_triggers_when_put_into_a_graveyard_from_any_zone() {
+    cr!("113.6k", "603.6c", "701.9a");
+    ruling!(
+        "Vigor",
+        "The last ability triggers when the Incarnation is put into its owner's graveyard from any zone, not just from on the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    t.hand(P0, VIGOR);
+    t.set_step(P1, Step::PrecombatMain);
+    cast_new(&mut t, P1, "Mind Rot", &[Entity::Player(P0)]);
+    t.resolve_all();
+    assert!(in_library(&t, P0, VIGOR), "discarded: shuffled in");
+    let mut t = TestGame::new(2);
+    t.library_top(P0, VIGOR);
+    cast_new(&mut t, P0, "Thought Scour", &[Entity::Player(P0)]);
+    t.resolve_all();
+    assert!(!t.in_graveyard(P0, VIGOR));
+    assert!(in_library(&t, P0, VIGOR), "milled: shuffled in");
+}
+
+#[test]
+fn vigor_triggers_from_the_graveyard_with_the_abilities_it_has_there() {
+    cr!("603.10a", "113.6k", "613.1f");
+    ruling!(
+        "Vigor",
+        "If the Incarnation had lost this ability while on the battlefield (due to Lignify, for example) and then was destroyed, the ability would still trigger and it would get shuffled into its owner's library. However, if the Incarnation lost this ability when it was put into the graveyard (due to Yixlid Jailer, for example), the ability wouldn't trigger and the Incarnation would remain in the graveyard."
+    );
+    ruling!(
+        "Vigor",
+        "Although this ability triggers when the Incarnation is put into a graveyard from the battlefield, it doesn't *specifically* trigger on leaving the battlefield, so it doesn't behave like other leaves-the-battlefield abilities. The ability will trigger from the graveyard."
+    );
+    let mut t = TestGame::new(2);
+    let vigor = t.battlefield(P0, VIGOR);
+    attach_new(&mut t, P0, "Lignify", vigor);
+    assert!(t.obj(vigor).chars.abilities.is_empty());
+    destroy(&mut t, vigor);
+    t.resolve_all();
+    assert!(in_library(&t, P0, VIGOR));
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Yixlid Jailer");
+    let vigor = t.battlefield(P0, VIGOR);
+    destroy(&mut t, vigor);
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, VIGOR));
+}
+
+#[test]
+fn vigor_removed_from_the_graveyard_or_exiled_instead_isnt_shuffled_in() {
+    cr!("400.7", "614.6");
+    ruling!(
+        "Vigor",
+        "If the Incarnation is removed from the graveyard after the ability triggers but before it resolves, it will remain in its new zone when its owner shuffles their library. Similarly, if a replacement effect has the Incarnation move to a different zone instead of being put into the graveyard, the ability won't trigger at all."
+    );
+    let mut t = TestGame::new(2);
+    let vigor = t.battlefield(P0, VIGOR);
+    destroy(&mut t, vigor);
+    assert_eq!(t.stack_len(), 1);
+    let card = t.g.current(vigor);
+    cast_new(&mut t, P1, "Cremate", &[Entity::Object(card)]);
+    t.resolve_all();
+    assert!(t.in_exile(VIGOR));
+    assert!(!in_library(&t, P0, VIGOR));
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rest in Peace");
+    let vigor = t.battlefield(P0, VIGOR);
+    destroy(&mut t, vigor);
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.in_exile(VIGOR));
+}

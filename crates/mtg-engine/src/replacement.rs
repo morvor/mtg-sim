@@ -1021,9 +1021,15 @@ impl Game {
                     info.amount = prevented as i32;
                     c.event = Some(info);
                     // Applied to simultaneous damage events, a prevention effect is
-                    // applied once: its instruction happens once, for all the damage.
+                    // applied once: its instruction happens once, for all the damage
+                    // (once for each recipient if it's about the recipient).
+                    let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
+                    let this = recipient(&c);
                     match self.prevention_followups.as_mut() {
-                        Some(list) => match list.iter_mut().find(|(k, _, _)| *k == key) {
+                        Some(list) => match list.iter_mut().find(|(k, c0, _)| {
+                            *k == key && (!per_recipient || recipient(c0) == this)
+                        }) {
                             Some((_, first, _)) => {
                                 if let Some(ev) = first.event.as_mut() {
                                     ev.amount += prevented as i32;

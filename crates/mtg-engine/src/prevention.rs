@@ -11,6 +11,14 @@ use crate::object::*;
 use crate::replacement::ReplEvent;
 use crate::types::*;
 
+/// Whether a prevention effect's additional instruction (CR 615.5) is about the object the
+/// damage would have been dealt to ("put a +1/+1 counter on that creature for each 1
+/// damage prevented this way"): applied to simultaneous damage to several objects, it
+/// happens once for each of them, rather than once for all the damage.
+pub fn followup_about_recipient(e: &Effect) -> bool {
+    serde_json::to_string(e).is_ok_and(|s| s.contains("\"TriggerObject\""))
+}
+
 /// Replaces references to chosen objects in a filter (targets, variables, "a source of
 /// your choice") with those objects, so an effect created by a resolving spell or
 /// ability keeps referring to them (CR 609.7b, 611.2c).
