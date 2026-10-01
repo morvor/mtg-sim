@@ -271,3 +271,25 @@ fn tempt_with_reflections_tokens_use_the_copied_enters_with_abilities() {
     riftwatcher_tokens_entered(&t, P0, &[], mine, 2);
     riftwatcher_tokens_entered(&t, P1, &[], theirs, 1);
 }
+
+#[test]
+fn echocasting_symposium_token_has_the_copied_enters_abilities() {
+    cr!("707.2", "614.1c", "603.6a", "111.2");
+    ruling!(
+        "Echocasting Symposium",
+        "Any enters abilities of the copied creature will trigger when the token enters. Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the copied permanent will also work."
+    );
+    // "Target player creates a token that's a copy of target creature you control." P1
+    // creates (and controls) the copy of P0's Riftwatcher: its trigger gains P1 life.
+    let (mut t, rift) = with_riftwatcher(P0);
+    let before = tokens(&t, P1);
+    let life = t.life(P1);
+    cast_and_resolve(
+        &mut t,
+        "Echocasting Symposium",
+        &[],
+        &[Entity::Player(P1), Entity::Object(rift)],
+    );
+    riftwatcher_tokens_entered(&t, P1, &before, life, 1);
+    assert!(tokens(&t, P0).is_empty());
+}

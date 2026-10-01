@@ -166,6 +166,18 @@ fn replaced_characteristics(s: &str) -> Option<Vec<Modification>> {
     Some(out)
 }
 
+/// "black", "red and white": colors only.
+fn only_colors(s: &str) -> Option<ColorSet> {
+    let mut colors = ColorSet::NONE;
+    for w in s.split_whitespace() {
+        if w == "and" {
+            continue;
+        }
+        colors.insert(Color::from_word(w)?);
+    }
+    (!colors.is_colorless()).then_some(colors)
+}
+
 /// The original-case name after "its name is " (lowercase `name`).
 fn original_name(name: &str) -> Option<String> {
     let raw = crate::oracle::raw_text();
@@ -272,6 +284,10 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(colors) = only_colors(r) {
+                // "the token is black" (Penumbra Umbra): its colors instead of the copied
+                // ones (CR 707.9b).
+                out.push(Modification::SetColors(colors));
             } else {
                 out.extend(replaced_characteristics(r)?);
             }

@@ -472,3 +472,58 @@ fn minion_reflector_token_copies_printed_values_plus_copy_effects() {
     t.answer_yes(P0, true);
     copy_of_a_dressed_up_clone(&mut t);
 }
+
+#[test]
+fn penumbra_umbra_token_has_the_copied_enters_abilities() {
+    cr!("707.2", "707.9b", "614.1c", "603.6a", "702.89a", "603.10a");
+    ruling!(
+        "Penumbra Umbra",
+        "Any enters abilities of the copied creature will trigger when the token enters the battlefield. Any “as [this creature] enters” or “[this creature] enters with” abilities of the copied creature will also work."
+    );
+    // "When Penumbra Umbra is put into a graveyard from the battlefield, create a token
+    // that's a copy of enchanted creature, except the token is black. Umbra armor." The
+    // Riftwatcher would be destroyed: the umbra is destroyed instead.
+    let (mut t, rift, _) = with_riftwatcher_and("Grizzly Bears");
+    attach_new(&mut t, P0, "Penumbra Umbra", rift);
+    let before = tokens(&t, P0);
+    let life = t.life(P0);
+    t.g.destroy(rift, None);
+    t.resolve_all();
+    assert!(t.on_battlefield(rift));
+    assert!(t.in_graveyard(P0, "Penumbra Umbra"));
+    let tok = riftwatcher_tokens_entered(&t, P0, &before, life, 1)[0];
+    let colors = t.obj_now(tok).chars.colors;
+    assert!(colors.contains(Color::Black) && !colors.contains(Color::White));
+}
+
+#[test]
+fn isle_of_vesuva_token_copies_only_copiable_values() {
+    cr!("707.2", "707.3", "111.2", "901.7");
+    ruling!(
+        "Isle of Vesuva",
+        "As a token is created by Isle of Vesuva's first ability, it checks the printed values of the creature it's copying, as well as any copy effects that have been applied to it. It won't copy counters on the creature, nor will it copy other effects that have changed the creature's power, toughness, types, color, and so on."
+    );
+    // "Whenever a nontoken creature enters, its controller creates a token that's a copy
+    // of that creature." P1's Clone enters as a copy of Hill Giant and is changed before
+    // the trigger resolves.
+    use crate::r_s19_common::{planechase_game, start_planar_deck};
+    supported("Isle of Vesuva");
+    let mut t = planechase_game(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    start_planar_deck(&mut t, P0, &["Isle of Vesuva"]);
+    t.resolve_all();
+    let before = tokens(&t, P1);
+    t.answer_choose(P1, &[Entity::Object(giant)]);
+    let clone = t.enter(P1, "Clone");
+    t.settle();
+    dress_up(&mut t, clone);
+    t.resolve_all();
+    let new = new_tokens_of(&t, P1, &before);
+    assert_eq!(new.len(), 1);
+    let o = t.obj_now(new[0]);
+    assert_eq!(o.chars.name, "Hill Giant");
+    assert!(o.chars.colors.contains(Color::Red) && !o.chars.colors.contains(Color::Green));
+    assert_eq!(t.pt(new[0]), (3, 3));
+    assert!(fresh(&t, new[0]));
+    assert!(tokens(&t, P0).is_empty());
+}
