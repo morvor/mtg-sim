@@ -176,3 +176,33 @@ pub fn ignores_zero_life(g: &Game, p: PlayerId) -> bool {
 pub fn team_ignores_zero_life(g: &Game, members: &[PlayerId]) -> bool {
     members.iter().any(|p| ignores_zero_life(g, *p))
 }
+
+/// Whether a cost performed as an effect (`CostPart::Effect`) can be paid as far as life
+/// gain goes: a cost that involves having a player gain life can't be paid if that
+/// player can't gain life (CR 119.7) — "have each other player gain 6 life" needs each of
+/// them able to, "have an opponent gain 3 life" (an opponent chosen as it's paid) one of
+/// them.
+pub fn cost_life_gain_possible(
+    g: &Game,
+    e: &crate::ability::Effect,
+    ctx: &crate::eval::Ctx,
+) -> bool {
+    use crate::ability::{Effect, PlayerRef};
+    match e {
+        Effect::Seq(v) => v.iter().all(|x| cost_life_gain_possible(g, x, ctx)),
+        Effect::GainLife { who, n } => {
+            if g.eval_value(n, ctx) <= 0 {
+                return true;
+            }
+            let players = g.eval_players(who, ctx);
+            if players.is_empty() && matches!(who, PlayerRef::ChosenOpponent) {
+                g.opponents(ctx.controller)
+                    .into_iter()
+                    .any(|p| !g.cant_gain_life(p))
+            } else {
+                players.into_iter().all(|p| !g.cant_gain_life(p))
+            }
+        }
+        _ => true,
+    }
+}

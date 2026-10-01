@@ -2475,6 +2475,7 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 crate::draw_rules::can_choose(self, e, &c)
+                    && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
