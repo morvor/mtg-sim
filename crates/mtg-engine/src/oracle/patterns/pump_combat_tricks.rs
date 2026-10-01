@@ -161,6 +161,8 @@ enum Verb {
     Gain,
     /// "has base power and toughness N/N"
     BasePt,
+    /// "has base power N" (layer 7b, setting only the power)
+    BasePower,
     /// "loses all abilities"
     LoseAll,
     /// "loses all creature types" (layer 4, CR 613.1d)
@@ -176,6 +178,8 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
         ("gain ", Verb::Gain),
         ("has base power and toughness ", Verb::BasePt),
         ("have base power and toughness ", Verb::BasePt),
+        ("has base power ", Verb::BasePower),
+        ("have base power ", Verb::BasePower),
         ("loses all abilities", Verb::LoseAll),
         ("lose all abilities", Verb::LoseAll),
         ("loses all creature types", Verb::LoseCreatureTypes),
@@ -490,6 +494,16 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                 let pv = val(p)?;
                 let tv = val(t)?;
                 mods.push(Modification::SetPT(Some(pv), Some(tv)));
+            }
+            Verb::BasePower => {
+                // Layer 7b (CR 613.4b): only the power is set.
+                let pv = if body == "x" {
+                    used_x = true;
+                    x.clone().unwrap_or(Value::X)
+                } else {
+                    Value::c(body.parse().ok()?)
+                };
+                mods.push(Modification::SetPT(Some(pv), None));
             }
             Verb::LoseAll => {
                 if !body.is_empty() {
