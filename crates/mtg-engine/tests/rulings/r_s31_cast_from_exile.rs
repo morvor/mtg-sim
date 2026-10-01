@@ -326,3 +326,34 @@ fn spark_of_creativity_counts_x_as_0_for_the_exiled_cards_mana_value() {
     assert!(t.on_battlefield(hydra));
     assert_eq!(t.counters(hydra, "+1/+1"), 1);
 }
+
+#[test]
+fn chaos_wand_casts_an_x_spell_with_x_0() {
+    cr!("107.3b", "118.9", "608.2g");
+    ruling!(
+        "Chaos Wand",
+        "If the exiled card has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Chaos Wand");
+    supported("Blaze");
+    // "{4}, {T}: Target opponent exiles cards from the top of their library until they
+    // exile an instant or sorcery card. You may cast that card without paying its mana
+    // cost. Then put the exiled cards that weren't cast this way on the bottom of that
+    // library in a random order." P1 exiles Grizzly Bears, then Blaze ({X}{R}: "Blaze
+    // deals X damage to any target.").
+    let mut t = TestGame::new(2);
+    let wand = t.battlefield(P0, "Chaos Wand");
+    let cards = stack_library(&mut t, P1, &["Grizzly Bears", "Blaze"]);
+    add_mana(&mut t, P0, ManaType::C, 4);
+    t.answer_yes(P0, true);
+    t.activate(P0, wand, 0, &[Entity::Player(P1)])
+        .expect("activate");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    // Blaze was cast with X = 0: no damage. It goes to its owner's graveyard.
+    assert_eq!(t.zone(cards[1]), Zone::Graveyard(P1));
+    assert_eq!(t.life(P1), 20);
+    // The Bears went to the bottom of P1's library.
+    assert!(matches!(t.zone(cards[0]), Zone::Library(_)));
+    assert_eq!(t.g.player(P1).library.first(), Some(&t.g.current(cards[0])));
+}
