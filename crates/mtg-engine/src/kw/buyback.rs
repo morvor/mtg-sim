@@ -17,6 +17,14 @@ pub const BUYBACK: &str = "buyback";
 
 pub struct Buyback;
 
+/// Whether the spell's buyback cost was paid.
+fn buyback_paid(g: &Game, spell: ObjectId) -> bool {
+    g.obj(spell)
+        .stack
+        .as_deref()
+        .is_some_and(|s| s.cast.paid.iter().any(|p| p == BUYBACK))
+}
+
 impl KeywordRules for Buyback {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Buyback]
@@ -46,11 +54,18 @@ impl KeywordRules for Buyback {
         _kw: &Keyword,
     ) -> Option<(Zone, LibraryPosition)> {
         let o = g.obj(spell);
-        let paid = o
-            .stack
-            .as_deref()
-            .is_some_and(|s| s.cast.paid.iter().any(|p| p == BUYBACK));
-        paid.then_some((Zone::Hand(o.owner), LibraryPosition::Top))
+        buyback_paid(g, spell).then_some((Zone::Hand(o.owner), LibraryPosition::Top))
+    }
+
+    /// A permanent spell whose buyback cost was paid doesn't enter the battlefield as it
+    /// resolves: it moves from the stack to its owner's hand (Innocuous Insect).
+    fn permanent_spell_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        _kw: &Keyword,
+    ) -> Option<Zone> {
+        buyback_paid(g, spell).then(|| Zone::Hand(g.obj(spell).owner))
     }
 }
 

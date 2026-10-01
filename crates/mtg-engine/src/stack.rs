@@ -1108,6 +1108,11 @@ impl Game {
                 crate::keyword_impls::resolve_mutate(self, id);
                 return;
             }
+            if let Some(to) = crate::kw::permanent_spell_destination(self, id) {
+                // E.g. buyback: it moves from the stack to its owner's hand (CR 702.27a).
+                self.move_object(id, to, MoveCause::Resolve, Some(controller));
+                return;
+            }
             crate::kw::before_permanent_enters(self, id);
             crate::kw::permanent_spell_etb(self, id, &mut etb);
             let copy = o.kind == ObjKind::SpellCopy || o.kind == ObjKind::CardCopy;
