@@ -377,6 +377,8 @@ impl Game {
                 let p = o.controller;
                 if self.player(p).speed.is_none() {
                     self.players[p.idx()].speed = Some(1);
+                    // Effects that use the speed apply anew (CR 611.3a).
+                    self.dirty = true;
                     performed = true;
                 }
             }

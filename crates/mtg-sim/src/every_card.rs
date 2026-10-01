@@ -7,7 +7,7 @@
 //! and triggered abilities were used.
 //!
 //! Usage: mtg-sim --every-card [--games-per-card K] [--from N] [--count M]
-//!                [--filter TEXT] [--game G] [--threads T] [--max-turns N]
+//!                [--filter TEXT] [--kind KIND] [--game G] [--threads T] [--max-turns N]
 //!                [--check N] [--slow SECS] [--timeout SECS] [--report FILE] [--log]
 //!                [--list]
 //!
@@ -168,6 +168,29 @@ const SNOW_BASICS: [&str; 5] = [
     "Snow-Covered Forest",
 ];
 
+/// The kind of game a card needs: "standard", or the variant or supplementary deck its
+/// card type or text calls for ("planechase", "archenemy", "vanguard", "attractions",
+/// "dungeon", "conspiracy", "commander").
+pub fn game_kind(x: &PoolCard) -> &'static str {
+    if x.is(CardType::Plane) || x.is(CardType::Phenomenon) {
+        "planechase"
+    } else if x.is(CardType::Scheme) {
+        "archenemy"
+    } else if x.is(CardType::Vanguard) {
+        "vanguard"
+    } else if x.has_subtype("Attraction") && x.is(CardType::Artifact) {
+        "attractions"
+    } else if x.is(CardType::Dungeon) {
+        "dungeon"
+    } else if x.is(CardType::Conspiracy) {
+        "conspiracy"
+    } else if x.text.contains("commander") || x.text.contains("command zone") {
+        "commander"
+    } else {
+        "standard"
+    }
+}
+
 /// What the games of a card are built from.
 pub struct Setup {
     pub config: GameConfig,
@@ -215,7 +238,9 @@ const STOP_WORDS: [&str; 8] = [
 
 /// Phrases of a card's text, and a phrase of the text of other cards that make them
 /// matter in a game: "whenever you discard" wants discard effects, and so on.
-const PHRASES: [(&str, &str); 14] = [
+const PHRASES: [(&str, &str); 16] = [
+    ("spell that targets", "target creature gets +"),
+    ("becomes the target", "target creature"),
     ("discard", "discards"),
     ("gain life", "you gain"),
     ("gains life", "you gain"),
@@ -398,6 +423,28 @@ impl<'a> Picker<'a> {
         out
     }
 
+    /// Four copies each of up to `n` cards of `from` that let the card be used (cards
+    /// that open Attractions, say), whatever their colors: the deck's colors grow to
+    /// include theirs.
+    fn enablers(
+        &self,
+        from: &[usize],
+        n: usize,
+        mask: &mut u8,
+        rng: &mut StdRng,
+    ) -> Vec<Arc<CardDef>> {
+        let mut v = from.to_vec();
+        v.shuffle(rng);
+        // Those in the deck's colors first.
+        v.sort_by_key(|&i| self.pool[i].mask & !*mask != 0);
+        let mut out = Vec::new();
+        for &i in v.iter().take(n) {
+            *mask |= self.pool[i].mask;
+            out.extend(std::iter::repeat_n(self.def(i), 4));
+        }
+        out
+    }
+
     /// Up to `n` distinct cards of `from` other than `not`.
     fn some(&self, from: &[usize], not: &str, n: usize, rng: &mut StdRng) -> Vec<Arc<CardDef>> {
         let mut v: Vec<usize> = from
@@ -415,7 +462,7 @@ impl<'a> Picker<'a> {
         let x = &self.pool[idx];
         let name = x.def.name.clone();
         let mut config = GameConfig::default();
-        let mut kind = "standard";
+        let kind = game_kind(x);
         // Deck colors: the card's color identity, or a random color for a colorless card.
         let mut mask = x.mask;
         if mask == 0 {
@@ -437,14 +484,12 @@ impl<'a> Picker<'a> {
         let mut extra: Vec<Arc<CardDef>> = Vec::new();
         let mut extra_filler: Vec<Arc<CardDef>> = Vec::new();
         let mut sideboard: Vec<Arc<CardDef>> = Vec::new();
-        if x.is(CardType::Plane) || x.is(CardType::Phenomenon) {
-            kind = "planechase";
+        if kind == "planechase" {
             config = GameConfig::planechase_game();
             copies = 0;
             extra.push(x.def.clone());
             extra.extend(self.some(&self.planes, &name, 9, rng));
-        } else if x.is(CardType::Scheme) {
-            kind = "archenemy";
+        } else if kind == "archenemy" {
             config = GameConfig::supervillain_rumble();
             copies = 0;
             extra.push(x.def.clone());
@@ -453,31 +498,22 @@ impl<'a> Picker<'a> {
                 extra.push(d.clone());
                 extra.push(d);
             }
-        } else if x.is(CardType::Vanguard) {
-            kind = "vanguard";
+        } else if kind == "vanguard" {
             config = GameConfig::vanguard_game();
             copies = 0;
             extra.push(x.def.clone());
-        } else if x.has_subtype("Attraction") && x.is(CardType::Artifact) {
-            kind = "attractions";
+        } else if kind == "attractions" {
             copies = 0;
             extra.push(x.def.clone());
             extra.extend(self.some(&self.attractions, &name, 9, rng));
-            for d in self.some(&self.fitting(&self.openers, mask), "", 3, rng) {
-                extra_filler.extend(std::iter::repeat_n(d, 4));
-            }
-        } else if x.is(CardType::Dungeon) {
-            kind = "dungeon";
+            extra_filler.extend(self.enablers(&self.openers, 3, &mut mask, rng));
+        } else if kind == "dungeon" {
             copies = 0;
             extra.push(x.def.clone());
-            for d in self.some(&self.fitting(&self.venturers, mask), "", 4, rng) {
-                extra_filler.extend(std::iter::repeat_n(d, 4));
-            }
-        } else if x.is(CardType::Conspiracy) {
-            kind = "conspiracy";
+            extra_filler.extend(self.enablers(&self.venturers, 3, &mut mask, rng));
+        } else if kind == "conspiracy" {
             copies = 1;
-        } else if x.text.contains("commander") || x.text.contains("command zone") {
-            kind = "commander";
+        } else if kind == "commander" {
             config = GameConfig::commander_game();
             if x.has_subtype("Background") {
                 let choosers = self.fitting(&self.background_choosers, 0b11111);
@@ -571,7 +607,12 @@ impl<'a> Picker<'a> {
                 lands += 1;
             }
             let mut copies_left = copies.saturating_sub(in_hand);
-            let mut names: Vec<SmolStr> = filler.iter().map(|d| d.name.clone()).collect();
+            let mut names: Vec<SmolStr> = filler
+                .iter()
+                .chain(extra_filler.iter())
+                .map(|d| d.name.clone())
+                .filter(|n| *n != name)
+                .collect();
             names.shuffle(rng);
             let mut filler_names = names.into_iter();
             while top.len() < 7 {
@@ -629,6 +670,7 @@ struct Options {
     from: usize,
     count: Option<usize>,
     filter: Option<String>,
+    kind: Option<String>,
     game: Option<u32>,
     threads: usize,
     max_turns: u32,
@@ -647,6 +689,7 @@ fn parse(args: &[String]) -> Options {
         from: 0,
         count: None,
         filter: None,
+        kind: None,
         game: None,
         threads: std::thread::available_parallelism().map_or(1, |n| n.get()),
         max_turns: 30,
@@ -680,6 +723,7 @@ fn parse(args: &[String]) -> Options {
             "--from" => o.from = value(i).parse().expect("--from N"),
             "--count" => o.count = Some(value(i).parse().expect("--count M")),
             "--filter" => o.filter = Some(value(i).to_lowercase()),
+            "--kind" => o.kind = Some(value(i)),
             "--game" => o.game = Some(value(i).parse().expect("--game G")),
             "--threads" => o.threads = value(i).parse().expect("--threads T"),
             "--max-turns" => o.max_turns = value(i).parse().expect("--max-turns N"),
@@ -921,6 +965,7 @@ pub fn run(args: &[String]) {
                     || pool[i].text.contains(f.as_str())
             })
         })
+        .filter(|&i| o.kind.as_ref().is_none_or(|k| game_kind(&pool[i]) == k))
         .collect();
     if o.list {
         let mut kinds: BTreeMap<&str, usize> = BTreeMap::new();

@@ -6,7 +6,7 @@ use mtg_engine::ability::{AbilityDef, AbilityKind};
 use mtg_engine::agents::RandomAgent;
 use mtg_engine::decision::SpecialAction;
 use mtg_engine::events::Event;
-use mtg_engine::object::StackKind;
+use mtg_engine::object::{StackKind, Zone};
 use mtg_engine::triggers::turn_keys;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -308,7 +308,7 @@ impl FocusAgent {
         usage.offered(g, actions);
         // Triggered mana abilities resolve without using the stack (CR 605.4a): they're
         // seen in the resolution counts of their sources.
-        for &id in &g.battlefield {
+        for &id in g.battlefield.iter().chain(&g.command) {
             if !self.focus.is_focus_card(g, id) {
                 continue;
             }
@@ -373,8 +373,17 @@ impl FocusAgent {
         let pick = if !fresh.is_empty() && self.rng.gen_bool(0.85) {
             (*fresh.choose(&mut self.rng)?).clone()
         } else if self.rng.gen_bool(0.3) {
-            // Again, now and then (keeping copies for casting later).
-            options.choose(&mut self.rng)?.clone()
+            // Again, now and then; but a card isn't used up from its owner's hand (by
+            // cycling, say) again before it has been cast.
+            let cast = usage.cast.contains(&self.focus.name);
+            let again: Vec<&Action> = options
+                .iter()
+                .filter(|a| {
+                    cast || !matches!(a, Action::Activate { source, .. }
+                        if matches!(g.obj(*source).zone, Zone::Hand(_)))
+                })
+                .collect();
+            (*again.choose(&mut self.rng)?).clone()
         } else {
             return None;
         };
@@ -420,6 +429,19 @@ impl Agent for FocusAgent {
                 top.shuffle(&mut self.rng);
                 other.shuffle(&mut self.rng);
                 return Answer::Split(top, other);
+            }
+            Decision::NameCard { .. } => {
+                // A card of its own deck, so that "the chosen name" can matter.
+                let names: Vec<SmolStr> = g
+                    .player(p)
+                    .library
+                    .iter()
+                    .chain(&g.player(p).hand)
+                    .filter_map(|&c| card_name(g, c))
+                    .collect();
+                if let Some(n) = names.choose(&mut self.rng) {
+                    return Answer::Text(n.to_string());
+                }
             }
             Decision::Order { items, .. } => {
                 let mut idx: Vec<usize> = (0..items.len()).collect();
