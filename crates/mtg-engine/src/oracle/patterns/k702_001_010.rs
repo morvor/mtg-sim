@@ -717,6 +717,9 @@ fn play_from_top_of_library(l: &str, text: &str, _ctx: &CompileContext) -> Optio
         (true, Some(s))
     } else if r == "play lands" {
         (true, None)
+    } else if r == "play cards" {
+        // Lands and spells (CR 305.1, 601.2).
+        (true, Some("spells"))
     } else {
         (false, Some(r.strip_prefix("cast ")?))
     };

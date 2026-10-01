@@ -91,6 +91,11 @@ pub fn grant_play_permission(
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
 /// that are lands can't be cast (CR 305.9). A preparation card is cast only normally
 /// (CR 722.3).
+/// [`CastMethod::Alternative`] of a spell cast for the cost a play permission sets ("If
+/// you cast a spell this way, pay life equal to its mana value rather than pay its mana
+/// cost."), not for an alternative cost of its own.
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
@@ -404,43 +409,92 @@ impl Game {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
-            if (land && !perm.lands) || (!land && !perm.spells) {
+            // A permission to cast spells only for a cost of its own ("If you cast a spell
+            // this way, pay life equal to its mana value rather than pay its mana cost")
+            // allows casting them only that way (CR 118.9; see
+            // [`Game::permission_cost_options`]).
+            if !land && perm.cost.as_ref().is_some_and(|c| !c.is_free()) {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
-            if !self.player_rel_matches(perm.who, p, &ctx) {
-                continue;
-            }
-            let in_zone = match perm.zone {
-                ZoneKind::Library => {
-                    if perm.top_only {
-                        self.library_top(p) == Some(card)
-                    } else {
-                        o.zone == Zone::Library(p)
-                    }
-                }
-                ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
-                ZoneKind::Exile => o.zone == Zone::Exile,
-                ZoneKind::Hand => o.zone == Zone::Hand(p),
-                ZoneKind::Command => o.zone == Zone::Command,
-                _ => false,
-            };
-            if !in_zone {
-                continue;
-            }
-            // CR 601.3e: the alternative characteristics the card would have as it's
-            // played are what the permission checks.
-            let f = if land {
-                perm.what.clone()
-            } else {
-                as_spell_filter(&perm.what)
-            };
-            let view = WithChars { id: card, chars };
-            if self.matches_view(&view, card, &f, &ctx) {
+            if self.static_permission_matches(*src, *ctl, perm, p, card, chars, land) {
                 return true;
             }
         }
         false
+    }
+
+    /// Whether the static play permission `perm` of `src` (controlled by `ctl`) lets `p`
+    /// play `card` with the characteristics `chars`, as a land or as a spell, ignoring any
+    /// cost of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn static_permission_matches(
+        &self,
+        src: ObjectId,
+        ctl: PlayerId,
+        perm: &PlayPermission,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+    ) -> bool {
+        let o = self.obj(card);
+        if (land && !perm.lands) || (!land && !perm.spells) {
+            return false;
+        }
+        let ctx = Ctx::new(Some(src), ctl);
+        if !self.player_rel_matches(perm.who, p, &ctx) {
+            return false;
+        }
+        let in_zone = match perm.zone {
+            ZoneKind::Library => {
+                if perm.top_only {
+                    self.library_top(p) == Some(card)
+                } else {
+                    o.zone == Zone::Library(p)
+                }
+            }
+            ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+            ZoneKind::Exile => o.zone == Zone::Exile,
+            ZoneKind::Hand => o.zone == Zone::Hand(p),
+            ZoneKind::Command => o.zone == Zone::Command,
+            _ => false,
+        };
+        if !in_zone {
+            return false;
+        }
+        // CR 601.3e: the alternative characteristics the card would have as it's
+        // played are what the permission checks.
+        let f = if land {
+            perm.what.clone()
+        } else {
+            as_spell_filter(&perm.what)
+        };
+        let view = WithChars { id: card, chars };
+        self.matches_view(&view, card, &f, &ctx)
+    }
+
+    /// Ways to cast `card` outside the hand that static permissions with a cost of their
+    /// own allow ("You may play lands and cast spells from the top of your library. If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost."): that cost is an alternative cost (CR 118.9), so the spell can't be cast
+    /// that way with another one (CR 118.9a).
+    fn permission_cost_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        let mut out = Vec::new();
+        for face in castable_faces(self, card) {
+            let chars = self.face_characteristics(card, face);
+            for (src, ctl, perm) in &self.statics.play_permissions {
+                let Some(cost) = perm.cost.as_ref().filter(|c| !c.is_free()) else {
+                    continue;
+                };
+                if self.static_permission_matches(*src, *ctl, perm, p, card, &chars, false) {
+                    let mut opt = CastOption::normal(face);
+                    opt.method = CastMethod::Alternative(PERMISSION_COST);
+                    opt.alt_cost = Some(cost.clone());
+                    out.push(opt);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a static permission lets `p` cast `card` from their hand without paying its
@@ -658,6 +712,7 @@ impl Game {
                     let free = opt.method == CastMethod::Free;
                     self.permission_allows_with(p, card, &chars, false, free)
                 });
+                out.extend(self.permission_cost_options(p, card));
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));

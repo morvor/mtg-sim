@@ -363,3 +363,105 @@ fn vizier_of_the_menagerie_any_type_of_mana_for_any_creature_spell() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
 }
+
+/// The ways P0 may cast `card` now.
+fn methods(t: &mut TestGame, card: ObjectId) -> Vec<CastMethod> {
+    crate::r_s08_common::legal_cast_methods(t, P0, card)
+}
+
+#[test]
+fn bolass_citadel_a_land_from_the_top_needs_an_available_land_play() {
+    cr!("305.2", "305.1");
+    ruling!(
+        "Bolas's Citadel",
+        "You can play a land card from the top of your library only if you have available land plays remaining."
+    );
+    supported("Bolas's Citadel");
+    // "You may play lands and cast spells from the top of your library. If you cast a
+    // spell this way, pay life equal to its mana value rather than pay its mana cost."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bolas's Citadel");
+    let top = t.library_top(P0, "Forest");
+    assert!(can_play_land(&mut t, P0, top));
+    let island = t.hand(P0, "Island");
+    t.play_land(P0, island).unwrap();
+    t.settle();
+    assert!(!can_play_land(&mut t, P0, top));
+    // On a later turn, with a land play available, it can be played.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bolas's Citadel");
+    let top = t.library_top(P0, "Forest");
+    t.play_land(P0, top).unwrap();
+    t.settle();
+    assert!(t.on_battlefield(top));
+    // That was the turn's land play.
+    let next = t.library_top(P0, "Mountain");
+    assert!(!can_play_land(&mut t, P0, next));
+}
+
+#[test]
+fn bolass_citadel_spells_from_the_top_cost_life_and_no_other_alternative_cost() {
+    cr!("118.9", "118.9a", "118.8", "601.2f", "601.2h");
+    ruling!(
+        "Bolas's Citadel",
+        "If you cast a spell for another cost \"rather than pay its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, such as that of Spark Harvest, those must be paid to cast the card."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bolas's Citadel");
+    t.lands(P0, "Swamp", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Snuff Out ("If you control a Swamp, you may pay 4 life rather than pay this spell's
+    // mana cost. Destroy target nonblack creature."): from the top, only for Bolas's
+    // Citadel's cost.
+    let snuff = t.library_top(P0, "Snuff Out");
+    assert_eq!(
+        methods(&mut t, snuff),
+        vec![CastMethod::Alternative(mtg_engine::casting::PERMISSION_COST)]
+    );
+    // Bone Splinters ({B}; "As an additional cost to cast this spell, sacrifice a
+    // creature."): P0 pays 1 life and sacrifices a creature; no mana is spent.
+    let splinters = t.library_top(P0, "Bone Splinters");
+    let m = methods(&mut t, splinters);
+    assert_eq!(m.len(), 1);
+    t.cast(P0, splinters).method(m[0].clone()).target(giant).go();
+    assert_eq!(t.life(P0), 19);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 2);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    // Without a creature to sacrifice, it can't be cast.
+    let again = t.library_top(P0, "Bone Splinters");
+    assert!(methods(&mut t, again).is_empty());
+}
+
+#[test]
+fn gwenom_a_land_from_the_top_needs_an_available_land_play() {
+    cr!("305.2", "611.2a");
+    ruling!(
+        "Gwenom, Remorseless",
+        "You can play a land card from the top of your library only if you have available land plays remaining."
+    );
+    supported("Gwenom, Remorseless");
+    // "Whenever Gwenom attacks, until end of turn, you may look at the top card of your
+    // library any time and you may play cards from the top of your library. If you cast a
+    // spell this way, pay life equal to its mana value rather than pay its mana cost."
+    let mut t = TestGame::new(2);
+    let gwenom = t.battlefield(P0, "Gwenom, Remorseless");
+    let island = t.hand(P0, "Island");
+    t.play_land(P0, island).unwrap();
+    t.set_step(P0, Step::BeginningOfCombat);
+    crate::r_s01_common::attack_with(&mut t, &[(gwenom, Entity::Player(P1))]);
+    t.resolve_all();
+    t.advance_to(P0, Step::PostcombatMain);
+    let top = t.library_top(P0, "Forest");
+    assert!(!can_play_land(&mut t, P0, top));
+    // A spell from the top costs life equal to its mana value.
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let m = methods(&mut t, bears);
+    assert_eq!(m.len(), 1);
+    let life = t.life(P0);
+    t.cast(P0, bears).method(m[0].clone()).go();
+    assert_eq!(t.life(P0), life - 2);
+}
