@@ -560,3 +560,23 @@ fn biomass_mutation_example() {
     };
     layer7(&mut t, bears, "Relic's Roar", true, apply, (4, 4), "Square Up");
 }
+
+#[test]
+fn bramblefort_fink_sets_its_base_pt_under_its_modifiers() {
+    cr!("613.4b", "613.4c", "613.4d");
+    ruling!(
+        "Bramblefort Fink",
+        "Any effects that modify Bramblefort Fink's power and/or toughness without setting them to a specific number or value will apply after its base power and toughness are set, regardless of the order in which those effects were created. The same is true of counters that modify its power and toughness."
+    );
+    helpers_supported();
+    supported("Bramblefort Fink");
+    supported("Oko, Thief of Crowns");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oko, Thief of Crowns");
+    let fink = t.battlefield(P0, "Bramblefort Fink");
+    let apply = move |t: &mut TestGame| {
+        t.lands(P0, "Wastes", 8);
+        activate_resolve(t, P0, fink, 0, &[]);
+    };
+    layer7(&mut t, fink, "Relic's Roar", true, apply, (10, 10), "Square Up");
+}
