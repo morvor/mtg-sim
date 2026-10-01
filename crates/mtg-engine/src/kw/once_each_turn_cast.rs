@@ -7,7 +7,8 @@
 //! alternative cost instead (CR 118.9); the usual timing rules apply.
 //!
 //! A spell cast from its controller's graveyard by a way the permission is needed for
-//! uses the permission of the first such object that allows it: normally, or for an
+//! uses the permission of one object that allows it — the player's choice when several
+//! do (Karador and Lurrus both allowing a two-mana creature card): normally, or for an
 //! alternative cost such as evoke — but not with a keyword that is its own permission to
 //! cast the card from a graveyard ([`OWN_GRAVEYARD_PERMISSION`], e.g. flashback), nor
 //! with a permission a resolved effect gave for that card ("You may cast that card this
@@ -20,7 +21,7 @@ use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::object::CastMethod;
-use crate::types::ObjectId;
+use crate::types::{Entity, ObjectId};
 
 /// `Condition::Custom`: this object's once-each-turn permission hasn't been used this turn.
 pub const ONCE_UNUSED: &str = "once each turn: permission unused";
@@ -121,8 +122,27 @@ impl KeywordRules for OnceEachTurnCast {
                 sources.push(id);
             }
         }
-        if let Some(first) = sources.first() {
-            g.history.once_permissions_used.push(*first);
+        // With several such permissions, the player says which one they're using (CR 601.3:
+        // the card is cast because of one of them); by default, the first.
+        let used = if sources.len() > 1 {
+            let cands = sources.iter().map(|s| Entity::Object(*s)).collect();
+            let chosen = g.ask_entities(
+                p,
+                Some(spell),
+                "Casting this spell from your graveyard: choose the permission you're using",
+                cands,
+                1,
+                1,
+            );
+            match chosen.first() {
+                Some(Entity::Object(o)) => Some(*o),
+                _ => sources.first().copied(),
+            }
+        } else {
+            sources.first().copied()
+        };
+        if let Some(used) = used {
+            g.history.once_permissions_used.push(used);
             g.dirty = true;
         }
     }
