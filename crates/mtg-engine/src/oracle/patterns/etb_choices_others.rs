@@ -259,7 +259,21 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
                 return None;
             }
             let start = l.find(", except ")? + ", except ".len();
-            (a, copy_exceptions(end(&block[start..]), ctx)?)
+            let exc = end(&block[start..]);
+            let mods = match copy_exceptions(exc, ctx) {
+                Some(m) => m,
+                // The fuller grammar of token copies' exceptions ("it's 7/7", "it has
+                // haste and dethrone", ...), CR 707.9b.
+                None => {
+                    let (masked, quotes) = super::statics::mask_quotes(exc)?;
+                    super::tokens_copies_copy::copy_exceptions(
+                        &masked.to_lowercase(),
+                        &quotes,
+                        ctx,
+                    )?
+                }
+            };
+            (a, mods)
         }
         None => (r, vec![]),
     };

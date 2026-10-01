@@ -226,6 +226,22 @@ pub(crate) fn copy_exceptions(
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
             {
                 out.extend(added_types(types)?);
+            } else if let Some(types) = r
+                .strip_suffix(" in addition to its other creature types")
+                .or_else(|| r.strip_suffix(" in addition to their other creature types"))
+            {
+                // "it's a Ninja in addition to its other creature types": creature
+                // types only (CR 205.3d).
+                let mods = added_types(types)?;
+                if !mods.iter().all(|m| match m {
+                    Modification::AddSubtypes(s) => s
+                        .iter()
+                        .all(|x| subtype_kind(x.as_str()) == Some(SubtypeKind::Creature)),
+                    _ => false,
+                }) {
+                    return None;
+                }
+                out.extend(mods);
             } else if let Some(x) = r
                 .strip_suffix(" in addition to its other colors and types")
                 .or_else(|| r.strip_suffix(" in addition to their other colors and types"))
