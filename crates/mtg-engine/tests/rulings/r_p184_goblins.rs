@@ -241,7 +241,7 @@ fn stenchskipper_checks_for_goblins_on_trigger_and_resolution() {
     // A Goblin at the beginning of the end step: no trigger.
     let mut t = TestGame::new(2);
     let skipper = t.battlefield(P0, "Stenchskipper");
-    let goblin = t.battlefield(P0, "Raging Goblin");
+    t.battlefield(P0, "Raging Goblin");
     t.advance_to(P0, Step::End);
     t.settle();
     assert_eq!(t.stack_len(), 0);
