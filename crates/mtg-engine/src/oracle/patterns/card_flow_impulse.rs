@@ -58,6 +58,16 @@ fn exile_top(l: &str, b: &mut Builder) -> Option<Effect> {
             b.it_player = PlayerRef::Target(slot);
             PlayerRef::Target(slot)
         }
+        // "exile the top card of that player's library" / "of their library": the player
+        // the text is about (e.g. the player a creature dealt combat damage to).
+        "that player's library" | "their library"
+            if matches!(
+                b.it_player,
+                PlayerRef::Target(_) | PlayerRef::TriggerPlayer | PlayerRef::DefendingPlayer
+            ) =>
+        {
+            b.it_player.clone()
+        }
         _ => return None,
     };
     b.it = Sel::Var(vars::IT);

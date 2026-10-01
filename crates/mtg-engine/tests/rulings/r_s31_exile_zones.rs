@@ -262,3 +262,31 @@ fn summoners_sending_counts_x_as_0_in_the_exiled_cards_mana_value() {
     assert_eq!(summoners_sending_exiles("Primordial Hydra"), (1, 1));
     assert_eq!(summoners_sending_exiles("Craw Wurm"), (2, 2));
 }
+
+#[test]
+fn exiling_the_top_cards_of_that_players_library() {
+    cr!("406.1", "603.2", "510.2");
+    // A creature with "Whenever this creature deals combat damage to a player, exile the
+    // top two cards of that player's library.": the damaged player's cards.
+    let def = crate::r_s01_common::custom_card(
+        "Library Raider",
+        "Creature — Rogue",
+        "{2}",
+        Some((2, 2)),
+        "Whenever this creature deals combat damage to a player, exile the top two cards of that player's library.",
+    );
+    let mut t = TestGame::new(3);
+    let raider = t.custom(P0, def, Zone::Battlefield);
+    let theirs = crate::r_s01_common::stack_library(&mut t, P2, &["Grizzly Bears", "Hill Giant"]);
+    let other = t.library_top(P1, "Craw Wurm");
+    let mine = t.library_top(P0, "Forest");
+    crate::r_s01_common::attack_with(&mut t, &[(raider, Entity::Player(P2))]);
+    crate::r_s01_common::block_and_finish(&mut t, P2, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P2), 18);
+    for c in &theirs {
+        assert_eq!(t.zone(*c), Zone::Exile);
+    }
+    assert!(matches!(t.zone(other), Zone::Library(_)));
+    assert!(matches!(t.zone(mine), Zone::Library(_)));
+}
