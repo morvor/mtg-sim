@@ -403,6 +403,28 @@ impl Agent for FocusAgent {
                 if let Some(a) = self.priority(g, p, actions) {
                     return Answer::Action(a);
                 }
+                // Left to chance, the focus card isn't used up from its owner's hand
+                // (by cycling, say) before it has been cast.
+                let cast = self
+                    .usage
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .cast
+                    .contains(&self.focus.name);
+                if !cast {
+                    let kept: Vec<Action> = actions
+                        .iter()
+                        .filter(|a| {
+                            !matches!(a, Action::Activate { source, .. }
+                                if matches!(g.obj(*source).zone, Zone::Hand(_))
+                                    && self.focus.is_focus_card(g, *source))
+                        })
+                        .cloned()
+                        .collect();
+                    return self
+                        .inner
+                        .decide(g, p, &Decision::Priority { actions: kept });
+                }
             }
             Decision::OptionalCost { repeatable, .. } => {
                 return if *repeatable {
