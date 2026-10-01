@@ -417,7 +417,12 @@ impl Game {
                     link: 0,
                     controller: inst.controller,
                     class: repl_class(&inst.def, ev),
-                    text: format!("effect #{}", inst.id),
+                    // Named after the object that created it, so a player choosing the
+                    // order (CR 616.1) can tell the effects apart.
+                    text: match inst.source {
+                        Some(s) => format!("{} (effect #{})", self.obj(s).chars.name, inst.id),
+                        None => format!("effect #{}", inst.id),
+                    },
                     def: inst.def.clone(),
                     instance: Some(inst.id),
                 });
@@ -1298,6 +1303,65 @@ impl Game {
                         combat,
                     }],
                 }
+            }
+            (
+                ReplacementAction::RedirectNext(sel, n),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                let original = ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                };
+                // CR 614.9: redirection to something no longer valid does nothing (and
+                // doesn't use up the shield).
+                let Some(to) = self
+                    .eval_sel(&sel, &ctx)
+                    .into_iter()
+                    .next()
+                    .filter(|t| self.valid_damage_recipient(*t))
+                else {
+                    return vec![original];
+                };
+                let inst = cand
+                    .instance
+                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let shield = match inst.and_then(|i| self.replacements[i].remaining) {
+                    Some(r) => r,
+                    None => self.eval_value(&n, &ctx).max(0) as u32,
+                };
+                let moved = shield.min(amount);
+                if let Some(i) = inst {
+                    let rem = shield - moved;
+                    self.replacements[i].remaining = Some(rem);
+                    if rem == 0 {
+                        self.replacements.remove(i);
+                    }
+                }
+                let mut out = Vec::new();
+                if moved > 0 {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target: to,
+                        amount: moved,
+                        combat,
+                    });
+                }
+                if amount > moved {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target,
+                        amount: amount - moved,
+                        combat,
+                    });
+                }
+                out
             }
             (ReplacementAction::Instead(effect), ev) => {
                 let mut c = ctx.clone();

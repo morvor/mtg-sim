@@ -645,7 +645,8 @@ impl Game {
                 };
                 let remaining = match &def.action {
                     ReplacementAction::PreventAmount(v)
-                    | ReplacementAction::PreventAndThen(Some(v), _) => {
+                    | ReplacementAction::PreventAndThen(Some(v), _)
+                    | ReplacementAction::RedirectNext(_, v) => {
                         Some(self.eval_value(v, ctx).max(0) as u32)
                     }
                     _ => None,
@@ -1719,6 +1720,29 @@ impl Game {
                         objects,
                         remaining,
                     });
+                }
+            }
+            Effect::PreventDividedDamage { slot, duration } => {
+                // Divisions are kept aligned with the targets that are still legal
+                // (CR 608.2b; see `recheck_targets`).
+                let targets = ctx.targets.get(*slot as usize).cloned().unwrap_or_default();
+                let div = ctx.divided.get(*slot as usize).cloned().unwrap_or_default();
+                for (i, t) in targets.into_iter().enumerate() {
+                    let n = div.get(i).copied().unwrap_or(0);
+                    if n == 0 {
+                        continue;
+                    }
+                    let to = match t {
+                        Entity::Player(p) => Sel::Players(PlayerRef::Player(p)),
+                        Entity::Object(o) => Sel::All(Filter::Objects(vec![o])),
+                    };
+                    let shield = Effect::PreventDamage {
+                        to,
+                        amount: Some(Value::c(n as i32)),
+                        duration: duration.clone(),
+                        combat_only: false,
+                    };
+                    self.exec(&shield, ctx);
                 }
             }
             Effect::BecomeMonarch { who } => {
