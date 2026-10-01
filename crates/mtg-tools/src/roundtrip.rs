@@ -65,13 +65,14 @@ pub fn cluster_key(r: &CardCheck) -> String {
 /// The first differing region of two token sequences (after their common prefix and
 /// before their common suffix), each cut to a few tokens.
 fn first_diff(a: &[String], b: &[String]) -> (Vec<String>, Vec<String>) {
-    let p = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    use mtg_engine::oracle::render::compare::token_eq;
+    let p = a.iter().zip(b).take_while(|(x, y)| token_eq(x, y)).count();
     let (a2, b2) = (&a[p..], &b[p..]);
     let s = a2
         .iter()
         .rev()
         .zip(b2.iter().rev())
-        .take_while(|(x, y)| x == y)
+        .take_while(|(x, y)| token_eq(x, y))
         .count();
     let a3 = &a2[..a2.len() - s];
     let b3 = &b2[..b2.len() - s];

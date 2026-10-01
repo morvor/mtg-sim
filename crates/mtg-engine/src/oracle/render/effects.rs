@@ -371,7 +371,7 @@ impl Renderer<'_> {
                         .targets
                         .get(*i as usize)
                         .is_some_and(|t| t.max.as_const() != Some(1));
-                    if many && t.contains("target") {
+                    if many && (t.contains("target") || t == "them") {
                         t = format!("each of {t}");
                     }
                 }
@@ -430,7 +430,12 @@ impl Renderer<'_> {
                     (restriction, duration)
                 {
                     let s = self.restriction_subject(f);
-                    return format!("{s} doesn't untap during its controller's next untap step");
+                    let whose = if values::split_controller(f).0 == Some(PlayerRel::You) {
+                        "your"
+                    } else {
+                        "its controller's"
+                    };
+                    return format!("{s} doesn't untap during {whose} next untap step");
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
@@ -933,6 +938,7 @@ impl Renderer<'_> {
             Effect::AtNext { step, effect } => {
                 let s = match step {
                     TriggerStep::EndOfCombat => "at end of combat".to_string(),
+                    TriggerStep::Upkeep => "at the beginning of the next turn's upkeep".to_string(),
                     other => format!("at the beginning of the next {}", self.step_name(*other)),
                 };
                 let e = self.effect(effect);
@@ -1198,6 +1204,33 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "~ deals 1 damage to any target and 1 damage to you."
+            if let Effect::DealDamage { source, .. } = &v[i] {
+                let mut j = i + 1;
+                while let Some(Effect::DealDamage { source: s2, .. }) = v.get(j) {
+                    if same_sel(source, s2) {
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if j > i + 1 {
+                    let s = self.sel(source, Case::Subj);
+                    let mut items = Vec::new();
+                    let mut wheres = String::new();
+                    for e in &v[i..j] {
+                        if let Effect::DealDamage { amount, to, .. } = e {
+                            let (a, w) = self.amount(amount);
+                            let t = self.sel(to, Case::Obj);
+                            items.push(format!("{a} damage to {t}"));
+                            wheres.push_str(&w.unwrap_or_default());
+                        }
+                    }
+                    parts.push(format!("{s} deals {}{wheres}", join_list(&items, "and")));
+                    i = j;
+                    continue;
+                }
+            }
             // "Target creature gets +2/+2 and gains flying until end of turn."
             if let Effect::Modify {
                 what,
@@ -1251,7 +1284,22 @@ impl Renderer<'_> {
                             }
                             vps.push(third_person(&vp));
                         }
-                        parts.push(format!("{subj} {}", join_list(&vps, "and")));
+                        // One "where X is ..." for the clauses that share it.
+                        let mut wheres: Vec<String> = Vec::new();
+                        let vps: Vec<String> = vps
+                            .into_iter()
+                            .map(|vp| match vp.split_once(", where X is ") {
+                                Some((a, w)) => {
+                                    let w = format!(", where X is {w}");
+                                    if !wheres.contains(&w) {
+                                        wheres.push(w);
+                                    }
+                                    a.to_string()
+                                }
+                                None => vp,
+                            })
+                            .collect();
+                        parts.push(format!("{subj} {}{}", join_list(&vps, "and"), wheres.concat()));
                         i = j;
                         let _ = keep;
                         continue;
@@ -1286,6 +1334,12 @@ impl Renderer<'_> {
             {
                 // "When you do, ..." already means "if you do" (CR 603.12).
                 self.effect(then)
+            }
+            // "Clash with an opponent. If you win, ..." (CR 701.30).
+            Condition::PrevHappened if self.after_clash => {
+                self.after_clash = false;
+                let t = self.effect(then);
+                format!("if you win, {t}")
             }
             Condition::PrevHappened => {
                 let mut s = String::new();
@@ -1419,10 +1473,20 @@ impl Renderer<'_> {
         let plural = is_plural_sel(what);
         let yours = self.sel_is_yours(what);
         let d = self.destination_phrase(to, plural, yours);
+        // Cards "return" what comes back from a graveyard, exile, or the battlefield,
+        // and "put" what comes from a hand or library.
+        let from_hidden = matches!(self.sel_zone(what), Some(ZoneKind::Hand | ZoneKind::Library));
         let verb = match to.zone {
-            ZoneKind::Hand | ZoneKind::Battlefield => "return",
+            ZoneKind::Hand | ZoneKind::Battlefield if !from_hidden => "return",
             ZoneKind::Exile => "exile",
             _ => "put",
+        };
+        let d = if verb == "put" && to.zone == ZoneKind::Battlefield {
+            d.replacen("to the battlefield", "onto the battlefield", 1)
+        } else if verb == "put" && to.zone == ZoneKind::Hand {
+            d.replacen("to ", "into ", 1)
+        } else {
+            d
         };
         if to.zone == ZoneKind::Exile {
             return format!(
@@ -1728,7 +1792,7 @@ impl Renderer<'_> {
         if let (Some(p), Some(t)) = (spec.power, spec.toughness) {
             words.push(format!("{p}/{t}"));
         }
-        let colors: Vec<String> = spec.colors.iter().map(|c| c.word().to_string()).collect();
+        let colors: Vec<String> = color_words(spec.colors);
         if colors.is_empty() {
             words.push("colorless".into());
         } else {
@@ -1813,6 +1877,29 @@ impl Renderer<'_> {
         self.subject_types.clear();
         let d = self.duration(d);
         join_words(&[format!("{w} {vp}"), d]) + &tail
+    }
+
+    /// The zone the selected objects are known to be in.
+    pub(crate) fn sel_zone(&self, s: &Sel) -> Option<ZoneKind> {
+        match s {
+            Sel::This => match self.zone {
+                FunctionZone::Graveyard => Some(ZoneKind::Graveyard),
+                FunctionZone::Hand => Some(ZoneKind::Hand),
+                FunctionZone::Exile => Some(ZoneKind::Exile),
+                FunctionZone::Library => Some(ZoneKind::Library),
+                _ => Some(ZoneKind::Battlefield),
+            },
+            Sel::Target(i) => match self.targets.get(*i as usize) {
+                Some(TargetSpec {
+                    what: TargetKind::Object(f),
+                    ..
+                }) => f.zone(),
+                _ => None,
+            },
+            Sel::All(f) | Sel::Choose { filter: f, .. } => f.zone(),
+            Sel::TopOfLibrary(..) => Some(ZoneKind::Library),
+            _ => None,
+        }
     }
 
     /// Whether the selected objects are known to be the controller's own (their own
@@ -2016,7 +2103,7 @@ impl Renderer<'_> {
                 }
                 Modification::SetChosenBasicLandType => parts.push("is the chosen type".into()),
                 Modification::SetColors(cs) => {
-                    let w: Vec<String> = cs.iter().map(|c| c.word().to_string()).collect();
+                    let w: Vec<String> = color_words(*cs);
                     becomes.colors = Some(if w.is_empty() {
                         "colorless".into()
                     } else {
@@ -2406,7 +2493,10 @@ impl Renderer<'_> {
             K::EmpowerJace => format!("empower Jace {}", num(self)),
             K::Earthbend if !has_what => format!("earthbend {}", num(self)),
             K::Waterbend if !has_what => format!("waterbend {}", num(self)),
-            K::Clash => "clash with an opponent".into(),
+            K::Clash => {
+                self.after_clash = true;
+                "clash with an opponent".into()
+            }
             K::Manifest | K::Cloak if !has_what => {
                 let p = self.possessive_for(who);
                 let verb = if action == K::Manifest {

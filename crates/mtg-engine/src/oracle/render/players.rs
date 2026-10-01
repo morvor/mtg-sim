@@ -3,6 +3,26 @@
 use super::nouns::{possessive, Det};
 use super::*;
 
+/// A filter matching every card in a zone ("exile target player's graveyard"): the zone
+/// and its owner.
+fn whole_zone(f: &Filter) -> Option<(ZoneKind, Option<PlayerRel>)> {
+    let atoms: Vec<&Filter> = match f {
+        Filter::And(v) => v.iter().collect(),
+        other => vec![other],
+    };
+    let mut zone = None;
+    let mut owner = None;
+    for a in atoms {
+        match a {
+            Filter::InZone(z) if matches!(z, ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library) => zone = Some(*z),
+            Filter::OwnedBy(r) => owner = Some(*r),
+            Filter::Card | Filter::Any => {}
+            _ => return None,
+        }
+    }
+    zone.map(|z| (z, owner))
+}
+
 /// Grammatical role of a reference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Case {
@@ -197,8 +217,10 @@ impl Renderer<'_> {
         };
         match s {
             Sel::None => self.gap("Sel::None"),
-            Sel::This if self.self_salient => decline("~it".into(), case),
-            Sel::This => decline(self.me(), case),
+            Sel::This => {
+                let m = self.me();
+                decline(m, case)
+            }
             Sel::Target(i) => self.target_mention(*i, case),
             Sel::AllTargets => {
                 let any_new = self.introduced.iter().any(|b| !b);
@@ -229,6 +251,10 @@ impl Renderer<'_> {
             }
             Sel::AttachedToThis => decline("each permanent attached to ~".into(), case),
             Sel::All(f) => {
+                if let Some(z) = whole_zone(f) {
+                    let s = self.whole_zone_phrase(z.0, z.1);
+                    return decline(s, case);
+                }
                 let s = self.noun_det(f, Det::Each);
                 decline(s, case)
             }
@@ -280,6 +306,19 @@ impl Renderer<'_> {
                     }
                 };
                 decline(s, case)
+            }
+        }
+    }
+
+    /// "target player's graveyard", "each opponent's graveyard", "all graveyards".
+    fn whole_zone_phrase(&mut self, z: ZoneKind, owner: Option<PlayerRel>) -> String {
+        let zw = zone_word(z);
+        match owner {
+            None | Some(PlayerRel::Any) => format!("all {}", plural(zw)),
+            Some(PlayerRel::Opponent) => format!("each opponent's {zw}"),
+            Some(r) => {
+                let p = self.rel_possessive(r, Num::One);
+                format!("{p} {zw}")
             }
         }
     }

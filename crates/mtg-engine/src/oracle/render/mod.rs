@@ -107,8 +107,11 @@ pub fn enchant_noun(abilities: &[Ability], info: &FaceInfo) -> Option<String> {
     for a in abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
             if k.kind == crate::keywords::KeywordKind::Enchant {
+                // "enchanted creature" for "Enchant creature you control".
+                let mut k = k.clone();
+                k.filter = k.filter.map(|f| effects::strip_controller(&f));
                 let mut r = Renderer::new(info);
-                let s = r.keyword_lower(k);
+                let s = r.keyword_lower(&k);
                 return s.strip_prefix("enchant ").map(|x| x.to_string());
             }
         }
@@ -205,6 +208,10 @@ pub struct Renderer<'a> {
     pub(crate) each_mode: bool,
     /// Alternatives in a head noun join with "and" ("for each instant and sorcery card").
     pub(crate) alt_and: bool,
+    /// The noun for a filter that names no type: "source" for damage sources.
+    pub(crate) default_head: Option<&'static str>,
+    /// The previous instruction was a clash ("If you win, ...", CR 701.30).
+    pub(crate) after_clash: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -220,6 +227,8 @@ impl<'a> Renderer<'a> {
             subject_types: Vec::new(),
             each_mode: false,
             alt_and: false,
+            default_head: None,
+            after_clash: false,
         }
     }
 
@@ -255,8 +264,14 @@ impl<'a> Renderer<'a> {
     }
 
     /// The self-reference.
-    pub(crate) fn me(&self) -> String {
-        "~".to_string()
+    /// The first mention in an ability is "~"; later ones may be "it" (`~it`).
+    pub(crate) fn me(&mut self) -> String {
+        if self.self_salient {
+            "~it".to_string()
+        } else {
+            self.self_salient = true;
+            "~".to_string()
+        }
     }
 
     /// Renders an ability in a nested position (a quoted granted ability, an emblem's or a
@@ -264,16 +279,19 @@ impl<'a> Renderer<'a> {
     pub(crate) fn nested_ability(&mut self, a: &Ability) -> String {
         let saved_t = std::mem::take(&mut self.targets);
         let saved_i = std::mem::take(&mut self.introduced);
+        let saved_s = self.self_salient;
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
         self.targets = saved_t;
         self.introduced = saved_i;
+        self.self_salient = saved_s;
         s
     }
 
     /// One ability.
     pub fn ability(&mut self, a: &Ability) -> String {
+        self.self_salient = false;
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),
             AbilityKind::Activated(act) => self.activated(act),
@@ -521,6 +539,20 @@ pub fn capitalize(s: &str) -> String {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
         None => String::new(),
     }
+}
+
+/// Color words in the order cards print them: WUBRG, except that a pair of colors two
+/// steps or more apart around the color wheel starts from the later one ("green and
+/// white", "red and white").
+pub fn color_words(cs: ColorSet) -> Vec<String> {
+    let mut v: Vec<Color> = cs.iter().collect();
+    if v.len() == 2 {
+        let i = |c: Color| Color::ALL.iter().position(|x| *x == c).unwrap_or(0);
+        if i(v[1]) - i(v[0]) > 2 {
+            v.swap(0, 1);
+        }
+    }
+    v.iter().map(|c| c.word().to_string()).collect()
 }
 
 /// Mana type symbol.

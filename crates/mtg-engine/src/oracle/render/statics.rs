@@ -14,22 +14,23 @@ impl Renderer<'_> {
         if let StaticEffect::Continuous { affected: Filter::Source, .. } = &s.effect {
             self.subject_types = self.info.card_types.iter().collect();
         }
-        let e = self.static_effect(&s.effect);
-        self.subject_types.clear();
         let e = match &s.condition {
             // Cost modifiers state their condition with "if" ("This spell costs {2} less
             // to cast if ...").
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
-                self.self_salient = e.starts_with('~');
+                let e = self.static_effect(&s.effect);
                 let c = self.condition(c);
                 format!("{} if {c}", e.trim_end_matches('.'))
             }
             Some(c) => {
+                // "As long as ~ is enchanted, it has ...".
                 let c = self.condition(c);
+                let e = self.static_effect(&s.effect);
                 format!("as long as {c}, {}", lower_first(&e))
             }
-            None => e,
+            None => self.static_effect(&s.effect),
         };
+        self.subject_types.clear();
         self.self_salient = saved;
         let e = capitalize(e.trim());
         if e.ends_with('.') || e.ends_with('"') {
@@ -692,10 +693,17 @@ impl Renderer<'_> {
             Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
                 format!("{} can't enter the battlefield", subj(self, f))
             }
-            Restriction::DoesntUntap(f) => format!(
-                "{} doesn't untap during its controller's untap step",
-                subj(self, f)
-            ),
+            Restriction::DoesntUntap(f) => {
+                let s = subj(self, f);
+                let whose = if matches!(f, Filter::Source)
+                    || super::values::split_controller(f).0 == Some(PlayerRel::You)
+                {
+                    "your"
+                } else {
+                    "its controller's"
+                };
+                format!("{s} doesn't untap during {whose} untap step")
+            }
             Restriction::MaxUntaps { who, what, n } => {
                 let w = self.player_filter_subject(who);
                 let x = self.noun(what, Num::Many);
@@ -1288,9 +1296,20 @@ impl Renderer<'_> {
         let src = match source {
             Filter::Any => None,
             Filter::Source => Some("~".to_string()),
-            other => Some(self.noun_det(other, Det::A)),
+            other => {
+                let saved = self.default_head;
+                self.default_head = Some("source");
+                let s = self.noun_det(other, Det::A);
+                self.default_head = saved;
+                Some(s)
+            }
         };
         let mut to = Vec::new();
+        // Damage to anything: no recipient phrase.
+        let (to_objects, to_players) = match (to_objects, to_players) {
+            (Some(Filter::Any), Some(PlayerFilter::Any)) => (&None, &None),
+            other => other,
+        };
         if let Some(o) = to_objects {
             to.push(match o {
                 Filter::Source => "~".to_string(),

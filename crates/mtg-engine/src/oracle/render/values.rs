@@ -20,7 +20,17 @@ impl Renderer<'_> {
                 self.alt_and = true;
                 let n = self.noun_det(f, Det::Plural);
                 self.alt_and = saved;
-                format!("the number of {n}")
+                // A count of permanents with no controller is of all of them.
+                let global = split_controller(f).0.is_none()
+                    && f.zone().is_none()
+                    && !n.contains(" you ")
+                    && !n.contains("among")
+                    && !n.ends_with(" ~");
+                if global {
+                    format!("the number of {n} on the battlefield")
+                } else {
+                    format!("the number of {n}")
+                }
             }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -184,6 +194,7 @@ impl Renderer<'_> {
                 format!("{a} minus {b}")
             }
             Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
+                (Value::Const(1), x) | (x, Value::Const(1)) => self.value(x),
                 (Value::Const(2), x) | (x, Value::Const(2)) => {
                     let x = self.value(x);
                     format!("twice {x}")

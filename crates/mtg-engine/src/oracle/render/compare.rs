@@ -89,14 +89,49 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Anaphora (plural).",
     },
     Equivalence {
+        pattern: r"\buntil end of turn\b",
+        replacement: "this turn",
+        why: "\"Until end of turn\" and \"this turn\" effects both end in the cleanup step \
+              (CR 514.2).",
+    },
+    Equivalence {
+        pattern: r#"\. (it has|they have|it gains|they gain) ""#,
+        replacement: " with \"",
+        why: "A token created \"with\" an ability and one that \"has\" it (a following \
+              sentence) are the same token (CR 111.1).",
+    },
+    Equivalence {
+        pattern: r"\breturn(s?)\b",
+        replacement: "put$1",
+        why: "\"Return\" has no rules meaning of its own: it's a zone change like \
+              \"put\" (CR 400.6), described by its destination.",
+    },
+    Equivalence {
+        pattern: r"\b(into|onto)\b",
+        replacement: "to",
+        why: "Prepositions of a destination zone (\"into your hand\", \"onto the \
+              battlefield\").",
+    },
+    Equivalence {
+        pattern: r"\bwith (x|\d+|an?) additional\b",
+        replacement: "with $1",
+        why: "Counters an object enters with are put on it in addition to any others it \
+              would enter with (CR 614.1c, 122.6).",
+    },
+    Equivalence {
+        pattern: r"\balso\b ",
+        replacement: "",
+        why: "\"Also\" has no rules meaning.",
+    },
+    Equivalence {
         pattern: r"\band/or\b",
         replacement: "and",
         why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
               and enchantments\" both mean objects that are either.",
     },
     Equivalence {
-        pattern: r"\b(it|that|there|what)'s\b",
-        replacement: "$1 is",
+        pattern: r"(^|[^~\w])(it|that|there|what)'s\b",
+        replacement: "$1$2 is",
         why: "Contraction.",
     },
     Equivalence {
@@ -403,7 +438,7 @@ fn equivalence_regex(p: &'static str) -> &'static Regex {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Regex> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
+        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
             .unwrap()
     });
     let mut s = s.to_string();
@@ -427,6 +462,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
     R.get_or_init(|| {
         [
             (r"\bdeals? damage equal to ([^.]+?) to ([^.]+?)(\.|$)", "deals x damage to $2, where x is $1$3"),
+            (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),
             (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
             (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
             (r"\b(gets?) ([+-])1/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x, where x is the number of $4$5"),
@@ -709,12 +745,12 @@ pub fn check_card(def: &CardDef) -> CardCheck {
 /// itself, just mentioned) matches "~" or "it": cards refer to an object that a trigger
 /// condition just named either by its name or by "it".
 pub fn tokens_match(a: &[String], b: &[String]) -> bool {
-    a.len() == b.len()
-        && a.iter().zip(b).all(|(x, y)| {
-            x == y
-                || (x == "~it" && (y == "~" || y == "it"))
-                || (y == "~it" && (x == "~" || x == "it"))
-        })
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| token_eq(x, y))
+}
+
+/// Token equality for [`tokens_match`].
+pub fn token_eq(x: &str, y: &str) -> bool {
+    x == y || (x == "~it" && (y == "~" || y == "it")) || (y == "~it" && (x == "~" || x == "it"))
 }
 
 /// Whether the rendered units, in order, spell the Oracle tokens when a unit may drop

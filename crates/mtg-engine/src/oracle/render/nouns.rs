@@ -114,6 +114,10 @@ impl Renderer<'_> {
         }
         match &self.info.enchant {
             Some(n) => format!("enchanted {n}"),
+            // A creature with bestow is an Aura with enchant creature (CR 702.103b).
+            None if self.info.card_types.contains(CardType::Creature) => {
+                "enchanted creature".into()
+            }
             None => "enchanted permanent".into(),
         }
     }
@@ -529,7 +533,10 @@ impl Renderer<'_> {
             || !np.alts.is_empty()
             || np.kind.is_some();
         if !has_head {
-            np.kind = Some(Self::default_kind(&np));
+            np.kind = Some(match self.default_head {
+                Some(h) => h,
+                None => Self::default_kind(&np),
+            });
         }
         let mut words: Vec<String> = Vec::new();
         words.extend(np.status.iter().cloned());
@@ -727,12 +734,20 @@ impl Renderer<'_> {
         if np.is_self {
             return self.me();
         }
+        // "enchanted creature" is definite: no determiner.
+        if np.fixed.is_some() && !np.other {
+            let n = det.num();
+            return self.np_text(&np, n, false);
+        }
         let num = det.num();
         let other = np.other;
-        let saved = self.each_mode;
+        let saved = (self.each_mode, self.alt_and);
         self.each_mode = matches!(det, Det::Each);
+        if matches!(det, Det::Each | Det::Plural) {
+            self.alt_and = true;
+        }
         let text = self.np_text(&np, num, other);
-        self.each_mode = saved;
+        (self.each_mode, self.alt_and) = saved;
         match det {
             Det::A => {
                 if other {

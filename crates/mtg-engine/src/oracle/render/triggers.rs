@@ -37,6 +37,9 @@ impl Renderer<'_> {
                 return format!("{} — {body}", romans.join(", "));
             }
         }
+        let saved_zone = self.zone;
+        self.zone = t.zone;
+        self.self_salient = false;
         let trig = self.trigger_text(&t.trigger);
         let saved_salient = self.self_salient;
         self.self_salient = trig.contains('~');
@@ -47,6 +50,7 @@ impl Renderer<'_> {
         }
         let body = self.body(&t.body);
         self.self_salient = saved_salient;
+        self.zone = saved_zone;
         s = format!("{s}, {}", lower_first(&body));
         if t.once_per_turn {
             s.push_str(" This ability triggers only once each turn.");
@@ -93,7 +97,17 @@ impl Renderer<'_> {
             TriggerCond::LeavesBattlefield(f) => Ev::new(obj(self, f), "leaves the battlefield"),
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
             TriggerCond::ZoneChange { filter, from, to } => {
-                let o = obj(self, filter);
+                // "one or more cards leave your graveyard": the owner is in the zone.
+                let shown = match filter {
+                    Filter::And(v) if from.is_some_and(|z| z != ZoneKind::Battlefield) || to.is_some_and(|z| z != ZoneKind::Battlefield) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::OwnedBy(_)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let o = obj(self, &shown);
                 let vp = match (from, to) {
                     (Some(ZoneKind::Battlefield), Some(ZoneKind::Graveyard)) => "dies".to_string(),
                     (_, Some(ZoneKind::Exile)) => {
@@ -213,11 +227,15 @@ impl Renderer<'_> {
                 } else {
                     "damage"
                 };
+                let saved = self.default_head;
+                self.default_head = Some("source");
+                let src = obj(self, source);
+                self.default_head = saved;
                 let to_s = match to {
                     DamageRecipient::Any => String::new(),
                     other => format!(" to {}", self.recipient(other)),
                 };
-                Ev::new(obj(self, source), format!("deals {c}{to_s}"))
+                Ev::new(src, format!("deals {c}{to_s}"))
             }
             TriggerCond::IsDealtDamage {
                 filter,
@@ -411,16 +429,35 @@ impl Renderer<'_> {
                 )
             }
             TriggerCond::AnyOf(v) => {
+                let salient = self.self_salient;
                 let evs: Vec<Ev> = v
                     .iter()
-                    .map(|x| self.trigger_event(x, det.clone()))
+                    .map(|x| {
+                        self.self_salient = salient;
+                        self.trigger_event(x, det.clone())
+                    })
                     .collect();
                 if evs.iter().all(|e| e.subj == evs[0].subj) && !evs[0].subj.is_empty() {
                     let vps: Vec<String> = evs.iter().map(|e| e.vp.clone()).collect();
                     Ev::new(evs[0].subj.clone(), join_list(&vps, "or"))
                 } else {
-                    let ts: Vec<String> = evs.iter().map(|e| e.text()).collect();
-                    Ev::new("", join_list(&ts, "or"))
+                    // "Whenever A and whenever B" (each condition keeps its trigger word).
+                    let ts: Vec<String> = evs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| {
+                            let t = e.text();
+                            let begins = v.get(i).is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
+                            if i == 0 {
+                                t
+                            } else if begins {
+                                format!("at {t}")
+                            } else {
+                                format!("whenever {t}")
+                            }
+                        })
+                        .collect();
+                    Ev::new("", join_list(&ts, "and"))
                 }
             }
             // "Whenever you draw your second card each turn".
@@ -436,6 +473,25 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 let p = if w == "you" { "your" } else { "their" };
                 Ev::new(w, format!("draw {p} {} card each turn", ordinal_word(*n as u32)))
+            }
+            // "Whenever ~ and at least two other creatures attack".
+            TriggerCond::Where { trigger, cond }
+                if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
+                    && matches!(cond, Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(_))) =>
+            {
+                let (TriggerCond::Attacks(f), Condition::Compare(_, _, Value::Const(n))) =
+                    (trigger.as_ref(), cond)
+                else {
+                    return Ev::new("", self.gap("attacks-with"));
+                };
+                let o = self.noun_det(f, det.clone());
+                let others = n - 1;
+                let c = if others == 1 {
+                    "at least one other creature".to_string()
+                } else {
+                    format!("at least {} other creatures", number_word(others))
+                };
+                Ev::new(format!("{o} and {c}"), "attack")
             }
             TriggerCond::Where { trigger, cond } => {
                 let e = self.trigger_event(trigger, det);

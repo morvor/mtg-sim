@@ -89,6 +89,14 @@ impl Renderer<'_> {
                 }
                 None => self.gap("affinity without filter"),
             },
+            KeywordKind::Splice => match &k.filter {
+                Some(f) => {
+                    let n = self.noun(f, Num::One);
+                    let c = k.cost.as_ref().map(|c| cost(self, c)).unwrap_or_default();
+                    format!("splice onto {n}{c}")
+                }
+                None => self.gap("splice without quality"),
+            },
             KeywordKind::Banding => match &k.filter {
                 Some(f) => {
                     let n = self.noun(f, Num::Many);
