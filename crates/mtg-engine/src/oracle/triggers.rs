@@ -55,14 +55,18 @@ fn parse_triggered_at(
                 .any(|w| matches!(w, "it" | "its" | "it's"));
             let parsed = super::statics::parse_condition(c, ctx);
             // A condition read as being about the triggering object ("if it had counters
-            // on it", CR 603.10a) has the trigger's referent.
+            // on it", CR 603.10a; "if it doesn't have the same name as another creature
+            // you control") has the trigger's referent.
             let about_trigger_object = matches!(
                 parsed,
                 Some(Condition::SelMatches(
                     Sel::TriggerLki | Sel::TriggerObject,
                     _
                 ))
-            );
+            ) || parsed.as_ref().is_some_and(|p| {
+                let d = format!("{p:?}");
+                d.contains("TriggerObject") || d.contains("TriggerLki")
+            });
             if mentions_it && !matches!(it, Sel::This) && !about_trigger_object {
                 return None;
             }

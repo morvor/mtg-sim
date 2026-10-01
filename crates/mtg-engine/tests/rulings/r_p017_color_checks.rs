@@ -687,3 +687,98 @@ fn seedtime_counts_blue_spells_an_opponent_cast_even_if_unresolved() {
     t.resolve_all();
     assert!(t.g.extra_turns.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Guardian Project
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guardian_project_checks_the_name_on_entering_and_on_resolution() {
+    cr!("603.4");
+    ruling!(
+        "Guardian Project",
+        "Whether the entering creature shares a name with a creature you control or a creature card in your graveyard is checked both as that creature enters and as Guardian Project's ability resolves."
+    );
+    supported("Guardian Project");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Guardian Project");
+    // The first Grizzly Bears: it triggers and draws.
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // A second one: it doesn't trigger at all.
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // An opponent's creature with that name doesn't matter.
+    t.battlefield(P1, "Hill Giant");
+    t.enter(P0, "Hill Giant");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    // A Hill Giant card reaches P0's graveyard before it resolves: no card.
+    t.graveyard(P0, "Hill Giant");
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
+fn guardian_project_the_entering_creature_itself_in_the_graveyard_shares_its_name() {
+    cr!("603.4", "400.7");
+    ruling!(
+        "Guardian Project",
+        "If the entering creature is put into your graveyard while Guardian Project's ability is on the stack, that same card will be a creature card in your graveyard that shares a name with the creature that was on the battlefield, so you won't draw a card."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Guardian Project");
+    let elves = t.enter(P0, "Llanowar Elves");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.destroy(elves, None);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Llanowar Elves"));
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
+fn guardian_project_a_returned_creature_is_a_new_object_sharing_the_name() {
+    cr!("603.4", "400.7");
+    ruling!(
+        "Guardian Project",
+        "If the entering creature leaves the battlefield and returns while Guardian Project's ability is on the stack, that same card will be a new creature you control that shares a name with the creature that was on the battlefield, so you won't draw a card. However, Guardian Project's ability may trigger for the new creature and you may draw a card as that ability resolves."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Guardian Project");
+    let elves = t.enter(P0, "Llanowar Elves");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    let hand = t.hand_size(P0);
+    // Flickered in response: the new Elves triggers it again.
+    let exiled =
+        t.g.move_object(
+            elves,
+            Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        )
+        .expect("exiled");
+    t.g.move_object(
+        exiled,
+        Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    )
+    .expect("returned");
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    // The new trigger resolves first and draws; the first one doesn't.
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
