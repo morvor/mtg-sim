@@ -355,6 +355,13 @@ impl Game {
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         LookbackSnapshot {
             sources: self.current_trigger_sources(),
+            additional_triggers: self
+                .statics
+                .other
+                .iter()
+                .filter(|(_, _, e)| matches!(e, StaticEffect::AdditionalTrigger { .. }))
+                .cloned()
+                .collect(),
         }
     }
 
