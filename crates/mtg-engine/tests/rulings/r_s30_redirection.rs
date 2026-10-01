@@ -10,6 +10,7 @@ use crate::r_s06_common::attach_new;
 use crate::r_s25_common::cast_new;
 use crate::r_s29_common::damage_marked;
 use crate::r_s30_common::damage_events;
+use mtg_engine::decision::Decision;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -22,7 +23,7 @@ fn redirect_one(t: &mut TestGame, p: PlayerId, kor: ObjectId, to: ObjectId) {
 }
 
 #[test]
-fn the_en_kor_are_supported() {
+fn each_en_kor_redirects_the_next_1_damage_to_a_creature_you_control() {
     cr!("614.9");
     for name in [
         "Nomads en-Kor",
@@ -32,6 +33,17 @@ fn the_en_kor_are_supported() {
         "Lancers en-Kor",
     ] {
         supported(name);
+        // Shock's 2 damage to the en-Kor: 1 is dealt to Hill Giant instead, by Shock.
+        let mut t = TestGame::new(2);
+        let kor = t.battlefield(P1, name);
+        let giant = t.battlefield(P1, "Hill Giant");
+        redirect_one(&mut t, P1, kor, giant);
+        let shock = cast_new(&mut t, P0, "Shock", &[Entity::Object(kor)]);
+        t.resolve_all();
+        let events = damage_events(&t);
+        assert_eq!(events.len(), 2, "{name}: {events:?}");
+        assert!(events.contains(&(shock, Entity::Object(giant), 1, false)), "{name}");
+        assert!(events.contains(&(shock, Entity::Object(kor), 1, false)), "{name}");
     }
 }
 
@@ -57,7 +69,7 @@ fn an_en_kor_can_redirect_damage_to_itself() {
 
 #[test]
 fn the_en_kor_ability_can_be_activated_any_number_of_times() {
-    cr!("614.9", "602.1");
+    cr!("614.9", "117.1b");
     ruling!(
         "Nomads en-Kor",
         "You can use this ability as much as you want prior to damage being dealt."
@@ -214,15 +226,29 @@ fn kor_chant_vs_bolt(t: &mut TestGame) -> (ObjectId, ObjectId, ObjectId) {
     let giant = t.battlefield(P1, "Hill Giant");
     let bolt = cast_new(t, P1, "Lightning Bolt", &[Entity::Object(bears)]);
     t.answer_choose(P0, &[Entity::Object(bolt)]);
+    let from = t.asked().len();
     cast_new(
         t,
         P0,
         "Kor Chant",
         &[Entity::Object(bears), Entity::Object(giant)],
     );
+    // The targets were chosen as Kor Chant was cast; the source is chosen only as it
+    // resolves.
+    assert!(!source_chosen(t, from));
+    let from = t.asked().len();
     t.resolve();
+    assert!(source_chosen(t, from));
     assert_eq!(t.stack_len(), 1);
     (bears, giant, bolt)
+}
+
+/// Whether P0 was asked to choose a source of damage since the `from`th decision.
+fn source_chosen(t: &TestGame, from: usize) -> bool {
+    t.asked()[from..].iter().any(|(p, d)| {
+        *p == P0
+            && matches!(d, Decision::ChooseEntities { prompt, .. } if prompt.contains("source"))
+    })
 }
 
 #[test]

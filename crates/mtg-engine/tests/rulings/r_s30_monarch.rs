@@ -29,10 +29,11 @@ fn being_the_monarch_draws_at_end_step_and_combat_damage_steals_it() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
     // Not at the beginning of another player's end step.
-    let hand1 = t.hand_size(P1);
+    let (hand0, hand1) = (t.hand_size(P0), t.hand_size(P1));
     let bear = t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P1, Step::End);
     t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand0);
     assert_eq!(t.hand_size(P1), hand1 + 1, "only P1's draw step draw");
     // Whenever a creature deals combat damage to the monarch, its controller becomes the
     // monarch.

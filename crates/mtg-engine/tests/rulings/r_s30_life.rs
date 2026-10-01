@@ -21,7 +21,7 @@ fn make_commander(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn unpreventable_damage_to_a_protected_player_still_has_its_other_effects() {
-    cr!("702.16e", "615.12", "119.10", "702.15b", "702.90b");
+    cr!("702.16e", "615.12", "119.8", "702.15b", "702.90b");
     ruling!(
         "Teferi's Protection",
         "Protection from everything will usually prevent damage if it would be dealt to you, but some damage can't be prevented. In this case, because your life total also can't change, that damage has any other effects that it may have aside from causing you to lose that much life (such as effects from lifelink or infect) and triggers and effects can see that damage was dealt even though your life total didn't change."
@@ -72,7 +72,7 @@ fn unpreventable_damage_to_a_protected_player_still_has_its_other_effects() {
 
 #[test]
 fn commander_damage_is_tracked_even_when_the_life_total_doesnt_change() {
-    cr!("903.10a", "615.1a");
+    cr!("903.10a", "614.1a");
     ruling!(
         "Angel's Grace",
         "In a Commander game, combat damage you're dealt by a commander is still tracked, even if it doesn't change your life total."

@@ -160,6 +160,33 @@ fn remedy_and_angel_of_salvation_are_supported() {
 }
 
 #[test]
+fn angel_of_salvations_trigger_divides_its_prevention_as_it_goes_on_the_stack() {
+    cr!("603.3d", "601.2d", "615.1a");
+    supported("Angel of Salvation");
+    let mut t = TestGame::new(2);
+    // "When this creature enters, prevent the next 5 damage that would be dealt this turn
+    // to any number of targets, divided as you choose." 3 to Hill Giant, 2 to P1.
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P1, &[Entity::Object(giant), Entity::Player(P1)]);
+    t.answer(P1, DecisionKind::Divide, Answer::Numbers(vec![3, 2]));
+    let from = t.asked().len();
+    t.enter(P1, "Angel of Salvation");
+    t.settle();
+    // The division was announced as the ability was put on the stack.
+    assert_eq!(t.stack_len(), 1);
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::Divide { total: 5, .. })));
+    t.resolve_all();
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).damage, 0);
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
 fn the_permanents_controller_orders_prevention_and_doubling() {
     cr!("616.1", "615.1a", "614.1a");
     ruling!(

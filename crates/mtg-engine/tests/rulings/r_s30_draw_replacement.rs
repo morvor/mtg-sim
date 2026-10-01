@@ -31,11 +31,27 @@ fn wilding_first(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
 }
 
 #[test]
-fn the_words_that_compile() {
-    cr!("614.11");
+fn words_of_waste_replaces_the_draw_with_each_opponent_discarding() {
+    cr!("614.11", "614.1a");
     for name in ["Words of Worship", "Words of Wilding", "Words of Waste"] {
         supported(name);
     }
+    let mut t = TestGame::new(3);
+    // "{1}: The next time you would draw a card this turn, each opponent discards a card
+    // instead."
+    let waste = t.battlefield(P0, "Words of Waste");
+    t.hand(P1, "Grizzly Bears");
+    t.hand(P2, "Hill Giant");
+    use_words(&mut t, waste);
+    let hand = t.hand_size(P0);
+    draw(&mut t, P0);
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!((t.hand_size(P1), t.hand_size(P2)), (0, 0));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P2, "Hill Giant"));
+    // Used up: the next draw is a draw.
+    draw(&mut t, P0);
+    assert_eq!(t.hand_size(P0), hand + 1);
 }
 
 #[test]
@@ -200,7 +216,7 @@ fn plagiarize_draws_from_the_casters_library() {
 
 #[test]
 fn two_plagiarizes_cancel_each_other_out() {
-    cr!("614.5", "616.1");
+    cr!("614.5", "616.1f");
     ruling!(
         "Plagiarize",
         "If you and your opponent each cast Plagiarize on each other during the same turn, the two spells effectively cancel each other out."

@@ -51,7 +51,7 @@ fn check_copy(t: &mut TestGame, arc: ObjectId, giant: ObjectId) {
 
 #[test]
 fn each_target_of_pyrokinesis_must_be_assigned_at_least_1_damage() {
-    cr!("601.2d", "115.7f");
+    cr!("601.2d");
     ruling!("Pyrokinesis", "Each target must be assigned at least 1 damage.");
     supported("Pyrokinesis");
     let mut t = TestGame::new(2);
@@ -152,7 +152,7 @@ fn damage_divided_to_a_target_that_became_illegal_isnt_dealt() {
 
 #[test]
 fn excess_damage_from_a_spell_ignores_prevention_and_indestructible() {
-    cr!("120.10", "120.6");
+    cr!("120.4a", "120.4b", "120.6");
     ruling!(
         "Flame Spill",
         "Excess damage caused by a spell or ability is similar to how combat damage from a creature with trample is handled. Start with the amount of damage being dealt to the creature and determine what is “lethal.”"

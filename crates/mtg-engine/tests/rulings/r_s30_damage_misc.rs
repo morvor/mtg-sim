@@ -122,7 +122,7 @@ fn dragon_tempest_counts_dragons_as_its_ability_resolves() {
 
 #[test]
 fn the_creature_type_is_chosen_after_players_could_respond() {
-    cr!("608.2", "117.3c");
+    cr!("608.2", "117.3d", "117.4");
     ruling!(
         "Roar of the Crowd",
         "Spells and abilities that prevent damage or regenerate the targeted creature must be cast or activated before the creature type is chosen."

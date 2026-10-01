@@ -21,7 +21,7 @@ fn attacking(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn damage_can_go_to_the_player_even_if_the_blocker_has_protection() {
-    cr!("510.1c", "702.16e");
+    cr!("510.1b");
     ruling!(
         "Thorn Elemental",
         "You can decide to assign damage to the defending player or planeswalker even if the blocking creature has protection from green or damage preventing effects on it."
@@ -42,7 +42,7 @@ fn damage_can_go_to_the_player_even_if_the_blocker_has_protection() {
 
 #[test]
 fn destroying_the_blocker_doesnt_make_the_attacker_unblocked() {
-    cr!("509.1h", "506.4", "702.19e");
+    cr!("509.1h", "506.4", "510.1c", "702.19d");
     ruling!(
         "Divine Verdict",
         "Destroying a blocking creature won't cause any of the creatures it was blocking to become unblocked. They won't deal combat damage to the defending player or planeswalker (unless they have trample)."
