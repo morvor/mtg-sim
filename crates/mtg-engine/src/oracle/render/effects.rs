@@ -287,6 +287,10 @@ impl Renderer<'_> {
                 }
                 s
             }
+            Effect::Store { sel, var } if matches!(sel, Sel::All(_)) => {
+                self.var_defs.push((*var, sel.clone(), false));
+                String::new()
+            }
             Effect::Store { sel, .. } => match sel {
                 Sel::Choose { chooser, .. } => {
                     let c = self.player(chooser, Case::Subj);
@@ -341,7 +345,17 @@ impl Renderer<'_> {
             Effect::DealDamage { source, amount, to } => {
                 let s = self.sel(source, Case::Subj);
                 let (a, w) = self.amount(amount);
-                let t = self.sel(to, Case::Obj);
+                let mut t = self.sel(to, Case::Obj);
+                // "deals 3 damage to each of up to two target creatures".
+                if let Sel::Target(i) = to {
+                    let many = self
+                        .targets
+                        .get(*i as usize)
+                        .is_some_and(|t| t.max.as_const() != Some(1) && t.divide.is_none());
+                    if many && t.contains("target") {
+                        t = format!("each of {t}");
+                    }
+                }
                 format!("{s} deals {a} damage to {t}{}", w.unwrap_or_default())
             }
             Effect::DealDamageExcess {
@@ -454,6 +468,12 @@ impl Renderer<'_> {
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
+                // "Target creature blocks this turn if able."
+                if d == "this turn" {
+                    if let Some(x) = r.strip_suffix(" each combat if able") {
+                        return format!("{x} this turn if able");
+                    }
+                }
                 join_words(&[r, d])
             }
             Effect::AddPlayerEffect {
@@ -472,6 +492,10 @@ impl Renderer<'_> {
             } => {
                 let s = self.replacement(def, *uses);
                 let d = self.duration(duration);
+                // "If it would die this turn, exile it instead."
+                if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
+                    return s.replacen(" would die,", " would die this turn,", 1);
+                }
                 join_words(&[s, d])
             }
             Effect::GainControl {
@@ -941,14 +965,23 @@ impl Renderer<'_> {
                 self.with_subject(who, &vp, false)
             }
             Effect::DelayedTrigger { trigger, body, once } => {
-                let t = self.trigger_text(trigger);
                 // A one-shot delayed trigger at a step: "at the beginning of the next end
                 // step" (CR 603.7).
-                let t = if *once {
-                    t.replace("at the beginning of each ", "at the beginning of the next ")
-                        .replace("at the beginning of your ", "at the beginning of your next ")
-                } else {
-                    t
+                let t = match trigger {
+                    TriggerCond::BeginningOf { step, whose } if *once => match (step, whose) {
+                        (TriggerStep::EndOfCombat, _) => "at end of combat".to_string(),
+                        (TriggerStep::Upkeep, PlayerRel::You) => {
+                            "at the beginning of your next upkeep".to_string()
+                        }
+                        (TriggerStep::Upkeep, _) => {
+                            "at the beginning of the next turn's upkeep".to_string()
+                        }
+                        (s, PlayerRel::You) if *s != TriggerStep::End => {
+                            format!("at the beginning of your next {}", self.step_name(*s))
+                        }
+                        (s, _) => format!("at the beginning of the next {}", self.step_name(*s)),
+                    },
+                    other => self.trigger_text(other),
                 };
                 let b = self.body(body);
                 format!("{t}, {}", lower_first(&b))
@@ -1334,7 +1367,7 @@ impl Renderer<'_> {
             }
             i += 1;
         }
-        parts.join(". ")
+        dedupe_where(&parts.join(". "))
     }
 
     /// `actor_vp` without side effects on target introduction or gaps.
@@ -1379,6 +1412,13 @@ impl Renderer<'_> {
             Condition::Not(inner) if matches!(inner.as_ref(), Condition::PrevHappened) => {
                 self.if_effect(&Condition::PrevHappened, otherwise, then)
             }
+            // "Sacrifice it" needs no "if you control it" (CR 701.21a).
+            Condition::SelMatches(s, Filter::ControlledBy(PlayerRel::You))
+                if else_empty
+                    && matches!(then, Effect::SacrificeObjects { what } if format!("{what:?}") == format!("{s:?}")) =>
+            {
+                self.effect(then)
+            }
             _ => {
                 let c = self.condition(cond);
                 let t = self.effect(then);
@@ -1393,6 +1433,10 @@ impl Renderer<'_> {
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
+        // Changing targets is already optional ("you may change the target").
+        if matches!(effect, Effect::ChangeTargets { .. }) {
+            return self.effect(effect);
+        }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
             if same_player(&w, who) {
                 let p = self.player(who, Case::Subj);
@@ -1643,7 +1687,13 @@ impl Renderer<'_> {
         if *reveal {
             s.push_str(&format!(", reveal {pron}"));
         }
-        let mut dest = self.destination_phrase(to, many, same_player(who, whose));
+        // The searching player puts the card onto the battlefield under their own control
+        // (CR 110.2a).
+        let mut to2 = to.clone();
+        if to2.controller.as_ref().is_some_and(|c| same_player(c, who)) {
+            to2.controller = None;
+        }
+        let mut dest = self.destination_phrase(&to2, many, same_player(who, whose));
         if to.zone == ZoneKind::Battlefield {
             dest = dest.replacen("to the battlefield", "onto the battlefield", 1);
         }
@@ -1688,6 +1738,10 @@ impl Renderer<'_> {
         };
         let look = if reveal { "reveal" } else { "look at" };
         let mut s = self.with_subject(who, &format!("{look} {top}"), false);
+        // Only looking ("Look at the top card of your library.").
+        if matches!(take, Value::Const(0)) {
+            return s;
+        }
         let noun = self.card_noun(filter);
         let many = !matches!(take, Value::Const(1));
         let mut d = self.destination_phrase(take_to, many, true);
@@ -2150,7 +2204,9 @@ impl Renderer<'_> {
         }
         let has = if gains { "gains" } else { "has" };
         if let Some((b, still)) = becomes.render(self, &keywords, &abilities, gains) {
-            parts.insert(0, b);
+            // Negations come first ("except it isn't legendary and is a 4/4 Hero").
+            let at = parts.iter().take_while(|p| p.starts_with("isn't")).count();
+            parts.insert(at, b);
             if !still.is_empty() {
                 where_clauses.push(still);
             }
@@ -2161,6 +2217,8 @@ impl Renderer<'_> {
                 parts.push(format!("{has} {}", join_list(&grants, "and")));
             }
         }
+        // An "isn't" part moves before the rest: cards list it first.
+        parts.sort_by_key(|p| !p.starts_with("isn't"));
         let s = join_list(&parts, "and");
         (s, where_clauses.concat())
     }
@@ -2187,7 +2245,8 @@ impl Renderer<'_> {
     /// Copy exceptions ("it's 1/1", "it has haste", "it isn't legendary").
     pub(crate) fn exceptions(&mut self, mods: &[Modification]) -> String {
         let vp = self.mods_vp(mods, false);
-        format!("it {vp}")
+        // "except it isn't legendary, it's a 4/4 Hero": each exception has its subject.
+        format!("it {}", vp.replace(" and is ", " and it is ").replace(" and has ", " and it has "))
     }
 
     /// A choice ("a color", "a creature type", "an opponent").
@@ -2785,6 +2844,30 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
 fn until_event(u: &UntilEvent) -> String {
     match u {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
+    }
+}
+
+/// Keeps only the last of repeated identical "where X is ..." clauses in a sentence
+/// sequence: "You gain X life and each opponent loses X life, where X is ...".
+pub(crate) fn dedupe_where(s: &str) -> String {
+    let mut out = s.to_string();
+    loop {
+        let mut changed = false;
+        let mut start = 0;
+        while let Some(i) = out[start..].find(", where X is ") {
+            let i = start + i;
+            let end = out[i..].find(". ").map(|e| i + e).unwrap_or(out.len());
+            let clause = out[i..end].to_string();
+            if out[end..].contains(&clause) {
+                out.replace_range(i..end, "");
+                changed = true;
+                break;
+            }
+            start = end;
+        }
+        if !changed {
+            return out;
+        }
     }
 }
 

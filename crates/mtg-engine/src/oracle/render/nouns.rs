@@ -230,8 +230,14 @@ impl Renderer<'_> {
                 let who = self.rel_object(*r);
                 np.post.push(format!("attacking {who}"));
             }
-            Filter::BlockingSource => np.post.push("blocking ~".into()),
-            Filter::BlockedBySource => np.post.push("blocked by ~".into()),
+            Filter::BlockingSource => {
+                let m = self.me();
+                np.post.push(format!("blocking {m}"))
+            }
+            Filter::BlockedBySource => {
+                let m = self.me();
+                np.post.push(format!("blocked by {m}"))
+            }
             Filter::BlockingAnyOf(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
@@ -721,6 +727,10 @@ impl Renderer<'_> {
 
     /// A determiner + noun phrase.
     pub(crate) fn noun_det(&mut self, f: &Filter, det: Det) -> String {
+        // "If that creature would die this turn": the selection itself.
+        if let Filter::In(sel) = f {
+            return self.sel(sel, Case::Obj);
+        }
         // A complex union: each alternative gets the determiner ("~ or another creature").
         if let Filter::Or(v) = f {
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))

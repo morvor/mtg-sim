@@ -263,9 +263,21 @@ impl Renderer<'_> {
             Some(n) => restr.push(format!("{} times each turn", number_word(n as i32))),
         }
         let solved = a.condition.as_ref().is_some_and(super::is_solved);
-        if let Some(c) = a.condition.as_ref().filter(|_| !solved) {
-            let c = self.condition(c);
-            restr.push(format!("if {c}"));
+        match a.condition.as_ref().filter(|_| !solved) {
+            // "Activate only during your turn before attackers are declared."
+            Some(Condition::YourTurn) => {
+                if let ActivationTiming::CombatWindow(_) = a.timing {
+                    let t = restr.remove(0);
+                    restr.insert(0, format!("during your turn {t}"));
+                } else {
+                    restr.push("during your turn".into());
+                }
+            }
+            Some(c) => {
+                let c = self.condition(c);
+                restr.push(format!("if {c}"));
+            }
+            None => {}
         }
         let mut s = format!("{cost}: {body}");
         if !restr.is_empty() {

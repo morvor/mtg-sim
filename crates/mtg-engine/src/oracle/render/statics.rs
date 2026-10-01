@@ -39,6 +39,14 @@ impl Renderer<'_> {
                 let c = self.condition(c);
                 format!("{} if {c}", e.trim_end_matches('.'))
             }
+            Some(Condition::YourTurn) => {
+                let e = self.static_effect(&s.effect);
+                format!("during your turn, {}", lower_first(&e))
+            }
+            Some(Condition::NotYourTurn) => {
+                let e = self.static_effect(&s.effect);
+                format!("during turns other than yours, {}", lower_first(&e))
+            }
             Some(c) => {
                 // "As long as ~ is enchanted, it has ...".
                 let c = self.condition(c);
@@ -527,6 +535,22 @@ impl Renderer<'_> {
                 let n = self.for_each_noun(f);
                 ("{1}".into(), format!(" for each {n}"))
             }
+            Value::Custom(n) if n == "party_size" => {
+                ("{1}".into(), " for each creature in your party".into())
+            }
+            Value::Custom(n) if n == "spell_targets_beyond_first" => {
+                ("{1}".into(), " for each target beyond the first".into())
+            }
+            Value::Sum(v) if v.iter().all(|x| matches!(x, Value::Count(_))) => {
+                let parts: Vec<String> = v
+                    .iter()
+                    .map(|x| match x {
+                        Value::Count(f) => format!("each {}", self.for_each_noun(f)),
+                        _ => String::new(),
+                    })
+                    .collect();
+                ("{1}".into(), format!(" for {}", join_list(&parts, "and")))
+            }
             other => {
                 let s = self.value(other);
                 ("{X}".into(), format!(", where X is {s}"))
@@ -550,6 +574,14 @@ impl Renderer<'_> {
                 battles,
             } => {
                 let a = subj(self, attackers);
+                // "~ can't attack unless defending player controls an Island".
+                if let (PlayerFilter::Not(inner), true) = (defender, *planeswalkers) {
+                    let c = self.condition(&Condition::PlayerMatches(
+                        PlayerRef::DefendingPlayer,
+                        (**inner).clone(),
+                    ));
+                    return format!("{a} can't attack unless {c}");
+                }
                 let d = self.player_filter_object(defender);
                 let mut s = format!("{a} can't attack {d}");
                 if *planeswalkers {
@@ -1200,7 +1232,14 @@ impl Renderer<'_> {
                         format!("{subj} {t} unless {c}")
                     }
                     other => {
+                        // "If this spell was kicked, it enters with ...": the condition
+                        // comes first, so the object is named there.
+                        let was_self = subj == "~";
+                        if was_self {
+                            self.self_salient = false;
+                        }
                         let c = self.condition(other);
+                        let subj = if was_self { self.me() } else { subj.to_string() };
                         format!("if {c}, {subj} {t}")
                     }
                 }
@@ -1310,17 +1349,6 @@ impl Renderer<'_> {
         } else {
             "damage"
         };
-        let src = match source {
-            Filter::Any => None,
-            Filter::Source => Some(self.me()),
-            other => {
-                let saved = self.default_head;
-                self.default_head = Some("source");
-                let s = self.noun_det(other, Det::A);
-                self.default_head = saved;
-                Some(s)
-            }
-        };
         let mut to = Vec::new();
         // Damage to anything: no recipient phrase.
         let (to_objects, to_players) = match (to_objects, to_players) {
@@ -1337,6 +1365,17 @@ impl Renderer<'_> {
         if let Some(p) = to_players {
             to.push(self.player_filter_object(p));
         }
+        let src = match source {
+            Filter::Any => None,
+            Filter::Source => Some(self.me()),
+            other => {
+                let saved = self.default_head;
+                self.default_head = Some("source");
+                let s = self.noun_det(other, Det::A);
+                self.default_head = saved;
+                Some(s)
+            }
+        };
         let to_s = if to.is_empty() {
             String::new()
         } else {

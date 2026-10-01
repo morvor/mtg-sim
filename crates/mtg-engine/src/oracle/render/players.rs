@@ -61,8 +61,14 @@ impl Renderer<'_> {
         let other = !t.distinct_from.is_empty();
         let count = match (t.min, t.max.as_const()) {
             (1, Some(1)) => None,
+            (0, Some(m)) if m >= 99 => Some("any number of".into()),
             (n, Some(m)) if n as i32 == m => Some(number_word(m)),
             (0, Some(m)) if m >= 1 => Some(format!("up to {}", number_word(m))),
+            (1, Some(2)) => Some("one or two".into()),
+            (a, Some(m)) if a >= 1 && m > a as i32 && m - (a as i32) <= 3 => {
+                let words: Vec<String> = (a as i32..=m).map(number_word).collect();
+                Some(join_list(&words, "or"))
+            }
             (1, Some(m)) if m > 1 && m < 100 => Some(format!("one or {}", number_word(m))),
             (0, Some(_)) | (0, None) if matches!(t.max, Value::Const(_)) => {
                 Some("any number of".into())
@@ -232,6 +238,12 @@ impl Renderer<'_> {
                 } else {
                     them(case)
                 }
+            }
+            Sel::Var(v) if self.var_defs.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self.var_defs.iter().position(|(x, _, used)| x == v && !used).unwrap_or(0);
+                self.var_defs[i].2 = true;
+                let s = self.var_defs[i].1.clone();
+                self.sel(&s, case)
             }
             Sel::Var(v) => match *v {
                 vars::SACRIFICED => decline("the sacrificed creature".into(), case),

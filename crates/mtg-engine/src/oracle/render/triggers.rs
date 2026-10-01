@@ -543,6 +543,13 @@ impl Renderer<'_> {
                 };
                 Ev::new(format!("{o} and {c}"), "attack")
             }
+            // "Whenever ~ attacks while saddled".
+            TriggerCond::Where { trigger, cond: Condition::SelMatches(Sel::This, f) } => {
+                let e = self.trigger_event(trigger, det);
+                let p = self.is_predicate(f, false);
+                let p = p.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(p);
+                Ev::new(e.subj, format!("{} while {p}", e.vp))
+            }
             TriggerCond::Where { trigger, cond } => {
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);

@@ -154,10 +154,14 @@ impl Renderer<'_> {
                     let n = self.noun(f, Num::One);
                     s.push_str(&format!(" {n}"));
                 }
-                match k.n {
-                    Some(-1) => s.push_str(" X"),
-                    Some(n) => s.push_str(&format!(" {n}")),
-                    None => {}
+                match (k.n, &k.x) {
+                    (_, Some(v)) => {
+                        let v = self.value(v);
+                        s.push_str(&format!(" X, where X is {v}"));
+                    }
+                    (Some(-1), None) => s.push_str(" X"),
+                    (Some(n), None) => s.push_str(&format!(" {n}")),
+                    (None, None) => {}
                 }
                 if let Some(c) = &k.cost {
                     if k.n.is_some() {

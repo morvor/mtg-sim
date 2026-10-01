@@ -179,7 +179,7 @@ impl Renderer<'_> {
             Value::ColorsSpent => "the number of colors of mana spent to cast ~".into(),
             Value::ManaSpent => "the amount of mana spent to cast ~".into(),
             Value::Chosen => "the chosen number".into(),
-            Value::TimesKicked => "the number of times ~ was kicked".into(),
+            Value::TimesKicked => format!("the number of times {} was kicked", self.me()),
             Value::Speed(p) => {
                 let p = self.player(p, Case::Poss);
                 format!("{p} speed")
@@ -342,6 +342,25 @@ impl Renderer<'_> {
             "kicked" | "kicker" => format!("{} was kicked", self.me()),
             "bargained" | "bargain" => format!("{} was bargained", self.me()),
             "gift" => "the gift was promised".into(),
+            "teamwork" | "web-slinging" | "warp" => {
+                let m = self.me();
+                format!("{m} was cast using {name}")
+            }
+            "collect evidence" => "evidence was collected".into(),
+            n if n.starts_with("kicker ") => {
+                let m = self.me();
+                format!("{m} was kicked with its {} kicker", &n["kicker ".len()..])
+            }
+            n if n.starts_with("alternative cost ") => {
+                format!("the {} cost was paid", &n["alternative cost ".len()..])
+            }
+            "sneak" | "surge" | "prowl" | "spectacle" | "mayhem" | "freerunning" | "madness"
+            | "dash" | "blitz" | "evoke" | "escape" | "emerge" | "plot" | "disturb"
+            | "overload" | "harmonize" | "impending" | "flashback" | "awaken"
+            | "jump-start" | "prototype" | "squad" | "offspring" | "bestow" => {
+                let m = self.me();
+                format!("{} {name} cost was paid", nouns::possessive(&m))
+            }
             other => format!("the {other} cost was paid"),
         }
     }
@@ -464,6 +483,21 @@ impl Renderer<'_> {
                         return format!("doesn't target {n}");
                     }
                     return format!("targets {n}");
+                }
+                Filter::Supertype(s) => nouns::supertype_word(*s).to_string(),
+                Filter::Color(c) => c.word().to_string(),
+                Filter::Colorless => "colorless".into(),
+                Filter::Multicolored => "multicolored".into(),
+                Filter::Monocolored => "monocolored".into(),
+                Filter::Historic => "historic".into(),
+                Filter::Custom(n) => {
+                    let (adj, s) = self.custom_filter_quality(n);
+                    if adj {
+                        s
+                    } else {
+                        let n = self.noun_det(a, Det::A);
+                        n
+                    }
                 }
                 other => {
                     let n = self.noun_det(other, Det::A);

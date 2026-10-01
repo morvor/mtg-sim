@@ -124,13 +124,40 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "\"Also\" has no rules meaning.",
     },
     Equivalence {
+        pattern: r"\beach player's (upkeep|draw step|end step)\b",
+        replacement: "each $1",
+        why: "Each player has one upkeep (draw step, end step) per turn: \"each upkeep\" \
+              and \"each player's upkeep\" are the same steps (CR 501–503, 513).",
+    },
+    Equivalence {
+        pattern: r"\bnumber of of\b",
+        replacement: "number of",
+        why: "\"For each of its colors\" rewritten to the \"where X is the number of\" form.",
+    },
+    Equivalence {
+        pattern: r"\bat the beginning of the end step\b",
+        replacement: "at the beginning of each end step",
+        why: "Older wording: \"the end step\" in a trigger condition means every end step \
+              (CR 513.1a).",
+    },
+    Equivalence {
+        pattern: r"\b(gets?) an additional ([+-])",
+        replacement: "$1 $2",
+        why: "P/T modifications add up (CR 613.4c); \"an additional +2/-2\" is +2/-2.",
+    },
+    Equivalence {
+        pattern: r"\b(is|are|was|were|do|does|has|have)n't\b",
+        replacement: "$1 not",
+        why: "Contraction.",
+    },
+    Equivalence {
         pattern: r"\band/or\b",
         replacement: "and",
         why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
               and enchantments\" both mean objects that are either.",
     },
     Equivalence {
-        pattern: r"(^|[^~\w])(it|that|there|what)'s\b",
+        pattern: r"(^|[^~\w])(it|that|there|what|he|she)'s\b",
         replacement: "$1$2 is",
         why: "Contraction.",
     },
@@ -438,7 +465,7 @@ fn equivalence_regex(p: &'static str) -> &'static Regex {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Regex> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
+        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
             .unwrap()
     });
     let mut s = s.to_string();
@@ -452,6 +479,29 @@ fn sentence_rewrites(s: &str) -> String {
     });
     s = instead.replace_all(&s, "${1}if $2, $3 instead.").to_string();
     s = otherwise.replace_all(&s, "$1$4. if $2, $3 instead.").to_string();
+    // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
+    // if" is something else).
+    static TRAILING_IF: OnceLock<Regex> = OnceLock::new();
+    let trailing = TRAILING_IF.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").unwrap()
+    });
+    s = trailing
+        .replace_all(&s, |c: &regex::Captures| {
+            let (lead, body, cond) = (&c[1], &c[2], &c[3]);
+            let keep = body.starts_with("if ")
+                || body.ends_with(" only")
+                || body.ends_with(" as though")
+                || cond == "able"
+                || cond.starts_with("able ")
+                || body.contains(" unless ")
+                || body.contains("\"");
+            if keep {
+                c[0].to_string()
+            } else {
+                format!("{lead}if {cond}, {body}.")
+            }
+        })
+        .to_string();
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
@@ -475,9 +525,11 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),
             (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
             (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
-            (r"\b(gets?) ([+-])1/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x, where x is the number of $4$5"),
-            (r"\b(gets?) ([+-])1/([+-])0 for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0, where x is the number of $4$5"),
-            (r"\b(gets?) ([+-])0/([+-])1 for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x, where x is the number of $4$5"),
+            (r"\b(gets?) ([+-])1/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x $4, where x is the number of $5$6"),
+            (r"\b(gets?) ([+-])1/([+-])0 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 $4, where x is the number of $5$6"),
+            (r"\b(gets?) ([+-])0/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x $4, where x is the number of $5$6"),
+            (r"\b(draws?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
+            (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
             (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),

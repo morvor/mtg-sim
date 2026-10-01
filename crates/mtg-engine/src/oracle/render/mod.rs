@@ -251,6 +251,9 @@ pub struct Renderer<'a> {
     pub(crate) default_head: Option<&'static str>,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
     pub(crate) after_clash: bool,
+    /// Selections stored in variables by the ability being rendered ("other creatures
+    /// you control gain ..." stored, then modified): the first mention is the phrase.
+    pub(crate) var_defs: Vec<(Var, Sel, bool)>,
 }
 
 impl<'a> Renderer<'a> {
@@ -268,6 +271,7 @@ impl<'a> Renderer<'a> {
             alt_and: false,
             default_head: None,
             after_clash: false,
+            var_defs: Vec::new(),
         }
     }
 
@@ -319,9 +323,11 @@ impl<'a> Renderer<'a> {
         let saved_t = std::mem::take(&mut self.targets);
         let saved_i = std::mem::take(&mut self.introduced);
         let saved_s = self.self_salient;
+        let saved_v = std::mem::take(&mut self.var_defs);
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
+        self.var_defs = saved_v;
         self.targets = saved_t;
         self.introduced = saved_i;
         self.self_salient = saved_s;
@@ -331,9 +337,19 @@ impl<'a> Renderer<'a> {
     /// One ability.
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
+        self.var_defs.clear();
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),
-            AbilityKind::Activated(act) => self.activated(act),
+            AbilityKind::Activated(act) => {
+                let s = self.activated(act);
+                // "Exhaust — {2}{R}: ..." (CR 702.177a), "Power-up — ...", "Boast — ...":
+                // keywords that modify the activated ability they introduce, recognized
+                // the same way the engine recognizes them.
+                match crate::keyword_impls::ability_from_keyword(a) {
+                    Some(k) => format!("{} — {s}", k.name()),
+                    None => s,
+                }
+            }
             AbilityKind::Triggered(t) => self.triggered(t),
             AbilityKind::Static(s) => self.static_ability(s),
             AbilityKind::Keyword(k) => self.keyword(k),
@@ -375,6 +391,23 @@ impl<'a> Renderer<'a> {
                 }
                 (Some(a), Some(b)) => format!("{} or {}", self.count_word(a), self.count_word(b)),
                 (Some(1), None) if m.per_mode_cost => "one or more".to_string(),
+                // "Choose one. If ~ was cast using teamwork, choose both instead."
+                (Some(a), None) if matches!(&m.max, Value::If(..)) => {
+                    let Value::If(c, yes, no) = &m.max else {
+                        return self.gap("modal max");
+                    };
+                    let c = self.condition(c);
+                    let no_s = match no.as_ref() {
+                        Value::Const(n) if *n == a => self.count_word(*n),
+                        other => self.value(other),
+                    };
+                    let yes_s = match yes.as_ref() {
+                        Value::Const(2) if m.modes.len() == 2 => "both".to_string(),
+                        Value::Const(n) => self.count_word(*n),
+                        other => self.value(other),
+                    };
+                    format!("{no_s}. If {c}, choose {yes_s} instead")
+                }
                 _ => {
                     let v = self.value(&m.max);
                     format!("up to {v}")
