@@ -608,6 +608,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
                 rest.to_string(),
             ));
         }
+        // Domain (CR 207.2c): "the number of basic land types among lands you control".
+        if let Some(rest) = r.strip_prefix("basic land types among lands you control") {
+            return Some((Value::Domain, rest.to_string()));
+        }
         // "the number of cards in your hand"
         if let Some(rest) = r.strip_prefix("cards in your hand") {
             return Some((Value::HandSize(PlayerRef::You), rest.to_string()));

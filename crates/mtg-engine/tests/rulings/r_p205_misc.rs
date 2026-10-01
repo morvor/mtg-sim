@@ -278,3 +278,97 @@ fn leyline_bindings_domain_reduction_doesnt_change_its_mana_value() {
     t.resolve_all();
     assert_eq!(t.zone(giant), mtg_engine::object::Zone::Exile);
 }
+
+/// Taps P0's Prismatic Geoscope for mana; the amount added.
+fn geoscope_mana(t: &mut TestGame) -> u32 {
+    supported("Prismatic Geoscope");
+    let scope = t.battlefield(P0, "Prismatic Geoscope");
+    assert!(crate::r_s20_common::tap_for_mana(t, P0, scope, "Add X"));
+    assert_eq!(t.stack_len(), 0);
+    t.g.player(P0).mana_pool.total() as u32
+}
+
+#[test]
+fn domain_counts_basic_land_types_not_lands() {
+    cr!("207.2c", "305.6");
+    ruling!(
+        "Prismatic Geoscope",
+        "How many lands you control of a particular basic land type is irrelevant to a domain ability, as long as that number is greater than zero. As far as domain is concerned, ten Forests are the same as one Forest."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 10);
+    assert_eq!(geoscope_mana(&mut t), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 10);
+    t.battlefield(P0, "Island");
+    assert_eq!(geoscope_mana(&mut t), 2);
+}
+
+#[test]
+fn domain_counts_basic_land_types_of_nonbasic_lands() {
+    cr!("207.2c", "305.6", "305.8");
+    ruling!(
+        "Prismatic Geoscope",
+        "Some nonbasic lands do have basic land types. Domain abilities don't count the number of lands you control—they count the number of basic land types among lands you control, even if that means checking the same land twice. For example, if you control a Tundra, a Blood Crypt, and a Forest, you'll have a Plains, Island, Swamp, Mountain, and Forest among the lands you control. Your domain abilities will be maxed out."
+    );
+    let mut t = TestGame::new(2);
+    for land in ["Tundra", "Blood Crypt", "Forest"] {
+        t.battlefield(P0, land);
+    }
+    assert_eq!(geoscope_mana(&mut t), 5);
+}
+
+// ---------------------------------------------------------------------------
+// Delirium: Demonic Counsel
+// ---------------------------------------------------------------------------
+
+#[test]
+fn demonic_counsels_delirium_search_doesnt_reveal() {
+    cr!("701.23e", "207.2c", "608.2c");
+    ruling!(
+        "Demonic Counsel",
+        "In the case where Demonic Counsel's delirium ability allows you to search your library for any card, you won't have to reveal that card."
+    );
+    supported("Demonic Counsel");
+    let reveals = |t: &TestGame| {
+        t.g.turn_events
+            .iter()
+            .filter(|e| {
+                matches!(e, mtg_engine::events::Event::Custom { name, .. }
+                    if name == mtg_engine::reveal::REVEALED)
+            })
+            .count()
+    };
+    // With delirium: any card (Hill Giant), not revealed.
+    let mut t = TestGame::new(2);
+    bury(&mut t, P0, &["Forest", "Grizzly Bears", "Mind Stone", "Lightning Bolt"]);
+    let giant = t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Lord of the Pit");
+    give_mana_for(&mut t, P0, "Demonic Counsel");
+    let card = t.hand(P0, "Demonic Counsel");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert_eq!(t.hand_size(P0), 1);
+    assert_eq!(reveals(&t), 0);
+    // Without: only a Demon, and it's revealed.
+    let mut t = TestGame::new(2);
+    let giant = t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Lord of the Pit");
+    give_mana_for(&mut t, P0, "Demonic Counsel");
+    let card = t.hand(P0, "Demonic Counsel");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Lord of the Pit"));
+    assert!(!t.in_hand(P0, "Hill Giant"));
+    assert_eq!(reveals(&t), 1);
+
+}
+
+fn bury(t: &mut TestGame, p: PlayerId, names: &[&str]) {
+    for n in names {
+        t.graveyard(p, n);
+    }
+}
