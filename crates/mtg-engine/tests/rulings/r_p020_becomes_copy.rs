@@ -321,3 +321,72 @@ fn augmenter_pugilist_marked_damage_becomes_lethal_when_lands_drop_below_eight()
     assert!(!t.on_battlefield(pug));
     assert!(t.g.player(P0).graveyard.contains(&t.g.current(pug)));
 }
+
+#[test]
+fn lazav_keeps_its_effects_counters_and_name_and_doesnt_enter() {
+    cr!("707.2", "707.9b", "613.1a", "613.4c", "122.1a", "603.6a", "614.1c");
+    ruling!(
+        "Lazav, the Multifarious",
+        "Any effects that applied to Lazav before it becomes a copy of another card will continue to apply once it's become a copy. The same is true of any counters that are on Lazav."
+    );
+    ruling!(
+        "Lazav, the Multifarious",
+        "Because Lazav isn't entering the battlefield when it becomes a copy of a card, any \"When this enters the battlefield\" or \"This enters the battlefield with\" abilities of the copied card won't apply."
+    );
+    // "{X}: Lazav becomes a copy of target creature card in your graveyard with mana value
+    // X, except its name is Lazav, the Multifarious, it's legendary in addition to its
+    // other types, and it has this ability."
+    supported("Lazav, the Multifarious");
+    let mut t = TestGame::new(2);
+    let lazav = t.battlefield(P0, "Lazav, the Multifarious");
+    t.resolve_all();
+    let card = t.graveyard(P0, RIFTWATCHER);
+    plus1(&mut t, lazav, 1);
+    cast_new(&mut t, P0, "Giant Growth", &[Entity::Object(lazav)]);
+    t.resolve_all();
+    let life = t.life(P0);
+    t.lands(P0, "Wastes", 3);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.answer_targets(P0, &[Entity::Object(card)]);
+    activate_containing(&mut t, P0, lazav, "becomes a copy").expect("activation");
+    t.resolve_all();
+    let o = t.obj_now(lazav);
+    assert_eq!(o.chars.name, "Lazav, the Multifarious");
+    assert!(o.chars.has_subtype("Bird"));
+    assert!(o.chars.supertypes.contains(Supertype::Legendary));
+    assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    // Aven Riftwatcher's 2/3, the +1/+1 counter and Giant Growth's +3/+3.
+    assert_eq!(t.pt(lazav), (2 + 1 + 3, 3 + 1 + 3));
+    assert_eq!(t.counters(lazav, counters::TIME), 0);
+    assert_eq!(t.life(P0), life);
+}
+
+#[test]
+fn irma_doesnt_enter_when_she_becomes_a_copy() {
+    cr!("707.2", "707.9b", "603.6a", "614.1c");
+    ruling!(
+        "Irma, Part-Time Mutant",
+        "Because Irma isn't entering the battlefield when she becomes a copy of another creature, any \"When [this creature] enters\" or \"[This creature] enters with\" abilities of the copied creature won't apply."
+    );
+    // "At the beginning of combat on your turn, Irma becomes a copy of up to one other
+    // target creature you control, except her name is Irma, Part-Time Mutant and she has
+    // this ability. Then put a +1/+1 counter on her."
+    supported("Irma, Part-Time Mutant");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let irma = t.battlefield(P0, "Irma, Part-Time Mutant");
+    let rift = t.battlefield(P0, RIFTWATCHER);
+    let life = t.life(P0);
+    t.answer_targets(P0, &[Entity::Object(rift)]);
+    t.advance_to_step(Step::BeginningOfCombat);
+    t.resolve_all();
+    let o = t.obj_now(irma);
+    assert_eq!(o.chars.name, "Irma, Part-Time Mutant");
+    assert!(o.chars.has_subtype("Bird"));
+    assert_eq!(t.counters(irma, counters::PLUS1), 1);
+    assert_eq!(t.counters(rift, counters::PLUS1), 0);
+    assert_eq!(t.pt(irma), (3, 4));
+    // No time counters and no life: she didn't enter.
+    assert_eq!(t.counters(irma, counters::TIME), 0);
+    assert_eq!(t.life(P0), life);
+}

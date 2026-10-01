@@ -23,12 +23,16 @@ use crate::types::*;
 use smol_str::SmolStr;
 
 /// The subjects an exception clause can start with ("it", "the token", "they").
-const SUBJECTS: [&str; 12] = [
+const SUBJECTS: [&str; 16] = [
     "it's ",
     "it isn't ",
     "it is ",
     "it has ",
     "its ",
+    "she has ",
+    "her ",
+    "he has ",
+    "his ",
     "they're ",
     "they aren't ",
     "they have ",
@@ -90,6 +94,7 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     let mut card_types = Vec::new();
     let mut subtypes = Vec::new();
+    let mut supertypes = Vec::new();
     for (i, w) in s.split_whitespace().enumerate() {
         if i == 0 {
             if let Some((p, t)) = pt(w) {
@@ -97,15 +102,21 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
                 continue;
             }
         }
-        if let Some(t) = CardType::from_word(w) {
+        if let Some(t) = Supertype::from_word(w) {
+            // "it's legendary in addition to its other types" (Lazav, the Multifarious).
+            supertypes.push(t);
+        } else if let Some(t) = CardType::from_word(w) {
             card_types.push(t);
         } else {
             let sub = subtype_word(w)?;
             subtypes.push(sub);
         }
     }
-    if card_types.is_empty() && subtypes.is_empty() {
+    if card_types.is_empty() && subtypes.is_empty() && supertypes.is_empty() {
         return None;
+    }
+    if !supertypes.is_empty() {
+        out.push(Modification::AddSupertypes(supertypes));
     }
     if !card_types.is_empty() {
         out.push(Modification::AddTypes(card_types));
@@ -190,7 +201,15 @@ pub(crate) fn copy_exceptions(
                 | "the tokens are not legendary"
         ) {
             out.push(Modification::RemoveSupertypes(vec![Supertype::Legendary]));
-        } else if let Some(r) = ["it has ", "they have ", "the token has ", "the tokens have ", "each of them has "]
+        } else if let Some(r) = [
+            "it has ",
+            "they have ",
+            "the token has ",
+            "the tokens have ",
+            "each of them has ",
+            "she has ",
+            "he has ",
+        ]
             .iter()
             .find_map(|p| c.strip_prefix(p))
         {
@@ -252,6 +271,9 @@ pub(crate) fn copy_exceptions(
             } else {
                 out.extend(replaced_characteristics(r)?);
             }
+        } else if ["its name is ~", "her name is ~", "his name is ~"].contains(&c) {
+            // "its name is ~": it keeps this object's name (Lazav, the Multifarious).
+            out.push(Modification::SetName(SmolStr::new(ctx.card_name)));
         } else if let Some(n) = c.strip_prefix("its name is ") {
             if n.is_empty() || n.contains('~') || n.contains('"') || n.split(' ').count() > 4 {
                 return None;
