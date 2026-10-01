@@ -3,11 +3,12 @@
 //! revealing each card drawn from a library played with its top card revealed, and an
 //! additional beginning phase.
 
-use crate::r_s01_common::supported;
-use crate::r_s04_common::cycle;
+use crate::r_s01_common::{custom_card, supported};
+use crate::r_s04_common::{can_cycle, cycle};
 use crate::r_s25_common::{cast_new, creature_tokens};
 use crate::r_s28_common::cast_card;
 use mtg_engine::events::Event;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -357,4 +358,29 @@ fn an_additional_beginning_phase_untaps_has_upkeep_triggers_and_a_draw() {
     t.advance_to(P0, Step::Draw);
     assert_eq!(t.g.turn.number, turn);
     assert_eq!(t.hand_size(P0), hand + 2);
+}
+
+#[test]
+fn cycling_4_means_pay_4_and_discard_this_card_to_draw_a_card() {
+    cr!("702.29a");
+    ruling!("Gunk Slug", "Cycling {4} means");
+    // A Gunk token card ("a colorless Gunk sorcery named Gunk with cycling {4}"; Gunk Slug
+    // itself isn't supported), built as a custom card.
+    let gunk = custom_card("Gunk", "Sorcery — Gunk", "", None, "Cycling {4}");
+    let mut t = TestGame::new(2);
+    let card = t.custom(P0, gunk, Zone::Hand(P0));
+    // {4} is the whole mana cost: three lands aren't enough.
+    let mut lands = t.lands(P0, "Wastes", 3);
+    assert!(!can_cycle(&mut t, P0, card));
+    lands.extend(t.lands(P0, "Wastes", 1));
+    assert!(can_cycle(&mut t, P0, card));
+    let hand = t.hand_size(P0);
+    cycle(&mut t, P0, card, 0).unwrap();
+    // Discarding the card is part of the cost; the card is drawn as the ability resolves.
+    assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
+    assert!(t.in_graveyard(P0, "Gunk"));
+    assert_eq!(t.hand_size(P0), hand - 1);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
 }

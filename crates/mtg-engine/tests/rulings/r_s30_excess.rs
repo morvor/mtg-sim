@@ -1,7 +1,7 @@
 //! Rulings batch S30 — excess damage (CR 120.10): "the amount of excess damage dealt this
 //! way" (Windswift Slice), with deathtouch making any damage beyond 1 excess.
 
-use crate::r_s01_common::supported;
+use crate::r_s01_common::{supported, with_subtype};
 use crate::r_s25_common::{cast_new, creature_tokens};
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
@@ -47,4 +47,26 @@ fn with_deathtouch_any_damage_beyond_1_is_excess() {
     supported("Gifted Aetherborn");
     // Gifted Aetherborn (2/3 deathtouch) deals 2 to a 3/3: 1 is lethal, 1 is excess.
     assert_eq!(slice("Gifted Aetherborn"), (1, true));
+}
+
+#[test]
+fn a_planeswalker_is_dealt_excess_damage_beyond_its_current_loyalty() {
+    cr!("120.10", "120.3c");
+    ruling!(
+        "Aegar, the Freezing Flame",
+        "A planeswalker is dealt excess damage if it's dealt damage greater than its current loyalty."
+    );
+    supported("Bottle-Cap Blast");
+    // Jace Beleren (printed loyalty 3) is dealt 2 damage by Shock: its loyalty is 1.
+    let mut t = TestGame::new(2);
+    let jace = t.battlefield(P1, "Jace Beleren");
+    cast_new(&mut t, P0, "Shock", &[Entity::Object(jace)]);
+    t.resolve_all();
+    assert_eq!(t.counters(jace, counters::LOYALTY), 1);
+    // "Bottle-Cap Blast deals 5 damage to any target. If excess damage was dealt to a
+    // permanent this way, create that many tapped Treasure tokens." 4 excess, not 2.
+    cast_new(&mut t, P0, "Bottle-Cap Blast", &[Entity::Object(jace)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Jace Beleren"));
+    assert_eq!(with_subtype(&t, P0, "Treasure").len(), 4);
 }
