@@ -23,7 +23,9 @@ use crate::types::*;
 use smol_str::SmolStr;
 
 /// The subjects an exception clause can start with ("it", "the token", "they").
-const SUBJECTS: [&str; 12] = [
+const SUBJECTS: [&str; 14] = [
+    "she has ",
+    "he has ",
     "it's ",
     "it isn't ",
     "it is ",
@@ -216,7 +218,15 @@ pub(crate) fn copy_exceptions(
                 | "the tokens are not legendary"
         ) {
             out.push(Modification::RemoveSupertypes(vec![Supertype::Legendary]));
-        } else if let Some(r) = ["it has ", "they have ", "the token has ", "the tokens have ", "each of them has "]
+        } else if let Some(r) = [
+            "it has ",
+            "she has ",
+            "he has ",
+            "they have ",
+            "the token has ",
+            "the tokens have ",
+            "each of them has ",
+        ]
             .iter()
             .find_map(|p| c.strip_prefix(p))
         {

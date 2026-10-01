@@ -259,3 +259,35 @@ fn sunfrill_imitator_copying_a_clone() {
     assert_eq!(t.pt(imitator), (6, 6));
     assert_eq!(t.life(P1), 14);
 }
+
+// --- Irma, Part-Time Mutant ---------------------------------------------------------------
+
+#[test]
+fn irma_copying_a_clone() {
+    cr!("707.3", "707.9a", "707.9b");
+    ruling!(
+        "Irma, Part-Time Mutant",
+        "If the copied creature is copying something else, then Irma becomes a copy of whatever that creature copied (with the listed exceptions)."
+    );
+    supported("Irma, Part-Time Mutant");
+    let mut t = TestGame::new(2);
+    let irma = t.battlefield(P0, "Irma, Part-Time Mutant");
+    let clone = cloned_angel(&mut t, P0);
+    t.answer_targets(P0, &[obj(clone)]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let o = t.obj_now(irma);
+    assert_eq!(o.chars.name, "Irma, Part-Time Mutant");
+    assert!(has_subtype(&t, irma, "Angel"));
+    assert!(o.chars.colors.contains(Color::White));
+    assert!(o.has_keyword(KeywordKind::Flying) && o.has_keyword(KeywordKind::Vigilance));
+    assert!(!o.is_token());
+    // She keeps "this ability" and gets the +1/+1 counter.
+    assert!(o
+        .chars
+        .abilities
+        .iter()
+        .any(|a| a.text.contains("becomes a copy of")));
+    assert_eq!(t.counters(irma, counters::PLUS1), 1);
+    assert_eq!(t.pt(irma), (5, 5));
+}
