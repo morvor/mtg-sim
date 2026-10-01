@@ -6,6 +6,7 @@
 use crate::r_s01_common::supported;
 use crate::r_s03_common::to_blockers;
 use crate::r_s04_common::ability_targets;
+use crate::r_s06_common::attach_new;
 use crate::r_s25_common::cast_new;
 use crate::r_s29_common::damage_marked;
 use crate::r_s30_common::damage_events;
@@ -202,4 +203,76 @@ fn damage_isnt_redirected_to_a_creature_thats_gone() {
     cast_new(&mut t, P0, "Shock", &[Entity::Object(nomads)]);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Nomads en-Kor"));
+}
+
+/// P1 casts Lightning Bolt at P0's Grizzly Bears; P0 responds with Kor Chant ("All damage
+/// that would be dealt this turn to target creature you control by a source of your
+/// choice is dealt to another target creature instead.") targeting the Bears and P1's
+/// Hill Giant, choosing the Bolt as it resolves. Returns (bears, giant, bolt).
+fn kor_chant_vs_bolt(t: &mut TestGame) -> (ObjectId, ObjectId, ObjectId) {
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bolt = cast_new(t, P1, "Lightning Bolt", &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    cast_new(
+        t,
+        P0,
+        "Kor Chant",
+        &[Entity::Object(bears), Entity::Object(giant)],
+    );
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    (bears, giant, bolt)
+}
+
+#[test]
+fn kor_chant_redirects_the_chosen_sources_damage() {
+    cr!("614.9", "609.7a");
+    ruling!(
+        "Kor Chant",
+        "The damage dealt to the second target creature is dealt by the original source of damage, not by Kor Chant."
+    );
+    ruling!(
+        "Kor Chant",
+        "You choose the two target creatures as you cast Kor Chant, but you choose the source as it resolves."
+    );
+    supported("Kor Chant");
+    supported("Kor Dirge");
+    let mut t = TestGame::new(2);
+    let (bears, giant, bolt) = kor_chant_vs_bolt(&mut t);
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(
+        damage_events(&t),
+        vec![(bolt, Entity::Object(giant), 3, false)]
+    );
+}
+
+#[test]
+fn kor_chant_doesnt_redirect_to_a_creature_thats_gone_or_not_a_creature() {
+    cr!("614.9", "120.1a");
+    ruling!(
+        "Kor Chant",
+        "If the second target creature is no longer on the battlefield as the damage is dealt, the damage isn't redirected away from its original recipient. The same is true if the second target creature isn't a creature (or a planeswalker) at that time."
+    );
+    supported("Kor Chant");
+    // The Giant leaves the battlefield before the Bolt resolves.
+    let mut t = TestGame::new(2);
+    let (_, giant, _) = kor_chant_vs_bolt(&mut t);
+    cast_new(&mut t, P1, "Unsummon", &[Entity::Object(giant)]);
+    t.resolve();
+    assert!(t.in_hand(P1, "Hill Giant"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // The Giant stops being a creature: Song of the Dryads ("Enchanted permanent is a
+    // colorless Forest land.").
+    supported("Song of the Dryads");
+    let mut t = TestGame::new(2);
+    let (_, giant, _) = kor_chant_vs_bolt(&mut t);
+    attach_new(&mut t, P0, "Song of the Dryads", giant);
+    assert!(!t.obj_now(giant).is(CardType::Creature));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(damage_marked(&t, giant), 0);
 }

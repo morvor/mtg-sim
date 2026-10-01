@@ -10,6 +10,9 @@
 //! - "Prevent all damage that would be dealt to you this turn by a source of your
 //!   choice." / "If damage would be dealt to you this turn by a source of your choice,
 //!   prevent that damage."
+//! - "All damage that would be dealt this turn to target creature you control by a
+//!   source of your choice is dealt to another target creature instead." (Kor Chant;
+//!   CR 614.9 redirection)
 //! - Follow-up: "You gain life equal to the damage prevented this way." (CR 615.5)
 //!
 //! The source is chosen as the effect is created, i.e. on resolution (CR 609.7a); the
@@ -246,6 +249,29 @@ fn p_prevent_all_from_source(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "damage_removal: prevent all damage from a source of your choice", priority: 45, parse: p_prevent_all_from_source } }
+
+/// "all damage that would be dealt this turn to [recipient] by a source of your choice
+/// is dealt to [target] instead" (the new recipient is locked in as the effect is
+/// created; damage isn't redirected to it if it's no longer a creature, planeswalker,
+/// or battle on the battlefield, CR 614.9).
+fn p_redirect_all_from_source(l: &str, b: &mut Builder) -> Option<Effect> {
+    let saved = b.targets.len();
+    let parsed = (|| {
+        let r = l.strip_prefix("all damage that would be dealt this turn to ")?;
+        let (to, r) = recipient(r, b)?;
+        let r = r.trim_start().strip_prefix("by ")?;
+        let (source, r) = chosen_source(r)?;
+        let r = r.trim_start().strip_prefix("is dealt to ")?;
+        let act = action(&format!("that damage is dealt to {r}"), b)?;
+        Some(chosen_source_effect(source, to, act, None))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "damage_removal: redirect all damage from a source of your choice", priority: 45, parse: p_redirect_all_from_source } }
 
 /// The last prevention replacement created by an effect.
 fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementAction> {
