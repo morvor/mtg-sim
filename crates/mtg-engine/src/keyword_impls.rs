@@ -91,11 +91,11 @@ pub fn derived_by_keyword(chars: &Characteristics) -> Vec<(u64, Ability)> {
                 format!("{base}#{nth}")
             };
             *nth += 1;
-            out.extend(
-                derived_abilities_keyed(k, key)
-                    .into_iter()
-                    .map(|d| (a.uid, d)),
-            );
+            let derived = derived_abilities_keyed(k, key);
+            for d in &derived {
+                crate::structure::note_derived(d, a, &chars.name);
+            }
+            out.extend(derived.into_iter().map(|d| (a.uid, d)));
         }
     }
     out

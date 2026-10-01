@@ -252,6 +252,9 @@ impl Game {
             }
         }
         let mut results = self.apply_replacement(&cand, ev, &applied);
+        if let ReplKey::Static(src, uid) = cand.key {
+            crate::structure::record_replacement(self, src, uid);
+        }
         // CR 801.13a: the parts of the modified event that would have a spell or ability
         // affect objects or players outside its controller's range of influence do nothing.
         results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));

@@ -84,10 +84,16 @@ impl Characteristics {
         self.abilities.iter().filter_map(|a| a.keyword())
     }
     pub fn has_keyword(&self, k: KeywordKind) -> bool {
-        self.keywords().any(|kw| kw.kind == k)
+        self.keyword(k).is_some()
     }
     pub fn keyword(&self, k: KeywordKind) -> Option<&Keyword> {
-        self.keywords().find(|kw| kw.kind == k)
+        let a = self
+            .abilities
+            .iter()
+            .find(|a| a.keyword().is_some_and(|kw| kw.kind == k))?;
+        // The keyword is consulted: it's exercised (see `structure`).
+        crate::structure::record(a, &self.name, "keyword");
+        a.keyword()
     }
     pub fn keyword_count(&self, k: KeywordKind) -> usize {
         self.keywords().filter(|kw| kw.kind == k).count()

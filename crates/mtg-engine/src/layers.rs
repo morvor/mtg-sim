@@ -972,6 +972,9 @@ impl Game {
                         v
                     }
                 };
+                if !trial && !affected_now.is_empty() {
+                    crate::structure::record(&a, &self.obj(*src).chars.name, "static");
+                }
                 for t in affected_now {
                     self.apply_mods_to(t, mods, layer, &ctx, e.ts.0, st, trial);
                 }
@@ -1187,6 +1190,12 @@ impl Game {
                     }
                 }
                 let ctl = o.controller;
+                if !matches!(
+                    s.effect,
+                    StaticEffect::Continuous { .. } | StaticEffect::Replacement(_)
+                ) {
+                    crate::structure::record(a, &o.chars.name, "static");
+                }
                 match &s.effect {
                     StaticEffect::Continuous { .. } => {}
                     StaticEffect::Restriction(r) => st.restrictions.push((id, ctl, r.clone())),

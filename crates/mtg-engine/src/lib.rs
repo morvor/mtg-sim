@@ -117,6 +117,7 @@ pub mod stack;
 pub mod stack_ability_filters;
 pub mod start;
 pub mod stickers;
+pub mod structure;
 pub mod subgame;
 pub mod target_rules;
 pub mod teams;

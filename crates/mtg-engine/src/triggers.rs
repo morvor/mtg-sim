@@ -2040,5 +2040,6 @@ impl Game {
         ctx.controller = t.controller;
         ctx.event = Some(t.event.clone());
         self.exec(&body.effect, &mut ctx);
+        crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }
 }
