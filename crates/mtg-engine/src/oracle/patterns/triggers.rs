@@ -1091,6 +1091,17 @@ pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
             false,
         );
     }
+    // "~ or an instant or sorcery spell you control" (Syr Carah, the Bold): either.
+    if let Some(r) = s
+        .strip_prefix("~ or ")
+        .filter(|r| !r.starts_with("another "))
+    {
+        let other = parse_subject(r)?;
+        if other.self_only || other.one_or_more {
+            return None;
+        }
+        return mk(Filter::Or(vec![Filter::Source, other.filter]), false, false);
+    }
     if let Some(r) = s.strip_prefix("~ or another ") {
         let (f, plural, tail) = parse_object_phrase(r)?;
         if plural || !end(tail).is_empty() {

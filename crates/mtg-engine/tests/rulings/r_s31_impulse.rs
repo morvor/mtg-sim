@@ -698,3 +698,40 @@ fn practiced_scrollsmiths_sorcery_is_cast_with_sorcery_timing_and_its_cost() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+#[test]
+fn syr_carahs_card_stays_exiled_if_not_played() {
+    cr!("611.2a", "603.2", "120.3");
+    ruling!(
+        "Syr Carah, the Bold",
+        "If you don't play the exiled card, it remains in exile."
+    );
+    supported("Syr Carah, the Bold");
+    // "Whenever Syr Carah or an instant or sorcery spell you control deals damage to a
+    // player, exile the top card of your library. You may play that card this turn.
+    // {T}: Syr Carah deals 1 damage to any target."
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    let carah = t.battlefield(P0, "Syr Carah, the Bold");
+    t.activate(P0, carah, 0, &[Entity::Player(P1)])
+        .expect("activate");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    stays_exiled_after_this_turn(&mut t, forest);
+    // An instant P0 controls dealing damage to a player triggers it too; damage to a
+    // creature doesn't.
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t, P0, &["Forest", "Hill Giant"]);
+    t.battlefield(P0, "Syr Carah, the Bold");
+    let giant = t.battlefield(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let shock = t.hand(P0, "Shock");
+    t.cast(P0, shock).target(giant).go();
+    t.resolve_all();
+    assert!(matches!(t.zone(cards[0]), Zone::Library(_)));
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    stays_exiled_after_this_turn(&mut t, cards[0]);
+}
