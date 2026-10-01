@@ -218,7 +218,11 @@ pub(crate) fn copy_exceptions(
             let r = if r == "this ability" {
                 out.push(Modification::AddThisAbility);
                 ""
-            } else if let Some(x) = r.strip_suffix(" and this ability") {
+            } else if let Some(x) = r
+                .strip_suffix(" and this ability")
+                .or_else(|| r.strip_prefix("this ability and "))
+            {
+                // "it has this ability and \"[ability]\"" (Aurora Shifter).
                 out.push(Modification::AddThisAbility);
                 x
             } else {

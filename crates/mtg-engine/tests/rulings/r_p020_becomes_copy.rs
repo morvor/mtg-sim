@@ -390,3 +390,59 @@ fn irma_doesnt_enter_when_she_becomes_a_copy() {
     assert_eq!(t.counters(irma, counters::TIME), 0);
     assert_eq!(t.life(P0), life);
 }
+
+/// P0's Aurora Shifter becomes a copy of P0's `of` at the beginning of P0's combat (P0
+/// pays {E}{E}: "At the beginning of combat on your turn, you may pay {E}{E}. When you do,
+/// this creature becomes a copy of another target creature you control, except it has
+/// this ability and \"Whenever this creature deals combat damage to a player, you get that
+/// many {E}.\""). Returns the Shifter.
+fn aurora_shifter_copies(t: &mut TestGame, of: ObjectId) -> ObjectId {
+    supported("Aurora Shifter");
+    t.set_step(P0, Step::PrecombatMain);
+    let shifter = t.battlefield(P0, "Aurora Shifter");
+    t.g.add_counters(Entity::Player(P0), counters::ENERGY, 2, None);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(t.g.current(of))]);
+    t.advance_to_step(Step::BeginningOfCombat);
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).counter(counters::ENERGY), 0);
+    let o = t.obj_now(shifter);
+    assert!(o.chars.abilities.iter().any(|a| a.text.contains("pay {E}{E}")));
+    assert!(o.chars.abilities.iter().any(|a| a.text.contains("that many {E}")));
+    shifter
+}
+
+#[test]
+fn aurora_shifter_copies_only_printed_values_with_the_listed_exception() {
+    cr!("707.2", "707.3", "707.9a", "603.12");
+    ruling!(
+        "Aurora Shifter",
+        "Aurora Shifter copies exactly what was printed on the original creature and nothing else, with the listed exception (unless that permanent is copying something else; see below). It doesn't copy whether that creature is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, and so on."
+    );
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    dress_up(&mut t, giant);
+    let shifter = aurora_shifter_copies(&mut t, giant);
+    let o = t.obj_now(shifter);
+    assert_eq!(o.chars.name, "Hill Giant");
+    assert!(o.chars.colors.contains(Color::Red) && !o.chars.colors.contains(Color::Green));
+    assert!(!o.tapped);
+    assert_eq!(t.counters(shifter, counters::PLUS1), 0);
+    assert_eq!(t.pt(shifter), (3, 3));
+}
+
+#[test]
+fn aurora_shifter_doesnt_enter_when_it_becomes_a_copy() {
+    cr!("707.2", "603.6a", "614.1c");
+    ruling!(
+        "Aurora Shifter",
+        "Because Aurora Shifter isn't entering the battlefield when it becomes a copy of another creature, any \"When [this creature] enters the battlefield\" or \"[This creature] enters the battlefield with\" abilities of the copied creature won't apply."
+    );
+    let mut t = TestGame::new(2);
+    let rift = t.battlefield(P0, RIFTWATCHER);
+    let life = t.life(P0);
+    let shifter = aurora_shifter_copies(&mut t, rift);
+    assert_eq!(t.obj_now(shifter).chars.name, RIFTWATCHER);
+    assert_eq!(t.counters(shifter, counters::TIME), 0);
+    assert_eq!(t.life(P0), life);
+}
