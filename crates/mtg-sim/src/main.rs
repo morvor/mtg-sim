@@ -15,9 +15,15 @@
 //! decision was made for `--timeout` seconds is reported as a hang and ends the run with
 //! status 2.
 //!
-//! `--check N` checks every Nth priority decision that no state-based action was pending
-//! when the player got priority (CR 117.5); a violation is reported like a panic. Fuzzing
-//! checks every 4th decision unless told otherwise (`--check 0` turns it off).
+//! `--check N` runs the rules checks of `checks.rs` before every Nth priority decision (no
+//! state-based action pending, CR 117.5; consistent zones; up-to-date characteristics;
+//! damage only on creatures; life totals and counters that add up to the events), and
+//! watches every event (the stack and mana pools empty as each step ends, damage gone as
+//! each turn begins); a violation is reported like a panic. Fuzzing checks every 4th
+//! decision unless told otherwise (`--check 0` turns it off).
+//!
+//! `mtg-sim --every-card ...` plays games built around every fully supported card in turn
+//! (see `every_card.rs`).
 
 mod checks;
 mod coverage;

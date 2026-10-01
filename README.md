@@ -30,12 +30,22 @@ cargo test --workspace                                        # the full test su
 cargo run --release -p mtg-sim -- --games 200                 # simulate games
 cargo run --release -p mtg-sim -- --deck a.txt --deck b.txt   # "4 Lightning Bolt" lines
 cargo run --release -p mtg-sim -- --random-decks --games 1000 # fuzz the engine
+cargo run --release -p mtg-sim -- --every-card --threads 4     # play every supported card
 ```
 
 `--random-decks` gives every game new random decks of fully supported cards. It reports
 any panic, any hang, and any rules violation its checks find (a player getting priority
 while a state-based action is pending, CR 117.5; zone lists that don't match their
-objects), each with a command that replays that game (`--only G --log`).
+objects; out-of-date characteristics; mana or spells left as a step ends; damage left as
+a turn begins or marked on a noncreature; life totals and counters that don't add up to
+the events), each with a command that replays that game (`--only G --log`).
+
+`--every-card` plays games built around each fully supported card in turn (both decks
+hold copies of it, in the variant it needs), with the same checks, and reports which
+cards were never cast and which of their abilities were never activated or triggered,
+grouped by likely reason (`--from N --count M`, `--filter TEXT`, `--kind KIND`,
+`--games-per-card K`, `--report FILE`). See [docs/EVERY_CARD.md](docs/EVERY_CARD.md)
+for the latest full sweep.
 
 ## Data
 
