@@ -463,9 +463,56 @@ pub fn planar_die_rolled(g: &mut Game, p: PlayerId) {
 }
 
 /// Performs a coin flip instruction (CR 705).
+/// "Flip two coins and ignore one": the number of extra coins `p` flips for each flip.
+fn extra_coins(g: &Game, p: PlayerId) -> usize {
+    statics(g)
+        .iter()
+        .filter(|(_, ctl, _, d)| {
+            matches!(d, DiceStatic::ExtraCoin { who } if applies_to(g, *who, *ctl, p))
+        })
+        .count()
+}
+
+/// CR 705.2: the player who flips calls heads or tails, then flips the coin — or, with
+/// "flip two coins and ignore one", the coins replacing it.
+fn call_and_flip(
+    g: &mut Game,
+    spec: &CoinFlip,
+    p: PlayerId,
+    source: Option<ObjectId>,
+) -> (Option<bool>, Vec<bool>) {
+    let call = spec.call.then(|| {
+        g.ask_option(
+            p,
+            source,
+            "Call the coin flip",
+            vec!["Heads".into(), "Tails".into()],
+        ) == 0
+    });
+    let extra = extra_coins(g, p);
+    let flips: Vec<bool> = (0..=extra).map(|_| coin(g)).collect();
+    (call, flips)
+}
+
 pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
     let players = g.eval_players(&spec.who, ctx);
-    for p in players {
+    // Coins flipped at once — by one player or by several ("each player flips a coin") —
+    // are all called and flipped before any flip is ignored, so the results of all of
+    // them are known then.
+    let mut at_once: Vec<std::collections::VecDeque<(Option<bool>, Vec<bool>)>> = players
+        .iter()
+        .map(|p| {
+            if spec.until_lose {
+                Default::default()
+            } else {
+                let n = g.eval_value(&spec.count, ctx).max(0) as u32;
+                (0..n)
+                    .map(|_| call_and_flip(g, spec, *p, ctx.source))
+                    .collect()
+            }
+        })
+        .collect();
+    for (pi, p) in players.into_iter().enumerate() {
         let n = g.eval_value(&spec.count, ctx).max(0) as u32;
         let st = statics(g);
         // CR 705.3: "the first time you flip one or more coins each turn, those coins
@@ -479,34 +526,8 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
             && st.iter().any(|(_, ctl, _, d)| {
                 matches!(d, DiceStatic::FirstFlipsWin { who } if applies_to(g, *who, *ctl, p))
             });
-        let extra = st
-            .iter()
-            .filter(|(_, ctl, _, d)| {
-                matches!(d, DiceStatic::ExtraCoin { who } if applies_to(g, *who, *ctl, p))
-            })
-            .count();
         let (mut wins, mut losses, mut heads, mut tails) = (0i64, 0i64, 0i64, 0i64);
-        // CR 705.2: the player who flips calls heads or tails; "flip two coins and ignore
-        // one" replaces each flip. Coins flipped at once are all called and flipped
-        // before any flip is ignored, so the results of all of them are known then.
-        let call_and_flip = |g: &mut Game| {
-            let call = spec.call.then(|| {
-                g.ask_option(
-                    p,
-                    ctx.source,
-                    "Call the coin flip",
-                    vec!["Heads".into(), "Tails".into()],
-                ) == 0
-            });
-            let flips: Vec<bool> = (0..=extra).map(|_| coin(g)).collect();
-            (call, flips)
-        };
-        let mut at_once: std::collections::VecDeque<(Option<bool>, Vec<bool>)> = if spec.until_lose
-        {
-            Default::default()
-        } else {
-            (0..n).map(|_| call_and_flip(g)).collect()
-        };
+        let at_once = &mut at_once[pi];
         let mut i = 0u32;
         loop {
             if spec.until_lose {
@@ -519,7 +540,7 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
             i += 1;
             let (call, flips) = match at_once.pop_front() {
                 Some(x) => x,
-                None => call_and_flip(g),
+                None => call_and_flip(g, spec, p, ctx.source),
             };
             // "Flip two coins and ignore one": the ignored flip never happened.
             let up = if flips.len() > 1 {

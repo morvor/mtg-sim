@@ -324,3 +324,46 @@ fn creepy_doll_flips_on_resolution_so_responses_come_first() {
     assert!(t.on_battlefield(troll));
     assert!(t.obj_now(troll).tapped);
 }
+
+#[test]
+fn krarks_thumb_sees_the_opponents_simultaneous_flip_before_choosing() {
+    cr!("705.1", "614.1a", "101.4");
+    ruling!(
+        "Krark's Thumb",
+        "If you and your opponent both flip at the same time, you can see your opponent's result before choosing which result to keep."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Krark's Thumb");
+    // "Each player flips a coin."
+    let mut spec = mtg_engine::dice::CoinFlip::new();
+    spec.who = mtg_engine::ability::PlayerRef::EachPlayer;
+    load_coins(&mut t, &[true, false, true]);
+    let from = t.asked().len();
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::FlipCoins(Box::new(spec)),
+        &mut ctx,
+    );
+    let asked: Vec<(PlayerId, String)> = t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption { prompt, .. } => {
+                Some((*p, prompt.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    let keep = asked
+        .iter()
+        .position(|(p, x)| *p == P0 && x == "Choose the flip to keep")
+        .expect("P0 chooses a flip to keep");
+    let p1_call = asked
+        .iter()
+        .position(|(p, x)| *p == P1 && x == "Call the coin flip")
+        .expect("P1 calls its flip");
+    assert!(p1_call < keep, "{asked:?}");
+    t.g.flush_events();
+    // All three coins were flipped: two for P0, one for P1.
+    assert!(t.g.dice.loaded_coins.is_empty());
+    assert_eq!(flip_results(&t).len(), 2);
+}

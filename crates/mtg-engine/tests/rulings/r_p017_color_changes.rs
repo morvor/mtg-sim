@@ -681,3 +681,84 @@ fn vodalian_mystic_targets_only_instant_and_sorcery_spells() {
     assert_eq!(colors(&mut t, bolt), of(&[Color::White]));
     let _ = Zone::Stack;
 }
+
+// ---------------------------------------------------------------------------
+// Neurok Transmuter: "isn't an artifact"
+// ---------------------------------------------------------------------------
+
+/// P0's Neurok Transmuter makes `target` blue and not an artifact until end of turn.
+fn transmute(t: &mut TestGame, target: ObjectId) {
+    supported("Neurok Transmuter");
+    let nt = t.battlefield(P0, "Neurok Transmuter");
+    add_mana(t, P0, ManaType::U, 1);
+    t.activate(P0, nt, 1, &[Entity::Object(target)])
+        .expect("activate");
+    t.resolve_all();
+}
+
+#[test]
+fn neurok_transmuter_removes_only_artifact_and_its_subtypes() {
+    cr!("205.1b", "613.1d", "105.3");
+    ruling!(
+        "Neurok Transmuter",
+        "Neurok Transmuter’s second ability removes the type “artifact” — and any artifact subtypes — from the artifact creature it targets. It doesn’t remove any other types or any subtypes of other types, and it doesn’t remove supertypes."
+    );
+    supported("Karn, Silver Golem");
+    let mut t = TestGame::new(2);
+    let karn = t.battlefield(P1, "Karn, Silver Golem");
+    transmute(&mut t, karn);
+    let o = t.obj_now(karn);
+    assert!(!o.is(CardType::Artifact) && o.is(CardType::Creature));
+    assert!(o.chars.supertypes.contains(Supertype::Legendary));
+    assert!(o.chars.has_subtype("Golem"));
+    assert_eq!(colors(&mut t, karn), of(&[Color::Blue]));
+    // Still legendary: the legend rule applies normally.
+    t.battlefield(P1, "Karn, Silver Golem");
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Karn, Silver Golem").len(), 1);
+    // Until end of turn.
+    next_turn(&mut t);
+    let karn = t.named_on_battlefield("Karn, Silver Golem")[0];
+    assert!(t.obj_now(karn).is(CardType::Artifact));
+}
+
+#[test]
+fn equipment_that_stops_being_an_artifact_isnt_equipment() {
+    cr!("205.1b", "301.5");
+    ruling!(
+        "Neurok Transmuter",
+        "Equipment that stops being an artifact loses the subtype “Equipment.” Permanents without the subtype Equipment can’t equip creatures."
+    );
+    let mut t = TestGame::new(2);
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    animate(&mut t, splitter, 2);
+    transmute(&mut t, splitter);
+    let o = t.obj_now(splitter);
+    assert!(!o.is(CardType::Artifact));
+    assert!(!o.chars.has_subtype("Equipment"));
+    add_mana(&mut t, P0, ManaType::C, 1);
+    let _ = t.activate(P0, splitter, 0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(splitter).attached_to, None);
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn neurok_transmuter_on_a_march_of_the_machines_creature_leaves_no_types() {
+    cr!("613.8a", "613.8b", "613.1d");
+    ruling!(
+        "Neurok Transmuter",
+        "If an artifact is an artifact creature only because March of the Machines is on the battlefield and you then activate Neurok Transmuter’s second ability on that artifact creature, the result is a permanent with no types whatsoever."
+    );
+    supported("March of the Machines");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "March of the Machines");
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.g.recompute();
+    assert!(t.obj_now(ring).is(CardType::Creature));
+    transmute(&mut t, ring);
+    let o = t.obj_now(ring);
+    assert!(t.on_battlefield(ring));
+    assert!(o.chars.card_types.is_empty(), "{:?}", o.chars.card_types);
+}
