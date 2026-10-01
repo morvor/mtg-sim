@@ -466,3 +466,78 @@ fn aetherwind_basker_triggers_on_entering_and_on_attacking() {
     t.attack(&[(basker, Entity::Player(P1))], &[]);
     assert_eq!(t.g.player(P0).counter("energy"), 4);
 }
+
+#[test]
+fn loxodon_lifechanter() {
+    cr!("608.2h", "119.5", "603.3", "117.1b");
+    ruling!(
+        "Loxodon Lifechanter",
+        "The value of X is determined only as Loxodon Lifechanter's last ability begins to resolve. It won't change later in the turn if your life total changes."
+    );
+    ruling!(
+        "Loxodon Lifechanter",
+        "You can activate Loxodon Lifechanter's last ability after it has entered the battlefield but before its first ability has resolved."
+    );
+    ruling!(
+        "Loxodon Lifechanter",
+        "You choose whether to change your life total and, if you choose to do so, you set your life total to the appropriate number while Loxodon Lifechanter's triggered ability is resolving."
+    );
+    supported("Loxodon Lifechanter");
+    // With the enters trigger on the stack, the pump is activated in response: X is 20
+    // (the life total as it resolves). Then the trigger resolves: the life total becomes
+    // the total toughness of creatures you control, 26 + 2.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    let lc = t.enter(P0, "Loxodon Lifechanter");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.lands(P0, "Plains", 6);
+    t.activate(P0, lc, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(lc), (24, 26));
+    yes(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 28);
+    // The bonus doesn't change when the life total does.
+    assert_eq!(t.pt(lc), (24, 26));
+    // Choosing not to: the life total stays.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(false));
+    t.enter(P0, "Loxodon Lifechanter");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // Choosing to can lower it.
+    let mut t = TestGame::new(2);
+    yes(&mut t, P0);
+    t.enter(P0, "Loxodon Lifechanter");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 6);
+}
+
+#[test]
+fn tarox_bladewing_grandeur_uses_its_power_as_it_resolves() {
+    cr!("608.2h", "207.2c");
+    ruling!(
+        "Tarox Bladewing",
+        "The +X/+X bonus is based on Tarox Bladewing’s power at the time the ability resolves. It won’t change if Tarox’s power changes later in the turn."
+    );
+    supported("Tarox Bladewing");
+    let mut t = TestGame::new(2);
+    let tarox = t.battlefield(P0, "Tarox Bladewing");
+    let other = t.hand(P0, "Tarox Bladewing");
+    t.hand(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(other)]);
+    t.activate(P0, tarox, 0, &[]).unwrap();
+    assert!(t.in_graveyard(P0, "Tarox Bladewing"));
+    // Giant Growth in response: X is 7.
+    cast_new(&mut t, P0, "Giant Growth", &[Entity::Object(tarox)]);
+    t.resolve_all();
+    assert_eq!(t.pt(tarox), (14, 13));
+    cast_resolve(&mut t, P0, "Giant Growth", &[Entity::Object(tarox)]);
+    assert_eq!(t.pt(tarox), (17, 16));
+    // Only another card named Tarox Bladewing can be discarded.
+    let mut t = TestGame::new(2);
+    let tarox = t.battlefield(P0, "Tarox Bladewing");
+    t.hand(P0, "Grizzly Bears");
+    assert!(t.activate(P0, tarox, 0, &[]).is_err());
+}
