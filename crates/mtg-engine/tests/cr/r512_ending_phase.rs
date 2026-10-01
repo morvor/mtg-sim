@@ -36,7 +36,13 @@ fn end_step_has_no_turn_based_actions_and_active_player_gets_priority() {
     assert_eq!(order, vec![P0, P1]);
     let evs: Vec<_> = t.g.turn_events[before..]
         .iter()
-        .filter(|e| !matches!(e, mtg_engine::events::Event::StepBegan { .. }))
+        .filter(|e| {
+            !matches!(
+                e,
+                mtg_engine::events::Event::StepBegan { .. }
+                    | mtg_engine::events::Event::StepEnded { .. }
+            )
+        })
         .collect();
     assert!(evs.is_empty(), "{evs:?}");
 }

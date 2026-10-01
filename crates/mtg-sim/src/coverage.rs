@@ -201,13 +201,26 @@ pub fn tracked_abilities(def: &CardDef) -> Vec<Tracked> {
 pub struct Focus {
     pub name: SmolStr,
     pub uids: HashSet<u64>,
+    /// Loyalty costs of its loyalty abilities (CR 606), by uid.
+    pub loyalty: HashMap<u64, i32>,
 }
 
 impl Focus {
     pub fn new(def: &CardDef) -> Focus {
+        let mut loyalty = HashMap::new();
+        for f in &def.faces {
+            for a in &f.chars.abilities {
+                if let AbilityKind::Activated(act) = &a.kind {
+                    if let Some(n) = act.cost.loyalty() {
+                        loyalty.insert(a.uid, n);
+                    }
+                }
+            }
+        }
         Focus {
             name: def.name.clone(),
             uids: tracked_abilities(def).iter().map(|t| t.uid).collect(),
+            loyalty,
         }
     }
 
@@ -235,11 +248,38 @@ impl Focus {
             Action::Pass | Action::Concede => false,
         }
     }
+
+    /// Activations of the mana abilities of focus permanents `p` controls. Players may
+    /// activate mana abilities whenever they have priority (CR 605.3a), though the
+    /// engine only lists other actions.
+    fn mana_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
+        let mut out = Vec::new();
+        for &id in &g.battlefield {
+            let o = g.obj(id);
+            if o.controller != p || !self.is_focus_card(g, id) {
+                continue;
+            }
+            for a in &o.chars.abilities {
+                if matches!(a.kind, AbilityKind::Activated(_))
+                    && a.is_mana_ability()
+                    && self.uids.contains(&a.uid)
+                {
+                    out.push(Action::Activate {
+                        source: id,
+                        ability: a.uid,
+                    });
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Plays like [`RandomAgent`], but when it can use the focus card (cast it, play it,
 /// activate its abilities, take a special action with it) it usually does, preferring
-/// abilities not activated yet in the game, and records what it was offered in `usage`.
+/// what it hasn't done yet in the game, and records what it was offered in `usage`. It
+/// also makes some choices [`RandomAgent`] leaves to the engine (optional costs, casting
+/// methods, numbers, scry and surveil, orders) at random.
 pub struct FocusAgent {
     pub inner: RandomAgent,
     pub focus: Arc<Focus>,
@@ -261,6 +301,69 @@ impl FocusAgent {
             taken: Vec::new(),
         }
     }
+
+    fn priority(&mut self, g: &Game, p: PlayerId, actions: &[Action]) -> Option<Action> {
+        let mut usage = self.usage.lock().unwrap_or_else(|e| e.into_inner());
+        usage.offered(g, actions);
+        if self.step != (g.turn.number, g.turn.step) {
+            self.step = (g.turn.number, g.turn.step);
+            self.taken.clear();
+        }
+        // Each focus action at most twice a step, and a dozen in all, so a repeatable
+        // ability doesn't take over the game.
+        if self.taken.len() >= 12 {
+            return None;
+        }
+        let mut all: Vec<Action> = actions
+            .iter()
+            .filter(|a| self.focus.uses(g, a))
+            .cloned()
+            .collect();
+        all.extend(self.focus.mana_actions(g, p));
+        let options: Vec<Action> = all
+            .into_iter()
+            .filter(|a| self.taken.iter().filter(|t| *t == a).count() < 2)
+            .collect();
+        if options.is_empty() {
+            return None;
+        }
+        let done = |a: &Action| match a {
+            Action::Activate { ability, .. } => usage.activated.contains(ability),
+            Action::Cast { card, .. } | Action::PlayLand { card } => {
+                card_name(g, *card).is_some_and(|n| usage.cast.contains(&n))
+            }
+            _ => false,
+        };
+        // A loyalty ability that costs more loyalty than any planeswalker has: build
+        // loyalty up for it.
+        let loyalty_of = |a: &Action| match a {
+            Action::Activate { ability, .. } => self.focus.loyalty.get(ability).copied(),
+            _ => None,
+        };
+        let ultimate_waiting = self
+            .focus
+            .loyalty
+            .iter()
+            .any(|(uid, n)| *n < 0 && !usage.activated.contains(uid))
+            && !options
+                .iter()
+                .any(|a| loyalty_of(a).is_some_and(|n| n < 0) && !done(a));
+        let fresh: Vec<&Action> = options
+            .iter()
+            .filter(|a| !done(a))
+            .filter(|a| !ultimate_waiting || loyalty_of(a).is_none_or(|n| n >= 0))
+            .collect();
+        let pick = if !fresh.is_empty() && self.rng.gen_bool(0.85) {
+            (*fresh.choose(&mut self.rng)?).clone()
+        } else if self.rng.gen_bool(0.3) {
+            // Again, now and then (keeping copies for casting later).
+            options.choose(&mut self.rng)?.clone()
+        } else {
+            return None;
+        };
+        self.taken.push(pick.clone());
+        Some(pick)
+    }
 }
 
 impl Agent for FocusAgent {
@@ -269,37 +372,44 @@ impl Agent for FocusAgent {
     }
 
     fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
-        if let Decision::Priority { actions } = d {
-            let mut usage = self.usage.lock().unwrap_or_else(|e| e.into_inner());
-            usage.offered(g, actions);
-            if self.step != (g.turn.number, g.turn.step) {
-                self.step = (g.turn.number, g.turn.step);
-                self.taken.clear();
+        match d {
+            Decision::Priority { actions } => {
+                if let Some(a) = self.priority(g, p, actions) {
+                    return Answer::Action(a);
+                }
             }
-            // Each focus action at most twice a step, and at most a dozen in all, so a
-            // repeatable ability doesn't take over the game.
-            let options: Vec<&Action> = actions
-                .iter()
-                .filter(|a| self.focus.uses(g, a))
-                .filter(|a| self.taken.iter().filter(|t| t == a).count() < 2)
-                .collect();
-            if !options.is_empty() && self.taken.len() < 12 && self.rng.gen_bool(0.85) {
-                let fresh: Vec<&Action> = options
-                    .iter()
-                    .copied()
-                    .filter(|a| match a {
-                        Action::Activate { ability, .. } => !usage.activated.contains(ability),
-                        Action::Cast { card, .. } | Action::PlayLand { card } => {
-                            !card_name(g, *card).is_some_and(|n| usage.cast.contains(&n))
-                        }
-                        _ => true,
-                    })
-                    .collect();
-                let pick = if fresh.is_empty() { &options } else { &fresh };
-                let a = (*pick.choose(&mut self.rng).expect("nonempty")).clone();
-                self.taken.push(a.clone());
-                return Answer::Action(a);
+            Decision::OptionalCost { repeatable, .. } => {
+                return if *repeatable {
+                    Answer::Number(self.rng.gen_range(0..=2))
+                } else {
+                    Answer::Bool(self.rng.gen_bool(0.6))
+                };
             }
+            Decision::ChooseCastingMethod { options, .. } if !options.is_empty() => {
+                return Answer::Index(self.rng.gen_range(0..options.len()));
+            }
+            Decision::ChooseNumber { min, max, .. } if min <= max => {
+                return Answer::Number(self.rng.gen_range(*min..=*max));
+            }
+            Decision::Scry { cards } | Decision::Surveil { cards } => {
+                let (mut top, mut other) = (Vec::new(), Vec::new());
+                for c in cards {
+                    if self.rng.gen_bool(0.5) {
+                        top.push(*c);
+                    } else {
+                        other.push(*c);
+                    }
+                }
+                top.shuffle(&mut self.rng);
+                other.shuffle(&mut self.rng);
+                return Answer::Split(top, other);
+            }
+            Decision::Order { items, .. } => {
+                let mut idx: Vec<usize> = (0..items.len()).collect();
+                idx.shuffle(&mut self.rng);
+                return Answer::Indices(idx);
+            }
+            _ => {}
         }
         self.inner.decide(g, p, d)
     }

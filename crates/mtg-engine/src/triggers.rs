@@ -161,6 +161,10 @@ impl Game {
         }
         self.check_batch_triggers(&events[batch_start..]);
         self.fire_once_delayed(once_delayed);
+        // Static abilities' conditions can depend on what happened this turn ("as long as
+        // you've cast two or more spells this turn"): characteristics must be computed
+        // again (CR 611.3a, 613.1).
+        self.dirty = true;
         // Events emitted while detecting triggers (rare) are handled on the next flush.
     }
 
