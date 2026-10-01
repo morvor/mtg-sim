@@ -37,6 +37,37 @@ impl Renderer<'_> {
                 return format!("{} — {body}", romans.join(", "));
             }
         }
+        // A Case's "To solve — [condition]" (CR 719.3a): at your end step, if the
+        // condition is met and it isn't solved, it becomes solved.
+        if matches!(&t.body.effect, Effect::Custom(n) if n == "case: becomes solved") {
+            let cond = match &t.intervening_if {
+                Some(Condition::And(v)) => {
+                    let rest: Vec<Condition> = v
+                        .iter()
+                        .filter(|c| !matches!(c, Condition::Not(x) if is_solved(x)))
+                        .cloned()
+                        .collect();
+                    if rest.len() == 1 {
+                        Some(rest[0].clone())
+                    } else {
+                        Some(Condition::And(rest))
+                    }
+                }
+                other => other.clone(),
+            };
+            let c = match &cond {
+                Some(c) => self.condition(c),
+                None => self.gap("to solve without condition"),
+            };
+            return format!("To solve — {}", capitalize(&c));
+        }
+        // "Solved — [ability]" (CR 719.3b).
+        if t.intervening_if.as_ref().is_some_and(is_solved) {
+            let mut t2 = t.clone();
+            t2.intervening_if = None;
+            let s = self.triggered(&t2);
+            return format!("Solved — {s}");
+        }
         let saved_zone = self.zone;
         self.zone = t.zone;
         self.self_salient = false;
@@ -67,6 +98,12 @@ impl Renderer<'_> {
     /// "When ~ enters", "At the beginning of your upkeep", "Whenever you cast a spell".
     pub(crate) fn trigger_text(&mut self, t: &TriggerCond) -> String {
         match t {
+            TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger)
+                if matches!(trigger.as_ref(), TriggerCond::BeginningOf { .. }) =>
+            {
+                let e = self.trigger_event(t, Det::A);
+                format!("at {}", e.text())
+            }
             TriggerCond::BeginningOf { .. } => {
                 let e = self.trigger_event(t, Det::A);
                 format!("at {}", e.text())
@@ -362,7 +399,7 @@ impl Renderer<'_> {
             TriggerCond::Cycled { who, filter } => {
                 let w = self.rel_subject(*who);
                 let n = if matches!(filter, Filter::Source) {
-                    "~".to_string()
+                    self.me()
                 } else {
                     self.noun_det(filter, Det::A)
                 };
@@ -473,6 +510,19 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 let p = if w == "you" { "your" } else { "their" };
                 Ev::new(w, format!("draw {p} {} card each turn", ordinal_word(*n as u32)))
+            }
+            // "At the beginning of your second main phase".
+            TriggerCond::Where { trigger, cond }
+                if matches!(cond, Condition::Custom(n) if n.starts_with("main_phase:")) =>
+            {
+                let (TriggerCond::BeginningOf { whose, .. }, Condition::Custom(n)) =
+                    (trigger.as_ref(), cond)
+                else {
+                    return Ev::new("", self.gap("main phase trigger"));
+                };
+                let k: u32 = n["main_phase:".len()..].parse().unwrap_or(1);
+                let p = self.rel_possessive(*whose, Num::One);
+                Ev::new("", format!("the beginning of {p} {} main phase", ordinal_word(k)))
             }
             // "Whenever ~ and at least two other creatures attack".
             TriggerCond::Where { trigger, cond }

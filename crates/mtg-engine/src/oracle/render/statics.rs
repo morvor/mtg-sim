@@ -9,6 +9,23 @@ use super::*;
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        // "Solved — [ability]" (CR 719.3b), compiled as the ability granted while solved.
+        if s.condition.as_ref().is_some_and(super::is_solved) {
+            if let StaticEffect::Continuous {
+                affected: Filter::Source,
+                mods,
+            } = &s.effect
+            {
+                if let [Modification::AddAbility(a)] = mods.as_slice() {
+                    let inner = self.nested_ability(a);
+                    return format!("Solved — {inner}");
+                }
+            }
+            let mut s2 = s.clone();
+            s2.condition = None;
+            let inner = self.static_ability(&s2);
+            return format!("Solved — {inner}");
+        }
         let saved = self.self_salient;
         self.self_salient = false;
         if let StaticEffect::Continuous { affected: Filter::Source, .. } = &s.effect {
@@ -403,7 +420,7 @@ impl Renderer<'_> {
                     format!("activated abilities of {n}")
                 }
             }
-            CostTarget::ThisSpell => "~".into(),
+            CostTarget::ThisSpell => self.me(),
             CostTarget::Keyword(k) => format!("{} abilities", k.name().to_lowercase()),
             CostTarget::KeywordAbilitiesOf(k, f) => {
                 let n = self.noun_det(f, Det::Plural);
@@ -1155,7 +1172,7 @@ impl Renderer<'_> {
     /// The subject of an "enters" replacement: "~", "creatures your opponents control".
     fn enters_subject(&mut self, f: &Filter) -> String {
         match f {
-            Filter::Source => "~".into(),
+            Filter::Source => self.me(),
             other => self.noun_det(other, Det::Plural),
         }
     }
@@ -1295,7 +1312,7 @@ impl Renderer<'_> {
         };
         let src = match source {
             Filter::Any => None,
-            Filter::Source => Some("~".to_string()),
+            Filter::Source => Some(self.me()),
             other => {
                 let saved = self.default_head;
                 self.default_head = Some("source");
@@ -1312,7 +1329,7 @@ impl Renderer<'_> {
         };
         if let Some(o) = to_objects {
             to.push(match o {
-                Filter::Source => "~".to_string(),
+                Filter::Source => self.me(),
                 Filter::AttachedToSource => self.attached_noun(),
                 other => self.noun_det(other, Det::A),
             });
@@ -1452,47 +1469,6 @@ impl Renderer<'_> {
                 format!("whenever you roll a die, you may {c}. If you do, {what}")
             }
         }
-    }
-
-    // --- Named custom behaviors -------------------------------------------------------
-    //
-    // `Custom(name)` nodes are behaviors implemented in code. Each name the renderer can
-    // put into words is listed here; any other name is a gap (reported as a mismatch).
-
-    pub(crate) fn custom_effect(&mut self, name: &str) -> String {
-        self.gap(format!("Effect::Custom({name})"))
-    }
-
-    pub(crate) fn custom_filter(&mut self, name: &str) -> String {
-        self.gap(format!("Filter::Custom({name})"))
-    }
-
-    pub(crate) fn custom_value(&mut self, name: &str) -> String {
-        self.gap(format!("Value::Custom({name})"))
-    }
-
-    pub(crate) fn custom_condition(&mut self, name: &str) -> String {
-        self.gap(format!("Condition::Custom({name})"))
-    }
-
-    pub(crate) fn custom_trigger_is_complete(&self, _name: &str) -> bool {
-        false
-    }
-
-    pub(crate) fn custom_trigger(&mut self, name: &str) -> String {
-        self.gap(format!("TriggerCond::Custom({name})"))
-    }
-
-    pub(crate) fn custom_static(&mut self, name: &str) -> String {
-        self.gap(format!("StaticEffect::Custom({name})"))
-    }
-
-    pub(crate) fn custom_restriction(&mut self, name: &str) -> String {
-        self.gap(format!("Restriction::Custom({name})"))
-    }
-
-    pub(crate) fn custom_player_mod(&mut self, name: &str) -> String {
-        self.gap(format!("PlayerModification::Custom({name})"))
     }
 
     #[allow(dead_code)]

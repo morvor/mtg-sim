@@ -22,7 +22,7 @@ impl Renderer<'_> {
                 self.alt_and = saved;
                 // A count of permanents with no controller is of all of them.
                 let global = split_controller(f).0.is_none()
-                    && f.zone().is_none()
+                    && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
                     && !n.contains(" you ")
                     && !n.contains("among")
                     && !n.ends_with(" ~");
@@ -337,10 +337,10 @@ impl Renderer<'_> {
         }
     }
 
-    fn cost_paid(&self, name: &str) -> String {
+    fn cost_paid(&mut self, name: &str) -> String {
         match name {
-            "kicked" | "kicker" => "~ was kicked".into(),
-            "bargained" | "bargain" => "~ was bargained".into(),
+            "kicked" | "kicker" => format!("{} was kicked", self.me()),
+            "bargained" | "bargain" => format!("{} was bargained", self.me()),
             "gift" => "the gift was promised".into(),
             other => format!("the {other} cost was paid"),
         }
@@ -556,6 +556,14 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        if let Some(s) = self.this_turn_compare(a, cmp, b) {
+            return s;
+        }
+        if let (Value::Custom(name), Value::Const(n)) = (a, b) {
+            if let Some(s) = self.custom_compare(name, cmp, *n) {
+                return s;
+            }
+        }
         if let (Value::CreaturesDiedThisTurn, Value::Const(n)) = (a, b) {
             return match (cmp, n) {
                 (Cmp::Gt, 0) | (Cmp::Ge, 1) => "a creature died this turn".into(),
@@ -634,6 +642,79 @@ impl Renderer<'_> {
         format!("{a} {rel}")
     }
 
+    /// "you gained life this turn", "you've drawn two or more cards this turn".
+    fn this_turn_compare(&mut self, a: &Value, cmp: Cmp, b: &Value) -> Option<String> {
+        let Value::Const(n) = b else { return None };
+        let min = match cmp {
+            Cmp::Ge => *n,
+            Cmp::Gt => n + 1,
+            _ => return None,
+        };
+        let you = |r: &mut Self, p: &PlayerRef| -> String { r.player(p, Case::Subj) };
+        Some(match a {
+            Value::LifeGainedThisTurn(p) => {
+                let w = you(self, p);
+                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                let did = if w == "you" { "you".to_string() } else { w.clone() };
+                if min <= 1 {
+                    format!("{did} gained life this turn")
+                } else {
+                    format!("{have} gained {min} or more life this turn")
+                }
+            }
+            Value::LifeLostThisTurn(p) => {
+                let w = you(self, p);
+                if min <= 1 {
+                    format!("{w} lost life this turn")
+                } else {
+                    let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                    format!("{have} lost {min} or more life this turn")
+                }
+            }
+            Value::CardsDrawnThisTurn(p) => {
+                let w = you(self, p);
+                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                let c = if min <= 1 {
+                    "a card".to_string()
+                } else {
+                    format!("{} or more cards", number_word(min))
+                };
+                format!("{have} drawn {c} this turn")
+            }
+            Value::SpellsCastThisTurn(p, f) => {
+                let w = you(self, p);
+                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                let noun = self.noun(f, if min <= 1 { Num::One } else { Num::Many });
+                let noun = if noun.contains("spell") {
+                    noun
+                } else if min <= 1 {
+                    format!("{noun} spell")
+                } else {
+                    format!("{noun} spells")
+                };
+                let noun = noun.replace("permanent spell", "spell");
+                let c = if min <= 1 {
+                    with_article(&noun)
+                } else {
+                    format!("{} or more {noun}", number_word(min))
+                };
+                format!("{have} cast {c} this turn")
+            }
+            Value::PermanentsEnteredThisTurn(p, f) => {
+                let poss = self.player(p, Case::Poss);
+                let noun = self.noun(f, if min <= 1 { Num::One } else { Num::Many });
+                let c = if min <= 1 {
+                    with_article(&noun)
+                } else {
+                    format!("{} or more {noun}", number_word(min))
+                };
+                let v = if min <= 1 { "entered" } else { "entered" };
+                format!("{c} {v} the battlefield under {poss} control this turn")
+            }
+            _ => return None,
+        })
+    }
+
     pub(crate) fn combat_timing(&mut self, ct: &CombatTiming) -> String {
         let point = match ct.point {
             CombatPoint::Combat => "combat",
@@ -689,7 +770,7 @@ impl Renderer<'_> {
             TriggerStep::Untap => "untap step",
             TriggerStep::Upkeep => "upkeep",
             TriggerStep::Draw => "draw step",
-            TriggerStep::PrecombatMain => "precombat main phase",
+            TriggerStep::PrecombatMain => "first main phase",
             TriggerStep::BeginningOfCombat => "combat",
             TriggerStep::DeclareAttackers => "declare attackers step",
             TriggerStep::DeclareBlockers => "declare blockers step",

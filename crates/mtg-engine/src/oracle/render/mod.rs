@@ -12,6 +12,7 @@
 
 pub mod compare;
 mod costs;
+mod custom;
 mod effects;
 mod keywords;
 mod nouns;
@@ -78,6 +79,17 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
             continue;
         }
         prev_changeling = matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Changeling);
+        // Gift (CR 702.174): the keyword and the gift it gives are one line ("Gift a
+        // card"); the gift is compiled as an ability that gives it if it was promised.
+        if let Some(what) = gift_given(a) {
+            if let Some(last) = out.lines.last() {
+                if last == "Gift" {
+                    out.lines.pop();
+                }
+            }
+            out.lines.push(format!("Gift {what}"));
+            continue;
+        }
         let line = r.ability(a);
         out.lines.push(line);
     }
@@ -117,6 +129,33 @@ pub fn enchant_noun(abilities: &[Ability], info: &FaceInfo) -> Option<String> {
         }
     }
     None
+}
+
+/// What a gift ability gives: "a card" for `If(gift promised, Custom("gift:give:a card"))`.
+fn gift_given(a: &Ability) -> Option<String> {
+    let body = match &a.kind {
+        AbilityKind::Spell(s) => &s.body,
+        AbilityKind::Triggered(t) => &t.body,
+        _ => return None,
+    };
+    if let Effect::If {
+        cond: Condition::CostPaid(c),
+        then,
+        otherwise,
+    } = &body.effect
+    {
+        if c == "gift" && matches!(otherwise.as_ref(), Effect::Noop) {
+            if let Effect::Custom(n) = then.as_ref() {
+                return n.strip_prefix("gift:give:").map(|s| s.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Whether a condition is "this Case is solved" (CR 719.3).
+pub(crate) fn is_solved(c: &Condition) -> bool {
+    matches!(c, Condition::Custom(n) if n == "case: is solved")
 }
 
 fn is_changeling_cda(a: &Ability) -> bool {

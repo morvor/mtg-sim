@@ -231,6 +231,21 @@ impl Renderer<'_> {
                 then,
                 otherwise,
             } => self.pay_optional(who, cost, then, otherwise),
+            // "Double the number of +1/+1 counters on each of those creatures" (CR 701.10e):
+            // put on each the counters it has.
+            Effect::ForEach { sel, var, effect }
+                if matches!(effect.as_ref(), Effect::PutCountersOf { from: Sel::Var(a), to: Sel::Var(b), .. } if a == var && b == var) =>
+            {
+                let Effect::PutCountersOf { kind, .. } = effect.as_ref() else {
+                    return String::new();
+                };
+                let k = match kind {
+                    Some(k) => format!("{k} counters"),
+                    None => "each kind of counter".into(),
+                };
+                let s = self.sel(sel, Case::Obj);
+                format!("double the number of {k} on {s}")
+            }
             Effect::ForEach { sel, effect, .. } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
@@ -686,12 +701,19 @@ impl Renderer<'_> {
                 let c = self.choice(kind);
                 self.with_subject(who, &format!("choose {c}"), false)
             }
-            Effect::EnterTapped => "~ enters tapped".into(),
+            Effect::EnterTapped => {
+                let m = self.me();
+                format!("{m} enters tapped")
+            }
             Effect::EnterWithCounters { kind, n } => {
                 let (c, w) = self.counted(n, &counter_name(kind));
-                format!("~ enters with {c} on it{}", w.unwrap_or_default())
+                let m = self.me();
+                format!("{m} enters with {c} on it{}", w.unwrap_or_default())
             }
-            Effect::EnterPrepared => "~ enters prepared".into(),
+            Effect::EnterPrepared => {
+                let m = self.me();
+                format!("{m} enters prepared")
+            }
             Effect::EnterCopyExceptions(mods) => {
                 let ex = self.exceptions(mods);
                 format!("except {ex}")

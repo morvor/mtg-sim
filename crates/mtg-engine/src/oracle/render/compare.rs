@@ -442,6 +442,16 @@ fn sentence_rewrites(s: &str) -> String {
             .unwrap()
     });
     let mut s = s.to_string();
+    // "If C, Y. Otherwise, X." and "X. If C, Y instead." state the same choice.
+    static OTHERWISE: OnceLock<[Regex; 2]> = OnceLock::new();
+    let [instead, otherwise] = OTHERWISE.get_or_init(|| {
+        [
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), instead ([^.]+)\.").unwrap(),
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), ([^.]+)\. otherwise, ([^.]+)\.").unwrap(),
+        ]
+    });
+    s = instead.replace_all(&s, "${1}if $2, $3 instead.").to_string();
+    s = otherwise.replace_all(&s, "$1$4. if $2, $3 instead.").to_string();
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }

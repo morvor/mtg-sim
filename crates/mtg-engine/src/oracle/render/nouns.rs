@@ -357,8 +357,12 @@ impl Renderer<'_> {
                 np.post.push(s);
             }
             Filter::Custom(name) => {
-                let s = self.custom_filter(name);
-                np.rel.push(s);
+                let (adj, s) = self.custom_filter_quality(name);
+                if adj {
+                    np.status.push(s);
+                } else {
+                    np.rel.push(s);
+                }
             }
         }
     }

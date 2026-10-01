@@ -262,7 +262,8 @@ impl Renderer<'_> {
             Some(2) => restr.push("twice each turn".into()),
             Some(n) => restr.push(format!("{} times each turn", number_word(n as i32))),
         }
-        if let Some(c) = &a.condition {
+        let solved = a.condition.as_ref().is_some_and(super::is_solved);
+        if let Some(c) = a.condition.as_ref().filter(|_| !solved) {
             let c = self.condition(c);
             restr.push(format!("if {c}"));
         }
@@ -286,6 +287,9 @@ impl Renderer<'_> {
         }
         self.zone = saved;
         let _ = third_person;
+        if solved {
+            return format!("Solved — {s}");
+        }
         s
     }
 }
