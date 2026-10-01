@@ -165,21 +165,27 @@ pub fn cost_reductions_from_keywords(
     x: u32,
 ) {
     for kw in chars.keywords() {
-        if kw.kind == KeywordKind::Affinity {
-            // CR 702.41a: costs {1} less for each [filter] you control.
-            if let Some(f) = &kw.filter {
-                let n = g
-                    .objects_matching(f, &Ctx::new(Some(card), p))
-                    .into_iter()
-                    .filter(|o| g.obj(*o).controller == p)
-                    .count();
-                if let Some(m) = cost.mana.as_mut() {
-                    m.reduce_generic(n as u32);
-                }
-            }
+        let n = affinity_reduction(g, p, card, kw);
+        if let Some(m) = cost.mana.as_mut() {
+            m.reduce_generic(n);
         }
     }
     crate::kw::cost_reductions(g, p, card, chars, cost, x);
+}
+
+/// How much less an affinity ability makes `card` cost to cast for `p` (CR 702.41a:
+/// {1} less for each [filter] they control); 0 for other keywords.
+pub fn affinity_reduction(g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> u32 {
+    if kw.kind != KeywordKind::Affinity {
+        return 0;
+    }
+    let Some(f) = &kw.filter else {
+        return 0;
+    };
+    g.objects_matching(f, &Ctx::new(Some(card), p))
+        .into_iter()
+        .filter(|o| g.obj(*o).controller == p)
+        .count() as u32
 }
 
 /// Where an instant/sorcery goes after resolving (CR 608.2n), considering replacement

@@ -715,6 +715,7 @@ pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
             || (kw.kind == KeywordKind::Convoke && !cast.convoked.is_empty())
             || (kw.kind == KeywordKind::Delve && !cast.delved.is_empty())
             || (kw.kind == KeywordKind::Spree && spree)
+            || crate::keyword_impls::affinity_reduction(g, o.controller, spell, kw) > 0
             || cost_changing.contains(&format!("{kw:?}"));
         if used {
             record(a, &o.chars.name, "keyword");
