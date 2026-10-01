@@ -654,6 +654,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_inset_suffix(t) {
             (f, r)
+        } else if let Some(r) = [
+            "that are enchanted by auras you control",
+            "that are enchanted by Auras you control",
+            "that's enchanted by an aura you control",
+            "that's enchanted by an Aura you control",
+        ]
+        .into_iter()
+        .find_map(|p| t.strip_prefix(p))
+        {
+            // (CR 303.4b) An Aura you control attached to it.
+            (
+                Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
+                r,
+            )
         } else {
             break;
         };

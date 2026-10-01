@@ -289,3 +289,67 @@ fn pupu_ufo_putting_a_land_isnt_playing_one() {
     t.play_land(P0, second).unwrap();
     assert!(t.on_battlefield(second));
 }
+
+#[test]
+fn allosaurus_shepherd_sets_elves_base_pt_and_makes_them_dinosaurs() {
+    cr!("613.4b", "613.4c", "613.1d", "613.7b", "611.2c");
+    ruling!(
+        "Allosaurus Shepherd",
+        "Allosaurus Shepherd's last ability overwrites all previous effects that set the affected creatures' power and/or toughness to specific values. Other effects that set these characteristics to specific values that start to apply after the ability resolves will overwrite that part of the effect."
+    );
+    ruling!(
+        "Allosaurus Shepherd",
+        "Effects that modify an affected creature's power or toughness without setting it will apply no matter when they started to take effect. The same is true for counters that change the creature's power or toughness."
+    );
+    helpers_supported();
+    supported("Allosaurus Shepherd");
+    let mut t = TestGame::new(2);
+    let shepherd = t.battlefield(P0, "Allosaurus Shepherd");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let apply = move |t: &mut TestGame| {
+        t.lands(P0, "Forest", 6);
+        activate_resolve(t, P0, shepherd, 0, &[]);
+        assert!(t.obj(elf).chars.subtypes.iter().any(|s| s == "Dinosaur"));
+        assert!(t.obj(elf).chars.subtypes.iter().any(|s| s == "Elf"));
+        assert_eq!(t.pt(shepherd), (5, 5));
+        // Not an Elf: unaffected.
+        assert_eq!(t.pt(bears), (2, 2));
+    };
+    layer7(&mut t, elf, "Relic's Roar", true, apply, (5, 5), "Square Up");
+}
+
+#[test]
+fn archon_of_the_wild_rose_sets_enchanted_creatures_base_pt() {
+    cr!("613.4b", "613.4c", "613.7a", "303.4b");
+    ruling!(
+        "Archon of the Wild Rose",
+        "Archon of the Wild Rose's ability overwrites all previous effects that set the affected creatures' power and/or toughness to specific values. Other effects that set these characteristics to specific values that start to apply after Archon of the Wild Rose enters the battlefield will overwrite this effect."
+    );
+    ruling!(
+        "Archon of the Wild Rose",
+        "Effects that modify a creature's power and/or toughness without setting it will apply to the affected creatures no matter when they started to take effect. The same is true for counters that change a creature's power and/or toughness."
+    );
+    helpers_supported();
+    supported("Archon of the Wild Rose");
+    supported("Pacifism");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let plain = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P0, "Grizzly Bears");
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(bears)]);
+    // An Aura an opponent controls doesn't count.
+    t.set_step(P1, Step::PrecombatMain);
+    cast_resolve(&mut t, P1, "Pacifism", &[Entity::Object(theirs)]);
+    t.set_step(P0, Step::PrecombatMain);
+    let apply = move |t: &mut TestGame| {
+        t.battlefield(P0, "Archon of the Wild Rose");
+        t.g.recompute();
+        assert!(t
+            .obj(bears)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+        assert_eq!(t.pt(plain), (2, 2));
+        assert_eq!(t.pt(theirs), (2, 2));
+    };
+    layer7(&mut t, bears, "Relic's Roar", true, apply, (4, 4), "Mind Transfer Protocol");
+}
