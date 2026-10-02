@@ -22,7 +22,7 @@ fn wolves(t: &TestGame) -> usize {
 
 #[test]
 fn pack_guardian_discards_a_land_card_for_a_wolf() {
-    cr!("701.9a", "603.12");
+    cr!("701.9a");
     compiles("Pack Guardian");
     // "When this creature enters, you may discard a land card. If you do, create a 2/2
     // green Wolf creature token."
