@@ -132,7 +132,6 @@ fn resonance_copying_a_legend_you_control_triggers_the_legend_rule() {
     let karn = t.battlefield(P0, "Karn, Silver Golem");
     resonate(&mut t, karn);
     assert_eq!(t.named_on_battlefield("Karn, Silver Golem").len(), 1);
-    assert_eq!(t.graveyard_size(P0) >= 1, true);
     let in_gy = t
         .g
         .player(P0)
@@ -484,7 +483,7 @@ fn reliquat_first_ability_loses_its_copy_abilities_until_end_of_turn() {
 
 #[test]
 fn a_copy_of_a_copying_reliquat_stays_what_it_copied() {
-    cr!("707.3", "707.2", "706.2");
+    cr!("707.3", "707.2");
     ruling!(
         "Mizzium Transreliquat",
         "The results of all copy effects are copied. If Mizzium Transreliquat is copied, the copy will be a Mizzium Transreliquat after applying all copy effects currently affecting the original. For example, Copy Artifact copying a Transreliquat that's using its first ability to copy an Izzet Signet will be an Izzet Signet. The effect won't wear off at the end of the turn; rather, the Copy Artifact will remain an Izzet Signet for the rest of the game."

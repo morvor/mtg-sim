@@ -18,7 +18,7 @@ fn aura_on(t: &mut TestGame, caster: PlayerId, aura: &str, target: ObjectId) -> 
 
 #[test]
 fn only_the_auras_controller_can_return_it() {
-    cr!("602.2", "301.5d");
+    cr!("602.2", "303.4e");
     ruling!(
         "Agoraphobia",
         "Only Agoraphobia's controller can activate its last ability, no matter who controls the creature Agoraphobia's attached to."
@@ -121,7 +121,7 @@ fn rookie_mistake_affects_the_remaining_legal_target() {
 
 #[test]
 fn cantrips_with_an_illegal_target_dont_draw() {
-    cr!("608.2b", "701.6a");
+    cr!("608.2b");
     ruling!(
         "Befuddle",
         "If the target creature is an illegal target by the time Befuddle tries to resolve, the spell doesn’t resolve. You won’t draw a card."
@@ -266,7 +266,7 @@ fn cease_fire_doesnt_counter_creature_spells_already_cast() {
 
 #[test]
 fn evaporate_deals_one_damage_to_a_white_and_blue_creature() {
-    cr!("105.4", "120.3");
+    cr!("105.2", "120.3");
     ruling!(
         "Evaporate",
         "A creature which is both blue and white only takes one damage."
@@ -466,7 +466,7 @@ fn havoc_affects_every_opponent() {
 
 #[test]
 fn ignite_disorder_one_to_three_targets_divided_as_cast() {
-    cr!("601.2c", "601.2d", "115.1d");
+    cr!("601.2c", "601.2d", "115.1a");
     ruling!(
         "Ignite Disorder",
         "The number of targets chosen for Ignite Disorder must be at least 1 and at most 3. You divide the damage as you cast the spell, not as it resolves. Each target must be assigned at least 1 damage."
@@ -634,4 +634,32 @@ fn combat_damage_counters_arrive_after_the_damage() {
     t.attack(&[(ripper, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.pt(ripper), (3, 2));
+}
+
+#[test]
+fn combust_static_prevention_fails_but_its_additional_effect_still_works_once() {
+    cr!("615.12");
+    ruling!(
+        "Combust",
+        "If a static ability would prevent damage from being dealt to the targeted creature, it fails to prevent the damage dealt by Combust. If that ability has an additional effect that doesn’t depend on the amount of damage prevented, that additional effect will still work. It’s applied just once as Combust resolves."
+    );
+    supported("Combust");
+    supported("Phantom Flock");
+    // Phantom Flock (white, 0/0, enters with three +1/+1 counters): "If damage would be
+    // dealt to this creature, prevent that damage. Remove a +1/+1 counter from this
+    // creature." With eight counters it's an 8/8 (placed directly, without its enters
+    // replacement).
+    let mut t = TestGame::new(2);
+    let flock = t.battlefield(P1, "Phantom Flock");
+    plus_counters(&mut t, flock, 8);
+    assert_eq!(t.pt(flock), (8, 8));
+    // A preventable Shock is prevented and costs one counter.
+    cast_resolve(&mut t, P0, "Shock", &[Entity::Object(flock)]);
+    assert_eq!(t.obj(flock).damage, 0);
+    assert_eq!(t.counters(flock, counters::PLUS1), 7);
+    // Combust's 5 damage isn't prevented, but one counter (just one) is still removed.
+    cast_resolve(&mut t, P0, "Combust", &[Entity::Object(flock)]);
+    assert!(t.on_battlefield(flock));
+    assert_eq!(t.obj(flock).damage, 5);
+    assert_eq!(t.counters(flock, counters::PLUS1), 6);
 }

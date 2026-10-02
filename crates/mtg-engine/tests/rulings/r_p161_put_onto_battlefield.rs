@@ -58,7 +58,7 @@ fn putting_the_card_onto_the_battlefield_is_optional() {
 
 #[test]
 fn dragon_arch_multicolored_means_more_than_one_color() {
-    cr!("105.4", "202.2c");
+    cr!("105.2b", "202.2c");
     ruling!(
         "Dragon Arch",
         "A multicolored card has more than one color in its mana cost."

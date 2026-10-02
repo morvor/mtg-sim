@@ -75,7 +75,10 @@ fn becoming_an_artifact_creature_keeps_abilities_and_colors() {
         let before = ability_count(&t, elf);
         cast_resolve(&mut t, P0, name, &[Entity::Object(elf)]);
         assert!(t.obj(elf).is(CardType::Artifact), "{name}");
-        assert!(ability_count(&t, elf) >= before, "{name}");
+        // Majestic Metamorphosis adds flying; nothing is lost.
+        let gained = usize::from(name == "Majestic Metamorphosis");
+        assert_eq!(ability_count(&t, elf), before + gained, "{name}");
+        assert!(t.obj_now(elf).chars.abilities.iter().any(|a| a.text.contains("{T}: Add {G}")), "{name}");
         assert_eq!(t.obj(elf).chars.colors, ColorSet::single(Color::Green), "{name}");
         // A noncreature artifact: Sol Ring keeps its mana ability and stays colorless.
         let mut t = TestGame::new(2);
@@ -84,7 +87,7 @@ fn becoming_an_artifact_creature_keeps_abilities_and_colors() {
         let before = ability_count(&t, ring);
         cast_resolve(&mut t, P0, name, &[Entity::Object(ring)]);
         assert!(t.obj(ring).is(CardType::Creature), "{name}");
-        assert!(ability_count(&t, ring) >= before, "{name}");
+        assert_eq!(ability_count(&t, ring), before + gained, "{name}");
         assert!(t.obj(ring).chars.colors.is_colorless(), "{name}");
     }
 }
@@ -176,7 +179,7 @@ fn tricksters_elk_overwrites_colors_and_types_but_not_supertypes() {
 
 #[test]
 fn tricksters_elk_keeps_a_temporary_creature_a_creature() {
-    cr!("613.1d", "303.4d", "611.2a");
+    cr!("613.1d", "611.2a");
     ruling!(
         "Trickster's Elk",
         "Trickster's Elk may enchant a permanent that is only temporarily a creature, such as a Vehicle. If this happens, Trickster's Elk's effect causes the enchanted permanent to remain a 3/3 green Elk creature even after the temporary effect making it a creature expires."
@@ -362,7 +365,7 @@ fn pupu_ufo_counts_towns_as_the_ability_resolves() {
 
 #[test]
 fn bramblefort_fink_checks_for_oko_only_on_activation() {
-    cr!("602.5b", "613.4b");
+    cr!("602.5", "613.4b");
     ruling!(
         "Bramblefort Fink",
         "Whether you control an Oko planeswalker is checked only as you begin to activate Bramblefort Fink's ability. It doesn't matter if Oko leaves the battlefield before the ability resolves or later in the turn."
@@ -389,7 +392,7 @@ fn bramblefort_fink_checks_for_oko_only_on_activation() {
 
 #[test]
 fn master_of_winds_chooses_as_the_ability_resolves() {
-    cr!("603.3c", "608.2d", "613.4b");
+    cr!("608.2d", "613.4b");
     ruling!(
         "Master of Winds",
         "You don’t choose a power and toughness for Master of Winds as its ability triggers. Rather, as it resolves, you choose whether to have Master of Winds become 4/1, become 1/4, or not change its power and toughness."
