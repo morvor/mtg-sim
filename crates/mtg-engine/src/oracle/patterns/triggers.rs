@@ -1337,6 +1337,23 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         // and the new object for actions (CR 400.7e; see `Game::resolve_sel`).
         Some(((cond, this_or(Sel::TriggerLki), ctl_of(Sel::TriggerLki)), r))
     };
+    // "dies or is put into exile" (Kaya's Ghostform): either zone change from the
+    // battlefield (CR 603.1b, 603.6c).
+    for p in ["dies or is put into exile", "die or are put into exile"] {
+        if let Some(r) = starts(p) {
+            return zone_change(
+                TriggerCond::AnyOf(vec![
+                    TriggerCond::Dies(f.clone()),
+                    TriggerCond::ZoneChange {
+                        filter: f.clone(),
+                        from: Some(ZoneKind::Battlefield),
+                        to: Some(ZoneKind::Exile),
+                    },
+                ]),
+                r,
+            );
+        }
+    }
     for p in ["dies", "die"] {
         if let Some(r) = starts(p) {
             return zone_change(TriggerCond::Dies(f.clone()), r);
