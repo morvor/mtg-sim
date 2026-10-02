@@ -3097,7 +3097,16 @@ impl Renderer<'_> {
                     Some((n, w)) => (n.to_string(), format!(" with {w}")),
                     None => (rest.to_string(), String::new()),
                 };
-                return format!("create {name}, {} token{with}", with_article(&head));
+                // Cards also say "create a 2/2 white Cat Soldier creature token named
+                // Ajani's Pridemate with ...".
+                let a = format!("create {name}, {} token{with}", with_article(&head));
+                if a.contains('|') {
+                    return a;
+                }
+                return format!(
+                    "{{alt:{a}|create {} token named {name}{with}}}",
+                    with_article(&head)
+                );
             }
         }
         let noun_one = join_words(&[status.clone(), head.clone(), "token".into()]);

@@ -222,6 +222,8 @@ impl Renderer<'_> {
                     self.collect(x, np);
                 }
             }
+            // "outlaw": an Assassin, Mercenary, Pirate, Rogue, or Warlock (CR 700.12).
+            Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
             Filter::Or(v) => {
                 let status_word = |x: &Filter| -> Option<&'static str> {
                     Some(match x {
@@ -719,6 +721,7 @@ impl Renderer<'_> {
                     zone_word(z)
                 ))
             }
+            Filter::Or(v) if is_outlaw(v) => np.nons.push("non-outlaw".into()),
             Filter::Or(v) => {
                 for x in v {
                     self.collect_not(x, np);
@@ -1330,4 +1333,17 @@ pub fn possessive(s: &str) -> String {
         _ if s.ends_with('s') && !s.ends_with("ss") && s != "~" => format!("{s}'"),
         _ => format!("{s}'s"),
     }
+}
+
+/// The creature types an outlaw has one of (CR 700.12).
+fn is_outlaw(v: &[Filter]) -> bool {
+    let mut names: Vec<&str> = v
+        .iter()
+        .filter_map(|f| match f {
+            Filter::Subtype(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .collect();
+    names.sort_unstable();
+    v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
 }

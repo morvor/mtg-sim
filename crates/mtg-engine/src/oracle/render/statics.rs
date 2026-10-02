@@ -1740,6 +1740,26 @@ impl Renderer<'_> {
                         let (c, w) = self.counted(n, &counter_name(k));
                         format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
                     }
+                    // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
+                    A::AsEnters(e)
+                        if matches!(e.as_ref(), Effect::If {
+                        cond: Condition::CostPaid(c),
+                        then,
+                        otherwise,
+                    } if c == "escape"
+                        && matches!(otherwise.as_ref(), Effect::Noop)
+                        && matches!(then.as_ref(), Effect::EnterWithCounters { .. })
+                        && (subj == "~" || subj == "~it")) =>
+                    {
+                        let Effect::If { then, .. } = e.as_ref() else {
+                            return self.gap("escapes with");
+                        };
+                        let Effect::EnterWithCounters { kind, n } = then.as_ref() else {
+                            return self.gap("escapes with");
+                        };
+                        let (c, w) = self.counted(n, &counter_name(kind));
+                        format!("~ escapes with {c} on {it}{}", w.unwrap_or_default())
+                    }
                     A::AsEnters(e) => self.as_enters(&subj, e),
                     A::EnterAsCopy { filter, optional } => {
                         let n = format!("any {}", self.noun(filter, Num::One));

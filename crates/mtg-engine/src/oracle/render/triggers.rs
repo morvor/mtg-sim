@@ -884,6 +884,36 @@ impl Renderer<'_> {
                 let c = self.condition(cond);
                 Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
             }
+            // "Whenever you cast your first instant or sorcery spell each turn": the first
+            // time you cast one.
+            TriggerCond::FirstTimeEachTurn(inner)
+                if matches!(
+                    inner.as_ref(),
+                    TriggerCond::CastSpell {
+                        who: PlayerRel::You,
+                        ..
+                    }
+                ) =>
+            {
+                let e = self.trigger_event(inner, det);
+                let first = match e.vp.strip_prefix("cast ") {
+                    Some(full) => {
+                        let sp = full
+                            .strip_prefix("an ")
+                            .or_else(|| full.strip_prefix("a "))
+                            .unwrap_or(full);
+                        Some((full.to_string(), format!("your first {sp} each turn")))
+                    }
+                    None => None,
+                };
+                match first {
+                    Some((full, f)) if !e.vp.contains('|') => Ev::new(
+                        e.subj,
+                        format!("cast {{alt:{full} for the first time each turn|{f}}}"),
+                    ),
+                    _ => Ev::new(e.subj, format!("{} for the first time each turn", e.vp)),
+                }
+            }
             TriggerCond::FirstTimeEachTurn(inner) => {
                 let e = self.trigger_event(inner, det);
                 Ev::new(e.subj, format!("{} for the first time each turn", e.vp))
