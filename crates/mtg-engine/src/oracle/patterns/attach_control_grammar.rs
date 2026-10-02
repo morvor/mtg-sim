@@ -263,9 +263,6 @@ fn recipient(s: &str, what: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
 
 /// "attach [attachments] to [recipient]".
 fn p_attach(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("attach ")?;
     // "attach a Curse attached to you to one of your opponents" (Lynde, Cheerful
     // Tormentor): an opponent chosen as it's performed.
@@ -348,9 +345,6 @@ inventory::submit! { EffectPattern { name: "attach grammar: attach [attachments]
 
 /// "unattach enchanted Equipment", "unattach it", "unattach target Equipment".
 fn p_unattach(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("unattach ")?;
     if r.starts_with("all ") {
         return None;
@@ -372,9 +366,6 @@ fn p_unattach(l: &str, b: &mut Builder) -> Option<Effect> {
 /// that creature") and targets are read by the parsers that know what they refer to
 /// (`value_grammar`, the zone-move grammar, [`p_destroy_exile_attached`]).
 fn attached_to_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = t
         .strip_prefix("attached to ")
         .or_else(|| t.strip_prefix("that's attached to "))
@@ -416,9 +407,6 @@ inventory::submit! { super::FilterSuffixPattern { name: "attach grammar: attache
 /// "creature with another Aura attached to it" (Daybreak Coronet's enchant ability): an
 /// Aura other than the source is attached to it.
 fn with_another_aura_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = t.strip_prefix("with another aura attached to it")?;
     word_end(r).then(|| {
         (
@@ -534,9 +522,6 @@ fn attached_selection(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
 /// "destroy [objects attached to ...]", "exile [objects attached to ...]" (see
 /// [`attached_selection`]).
 fn p_destroy_exile_attached(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (exile, r) = if let Some(r) = l.strip_prefix("destroy ") {
         (false, r)
@@ -584,9 +569,6 @@ fn host(s: &str) -> Option<Sel> {
 /// creature", "an Aura is attached to ~": counted as the condition is checked ("another":
 /// other than the source).
 fn attached_count_condition(c: &str) -> Option<Condition> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let c = end(c);
     let (objs, to) = c
         .split_once(" are attached to ")
@@ -623,7 +605,7 @@ inventory::submit! { super::ConditionPattern { name: "attach grammar: N or more 
 /// ("~", "equipped creature", "enchanted creature"). Read as the static ability with the
 /// subject named in place of "it".
 fn attached_it_static(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
-    if super::zz_probe_ps::disabled() || block.contains('\n') || block.contains('"') {
+    if block.contains('\n') || block.contains('"') {
         return None;
     }
     let lower = block.to_lowercase();
@@ -787,9 +769,6 @@ fn moved_onto_battlefield(e: &Effect) -> Option<Sel> {
 /// to something undefined, stays where it is; an Equipment that can't equip it enters
 /// unattached (CR 301.5e, 303.4f–i).
 fn p_enter_attached(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     if l.matches(" attached to ").count() != 1 {
         return None;
@@ -855,9 +834,6 @@ inventory::submit! { EffectPattern { name: "attach grammar: [put onto the battle
 /// control to that creature. If you do, ..."): a delayed triggered ability (CR 603.7)
 /// that keeps referring to that object.
 fn p_delayed_on_stored(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (trigger, inner) = super::triggers_delayed::split_delay(l)?;
     if !matches!(b.it, Sel::Var(_)) || !inner.starts_with("unattach ") {
@@ -883,9 +859,6 @@ inventory::submit! { EffectPattern { name: "attach grammar: unattach it at the b
 /// "That player attaches ~ to a land of their choice." (Steam Vines): the player named
 /// performs the instruction and chooses the recipient.
 fn p_player_attaches(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (subject, r) = l.split_once(" attaches ")?;
     let r = r.strip_suffix(" of their choice")?;
@@ -937,9 +910,6 @@ const UNATTACHED_FROM: Var = vars::USER + 8331;
 /// chosen as it's performed among those attached to such a permanent; "that creature" is
 /// the permanent it was attached to.
 fn p_unattach_from(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("unattach ")?;
     let r = r.strip_prefix("an ").or_else(|| r.strip_prefix("a "))?;
     let (what, from) = r.split_once(" from ")?;
@@ -985,9 +955,6 @@ inventory::submit! { EffectPattern { name: "attach grammar: unattach a [attachme
 /// gaining control of an object: a delayed triggered ability (CR 603.7) that triggers the
 /// next time its controller loses control of that object.
 fn p_when_you_lose_control(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("when you lose control of ")?;
     let (obj, inner) = r.split_once(", ")?;
     if !obj.starts_with("that ") || obj.contains(" this turn") {
@@ -1057,9 +1024,6 @@ inventory::submit! { EffectPattern { name: "attach grammar: when you lose contro
 /// onto the battlefield: only an Equipment that was, attached to a creature chosen among
 /// those it can equip.
 fn f_if_put_this_way_attach(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let Some(r) = l
         .strip_prefix("if an ")
@@ -1137,9 +1101,6 @@ inventory::submit! { super::FollowupPattern { name: "attach grammar: if an Equip
 /// after attaching to a target: a reflexive triggered ability (CR 603.12) that triggers
 /// if anything became attached; "that creature" is the target.
 fn f_when_attached_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let Some(r) = l.strip_prefix("when one or more ") else {
         return false;

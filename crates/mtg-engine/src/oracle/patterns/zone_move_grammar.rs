@@ -997,9 +997,6 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
 /// "the top card of your library", "the top two cards of that player's library": the
 /// cards, whether they're another player's, and the rest of the text.
 fn top_of_library(s: &str, b: &Builder) -> Option<(Sel, bool, String)> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = s.strip_prefix("the top ")?;
     let (n, r) = match r.strip_prefix("card of ") {
         Some(r) => (Value::c(1), r),
@@ -1542,7 +1539,6 @@ fn modifiers<'a>(
         } else if let Some(r) = strip_word(t, "face down and tapped")
             .map(|r| (r, true))
             .or_else(|| strip_word(t, "face down").map(|r| (r, false)))
-            .filter(|_| !super::zz_probe_ps::disabled())
         {
             // "Return it to the battlefield face down": a face-down 2/2 creature with no
             // text, unless the effect lists other characteristics (CR 708.2a, 708.3).
@@ -1555,7 +1551,7 @@ fn modifiers<'a>(
         } else if let Some(r) = strip_word(t, "under your control") {
             to.controller = Some(PlayerRef::You);
             s = r;
-        } else if let Some(r) = strip_word(t, "face up").filter(|_| !super::zz_probe_ps::disabled())
+        } else if let Some(r) = strip_word(t, "face up")
         {
             // "Put a creature card ... onto the battlefield face up" (Dermoplasm): as
             // permanents normally enter.

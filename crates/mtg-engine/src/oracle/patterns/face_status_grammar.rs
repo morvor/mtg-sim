@@ -70,9 +70,6 @@ fn exiled_face_down(e: Effect) -> Option<Effect> {
 /// face down (CR 406.3). Only for text with one exile instruction, where "face down"
 /// follows it.
 fn p_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     if l.matches(" face down").count() != 1 || l.contains("face-down") || l.contains("face up") {
         return None;
@@ -199,9 +196,6 @@ fn exile_some(l: &str) -> Option<(u32, bool, &str)> {
 /// top cards of a library: the player performing it chooses the cards exiled (CR 406.3:
 /// no one may look at them afterwards unless an instruction says so).
 fn f_exile_some(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     let Some((k, face_down, r)) = exile_some(l) else {
@@ -260,9 +254,6 @@ inventory::submit! { FollowupPattern { name: "face grammar: exile N of them [fac
 /// their graveyard" after exiling some of the cards looked at in another player's
 /// library.
 fn f_rest_of_other_library(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     let Some(r) = l.strip_prefix("put the rest ") else {
@@ -295,9 +286,6 @@ inventory::submit! { FollowupPattern { name: "face grammar: put the rest (anothe
 /// "look at the top N cards of [library], [instruction][, then instruction]": the look,
 /// then what's done with the cards, read as the sentences that would follow it.
 fn p_look_then(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     if !l.starts_with("look at the top ") {
         return None;
@@ -330,9 +318,6 @@ inventory::submit! { EffectPattern { name: "face grammar: look at the top N card
 
 /// "look at the top N cards of that player's library" (the player the text refers to).
 fn p_look_at_that_players_library(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("look at the top ")?;
     let (n, r) = match r.strip_prefix("card of ") {
         Some(r) => (Value::c(1), r),
@@ -429,9 +414,6 @@ fn face_up_objects(s: &str, b: &mut Builder) -> Option<Sel> {
 /// up (CR 708.8; turning a face-up one face up does nothing), and a card exiled face down
 /// becomes a face-up exiled card (CR 406.3).
 fn p_turn_face_up(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let r = l.strip_prefix("turn ")?;
     let r = r
@@ -463,9 +445,6 @@ inventory::submit! { EffectPattern { name: "face grammar: turn [objects] face up
 /// "transform [target phrase / all objects / any number of objects]": each one that can
 /// transform does; anything else doesn't (CR 701.27c).
 fn p_transform_objects(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("transform ")?;
     let on_battlefield = |f: Filter| {
         if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
@@ -576,9 +555,6 @@ fn list_face_down_characteristics(e: &mut Effect, mods: &[Modification]) -> bool
 /// Forest land." after putting cards onto the battlefield face down: the characteristics
 /// they have face down instead of a 2/2 creature's (CR 708.2a).
 fn f_face_down_entry_listed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let clause = if let Some(r) = l.strip_prefix("it's ") {
         format!("~ becomes {r}")
@@ -607,9 +583,6 @@ inventory::submit! { FollowupPattern { name: "face grammar: face-down entry char
 /// "[put/return objects onto/to the battlefield] face up or face down": the controller of
 /// the effect chooses which as it's performed.
 fn p_face_up_or_down(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let head = end(l).strip_suffix(" face up or face down")?;
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let up = parse_clause(head, b);
@@ -660,9 +633,6 @@ inventory::submit! { EffectPattern { name: "face grammar: [enter the battlefield
 /// 701.40a), a card from your hand (chosen as the instruction is performed), or a number
 /// of cards from the top of your library given by a value.
 fn p_manifest_cards(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let l = l.strip_prefix("you ").unwrap_or(l);
     let (action, r) = if let Some(r) = l
@@ -738,9 +708,6 @@ inventory::submit! { EffectPattern { name: "face grammar: manifest / cloak [part
 // ---------------------------------------------------------------------------
 
 fn p_look_at_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let l = l.strip_prefix("you may ").unwrap_or(l);
     let r = l.strip_prefix("look at ")?;
@@ -800,9 +767,6 @@ inventory::submit! { EffectPattern { name: "face grammar: look at face-down perm
 /// "exile a card from the top of your library for each opponent you have" (Wall of
 /// Mourning; "face down" is read by [`p_exile_face_down`]): the top N cards.
 fn p_exile_top_for_each(l: &str, _b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("exile a card from the top of your library for each ")?;
     let n = super::statics::parse_for_each(r, None)?;
     Some(Effect::Exile {
@@ -818,9 +782,6 @@ inventory::submit! { EffectPattern { name: "face grammar: exile a card from the 
 /// after exiling cards with the source: the cards exiled with it before, not the ones just
 /// exiled (CR 607.2a).
 fn p_other_exiled_with(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (verb, r) = l.split_once(" all other cards ")?;
     if !matches!(verb, "put" | "return") || !r.contains(" exiled with ~") {
@@ -848,9 +809,6 @@ inventory::submit! { EffectPattern { name: "face grammar: put all other cards ex
 /// "turn that creature face up or put a +1/+1 counter on it" (Experimental Lab): the
 /// controller of the effect chooses one instruction as it's performed.
 fn p_face_up_or(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     if !l.starts_with("turn ") {
         return None;
@@ -881,9 +839,6 @@ inventory::submit! { EffectPattern { name: "face grammar: turn [object] face up 
 /// library: the cards are chosen among those looked at, then manifested or cloaked one at
 /// a time (CR 701.40, 701.58), and the rest go where the text says.
 fn f_manifest_some(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     let (action, r) = if let Some(r) = l.strip_prefix("manifest ") {
@@ -987,9 +942,6 @@ inventory::submit! { FollowupPattern { name: "face grammar: manifest / cloak N o
 /// "the exiled card's owner manifests dread" (Unidentified Hovership): the owner of the
 /// card exiled with the source (CR 607.2a, 701.62a).
 fn p_exiled_cards_owner_manifests(l: &str, _b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("the exiled card's owner ")?;
     let action = match r {
         "manifests dread" => KeywordAction::ManifestDread,
@@ -1008,9 +960,6 @@ inventory::submit! { EffectPattern { name: "face grammar: the exiled card's owne
 /// "Put the rest of those cards on the bottom of your library in a random order." after
 /// taking some of the looked-at cards (and perhaps doing something with them).
 fn f_rest_of_those_cards(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() {
-        return false;
-    }
     let l = end(l);
     let Some(r) = l.strip_prefix("put the rest of those cards ") else {
         return false;
@@ -1051,9 +1000,6 @@ fn s_look_at_opponents_face_down(
     text: &str,
     _ctx: &crate::oracle::CompileContext,
 ) -> Option<Vec<Ability>> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     if end(l) != "you may look at face-down creatures your opponents control any time" {
         return None;
     }

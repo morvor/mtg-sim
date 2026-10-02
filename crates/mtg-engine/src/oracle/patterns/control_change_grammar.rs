@@ -69,9 +69,6 @@ fn objects(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
 
 /// "[subject] gain(s) control of [objects] [duration]".
 fn p_control(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (subj, obj) = if let Some(r) = l.strip_prefix("gain control of ") {
         ("", r)
@@ -110,9 +107,6 @@ inventory::submit! { EffectPattern { name: "control grammar: [player] gains cont
 /// Leshrac), "... of all nontoken permanents they own": each player gains control of
 /// their own permanents of that kind (CR 108.4).
 fn p_each_player_regains(l: &str, _b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("each player gains control of ")?;
     let r = r.strip_prefix("each ").or_else(|| r.strip_prefix("all "))?;
     let (r, from_you) = match r.strip_suffix(" they own that you control") {
@@ -147,9 +141,6 @@ inventory::submit! { EffectPattern { name: "control grammar: each player gains c
 /// "Until end of turn, you gain control of target creature and it gains haste." (Grab
 /// the Reins): the duration applies to both instructions.
 fn p_leading_until_end_of_turn(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("until end of turn, ")?;
     let (first, second) = r.split_once(" and ")?;
     if first.contains(" until ") || second.contains(" until ") {
@@ -191,9 +182,6 @@ inventory::submit! { EffectPattern { name: "control grammar: until end of turn, 
 /// "Gain control of that creature until end of turn, untap it, and it gains haste until
 /// end of turn": a list of three instructions, performed in order.
 fn p_three_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let l = end(l);
     let (head, last) = l.rsplit_once(", and ")?;
     let (first, second) = head.split_once(", ")?;
@@ -221,9 +209,6 @@ inventory::submit! { EffectPattern { name: "control grammar: gain control of [ob
 /// (Modify Memory, Kitsune, Dragon's Daughter): the targets must have different
 /// controllers (CR 701.12b: an exchange between one player's permanents does nothing).
 fn p_exchange_different_players(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("exchange control of ")?;
     let r = r.strip_suffix(" controlled by different players")?;
     if !r.starts_with("two ") {
@@ -260,7 +245,7 @@ fn ends_with_control_change(e: &Effect) -> bool {
 /// Securitron; a reflexive triggered ability, CR 603.12): only if the player gained
 /// control of it (not if it left the battlefield first, or they already controlled it).
 fn f_if_they_gain_control(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() || !ends_with_control_change(prev) {
+    if !ends_with_control_change(prev) {
         return false;
     }
     let l = end(l);
@@ -295,9 +280,6 @@ inventory::submit! { super::FollowupPattern { name: "control grammar: if/when th
 
 /// "target permanent you own but don't control" (Coveted Falcon).
 fn but_dont_control<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = t.strip_prefix("but don't control")?;
     // Only after "you own".
     let owned = match so_far {
@@ -314,7 +296,7 @@ inventory::submit! { super::FilterSuffixPattern { name: "control grammar: you ow
 /// control change: one card for each permanent whose controller changed (not those the
 /// player already controlled, or that had left the battlefield).
 fn f_draw_for_each_gained(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if super::zz_probe_ps::disabled() || !ends_with_control_change(prev) {
+    if !ends_with_control_change(prev) {
         return false;
     }
     if !matches!(
@@ -346,9 +328,6 @@ const SWAPPED_YOURS: Var = vars::USER + 8321;
 /// end of turn." (Twist Allegiance): both sets are determined first, then each player
 /// gains control of the other's (CR 611.2c). "Those creatures" afterwards are both sets.
 fn p_swap_all(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("you and ")?;
     let (other, r) = r.split_once(" each gain control of all ")?;
     let (r, duration) = {
@@ -413,9 +392,6 @@ inventory::submit! { EffectPattern { name: "control grammar: you and [player] ea
 /// "If you control neither creature, ..." after an instruction about two targets (Modify
 /// Memory, after the exchange): you control none of the targets.
 fn neither_target(c: &str) -> Option<Condition> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let noun = end(c).strip_prefix("you control neither ")?;
     let (f, plural, tail) = parse_object_phrase(noun)?;
     if plural || !end(tail).is_empty() || f.zone().is_some() {
@@ -433,9 +409,6 @@ inventory::submit! { super::ConditionPattern { name: "control grammar: you contr
 /// "[you may] have two target players exchange life totals" (Axis of Mortality): the
 /// players named perform the exchange (CR 701.12).
 fn p_have_players_exchange(l: &str, b: &mut Builder) -> Option<Effect> {
-    if super::zz_probe_ps::disabled() {
-        return None;
-    }
     let r = end(l).strip_prefix("have ")?;
     let (subject, _) = r.split_once(" exchange ")?;
     if !subject.contains("player") && !subject.contains("opponent") {
