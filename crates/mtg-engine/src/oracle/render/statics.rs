@@ -2452,18 +2452,19 @@ impl Renderer<'_> {
             (Some(Filter::Any), Some(PlayerFilter::Any)) => (&None, &None),
             other => other,
         };
+        // "to an opponent or a permanent an opponent controls": players, then objects.
+        if let Some(p) = to_players
+            .as_ref()
+            .filter(|p| !matches!(p, PlayerFilter::You))
+        {
+            to.push(self.player_filter_object(p));
+        }
         if let Some(o) = to_objects {
             to.push(match o {
                 Filter::Source => self.me(),
                 Filter::AttachedToSource => self.attached_noun(),
                 other => self.noun_det(other, Det::A),
             });
-        }
-        if let Some(p) = to_players
-            .as_ref()
-            .filter(|p| !matches!(p, PlayerFilter::You))
-        {
-            to.push(self.player_filter_object(p));
         }
         let src = match source {
             Filter::Any => None,
@@ -2529,9 +2530,16 @@ impl Renderer<'_> {
             }
             other => {
                 let s = src.unwrap_or_else(|| "a source".into());
+                // "it deals double that damage to that player or permanent instead".
+                let both = to_players.is_some() && to_objects.is_some();
+                let to_that = if both {
+                    " {opt:to that player or permanent}"
+                } else {
+                    ""
+                };
                 let then = match other {
-                    A::Multiply(2) => "it deals double that damage instead".to_string(),
-                    A::Multiply(3) => "it deals triple that damage instead".to_string(),
+                    A::Multiply(2) => format!("it deals double that damage{to_that} instead"),
+                    A::Multiply(3) => format!("it deals triple that damage{to_that} instead"),
                     A::Add(v) => {
                         let v = self.value(v);
                         let to_that = if anything {

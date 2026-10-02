@@ -253,6 +253,9 @@ impl Renderer<'_> {
                     self.collect(x, np);
                 }
             }
+            // CR 700.12: an outlaw is an object with the Assassin, Mercenary, Pirate,
+            // Rogue, and/or Warlock creature types.
+            Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
             Filter::Or(v) => {
                 let status_word = |x: &Filter| -> Option<&'static str> {
                     Some(match x {
@@ -1341,6 +1344,19 @@ fn flatten_or(f: &Filter) -> Filter {
         }
         other => other.clone(),
     }
+}
+
+/// The creature types an outlaw has one of (CR 700.12).
+fn is_outlaw(v: &[Filter]) -> bool {
+    let mut names: Vec<&str> = v
+        .iter()
+        .filter_map(|x| match x {
+            Filter::Subtype(s) => Some(s.as_ref()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
 }
 
 fn distribute_or(f: &Filter) -> Filter {

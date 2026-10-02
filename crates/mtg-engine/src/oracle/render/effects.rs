@@ -1647,7 +1647,16 @@ impl Renderer<'_> {
                 self.trigger_is_self = false;
                 let b = self.in_event_scope(|r| r.body(body));
                 (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
-                format!("{t}, {}", lower_first(&b))
+                // "Sacrifice it at end of combat": a time for one instruction may follow it.
+                let at_step = *once && matches!(trigger, TriggerCond::BeginningOf { .. });
+                let b = lower_first(&b);
+                let one = b.trim_end_matches('.');
+                if at_step && !one.contains(['.', '"']) {
+                    let b = one;
+                    format!("{{alt:{t}, {b}|{b} {t}}}")
+                } else {
+                    format!("{t}, {b}")
+                }
             }
             // Noting what the ability affected has no words of its own: the linked
             // ability says "that player" (CR 607.1).
@@ -1663,7 +1672,11 @@ impl Renderer<'_> {
                     other => format!("at the beginning of the next {}", self.step_name(*other)),
                 };
                 let e = self.effect(effect);
-                format!("{s}, {e}")
+                if e.contains(['.', '"']) {
+                    format!("{s}, {e}")
+                } else {
+                    format!("{{alt:{s}, {e}|{e} {s}}}")
+                }
             }
             Effect::TokensEnterWithCounters { counters, effect } => {
                 let e = self.effect(effect);
@@ -2064,11 +2077,113 @@ impl Renderer<'_> {
         }
     }
 
+    /// "The next time a source of your choice would deal damage to you this turn, prevent
+    /// that damage", "Prevent all damage a source of your choice would deal this turn":
+    /// a source chosen as the effect resolves (CR 609.7a: any object, wherever it is)
+    /// and a damage replacement or prevention effect about it.
+    fn chosen_source_damage(&mut self, choose: &Effect, next: &Effect) -> Option<String> {
+        let Effect::ChooseSource {
+            who: PlayerRef::You,
+            filter,
+            var,
+        } = choose
+        else {
+            return None;
+        };
+        let Effect::AddReplacement {
+            def,
+            duration: Duration::EndOfTurn | Duration::ThisTurn,
+            uses,
+        } = next
+        else {
+            return None;
+        };
+        let ReplacementEvent::Damage {
+            source,
+            to_players,
+            to_objects,
+            combat_only: false,
+        } = &def.event
+        else {
+            return None;
+        };
+        if !matches!(source, Filter::In(s) if matches!(s.as_ref(), Sel::Var(x) if x == var)) {
+            return None;
+        }
+        let src = if matches!(filter, Filter::Any) {
+            "a source of your choice".to_string()
+        } else {
+            let saved = self.default_head;
+            self.default_head = Some("source");
+            let n = self.noun_det(filter, Det::A);
+            self.default_head = saved;
+            format!("{n} of your choice")
+        };
+        let mut to: Vec<String> = Vec::new();
+        match to_players {
+            None => {}
+            Some(PlayerFilter::You) => to.push("you".into()),
+            Some(PlayerFilter::Any) if matches!(to_objects, Some(Filter::Any)) => {}
+            Some(_) => return None,
+        }
+        match to_objects {
+            None => {}
+            Some(Filter::Any) if matches!(to_players, Some(PlayerFilter::Any)) => {}
+            Some(Filter::Source) => to.push(self.me()),
+            Some(Filter::In(s)) => to.push(self.sel(s, Case::Obj)),
+            Some(f) => to.push(self.noun_det(f, Det::A)),
+        }
+        let to_s = if to.is_empty() {
+            String::new()
+        } else {
+            format!(" to {}", join_list(&to, "and"))
+        };
+        let then = match &def.action {
+            ReplacementAction::Prevent => "prevent that damage".to_string(),
+            ReplacementAction::PreventAndThen(None, e)
+                if matches!(
+                    e.as_ref(),
+                    Effect::GainLife {
+                        who: PlayerRef::You,
+                        n: Value::EventAmount
+                    }
+                ) =>
+            {
+                "prevent that damage. You gain life equal to the damage prevented this way"
+                    .to_string()
+            }
+            ReplacementAction::Redirect(t) => {
+                let t = self.sel(t, Case::Obj);
+                format!("that damage is dealt to {t} instead")
+            }
+            _ => return None,
+        };
+        Some(match (uses, &def.action) {
+            (Some(1), _) => {
+                format!("the next time {src} would deal damage{to_s} this turn, {then}")
+            }
+            (None, ReplacementAction::Prevent) => format!(
+                "{{alt:prevent all damage {src} would deal{to_s} this turn|prevent all damage that would be dealt{to_s} this turn by {src}}}"
+            ),
+            (None, ReplacementAction::Redirect(_)) => {
+                format!("all damage that would be dealt this turn{to_s} by {src} is dealt to {} instead", then.trim_start_matches("that damage is dealt to ").trim_end_matches(" instead"))
+            }
+            _ => return None,
+        })
+    }
+
     fn seq(&mut self, v: &[Effect]) -> String {
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            if let (Some(a), Some(b)) = (v.get(i), v.get(i + 1)) {
+                if let Some(s) = self.chosen_source_damage(a, b) {
+                    parts.push(s);
+                    i += 2;
+                    continue;
+                }
+            }
             // "Target land becomes the basic land type of your choice until end of turn."
             if let (
                 Some(Effect::Choose {

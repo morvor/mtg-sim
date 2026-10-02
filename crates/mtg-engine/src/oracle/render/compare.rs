@@ -166,8 +166,8 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Anaphora: \"that spell or ability\" refers back to the one already named.",
     },
     Equivalence {
-        pattern: r"\bwould be dealt this turn (by|to) ([^.]+?)(\.|$)",
-        replacement: "would be dealt $1 $2 this turn$3",
+        pattern: r"\bwould be dealt((?: to (?:[^.{}|]|\{[^{}]*\})+?)?) this turn (by|to) ((?:[^.{}|]|\{[^{}]*\})+?)(\.|$)",
+        replacement: "would be dealt$1 $2 $3 this turn$4",
         why: "Word order of the duration in a prevention effect.",
     },
     Equivalence {
