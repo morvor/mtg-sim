@@ -30,6 +30,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "thirty" => 30,
         "x" => return Some((Value::X, rest)),
         other => {
             if let Ok(n) = other.parse::<i32>() {
