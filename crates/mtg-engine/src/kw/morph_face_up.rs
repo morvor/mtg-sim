@@ -73,7 +73,7 @@ pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;
     }
-    if crate::prohibitions::object_cant(g, id, crate::ability::ObjectAction::TurnedFaceUp) {
+    if crate::rule_statics::face_up::cant_be_turned_face_up(g, id) {
         return None;
     }
     let card = o.card.as_ref()?;

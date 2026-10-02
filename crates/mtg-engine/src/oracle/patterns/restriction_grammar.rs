@@ -12,9 +12,9 @@
 //!   phase in", "can't be turned face up", "can't be equipped", "can't be enchanted by
 //!   other Auras", "can't become suspected".
 //! * Static lines: "No more than two creatures can attack you each combat", "All Walls
-//!   able to block ~ do so", "[players] can't block with [creatures]", "[cards] in
-//!   graveyards can't enter the battlefield", "Players can't get counters", "Counters
-//!   can't be put on artifacts, creatures, enchantments, or lands".
+//!   able to block ~ do so", "[players] can't block with [creatures]", "Players can't get
+//!   counters", "Counters can't be put on artifacts, creatures, enchantments, or lands",
+//!   "If a creature you control attacks, ~ also attacks if able".
 //! * Effects: "[players] can't gain life this turn", "[spells] can't be countered this
 //!   turn", "The next creature spell you cast this turn can't be countered", "Target
 //!   spell can't be countered", "[objects] can't be the target of ... this turn", and
@@ -50,11 +50,9 @@ fn object_action(x: &str) -> Option<ObjectAction> {
     Some(match x {
         "become untapped" => ObjectAction::Untapped,
         "phase in" => ObjectAction::PhasedIn,
-        "be turned face up" => ObjectAction::TurnedFaceUp,
         "be equipped" => ObjectAction::Equipped,
         "be enchanted by other auras" => ObjectAction::EnchantedByOtherAuras,
         "become suspected" => ObjectAction::Suspected,
-        "be copied" => ObjectAction::Copied,
         _ => return None,
     })
 }
@@ -91,6 +89,8 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
         }
         // CR 506.5.
         "can only attack alone" => return Some(vec![Restriction::AttackOnlyAlone(fc)]),
+        // CR 708.7 (see `rule_statics::face_up`).
+        "can't be turned face up" => return Some(vec![Restriction::CantTurnFaceUp(fc)]),
         "can't transform" => return Some(vec![Restriction::CantTransform(fc)]),
         "must be blocked each combat if able" => {
             return Some(vec![Restriction::MustBeBlocked(fc)])
@@ -377,29 +377,6 @@ fn players_cant_use(who: &PlayerFilter, p: &str) -> Option<Vec<Restriction>> {
     None
 }
 
-/// "[kind] cards in graveyards [and libraries] can't enter the battlefield" (CR 614.17d):
-/// cards coming from those zones.
-fn cards_cant_enter(l: &str) -> Option<Vec<Restriction>> {
-    let subject = l.strip_suffix(" can't enter the battlefield")?;
-    let (cards, zones) = subject.split_once(" in ")?;
-    let zones: Vec<ZoneKind> = match zones {
-        "graveyards" => vec![ZoneKind::Graveyard],
-        "graveyards and libraries" | "libraries and graveyards" => {
-            vec![ZoneKind::Graveyard, ZoneKind::Library]
-        }
-        "libraries" => vec![ZoneKind::Library],
-        _ => return None,
-    };
-    let (f, plural) = whole_object_phrase(cards)?;
-    if !plural || !filter_mentions(&f, &|x| matches!(x, Filter::Card | Filter::PermanentCard)) {
-        return None;
-    }
-    let zone = Filter::Or(zones.into_iter().map(Filter::InZone).collect());
-    Some(vec![Restriction::CantEnterFrom {
-        what: Filter::and(vec![f, zone]),
-    }])
-}
-
 fn put_counters_prevented(on_objects: Option<Filter>, on_players: Option<PlayerFilter>) -> StaticEffect {
     StaticEffect::Replacement(ReplacementDef {
         event: ReplacementEvent::PutCounters {
@@ -434,10 +411,7 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         }
         return Some(v);
     }
-    if let Some(rs) = no_more_than(l)
-        .or_else(|| all_able_to_block(l))
-        .or_else(|| cards_cant_enter(l))
-    {
+    if let Some(rs) = no_more_than(l).or_else(|| all_able_to_block(l)) {
         return Some(static_restrictions(rs, text));
     }
     // "Players can't get counters." (CR 122.1).
@@ -1379,22 +1353,6 @@ fn even_odd_mana_value<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)>
 }
 
 inventory::submit! { FilterSuffixPattern { name: "restriction grammar: with even/odd mana values", priority: 100, parse: even_odd_mana_value } }
-
-/// "This spell can't be copied." (CR 707.10): a static ability that functions while the
-/// spell is on the stack.
-fn cant_be_copied(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if !ctx.is_spell() || !matches!(block.trim(), "~ can't be copied." | "This spell can't be copied.") {
-        return None;
-    }
-    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBe {
-        what: Filter::Source,
-        action: ObjectAction::Copied,
-    }));
-    s.zone = FunctionZone::Stack;
-    Some(vec![AbilityDef::new(AbilityKind::Static(s), block)])
-}
-
-inventory::submit! { super::AbilityPattern { name: "restriction grammar: this spell can't be copied", priority: 100, parse: cant_be_copied } }
 
 /// "with {X} in their mana costs", "with {X} in its mana cost" (CR 107.3).
 fn with_x_in_mana_cost<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {

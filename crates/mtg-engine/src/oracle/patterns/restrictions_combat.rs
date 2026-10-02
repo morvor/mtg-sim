@@ -200,8 +200,37 @@ fn temporary_restriction(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let f = subject_filter(&what)?;
+    if let Some(e) = blocks_target(&rest, &f, b) {
+        return Some(e);
+    }
     let (rs, dur) = predicate_with_it(&rest, &f, Some(&it))?;
     Some(Effect::seq(add(rs, dur)))
+}
+
+/// "... blocks target creature this turn if able" (Hunt Down: "Target creature blocks
+/// target creature this turn if able."): a requirement that the subject block the second
+/// target (CR 509.1c). It does nothing if that block isn't possible.
+fn blocks_target(rest: &str, f: &Filter, b: &mut Builder) -> Option<Effect> {
+    let r = end(rest.trim()).strip_prefix("blocks ")?;
+    let (r, dur) = if let Some(x) = r.strip_suffix(" this turn if able") {
+        (x, Duration::EndOfTurn)
+    } else {
+        (r.strip_suffix(" this combat if able")?, Duration::EndOfCombat)
+    };
+    if r != "target creature" {
+        return None;
+    }
+    let (attacker, tail) = object_ref(r, b)?;
+    if !end(&tail).is_empty() || !matches!(attacker, Sel::Target(_)) {
+        return None;
+    }
+    Some(Effect::seq(add(
+        vec![Restriction::MustBlockAttacker {
+            blocker: f.clone(),
+            attacker: Filter::In(Box::new(attacker)),
+        }],
+        dur,
+    )))
 }
 
 inventory::submit! { EffectPattern { name: "restrictions: temporary combat restrictions", priority: 100, parse: temporary_restriction } }

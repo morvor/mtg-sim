@@ -1,8 +1,8 @@
 //! Prohibitions on what can happen to objects ([`Restriction::CantBe`]): "can't become
 //! untapped" (no untapping at all, CR 701.26b), "can't phase in" (CR 702.26), "can't be
-//! turned face up" (CR 708.8), "can't be equipped" (CR 301.5c), "can't be enchanted by
-//! other Auras" (CR 303.4), "can't become suspected" (CR 701.60). Each check is a hook
-//! where the engine would otherwise perform that action.
+//! equipped" (CR 301.5c), "can't be enchanted by other Auras" (CR 303.4), "can't become
+//! suspected" (CR 701.60); "can't be turned face up" is `rule_statics::face_up`. Each
+//! check is a hook where the engine would otherwise perform that action.
 
 use crate::ability::*;
 use crate::eval::Ctx;

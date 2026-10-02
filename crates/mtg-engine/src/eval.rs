@@ -68,6 +68,11 @@ pub struct Ctx {
     /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
     #[serde(default)]
     pub paying_cost: bool,
+    /// The costs paid with this context are those of casting a spell or activating an
+    /// ability (CR 601.2g–h, 602.2b), not a cost a resolving spell or ability asks for:
+    /// what they're paid for (see `rule_statics::payment`).
+    #[serde(default)]
+    pub cost_of: Option<crate::rule_statics::payment::CostOf>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -832,6 +837,22 @@ impl Game {
                     .collect();
             }
         }
+        // "All cards from target player's hand and graveyard": several zones.
+        if f.zone().is_none() {
+            if let Some(mut zones) = alternative_zones(f) {
+                let mut seen = Vec::new();
+                zones.retain(|z| {
+                    let new = !seen.contains(z);
+                    seen.push(*z);
+                    new
+                });
+                return zones
+                    .into_iter()
+                    .flat_map(|z| self.objects_in_zone_kind(z))
+                    .filter(|id| self.matches(*id, f, ctx))
+                    .collect();
+            }
+        }
         let zone = f.zone().unwrap_or(ZoneKind::Battlefield);
         self.objects_in_zone_kind(zone)
             .into_iter()
@@ -1322,6 +1343,9 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
+            Value::TurnsTaken(r) => self
+                .eval_player(r, ctx)
+                .map_or(0, |p| self.player(p).turns_taken as i64),
             Value::Aggregate(op, stat, sel) => {
                 crate::aggregates::aggregate(self, *op, stat, sel, ctx)
             }
@@ -1461,5 +1485,21 @@ impl Game {
                 .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
+    }
+}
+
+/// The zones of a filter that requires one of several zones (`Or` of `InZone`s, possibly
+/// inside an `And`).
+fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
+    match f {
+        Filter::Or(v) if !v.is_empty() => v
+            .iter()
+            .map(|x| match x {
+                Filter::InZone(z) => Some(*z),
+                _ => None,
+            })
+            .collect(),
+        Filter::And(v) => v.iter().find_map(alternative_zones),
+        _ => None,
     }
 }
