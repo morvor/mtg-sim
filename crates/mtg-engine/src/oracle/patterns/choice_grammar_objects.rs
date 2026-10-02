@@ -34,6 +34,9 @@ const UNIVERSE: &str = "\u{1}choice grammar: chosen among";
 struct Chooser {
     chooser: PlayerRef,
     each: Option<PlayerRef>,
+    /// One player chooses ("target opponent chooses"), as the only player iterated over
+    /// (the same form as "each opponent chooses").
+    single: bool,
     pre: Option<Effect>,
     rest: String,
 }
@@ -42,6 +45,7 @@ fn chooser(l: &str, b: &mut Builder) -> Option<Chooser> {
     let simple = |who: PlayerRef, rest: &str| Chooser {
         chooser: who,
         each: None,
+        single: true,
         pre: None,
         rest: rest.to_string(),
     };
@@ -53,6 +57,7 @@ fn chooser(l: &str, b: &mut Builder) -> Option<Chooser> {
         return Some(Chooser {
             chooser: PlayerRef::Var(DECIDER),
             each: None,
+            single: true,
             pre: Some(pre),
             rest: r.to_string(),
         });
@@ -66,15 +71,12 @@ fn chooser(l: &str, b: &mut Builder) -> Option<Chooser> {
         who,
         PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer | PlayerRef::Each(_)
     );
-    Some(if each {
-        Chooser {
-            chooser: PlayerRef::Iterated,
-            each: Some(who),
-            pre: None,
-            rest: r.to_string(),
-        }
-    } else {
-        simple(who, r)
+    Some(Chooser {
+        chooser: PlayerRef::Iterated,
+        each: Some(who),
+        single: !each,
+        pre: None,
+        rest: r.to_string(),
     })
 }
 
@@ -251,6 +253,7 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     // What it was chosen among, for "the rest" (each player's own, for "each player
     // chooses a creature they control": all such creatures).
     let universe = match &c.each {
+        Some(who) if c.single => for_player(filter, who),
         Some(_) => without_iterated(filter),
         None => filter,
     };
@@ -291,6 +294,19 @@ fn without_iterated(f: Filter) -> Filter {
     };
     match f {
         Filter::And(v) => Filter::and(v.into_iter().filter(|x| !mine(x)).collect()),
+        f => f,
+    }
+}
+
+/// The filter with "controlled by / owned by the player choosing" naming `who` (the one
+/// player who chose).
+fn for_player(f: Filter, who: &PlayerRef) -> Filter {
+    match f {
+        Filter::And(v) => Filter::and(v.into_iter().map(|x| for_player(x, who)).collect()),
+        Filter::ControlledBy(PlayerRel::Iterated) => {
+            Filter::ControlledByPlayer(Box::new(who.clone()))
+        }
+        Filter::OwnedBy(PlayerRel::Iterated) => Filter::OwnedByPlayer(Box::new(who.clone())),
         f => f,
     }
 }

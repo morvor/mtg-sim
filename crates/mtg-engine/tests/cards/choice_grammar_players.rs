@@ -64,3 +64,44 @@ fn the_fall_of_kroog_that_player_and_creatures_they_control() {
     assert!(!t.on_battlefield(elves));
     assert!(t.on_battlefield(mine));
 }
+
+#[test]
+fn courageous_resolve_fateful_hour_three_instructions() {
+    // "you can't lose life this turn, you can't lose the game this turn, and your opponents
+    // can't win the game this turn": a series of instructions, all under the condition.
+    cr!("704.5a", "120.3a");
+    compiles("Courageous Resolve");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    t.g.player_mut(P0).life = 5;
+    let spell = t.hand(P0, "Courageous Resolve");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 5, "{}", t.dump_log());
+    // At 0 life (set directly) the player still doesn't lose this turn.
+    t.g.player_mut(P0).life = 0;
+    t.settle();
+    assert!(!t.has_lost(P0));
+}
+
+#[test]
+fn courageous_resolve_above_six_life_does_nothing_more() {
+    cr!("120.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    t.g.player_mut(P0).life = 6;
+    let spell = t.hand(P0, "Courageous Resolve");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 3);
+}

@@ -10,10 +10,13 @@ pub fn parse_effect_ext(l: &str, b: &mut Builder) -> Option<Effect> {
         let saved_targets = b.targets.len();
         let saved_it = b.it.clone();
         let saved_player = b.it_player.clone();
+        // Referents a pattern named before giving up go with it.
+        let saved_named = b.named.len();
         if let Some(e) = (p.parse)(l, b) {
             return Some(e);
         }
         b.targets.truncate(saved_targets);
+        b.named.truncate(saved_named);
         b.it = saved_it;
         b.it_player = saved_player;
     }
@@ -29,11 +32,13 @@ pub fn apply_followup_ext(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         let saved_targets = b.targets.len();
         let saved_it = b.it.clone();
         let saved_player = b.it_player.clone();
+        let saved_named = b.named.len();
         if (p.apply)(l, prev, b) {
             true
         } else {
             *prev = saved;
             b.targets.truncate(saved_targets);
+            b.named.truncate(saved_named);
             b.it = saved_it;
             b.it_player = saved_player;
             false

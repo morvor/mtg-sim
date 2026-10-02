@@ -196,3 +196,37 @@ fn tersa_lightshatter_exiles_a_card_at_random_you_may_play() {
         .unwrap();
     t.play_land(P0, exiled).expect("the exiled card may be played");
 }
+
+#[test]
+fn strax_grenades_fights_another_creature_the_random_player_controls() {
+    // "Choose a player at random. When you do, ~ fights another target creature that
+    // player controls." Strax never fights itself: with you chosen, it has no other
+    // creature to fight.
+    cr!("701.14a", "603.12");
+    compiles("Strax, Sontaran Nurse");
+    let (mut fought, mut not_fought) = (false, false);
+    for seed in 0..10 {
+        let mut t = TestGame::with_config(
+            2,
+            GameConfig {
+                seed,
+                ..Default::default()
+            },
+        );
+        t.set_step(P0, Step::PrecombatMain);
+        let strax = t.battlefield(P0, "Strax, Sontaran Nurse");
+        t.battlefield(P0, "Mind Stone");
+        t.lands(P0, "Wastes", 2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.activate(P0, strax, 0, &[]).expect("activates");
+        t.resolve_all();
+        if t.on_battlefield(bears) {
+            not_fought = true;
+            assert_eq!(t.obj_now(strax).damage, 0, "seed {seed}: {}", t.dump_log());
+        } else {
+            fought = true;
+            assert_eq!(t.obj_now(strax).damage, 2, "seed {seed}");
+        }
+    }
+    assert!(fought && not_fought);
+}

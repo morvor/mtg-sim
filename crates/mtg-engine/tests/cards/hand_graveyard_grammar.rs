@@ -2356,9 +2356,13 @@ fn reviewed_wordings_are_read_faithfully_or_not_at_all() {
         .unsupported_text()
         .iter()
         .any(|u| u.contains("single graveyard")));
-    // The fateful hour sentence has more instructions than the text up to the comma.
-    assert!(card("Courageous Resolve")
-        .unsupported_text()
-        .iter()
-        .any(|u| u.contains("can't lose life")));
+    // The fateful hour sentence has more instructions than the text up to the comma:
+    // read as all three of them, or not at all (see `courageous_resolve_fateful_hour`).
+    let def = card("Courageous Resolve");
+    if def.unsupported_text().iter().all(|u| !u.contains("can't lose life")) {
+        let dbg = format!("{:?}", def.faces[0].chars.abilities);
+        for r in ["CantLoseLife", "CantLoseGame", "CantWinGame"] {
+            assert!(dbg.contains(r), "{r} missing: {dbg}");
+        }
+    }
 }

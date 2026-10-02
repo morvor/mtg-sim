@@ -327,6 +327,7 @@ fn serial_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it_player.clone(),
         b.group.clone(),
     );
+    let named = b.named.len();
     let mut acc = Effect::Noop;
     for p in parts.iter().copied().chain(std::iter::once(last)) {
         // Each part is an instruction of its own ("you draw a card"), not a list item, or
@@ -339,6 +340,7 @@ fn serial_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
             continue;
         }
         b.targets.truncate(saved.0);
+        b.named.truncate(named);
         (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
         return None;
     }
@@ -528,11 +530,13 @@ fn and_followup(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it_player.clone(),
         b.group.clone(),
     );
+    let named = b.named.len();
     let mut e = crate::oracle::effects::parse_simple(a, b)?;
     if crate::oracle_ext::apply_followup_ext(c, &mut e, b) {
         return Some(e);
     }
     b.targets.truncate(saved.0);
+    b.named.truncate(named);
     (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
     None
 }

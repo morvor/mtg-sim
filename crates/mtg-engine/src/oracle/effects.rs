@@ -2037,8 +2037,23 @@ fn p_fight(l: &str, b: &mut Builder) -> Option<Effect> {
     let (c, tail) = if let Some(r2) = r.strip_prefix("another target ") {
         let (mut spec, t) =
             parse_target(&format!("target {r2}")).map(|(s, t)| (s, t.to_string()))?;
-        spec.distinct_from = vec![0];
-        let slot = b.add_target(spec, "another target");
+        match &a {
+            // Another than the first target ("target creature you control fights another
+            // target creature").
+            Sel::Target(first) => spec.distinct_from = vec![*first],
+            // Another than the fighting object itself ("~ fights another target creature").
+            _ => {
+                if let TargetKind::Object(f) = &mut spec.what {
+                    *f = Filter::and(vec![f.clone(), Filter::Other]);
+                }
+            }
+        }
+        let text = if matches!(a, Sel::Target(_)) {
+            "another target"
+        } else {
+            "target"
+        };
+        let slot = b.add_target(spec, text);
         (Sel::Target(slot), t)
     } else {
         object_ref(r, b)?
