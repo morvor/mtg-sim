@@ -470,7 +470,7 @@ impl Game {
             // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
             let ignore_hexproof =
                 crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
-            for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
+            for kw in c.keywords_of(KeywordKind::Hexproof) {
                 if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {
                         None => return true,
@@ -586,8 +586,7 @@ impl Game {
         // For abilities on the stack, the source of the ability is its source object.
         let src = self.ability_source_of(source);
         ob.chars
-            .keywords()
-            .filter(|k| k.kind == KeywordKind::Protection)
+            .keywords_of(KeywordKind::Protection)
             .any(|k| match &k.filter {
                 None => true,
                 Some(f) => self.matches(src, f, &src_ctx),
@@ -978,6 +977,15 @@ impl Game {
             }
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        if let StackKind::Triggered { ability, .. } | StackKind::Activated { ability, .. } =
+            &si.kind
+        {
+            let name = si
+                .source_lki
+                .as_ref()
+                .map_or(&self.obj(src).chars.name, |c| &c.name);
+            crate::structure::record(ability, name, "resolved");
+        }
         // CR 603.2h: remember that a "do this only once each turn" action was taken.
         if trig.as_ref().is_some_and(|t| t.do_once_per_turn) && ctx.prev_happened {
             *self.objects[src.0 as usize]
@@ -1205,6 +1213,11 @@ impl Game {
             return;
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        for a in &o.chars.abilities {
+            if matches!(a.kind, AbilityKind::Spell(_)) {
+                crate::structure::record(a, &o.chars.name, "resolved");
+            }
+        }
         // CR 608.2n: put into owner's graveyard (or wherever a replacement sends it).
         if self.is_live(id) && self.obj(id).zone == Zone::Stack {
             let (dest, declined) =

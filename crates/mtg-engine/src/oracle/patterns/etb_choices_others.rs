@@ -58,6 +58,18 @@ fn subject_list(subj: &str) -> Option<Filter> {
     if !end(tail).is_empty() {
         return None;
     }
+    // Keep only the controller part: the probe noun's own "is a card" restriction would
+    // wrongly exclude tokens ("Creatures your opponents control enter tapped" applies to
+    // creature tokens too, CR 111.1).
+    let sf = match sf {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|f| !matches!(f, Filter::Card))
+                .collect(),
+        ),
+        Filter::Card => Filter::Any,
+        other => other,
+    };
     Some(Filter::and(vec![head, sf]))
 }
 
@@ -84,6 +96,37 @@ fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
         block,
     )])
+}
+
+/// "Creatures you control enter as a copy of ~." (Essence of the Wild): a replacement
+/// effect that makes other permanents enter as a copy of this one (CR 614.1c, 707.2).
+fn others_enter_as_copy_of_this(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let subj = end(&lower).strip_suffix(" enter as a copy of ~")?;
+    if subj.starts_with('~') || subj.contains(" this turn") {
+        return None;
+    }
+    let f = subject_list(subj)?;
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+        action: ReplacementAction::EnterAsCopy {
+            filter: Filter::Source,
+            optional: false,
+        },
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "others enter as a copy of this", priority: 50, parse: others_enter_as_copy_of_this }
 }
 
 /// "Each other creature you control of the chosen type enters with an additional +1/+1
