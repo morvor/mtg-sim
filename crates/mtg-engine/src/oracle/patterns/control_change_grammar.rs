@@ -429,3 +429,26 @@ fn neither_target(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "control grammar: you control neither [target]", priority: 110, parse: neither_target } }
+
+/// "[you may] have two target players exchange life totals" (Axis of Mortality): the
+/// players named perform the exchange (CR 701.12).
+fn p_have_players_exchange(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("have ")?;
+    let (subject, _) = r.split_once(" exchange ")?;
+    if !subject.contains("player") && !subject.contains("opponent") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = parse_clause(r, b);
+    if !matches!(e, Some(Effect::ExchangeLifeTotals { .. })) {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    e
+}
+
+inventory::submit! { EffectPattern { name: "control grammar: have [players] exchange [...]", priority: 110, parse: p_have_players_exchange } }

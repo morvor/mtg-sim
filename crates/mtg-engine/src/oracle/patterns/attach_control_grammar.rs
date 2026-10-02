@@ -894,3 +894,56 @@ fn p_player_attaches(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: [player] attaches [object] to [object] of their choice", priority: 110, parse: p_player_attaches } }
+
+/// The Equipment unattached by "unattach an Equipment from a creature you control", and
+/// the creature it was attached to ("If you do, tap that creature").
+const UNATTACHED: Var = vars::USER + 8330;
+const UNATTACHED_FROM: Var = vars::USER + 8331;
+
+/// "unattach an Equipment from a creature you control" (Akiri, Fearless Voyager): one
+/// chosen as it's performed among those attached to such a permanent; "that creature" is
+/// the permanent it was attached to.
+fn p_unattach_from(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("unattach ")?;
+    let r = r.strip_prefix("an ").or_else(|| r.strip_prefix("a "))?;
+    let (what, from) = r.split_once(" from ")?;
+    let (fa, plural_a, rest_a) = parse_object_phrase(what)?;
+    let from = from.strip_prefix("a ").or_else(|| from.strip_prefix("an "))?;
+    let (fh, plural_h, rest_h) = parse_object_phrase(from)?;
+    if plural_a || plural_h || !end(rest_a).is_empty() || !end(rest_h).is_empty() {
+        return None;
+    }
+    if fa.zone().is_some() || fh.zone().is_some() {
+        return None;
+    }
+    let hosts = Sel::All(Filter::and(vec![fh, Filter::InZone(ZoneKind::Battlefield)]));
+    b.it = Sel::Var(UNATTACHED_FROM);
+    Some(Effect::Seq(vec![
+        Effect::Store {
+            var: UNATTACHED,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(vec![
+                    fa,
+                    Filter::InZone(ZoneKind::Battlefield),
+                    Filter::AttachedToAnyOf(Box::new(hosts)),
+                ]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Store {
+            var: UNATTACHED_FROM,
+            sel: Sel::HostOf(Box::new(Sel::Var(UNATTACHED))),
+        },
+        Effect::Unattach {
+            what: Sel::Var(UNATTACHED),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "attach grammar: unattach a [attachment] from a [permanent]", priority: 110, parse: p_unattach_from } }

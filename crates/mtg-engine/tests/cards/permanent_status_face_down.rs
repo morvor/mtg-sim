@@ -666,3 +666,89 @@ fn wall_of_mourning_exiles_a_card_face_down_for_each_opponent() {
     assert_eq!(t.library_size(P0), size - 2);
     assert_eq!(exiled_face_down(&t).len(), 2);
 }
+
+// ---------------------------------------------------------------------------
+// More face-down and face-up wordings
+// ---------------------------------------------------------------------------
+
+#[test]
+fn more_face_cards_compile() {
+    assert_compiles(&[
+        "Duplicity",
+        "Dermoplasm",
+        "Cybership",
+        "Experimental Lab // Staff Room",
+    ]);
+}
+
+#[test]
+fn duplicity_swaps_your_hand_for_the_other_exiled_cards() {
+    cr!("406.3", "607.2a");
+    let mut t = TestGame::new(2);
+    let top: Vec<ObjectId> = (0..5)
+        .map(|_| t.library_top(P0, "Grizzly Bears"))
+        .collect();
+    t.enter(P0, "Duplicity");
+    t.resolve_all();
+    assert_eq!(exiled_face_down(&t).len(), 5);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::Untap);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    // The five cards are in hand; the Bolt is exiled face down in their place.
+    for c in &top {
+        assert_eq!(t.zone(t.g.current(*c)), Zone::Hand(P0));
+    }
+    let bolt = t.g.current(bolt);
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    assert!(t.g.obj(bolt).face_down);
+}
+
+#[test]
+fn dermoplasm_puts_a_morph_creature_from_hand_onto_the_battlefield_face_up() {
+    cr!("708.8", "702.37e");
+    let mut t = TestGame::new(2);
+    let plasm = t.battlefield(P0, "Dermoplasm");
+    let phoenix = t.hand(P0, "Ashcloud Phoenix");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, plasm));
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(phoenix)]);
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::TurnFaceUp {
+            what: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::FaceDown),
+        },
+        &mut ctx,
+    );
+    t.g.flush_events();
+    t.resolve_all();
+    let phoenix = t.g.current(phoenix);
+    assert!(t.on_battlefield(phoenix));
+    assert!(!t.g.obj(phoenix).face_down);
+    assert!(t.in_hand(P0, "Dermoplasm"));
+}
+
+#[test]
+fn staff_room_turns_the_creature_face_up_or_puts_a_counter_on_it() {
+    cr!("708.8", "709.5");
+    let mut t = TestGame::new(2);
+    let room = t.hand(P0, "Experimental Lab // Staff Room");
+    t.lands(P0, "Forest", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, room).method(CastMethod::Half(1)).go();
+    t.resolve_all();
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, giant));
+    t.g.recompute();
+    // Choose the first option: turn it face up.
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.attack(&[(giant, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(!t.g.obj(giant).face_down);
+    assert_eq!(t.counters(giant, "+1/+1"), 0);
+}

@@ -362,3 +362,66 @@ fn unexpected_request_unattaches_the_equipment_at_the_next_end_step() {
     t.resolve_all();
     assert_eq!(t.obj_now(blade).attached_to, None);
 }
+
+#[test]
+fn axis_of_mortality_two_target_players_exchange_life_totals() {
+    cr!("701.12a", "119.7");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Axis of Mortality");
+    t.g.players[P1.idx()].life = 5;
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P0), Entity::Player(P1)]);
+    t.set_step(P0, Step::Untap);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 5);
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn trove_warden_returns_cards_under_their_owners_control() {
+    cr!("110.2a", "607.2a");
+    let mut t = TestGame::new(2);
+    let warden = t.battlefield(P0, "Trove Warden");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let forest = t.hand(P0, "Forest");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.play_land(P0, forest).unwrap();
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bears)), mtg_engine::object::Zone::Exile);
+    // P1 controls Trove Warden when it dies: the card returns under its owner's control.
+    give_control(&mut t, warden, P1);
+    t.g.destroy(t.g.current(warden), None);
+    t.g.flush_events();
+    t.resolve_all();
+    let bears = t.g.current(bears);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(controller(&t, bears), P0);
+}
+
+#[test]
+fn akiri_unattaches_an_equipment_and_the_creature_becomes_tapped_and_indestructible() {
+    cr!("701.3d", "702.12b");
+    ruling!(
+        "Akiri, Fearless Voyager",
+        "The Equipment that's unattached remains on the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    let akiri = t.battlefield(P0, "Akiri, Fearless Voyager");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blade = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(blade, Entity::Object(bears)));
+    t.lands(P0, "Plains", 1);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(blade)]);
+    t.activate(P0, akiri, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(blade));
+    assert_eq!(t.obj_now(blade).attached_to, None);
+    assert!(t.obj_now(bears).tapped);
+    assert!(t
+        .obj_now(bears)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Indestructible));
+}

@@ -125,7 +125,7 @@ mod probe {
                 };
                 if verbose {
                     for a in &fd.chars.abilities {
-                        eprintln!("  {:?}\n      <- {:?}", a.kind, a.text);
+                        eprintln!("  [link {}] {:?}\n      <- {:?}", a.link, a.kind, a.text);
                     }
                 }
                 for u in &fd.unsupported {

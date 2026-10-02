@@ -814,3 +814,64 @@ fn p_exile_top_for_each(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: exile a card from the top of your library for each [...]", priority: 110, parse: p_exile_top_for_each } }
+
+/// "If you do, put all other cards you own exiled with ~ into your hand." (Duplicity)
+/// after exiling cards with the source: the cards exiled with it before, not the ones just
+/// exiled (CR 607.2a).
+fn p_other_exiled_with(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    let (verb, r) = l.split_once(" all other cards ")?;
+    if !matches!(verb, "put" | "return") || !r.contains(" exiled with ~") {
+        return None;
+    }
+    let e = parse_clause(&format!("{verb} all cards {r}"), b)?;
+    let Effect::Move {
+        what: Sel::All(f),
+        to,
+    } = e
+    else {
+        return None;
+    };
+    Some(Effect::Move {
+        what: Sel::All(Filter::and(vec![
+            f,
+            Filter::not(Filter::In(Box::new(Sel::Var(vars::IT)))),
+        ])),
+        to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: put all other cards exiled with ~ ...", priority: 110, parse: p_other_exiled_with } }
+
+/// "turn that creature face up or put a +1/+1 counter on it" (Experimental Lab): the
+/// controller of the effect chooses one instruction as it's performed.
+fn p_face_up_or(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    if !l.starts_with("turn ") {
+        return None;
+    }
+    let (first, second) = l.split_once(" face up or ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let a = p_turn_face_up(&format!("{first} face up"), b)?;
+        let c = parse_clause(second, b)?;
+        Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: vec![("Turn it face up".into(), a), ("The other".into(), c)],
+        })
+    })();
+    if parsed.is_none() || b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: turn [object] face up or [instruction]", priority: 110, parse: p_face_up_or } }
