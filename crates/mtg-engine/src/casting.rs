@@ -3222,6 +3222,15 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
+                // exiled to pay the cost.
+                if let Some(v) = c.vars.get(&vars::IT) {
+                    for o in v.iter().filter_map(|x| x.object()) {
+                        if self.obj(o).zone == Zone::Exile && !paid.objects.contains(&o) {
+                            paid.objects.push(o);
+                        }
+                    }
+                }
                 // CR 119.7: a cost that has a player who can't gain life gain life can't be
                 // paid — "have an opponent gain 3 life" with an opponent chosen as it's
                 // paid who can't.

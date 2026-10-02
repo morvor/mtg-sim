@@ -336,3 +336,33 @@ fn and_loses(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: loses keywords", priority: 120, parse: and_loses } }
+
+/// "behold a Goblin and exile it" (Champion of the Weird and the other Lorwyn champions):
+/// behold (CR 701.4a), then exile what was beheld; the exiled card is exiled to pay the
+/// cost (CR 607.2q).
+fn behold_and_exile(p: &str) -> Option<CostPart> {
+    let r = end(p).strip_prefix("behold ")?.strip_suffix(" and exile it")?;
+    let (n, r) = parse_number(r)?;
+    if n.as_const() != Some(1) {
+        return None;
+    }
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(CostPart::Effect(Box::new(Effect::seq(vec![
+        Effect::KeywordAction {
+            action: KeywordAction::Behold,
+            who: PlayerRef::You,
+            what: Sel::All(f),
+            n,
+        },
+        Effect::Exile {
+            what: Sel::Var(vars::IT),
+            face_down: false,
+            link: false,
+        },
+    ]))))
+}
+
+inventory::submit! { super::CostPattern { name: "basic effects: behold and exile it", priority: 100, parse: behold_and_exile } }
