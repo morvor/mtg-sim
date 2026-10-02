@@ -345,14 +345,22 @@ fn worldwalker_helm_a_copied_x_cost_has_x_0() {
         "Worldwalker Helm",
         "If the copied token has {X} in its mana cost, X is 0."
     );
-    // A token copy of Chalice of the Void ({X}{X}).
+    // Chalice of the Void ({X}{X}, "enters with X charge counters") cast for X = 2, and a
+    // token copy of it: X is 0 for the copies, so they enter with no counters.
     let mut t = TestGame::new(2);
     let helm = t.battlefield(P0, "Worldwalker Helm");
-    let chalice = t.battlefield(P0, "Chalice of the Void");
+    t.lands(P0, "Wastes", 4);
+    let card = t.hand(P0, "Chalice of the Void");
+    t.cast(P0, card).x(2).go();
+    t.resolve_all();
+    let chalice = t.g.current(card);
+    assert!(t.on_battlefield(chalice));
+    assert_eq!(t.counters(chalice, "charge"), 2);
     let tok = token_copy(&mut t, P0, chalice)
         .into_iter()
         .find(|id| name_now(&t, *id) == "Chalice of the Void")
         .unwrap();
+    assert_eq!(t.counters(tok, "charge"), 0);
     let before = tokens_of_p0(&t);
     t.lands(P0, "Island", 2);
     t.activate(P0, helm, 0, &[obj(tok)]).expect("activate Helm");
