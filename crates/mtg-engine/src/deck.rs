@@ -178,6 +178,13 @@ fn is_basic_land(card: &CardDef) -> bool {
     c.supertypes.contains(Supertype::Basic) && c.card_types.contains(CardType::Land)
 }
 
+/// A basic land card a limited deck may add beyond its card pool (CR 100.2b). Basic snow
+/// lands aren't: a player plays with them only if they're in the pool they opened or
+/// drafted.
+fn is_free_limited_basic(card: &CardDef) -> bool {
+    is_basic_land(card) && !card.front().chars.supertypes.contains(Supertype::Snow)
+}
+
 /// The name a card counts as for deck construction: cards with interchangeable names
 /// have the same name (CR 201.3b), whether the pair is given by `names` or by the card's
 /// own interchangeable names (CR 201.3). The alphabetically first of them stands for all.
@@ -251,7 +258,7 @@ pub fn check_constructed_with(
 
 /// Checks a limited deck built from a card pool (CR 100.2b): at least 40 cards, made only
 /// of cards from the pool — as many duplicates as the pool has — plus any number of basic
-/// lands. Conspiracy cards can't be included in the deck (CR 315.3); they're used from the
+/// lands (other than basic snow lands, which must come from the pool). Conspiracy cards can't be included in the deck (CR 315.3); they're used from the
 /// sideboard.
 pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckProblem> {
     // A conspiracy listed with the deck isn't a card in it: it doesn't count toward the
@@ -270,7 +277,7 @@ pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckPr
     let names = NameEquivalence::default();
     let available = counts(pool.iter(), &names);
     for (name, (n, c)) in counts(cards, &names) {
-        if is_basic_land(c) {
+        if is_free_limited_basic(c) {
             continue;
         }
         let have = available.get(name).map_or(0, |x| x.0);
@@ -286,7 +293,7 @@ pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckPr
 }
 
 /// Removes one copy of each card of `used` from `pool` (basic lands not in the pool are
-/// added freely). Returns the problems if something used isn't there.
+/// added freely, except basic snow lands). Returns the problems if something used isn't there.
 fn take_from_pool(
     pool: &mut Vec<Arc<CardDef>>,
     used: &[Arc<CardDef>],
@@ -297,7 +304,7 @@ fn take_from_pool(
             Some(i) => {
                 pool.remove(i);
             }
-            None if is_basic_land(c) => {}
+            None if is_free_limited_basic(c) => {}
             None => problems.push(DeckProblem::PoolMismatch {
                 name: c.name.to_string(),
             }),

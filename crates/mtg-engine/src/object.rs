@@ -277,6 +277,10 @@ pub struct CastInfo {
     /// main phase", addendum).
     #[serde(default)]
     pub main_phase: bool,
+    /// The generic cost increase that came with the permission it was cast with ("A spell
+    /// cast this way costs {2} more to cast", CR 601.2f).
+    #[serde(default)]
+    pub permission_cost_increase: u32,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that
@@ -340,6 +344,8 @@ pub struct Choices {
     pub card_name: Option<SmolStr>,
     pub number: Option<i32>,
     pub player: Option<PlayerId>,
+    /// The chosen basic land type ("choose a basic land type"), or any land type ("choose
+    /// a land type").
     pub basic_land_type: Option<Subtype>,
     pub card_type: Option<CardType>,
     /// Modal permanent choices (anchor words, CR 614.12c), etc.

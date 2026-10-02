@@ -33,6 +33,13 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         };
         return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
     }
+    // "the revealed card's mana value", after an instruction revealing a card (which "it"
+    // then names, e.g. "Target opponent reveals a card at random from their hand.").
+    if let Some(r) = s.strip_prefix("the revealed card's mana value") {
+        if matches!(b.it, Sel::Var(vars::IT)) && (r.is_empty() || r.starts_with([' ', ','])) {
+            return Some((Value::ManaValueOf(Box::new(b.it.clone())), r.to_string()));
+        }
+    }
     crate::oracle::statics::parse_value_phrase(s, b)
 }
 
@@ -84,9 +91,17 @@ fn subst(
 /// doesn't choose it; the value is determined as the effect is performed).
 fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (clause, value_s) = l.rsplit_once(", where x is ")?;
+    // The sentence's comma may sit inside a closing quote: "create X ... tokens with
+    // "This token can't block," where X is ...".
+    let (clause, value_s) = match l.rsplit_once(", where x is ") {
+        Some((c, v)) => (c.to_string(), v),
+        None => {
+            let (c, v) = l.rsplit_once(",\" where x is ")?;
+            (format!("{c}\""), v)
+        }
+    };
     let it = b.it.clone();
-    where_x_is_parts(clause, value_s, b, it)
+    where_x_is_parts(&clause, value_s, b, it)
 }
 
 /// "[clause], where X is [value]": the value is read first, with pronouns as they are
@@ -247,10 +262,11 @@ fn may_pay_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         },
         modal: None,
     };
-    Some(vec![AbilityDef::new(
-        AbilityKind::Triggered(TriggeredAbility::new(trigger, body)),
-        block,
-    )])
+    let mut tr = TriggeredAbility::new(trigger, body);
+    // "If you do, return ~ from your graveyard to the battlefield": it functions from the
+    // graveyard (CR 113.6m).
+    tr.zone = crate::oracle::triggers::trigger_zone(&tr.trigger, rest);
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), block)])
 }
 
 inventory::submit! { AbilityPattern { name: "r107 may pay trigger", priority: 70, parse: may_pay_trigger } }
