@@ -29,12 +29,22 @@ fn lookback_triggers(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
 }
 
-/// "sacrifice that permanent" / "sacrifice it": its controller sacrifices it.
+/// "sacrifice that permanent" / "sacrifice it": the ability's controller sacrifices it,
+/// which they can do only if they control it (CR 701.21a): Grafted Wargear unattached
+/// from an opponent's creature doesn't sacrifice that creature.
 fn sacrifice_that(l: &str, b: &mut Builder) -> Option<Effect> {
     match l {
         "sacrifice that permanent" | "sacrifice it" | "sacrifice that creature" => {
-            Some(Effect::SacrificeObjects {
-                what: sacrificed_referent(b),
+            let what = sacrificed_referent(b);
+            let sac = Effect::SacrificeObjects { what: what.clone() };
+            Some(match what {
+                // "Sacrifice ~" already checks that you control it.
+                Sel::This => sac,
+                _ => Effect::If {
+                    cond: Condition::SelMatches(what, Filter::ControlledBy(PlayerRel::You)),
+                    then: Box::new(sac),
+                    otherwise: Box::new(Effect::Noop),
+                },
             })
         }
         _ => None,

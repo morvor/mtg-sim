@@ -2375,6 +2375,10 @@ impl Game {
             self.fix_excluded_objects(f, ctx);
             if filter_references_specific(f) {
                 *f = Filter::Any;
+            } else {
+                // "Creatures target player controls don't untap ...": the objects that
+                // player controls, whichever they are later.
+                *f = self.bind_target_players(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2419,6 +2423,33 @@ impl Game {
                 **inner = Filter::Objects(self.named_objects(inner, ctx));
             }
             _ => {}
+        }
+    }
+
+    /// Replaces "controlled by the target player" in a filter kept beyond this resolution
+    /// with the player chosen as that target.
+    fn bind_target_players(&self, f: &Filter, ctx: &Ctx) -> Filter {
+        match f {
+            Filter::ControlledBy(PlayerRel::Target(k)) => {
+                let ps = ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(PlayerFilter::Is(*p)),
+                        _ => None,
+                    })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            Filter::And(v) => {
+                Filter::And(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            Filter::Or(v) => {
+                Filter::Or(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            other => other.clone(),
         }
     }
 
