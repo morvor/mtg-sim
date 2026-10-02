@@ -1410,12 +1410,17 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Scry;
                 crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // CR 701.22b, 701.22d: scrying N > 0 always happens ("When you do, ...").
+                ctx.prev_happened = k > 0 && !players.is_empty();
             }
             Effect::Surveil { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Surveil;
                 crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // CR 701.25c-d: surveilling N > 0 always happens, even with fewer cards in
+                // the library ("When you do, ...").
+                ctx.prev_happened = k > 0 && !players.is_empty();
             }
             Effect::Search {
                 who,
