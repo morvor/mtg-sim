@@ -33,6 +33,14 @@ impl Game {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
+                // "Create a [token] and a [token]" is one instruction that the compiler
+                // splits into one creation per kind: the tokens enter at the same time, as
+                // one batch of events (CR 603.2c, 608.2c).
+                let together = v.len() > 1 && v.iter().all(is_token_creation);
+                if together {
+                    self.end_event_batch();
+                    self.batch_hold += 1;
+                }
                 for (i, x) in v.iter().enumerate() {
                     self.exec(x, ctx);
                     // CR 727.4: the rest of an effect that restarted the game happens as the
@@ -44,6 +52,9 @@ impl Game {
                     // CR 603.8: state triggers trigger as soon as the game state matches,
                     // even momentarily during a resolution.
                     self.check_state_triggers();
+                }
+                if together {
+                    self.batch_hold -= 1;
                 }
             }
             Effect::If {
@@ -2742,3 +2753,14 @@ pub fn describe_cost(c: &Cost) -> String {
 
 #[allow(dead_code)]
 fn unused(_: Event) {}
+
+/// Whether `e` only creates tokens (of one kind).
+fn is_token_creation(e: &Effect) -> bool {
+    matches!(
+        e,
+        Effect::CreateToken { .. }
+            | Effect::CreateTokenWithPT { .. }
+            | Effect::CreateTokenCopy { .. }
+            | Effect::CreateTokenAttached { .. }
+    )
+}

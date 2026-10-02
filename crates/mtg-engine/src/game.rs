@@ -520,6 +520,9 @@ pub struct Game {
     pub events: Vec<Event>,
     /// All events this turn (for look-back queries).
     pub turn_events: Vec<Event>,
+    /// While positive, the events of the instructions being performed form one batch
+    /// (see [`Game::end_event_batch`]).
+    pub batch_hold: u32,
     pub log: Vec<LogEntry>,
     pub logging: bool,
     pub next_timestamp: Timestamp,
@@ -698,6 +701,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
+            batch_hold: 0,
             log: vec![],
             logging: false,
             next_timestamp: 1,
