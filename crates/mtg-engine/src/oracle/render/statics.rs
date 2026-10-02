@@ -867,7 +867,7 @@ impl Renderer<'_> {
                 blocker: Filter::Not(allowed),
             } => {
                 let a = subj(self, attacker);
-                let b = self.noun(allowed, Num::Many);
+                let b = self.noun_det(allowed, Det::Plural);
                 format!("{a} can't be blocked except by {b}")
             }
             Restriction::CantBeBlockedBy { attacker, blocker } => {
