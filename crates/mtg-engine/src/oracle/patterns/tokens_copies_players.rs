@@ -1,6 +1,7 @@
 //! Other players creating token copies: "Each player other than its controller creates a
 //! token that's a copy of it." (Fractured Identity), "each opponent creates a token
-//! that's a copy of ...". Each of those players creates the token, and so controls it
+//! that's a copy of ...", "each of your teammates creates a token that's a copy of this
+//! enchantment" (Imperial Mask). Each of those players creates the token, and so controls it
 //! (CR 111.2).
 
 use super::oracle_hardening_referents::is_no_referent;
@@ -27,6 +28,15 @@ fn players_create_token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
         (PlayerRef::EachOpponent, r)
     } else if let Some(r) = l.strip_prefix("each other player ") {
         (PlayerRef::EachOtherPlayer, r)
+    } else if let Some(r) = l.strip_prefix("each of your teammates ") {
+        // CR 102.3, 810.1: your teammates are the other players who aren't your opponents.
+        (
+            PlayerRef::Each(PlayerFilter::And(vec![
+                PlayerFilter::NotYou,
+                PlayerFilter::Not(Box::new(PlayerFilter::Opponent)),
+            ])),
+            r,
+        )
     } else {
         return None;
     };

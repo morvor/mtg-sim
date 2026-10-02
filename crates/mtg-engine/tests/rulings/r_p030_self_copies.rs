@@ -733,3 +733,99 @@ fn vaultborn_tyrant_s_token_copies_only_printed_values_plus_the_exception() {
     t.resolve_all();
     assert!(tokens_named(&t, P0, "Vaultborn Tyrant").is_empty());
 }
+
+// --- Imperial Mask (Two-Headed Giant) -------------------------------------------------------------
+
+/// A Two-Headed Giant game: P0 and P1 against P2 and P3.
+fn two_headed_giant() -> TestGame {
+    TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    )
+}
+
+/// Whether P2 can cast Lightning Bolt targeting `p`.
+fn p2_can_bolt(t: &mut TestGame, p: PlayerId) -> bool {
+    t.lands(P2, "Mountain", 1);
+    let bolt = t.hand(P2, "Lightning Bolt");
+    let ok = t
+        .cast_with(P2, bolt, &[Entity::Player(p)])
+        .is_ok_and(|s| crate::r_s25_common::targets_of(t, s) == vec![Entity::Player(p)]);
+    t.resolve_all();
+    ok
+}
+
+/// P0's Imperial Mask ("When this enchantment enters, if it's not a token, each of your
+/// teammates creates a token that's a copy of this enchantment. You have hexproof.")
+/// enters; its trigger is on the stack.
+fn mask_enters(t: &mut TestGame) -> ObjectId {
+    supported("Imperial Mask");
+    let m = t.enter(P0, "Imperial Mask");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    m
+}
+
+#[test]
+fn each_imperial_mask_protects_only_its_controller() {
+    cr!("702.11c", "102.3", "111.2");
+    ruling!(
+        "Imperial Mask",
+        "Each Imperial Mask permanent is independent and affects only its controller and the opponents of its controller."
+    );
+    let mut t = two_headed_giant();
+    mask_enters(&mut t);
+    t.resolve_all();
+    let tok = one_token(&t, P1, "Imperial Mask");
+    assert!(!p2_can_bolt(&mut t, P0));
+    assert!(!p2_can_bolt(&mut t, P1));
+    // Without its own Mask, P1 can be targeted: P0's Mask doesn't protect P1.
+    kill(&mut t, tok);
+    assert!(p2_can_bolt(&mut t, P1));
+    assert!(!p2_can_bolt(&mut t, P0));
+}
+
+#[test]
+fn imperial_mask_s_tokens_after_it_left() {
+    cr!("707.2", "608.2h", "603.4");
+    ruling!(
+        "Imperial Mask",
+        "If Imperial Mask has left the battlefield by the time the triggered ability resolves, the tokens will still enter as copies of Imperial Mask."
+    );
+    let mut t = two_headed_giant();
+    let m = mask_enters(&mut t);
+    kill(&mut t, m);
+    t.resolve_all();
+    one_token(&t, P1, "Imperial Mask");
+}
+
+#[test]
+fn imperial_mask_s_tokens_copy_what_it_s_copying() {
+    cr!("707.2", "707.3", "608.2h");
+    ruling!(
+        "Imperial Mask",
+        "If Imperial Mask becomes a copy of something else after the ability triggers but before it resolves, the tokens will enter as copies of whatever the ex-Imperial Mask is now. If Imperial Mask became a copy of something else and then left the battlefield, the tokens will enter as copies of whatever it was copying when it last existed on the battlefield."
+    );
+    supported("Opalescence");
+    // Opalescence makes the Mask a creature, so Cytoshape can turn it into a Hill Giant.
+    for leaves in [false, true] {
+        let mut t = two_headed_giant();
+        t.battlefield(P0, "Opalescence");
+        let giant = t.battlefield(P2, "Hill Giant");
+        let m = mask_enters(&mut t);
+        t.answer_choose(P0, &[obj(giant)]);
+        cast_new(&mut t, P0, "Cytoshape", &[obj(m)]);
+        t.resolve();
+        assert_eq!(t.obj_now(m).chars.name, "Hill Giant");
+        if leaves {
+            kill(&mut t, m);
+        }
+        t.resolve_all();
+        let tok = one_token(&t, P1, "Hill Giant");
+        assert_eq!(t.pt(tok), (3, 3));
+    }
+}
