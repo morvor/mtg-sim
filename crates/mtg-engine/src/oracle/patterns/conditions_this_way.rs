@@ -134,7 +134,15 @@ fn if_you_do_after_conditional_may(l: &str, prev: &mut Effect, b: &mut Builder) 
     if let Some(sel) = cond_subject(cond) {
         b.it = sel;
     }
-    let parsed = crate::oracle::effects::parse_clause(r, b);
+    // "If you don't put the card onto the battlefield, you may put it on the bottom of
+    // your library."
+    let parsed = match r.strip_prefix("you may ") {
+        Some(x) => crate::oracle::effects::parse_clause(x, b).map(|e| Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        }),
+        None => crate::oracle::effects::parse_clause(r, b),
+    };
     b.it = saved_it;
     let Some(e) = parsed else {
         return false;
