@@ -319,6 +319,10 @@ impl Game {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
             PlayerFilter::AsChosen(f) => self.player_filter_matches(f, p, ctx),
+            PlayerFilter::OpponentOf(r) => self
+                .eval_players(r, ctx)
+                .into_iter()
+                .any(|q| self.are_opponents(q, p)),
             PlayerFilter::FirstDrawInDrawStep => {
                 crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
             }

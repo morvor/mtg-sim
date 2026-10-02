@@ -855,6 +855,10 @@ impl Renderer<'_> {
                 let q = self.player_quality(x);
                 format!("not {q}")
             }
+            PlayerFilter::OpponentOf(r) => {
+                let p = self.player(r, Case::Obj);
+                format!("who is an opponent of {p}")
+            }
             PlayerFilter::AsChosen(x) => {
                 let q = self.player_quality(x);
                 format!("{q} as you activate this ability")

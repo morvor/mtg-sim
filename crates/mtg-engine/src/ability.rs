@@ -1082,6 +1082,9 @@ pub enum PlayerFilter {
     /// opponent who has more life than you do as you activate this ability"): it isn't
     /// checked again as the ability resolves (see `target_rules::relaxed_on_resolution`).
     AsChosen(Box<PlayerFilter>),
+    /// An opponent of one of the players a reference resolves to ("target player who ...
+    /// is their opponent", CR 102.3).
+    OpponentOf(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),

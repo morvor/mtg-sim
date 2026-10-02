@@ -3,6 +3,7 @@
 //! "they" and "the chosen player" refer to them afterward.
 
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 fn compiles(name: &str) {
@@ -382,4 +383,68 @@ fn choice_of_damnations_sacrifice_all_but_that_many() {
     assert_eq!(t.life(P1), 20);
     assert!(t.on_battlefield(keep), "{}", t.dump_log());
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
+
+#[test]
+fn oath_of_mages_the_upkeep_player_chooses_an_opponent_with_more_life() {
+    cr!("601.2c", "603.3d");
+    ruling!(
+        "Oath of Mages",
+        "The ability can only target an opponent of the current player."
+    );
+    compiles("Oath of Mages");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Mages");
+    t.g.player_mut(P1).life = 15;
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Draw);
+    // P1 (15 life) chose P0 (20 life) and had the Oath deal 1 damage to them.
+    assert_eq!(t.life(P0), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P1), 15);
+    // In P0's upkeep no opponent of P0 has more life: nothing happens.
+    t.advance_to(P0, Step::Draw);
+    assert_eq!(t.life(P1), 15);
+}
+
+#[test]
+fn oath_of_lieges_the_land_enters_under_the_current_players_control() {
+    cr!("601.2c", "701.23a");
+    ruling!(
+        "Oath of Lieges",
+        "The land card enters under the current player's control."
+    );
+    compiles("Oath of Lieges");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Lieges");
+    t.lands(P0, "Plains", 2);
+    let forest = t.library_top(P1, "Forest");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(forest)]);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Draw);
+    let f = t.g.current(forest);
+    assert!(t.on_battlefield(f), "{}", t.dump_log());
+    assert_eq!(t.obj_now(f).controller, P1);
+}
+
+#[test]
+fn oath_of_scholars_discard_hand_and_draw_three() {
+    cr!("601.2c");
+    compiles("Oath of Scholars");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Scholars");
+    for _ in 0..3 {
+        t.hand(P0, "Forest");
+    }
+    t.hand(P1, "Island");
+    for _ in 0..5 {
+        t.library_top(P1, "Island");
+    }
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 3, "{}", t.dump_log());
+    assert!(t.in_graveyard(P1, "Island"));
 }

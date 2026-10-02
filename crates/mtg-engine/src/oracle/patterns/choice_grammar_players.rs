@@ -13,9 +13,15 @@ use crate::oracle::phrases::*;
 /// [do]", "who controls more creatures than you [do]": a comparison of the player with
 /// you.
 pub fn compared_with_you(s: &str) -> Option<PlayerFilter> {
+    compared(s, "you", &PlayerRef::You)
+}
+
+/// [`compared_with_you`] with another player: "who controls more creatures than they do"
+/// (`than` is the word naming them, `who` the player).
+pub fn compared(s: &str, than: &str, who: &PlayerRef) -> Option<PlayerFilter> {
     let s = s.trim();
     let s = s.strip_suffix(" do").unwrap_or(s);
-    let r = s.strip_suffix(" than you")?;
+    let r = s.strip_suffix(&format!(" than {than}"))?;
     if let Some(r) = r.strip_prefix("who has ") {
         // "at least two more", "more"
         let (cmp, extra, r) = if let Some(x) = r.strip_prefix("at least ") {
@@ -25,18 +31,18 @@ pub fn compared_with_you(s: &str) -> Option<PlayerFilter> {
         } else {
             (Cmp::Gt, None, r.strip_prefix("more ")?)
         };
-        let theirs_vs = |you: Value| match extra.clone() {
-            Some(n) => Value::Sum(vec![you, n]),
-            None => you,
+        let theirs_vs = |v: Value| match extra.clone() {
+            Some(n) => Value::Sum(vec![v, n]),
+            None => v,
         };
         return match r {
             "life" => Some(PlayerFilter::Life(
                 cmp,
-                Box::new(theirs_vs(Value::LifeTotal(PlayerRef::You))),
+                Box::new(theirs_vs(Value::LifeTotal(who.clone()))),
             )),
             "cards in hand" | "cards in their hand" => Some(PlayerFilter::HandSize(
                 cmp,
-                Box::new(theirs_vs(Value::HandSize(PlayerRef::You))),
+                Box::new(theirs_vs(Value::HandSize(who.clone()))),
             )),
             _ => None,
         };
@@ -48,13 +54,14 @@ pub fn compared_with_you(s: &str) -> Option<PlayerFilter> {
     if !tail.trim().is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
         return None;
     }
+    let control = match who {
+        PlayerRef::You => Filter::ControlledBy(PlayerRel::You),
+        w => Filter::ControlledByPlayer(Box::new(w.clone())),
+    };
     Some(PlayerFilter::Controls(
         Box::new(f.clone()),
         Cmp::Gt,
-        Box::new(Value::Count(Filter::and(vec![
-            f,
-            Filter::ControlledBy(PlayerRel::You),
-        ]))),
+        Box::new(Value::Count(Filter::and(vec![f, control]))),
     ))
 }
 
@@ -149,3 +156,35 @@ fn choose_a_player(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose a player [described]", priority: 87, parse: choose_a_player } }
+
+/// "At the beginning of each player's upkeep, that player chooses target player who
+/// controls more creatures than they do and is their opponent. The first player may ..."
+/// (the Oaths): a target chosen by "that player" (CR 601.2c), compared with them; "the
+/// first player" is the chooser, "the second player" the target.
+fn that_player_chooses_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("that player chooses target player who ")?;
+    let pred = r.strip_suffix(" and is their opponent")?;
+    let chooser = b.it_player.clone();
+    if super::oracle_hardening_referents::is_no_player_referent(&chooser)
+        || matches!(chooser, PlayerRef::You)
+    {
+        return None;
+    }
+    let f = compared(&format!("who {pred}"), "they", &chooser)?;
+    let text = "target player".to_string();
+    let mut spec = TargetSpec::player(
+        PlayerFilter::And(vec![PlayerFilter::OpponentOf(Box::new(chooser.clone())), f]),
+        &text,
+    );
+    spec.chosen_by = Some(chooser.clone());
+    let slot = b.add_target(spec, &text);
+    b.it_player = chooser.clone();
+    b.named.push(("the first player".into(), Sel::Players(chooser)));
+    b.named.push((
+        "the second player".into(),
+        Sel::Players(PlayerRef::Target(slot)),
+    ));
+    Some(Effect::Noop)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: that player chooses target player who ... and is their opponent", priority: 86, parse: that_player_chooses_target_player } }
