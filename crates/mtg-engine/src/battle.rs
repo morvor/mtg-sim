@@ -18,6 +18,23 @@ pub const PROTECTED_BY_YOU: &str = "protected_by_you";
 /// an opponent protects it", CR 310.9e).
 pub const PROTECTED_BY_OPPONENT: &str = "protected_by_opponent";
 
+/// `Filter::Custom` name: a creature that attacked a battle this turn ("as long as it
+/// attacked a battle this turn"). What happens to the battle after the creature was
+/// declared as an attacker attacking it doesn't matter (CR 508.1b).
+pub const ATTACKED_A_BATTLE_THIS_TURN: &str = "attacked_a_battle_this_turn";
+
+/// Whether `id` was declared as an attacker attacking a battle this turn.
+fn attacked_a_battle_this_turn(g: &Game, id: ObjectId) -> bool {
+    g.turn_events.iter().any(|e| match e {
+        crate::events::Event::AttackersDeclared { attackers, .. } => {
+            attackers.iter().any(|(a, t)| {
+                *a == id && matches!(t, Entity::Object(b) if g.obj(*b).is(CardType::Battle))
+            })
+        }
+        _ => false,
+    })
+}
+
 /// The protector of a battle (stored as the battle's chosen player).
 pub fn protector(g: &Game, battle: ObjectId) -> Option<PlayerId> {
     g.obj(battle).choices.player
@@ -26,6 +43,9 @@ pub fn protector(g: &Game, battle: ObjectId) -> Option<PlayerId> {
 /// Filters about who protects a battle: the player who protects it is its protector
 /// (CR 310.9e). Returns `None` if `name` isn't one of them.
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    if name == ATTACKED_A_BATTLE_THIS_TURN {
+        return Some(attacked_a_battle_this_turn(g, id));
+    }
     let wanted: fn(&Game, PlayerId, PlayerId) -> bool = match name {
         PROTECTED_BY_YOU => |_, p, you| p == you,
         PROTECTED_BY_OPPONENT => |g, p, you| g.are_opponents(p, you),

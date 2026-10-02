@@ -19,6 +19,78 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "card_flow: until end of turn, you may cast that card [without paying its mana cost]", priority: 90, apply: may_cast_that_card }
 }
+inventory::submit! {
+    FollowupPattern { name: "card_flow: you may cast that card without paying its mana cost (now)", priority: 90, apply: may_cast_found_now }
+}
+inventory::submit! {
+    FollowupPattern { name: "card_flow: put the exiled cards that weren't cast on the bottom in a random order", priority: 90, apply: rest_to_bottom }
+}
+
+/// The card found, remembered before it may be cast ([`may_cast_found_now`]).
+const FOUND: Var = vars::USER + 3132;
+
+/// "You may cast that card without paying its mana cost." right after exiling cards until
+/// one was found (Chaos Wand): it's cast as the effect resolves (CR 608.2g, 118.9; X is
+/// 0, CR 107.3b).
+fn may_cast_found_now(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(
+        end(l),
+        "you may cast that card without paying its mana cost"
+            | "you may cast it without paying its mana cost"
+    ) || !matches!(prev, Effect::RevealUntil { .. })
+    {
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::Store {
+            var: FOUND,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            free: true,
+            optional: true,
+        },
+    ]);
+    true
+}
+
+/// "Then put the exiled cards that weren't cast this way on the bottom of that library in a
+/// random order." after [`may_cast_found_now`]: the card found if it wasn't cast, and the
+/// other cards exiled, still in exile.
+fn rest_to_bottom(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if !matches!(
+        l,
+        "put the exiled cards that weren't cast this way on the bottom of that library in a random order"
+            | "put the exiled cards that weren't cast this way on the bottom of their owner's library in a random order"
+    ) {
+        return false;
+    }
+    let remembers_found = match &*prev {
+        Effect::Seq(v) => v
+            .iter()
+            .any(|e| matches!(e, Effect::Store { var, .. } if *var == FOUND)),
+        _ => false,
+    };
+    if !remembers_found {
+        return false;
+    }
+    let mut to = Destination::zone(ZoneKind::Library);
+    to.position = LibraryPosition::BottomRandom;
+    let rest = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Union(vec![
+            Sel::Var(FOUND),
+            Sel::Var(vars::REVEALED),
+        ]))),
+        Filter::InZone(ZoneKind::Exile),
+    ]));
+    *prev = Effect::seq(vec![std::mem::take(prev), Effect::Move { what: rest, to }]);
+    true
+}
 
 /// "exile cards from the top of your library until you exile a nonland card", "target
 /// opponent exiles cards from the top of their library until they exile a nonland card",

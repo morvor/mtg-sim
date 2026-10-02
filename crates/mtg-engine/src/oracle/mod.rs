@@ -105,7 +105,10 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{201C}', "\"")
         .replace('\u{201D}', "\"")
         // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
-        .replace("converted mana cost", "mana value");
+        .replace("converted mana cost", "mana value")
+        // A comma inside a closing quote before "where X is" belongs to the sentence:
+        // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
+        .replace(",\" where X is ", "\", where X is ");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {

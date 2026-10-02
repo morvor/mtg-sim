@@ -92,9 +92,12 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
         power: None,
         toughness: None,
     };
+    // A comma before the closing quote may be the sentence's rather than the ability's
+    // (`with "[ability]," where X is ...`): compared without it.
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
     for q in quoted_segments(&raw) {
         let with_name = crate::oracle::normalize(q, ctx);
-        if with_name.trim() == normalized.trim() {
+        if bare(&with_name) == bare(normalized) {
             return with_name != crate::oracle::normalize(q, &anonymous);
         }
     }
@@ -826,6 +829,14 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
+    // "instant and sorcery cards you own in exile and in your graveyard" (Crackling
+    // Drake): the cards in either zone.
+    if let Some(head) = s.strip_suffix(" you own in exile and in your graveyard") {
+        return Some(Value::Sum(vec![
+            parse_for_each(&format!("{head} you own in exile"), it)?,
+            parse_for_each(&format!("{head} in your graveyard"), it)?,
+        ]));
+    }
     // Only cards count: a token in a graveyard isn't a card (CR 108.2b).
     let your_graveyard = || {
         Filter::and(vec![
@@ -889,6 +900,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
             _ => return None,
         };
         return Some(Value::Custom(format!("colors_of:{which}").into()));
+    }
+    // "different mana value among cards in your graveyard" (CR 202.3).
+    if let Some((v, "")) = super::mana_values_among::value(s) {
+        return Some(v);
     }
     // "color among permanents you control" (Vivid, CR 105.2).
     if let Some(r) = s.strip_prefix("color among ") {
@@ -1930,7 +1945,20 @@ fn parse_predicate(
     }
     if let Some(r) = p.strip_prefix("has ").or_else(|| p.strip_prefix("have ")) {
         // Base P/T (layer 7b).
-        if let Some(pt) = r.strip_prefix("base power and toughness ") {
+        if let Some(pt) = r
+            .strip_prefix("base power and toughness ")
+            .or_else(|| r.strip_prefix("base power and base toughness "))
+        {
+            if pt == "each equal to its mana value" && subj.it.is_none() {
+                // "Each other non-Aura enchantment ... has base power and base toughness
+                // each equal to its mana value" (Opalescence): each affected object's own
+                // mana value (CR 613.4b).
+                let mv = Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED)));
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(mv.clone()),
+                    Some(mv),
+                ))]);
+            }
             if let Some(a) = pt.strip_prefix("each equal to ") {
                 let v = parse_amount(a, subj.it.as_ref())?;
                 return Some(vec![Out::Mod(Modification::SetPT(
@@ -2660,6 +2688,10 @@ fn parse_player_body(s: &str) -> Option<Body> {
                     return None;
                 }
                 PlayerModification::HandSizeDelta(-n)
+            } else if let Some(x) = r.strip_prefix("equal to ") {
+                // "equal to the number of hour counters on ~" (Midnight Oil): the amount
+                // as it is now, recomputed continuously (CR 611.3a).
+                PlayerModification::MaxHandSize(Some(parse_amount(x, None)?))
             } else {
                 let (n, t) = parse_number(r)?;
                 if !t.trim().is_empty() || matches!(n, Value::X) || r.starts_with('a') {

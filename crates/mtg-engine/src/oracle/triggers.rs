@@ -138,7 +138,7 @@ fn parse_triggered_at(
 /// looking back in time), CR 113.6k — or its effect moves ~ out of the graveyard ("return
 /// ~ from your graveyard to your hand") and the trigger condition doesn't put it there
 /// (CR 113.6m).
-fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
+pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
     match trigger {
         TriggerCond::CastSpell {
             filter: Filter::Source,
