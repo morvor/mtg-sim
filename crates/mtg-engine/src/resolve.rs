@@ -150,18 +150,8 @@ impl Game {
             }
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
-                for it in items {
-                    let saved = ctx.vars.insert(*var, vec![it]);
-                    self.exec(effect, ctx);
-                    match saved {
-                        Some(s) => {
-                            ctx.vars.insert(*var, s);
-                        }
-                        None => {
-                            ctx.vars.remove(var);
-                        }
-                    }
-                }
+                // CR 608.2f: an action on several objects happens to all of them at once.
+                crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);

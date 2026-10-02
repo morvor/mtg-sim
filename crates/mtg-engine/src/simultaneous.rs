@@ -1,4 +1,5 @@
-//! "Each player ..." instructions (CR 101.4, 608.2e, 608.2f): [`Effect::ForEachPlayer`].
+//! "Each player ..." instructions (CR 101.4, 608.2e, 608.2f): [`Effect::ForEachPlayer`],
+//! and instructions performed for each of several objects ([`Effect::ForEach`]).
 //!
 //! The body's instructions (its separate sentences or clauses) are performed one after
 //! another, each one by all the players before the next (CR 608.2e). For each instruction,
@@ -27,6 +28,11 @@
 //! instruction is performed for each player in turn, so the choices see what the earlier
 //! ones did.
 //!
+//! The same holds for an instruction performed for each of several objects ("each creature
+//! deals damage to itself equal to its power", "return the exiled cards to their owners'
+//! hands"): it's performed for all of them at the same time (CR 608.2f), unless it involves
+//! choices, which a player then makes for each object in turn.
+//!
 //! Each player's instructions see what their own earlier instructions did ("it", "if they
 //! do", "that many", choices stored for later): every player has their own view of those
 //! results, starting from the state before the "each player" instruction. What is
@@ -47,16 +53,37 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Performs `body` for each of `players` ([`Effect::ForEachPlayer`]).
 pub fn for_each_player(g: &mut Game, players: Vec<PlayerId>, body: &Effect, ctx: &mut Ctx) {
-    if players.is_empty() {
-        return;
-    }
     // "Each player [does something]": the body performed as each of them.
     let (as_player, inner) = match body {
         Effect::AsPlayer { who, effect } => (Some(who), &**effect),
         e => (None, e),
     };
-    let groups = instructions(inner);
-    let mut frames = Frames::new(g, players, as_player, ctx);
+    let items = players.into_iter().map(Item::Player).collect();
+    let frames = Frames::new(g, items, as_player, ctx);
+    run(g, frames, inner, ctx);
+}
+
+/// Performs `body` for each of `objects`, bound to `var` ([`Effect::ForEach`]).
+pub fn for_each_object(g: &mut Game, objects: Vec<Entity>, var: Var, body: &Effect, ctx: &mut Ctx) {
+    let items = objects.into_iter().map(|e| Item::Object(var, e)).collect();
+    let frames = Frames::new(g, items, None, ctx);
+    run(g, frames, body, ctx);
+}
+
+/// What an instruction is performed for.
+#[derive(Clone, Copy, Debug)]
+enum Item {
+    /// A player ("each player").
+    Player(PlayerId),
+    /// An object, bound to a variable.
+    Object(Var, Entity),
+}
+
+fn run(g: &mut Game, mut frames: Frames, body: &Effect, ctx: &mut Ctx) {
+    if frames.frames.is_empty() {
+        return;
+    }
+    let groups = instructions(body);
     for (i, group) in groups.iter().enumerate() {
         if i > 0 {
             // The previous instruction is done (CR 608.2c, 608.2e).
@@ -208,20 +235,20 @@ fn choosers(g: &Game, sel: &Sel, ctx: &Ctx, out: &mut Vec<PlayerId>) {
     }
 }
 
-/// Whether every choice in `sels` is made by `p`.
-fn chosen_by(g: &Game, sels: &[&Sel], ctx: &Ctx, p: PlayerId) -> bool {
+/// Whether every choice in `sels` is made by `p` (or there are none, if `p` is `None`).
+fn chosen_by(g: &Game, sels: &[&Sel], ctx: &Ctx, p: Option<PlayerId>) -> bool {
     let mut who = Vec::new();
     for s in sels {
         choosers(g, s, ctx, &mut who);
     }
-    who.iter().all(|c| *c == p)
+    who.iter().all(|c| Some(*c) == p)
 }
 
-/// One player's view of what their instructions did.
+/// One player's (or object's) view of what their instructions did.
 #[derive(Clone, Debug)]
 struct Frame {
-    /// The player this is for ("each player": the iterated player).
-    player: PlayerId,
+    /// What this is for.
+    item: Item,
     /// Who performs the instructions ("you"); `None` if that player is undefined, in which
     /// case nothing is done for this one.
     actor: Option<PlayerId>,
@@ -254,25 +281,26 @@ struct Snapshot {
 }
 
 impl Frames {
-    fn new(
-        g: &Game,
-        mut players: Vec<PlayerId>,
-        as_player: Option<&PlayerRef>,
-        ctx: &Ctx,
-    ) -> Frames {
+    fn new(g: &Game, mut items: Vec<Item>, as_player: Option<&PlayerRef>, ctx: &Ctx) -> Frames {
+        // Players act in APNAP order (CR 101.4, 608.2f); objects in the order given.
         let order = g.apnap();
-        players.sort_by_key(|p| order.iter().position(|x| x == p).unwrap_or(usize::MAX));
-        let frames = players
+        items.sort_by_key(|i| match i {
+            Item::Player(p) => order.iter().position(|x| x == p).unwrap_or(usize::MAX),
+            Item::Object(..) => 0,
+        });
+        let frames = items
             .into_iter()
-            .map(|p| {
+            .map(|item| {
                 let mut c = ctx.clone();
-                c.iter_player = Some(p);
+                if let Item::Player(p) = item {
+                    c.iter_player = Some(p);
+                }
                 let actor = match as_player {
                     Some(who) => g.eval_player(who, &c),
                     None => Some(ctx.controller),
                 };
                 Frame {
-                    player: p,
+                    item,
                     actor,
                     vars: BTreeMap::new(),
                     nums: BTreeMap::new(),
@@ -298,7 +326,10 @@ impl Frames {
     /// Sets `ctx` up for frame `i`'s player.
     fn enter(&self, i: usize, ctx: &mut Ctx) -> Snapshot {
         let f = &self.frames[i];
-        ctx.iter_player = Some(f.player);
+        ctx.iter_player = match f.item {
+            Item::Player(p) => Some(p),
+            Item::Object(..) => self.iter,
+        };
         ctx.controller = f.actor.unwrap_or(self.controller);
         ctx.resolving_controller = if self.as_player {
             Some(self.resolving.unwrap_or(self.controller))
@@ -332,6 +363,9 @@ impl Frames {
                     ctx.nums.remove(k);
                 }
             }
+        }
+        if let Item::Object(var, e) = f.item {
+            ctx.vars.insert(var, vec![e]);
         }
         ctx.prev_happened = f.prev_happened;
         ctx.prev_value = f.prev_value;
@@ -381,6 +415,17 @@ impl Frames {
     /// last player's instructions stay, as for any repeated instruction.
     fn finish(&self, ctx: &mut Ctx) {
         ctx.iter_player = self.iter;
+        // The variable bound to each object is what it was before.
+        if let Some(Item::Object(var, _)) = self.frames.first().map(|f| f.item) {
+            match self.base_vars.get(&var) {
+                Some(v) => {
+                    ctx.vars.insert(var, v.clone());
+                }
+                None => {
+                    ctx.vars.remove(&var);
+                }
+            }
+        }
         ctx.controller = self.controller;
         ctx.resolving_controller = self.resolving;
     }
@@ -436,7 +481,7 @@ struct Outcome {
 
 /// Whether frame `i`'s player's choices for `e` can all be made before anyone performs
 /// it, and its action combined with the other players'.
-fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: PlayerId) -> bool {
+fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     match e {
         Effect::Noop => true,
         Effect::May { effect, .. } => plannable(g, effect, ctx, p),
@@ -454,18 +499,19 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: PlayerId) -> bool {
             chosen_by(g, &[what], ctx, p)
         }
         Effect::Sacrifice { who, .. } | Effect::Discard { who, .. } => {
-            g.eval_players(who, ctx) == vec![p]
+            p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
         Effect::Search { who, whose, .. } => {
-            g.eval_players(who, ctx) == vec![p] && g.eval_player(whose, ctx).is_some()
+            p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
+                && g.eval_player(whose, ctx).is_some()
         }
         _ => false,
     }
 }
 
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
-fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: PlayerId) -> Plan {
+fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
     match e {
         Effect::Noop => Plan::Nothing,
         Effect::May { who, effect } => {
@@ -503,7 +549,9 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: PlayerId) -> Plan {
                 .filter_map(|o| g.found_after_move(Entity::Object(o), ctx).object())
                 .collect();
             if has_choice(what) {
-                g.record_apnap_choice(p, objs.clone());
+                if let Some(p) = p {
+                    g.record_apnap_choice(p, objs.clone());
+                }
             }
             let moves = g.destination_moves(&objs, to, ctx);
             Plan::Move {
@@ -516,7 +564,9 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: PlayerId) -> Plan {
         } if plannable(g, e, ctx, p) => {
             let objs = g.resolve_objects(what, ctx);
             if has_choice(what) {
-                g.record_apnap_choice(p, objs.clone());
+                if let Some(p) = p {
+                    g.record_apnap_choice(p, objs.clone());
+                }
             }
             let moves = objs
                 .iter()
@@ -648,7 +698,7 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: PlayerId) -> Plan {
             {
                 return Plan::Exec(e.clone());
             }
-            let searcher = g.eval_player(who, ctx).unwrap_or(p);
+            let searcher = g.eval_player(who, ctx).unwrap_or(ctx.controller);
             let owner = g.eval_player(whose, ctx).unwrap_or(searcher);
             let n = g.eval_value(count, ctx).max(0) as u32;
             // CR 118.12b: whether the player searched.
@@ -682,7 +732,10 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
             continue;
         }
         let before = frames.enter(i, ctx);
-        let p = frames.frames[i].player;
+        let p = match frames.frames[i].item {
+            Item::Player(p) => Some(p),
+            Item::Object(..) => None,
+        };
         let early = match &ins.action {
             Some(a) => ins.pre.is_empty() || plannable(g, a, ctx, p),
             None => true,
