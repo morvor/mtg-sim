@@ -29,6 +29,14 @@ pub const ACCEPTED: Var = vars::USER + 2741;
 /// [instruction]" (the later "each player who does" refers to it).
 const ACCEPTED_NAME: &str = "\u{1}the players who accepted";
 
+/// The permanents the players put onto the battlefield with the most recent "each
+/// [player] [may] put a card ... onto the battlefield" (all of them at once, CR 101.4).
+const PUT_BY_EACH: Var = vars::USER + 9101;
+
+/// Marks, in [`Builder::named`], that [`PUT_BY_EACH`] holds what an earlier instruction put
+/// ("each opponent who didn't" refers to it).
+const PUT_BY_EACH_NAME: &str = "\u{1}the permanents each player put";
+
 /// Who performs the instruction.
 enum Subject {
     /// One player (or the players a reference names, each in turn when it names several).
@@ -776,6 +784,12 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                     }),
                 });
                 v.push(put);
+                v.push(Effect::Store {
+                    var: PUT_BY_EACH,
+                    sel: Sel::Var(vars::IT),
+                });
+                b.named
+                    .push((PUT_BY_EACH_NAME.to_string(), Sel::Var(PUT_BY_EACH)));
                 return with_outer_x(Effect::seq(v), |e| e).map(|e| with_hoisted(e, hoisted));
             }
             // "Each player chooses six lands they control, then sacrifices the rest": the
@@ -850,6 +864,81 @@ fn each_player_who_does(l: &str, b: &mut Builder) -> Option<Effect> {
         }),
     })
 }
+
+/// "then each opponent who didn't [instruction]" after "each player may put a land card
+/// from their hand onto the battlefield" (Kynaios and Tiro of Meletis): each of those
+/// players who controls none of the permanents put that way, in APNAP order.
+fn each_who_didnt_put(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.named.iter().any(|(p, _)| p == PUT_BY_EACH_NAME) {
+        return None;
+    }
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, r) = if let Some(r) = l.strip_prefix("each opponent who didn't ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        (PlayerFilter::Any, l.strip_prefix("each player who didn't ")?)
+    };
+    let e = instruction(&as_you(r)?, Some(r), b)?;
+    let put_one = PlayerFilter::Controls(
+        Box::new(Filter::In(Box::new(Sel::Var(PUT_BY_EACH)))),
+        Cmp::Ge,
+        Box::new(Value::c(1)),
+    );
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::Each(PlayerFilter::And(vec![
+            who,
+            PlayerFilter::Not(Box::new(put_one)),
+        ])),
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each opponent who didn't [put a card] [instruction]", priority: 150, parse: each_who_didnt_put } }
+
+/// "then each opponent who didn't discard a nonland card this way loses 3 life" (Kroxa,
+/// Titan of Death's Hunger), "Then each player who didn't discard a creature card this way
+/// loses 4 life." (Strongarm Tactics), after "each [player] discards a card": the players
+/// discarded at the same time (CR 101.4); each of those players none of whose discarded
+/// cards has the quality, in APNAP order — including a player who discarded nothing.
+fn each_who_didnt_discard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, r) = if let Some(r) = l.strip_prefix("each opponent who didn't discard ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        (
+            PlayerFilter::Any,
+            l.strip_prefix("each player who didn't discard ")?,
+        )
+    };
+    let (desc, rest) = r.split_once(" this way ")?;
+    let desc = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an "))?;
+    let quality = super::card_flow_search::card_filter(desc, b)?;
+    let e = instruction(&as_you(rest)?, Some(rest), b)?;
+    // The cards a player discarded are cards they owned (CR 701.9a: from their hand).
+    let discarded_one = PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(Sel::All(
+        Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(crate::discard_rules::DISCARDED))),
+            quality,
+        ]),
+    )))));
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::Each(PlayerFilter::And(vec![
+            who,
+            PlayerFilter::Not(Box::new(discarded_one)),
+        ])),
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each opponent who didn't discard [a card] this way [instruction]", priority: 150, parse: each_who_didnt_discard } }
 
 /// Marks that the players who accepted "each [player] may search their library ..."
 /// searched (a player who chooses to search searches, even if they find nothing).

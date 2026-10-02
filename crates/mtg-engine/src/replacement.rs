@@ -1317,7 +1317,11 @@ impl Game {
                     .into_iter()
                     .filter(|o| *o != m.obj)
                     .collect();
-                let chooser = m.by.unwrap_or(cand.controller);
+                // "You may have ~ enter as a copy": "you" is the player it enters under
+                // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
+                // e.g. each player for their own card put onto the battlefield by Show
+                // and Tell.
+                let chooser = m.etb.controller.or(m.by).unwrap_or(cand.controller);
                 let min = if optional { 0 } else { 1 };
                 let chosen = self.ask_objects(
                     chooser,

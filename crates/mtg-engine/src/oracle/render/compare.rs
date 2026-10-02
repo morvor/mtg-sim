@@ -28,6 +28,13 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\bwith the same name as ~(?:it\b)?",
+        replacement: "named ~",
+        why: "An object \"named ~\" is one with the same name as this object: a name used \
+              in an ability refers to the object that has it, whatever its name is \
+              (CR 201.5b), and objects share a name per CR 201.2a.",
+    },
+    Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3 $4$5 that player $6",
         why: "As below, for a targeted player: \"target player draws three cards and \

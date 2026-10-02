@@ -79,6 +79,17 @@ fn source_phrase(s: &str) -> Option<Filter> {
         "enchanted creature" | "equipped creature" => return Some(Filter::AttachedToSource),
         _ => {}
     }
+    // "a red instant or sorcery spell you control or a red planeswalker you control": two
+    // complete source phrases.
+    for (i, _) in s.match_indices(" or a") {
+        let right = &s[i + " or ".len()..];
+        if !(right.starts_with("a ") || right.starts_with("an ")) {
+            continue;
+        }
+        if let (Some(a), Some(b)) = (source_phrase(&s[..i]), source_phrase(right)) {
+            return Some(Filter::Or(vec![a, b]));
+        }
+    }
     let (other, r) = if let Some(r) = word(s, "another") {
         (true, r)
     } else {
@@ -172,9 +183,7 @@ fn recipient(s: &str) -> Option<Recipient> {
             "enchanted player" => {
                 out.0 = or_players(
                     out.0.take(),
-                    PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(
-                        Sel::AttachedTo,
-                    )))),
+                    PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
                 )
             }
             "~" | "this creature" => out.1 = or_objects(out.1.take(), Filter::Source),
