@@ -72,7 +72,7 @@ fn a_land_becoming_a_creature_doesnt_enter_the_battlefield() {
 
 #[test]
 fn becoming_the_monarch_while_already_the_monarch_doesnt_trigger() {
-    cr!("725.2", "603.2");
+    cr!("603.2e", "725.3");
     ruling!(
         "Custodi Lich",
         "Abilities that trigger whenever you “become the monarch” trigger only if you aren't already the monarch. For example, if you are already the monarch as Custodi Lich enters the battlefield, its last ability won't trigger."

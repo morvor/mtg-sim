@@ -68,9 +68,13 @@ fn etalis_creature_spell_cant_be_enchanted_by_an_aura_cast_with_it() {
             .iter()
             .any(|a| t.g.obj(*a).attached_to == Some(Entity::Object(bears_now)));
     assert!(!enchanted, "Pacifism couldn't target the Bears spell");
-    if let Some(p) = t.named_on_battlefield("Pacifism").first() {
-        assert_eq!(t.obj_now(*p).attached_to, Some(Entity::Object(etali)));
-    }
+    // Its only legal target was Etali: it resolved before the Bears and enchants Etali.
+    let pacifism = t.named_on_battlefield("Pacifism");
+    assert_eq!(pacifism.len(), 1, "Pacifism resolved");
+    assert_eq!(
+        t.obj_now(pacifism[0]).attached_to,
+        Some(Entity::Object(etali))
+    );
 }
 
 #[test]
@@ -108,7 +112,7 @@ fn goblin_dark_dwellers_spell_returned_to_hand_isnt_exiled_later() {
 
 #[test]
 fn nexus_of_becoming_copies_an_x_card_with_x_0() {
-    cr!("107.3b", "202.3e", "707.2", "122.6");
+    cr!("202.3e", "707.2", "122.6");
     ruling!(
         "Nexus of Becoming",
         "If the exiled card has {X} in its mana cost, X is 0."
@@ -284,7 +288,7 @@ fn chandras_exiled_card_isnt_cast_without_paying_and_then_she_deals_damage() {
 
 #[test]
 fn spark_of_creativity_counts_x_as_0_for_the_exiled_cards_mana_value() {
-    cr!("202.3e", "107.3b", "608.2h");
+    cr!("202.3e", "107.3g");
     ruling!(
         "Spark of Creativity",
         "If a card in exile has {X} in its mana cost, X is considered to be 0."

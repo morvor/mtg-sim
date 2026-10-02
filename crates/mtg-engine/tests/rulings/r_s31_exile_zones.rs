@@ -43,6 +43,48 @@ fn eradicate_doesnt_exile_permanents_with_the_same_name() {
 }
 
 #[test]
+fn eradicate_must_find_graveyard_copies_but_may_leave_hidden_ones() {
+    cr!("701.23a", "701.23b", "400.2");
+    ruling!(
+        "Eradicate",
+        "The copies must be found if they are in publicly viewable zones. Finding copies while searching private zones is optional."
+    );
+    supported("Eradicate");
+    let mut t = TestGame::new(2);
+    let target = t.battlefield(P1, "Grizzly Bears");
+    let in_hand = t.hand(P1, "Grizzly Bears");
+    let in_graveyard = t.graveyard(P1, "Grizzly Bears");
+    let in_library = t.library_top(P1, "Grizzly Bears");
+    add_mana(&mut t, P0, ManaType::B, 4);
+    let spell = t.hand(P0, "Eradicate");
+    // P0 chooses to find none of the copies in P1's hand and library.
+    t.answer_choose(P0, &[]);
+    t.answer_choose(P0, &[]);
+    let from = t.asked().len();
+    t.cast(P0, spell).target(target).go();
+    t.resolve_all();
+    assert_eq!(t.zone(target), Zone::Exile);
+    // The graveyard copy is found regardless: it was never offered as a choice.
+    assert_eq!(t.zone(in_graveyard), Zone::Exile);
+    let offered: Vec<Entity> = t.asked()[from..]
+        .iter()
+        .filter(|(p, _)| *p == P0)
+        .flat_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+                candidates.clone()
+            }
+            _ => vec![],
+        })
+        .collect();
+    assert!(offered.contains(&Entity::Object(in_hand)));
+    assert!(offered.contains(&Entity::Object(in_library)));
+    assert!(!offered.contains(&Entity::Object(in_graveyard)));
+    // The hidden copies stay where they were.
+    assert_eq!(t.zone(in_hand), Zone::Hand(P1));
+    assert!(matches!(t.zone(in_library), Zone::Library(_)));
+}
+
+#[test]
 fn splinter_searches_the_artifacts_controllers_zones() {
     cr!("701.23a", "201.2");
     ruling!(
@@ -252,7 +294,7 @@ fn summoners_sending_exiles(name: &str) -> (i32, i32) {
 
 #[test]
 fn summoners_sending_counts_x_as_0_in_the_exiled_cards_mana_value() {
-    cr!("202.3e", "107.3b", "608.2h");
+    cr!("202.3e", "107.3g");
     ruling!(
         "Summoner's Sending",
         "If the exiled card has {X} in its mana cost, X is 0 for the purpose of determining its mana value."

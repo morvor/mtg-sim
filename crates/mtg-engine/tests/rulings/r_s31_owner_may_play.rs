@@ -42,6 +42,10 @@ fn spellbinders_exiled_card_is_played_with_normal_timing_and_costs_two_more() {
         "Elite Spellbinder",
         "Playing the exiled card follows all normal timing restrictions."
     );
+    ruling!(
+        "Invasion of Gobakhan // Lightshield Array",
+        "Playing the exiled card follows all normal timing restrictions."
+    );
     supported("Elite Spellbinder");
     // (Only Lightshield Array's end step trigger isn't supported.)
     let invasion = card("Invasion of Gobakhan // Lightshield Array");
@@ -75,9 +79,9 @@ fn spellbinders_exiled_card_is_played_with_normal_timing_and_costs_two_more() {
 
 #[test]
 fn spellbinders_cost_increase_makes_the_card_unaffordable_with_its_own_cost() {
-    cr!("601.2f");
+    cr!("601.2f", "117.1a");
     ruling!(
-        "Invasion of Gobakhan // Lightshield Array",
+        "Elite Spellbinder",
         "Playing the exiled card follows all normal timing restrictions."
     );
     supported("Elite Spellbinder");

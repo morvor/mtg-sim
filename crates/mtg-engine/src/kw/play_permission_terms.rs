@@ -79,16 +79,22 @@ pub fn cost_increase(g: &Game, p: PlayerId, card: ObjectId) -> u32 {
     grant_cost_increase(g, p, card)
 }
 
-/// The terms of `p`'s permission to play `card`, if an effect gave one.
+/// The terms of the permission `p` plays `card` with, if an effect gave one. With several
+/// permissions from different effects, the player chooses which one to use (CR 601.2,
+/// 305.1): the one with the fewest terms (no cost increase is better than one, a land
+/// entering untapped better than tapped).
 fn grant_terms(g: &Game, p: PlayerId, card: ObjectId) -> Option<Terms> {
-    if !g
-        .play_grants
+    g.play_grants
         .iter()
-        .any(|gr| gr.player == p && gr.object == card)
-    {
-        return None;
-    }
-    g.kw_state.permission_terms.get(&(p, card)).copied()
+        .filter(|gr| gr.player == p && gr.object == card)
+        .map(|gr| {
+            g.kw_state
+                .permission_terms
+                .get(&(p, card, gr.source))
+                .copied()
+                .unwrap_or_default()
+        })
+        .min_by_key(|t| (t.cost_increase, t.lands_enter_tapped))
 }
 
 /// The generic cost increase of `p`'s permission to play `card`.
@@ -119,13 +125,15 @@ impl KeywordRules for PlayPermissionTerms {
             .unwrap_or_default();
         let controller = ctx.controller;
         let source = ctx.source;
-        let keys: Vec<(PlayerId, ObjectId)> = g
+        let mut keys: Vec<(PlayerId, ObjectId, Option<ObjectId>)> = g
             .play_grants
             .iter()
             .filter(|gr| cards.contains(&gr.object) && gr.source == source)
             .filter(|gr| !t.opponents_only || g.are_opponents(gr.player, controller))
-            .map(|gr| (gr.player, gr.object))
+            .map(|gr| (gr.player, gr.object, gr.source))
             .collect();
+        keys.sort();
+        keys.dedup();
         for k in keys {
             let e = g.kw_state.permission_terms.entry(k).or_default();
             e.cost_increase += t.cost_increase;

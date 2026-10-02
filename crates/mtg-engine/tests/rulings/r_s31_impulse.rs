@@ -239,7 +239,7 @@ fn grotag_night_runners_card_follows_timing_rules_and_stays_exiled() {
 
 #[test]
 fn elkin_bottles_card_is_played_with_its_normal_timing_and_costs() {
-    cr!("307.1", "601.2f", "305.2", "611.2a");
+    cr!("307.1", "601.2f");
     ruling!(
         "Elkin Bottle",
         "The exiled card is played using the normal timing rules for its card type, as well as any other applicable restrictions such as “Cast [this card] only during combat.” For example, you can’t play the card during an opponent’s turn unless it’s an instant or has flash."
@@ -611,7 +611,7 @@ fn valakut_exploration_puts_the_unplayed_cards_into_the_graveyard_at_end_step() 
 
 #[test]
 fn vances_blasting_cannons_creature_card_waits_for_the_main_phase() {
-    cr!("307.1", "601.2f", "305.9");
+    cr!("307.1", "601.2f");
     ruling!(
         "Vance's Blasting Cannons // Spitfire Bastion",
         "Casting the exiled card follows the normal rules for casting that card. You must pay its costs, and you must follow all applicable timing rules. For example, if you exile a creature card this way, you must wait until your main phase to cast it."

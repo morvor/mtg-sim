@@ -774,7 +774,6 @@ impl Game {
         c
     }
 
-    /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
     /// The characteristics whose abilities offer ways to cast `card` (alternative costs,
     /// keywords such as evoke): its own, or those of its front face if it's a face-down
     /// card outside the battlefield, as it's turned face up just before it's cast
@@ -788,6 +787,7 @@ impl Game {
         }
     }
 
+    /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
     pub fn face_characteristics(&self, card: ObjectId, face: FaceState) -> Characteristics {
         let o = self.obj(card);
         match (&o.card, face) {
