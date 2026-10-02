@@ -671,6 +671,18 @@ impl Renderer<'_> {
                 if d == "this turn" && r.contains(" can't be blocked except by ") {
                     return r.replacen(" except by ", " this turn except by ", 1);
                 }
+                // "You choose which creatures block this combat and how those creatures
+                // block."
+                if let Some((a, b)) = r.split_once(" block and how ") {
+                    if !d.is_empty() {
+                        let d = if d == "until end of combat" {
+                            "this combat"
+                        } else {
+                            &d
+                        };
+                        return format!("{a} block {d} and how {b}");
+                    }
+                }
                 // "Target creature blocks this turn if able."
                 if d == "this turn" {
                     if let Some(x) = r.strip_suffix(" each combat if able") {

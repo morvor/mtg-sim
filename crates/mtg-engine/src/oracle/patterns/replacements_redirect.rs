@@ -67,7 +67,7 @@ fn destination(s: &str, c: &Clause, t: &mut Targets) -> Option<Sel> {
             let base = t.base?;
             let (spec, rest) = parse_target(s)?;
             if !rest.trim().is_empty()
-                || spec.min != 1
+                || spec.fixed_min() != Some(1)
                 || !matches!(spec.max, Value::Const(1))
                 || !matches!(spec.what, TargetKind::Object(_))
             {

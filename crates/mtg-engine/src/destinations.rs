@@ -38,7 +38,8 @@ pub(crate) struct PreparedDestination {
     counters: Vec<(CounterKind, u32)>,
     face_down: bool,
     transformed: bool,
-    attacking: Option<Entity>,
+    /// Enters attacking: each object's controller chooses what it attacks (CR 508.4).
+    attacking: bool,
     with_mods: Option<(Option<ObjectId>, PlayerId, Vec<Modification>)>,
     /// `Some(None)`: attached to something undefined (CR 303.4i).
     attach_to: Option<Option<Entity>>,
@@ -72,11 +73,6 @@ impl Game {
             counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
         }
         let battlefield = to.zone == ZoneKind::Battlefield;
-        let attacking = if to.attacking {
-            self.attack_target_for_new_attacker(ctx)
-        } else {
-            None
-        };
         let with_mods = (battlefield && !to.with_mods.is_empty()).then(|| {
             (
                 ctx.source,
@@ -112,30 +108,74 @@ impl Game {
             counters,
             face_down: to.face_down,
             transformed: to.transformed,
-            attacking,
+            attacking: to.attacking,
             with_mods,
             attach_to,
         }
     }
 }
 
-impl PreparedDestination {
-    /// How an object owned by `owner` moves there.
-    pub(crate) fn etb(&self, owner: PlayerId) -> EtbInfo {
+impl Game {
+    /// How an object owned by `owner` moves to the prepared destination.
+    pub(crate) fn destination_etb(
+        &mut self,
+        d: &PreparedDestination,
+        owner: PlayerId,
+        ctx: &Ctx,
+    ) -> EtbInfo {
         let mut etb = EtbInfo::default();
-        self.apply_etb(&mut etb, owner);
+        let attack = self.destination_attack(d, owner, ctx);
+        d.apply_etb(&mut etb, owner, attack);
         etb
     }
 
-    fn apply_etb(&self, etb: &mut EtbInfo, owner: PlayerId) {
+    /// Has a proposed zone change go to the prepared destination instead (CR 614.6): the
+    /// modified event moves the object to that zone and position, entering the way the
+    /// destination says.
+    pub(crate) fn redirect_move(
+        &mut self,
+        d: &PreparedDestination,
+        m: &mut MoveEv,
+        owner: PlayerId,
+        ctx: &Ctx,
+    ) {
+        m.to = d.zone(owner);
+        m.pos = d.pos;
+        let attack = self.destination_attack(d, owner, ctx);
+        d.apply_etb(&mut m.etb, owner, attack);
+    }
+
+    /// What an object put onto the battlefield attacking attacks: the player who'll control
+    /// it chooses (CR 508.4).
+    fn destination_attack(
+        &mut self,
+        d: &PreparedDestination,
+        owner: PlayerId,
+        ctx: &Ctx,
+    ) -> Option<Entity> {
+        if !d.attacking {
+            return None;
+        }
+        let who = d.controller_of(owner);
+        self.attack_target_for_new_attacker(who, ctx)
+    }
+}
+
+impl PreparedDestination {
+    /// Who controls an object owned by `owner` put onto the battlefield there (CR 110.2a).
+    fn controller_of(&self, owner: PlayerId) -> PlayerId {
+        if self.owners_control {
+            owner
+        } else {
+            self.controller.unwrap_or(self.putter)
+        }
+    }
+
+    fn apply_etb(&self, etb: &mut EtbInfo, owner: PlayerId, attack: Option<Entity>) {
         let battlefield = self.zone == ZoneKind::Battlefield;
         if battlefield {
             etb.tapped |= self.tapped;
-            etb.controller = Some(if self.owners_control {
-                owner
-            } else {
-                self.controller.unwrap_or(self.putter)
-            });
+            etb.controller = Some(self.controller_of(owner));
             if self.with_mods.is_some() {
                 etb.with_mods = self.with_mods.clone();
             }
@@ -145,8 +185,8 @@ impl PreparedDestination {
             }
         }
         etb.transformed |= self.transformed;
-        if self.attacking.is_some() {
-            etb.attacking = self.attacking;
+        if attack.is_some() {
+            etb.attacking = attack;
         }
         etb.counters.extend(self.counters.iter().cloned());
         if self.face_down {
@@ -160,13 +200,5 @@ impl PreparedDestination {
 
     pub(crate) fn position(&self) -> LibraryPosition {
         self.pos
-    }
-
-    /// Has a proposed zone change go here instead (CR 614.6): the modified event moves the
-    /// object to this zone and position, entering the way the destination says.
-    pub(crate) fn redirect(&self, m: &mut MoveEv, owner: PlayerId) {
-        m.to = self.zone(owner);
-        m.pos = self.pos;
-        self.apply_etb(&mut m.etb, owner);
     }
 }

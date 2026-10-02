@@ -1345,7 +1345,7 @@ impl Game {
                 // under whose control, with counters, your choice of position, ...).
                 let owner = self.obj(m.obj).owner;
                 let prepared = self.prepare_destination(&dest, &mut ctx);
-                prepared.redirect(&mut m, owner);
+                self.redirect_move(&prepared, &mut m, owner, &ctx);
                 // CR 607.2b, 614.14: a card exiled by a replacement effect is exiled with
                 // (linked to) the effect's source.
                 if dest.zone == ZoneKind::Exile && cand.source.is_some() {
@@ -1357,13 +1357,14 @@ impl Game {
             (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {
                 let owner = self.obj(obj).owner;
                 let prepared = self.prepare_destination(&dest, &mut ctx);
+                let etb = self.destination_etb(&prepared, owner, &ctx);
                 vec![ReplEvent::Move(MoveEv {
                     obj,
                     to: prepared.zone(owner),
                     pos: prepared.position(),
                     cause: MoveCause::Destroy,
                     by: None,
-                    etb: prepared.etb(owner),
+                    etb,
                     source: cand.source,
                 })]
             }

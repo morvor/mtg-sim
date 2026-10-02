@@ -990,6 +990,31 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackAsThoughHaste {
+                attackers,
+                defender,
+            } => {
+                let a = if matches!(attackers, Filter::Type(CardType::Creature)) {
+                    "all creatures".to_string()
+                } else {
+                    subj(self, attackers)
+                };
+                match defender {
+                    None => format!("{a} can attack as though it had haste"),
+                    Some(d) => {
+                        let d = match d {
+                            PlayerFilter::Opponent => "your opponents".to_string(),
+                            d => self.player_filter_object(d),
+                        };
+                        format!(
+                            "{a} can attack {d} and planeswalkers {d} control as though those creatures had haste"
+                        )
+                    }
+                }
+            }
+            Restriction::BlockAsThoughUntapped(f) => {
+                format!("{} can block as though it were untapped", subj(self, f))
+            }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
             Restriction::MaxAttackers(n) => format!(
