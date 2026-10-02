@@ -1895,16 +1895,3 @@ mod tests {
         assert!(s.starts_with("[]"), "{s}");
     }
 }
-#[cfg(test)]
-mod probe_tmp {
-    #[test]
-    fn probe_tmp() {
-        let Ok(p) = std::env::var("PROBE") else { return };
-        for t in std::fs::read_to_string(p).unwrap().lines() {
-            let tl = crate::types::TypeLine::parse("Sorcery");
-            let ctx = crate::oracle::CompileContext { card_name: "Testcard", full_name: "Testcard", type_line: &tl, layout: crate::card::Layout::Normal, face_index: 0, keywords: &[], power: None, toughness: None };
-            let c = crate::oracle::compile(t, &ctx);
-            eprintln!("== {t}\n  unsupported: {:?}\n  {:?}", c.unsupported, c.abilities);
-        }
-    }
-}
