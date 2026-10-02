@@ -25,6 +25,10 @@
 //! `CastMethod::Alternative(`[`OFFERED_ALT_COST`]`)` (or the keyword's method it's
 //! combined with), and the player chooses among the costs offered as they cast the spell.
 //!
+//! One that comes with "If you cast a spell this way, you may cast it as though it had
+//! flash" (`CostChange::AlternativeCostWithFlash`, Primal Prayers) lets the spell be cast
+//! as though it had flash when cast for it (CR 601.3c).
+//!
 //! A once-each-turn alternative cost ("Once each turn, ...", "Once during each of your
 //! turns, ...") is a static ability with the condition
 //! `once_unused(`[`ALT_COST_SLOT`]`)` (`kw/once_each_turn_cast.rs`): casting a spell for
@@ -62,6 +66,9 @@ pub struct OfferedAltCost {
     /// Which spells, relative to `source` and `controller`.
     pub spells: Filter,
     pub cost: Cost,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 601.3c:
+    /// the player may begin to cast it as though it had flash).
+    pub flash: bool,
     /// The once-each-turn use it is, if it's one.
     pub once: Option<SmolStr>,
 }
@@ -84,9 +91,13 @@ pub fn collect(
     cm: &CostModifier,
     condition: Option<&Condition>,
 ) {
-    let (CostTarget::Spells(f), CostChange::AlternativeCost(cost)) = (&cm.applies_to, &cm.change)
-    else {
+    let (CostTarget::Spells(f), change) = (&cm.applies_to, &cm.change) else {
         return;
+    };
+    let (cost, flash) = match change {
+        CostChange::AlternativeCost(c) => (c, false),
+        CostChange::AlternativeCostWithFlash(c) => (c, true),
+        _ => return,
     };
     out.push(OfferedAltCost {
         source,
@@ -94,6 +105,7 @@ pub fn collect(
         who: cm.who,
         spells: f.clone(),
         cost: cost.clone(),
+        flash,
         once: condition.and_then(crate::kw::once_each_turn_cast::condition_slot),
     });
 }
@@ -128,7 +140,7 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
             .mana_cost
             .as_ref()
             .map_or(0, |m| m.mana_value_with_x(0));
-        let mut seen: Vec<Cost> = Vec::new();
+        let mut seen: Vec<(Cost, bool)> = Vec::new();
         for offer in &offers {
             let ctx = Ctx::new(Some(offer.source), offer.controller);
             let change = CostChange::AlternativeCost(offer.cost.clone());
@@ -142,14 +154,17 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
             ) {
                 continue;
             }
-            let cost = crate::permissions::spell_relative_cost(&offer.cost, mv);
+            let cost = cost_for_spell(&offer.cost, mv);
             // The same cost offered by several objects any number of times is one way of
             // casting it.
             if offer.once.is_none() {
-                if seen.iter().any(|c| format!("{c:?}") == format!("{cost:?}")) {
+                if seen
+                    .iter()
+                    .any(|(c, f)| *f == offer.flash && format!("{c:?}") == format!("{cost:?}"))
+                {
                     continue;
                 }
-                seen.push(cost.clone());
+                seen.push((cost.clone(), offer.flash));
             }
             let mut o = opt.clone();
             if matches!(o.method, CastMethod::Normal | CastMethod::Half(_)) {
@@ -160,6 +175,8 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
                 };
             }
             o.alt_cost = Some(cost);
+            // CR 601.3c: cast this way, it may be cast as though it had flash.
+            o.flash |= offer.flash;
             o.alt_source = Some(AltCostSource {
                 source: offer.source,
                 once: offer.once.clone(),
@@ -167,6 +184,32 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
             out.push(o);
         }
     }
+}
+
+/// An offered alternative cost for a spell with mana value `mv` (X being 0, CR 107.3b),
+/// amounts relative to the spell given: "life equal to its mana value", and "{X}, where X
+/// is that spell's mana value" (`CostPart::Repeated` of {1} that many times: that much
+/// generic mana).
+pub fn cost_for_spell(cost: &Cost, mv: u32) -> Cost {
+    let mut c = crate::permissions::spell_relative_cost(cost, mv);
+    let mut parts = Vec::new();
+    for part in std::mem::take(&mut c.parts) {
+        match part {
+            CostPart::Repeated { cost, times: Value::ManaValueOf(s) }
+                if matches!(*s, Sel::This) && cost.parts.is_empty() && cost.mana.is_some() =>
+            {
+                let total = c.mana.get_or_insert_with(crate::mana::ManaCost::default);
+                if let Some(m) = &cost.mana {
+                    for _ in 0..mv {
+                        total.add(m);
+                    }
+                }
+            }
+            other => parts.push(other),
+        }
+    }
+    c.parts = parts;
+    c
 }
 
 /// Records that a spell was cast for the alternative cost `src` offers: a once-each-turn
@@ -192,9 +235,10 @@ pub fn label(g: &Game, method: &CastMethod, cost: &Cost, src: &AltCostSource) ->
     } else {
         format!("pay {}", crate::casting::cost_label(cost))
     };
+    // Named with the object offering it (two As Foretolds are told apart).
     let from = g
         .try_obj(src.source)
-        .map_or_else(String::new, |o| format!(" ({})", o.chars.name));
+        .map_or_else(String::new, |_| format!(" ({})", g.describe(src.source)));
     match method {
         CastMethod::Keyword(k) => format!("{k:?}, {what}{from}"),
         _ => format!("{what}{from}"),

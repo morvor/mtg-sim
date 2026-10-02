@@ -863,6 +863,23 @@ impl Renderer<'_> {
             CostChange::AlternativeCost(c) if matches!(cm.applies_to, CostTarget::Spells(_)) => {
                 self.offered_alternative_cost(&cm.applies_to, c, &target, &who)
             }
+            // "You may cast creature spells with mana value 3 or less by paying {E} rather
+            // than paying their mana costs. If you cast a spell this way, you may cast it as
+            // though it had flash."
+            CostChange::AlternativeCostWithFlash(c) => {
+                let c = self.cost_as_payment(c);
+                let c = c.strip_prefix("pay ").unwrap_or(&c);
+                let flash = "If you cast a spell this way, you may cast it as though it had flash";
+                if matches!(cm.applies_to, CostTarget::Spells(_)) {
+                    format!(
+                        "you may cast {target} by paying {c} rather than paying their mana costs. {flash}"
+                    )
+                } else {
+                    format!(
+                        "you may cast ~ by paying {c} rather than paying its mana cost. {flash}"
+                    )
+                }
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
@@ -924,6 +941,18 @@ impl Renderer<'_> {
                 };
                 return format!(
                     "you may cast {a} {kind}{quals} by paying life equal to its mana value rather than paying its mana cost"
+                );
+            }
+        }
+        // "{X}, where X is that spell's mana value" (Kentaro).
+        if let [CostPart::Repeated {
+            cost,
+            times: Value::ManaValueOf(s),
+        }] = c.parts.as_slice()
+        {
+            if c.mana.is_none() && matches!(**s, Sel::This) && cost.parts.is_empty() {
+                return format!(
+                    "you may pay {{X}} rather than pay the mana cost for {kind}s{who}{quals}, where X is that spell's mana value"
                 );
             }
         }

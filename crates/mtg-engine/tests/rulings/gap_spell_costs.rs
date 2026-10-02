@@ -249,6 +249,67 @@ fn as_foretold_mandatory_additional_costs_are_still_paid() {
 }
 
 #[test]
+fn as_foretold_counts_time_counters_from_any_source() {
+    ruling!(
+        "As Foretold",
+        "All counters with the same name are indistinguishable from other counters with that name. Cards from the Time Spiral block that interact with time counters will interact with As Foretold."
+    );
+    supported("Timecrafting");
+    let mut t = TestGame::new(2);
+    let af = t.battlefield(P0, "As Foretold");
+    t.g.add_counters(Entity::Object(af), "time", 1, None);
+    // Gray Ogre (mana value 3) isn't offered {0} with one time counter.
+    let ogre = t.hand(P0, "Gray Ogre");
+    assert!(offered(&mut t, P0, ogre).is_empty());
+    // Timecrafting {X}{R}, X = 2: "Put X time counters on target permanent with a time
+    // counter on it or suspended card."
+    let tc = t.hand(P0, "Timecrafting");
+    add_mana(&mut t, P0, ManaType::R, 3);
+    t.cast(P0, tc)
+        .modes(&[1])
+        .x(2)
+        .target(Entity::Object(af))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.counters(af, "time"), 3);
+    assert_eq!(offered(&mut t, P0, ogre).len(), 1);
+    t.cast(P0, ogre).method(OFFERED).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Gray Ogre").len(), 1);
+}
+
+#[test]
+fn trinisphere_leaving_as_a_cost_doesnt_change_the_locked_in_total() {
+    ruling!(
+        "Trinisphere",
+        "If Trinisphere leaves the battlefield or becomes tapped or untapped as a cost to cast a spell, this cost is paid after you've locked in the total cost."
+    );
+    cr!("601.2f", "601.2h");
+    supported("Shrapnel Blast");
+    // Shrapnel Blast {1}{R}: "As an additional cost to cast this spell, sacrifice an
+    // artifact." Sacrificing Trinisphere for it, it still costs three mana.
+    let mut t = TestGame::new(2);
+    let tri = t.battlefield(P0, "Trinisphere");
+    let blast = t.hand(P0, "Shrapnel Blast");
+    add_mana(&mut t, P0, ManaType::R, 2);
+    t.answer_choose(P0, &[Entity::Object(tri)]);
+    assert!(t
+        .cast(P0, blast)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_err());
+    assert!(t.on_battlefield(tri));
+    t.clear_answers();
+    add_mana(&mut t, P0, ManaType::R, 1);
+    t.answer_choose(P0, &[Entity::Object(tri)]);
+    t.cast(P0, blast).target(Entity::Player(P1)).go();
+    assert!(!t.on_battlefield(tri));
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+}
+
+#[test]
 fn an_adventure_may_be_cast_for_an_offered_cost() {
     ruling!(
         "Tlincalli Hunter // Retrieve Prey",
@@ -318,6 +379,94 @@ fn access_maze_cost_is_life_equal_to_mana_value_from_the_hand() {
     assert!(offered(&mut t, P0, eyes).is_empty());
     let eyes2 = t.hand(P0, "Sentinel's Eyes");
     assert_eq!(offered(&mut t, P0, eyes2).len(), 1);
+}
+
+#[test]
+fn kentaro_makes_samurai_castable_for_generic_mana() {
+    cr!("118.9", "118.9c");
+    ruling!(
+        "Kentaro, the Smiling Cat",
+        "Kentaro doesn’t change when you can cast Samurai. It just makes Samurai castable for generic mana."
+    );
+    ruling!(
+        "Kentaro, the Smiling Cat",
+        "Kentaro’s ability only applies while Kentaro is on the battlefield. You have to pay for Kentaro normally. It still costs {1}{W}."
+    );
+    supported("Kentaro, the Smiling Cat");
+    // In the hand, Kentaro (a Samurai) isn't offered its own cost.
+    let mut t = TestGame::new(2);
+    let k = t.hand(P0, "Kentaro, the Smiling Cat");
+    assert!(offered(&mut t, P0, k).is_empty());
+    // On the battlefield: Kitsune Blademaster {2}{W} for {3} of any mana.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kentaro, the Smiling Cat");
+    let fox = t.hand(P0, "Kitsune Blademaster");
+    let ogre = t.hand(P0, "Gray Ogre");
+    assert!(offered(&mut t, P0, ogre).is_empty());
+    add_mana(&mut t, P0, ManaType::R, 2);
+    // Two mana isn't enough; and not on the opponent's turn.
+    assert!(!can_cast(&mut t, P0, fox, OFFERED));
+    add_mana(&mut t, P0, ManaType::R, 1);
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(!can_cast(&mut t, P0, fox, OFFERED));
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(can_cast(&mut t, P0, fox, OFFERED));
+    let spell = t.cast(P0, fox).method(OFFERED).go();
+    assert_eq!(pool_total(&t, P0), 0);
+    assert_eq!(t.g.mana_value_of(spell), 3);
+}
+
+fn energy(t: &TestGame) -> u32 {
+    t.player(P0).counters.get("energy").copied().unwrap_or(0)
+}
+
+#[test]
+fn primal_prayers_cost_comes_with_flash() {
+    cr!("601.3c", "118.9", "118.9a");
+    ruling!(
+        "Primal Prayers",
+        "If a spell you cast this way has {X} in its mana cost, you must choose 0 as the value of X when casting it."
+    );
+    ruling!(
+        "Primal Prayers",
+        "If you cast a spell for another cost \"rather than paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs, such as kicker costs. If the spell has any mandatory additional costs, those must be paid to cast it."
+    );
+    supported("Primal Prayers");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Primal Prayers");
+    t.g.players[P0.idx()].counters.insert("energy".into(), 3);
+    let bears = t.hand(P0, "Grizzly Bears");
+    let giant = t.hand(P0, "Hill Giant");
+    // Mana value 4: not one of those spells.
+    assert!(offered(&mut t, P0, giant).is_empty());
+    // During the opponent's turn: Grizzly Bears for {E}, as though it had flash (but not
+    // for its mana cost).
+    t.set_step(P1, Step::PrecombatMain);
+    add_mana(&mut t, P0, ManaType::G, 2);
+    assert!(can_cast(&mut t, P0, bears, OFFERED));
+    assert!(!can_cast(&mut t, P0, bears, CastMethod::Normal));
+    t.cast(P0, bears).method(OFFERED).go();
+    assert_eq!(energy(&t), 2);
+    assert_eq!(pool_total(&t, P0), 2);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Endless One {X}: X is 0.
+    let one = t.hand(P0, "Endless One");
+    t.cast(P0, one).method(OFFERED).x(2).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Endless One"));
+    // Goblin Bushwhacker {R}, kicker {R}: kicked for {E} plus {R}.
+    t.set_step(P0, Step::PrecombatMain);
+    let bw = t.hand(P0, "Goblin Bushwhacker");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    t.cast(P0, bw).method(OFFERED).kicked(true).go();
+    assert_eq!(energy(&t), 0);
+    t.resolve_all();
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    assert_eq!(t.pt(bears).0, 3);
+    // No energy left: it can't be cast that way.
+    let bears2 = t.hand(P0, "Grizzly Bears");
+    assert!(!can_cast(&mut t, P0, bears2, OFFERED));
 }
 
 // --- Optional additional costs offered for spells -----------------------------------------

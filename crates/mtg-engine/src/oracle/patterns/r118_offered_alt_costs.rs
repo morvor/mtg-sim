@@ -13,6 +13,10 @@
 //! paying life equal to its mana value rather than paying its mana cost." (Demon of Fate's
 //! Design; "a spell from your hand", Access Maze).
 //!
+//! "You may cast creature spells with mana value 3 or less by paying {E} rather than paying
+//! their mana costs. If you cast a spell this way, you may cast it as though it had flash."
+//! (Primal Prayers) is `CostChange::AlternativeCostWithFlash` (CR 601.3c).
+//!
 //! Each is a `CostChange::AlternativeCost` for `CostTarget::Spells`, offered as a way of
 //! casting those spells by `kw/offered_costs.rs`; a once-each-turn one has the condition
 //! `once_unused(ALT_COST_SLOT)` ("during each of your turns": and it's your turn).
@@ -156,31 +160,64 @@ fn offered_alternative_cost(l: &str, text: &str, ctx: &CompileContext) -> Option
     } else {
         (None, l)
     };
+    // "If you cast a spell this way, you may cast it as though it had flash." (CR 601.3c)
+    let (r, flash) = match r
+        .strip_suffix(". if you cast a spell this way, you may cast it as though it had flash")
+    {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    // "{X}, where X is that spell's mana value" (Kentaro): that much generic mana.
+    let (r, x_is_mana_value) = match r.strip_suffix(", where x is that spell's mana value") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
     let (cost, spells) = if let Some((cost, spells)) = r
         .strip_prefix("you may ")
         .and_then(|r| r.split_once(" rather than pay the mana cost for "))
     {
-        (
-            offered_action(cost)?,
-            spells_cast(spells, once.is_some(), ctx)?,
-        )
+        let cost = if x_is_mana_value {
+            if cost != "pay {x}" {
+                return None;
+            }
+            Cost::free().with(CostPart::Repeated {
+                cost: Box::new(Cost::mana(ManaCost::generic(1))),
+                times: Value::ManaValueOf(Box::new(Sel::This)),
+            })
+        } else {
+            offered_action(cost)?
+        };
+        (cost, spells_cast(spells, once.is_some(), ctx)?)
+    } else if x_is_mana_value {
+        return None;
     } else {
         // "you may cast a spell from your hand by paying ..." doesn't let its controller
         // cast spells from anywhere else (that would be a permission too).
         let r = r.strip_prefix("you may cast ")?;
         let (spell, cost) = r.split_once(" by paying ")?;
-        let cost = cost.strip_suffix(" rather than paying its mana cost")?;
-        once?;
+        // One spell once each turn, or spells ("... rather than paying their mana costs").
+        let (cost, singular) = match cost.strip_suffix(" rather than paying its mana cost") {
+            Some(c) => (c, true),
+            None => (cost.strip_suffix(" rather than paying their mana costs")?, false),
+        };
+        if singular != once.is_some() {
+            return None;
+        }
         let spell = match spell.strip_suffix(" from your hand") {
             Some(s) => format!("{s} you cast from your hand"),
             None => format!("{spell} you cast"),
         };
-        (offered_cost(cost)?, spells_cast(&spell, true, ctx)?)
+        (offered_cost(cost)?, spells_cast(&spell, singular, ctx)?)
+    };
+    let change = if flash {
+        CostChange::AlternativeCostWithFlash(cost)
+    } else {
+        CostChange::AlternativeCost(cost)
     };
     let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
         applies_to: CostTarget::Spells(spells),
         who: PlayerRel::You,
-        change: CostChange::AlternativeCost(cost),
+        change,
     }));
     s.condition = match once {
         Some(false) => Some(once_unused(ALT_COST_SLOT)),

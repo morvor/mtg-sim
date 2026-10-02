@@ -73,6 +73,7 @@ impl CostChanges {
                 .reductions
                 .push(Reduction::Mana(mana.clone(), *colored_only)),
             CostChange::AlternativeCost(_)
+            | CostChange::AlternativeCostWithFlash(_)
             | CostChange::FlashForAdditionalCost(_)
             | CostChange::OptionalAdditionalCost { .. }
             | CostChange::AdditionalCostChoice(_) => return false,
