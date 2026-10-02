@@ -77,6 +77,7 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
             !v.iter().any(|a| {
                 patterns::oracle_hardening_referents::has_no_referent(a)
                     || crate::repeat_process::has_stray_repeat(a)
+                    || patterns::filters_relational::unresolved(a)
             })
         });
         match parsed {

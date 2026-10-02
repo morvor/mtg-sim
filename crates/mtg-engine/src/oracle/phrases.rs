@@ -671,10 +671,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
                 r,
             )
-        } else if let Some((f, r)) = super::patterns::filter_suffix_patterns()
-            .iter()
-            .find_map(|p| (p.parse)(t))
-        {
+        } else if let Some((f, r)) = {
+            let so_far = Filter::and(parts.clone());
+            super::patterns::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(t, &so_far))
+        } {
             // Qualifiers registered by pattern files (`FilterSuffixPattern`).
             (f, r)
         } else {
@@ -1109,7 +1111,21 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Ability(f), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
+        // Requirements on the targets taken together ("with different names", "with
+        // total mana value 6 or less") belong to the target slot.
+        let (f, groups) = crate::relational::split_groups(f);
+        if groups.len() > 1 || crate::relational::has_nested_group(&f) {
+            return None;
+        }
+        let lifted = groups.into_iter().next();
         let (f, r) = target_group_suffix(f, &s[..s.len() - r.len()], r, &mut together)?;
+        if lifted.is_some() {
+            // Only one requirement per slot.
+            if together.is_some() {
+                return None;
+            }
+            together = lifted;
+        }
         // "target planeswalker that was activated this turn or tapped creature": an
         // alternative description after the first one's suffixes, ending the phrase. Not
         // after a list ("target Spirit, creature with disturb, or enchantment"), whose
@@ -1192,7 +1208,7 @@ fn target_group_suffix<'a>(
     ];
     let Some((rest, grp)) = groups
         .iter()
-        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, *g)))
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
     else {
         return Some((f, r));
     };

@@ -272,8 +272,8 @@ impl Game {
             s.min == 0 || s.condition.is_some() || {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
                 cands.len() as u32 >= s.min
-                    && s.together.is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, s.min as usize)
+                    && s.together.as_ref().is_none_or(|grp| {
+                        crate::target_groups::find_group(self, grp, &cands, s.min as usize, ctx)
                             .is_some()
                     })
             }
@@ -629,8 +629,8 @@ impl Game {
             }
             // Targets that must have a relationship with each other: a group of the
             // required size must exist (CR 601.2c).
-            if let Some(grp) = spec.together {
-                crate::target_groups::find_group(self, grp, &cands, spec.min as usize)?;
+            if let Some(grp) = &spec.together {
+                crate::target_groups::find_group(self, grp, &cands, spec.min as usize, ctx)?;
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
@@ -667,9 +667,9 @@ impl Game {
                         .collect(),
                 }
             };
-            out[i] = match spec.together {
+            out[i] = match &spec.together {
                 Some(grp) => {
-                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize)?
+                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize, ctx)?
                 }
                 None => picked,
             };
@@ -887,8 +887,8 @@ impl Game {
                 // Targets that must have a relationship with each other no longer have
                 // it: they're all illegal (CR 608.2b). Ones that left are compared using
                 // their last known information (see `target_groups`).
-                if let Some(grp) = spec.together {
-                    if !crate::target_groups::group_ok(self, grp, slot) {
+                if let Some(grp) = &spec.together {
+                    if !crate::target_groups::group_ok(self, grp, slot, &c2) {
                         legal.clear();
                         legal_div.clear();
                     }

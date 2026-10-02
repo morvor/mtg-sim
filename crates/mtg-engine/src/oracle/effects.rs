@@ -66,6 +66,14 @@ impl<'c> Builder<'c> {
     }
     pub fn add_target(&mut self, mut spec: TargetSpec, text: &str) -> u8 {
         spec.text = text.to_string();
+        // "target creature card with lesser mana value": the object "it" means as the
+        // target is described (see `patterns::filters_relational`); left unresolved
+        // (and so not understood) if "it" has no antecedent.
+        if super::patterns::filters_relational::mentions_referent(&spec) {
+            if let Some(s) = super::patterns::filters_relational::substitute(&spec, &self.it) {
+                spec = s;
+            }
+        }
         // "another target creature" / "up to one other target creature" after earlier
         // targets: different objects from those (CR 115.3 allows the same object for
         // different instances of "target" unless the text says otherwise).
@@ -319,7 +327,11 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         if followed_up {
             b.sentences += 1;
         } else {
-            let Some(mut e) = parse_sentence(&s, b) else {
+            let before = (b.it.clone(), b.targets.len());
+            let parsed = parse_sentence(&s, b).and_then(|e| {
+                super::patterns::filters_relational::resolve_in_sentence(e, b, before)
+            });
+            let Some(mut e) = parsed else {
                 super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
                 groups::abandon(b, outer_group);
                 return None;
@@ -685,6 +697,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     }
     if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
         let (f, _, rest) = parse_object_phrase(r)?;
+        let f = super::patterns::filters_relational::resolve_referent(f, b)?;
         // "each creature blocking it"
         let (f, rest) = match super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
             Some((f, r)) => (f, r),
@@ -696,6 +709,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     // Bare plural noun phrases ("creatures you control") mean all such objects.
     if let Some((f, plural, rest)) = parse_object_phrase(s) {
         if plural {
+            let f = super::patterns::filters_relational::resolve_referent(f, b)?;
             let (f, rest) = bind_target_player(f, rest, b);
             return Some((Sel::All(f), rest));
         }

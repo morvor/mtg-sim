@@ -612,7 +612,7 @@ pub struct TargetSpec {
 /// A relationship the targets of one instance of the word "target" must have with each
 /// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
 /// (CR 608.2b).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TargetGroup {
     /// All have the same owner: cards "from a single graveyard", or "two target cards
     /// from an opponent's graveyard" (one opponent's graveyard).
@@ -629,6 +629,21 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them have the same name ("with different names", CR 201.2).
+    DifferentNames,
+    /// Their total of a value is at most the value ("with total mana value 6 or less",
+    /// "with total mana value X or less").
+    TotalAtMost(TotalStat, Box<Value>),
+}
+
+/// What [`TargetGroup::TotalAtMost`] adds up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TotalStat {
+    ManaValue,
+    Power,
+    Toughness,
+    /// Power plus toughness.
+    PowerAndToughness,
 }
 
 impl TargetSpec {
@@ -719,6 +734,10 @@ pub mod vars {
     /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
     /// this way", CR 120.10), as a number.
     pub const EXCESS: Var = 7;
+    /// The object a [`Filter::ValueCmp`] is testing, or that a [`Value::Extreme`] is
+    /// measuring, while its values are evaluated ("with toughness greater than its power",
+    /// "the greatest power among creatures you control"; see `relational.rs`).
+    pub const TESTED: Var = 6;
 }
 
 /// Selects players and/or objects.
@@ -1155,6 +1174,16 @@ pub enum Filter {
     /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
     /// filter: "activated or triggered ability ... from an artifact source".
     AbilityFrom(Box<Filter>),
+    /// A value of the object compared with another value: the object is in
+    /// [`vars::TESTED`] while both are evaluated ("with toughness greater than its power",
+    /// "with total power and toughness 5 or less", "with the greatest mana value among
+    /// creatures you control"; see `relational.rs`).
+    ValueCmp(Box<Value>, Cmp, Box<Value>),
+    /// A requirement on the objects chosen together for one selection ("up to four cards
+    /// with different names", "any number of creature cards with total mana value 6 or
+    /// less"). Every object matches it on its own; whatever chooses the objects (target
+    /// slots, searches, choices) checks the group (see `relational.rs`, `target_groups.rs`).
+    Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1310,6 +1339,10 @@ pub enum Value {
     /// The first value if the condition holds, otherwise the second ("choose one. If you
     /// control a commander as you cast this spell, you may choose both instead").
     If(Box<Condition>, Box<Value>, Box<Value>),
+    /// The greatest (`true`) or least value among the selected objects, each measured with
+    /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
+    /// "the lowest mana value among nonland permanents"); 0 if there are none.
+    Extreme(Box<Value>, Box<Sel>, bool),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
 }

@@ -703,6 +703,11 @@ impl Game {
                 }
                 _ => false,
             },
+            Filter::ValueCmp(lhs, cmp, rhs) => {
+                crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
+            }
+            // Checked by whatever chooses the objects together (`relational.rs`).
+            Filter::Together(_) => true,
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }
@@ -1166,6 +1171,9 @@ impl Game {
                     set = set.union(self.obj(o).chars.colors);
                 }
                 set.count() as i64
+            }
+            Value::Extreme(of, sel, greatest) => {
+                crate::relational::extreme(self, of, sel, *greatest, ctx)
             }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
