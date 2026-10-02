@@ -729,3 +729,28 @@ fn the_attacking_token_may_attack_a_different_player() {
         assert_eq!(combat.attack_target(bears), Some(Entity::Player(P1)), "{name}");
     }
 }
+
+#[test]
+fn gremlin_infestations_controller_creates_the_gremlin() {
+    cr!("603.10a", "111.2", "109.5");
+    ruling!(
+        "Gremlin Infestation",
+        "When the enchanted artifact is put into a graveyard, Gremlin Infestation's controller creates the Gremlin token."
+    );
+    supported("Gremlin Infestation");
+    // "At the beginning of your end step, this Aura deals 2 damage to enchanted artifact's
+    // controller. When enchanted artifact is put into a graveyard, create a 2/2 red Gremlin
+    // creature token." P0's Aura on P1's Millstone.
+    let mut t = TestGame::new(2);
+    let stone = t.battlefield(P1, "Millstone");
+    attach_new(&mut t, P0, "Gremlin Infestation", stone);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 20);
+    destroy(&mut t, stone);
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Gremlin").len(), 1);
+    assert!(with_subtype(&t, P1, "Gremlin").is_empty());
+}
