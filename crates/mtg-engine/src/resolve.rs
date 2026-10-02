@@ -2953,6 +2953,16 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
         Restriction::MustAttackPlayer { defender, .. }
+        | Restriction::CantAttackPlayer { defender, .. }
+        | Restriction::AttackCost { defender, .. }
+        | Restriction::MustAttackOtherThan {
+            players: defender, ..
+        }
+        | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::MaxAttackersAgainst {
+            player: Some(defender),
+            ..
+        }
         | Restriction::AttackAsThoughHaste {
             defender: Some(defender),
             ..
