@@ -1721,6 +1721,10 @@ impl Renderer<'_> {
             _ => {
                 let c = self.condition(cond);
                 let t = self.effect(then);
+                // "Discard a card unless you attacked this turn."
+                if let Some(inner) = c.strip_prefix("it's not true that ") {
+                    return format!("{t} unless {inner}");
+                }
                 format!("if {c}, {t}")
             }
         }
