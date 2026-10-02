@@ -6,6 +6,7 @@
 use mtg_engine::decision::{Agent, Answer, Decision, PassiveAgent};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 fn assert_supported(name: &str) {
@@ -285,4 +286,121 @@ fn avatar_destiny_returns_itself_and_a_milled_creature_card() {
     assert!(t.in_graveyard(P0, "Forest"));
     assert_eq!(t.library_size(P0), 1);
     assert_eq!(t.zone(ids[0]), Zone::Library(P0));
+}
+
+#[test]
+fn expand_the_sphere_proliferates_for_each_land_short_of_two() {
+    cr!("701.34a", "608.2c");
+    assert_supported("Expand the Sphere");
+    let energy = |t: &TestGame| t.g.player(P0).counter(mtg_engine::types::counters::ENERGY);
+    // One land among the six: one proliferate.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 2);
+    t.g.players[0]
+        .counters
+        .insert(mtg_engine::types::counters::ENERGY.into(), 1);
+    let ids = library(
+        &mut t,
+        P0,
+        &[
+            "Mountain",
+            "Shock",
+            "Grizzly Bears",
+            "Forest",
+            "Shock",
+            "Lightning Bolt",
+            "Raging Goblin",
+        ],
+    );
+    let spell = t.hand(P0, "Expand the Sphere");
+    t.answer_choose(P0, &[Entity::Object(ids[3])]);
+    t.answer_choose(P0, &[Entity::Player(P0)]);
+    t.answer_choose(P0, &[Entity::Player(P0)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    let forest = t.g.current(ids[3]);
+    assert!(t.on_battlefield(forest) && t.obj_now(forest).tapped);
+    assert_eq!(energy(&t), 2);
+    // The Mountain (seventh from the top) wasn't looked at.
+    assert_eq!(t.zone(ids[0]), Zone::Library(P0));
+    assert_eq!(t.library_size(P0), 6);
+
+    // Two lands: no proliferate.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 2);
+    t.g.players[0]
+        .counters
+        .insert(mtg_engine::types::counters::ENERGY.into(), 1);
+    let ids = library(&mut t, P0, &["Shock", "Forest", "Island", "Shock"]);
+    let spell = t.hand(P0, "Expand the Sphere");
+    t.answer_choose(P0, &[Entity::Object(ids[1]), Entity::Object(ids[2])]);
+    t.answer_choose(P0, &[Entity::Player(P0)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(energy(&t), 1);
+    assert_eq!(t.named_on_battlefield("Island").len(), 3);
+}
+
+#[test]
+fn stillness_in_motion_restocks_an_empty_library() {
+    cr!("401.2", "701.17a");
+    assert_supported("Stillness in Motion");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stillness in Motion");
+    library(&mut t, P0, &["Forest", "Island", "Mountain"]);
+    for n in ["Shock", "Grizzly Bears", "Plains"] {
+        t.graveyard(P0, n);
+    }
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    t.resolve();
+    // Milled the last three cards: Stillness in Motion is exiled and five cards of the
+    // six in the graveyard are put on top of the library.
+    assert!(t.in_exile("Stillness in Motion"));
+    assert_eq!(t.library_size(P0), 5);
+    assert_eq!(t.graveyard_size(P0), 1);
+
+    // Cards left in the library: nothing else happens.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stillness in Motion");
+    library(&mut t, P0, &["Forest", "Island", "Mountain", "Swamp"]);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    t.resolve();
+    assert!(!t.in_exile("Stillness in Motion"));
+    assert_eq!(t.library_size(P0), 1);
+}
+
+#[test]
+fn fishers_talent_creates_a_fish_if_the_land_was_revealed() {
+    cr!("701.20a", "608.2c");
+    ruling!(
+        "Fisher's Talent",
+        "You don't have to reveal the card if it's a land card"
+    );
+    for (top, reveal, fish) in [
+        ("Forest", true, 1),
+        ("Forest", false, 0),
+        ("Shock", true, 0),
+    ] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Fisher's Talent");
+        library(&mut t, P0, &["Island", top]);
+        t.answer_yes(P0, reveal);
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        t.resolve();
+        assert_eq!(
+            t.g.battlefield
+                .iter()
+                .filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|s| s == "Fish"))
+                .count(),
+            fish,
+            "{top} {reveal}"
+        );
+        // Then draw a card: the card looked at.
+        assert!(t.in_hand(P0, top));
+    }
 }

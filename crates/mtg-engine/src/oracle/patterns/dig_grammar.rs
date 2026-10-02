@@ -375,6 +375,78 @@ fn for_each_put_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
+inventory::submit! {
+    FollowupPattern { name: "dig: if you put fewer than N [cards] [somewhere] this way, [instruction] a number of times equal to the difference", priority: 150, apply: fewer_than_this_way }
+}
+
+/// "Put up to two land cards from among them onto the battlefield tapped .... If you put
+/// fewer than two lands onto the battlefield this way, proliferate a number of times equal
+/// to the difference." (Expand the Sphere): N minus the number of cards the selection put
+/// there.
+fn fewer_than_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you put fewer than ") else {
+        return false;
+    };
+    let Some((what, clause)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some(clause) = clause.strip_suffix(" a number of times equal to the difference") else {
+        return false;
+    };
+    let Some((n, rest)) = parse_number(what) else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let Some((noun, zone)) = [
+        (" onto the battlefield", ZoneKind::Battlefield),
+        (" into your hand", ZoneKind::Hand),
+    ]
+    .iter()
+    .find_map(|(p, z)| rest.strip_suffix(p).map(|x| (x, *z))) else {
+        return false;
+    };
+    // The kind of cards counted is the kind the selection took.
+    let kind = match noun {
+        "cards" => None,
+        "lands" | "land cards" => Some(Filter::Type(crate::types::CardType::Land)),
+        "creatures" | "creature cards" => Some(Filter::Type(crate::types::CardType::Creature)),
+        _ => return false,
+    };
+    // The last selection (the rest may follow it).
+    let Some(DigStep::Take { to, filter, .. }) = steps_rev(prev)
+        .into_iter()
+        .find(|s| matches!(s, DigStep::Take { .. }))
+    else {
+        return false;
+    };
+    if to.zone != zone {
+        return false;
+    }
+    if let Some(k) = kind {
+        if !format!("{filter:?}").contains(&format!("{k:?}")) {
+            return false;
+        }
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e) = crate::oracle::effects::parse_clause(clause, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let diff = Value::Diff(Box::new(n.clone()), Box::new(Value::Var(vars::DUG_CHOSEN)));
+    let repeat = Effect::If {
+        cond: Condition::Compare(Value::Var(vars::DUG_CHOSEN), Cmp::Lt, n),
+        then: Box::new(Effect::Repeat {
+            times: diff,
+            effect: Box::new(e),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, repeat]);
+    true
+}
+
 /// The selection part of a dig the previous sentence made, split off its source: a
 /// [`Effect::Dig`] that takes cards becomes a dig that only looks, followed by the
 /// selection (and the rest). Returns the index in `v` where the selection starts.
@@ -677,6 +749,31 @@ fn source_then_steps(l: &str, b: &mut Builder) -> Option<Effect> {
     None
 }
 
+inventory::submit! {
+    EffectPattern { name: "dig: [effect] if you revealed it / put [cards] ... this way", priority: 200, parse: trailing_this_way }
+}
+
+/// "Create a 1/1 blue Fish creature token if you revealed it this way." (Fisher's
+/// Talent): the conditions of [`put_this_way`] after the instruction they condition.
+fn trailing_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (x, c) = end(l).rsplit_once(" if ")?;
+    if !dug(b) || !c.ends_with(" this way") || x.contains(',') || x.contains(" if ") {
+        return None;
+    }
+    let cond = put_this_way(c)?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
 /// "if you didn't put a card into your hand this way", "if you put no cards into your
 /// hand this way", "if you put a Town card into your hand this way": about the cards the
 /// previous instruction chose ([`DigStep::Take`] sets whether it chose any and `vars::IT`
@@ -684,14 +781,17 @@ fn source_then_steps(l: &str, b: &mut Builder) -> Option<Effect> {
 fn put_this_way(c: &str) -> Option<Condition> {
     let c = end(c);
     // "if you revealed it this way" (Fisher's Talent): whether a card was revealed by the
-    // previous selection ([`DigStep::Take`] stores the cards it revealed).
+    // previous selection: the cards the dig's selections took (`vars::REVEALED` also
+    // holds cards only looked at).
     if matches!(
         c,
         "you revealed it this way" | "you revealed a card this way"
     ) {
-        return Some(Condition::Exists(Filter::In(Box::new(Sel::Var(
-            vars::REVEALED,
-        )))));
+        return Some(Condition::Compare(
+            Value::CountSel(Box::new(Sel::Var(vars::DUG_TAKEN))),
+            Cmp::Ge,
+            Value::c(1),
+        ));
     }
     // "If you didn't put the revealed card onto the battlefield this way" (Break Out): the
     // card revealed from among them is still in the library.

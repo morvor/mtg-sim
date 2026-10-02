@@ -75,10 +75,18 @@ fn quantifier(c: &str) -> Option<(Quant, bool, &str)> {
         ("a player ", Quant::Some(PlayerRef::EachPlayer), false),
         ("an opponent ", Quant::Some(PlayerRef::EachOpponent), false),
         ("each player ", Quant::Each(PlayerRef::EachPlayer), false),
-        ("each opponent ", Quant::Each(PlayerRef::EachOpponent), false),
+        (
+            "each opponent ",
+            Quant::Each(PlayerRef::EachOpponent),
+            false,
+        ),
         ("no player ", Quant::No(PlayerRef::EachPlayer), false),
         ("no opponent ", Quant::No(PlayerRef::EachOpponent), false),
-        ("defending player ", Quant::One(PlayerRef::DefendingPlayer), false),
+        (
+            "defending player ",
+            Quant::One(PlayerRef::DefendingPlayer),
+            false,
+        ),
         ("you ", Quant::One(PlayerRef::You), true),
     ] {
         if let Some(r) = c.strip_prefix(p) {
@@ -126,10 +134,7 @@ impl Stat {
 fn comparison(r: &str, controls: bool) -> Option<(Stat, Cmp, &str)> {
     let (cmp, r) = if let Some(x) = r.strip_prefix("more ") {
         (Cmp::Gt, x)
-    } else if let Some(x) = r
-        .strip_prefix("fewer ")
-        .or_else(|| r.strip_prefix("less "))
-    {
+    } else if let Some(x) = r.strip_prefix("fewer ").or_else(|| r.strip_prefix("less ")) {
         (Cmp::Lt, x)
     } else {
         return None;
@@ -217,12 +222,17 @@ pub(crate) fn player_state(r: &str, you: bool) -> Option<PlayerFilter> {
                 return Some(PlayerFilter::Or(vec![first, second]));
             }
         }
-        let x = x.strip_prefix("a card in ").map(|h| format!("1 or more cards in {h}"));
+        let x = x
+            .strip_prefix("a card in ")
+            .map(|h| format!("1 or more cards in {h}"));
         let x = x.as_deref().unwrap_or(&r[has.len()..]);
         let (cmp, n, tail) = amount_cmp(x)?;
         return match end(tail) {
             "life" => Some(PlayerFilter::Life(cmp, Box::new(n))),
-            "cards in hand" | "card in hand" | "cards in their hand" | "cards in your hand"
+            "cards in hand"
+            | "card in hand"
+            | "cards in their hand"
+            | "cards in your hand"
             | "card in your hand" => Some(PlayerFilter::HandSize(cmp, Box::new(n))),
             _ => None,
         };
@@ -336,7 +346,7 @@ fn your_zones_condition(c: &str) -> Option<Condition> {
         }
         return Some(Condition::Compare(Value::LifeTotal(PlayerRef::You), cmp, n));
     }
-    if c == "there are no cards in your library" {
+    if c == "there are no cards in your library" || c == "your library has no cards in it" {
         return Some(Condition::Compare(
             Value::LibrarySize(PlayerRef::You),
             Cmp::Eq,
@@ -344,13 +354,13 @@ fn your_zones_condition(c: &str) -> Option<Condition> {
         ));
     }
     if let Some(r) = c.strip_prefix("you have ") {
-        let r = r.strip_prefix("a card ").map(|t| format!("1 or more cards {t}"));
+        let r = r
+            .strip_prefix("a card ")
+            .map(|t| format!("1 or more cards {t}"));
         let r = r.as_deref().unwrap_or(&c["you have ".len()..]);
         let (cmp, n, tail) = amount_cmp(r)?;
         let v = match end(tail) {
-            "cards in your library" | "card in your library" => {
-                Value::LibrarySize(PlayerRef::You)
-            }
+            "cards in your library" | "card in your library" => Value::LibrarySize(PlayerRef::You),
             "cards in hand" | "card in hand" | "cards in your hand" | "card in your hand" => {
                 Value::HandSize(PlayerRef::You)
             }
@@ -408,7 +418,10 @@ fn exiled_with_source(f: Filter) -> Filter {
 fn group_condition(c: &str) -> Option<Condition> {
     // "creatures you control have total toughness 10 or greater"
     for (p, stat) in [
-        ("creatures you control have total toughness ", Stat_::Toughness),
+        (
+            "creatures you control have total toughness ",
+            Stat_::Toughness,
+        ),
         ("creatures you control have total power ", Stat_::Power),
     ] {
         if let Some(r) = c.strip_prefix(p) {
@@ -466,7 +479,11 @@ fn group_condition(c: &str) -> Option<Condition> {
         return None;
     }
     // "three or more cards have been exiled with ~", "a card is exiled with ~"
-    for suffix in [" have been exiled with ~", " are exiled with ~", " is exiled with ~"] {
+    for suffix in [
+        " have been exiled with ~",
+        " are exiled with ~",
+        " is exiled with ~",
+    ] {
         if let Some(r) = c.strip_suffix(suffix) {
             let (n, what) = parse_number(r)?;
             let (cmp, what) = match strip(what, "or more") {
@@ -547,7 +564,10 @@ fn group_condition(c: &str) -> Option<Condition> {
     if let Some(r) = c.strip_prefix("your team controls ") {
         let (other, r) = match r.strip_prefix("another ") {
             Some(x) => (true, x),
-            None => (false, r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?),
+            None => (
+                false,
+                r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?,
+            ),
         };
         let mut v = vec![
             color_or_phrase(r)?,
@@ -576,7 +596,9 @@ fn each_kind_condition(c: &str) -> Option<Condition> {
     let r = c.strip_prefix("you control ")?;
     let mut parts = Vec::new();
     for part in r.split(" and ") {
-        let part = part.strip_prefix("a ").or_else(|| part.strip_prefix("an "))?;
+        let part = part
+            .strip_prefix("a ")
+            .or_else(|| part.strip_prefix("an "))?;
         let (noun, kind) = part.split_once(" of each ")?;
         let f = color_or_phrase(noun)?.you_control();
         match kind {
@@ -737,7 +759,10 @@ fn same_subject_and(c: &str) -> Option<Condition> {
     let r = c.strip_prefix("you ")?;
     for (i, _) in r.match_indices(" and ") {
         let (a, b) = (&r[..i], &r[i + " and ".len()..]);
-        if !["have ", "control ", "are "].iter().any(|v| b.starts_with(v)) {
+        if !["have ", "control ", "are "]
+            .iter()
+            .any(|v| b.starts_with(v))
+        {
             continue;
         }
         let ca = crate::oracle_ext::parse_condition_ext(&format!("you {a}"))
@@ -840,14 +865,11 @@ fn instead_if(l: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builde
     // draw three cards instead"), not one part of several.
     let core = match &*prev {
         Effect::If {
-            then,
-            otherwise,
-            ..
+            then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => &**then,
         other => other,
     };
-    if matches!(core, Effect::Seq(_))
-        || std::mem::discriminant(core) != std::mem::discriminant(&e)
+    if matches!(core, Effect::Seq(_)) || std::mem::discriminant(core) != std::mem::discriminant(&e)
     {
         b.targets.truncate(saved.0);
         b.it = saved.1;
@@ -871,7 +893,8 @@ fn eminence_static(
     text: &str,
     ctx: &crate::oracle::CompileContext,
 ) -> Option<Vec<Ability>> {
-    let rest = end(l).strip_prefix("as long as ~ is in the command zone or on the battlefield, ")?;
+    let rest =
+        end(l).strip_prefix("as long as ~ is in the command zone or on the battlefield, ")?;
     let cut = text.len() - rest.len() - usize::from(text.trim_end().ends_with('.'));
     let body = text.get(cut..)?.trim().to_string();
     let mut abilities = crate::oracle::statics::parse_static(&body, ctx)?;
@@ -909,9 +932,13 @@ fn conditional_parts(
     let mut out = Vec::new();
     {
         // "[one object] has K if C, K2 if C2, and K3 if C3"
-        let (subj, list) = ["equipped creature has ", "enchanted creature has ", "~ has "]
-            .iter()
-            .find_map(|p| l.strip_prefix(p).map(|r| (&p[..p.len() - 1], r)))?;
+        let (subj, list) = [
+            "equipped creature has ",
+            "enchanted creature has ",
+            "~ has ",
+        ]
+        .iter()
+        .find_map(|p| l.strip_prefix(p).map(|r| (&p[..p.len() - 1], r)))?;
         let items: Vec<&str> = list
             .split(", ")
             .map(|i| i.strip_prefix("and ").unwrap_or(i))
@@ -921,7 +948,8 @@ fn conditional_parts(
         }
         for item in items {
             let (k, c) = item.split_once(" if ")?;
-            let cond = state_condition(c).or_else(|| crate::oracle::statics::parse_condition(c, ctx))?;
+            let cond =
+                state_condition(c).or_else(|| crate::oracle::statics::parse_condition(c, ctx))?;
             let mut parsed = crate::oracle::statics::parse_static(&format!("{subj} {k}."), ctx)?;
             for a in parsed.iter_mut() {
                 let AbilityKind::Static(s) = &a.kind else {
