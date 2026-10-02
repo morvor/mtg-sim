@@ -97,3 +97,51 @@ fn noble_benefactor_players_search_in_turn_order_then_shuffle() {
     );
     assert_eq!((t.hand_size(P0), t.hand_size(P1)), (hands.0, hands.1 + 1));
 }
+
+#[test]
+fn veteran_explorer_no_one_searches_if_every_player_declines() {
+    cr!("701.23a", "701.24a");
+    // Every player declines: no library is searched or shuffled, and no land enters.
+    let mut t = TestGame::new(2);
+    for p in [P0, P1] {
+        t.library_top(p, "Forest");
+    }
+    let explorer = t.battlefield(P0, "Veteran Explorer");
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    let from = t.g.turn_events.len();
+    destroy(&mut t, explorer);
+    t.resolve_all();
+    assert!(searches_and_shuffles(&t, from).is_empty());
+    assert_eq!((basic_lands(&t, P0), basic_lands(&t, P1)), (0, 0));
+}
+
+#[test]
+fn veteran_explorer_a_player_who_cant_search_cant_choose_to() {
+    cr!("101.2", "701.23a");
+    // P0's Stranglehold: "Your opponents can't search libraries." P1 isn't offered the
+    // search (and doesn't shuffle); P0 searches as usual.
+    let mut t = TestGame::new(2);
+    for p in [P0, P1] {
+        t.library_top(p, "Forest");
+    }
+    t.battlefield(P0, "Stranglehold");
+    let explorer = t.battlefield(P0, "Veteran Explorer");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    let from = t.g.turn_events.len();
+    let asked = t.asked().len();
+    destroy(&mut t, explorer);
+    t.resolve_all();
+    assert_eq!(
+        searches_and_shuffles(&t, from),
+        vec!["search P0", "shuffle P0"]
+    );
+    assert_eq!((basic_lands(&t, P0), basic_lands(&t, P1)), (1, 0));
+    let askers: Vec<PlayerId> = t.asked()[asked..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(askers, vec![P0]);
+}

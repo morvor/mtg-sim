@@ -450,13 +450,19 @@ fn gwenom_a_land_from_the_top_needs_an_available_land_play() {
     let mut t = TestGame::new(2);
     let gwenom = t.battlefield(P0, "Gwenom, Remorseless");
     let island = t.hand(P0, "Island");
-    t.play_land(P0, island).unwrap();
+    let forest = t.library_top(P0, "Forest");
+    // Before Gwenom attacks, there's no permission.
+    assert!(!can_play_land(&mut t, P0, forest));
     t.set_step(P0, Step::BeginningOfCombat);
     crate::r_s01_common::attack_with(&mut t, &[(gwenom, Entity::Player(P1))]);
     t.resolve_all();
     t.advance_to(P0, Step::PostcombatMain);
-    let top = t.library_top(P0, "Forest");
-    assert!(!can_play_land(&mut t, P0, top));
+    // With the turn's land play available, the land on top can be played; once P0 has
+    // played a land this turn, it can't.
+    assert!(can_play_land(&mut t, P0, forest));
+    t.play_land(P0, island).unwrap();
+    t.settle();
+    assert!(!can_play_land(&mut t, P0, forest));
     // A spell from the top costs life equal to its mana value.
     let bears = t.library_top(P0, "Grizzly Bears");
     let m = methods(&mut t, bears);
@@ -464,4 +470,46 @@ fn gwenom_a_land_from_the_top_needs_an_available_land_play() {
     let life = t.life(P0);
     t.cast(P0, bears).method(m[0].clone()).go();
     assert_eq!(t.life(P0), life - 2);
+    t.resolve_all();
+    // The permission lasts until end of turn: an instant on top can be cast in P0's end
+    // step, but not once the turn is over.
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.advance_to(P0, Step::End);
+    assert_eq!(
+        methods(&mut t, bolt),
+        vec![CastMethod::Alternative(mtg_engine::casting::PERMISSION_COST)]
+    );
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.g.library_top(P0), Some(t.g.current(bolt)));
+    assert!(methods(&mut t, bolt).is_empty());
+}
+
+#[test]
+fn bolass_citadel_x_is_0_for_a_spell_cast_for_life() {
+    cr!("107.3b", "202.3e");
+    ruling!(
+        "Bolas's Citadel",
+        "If a spell has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    // Fireball ({X}{R}: "This spell costs {1} more to cast for each target beyond the
+    // first. Fireball deals X damage divided as you choose among any number of targets.")
+    // from the top: P0 isn't asked for X, pays 1 life (its mana value with X = 0), and it
+    // deals 0 damage.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bolas's Citadel");
+    let fireball = t.library_top(P0, "Fireball");
+    let m = methods(&mut t, fireball);
+    assert_eq!(
+        m,
+        vec![CastMethod::Alternative(mtg_engine::casting::PERMISSION_COST)]
+    );
+    t.cast(P0, fireball)
+        .method(m[0].clone())
+        .x(5)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(t.life(P0), 19);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P0, "Fireball"));
 }

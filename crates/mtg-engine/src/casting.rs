@@ -86,16 +86,16 @@ pub fn grant_play_permission(
     }
 }
 
+/// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
+/// sets ("If you cast a spell this way, pay life equal to its mana value rather than pay
+/// its mana cost."), not for an alternative cost of its own.
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
 /// that are lands can't be cast (CR 305.9). A preparation card is cast only normally
 /// (CR 722.3).
-/// [`CastMethod::Alternative`] of a spell cast for the cost a play permission sets ("If
-/// you cast a spell this way, pay life equal to its mana value rather than pay its mana
-/// cost."), not for an alternative cost of its own.
-pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
-
 pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);

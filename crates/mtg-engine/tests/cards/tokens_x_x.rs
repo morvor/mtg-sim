@@ -76,15 +76,43 @@ fn primordial_ooze_pays_x_or_takes_x_damage() {
     let mut t = TestGame::new(2);
     let ooze = t.battlefield(P0, "Primordial Ooze");
     t.g.add_counters(Entity::Object(ooze), "+1/+1", 1, None);
-    t.set_step(P1, Step::End);
-    t.advance_to(P0, Step::Upkeep);
-    t.settle();
-    // Two counters now: P0 declines to pay {2}, so the Ooze is tapped and deals 2.
-    t.answer_yes(P0, false);
-    t.resolve_all();
+    let upkeep = |t: &mut TestGame, pay: bool| {
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        t.answer_yes(P0, pay);
+        t.resolve_all();
+    };
+    // Two counters now, and three Forests: P0 declines to pay {2}, so the Ooze is tapped
+    // and deals 2 damage to P0.
+    t.lands(P0, "Forest", 3);
+    upkeep(&mut t, false);
     assert_eq!(t.counters(ooze, "+1/+1"), 2);
     assert!(t.obj_now(ooze).tapped);
     assert_eq!(t.life(P0), 18);
+    let yes_no = t
+        .asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+        .count();
+    assert_eq!(yes_no, 1);
+    // Three counters: P0 pays {3} (all three Forests), so the Ooze stays untapped and
+    // deals no damage.
+    upkeep(&mut t, true);
+    assert_eq!(t.counters(ooze, "+1/+1"), 3);
+    assert!(!t.obj_now(ooze).tapped);
+    assert_eq!(t.life(P0), 18);
+    let untapped_forests = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P0 && o.chars.has_subtype("Forest") && !o.tapped)
+        .count();
+    assert_eq!(untapped_forests, 0);
+    // Four counters, and only three Forests: P0 can't pay {4}; 4 damage.
+    upkeep(&mut t, true);
+    assert_eq!(t.counters(ooze, "+1/+1"), 4);
+    assert!(t.obj_now(ooze).tapped);
+    assert_eq!(t.life(P0), 14);
 }
 
 #[test]
