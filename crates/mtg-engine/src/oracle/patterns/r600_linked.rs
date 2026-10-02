@@ -133,7 +133,8 @@ fn casts_chosen_color(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 /// "return the exiled card(s) to the battlefield under its/their owner's control", "return
 /// the exiled card(s) to its/their owner's hand(s)", "put a creature card exiled with ~ onto
-/// the battlefield under your control" (CR 607.2a, 607.3).
+/// the battlefield under your control", "the exiled card's owner may cast that card without
+/// paying its mana cost" (CR 607.2a, 607.3).
 fn linked_exile_effects(l: &str, _b: &mut Builder) -> Option<Effect> {
     const V: Var = vars::USER + 80;
     let each = |to: Destination| Effect::ForEach {
@@ -152,6 +153,7 @@ fn linked_exile_effects(l: &str, _b: &mut Builder) -> Option<Effect> {
     match l {
         "return the exiled card to the battlefield under its owner's control"
         | "return the exiled cards to the battlefield under their owners' control"
+        | "return the exiled cards to the battlefield under their owner's control"
         | "return the exiled permanent to the battlefield under its owner's control"
         | "return all cards exiled with ~ to the battlefield under their owners' control" => {
             Some(each(owner_bf()))
@@ -163,6 +165,19 @@ fn linked_exile_effects(l: &str, _b: &mut Builder) -> Option<Effect> {
         | "put each card exiled with ~ into its owner's hand"
         | "put all cards exiled with ~ into their owners' hands" => {
             Some(each(Destination::zone(ZoneKind::Hand)))
+        }
+        // Spell Queller: the owner casts it as the ability resolves (CR 608.2g).
+        "the exiled card's owner may cast that card without paying its mana cost" => {
+            Some(Effect::ForEach {
+                sel: Sel::Linked,
+                var: V,
+                effect: Box::new(Effect::CastCard {
+                    who: PlayerRef::OwnerOf(Box::new(Sel::Var(V))),
+                    what: Sel::Var(V),
+                    free: true,
+                    optional: true,
+                }),
+            })
         }
         "put a creature card exiled with ~ onto the battlefield under your control"
         | "put a card exiled with ~ onto the battlefield under your control" => {

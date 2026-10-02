@@ -5,7 +5,7 @@
 //!   from your hand into your library, then draw that many cards".
 //! - "Target player shuffles up to three target cards from their graveyard into their
 //!   library", "shuffle any number of target creature cards from your graveyard into your
-//!   library".
+//!   library", "you shuffle up to four cards from your graveyard into your library".
 //! - "[Object]'s owner shuffles it into their library", "the owner of target nonland
 //!   permanent shuffles it into their library, then draws two cards".
 //!
@@ -76,7 +76,10 @@ fn is_creature(f: &Filter) -> bool {
 /// The subject of a "shuffles" sentence: the player, the possessive that refers back to
 /// them ("your" for you, "their" otherwise), and the rest after the verb.
 fn subject<'a>(l: &'a str, b: &mut Builder) -> Option<(PlayerRef, &'static str, String)> {
-    if let Some(r) = l.strip_prefix("shuffle ") {
+    if let Some(r) = l
+        .strip_prefix("shuffle ")
+        .or_else(|| l.strip_prefix("you shuffle "))
+    {
         return Some((PlayerRef::You, "your", r.to_string()));
     }
     let (who, rest) = player_ref(l, b)?;
@@ -230,7 +233,8 @@ fn p_shuffle_zones(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "target player shuffles up to three target cards from their graveyard into their
 /// library", "shuffle any number of target creature cards from your graveyard into your
-/// library".
+/// library", "you shuffle up to four cards from your graveyard into your library" (chosen
+/// on resolution).
 fn p_shuffle_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     let (who, poss, r) = subject(l, b)?;
     let player_rel = match &who {
@@ -241,6 +245,29 @@ fn p_shuffle_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     let (objs, rest) = r.split_once(&format!(" from {poss} graveyard into {poss} library"))?;
     if !end(rest).is_empty() {
         return None;
+    }
+    // "You shuffle up to four cards from your graveyard into your library" (Stream of
+    // Thought): chosen as the effect is performed, not targeted.
+    if !objs.contains("target") {
+        let (n, r) = parse_number(objs.strip_prefix("up to ")?)?;
+        let (f, plural, tail) = parse_object_phrase(r)?;
+        if !plural || !end(tail).is_empty() || !matches!(n, Value::Const(_)) {
+            return None;
+        }
+        return Some(Effect::ShuffleIntoLibrary {
+            what: Sel::Choose {
+                chooser: who.clone(),
+                filter: Filter::and(vec![
+                    f,
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(player_rel),
+                ]),
+                count: n,
+                up_to: true,
+                store: None,
+            },
+            library: who,
+        });
     }
     // The cards must be in that player's graveyard.
     let (mut spec, tail) = parse_target(objs)?;
