@@ -573,6 +573,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             // "target creature you control other than enchanted creature" (Due Diligence).
             (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t
+            .strip_prefix("that's attached to a creature")
+            .or_else(|| t.strip_prefix("that are attached to creatures"))
+        {
+            // "each Aura you control that's attached to a creature" (Sage's Reverie).
+            (
+                Filter::Custom(crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
             // "untapped creatures that player controls that didn't attack this turn".
             (Filter::not(Filter::AttackedThisTurn), r)

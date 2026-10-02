@@ -528,3 +528,55 @@ fn ancestral_vengeance_still_puts_its_counter_when_the_creature_dies() {
     assert_eq!(t.counters(bears, counters::PLUS1), 1);
     assert_eq!(t.pt(bears), (3, 3));
 }
+
+#[test]
+fn withercrowns_base_power_is_modified_by_pumps_and_counters_whenever_they_began() {
+    cr!("613.4b", "613.4c", "613.7");
+    ruling!(
+        "Withercrown",
+        "Any effects that modify the enchanted creature’s power without setting it to a specific value will apply after its base power is set, regardless of the order in which those effects were created. The same is true of counters that modify its power."
+    );
+    supported("Withercrown");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    giant_growth(&mut t, bears);
+    attach_new(&mut t, P0, "Withercrown", bears);
+    // Base power 0 (toughness unchanged), +3/+3.
+    assert_eq!(t.pt(bears), (3, 5));
+    t.g.add_counters(Entity::Object(bears), counters::PLUS1, 1, None);
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (4, 6));
+    giant_growth(&mut t, bears);
+    assert_eq!(t.pt(bears), (7, 9));
+    // The granted upkeep ability: P1 doesn't sacrifice it and loses 1 life.
+    t.advance_to(P1, Step::Upkeep);
+    t.answer_yes(P1, false);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert!(t.on_battlefield(bears));
+}
+
+#[test]
+fn sages_reverie_counts_any_aura_attached_to_a_creature() {
+    cr!("613.4c", "303.4", "109.4");
+    ruling!(
+        "Sage's Reverie",
+        "An Aura doesn't necessarily need the enchant creature ability for the abilities of Sage's Reverie to count it. For example, an Aura with enchant permanent that's attached to a creature will count."
+    );
+    supported("Sage's Reverie");
+    supported("Faith's Fetters");
+    supported("Urban Burgeoning");
+    let mut t = TestGame::new(2);
+    // Faith's Fetters (enchant permanent) on P1's Hill Giant; Urban Burgeoning on a land.
+    let giant = t.battlefield(P1, "Hill Giant");
+    attach_new(&mut t, P0, "Faith's Fetters", giant);
+    let forest = t.battlefield(P0, "Forest");
+    attach_new(&mut t, P0, "Urban Burgeoning", forest);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    cast_aura(&mut t, "Sage's Reverie", bears);
+    // It draws a card for each (Faith's Fetters and Sage's Reverie itself, which is on
+    // the battlefield attached to the Bears as its enters ability resolves).
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.pt(bears), (4, 4));
+}
