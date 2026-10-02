@@ -45,6 +45,41 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
         Effect::Unattach {
             what: Sel::Choose { filter, count, .. },
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        // "Sacrifice that artifact" (an "unless" action, CR 118.12a): a player can
+        // sacrifice only permanents they control (CR 701.21a).
+        Effect::SacrificeObjects { what } => {
+            let objs = g.eval_sel_objects(what, ctx);
+            Some(
+                !objs.is_empty()
+                    && objs.iter().all(|o| {
+                        g.is_live(*o)
+                            && g.obj(*o).zone == crate::object::Zone::Battlefield
+                            && g.obj(*o).controller == ctx.controller
+                    }),
+            )
+        }
+        // "Return a basic land card from your graveyard to your hand", "exile a creature
+        // card from your graveyard": as many objects as it names must be there.
+        Effect::Move {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        }
+        | Effect::Exile {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
         _ => None,
     }
 }

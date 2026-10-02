@@ -26,6 +26,12 @@ use crate::oracle::phrases::{end, parse_object_phrase, split_word};
 fn ends_optional(e: &Effect) -> bool {
     match e {
         Effect::May { .. } | Effect::PayOptional { .. } => true,
+        // "You may cast it without paying its mana cost", "you may cast a spell from among
+        // them": the player chooses whether to cast (and the effect records whether a
+        // card was cast or played).
+        Effect::CastCard { optional, what, .. } | Effect::PlayCard { optional, what, .. } => {
+            *optional || matches!(what, Sel::Choose { up_to: true, .. })
+        }
         Effect::Seq(v) => v.last().is_some_and(ends_optional),
         _ => false,
     }

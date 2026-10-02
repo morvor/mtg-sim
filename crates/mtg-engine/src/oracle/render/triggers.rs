@@ -141,6 +141,33 @@ impl Renderer<'_> {
     /// "When ~ enters", "At the beginning of your upkeep", "Whenever you cast a spell".
     pub(crate) fn trigger_text(&mut self, t: &TriggerCond) -> String {
         match t {
+            // "At the beginning of the upkeep of enchanted creature's controller", "At the
+            // beginning of enchanted player's upkeep": each upkeep whose active player
+            // controls the object (or is the player) this is attached to.
+            TriggerCond::Where { trigger, cond }
+                if matches!(
+                    cond,
+                    Condition::PlayerMatches(PlayerRef::ControllerOf(s), PlayerFilter::Active)
+                        if matches!(s.as_ref(), Sel::AttachedTo)
+                ) && matches!(
+                    trigger.as_ref(),
+                    TriggerCond::BeginningOf {
+                        whose: PlayerRel::Any,
+                        ..
+                    }
+                ) && self.info.enchant.is_some() =>
+            {
+                let TriggerCond::BeginningOf { step, .. } = trigger.as_ref() else {
+                    return String::new();
+                };
+                let step = self.step_name(*step);
+                let e = self.info.enchant.clone().unwrap_or_default();
+                if e == "player" {
+                    format!("at the beginning of enchanted player's {step}")
+                } else {
+                    format!("at the beginning of the {step} of enchanted {e}'s controller")
+                }
+            }
             TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger)
                 if matches!(trigger.as_ref(), TriggerCond::BeginningOf { .. }) =>
             {
@@ -537,6 +564,12 @@ impl Renderer<'_> {
                 Ev::new(w, format!("search {p} library"))
             }
             TriggerCond::TurnedFaceUp(f) => Ev::new(obj(self, f), "is turned face up"),
+            // "When ~ transforms into [this face]": an ability of a face triggers only
+            // when the permanent has that face up after it transforms (it has the ability
+            // only then; CR 701.27e), so cards say either.
+            TriggerCond::Transforms(Filter::Source) => {
+                Ev::new(obj(self, &Filter::Source), "transforms {opt:into ~}")
+            }
             TriggerCond::Transforms(f) => Ev::new(obj(self, f), "transforms"),
             TriggerCond::YouSacrifice(f) => {
                 let n = self.noun_det(f, det.clone());

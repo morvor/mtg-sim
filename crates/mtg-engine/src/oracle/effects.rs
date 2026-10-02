@@ -547,6 +547,8 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     if l.starts_with("you may pay ")
         || (l.starts_with("you may ") && l.contains(" unless that player pays "))
         || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
+        // A permission to play cards (see `patterns::permission_grammar`).
+        || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
     {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);

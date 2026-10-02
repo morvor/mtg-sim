@@ -132,7 +132,7 @@ Fields that would be empty, false, zero or absent are omitted throughout.
 | `mulligan` | `yes_no` | yes = take a mulligan, no = keep (CR 103.5). |
 | `put_on_bottom` | `choose_many` (exactly n) | Cards in hand (London mulligan). |
 | `choose_modes` | `choose_many` | Only the modes that may be chosen (CR 700.2); with pawprints, each option has a `cost` and the spec a `budget` (CR 700.2i). |
-| `choose_x` | `number` | The value of X (CR 107.3). |
+| `choose_x` | `number` | The value of X (CR 107.3), between the spec's `min` (1 when the text says "X can't be 0", CR 107.3a) and `max`. |
 | `casting_method` | `choose_one` | Ways to cast a spell. |
 | `optional_cost` | `yes_no`, or `number` for a cost that may be paid any number of times (multikicker) | |
 | `targets` | `choose_many` | Legal targets for one target slot (CR 115). |

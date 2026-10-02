@@ -345,6 +345,7 @@ fn top_of_library_permission(name: &str, what: Filter) -> CardDef {
             spells: true,
             cost: None,
             flash: false,
+            terms: Default::default(),
         })))
         .build()
 }
@@ -416,6 +417,7 @@ fn face_down_exiled_cards_can_be_cast_only_by_a_player_who_can_look_at_them() {
                 spells: true,
                 cost: None,
                 flash: false,
+                terms: Default::default(),
             })))
             .build(),
         Zone::Battlefield,

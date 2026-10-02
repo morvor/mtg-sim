@@ -224,6 +224,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_value(&mut self, name: &str) -> String {
+        // "the amount of {B} spent on X" (see `payment_rules`).
+        if let Some(t) = name.strip_prefix(crate::payment_rules::MANA_SPENT_ON_X) {
+            return format!("the amount of {{{t}}} spent on X");
+        }
         match name {
             "party_size" => "the number of creatures in your party".into(),
             crate::kw::hand_graveyard_actions::THAT_MANY => "that many".into(),
@@ -532,6 +536,9 @@ impl Renderer<'_> {
                 "you may have {} assign its combat damage as though it weren't blocked",
                 me(self)
             ),
+            "may look at cards exiled with this" => {
+                format!("you may look at cards exiled with {}", me(self))
+            }
             "hands revealed:each" => "players play with their hands revealed".into(),
             "hands revealed:opponents" => "your opponents play with their hands revealed".into(),
             "opponents' creatures targetable as though no hexproof" => "creatures your opponents control with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof".into(),

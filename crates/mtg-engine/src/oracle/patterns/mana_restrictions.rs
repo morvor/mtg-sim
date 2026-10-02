@@ -109,7 +109,7 @@ fn cast_purpose(s: &str) -> Option<ManaRestriction> {
 
 /// "a Dragon spell or an Omen spell", "Dragon creature spells", "instant and sorcery
 /// spells", "creature spells with mana value 4 or greater".
-fn spell_alternatives(s: &str) -> Option<Filter> {
+pub(crate) fn spell_alternatives(s: &str) -> Option<Filter> {
     let s = s
         .strip_prefix("a ")
         .or_else(|| s.strip_prefix("an "))

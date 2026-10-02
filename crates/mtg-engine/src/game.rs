@@ -728,6 +728,8 @@ pub struct Game {
     pub planechase: crate::planechase::PlanarState,
     /// Records kept by hand-written card abilities (see `cards/`).
     pub cards: crate::cards::CardState,
+    /// Players and objects abilities noted for their linked abilities (CR 607.1).
+    pub linked_notes: crate::linked_notes::LinkedNotes,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -843,6 +845,7 @@ impl Game {
             multiplayer: Default::default(),
             planechase: Default::default(),
             cards: Default::default(),
+            linked_notes: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),
