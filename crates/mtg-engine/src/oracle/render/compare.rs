@@ -236,6 +236,25 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               {1} for each of them.",
     },
     Equivalence {
+        pattern: r"\bcycles? or discards? (a|another|one or more|two or more) ",
+        replacement: "discard $1 ",
+        why: "Cycling a card discards it (CR 702.29a); an ability that triggers when a player \
+              \"cycles or discards\" a card triggers once when a card is cycled (CR 702.29d), \
+              as one that triggers on discarding does.",
+    },
+    Equivalence {
+        pattern: r"\bthe number of (white|blue|black|red|green) mana symbols in the mana costs of permanents you control\b",
+        replacement: "your devotion to $1",
+        why: "CR 700.5: devotion to a color is the number of mana symbols of that color among \
+              the mana costs of permanents that player controls.",
+    },
+    Equivalence {
+        pattern: r"\banother\b",
+        replacement: "other",
+        why: "\"Another creature\" and \"other creatures\" both exclude the object itself; the \
+              article and grammatical number are ignored elsewhere.",
+    },
+    Equivalence {
         pattern: r"\byour (commanders?)\b",
         replacement: "$1 you own",
         why: "A player's commander is the commander they own (CR 903.3); \"your commander\" \
