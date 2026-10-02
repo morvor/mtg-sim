@@ -1149,7 +1149,8 @@ impl Game {
             }
             if let Some(dest) = crate::kw::permanent_resolved_destination(self, id) {
                 // A keyword puts the resolving permanent spell somewhere else instead
-                // (e.g. rebound on a creature spell, CR 702.88a).
+                // (e.g. rebound on a creature spell, CR 702.88a; buyback on
+                // a permanent spell, which goes to its owner's hand, CR 702.27a).
                 let moved = self.move_object_ev(MoveEv {
                     obj: id,
                     to: dest.0,

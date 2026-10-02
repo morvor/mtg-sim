@@ -1268,6 +1268,9 @@ pub enum Value {
     /// stack, whether or not they're still there ("you've cast four or more instant and
     /// sorcery spells this turn"). Copies of spells weren't cast.
     SpellsCastThisTurn(PlayerRef, Filter),
+    /// Total mana value of the spells the player has cast this turn that match the filter
+    /// (each as it last existed on the stack); copies weren't cast (CR 707.10).
+    SpellsCastThisTurnManaValue(PlayerRef, Filter),
     /// Number of times this ability has resolved this turn.
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
