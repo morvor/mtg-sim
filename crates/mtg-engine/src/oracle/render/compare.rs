@@ -28,6 +28,33 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\bcan block an additional ([a-z ]*?creatures?) each combat this turn\b",
+        replacement: "can block an additional $1 this turn",
+        why: "\"Can block an additional creature this turn\" applies in each combat that \
+              turn (CR 509.1b).",
+    },
+    Equivalence {
+        pattern: r"\ba six-sided die\b",
+        replacement: "a d6",
+        why: "A d6 is a six-sided die (CR 706.1a).",
+    },
+    Equivalence {
+        pattern: r"\bthe owner of ~",
+        replacement: "~'s owner",
+        why: "\"The owner of ~\" is \"~'s owner\".",
+    },
+    Equivalence {
+        pattern: r"\bif no creatures are on the battlefield\b",
+        replacement: "if there are no creatures on the battlefield",
+        why: "The same condition, worded two ways.",
+    },
+    Equivalence {
+        pattern: r"\b(adds?) an amount of (\{[a-z0-9]\}) equal to the number of ",
+        replacement: "$1 $2 for each ",
+        why: "\"Add {R} for each card\" adds one {R} per card: an amount of {R} equal to \
+              the number of cards (CR 106.1).",
+    },
+    Equivalence {
         pattern: r"(^|\n|[.:] )([a-z]+s) can't be blocked by ([a-z]+s)(\.|$)",
         replacement: "$1$3 can't block $2$4",
         why: "\"Warriors can't be blocked by Cowards\" and \"Cowards can't block Warriors\" \

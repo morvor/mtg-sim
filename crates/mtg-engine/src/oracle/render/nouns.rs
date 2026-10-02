@@ -875,6 +875,10 @@ impl Renderer<'_> {
                 };
                 self.collect(&Filter::Power(neg, v.clone()), np);
             }
+            // "each creature that isn't of the chosen type".
+            Filter::ChosenType => np
+                .rel
+                .push("that {alt:isn't|aren't} of {alt:the chosen type|that type}".into()),
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));

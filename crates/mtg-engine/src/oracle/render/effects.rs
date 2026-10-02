@@ -4295,6 +4295,14 @@ impl Renderer<'_> {
                 _ => false,
             },
             Sel::All(f) | Sel::Choose { filter: f, .. } => owned(f),
+            Sel::Union(v) => !v.is_empty() && v.iter().all(|x| self.sel_is_yours(x)),
+            // A variable holding cards chosen from your own graveyard earlier.
+            Sel::Var(var) => self
+                .var_defs
+                .iter()
+                .rev()
+                .find(|(w, _, _)| w == var)
+                .is_some_and(|(_, d, _)| !matches!(d, Sel::Var(_)) && self.sel_is_yours(d)),
             _ => false,
         }
     }
@@ -4584,7 +4592,21 @@ impl Renderer<'_> {
         let has = if gains { "gains" } else { "has" };
         if let Some((b, still)) = becomes.render(self, &keywords, &abilities, gains) {
             // Negations come first ("except it isn't legendary and is a 4/4 Hero").
-            let at = parts.iter().take_while(|p| p.starts_with("isn't")).count();
+            // "loses all abilities and has base power and toughness 0/1": as the
+            // modifications are listed.
+            let loses_first =
+                mods.iter()
+                    .position(|x| matches!(x, Modification::RemoveAllAbilities))
+                    .zip(mods.iter().position(|x| {
+                        matches!(x, Modification::SetPT(..) | Modification::CdaPT(..))
+                    }))
+                    .is_some_and(|(a, b)| a < b);
+            let at = parts
+                .iter()
+                .take_while(|p| {
+                    p.starts_with("isn't") || (loses_first && p.as_str() == "loses all abilities")
+                })
+                .count();
             parts.insert(at, b);
             if !still.is_empty() {
                 where_clauses.push(still);

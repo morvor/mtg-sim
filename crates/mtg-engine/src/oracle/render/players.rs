@@ -860,7 +860,11 @@ impl Renderer<'_> {
                 format!("each {n}")
             }
             PlayerRef::Owner => "~'s owner".into(),
-            PlayerRef::ChosenOpponent => "the chosen opponent".into(),
+            // "Choose an opponent. ... the chosen player's hand".
+            PlayerRef::ChosenOpponent if matches!(case, Case::Poss) => {
+                return "the chosen {alt:opponent's|player's}".into();
+            }
+            PlayerRef::ChosenOpponent => "the chosen {alt:opponent|player}".into(),
             PlayerRef::Monarch => "the monarch".into(),
             PlayerRef::LinkedNoted => "that player".into(),
         };
