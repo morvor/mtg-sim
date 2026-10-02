@@ -44,6 +44,11 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
     match group {
         TargetGroup::SameOwner => objs.iter().all(|o| o.owner == objs[0].owner),
         TargetGroup::SameController => objs.iter().all(|o| o.controller == objs[0].controller),
+        TargetGroup::DifferentControllers => objs.iter().enumerate().all(|(i, a)| {
+            objs.iter()
+                .skip(i + 1)
+                .all(|b| a.controller != b.controller)
+        }),
         TargetGroup::ShareCreatureType => {
             let fixed: Vec<&Characteristics> = objs
                 .iter()
