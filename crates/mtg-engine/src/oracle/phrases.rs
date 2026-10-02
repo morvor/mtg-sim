@@ -1635,8 +1635,11 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 13] = [
+    let pairs: [(&str, PlayerRef); 14] = [
         ("you ", PlayerRef::You),
+        // Internal form of "that player" in an ability linked to one that targeted a
+        // player (CR 607.1, see `patterns::r607_linked_targets`).
+        ("the noted player ", PlayerRef::LinkedNoted),
         // A Curse's player (CR 303.4).
         (
             "enchanted player ",

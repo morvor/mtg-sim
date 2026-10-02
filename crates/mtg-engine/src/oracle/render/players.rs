@@ -542,6 +542,7 @@ impl Renderer<'_> {
                 decline(s, case)
             }
             Sel::Linked => decline("each card exiled with ~".into(), case),
+            Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)
@@ -659,6 +660,7 @@ impl Renderer<'_> {
             PlayerRef::Owner => "~'s owner".into(),
             PlayerRef::ChosenOpponent => "the chosen opponent".into(),
             PlayerRef::Monarch => "the monarch".into(),
+            PlayerRef::LinkedNoted => "that player".into(),
         };
         decline(s, case)
     }

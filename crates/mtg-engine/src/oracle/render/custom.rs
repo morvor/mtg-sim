@@ -558,6 +558,9 @@ impl Renderer<'_> {
                 "you may have {} assign its combat damage as though it weren't blocked",
                 me(self)
             ),
+            "may look at cards exiled with this" => {
+                format!("you may look at cards exiled with {}", me(self))
+            }
             "hands revealed:each" => "players play with their hands revealed".into(),
             "hands revealed:opponents" => "your opponents play with their hands revealed".into(),
             "opponents' creatures targetable as though no hexproof" => "creatures your opponents control with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof".into(),
