@@ -58,6 +58,18 @@ fn subject_list(subj: &str) -> Option<Filter> {
     if !end(tail).is_empty() {
         return None;
     }
+    // Keep only the controller part: the probe noun's own "is a card" restriction would
+    // wrongly exclude tokens ("Creatures your opponents control enter tapped" applies to
+    // creature tokens too, CR 111.1).
+    let sf = match sf {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|f| !matches!(f, Filter::Card))
+                .collect(),
+        ),
+        Filter::Card => Filter::Any,
+        other => other,
+    };
     Some(Filter::and(vec![head, sf]))
 }
 

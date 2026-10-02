@@ -29,7 +29,7 @@ fn players_create_token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     } else if let Some(r) = l.strip_prefix("each other player ") {
         (PlayerRef::EachOtherPlayer, r)
     } else if let Some(r) = l.strip_prefix("each of your teammates ") {
-        // CR 102.3, 810.1: your teammates are the other players who aren't your opponents.
+        // CR 102.3: your teammates are the other players who aren't your opponents.
         (
             PlayerRef::Each(PlayerFilter::And(vec![
                 PlayerFilter::NotYou,
