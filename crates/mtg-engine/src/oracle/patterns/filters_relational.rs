@@ -428,7 +428,11 @@ fn word_end(r: &str) -> bool {
 /// "with toughness greater than its power", "with total power and toughness 5 or less",
 /// "with total mana value 6 or less" (a group requirement).
 fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
-    let r = t.strip_prefix("with ")?;
+    // "... that shares a creature type with the sacrificed creature and has mana value
+    // equal to 1 plus that creature's mana value" (Pyre of Heroes).
+    let r = t
+        .strip_prefix("with ")
+        .or_else(|| t.strip_prefix("and has "))?;
     // "with lesser power [than ...]"
     for (p, cmp) in [("lesser ", Cmp::Lt), ("greater ", Cmp::Gt)] {
         if let Some(x) = r.strip_prefix(p) {
