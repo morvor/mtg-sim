@@ -2769,7 +2769,8 @@ pub enum CostRule {
     /// color may be spent this way."
     XOnlyColors { colors: ColorSet, distinct: bool },
     /// "You can't spend mana to cast this spell." (Hogaak, Arisen Necropolis): no mana may
-    /// pay its total cost, so only other ways of paying it (convoke, delve) can (CR 601.2h).
+    /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
+    /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
     NoMana,
 }
 

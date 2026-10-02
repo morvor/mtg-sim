@@ -943,7 +943,7 @@ pub fn usable_pool(g: &Game, p: PlayerId, spend: &SpendContext) -> Vec<bool> {
         .mana_pool
         .mana
         .iter()
-        .map(|m| m.can_spend_in(g, p, spend))
+        .map(|m| !spend.no_mana && m.can_spend_in(g, p, spend))
         .collect()
 }
 
@@ -1510,7 +1510,12 @@ pub fn plan_payment(
     reserve: Option<ObjectId>,
 ) -> Option<Vec<(ManaSource, Vec<ManaType>)>> {
     let reqs = expand(cost, spend.x_spend)?;
-    let sources = mana_sources(g, p, reserve);
+    // No mana may be spent: neither the pool's nor any mana ability's (only life pays).
+    let sources = if spend.no_mana {
+        Vec::new()
+    } else {
+        mana_sources(g, p, reserve)
+    };
     // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
     // any colored requirement.
     let widen = |mut types: Vec<ManaType>| {
@@ -1525,6 +1530,9 @@ pub fn plan_payment(
     };
     let mut units: Vec<Unit> = Vec::new();
     for (i, m) in g.player(p).mana_pool.mana.iter().enumerate() {
+        if spend.no_mana {
+            break;
+        }
         units.push(Unit {
             types: widen(vec![m.ty]),
             snow: m.snow,

@@ -1705,12 +1705,6 @@ impl Game {
         let before = generic(&total);
         crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
         x_left = x_left.saturating_sub(before.saturating_sub(generic(&total)));
-        // "You can't spend mana to cast this spell": what's left must be nothing (CR 118.3).
-        if crate::payment_rules::no_mana(&cost_rules)
-            && !crate::payment_rules::spends_no_mana(total.mana.as_ref())
-        {
-            return Err(Illegal("mana can't be spent to cast this spell".into()));
-        }
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
             is_spell: true,
@@ -1725,6 +1719,9 @@ impl Game {
             class_level: false,
             cost_of: Some(crate::rule_statics::payment::CostOf::Spell),
             x_spend: crate::payment_rules::x_spend(&cost_rules, x_left).filter(|_| !any_mana),
+            // "You can't spend mana to cast this spell": what's left is paid only with what
+            // may pay mana symbols other than mana (life, CR 118.3).
+            no_mana: crate::payment_rules::no_mana(&cost_rules),
             ..Default::default()
         };
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
@@ -1867,6 +1864,8 @@ impl Game {
             add_cost(&mut cost, &Cost::mana(ManaCost::generic(more)));
         }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        // The generic mana the X symbols represent ({X}{X}: twice X).
+        let x_part = x * cost.mana.as_ref().map_or(0, |m| m.x_count());
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
         }
@@ -1922,7 +1921,7 @@ impl Game {
             crate::cost_rules::chosen_half(self, card, i, cur, s)
         });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
-        let x_left = crate::payment_rules::x_left(x, before, generic(&cost));
+        let x_left = crate::payment_rules::x_left(x_part, before, generic(&cost));
         // Changes applied after all others (e.g. a minimum total cost).
         crate::kw::global_spell_cost(self, p, card, &mut cost);
         (cost, x_left)
@@ -2224,6 +2223,8 @@ impl Game {
             None => act.cost.clone(),
         };
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        // The generic mana the X symbols represent ({X}{X}: twice X).
+        let x_part = x * cost.mana.as_ref().map_or(0, |m| m.x_count());
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
         }
@@ -2261,7 +2262,7 @@ impl Game {
         });
         // Keyword rules that change the cost (power-up, CR 702.193a).
         crate::kw::activation_cost(self, p, src, a, &mut cost);
-        let x_left = crate::payment_rules::x_left(x, before, generic(&cost));
+        let x_left = crate::payment_rules::x_left(x_part, before, generic(&cost));
         // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
         let loyalty: Vec<i32> = cost
             .parts
@@ -2350,13 +2351,15 @@ impl Game {
             // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
             // can't be 0"): the least value that does is the least that may be announced,
             // and the one announced otherwise.
+            let least = crate::payment_rules::x_minimum(&crate::payment_rules::ability_rules(act));
             let holds = |g: &Game, x: i64| {
-                act.condition.as_ref().is_none_or(|c| {
-                    let mut ctx = ctx.clone();
-                    ctx.x = x as i32;
-                    ctx.x_defined = true;
-                    g.eval_cond(c, &ctx)
-                })
+                x >= least
+                    && act.condition.as_ref().is_none_or(|c| {
+                        let mut ctx = ctx.clone();
+                        ctx.x = x as i32;
+                        ctx.x_defined = true;
+                        g.eval_cond(c, &ctx)
+                    })
             };
             let min = (0..=max)
                 .find(|x| holds(self, *x))
@@ -2645,15 +2648,6 @@ impl Game {
         src: Option<ObjectId>,
         chars: &Characteristics,
     ) -> bool {
-        // "You can't spend mana to cast this spell": only a cost with no mana left to pay
-        // can be paid (see `payment_rules`).
-        if crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars))
-            && !crate::payment_rules::spends_no_mana(
-                cost.mana.as_ref().map(|m| m.with_x(0)).as_ref(),
-            )
-        {
-            return false;
-        }
         // The costs of casting a spell (CR 601.2f–h).
         let mut ctx = Ctx::new(src, p);
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
@@ -2667,7 +2661,7 @@ impl Game {
         p: PlayerId,
         cost: &Cost,
         src: Option<ObjectId>,
-        _chars: &Characteristics,
+        chars: &Characteristics,
         ctx: &Ctx,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -2704,6 +2698,9 @@ impl Game {
                     .unwrap_or_default(),
                 check_only: true,
                 cost_of: ctx.cost_of,
+                // "You can't spend mana to cast this spell" (see `payment_rules`).
+                no_mana: ctx.cost_of == Some(crate::rule_statics::payment::CostOf::Spell)
+                    && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),
                 ..Default::default()
             };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);

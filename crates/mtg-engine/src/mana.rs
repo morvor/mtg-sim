@@ -460,6 +460,9 @@ pub struct SpendContext {
     /// The ability on the stack whose activation cost is being paid ("When you spend this
     /// mana to cast a spell or activate an ability", CR 106.6).
     pub ability_on_stack: Option<ObjectId>,
+    /// No mana may be spent ("You can't spend mana to cast this spell"): only life may pay
+    /// symbols that can be paid with it (see `payment_rules`).
+    pub no_mana: bool,
 }
 
 /// The part of a cost's generic mana that X represents, which only mana of `colors` may pay
@@ -765,7 +768,10 @@ pub fn find_payment(
     ctx: &SpendContext,
     max_life: u32,
 ) -> Option<PaymentPlan> {
-    let usable: Vec<bool> = pool.iter().map(|m| m.can_spend(ctx)).collect();
+    let usable: Vec<bool> = pool
+        .iter()
+        .map(|m| !ctx.no_mana && m.can_spend(ctx))
+        .collect();
     find_payment_with(pool, cost, ctx, max_life, &usable)
 }
 
@@ -1043,5 +1049,57 @@ mod tests {
         };
         assert!(find_payment(&[m.clone()], &c, &creature, 0).is_some());
         assert!(find_payment(&[m], &c, &sorcery, 0).is_none());
+    }
+
+    #[test]
+    fn mana_that_cant_pay_generic_mana() {
+        use ManaType::*;
+        let not_generic = |t: ManaType| Mana {
+            restriction: Some(ManaRestriction::NotGeneric),
+            ..Mana::new(t)
+        };
+        let ctx = SpendContext::default();
+        let p = vec![not_generic(G), not_generic(W)];
+        assert!(find_payment(&p, &ManaCost::parse("{G}{W}").unwrap(), &ctx, 0).is_some());
+        assert!(find_payment(&p, &ManaCost::parse("{1}{G}").unwrap(), &ctx, 0).is_none());
+        // {2/W}: only its colored half.
+        assert!(find_payment(&p, &ManaCost::parse("{2/W}{G}").unwrap(), &ctx, 0).is_some());
+        assert!(find_payment(&p[..1], &ManaCost::parse("{2/W}").unwrap(), &ctx, 0).is_none());
+    }
+
+    #[test]
+    fn x_paid_only_with_mana_of_its_colors() {
+        use ManaType::*;
+        let black_x = |amount: u32| SpendContext {
+            x_spend: Some(XSpend {
+                amount,
+                colors: ColorSet::single(Color::Black),
+                distinct: false,
+            }),
+            ..Default::default()
+        };
+        // {X}{1}{B} with X = 2: {3}{B}, two of the generic being X.
+        let c = ManaCost::parse("{3}{B}").unwrap();
+        assert!(find_payment(&pool(&[B, B, B, R]), &c, &black_x(2), 0).is_some());
+        assert!(find_payment(&pool(&[B, B, R, R]), &c, &black_x(2), 0).is_none());
+        let plan = find_payment(&pool(&[R, B, B, B]), &c, &black_x(2), 0).unwrap();
+        assert_eq!(plan.x_indices.len(), 2);
+        // Life can't pay it, even for a player who may pay life for {B}.
+        let mut krrik = black_x(1);
+        krrik.pay_life_for = vec![(Color::Black, 2)];
+        let c = ManaCost::parse("{1}{B}").unwrap();
+        let plan = find_payment(&pool(&[B]), &c, &krrik, 20).unwrap();
+        assert_eq!((plan.life, plan.phyrexian), (2, 0));
+        assert!(find_payment(&pool(&[R]), &c, &krrik, 20).is_none());
+        // Distinct colors.
+        let mut colored = black_x(2);
+        colored.x_spend = Some(XSpend {
+            amount: 2,
+            colors: ColorSet::ALL,
+            distinct: true,
+        });
+        let c = ManaCost::parse("{2}").unwrap();
+        assert!(find_payment(&pool(&[W, W]), &c, &colored, 0).is_none());
+        assert!(find_payment(&pool(&[W, U]), &c, &colored, 0).is_some());
     }
 }

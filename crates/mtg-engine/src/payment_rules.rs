@@ -18,7 +18,7 @@
 
 use crate::ability::*;
 use crate::game::Game;
-use crate::mana::{ManaCost, XSpend};
+use crate::mana::XSpend;
 use crate::object::Characteristics;
 use crate::types::*;
 
@@ -81,11 +81,6 @@ pub fn x_spend(rules: &[CostRule], amount: u32) -> Option<XSpend> {
 /// "You can't spend mana to cast this spell."
 pub fn no_mana(rules: &[CostRule]) -> bool {
     rules.contains(&CostRule::NoMana)
-}
-
-/// Whether `mana` (X substituted) asks for no mana to be spent: nothing, or {0}.
-pub fn spends_no_mana(mana: Option<&ManaCost>) -> bool {
-    mana.is_none_or(|m| m.is_zero())
 }
 
 /// How much of a cost's generic mana X still represents after the generic mana it had

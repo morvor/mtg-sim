@@ -502,6 +502,32 @@ fn hogaak_can_be_cast_only_with_convoke_and_delve() {
     assert_eq!(t.named_on_battlefield("Hogaak, Arisen Necropolis").len(), 1);
 }
 
+#[test]
+fn hogaak_s_black_symbols_may_be_paid_with_life_instead_of_mana() {
+    cr!("601.2h", "118.3", "702.51a");
+    supported("Hogaak, Arisen Necropolis");
+    // With K'rrik ("For each {B} in a cost, you may pay 2 life rather than pay that mana"),
+    // paying 2 life for a {B/G} isn't spending mana. K'rrik convokes one {B/G}, life pays
+    // the other, five cards delve {5}; the Swamps stay untapped.
+    let mut t = TestGame::new(2);
+    let krrik = t.battlefield(P0, "K'rrik, Son of Yawgmoth");
+    let hogaak = t.graveyard(P0, "Hogaak, Arisen Necropolis");
+    t.lands(P0, "Swamp", 3);
+    for _ in 0..5 {
+        t.graveyard(P0, "Lightning Bolt");
+    }
+    assert!(castable(&mut t, P0, hogaak));
+    t.cast(P0, hogaak).go();
+    assert!(t.obj_now(krrik).tapped);
+    assert_eq!(t.life(P0), 18);
+    assert!(t
+        .g
+        .battlefield
+        .iter()
+        .filter(|l| t.obj_now(**l).chars.name == "Swamp")
+        .all(|l| !t.obj_now(*l).tapped));
+}
+
 // ---------------------------------------------------------------------------------------
 // Sunken Palace: "When you spend this mana to cast a spell or activate an ability, copy
 // that spell or ability."
