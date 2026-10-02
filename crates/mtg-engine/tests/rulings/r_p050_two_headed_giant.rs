@@ -447,6 +447,16 @@ fn campaign_of_vengeance_one_defending_player() {
         attack_with(t, &[(b, Entity::Player(P2))]);
         t.resolve_all();
     });
+    // Attacking the second player of the opposing team: that player is the one who
+    // loses the life (not the first defending player).
+    drain_2hg("Campaign of Vengeance", 1, 1, |t| {
+        t.battlefield(P0, "Campaign of Vengeance");
+        let b = t.battlefield(P0, "Grizzly Bears");
+        attack_with(t, &[(b, Entity::Player(P3))]);
+        t.resolve_all();
+        let lost = |p: PlayerId| t.g.history.life_lost.get(&p).copied().unwrap_or(0);
+        assert_eq!((lost(P2), lost(P3)), (0, 1));
+    });
 }
 
 #[test]

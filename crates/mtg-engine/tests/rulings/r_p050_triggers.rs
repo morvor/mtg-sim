@@ -521,7 +521,7 @@ fn rin_and_seri_dont_see_themselves_being_cast() {
 
 #[test]
 fn maccready_checks_power_only_as_it_triggers() {
-    cr!("603.2", "603.4");
+    cr!("603.2");
     ruling!(
         "MacCready, Lamplight Mayor",
         "Similarly, the power of the creature attacking you is checked only when MacCready’s second ability triggers."
