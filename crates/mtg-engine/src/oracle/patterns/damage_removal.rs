@@ -348,6 +348,8 @@ fn recipient_item(
     }
     if let Some(r) = s.strip_prefix("each ") {
         let (f, _, rest) = parse_object_phrase(r)?;
+        // "each other creature with the same name as that creature".
+        let f = super::filters_relational::resolve_referent(f, b)?;
         let (f, rest) = bind_target_player(f, rest, b);
         let t = rest.trim_start();
         // "each opponent and each creature they control", "target player and each

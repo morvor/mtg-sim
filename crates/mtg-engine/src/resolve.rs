@@ -2014,11 +2014,19 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
+                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
                 let picked: Vec<Entity> =
                     crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
                         .into_iter()
                         .map(Entity::Object)
                         .collect();
+                // Objects chosen together must meet the group requirements ("any number
+                // of cards with different names"; see `relational.rs`).
+                let picked = if crate::relational::groups_of(filter).is_empty() {
+                    picked
+                } else {
+                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
+                };
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }

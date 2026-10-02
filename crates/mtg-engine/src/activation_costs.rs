@@ -523,5 +523,16 @@ pub fn x_bound(g: &Game, p: PlayerId, act: &ActivatedAbility) -> i64 {
         .permanents()
         .map(|o| o.counters.values().sum::<u32>())
         .sum();
-    mana.max(objects as i64 + counters as i64)
+    // "Sacrifice an artifact with mana value X" (Scrap Welder): X is a characteristic
+    // of the object paid with, which neither mana nor the number of objects limits.
+    let describes = act.cost.parts.iter().any(|c| match c {
+        CostPart::Sacrifice { filter, .. }
+        | CostPart::Discard { filter, .. }
+        | CostPart::Exile { filter, .. }
+        | CostPart::ReturnToHand { filter, .. }
+        | CostPart::TapUntapped { filter, .. } => crate::casting::filter_mentions_x(filter),
+        _ => false,
+    });
+    let described = if describes { 20 } else { 0 };
+    mana.max(objects as i64 + counters as i64).max(described)
 }

@@ -460,6 +460,10 @@ pub struct TurnHistory {
     /// the damage (e.g. for prowl, CR 702.76a). Recorded by `kw/prowl.rs`.
     #[serde(default)]
     pub combat_damage_to_players: Vec<crate::kw::prowl::CombatDamageRecord>,
+    /// (source, player) pairs: players dealt damage this turn and by what ("target creature
+    /// that dealt damage to you this turn"). Recorded by `kw/dealt_damage_to_you.rs`.
+    #[serde(default)]
+    pub damage_to_players_by_source: Vec<(ObjectId, PlayerId)>,
     /// Creatures tapped this turn to pay the cost of a Vehicle's crew ability, which
     /// "crewed" it (CR 702.122b–c). Recorded by `kw/crew.rs`.
     #[serde(default)]
