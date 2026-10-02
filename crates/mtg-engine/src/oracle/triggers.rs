@@ -53,7 +53,9 @@ fn parse_triggered_at(
             let mentions_it = c
                 .split(|ch: char| !ch.is_alphanumeric() && ch != '\'')
                 .any(|w| matches!(w, "it" | "its" | "it's"));
-            let parsed = super::statics::parse_condition(c, ctx);
+            let parsed = super::statics::parse_condition(c, ctx).or_else(|| {
+                super::patterns::that_player_conditions::that_player_condition(c, &it_player)
+            });
             // A condition read as being about the triggering object ("if it had counters
             // on it", CR 603.10a) has the trigger's referent.
             let about_trigger_object = matches!(

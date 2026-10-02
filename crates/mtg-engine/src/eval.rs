@@ -274,6 +274,10 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            // Twice the life total against the starting life total: no rounding.
+            PlayerFilter::LessThanHalfStartingLife => {
+                2 * self.player(p).life < crate::life_totals::starting_life(self, p)
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -1006,7 +1010,8 @@ impl Game {
             Value::LifeTotal(r) => self
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
-            Value::StartingLife => self.config.starting_life as i64,
+            // "Your starting life total": the variant's (CR 119.1a-e).
+            Value::StartingLife => crate::life_totals::starting_life(self, ctx.controller) as i64,
             // CR 800.4i: for a player who left the game, as last known.
             Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
                 crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64

@@ -827,6 +827,9 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// A player whose life total is less than half their own starting life total (CR
+    /// 119.1; "that player has less than half their starting life total").
+    LessThanHalfStartingLife,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),

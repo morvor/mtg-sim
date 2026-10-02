@@ -945,10 +945,7 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     if s == "opponent whose life total is less than half their starting life total" {
         return Some(Value::CountPlayers(PlayerFilter::And(vec![
             PlayerFilter::Opponent,
-            PlayerFilter::Life(
-                Cmp::Lt,
-                Box::new(Value::Div(Box::new(Value::StartingLife), 2, true)),
-            ),
+            PlayerFilter::LessThanHalfStartingLife,
         ])));
     }
     // "poison counter your opponents have"

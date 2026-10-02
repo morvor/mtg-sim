@@ -86,6 +86,21 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (clause, value_s) = l.rsplit_once(", where x is ")?;
     let it = b.it.clone();
+    // "..., where X is the number of creature cards in your graveyard as you cast this
+    // spell" (Undercity Upheaval): X is read as the spell is cast. That's when X is used
+    // if it's only the number of targets or the amount divided among them (CR 601.2c-d),
+    // so nothing else may use it.
+    if let Some(v) = value_s
+        .strip_suffix(" as you cast ~")
+        .or_else(|| value_s.strip_suffix(" as you cast this spell"))
+    {
+        let (x, tail) = value_phrase(v, b)?;
+        if !end(&tail).is_empty() {
+            return None;
+        }
+        let e = where_x_is_parts(clause, v, b, it)?;
+        return (!format!("{e:?}").contains(&format!("{:?}", nonnegative(x)))).then_some(e);
+    }
     where_x_is_parts(clause, value_s, b, it)
 }
 
