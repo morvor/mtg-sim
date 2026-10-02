@@ -194,3 +194,39 @@ fn zirilan_found_dragon_gains_haste_and_is_exiled() {
     t.resolve_all();
     assert!(t.in_exile("Shivan Dragon"));
 }
+
+#[test]
+fn bill_the_pony_target_assigns_damage_by_toughness_this_turn() {
+    cr!("510.1a", "611.2a");
+    assert_supported(&["Bill the Pony"]);
+    let mut t = TestGame::new(2);
+    let bill = t.enter(P0, "Bill the Pony");
+    t.resolve_all();
+    // Horned Turtle: 1/4.
+    let turtle = t.battlefield(P0, "Horned Turtle");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.activate(P0, bill, 0, &[Entity::Object(turtle)]).unwrap();
+    t.resolve();
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(&[(turtle, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn kingpin_creatures_with_more_toughness_assign_damage_by_toughness() {
+    cr!("510.1a");
+    assert_supported(&["The Kingpin of Crime"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Kingpin of Crime");
+    let turtle = t.battlefield(P0, "Horned Turtle");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(
+        &[(turtle, Entity::Player(P1)), (giant, Entity::Player(P1))],
+        &[],
+    );
+    // 4 (the Turtle's toughness) + 3 (the Giant's power).
+    assert_eq!(t.life(P1), 13);
+    assert_eq!(t.life(P0), 18);
+}

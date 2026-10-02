@@ -1345,3 +1345,89 @@ fn each_other_that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "grants: each other creature that player controls ...", priority: 220, parse: each_other_that_player_controls } }
+
+/// "Until end of turn, target creature you control assigns combat damage equal to its
+/// toughness rather than its power." (Bill the Pony), "until end of turn, creatures you
+/// control with toughness greater than their power assign combat damage equal to their
+/// toughness rather than their power" (CR 510.1a).
+fn damage_by_toughness_until(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let body = l
+        .strip_prefix("until end of turn, ")
+        .or_else(|| l.strip_suffix(" this turn"))
+        .or_else(|| l.strip_suffix(" until end of turn"))?;
+    let (subject, plural) = if let Some(s) =
+        body.strip_suffix(" assigns combat damage equal to its toughness rather than its power")
+    {
+        (s, false)
+    } else {
+        (
+            body.strip_suffix(
+                " assign combat damage equal to their toughness rather than their power",
+            )?,
+            true,
+        )
+    };
+    let what = if plural {
+        let p = subject.strip_prefix("all ").unwrap_or(subject);
+        let (f, plural, rest) = super::statics::object_phrase(p)?;
+        if !plural || !rest.trim().is_empty() {
+            return None;
+        }
+        f
+    } else {
+        let saved = (b.targets.len(), b.it.clone());
+        let (sel, rest) = crate::oracle::effects::object_ref(subject, b)?;
+        if !rest.trim().is_empty() {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        }
+        match sel {
+            Sel::This => Filter::Source,
+            s => Filter::In(Box::new(s)),
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::DamageByToughness(what),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: assigns combat damage equal to its toughness until end of turn", priority: 120, parse: damage_by_toughness_until } }
+
+/// "you may have it deal 2 damage to another creature you control" (Wicked Guardian),
+/// "you may have her deal 3 damage to you" (Elektra, Femme Fatale), "you may have ~ deal 1
+/// damage to that source's controller" (Flameblade Angel): an optional damage
+/// instruction with the source as the subject.
+fn you_may_have_it_deal(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    // (The core grammar reads "you may" and leaves "have it deal ...".)
+    let (may, r) = match l.strip_prefix("you may have ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("have ")?),
+    };
+    let (subj, rest) = r.split_once(" deal ")?;
+    let source_is_this = matches!(subj, "~")
+        || (matches!(subj, "it" | "her" | "him") && matches!(b.it, Sel::This));
+    if !source_is_this {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e @ Effect::DealDamage { .. }) =
+        crate::oracle::effects::parse_clause(&format!("~ deals {rest}"), b)
+    else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    if !may {
+        return Some(e);
+    }
+    Some(Effect::May {
+        who: PlayerRef::You,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: you may have it deal N damage to ...", priority: 120, parse: you_may_have_it_deal } }

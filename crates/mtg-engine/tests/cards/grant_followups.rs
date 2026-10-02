@@ -348,3 +348,23 @@ fn glittering_lion_loses_its_prevention_ability_until_end_of_turn() {
     t.resolve();
     assert!(!t.on_battlefield(lion));
 }
+
+#[test]
+fn elektra_may_damage_you_and_then_deals_damage_to_a_creature() {
+    cr!("603.12");
+    assert_supported(&["Elektra, Femme Fatale"]);
+    for yes in [true, false] {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.answer_yes(P0, yes);
+        t.answer(
+            P0,
+            DecisionKind::Targets,
+            mtg_engine::decision::Answer::Entities(vec![Entity::Object(giant)]),
+        );
+        t.enter(P0, "Elektra, Femme Fatale");
+        t.resolve_all();
+        assert_eq!(t.life(P0), if yes { 18 } else { 20 });
+        assert_eq!(t.on_battlefield(giant), !yes);
+    }
+}
