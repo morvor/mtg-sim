@@ -50,7 +50,7 @@ impl Game {
 
     /// APNAP order for simultaneous choices: with shared team turns the active team's
     /// players first, then each other team in turn order (CR 805.6).
-    fn pregame_order_or_apnap(&self) -> Vec<PlayerId> {
+    pub(crate) fn pregame_order_or_apnap(&self) -> Vec<PlayerId> {
         let mut order = self.pregame_order();
         // Players who have left the game make no choices, but keep them last so a request
         // for them is still handled.

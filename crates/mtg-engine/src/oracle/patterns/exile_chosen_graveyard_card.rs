@@ -21,6 +21,11 @@ fn exile_a_graveyard_card(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     b.named
         .push(("that card".to_string(), Sel::Var(EXILED_CARD)));
+    // With no earlier antecedent, "it" is the exiled card too ("Exile a creature card from
+    // your graveyard. Create a token that's a copy of it.", Mordor on the March).
+    if matches!(b.it, Sel::None) || super::oracle_hardening_referents::is_no_referent(&b.it) {
+        b.it = Sel::Var(EXILED_CARD);
+    }
     Some(Effect::Seq(vec![
         Effect::Exile {
             what: Sel::Choose {

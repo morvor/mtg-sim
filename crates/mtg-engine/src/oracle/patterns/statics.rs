@@ -1501,6 +1501,13 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     if r == "isn't a creature" || r == "aren't creatures" || r == "not a creature" {
         return m(vec![Modification::RemoveTypes(vec![CardType::Creature])]);
     }
+    // "~ isn't legendary if it's a token" (Aeve, Progenitor Ooze): a supertype removed
+    // (CR 205.4, 613.1d).
+    if r == "not legendary" {
+        return m(vec![Modification::RemoveSupertypes(vec![
+            Supertype::Legendary,
+        ])]);
+    }
     // "in addition to its other types" (CR 205.1b): types are added.
     // "is a black Zombie in addition to its other colors and types": colors are added
     // too (CR 105.3, 205.1b).
@@ -2306,7 +2313,11 @@ fn parse_body(
             (" and loses all other card types", true, false),
             (" and it loses all other card types", true, false),
             (" and loses all other card types and abilities", true, true),
-            (" and it loses all other card types and abilities", true, true),
+            (
+                " and it loses all other card types and abilities",
+                true,
+                true,
+            ),
             (
                 ", and it loses all other abilities, card types, and creature types",
                 true,
@@ -2536,6 +2547,21 @@ fn parse_line(
                     attackers: Filter::ControllerMatches(Box::new(pf)),
                 })];
                 return Some((body, and_all(conds)));
+            }
+            // "~ isn't legendary if it's a token" (Aeve, Progenitor Ooze): a characteristic
+            // change of the objects in that state, as "as long as it's a token" above.
+            // Only a state of the object itself ("it's a token"): the same as "as long as
+            // it's a token".
+            if !negate
+                && body.also.is_empty()
+                && body.outs.iter().all(|o| matches!(o, Out::Mod(_)))
+                && super::statics_conditions::pronoun_state(c).is_some()
+            {
+                if let Some((cond, _)) = parse_static_condition(c, body.subject.it.as_ref(), ctx) {
+                    let mut conds2 = conds.clone();
+                    conds2.push(cond);
+                    return Some((body, and_all(conds2)));
+                }
             }
             if !body.outs.iter().all(|o| matches!(o, Out::Restr(_))) {
                 continue;
