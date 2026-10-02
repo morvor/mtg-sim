@@ -527,6 +527,8 @@ fn source_kind(e: &Effect) -> Option<bool> {
             ..
         } => Some(false),
         Effect::RevealUntil { .. } => Some(true),
+        // "Each player reveals the top card of their library." (parley)
+        Effect::Custom(name) if name == crate::kw::parley::REVEAL_TOPS => Some(false),
         Effect::DigStep(s) => matches!(**s, DigStep::Until { .. }).then_some(true),
         Effect::Seq(v) => v.iter().rev().find_map(source_kind),
         Effect::May { effect, .. } => source_kind(effect),

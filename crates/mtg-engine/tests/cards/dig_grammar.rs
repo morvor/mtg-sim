@@ -1012,6 +1012,50 @@ fn getaway_barrel_puts_a_random_creature_onto_the_battlefield() {
         .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })));
 }
 
+#[test]
+fn dakra_mystic_mills_the_revealed_cards_or_everyone_draws() {
+    cr!("701.20a");
+    assert_supported("Dakra Mystic");
+    for mill in [true, false] {
+        let mut t = TestGame::new(2);
+        let mystic = t.battlefield(P0, "Dakra Mystic");
+        t.lands(P0, "Island", 1);
+        t.library_top(P0, "Shock");
+        t.library_top(P1, "Forest");
+        t.answer_yes(P0, mill);
+        let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+        t.activate(P0, mystic, 0, &[]).unwrap();
+        t.resolve();
+        assert_eq!(t.in_graveyard(P0, "Shock"), mill);
+        assert_eq!(t.in_graveyard(P1, "Forest"), mill);
+        assert_eq!(t.in_hand(P0, "Shock"), !mill);
+        assert_eq!(t.hand_size(P1), h1 + usize::from(!mill));
+        let _ = h0;
+    }
+}
+
+#[test]
+fn psychic_surgery_exiles_one_of_the_top_two_after_an_opponent_shuffles() {
+    cr!("701.24a");
+    ruling!(
+        "Psychic Surgery",
+        "You look at the top two cards of that library as the triggered ability resolves."
+    );
+    assert_supported("Psychic Surgery");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Psychic Surgery");
+    // P1 shuffles (a search with nothing found), then the trigger resolves.
+    t.g.shuffle_library(P1);
+    t.settle();
+    let top: Vec<ObjectId> = t.g.player(P1).library.iter().rev().take(2).copied().collect();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(top[1])]);
+    t.resolve_all();
+    assert_eq!(t.g.exile.len(), 1);
+    assert!(!t.g.is_live(top[1]));
+    assert_eq!(t.g.player(P1).library.last(), Some(&top[0]));
+}
+
 /// Cards the dig grammar made fully supported (each with its dig, library position or
 /// shuffle text compiled); the families are exercised by the tests above.
 #[test]
@@ -1172,6 +1216,7 @@ fn dig_grammar_cards_are_supported() {
         "Floodpits Drowner",
         "Screaming Swarm",
         "Orcish Librarian",
+        "Dakra Mystic",
     ] {
         assert_supported(name);
     }
