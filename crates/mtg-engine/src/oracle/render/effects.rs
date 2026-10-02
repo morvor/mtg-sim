@@ -862,19 +862,27 @@ impl Renderer<'_> {
                 ..
             } if v
                 .iter()
-                .any(|f| matches!(f, Filter::InZone(ZoneKind::Hand)))
+                .any(|f| matches!(f, Filter::InZone(ZoneKind::Hand | ZoneKind::Graveyard)))
                 && v.iter()
                     .any(|f| matches!(f, Filter::OwnedBy(PlayerRel::Target(o)) if o == t)) =>
             {
+                let zone = if v
+                    .iter()
+                    .any(|f| matches!(f, Filter::InZone(ZoneKind::Graveyard)))
+                {
+                    "graveyard"
+                } else {
+                    "hand"
+                };
                 let rest: Vec<Filter> = v
                     .iter()
-                    .filter(|f| !matches!(f, Filter::InZone(ZoneKind::Hand) | Filter::OwnedBy(_)))
+                    .filter(|f| !matches!(f, Filter::InZone(_) | Filter::OwnedBy(_)))
                     .cloned()
                     .collect();
                 let subj = self.player(&PlayerRef::Target(*t), Case::Subj);
                 let det = self.det_for(count);
                 let n = self.noun_det(&Filter::and(rest), det);
-                format!("{subj} exiles {n} from their hand")
+                format!("{subj} exiles {n} from their {zone}")
             }
             Effect::Exile {
                 what, face_down, ..
@@ -2392,6 +2400,46 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Discard a card. When you discard a card this way, ..." (a reflexive trigger,
+            // CR 603.12).
+            if let Some(Effect::If {
+                cond: Condition::And(cs),
+                then,
+                otherwise,
+            }) = v.get(i)
+            {
+                let after_discard = i > 0
+                    && match &v[i - 1] {
+                        Effect::Discard {
+                            who: PlayerRef::You,
+                            ..
+                        } => true,
+                        Effect::May { effect, .. } => {
+                            matches!(
+                                effect.as_ref(),
+                                Effect::Discard {
+                                    who: PlayerRef::You,
+                                    ..
+                                }
+                            )
+                        }
+                        _ => false,
+                    };
+                if after_discard
+                    && matches!(otherwise.as_ref(), Effect::Noop)
+                    && matches!(cs.as_slice(), [Condition::PrevHappened, Condition::SelNonEmpty(Sel::Var(x))] if *x == vars::IT)
+                {
+                    if let Effect::Reflexive { body } = then.as_ref() {
+                        let b = self.in_event_scope(|r| r.body(body));
+                        parts.push(format!(
+                            "when you discard a card this way, {}",
+                            lower_first(&b)
+                        ));
+                        i += 1;
+                        continue;
+                    }
+                }
+            }
             // "Prevent all combat damage that would be dealt to and dealt by that creature
             // this turn."
             if let (
