@@ -46,7 +46,9 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             // What the text says next is about the cards chosen ("If you didn't put a card
             // into your hand this way"), not the rest.
             let cards = remaining(g, from, ctx);
-            place(g, cards, to, ctx);
+            let placed = place(g, cards, to, ctx);
+            // "for each card put into your graveyard this way".
+            ctx.nums.insert(vars::DUG, placed.len() as i64);
         }
         DigStep::Until {
             who,
@@ -273,6 +275,8 @@ fn take(
     ctx.prev_value = n as i64;
     ctx.prev_happened = n > 0;
     ctx.prev_affected = entities(&placed);
+    // "for each card you put into your hand this way".
+    ctx.nums.insert(vars::DUG_CHOSEN, n as i64);
     ctx.set_var(vars::IT, entities(&placed));
 }
 
