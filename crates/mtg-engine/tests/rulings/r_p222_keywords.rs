@@ -70,7 +70,7 @@ fn bannerhide_krushok_reinforce_gives_opponents_a_window_before_scavenge() {
     assert_eq!(t.counters(bears, counters::PLUS1), 2);
     // Once the stack is empty, P0 has priority and can activate scavenge.
     assert!(can_activate(&mut t, P0, krushok));
-    // Krushok dies to P0's own Doom Blade: P0 activates scavenge as soon as the Bolt
+    // Krushok dies to P0's own Doom Blade: P0 activates scavenge as soon as Doom Blade
     // has resolved, before P1 ever has priority while it's in the graveyard.
     let mut t = TestGame::new(2);
     let krushok = t.battlefield(P0, "Bannerhide Krushok");
