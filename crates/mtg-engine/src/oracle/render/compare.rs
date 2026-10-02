@@ -442,6 +442,10 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "CR 107.3: the same number, as above.",
     ),
     (
+        "\"When C, at end of combat, X.\" -> \"When C, X at end of combat.\" (a single instruction ending the ability)",
+        "A delayed trigger's time applies to the instruction wherever it's written (CR 603.7).",
+    ),
+    (
         "\"Choose target T. [Instruction] it ...\" -> \"[Instruction] target T ...\" (an instruction acting on it, not a condition)",
         "CR 601.2c, 602.2b: the target is chosen as the spell or ability is put on the stack either way.",
     ),
