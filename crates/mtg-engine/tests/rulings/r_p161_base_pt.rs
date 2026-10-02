@@ -285,3 +285,42 @@ fn riptide_mangler_overwrites_its_previous_activations() {
     cast_resolve(&mut t, P0, "Humble", &[Entity::Object(mangler)]);
     assert_eq!(t.pt(mangler), (0, 1));
 }
+
+#[test]
+fn timber_paladin_sets_base_pt_by_aura_count_with_its_own_timestamp() {
+    cr!("613.4b", "613.7a", "613.1f");
+    ruling!(
+        "Timber Paladin",
+        "Timber Paladin's abilities each overwrite any previous effects that set creatures' power and/or toughness to specific numbers. Any power- or toughness-setting effects that start to apply after Timber Paladin enters the battlefield will overwrite these effects, regardless of when Timber Paladin became enchanted by one, two, or three or more Auras."
+    );
+    supported("Timber Paladin");
+    supported("Pacifism");
+    use mtg_engine::keywords::KeywordKind;
+    let kw = |t: &TestGame, id: ObjectId, k: KeywordKind| t.obj_now(id).has_keyword(k);
+    // One, two, three Auras: 3/3, 5/5 with vigilance, 10/10 with vigilance and trample.
+    let mut t = TestGame::new(2);
+    let paladin = t.battlefield(P0, "Timber Paladin");
+    assert_eq!(t.pt(paladin), (1, 1));
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(paladin)]);
+    assert_eq!(t.pt(paladin), (3, 3));
+    assert!(!kw(&t, paladin, KeywordKind::Vigilance));
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(paladin)]);
+    assert_eq!(t.pt(paladin), (5, 5));
+    assert!(kw(&t, paladin, KeywordKind::Vigilance));
+    assert!(!kw(&t, paladin, KeywordKind::Trample));
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(paladin)]);
+    assert_eq!(t.pt(paladin), (10, 10));
+    assert!(kw(&t, paladin, KeywordKind::Vigilance));
+    assert!(kw(&t, paladin, KeywordKind::Trample));
+
+    // A setting effect that began after it entered wins, even though the Auras were
+    // attached after that effect began.
+    let mut t = TestGame::new(2);
+    let paladin = t.battlefield(P0, "Timber Paladin");
+    cast_resolve(&mut t, P0, "Square Up", &[Entity::Object(paladin)]);
+    assert_eq!(t.pt(paladin), (4, 4));
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(paladin)]);
+    cast_resolve(&mut t, P0, "Pacifism", &[Entity::Object(paladin)]);
+    assert_eq!(t.pt(paladin), (4, 4));
+    assert!(kw(&t, paladin, KeywordKind::Vigilance));
+}

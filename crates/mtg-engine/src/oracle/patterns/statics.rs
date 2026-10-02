@@ -2064,6 +2064,29 @@ fn parse_predicate(
                     Some(x.clone()),
                 ))]);
             }
+            // "has base power and toughness 5/5 and vigilance", "... 10/10, vigilance, and
+            // trample" (Timber Paladin): the rest are abilities it has.
+            if let Some((first, rest)) = pt.split_once(' ') {
+                let first = first.trim_end_matches(',');
+                let rest = rest.strip_prefix("and ").unwrap_or(rest);
+                let rest = if rest.matches(", ").count() == 1 {
+                    rest.replace(", and ", " and ")
+                } else {
+                    rest.to_string()
+                };
+                let (bp, bt) = base_pt(first)?;
+                let mut outs = vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))];
+                outs.extend(parse_predicate(
+                    &format!("has {rest}"),
+                    subj,
+                    x,
+                    used_x,
+                    quotes,
+                    text,
+                    ctx,
+                )?);
+                return Some(outs);
+            }
             let (bp, bt) = base_pt(pt)?;
             return Some(vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))]);
         }
