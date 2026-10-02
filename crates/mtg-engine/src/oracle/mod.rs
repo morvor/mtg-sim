@@ -59,6 +59,14 @@ pub struct Compiled {
 thread_local! {
     static NO_MANUAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    static CARD_NAME: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// The name of the card (face) being compiled on this thread, for phrases that name it
+/// ("a creature named ~", CR 201.2) parsed where the compile context isn't at hand
+/// (`FilterSuffixPattern`s). Empty when unknown.
+pub fn card_name() -> String {
+    CARD_NAME.with(|r| r.borrow().clone())
 }
 
 /// The raw (un-normalized) oracle text of the face being compiled on this thread.
@@ -81,6 +89,7 @@ pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
+    let prev_name = CARD_NAME.with(|r| r.replace(ctx.card_name.to_string()));
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     let manual_ok = !NO_MANUAL.with(|c| c.get());
@@ -119,6 +128,7 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
         // Replace an unsupported CDA line if the star P/T was handled.
         out.abilities.push(cda);
     }
+    CARD_NAME.with(|r| *r.borrow_mut() = prev_name);
     out
 }
 
@@ -146,7 +156,11 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
             names.push(short.to_string());
         }
         if let Some((short, _)) = ctx.card_name.split_once(" of ") {
-            if !short.contains(' ') {
+            // "General Kudro" (General Kudro of Drannith): a title and a name.
+            let titled = short
+                .split_once(' ')
+                .is_some_and(|(title, name)| is_title(title) && !name.contains(' '));
+            if !short.contains(' ') || titled {
                 names.push(short.to_string());
             }
         }
@@ -209,6 +223,14 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         s = replace_ci(&s, r, "~");
     }
     s
+}
+
+/// A title before a legendary character's name ("General Kudro").
+fn is_title(w: &str) -> bool {
+    matches!(
+        w,
+        "General" | "Captain" | "Lord" | "Lady" | "King" | "Queen" | "Sir" | "Doctor"
+    )
 }
 
 /// The first word of a legendary card's name when it can stand for the card: not a
@@ -466,6 +488,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
             Some((head, sentence)) => (head, Some(sentence)),
             None => (eff_text, None),
         };
+    // "This ability can't be copied." (CR 113.6g, 707.10).
+    let (eff_text, cant_be_copied) = match patterns::rule_statics::strip_cant_be_copied(eff_text) {
+        Some(rest) => (rest, true),
+        None => (eff_text.to_string(), false),
+    };
+    let eff_text = eff_text.as_str();
     // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
     let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
         || cost.parts.iter().any(crate::casting::cost_part_has_x);
@@ -501,7 +529,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let target_slots = if body
         .targets
         .iter()
-        .all(|t| t.max.as_const() == Some(1) && t.min == 1)
+        .all(|t| t.max.as_const() == Some(1) && t.fixed_min() == Some(1))
     {
         body.targets.len()
     } else {
@@ -522,6 +550,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_loyalty = loyalty;
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
+    act.cant_be_copied = cant_be_copied;
     act.zone = activated_zone(cost_s, eff_text);
     if let Some((_, Some(c))) = amount_x {
         act.condition = Some(match act.condition.take() {

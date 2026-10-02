@@ -68,6 +68,11 @@ pub struct Ctx {
     /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
     #[serde(default)]
     pub paying_cost: bool,
+    /// The costs paid with this context are those of casting a spell or activating an
+    /// ability (CR 601.2g–h, 602.2b), not a cost a resolving spell or ability asks for:
+    /// what they're paid for (see `rule_statics::payment`).
+    #[serde(default)]
+    pub cost_of: Option<crate::rule_statics::payment::CostOf>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -622,6 +627,13 @@ impl Game {
                 Some(k) => o.counter(k) > 0,
                 None => o.counters.values().any(|n| *n > 0),
             },
+            Filter::CounterCount(k, cmp, v) => {
+                let n = match k {
+                    Some(k) => o.counter(k),
+                    None => o.counters.values().sum(),
+                };
+                cmp.eval(n as i64, self.eval_value(v, ctx))
+            }
             Filter::HasAbilities => !c.has_no_abilities(),
             Filter::Source => ctx.source == Some(id),
             // "Another": not the source, nor the card it became after it left
@@ -639,6 +651,14 @@ impl Game {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }
             Filter::Attached => o.attached_to.is_some(),
+            Filter::AttachedTo(sel) => o
+                .attached_to
+                .is_some_and(|h| self.eval_sel(sel, ctx).contains(&h)),
+            Filter::CanBeAttachedBy(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .all(|a| crate::attach::can_attach(self, a, Entity::Object(id))),
             Filter::Enchanted => self
                 .attachments_of(Entity::Object(id))
                 .iter()
@@ -817,6 +837,22 @@ impl Game {
                     .collect();
             }
         }
+        // "All cards from target player's hand and graveyard": several zones.
+        if f.zone().is_none() {
+            if let Some(mut zones) = alternative_zones(f) {
+                let mut seen = Vec::new();
+                zones.retain(|z| {
+                    let new = !seen.contains(z);
+                    seen.push(*z);
+                    new
+                });
+                return zones
+                    .into_iter()
+                    .flat_map(|z| self.objects_in_zone_kind(z))
+                    .filter(|id| self.matches(*id, f, ctx))
+                    .collect();
+            }
+        }
         let zone = f.zone().unwrap_or(ZoneKind::Battlefield);
         self.objects_in_zone_kind(zone)
             .into_iter()
@@ -937,6 +973,16 @@ impl Game {
                 .and_then(|s| self.obj(s).attached_to)
                 .into_iter()
                 .collect(),
+            Sel::HostOf(s) => {
+                let mut out: Vec<Entity> = Vec::new();
+                for e in self.eval_sel(s, ctx) {
+                    let host = e.object().and_then(|o| self.obj(o).attached_to);
+                    if let Some(h) = host.filter(|h| !out.contains(h)) {
+                        out.push(h);
+                    }
+                }
+                out
+            }
             Sel::AttachedToThis => ctx
                 .source
                 .map(|s| {
@@ -1297,6 +1343,9 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
+            Value::TurnsTaken(r) => self
+                .eval_player(r, ctx)
+                .map_or(0, |p| self.player(p).turns_taken as i64),
             Value::Aggregate(op, stat, sel) => {
                 crate::aggregates::aggregate(self, *op, stat, sel, ctx)
             }
@@ -1375,6 +1424,15 @@ impl Game {
             Condition::SelNonEmpty(s) => !self.eval_sel(s, ctx).is_empty(),
             Condition::SelMatches(s, f) => {
                 let objs = self.eval_sel_objects(s, ctx);
+                // "If it's on the battlefield" (Animate Dead): a source that has since
+                // moved to another zone is a new object there (CR 400.7), so the object
+                // the ability is from isn't in any zone now.
+                if matches!(s, Sel::This)
+                    && f.zone().is_some()
+                    && objs.iter().any(|o| !self.is_live(*o))
+                {
+                    return false;
+                }
                 !objs.is_empty() && objs.iter().all(|o| self.matches(*o, f, ctx))
             }
             Condition::PlayerMatches(r, f) => self
@@ -1427,5 +1485,21 @@ impl Game {
                 .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
+    }
+}
+
+/// The zones of a filter that requires one of several zones (`Or` of `InZone`s, possibly
+/// inside an `And`).
+fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
+    match f {
+        Filter::Or(v) if !v.is_empty() => v
+            .iter()
+            .map(|x| match x {
+                Filter::InZone(z) => Some(*z),
+                _ => None,
+            })
+            .collect(),
+        Filter::And(v) => v.iter().find_map(alternative_zones),
+        _ => None,
     }
 }

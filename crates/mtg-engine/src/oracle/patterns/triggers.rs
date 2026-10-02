@@ -237,7 +237,7 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
 }
 
 fn is_batch(c: &TriggerCond) -> bool {
-    matches!(c, TriggerCond::Batched { .. })
+    super::trigger_grammar_events::is_batched(c)
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +291,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each ", Whose::Rel(PlayerRel::Any)),
         // "the chosen player's upkeep" (Black Vise; CR 607.2d)
         ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
+        // (Before "the ": "the monarch's end step".)
+        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
@@ -300,7 +302,6 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
             "enchanted opponent's ",
             Whose::Player(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))),
         ),
-        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             return Some((w, r));
@@ -613,7 +614,11 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         if cond.is_some() {
             return None;
         }
-        return Some((TriggerCond::SpellCopied { who, filter }, Sel::TriggerSpell, tp()));
+        return Some((
+            TriggerCond::SpellCopied { who, filter },
+            Sel::TriggerSpell,
+            tp(),
+        ));
     }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
@@ -920,7 +925,9 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
     // is ~, the object the spell targets (Fabled Hero, Favored Hoplite's "prevent all
     // damage that would be dealt to it").
     let targets_source = match &filter {
-        Filter::And(v) => v.iter().any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
+        Filter::And(v) => v
+            .iter()
+            .any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
         _ => false,
     };
     let base = TriggerCond::CastSpell { who, filter };
@@ -1084,6 +1091,12 @@ pub(crate) struct Subject {
 }
 
 pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
+    // More subjects ("enchanted Forest", "~ and/or one or more other Vampires you
+    // control", "[object] or a [object]"): see `trigger_grammar_zones`.
+    parse_subject_core(s).or_else(|| super::trigger_grammar_zones::subject_ext(s))
+}
+
+fn parse_subject_core(s: &str) -> Option<Subject> {
     let s = s.trim();
     let mk = |filter, self_only, one_or_more| {
         Some(Subject {
@@ -1309,7 +1322,19 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             } else if let Some(x) = r.strip_prefix(" from exile") {
                 from = Some(ZoneKind::Exile);
                 r = x;
+            } else if let Some(x) = r.strip_prefix(" from your hand") {
+                from = Some(ZoneKind::Hand);
+                r = x;
             }
+            // "Whenever a nonland permanent an opponent owns enters the battlefield under
+            // your control, they lose life ...": "they" is the owner the subject names.
+            let who = if p.contains("under your control")
+                && super::trigger_grammar_filters::names_other_owner(&f)
+            {
+                PlayerRef::OwnerOf(Box::new(Sel::TriggerObject))
+            } else {
+                ctl_of(Sel::TriggerObject)
+            };
             let cond = match from {
                 None => TriggerCond::EntersBattlefield(f),
                 Some(z) => TriggerCond::ZoneChange {
@@ -1319,16 +1344,9 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 },
             };
             if subj.one_or_more {
-                return Some((batch(cond, false, ctl_of(Sel::TriggerObject)), r));
+                return Some((batch(cond, false, who), r));
             }
-            return Some((
-                (
-                    cond,
-                    this_or(Sel::TriggerObject),
-                    ctl_of(Sel::TriggerObject),
-                ),
-                r,
-            ));
+            return Some(((cond, this_or(Sel::TriggerObject), who), r));
         }
     }
     // --- leaves the battlefield / dies / put into a graveyard ---------------------------
@@ -1340,6 +1358,24 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         // and the new object for actions (CR 400.7e; see `Game::resolve_sel`).
         Some(((cond, this_or(Sel::TriggerLki), ctl_of(Sel::TriggerLki)), r))
     };
+    // "dies or is put into exile" (Kaya's Ghostform): either zone change from the
+    // battlefield (CR 603.1b, 603.6c).
+    // ("... from the battlefield" is the God-Eternals' own pattern.)
+    for p in ["dies or is put into exile", "die or are put into exile"] {
+        if let Some(r) = starts(p).filter(|r| !r.trim_start().starts_with("from")) {
+            return zone_change(
+                TriggerCond::AnyOf(vec![
+                    TriggerCond::Dies(f.clone()),
+                    TriggerCond::ZoneChange {
+                        filter: f.clone(),
+                        from: Some(ZoneKind::Battlefield),
+                        to: Some(ZoneKind::Exile),
+                    },
+                ]),
+                r,
+            );
+        }
+    }
     for p in ["dies", "die"] {
         if let Some(r) = starts(p) {
             return zone_change(TriggerCond::Dies(f.clone()), r);
@@ -1466,10 +1502,21 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     // "one or more cards leave your graveyard" (look back in time, CR 603.10a).
     for p in ["leaves your graveyard", "leave your graveyard"] {
         if let Some(r) = starts(p) {
-            let cond = TriggerCond::ZoneChange {
+            let mut cond = TriggerCond::ZoneChange {
                 filter: Filter::and(vec![f.clone(), Filter::OwnedBy(PlayerRel::You)]),
                 from: Some(ZoneKind::Graveyard),
                 to: None,
+            };
+            // "... leave your graveyard during your turn" (Kheru Goldkeeper).
+            let r = match r.strip_prefix(" during your turn") {
+                Some(rest) => {
+                    cond = TriggerCond::Where {
+                        trigger: Box::new(cond),
+                        cond: Condition::YourTurn,
+                    };
+                    rest
+                }
+                None => r,
             };
             if subj.one_or_more {
                 return Some((batch(cond, false, PlayerRef::You), r));

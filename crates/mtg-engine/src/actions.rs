@@ -186,13 +186,16 @@ impl Game {
                 ReplEvent::Move(m) if m.to != Zone::Battlefield => Some(m.obj),
                 _ => None,
             })
-            .filter(|o| {
-                let o = self.obj(*o);
+            .filter(|id| {
+                let o = self.obj(*id);
                 o.zone == Zone::Battlefield
                     && o.attached_to.is_some_and(|a| match a {
                         Entity::Player(_) => true,
+                        // A permanent, or a card in the zone the Aura's enchant ability
+                        // names (Spellweaver Volute).
                         Entity::Object(x) => {
-                            self.is_live(x) && self.obj(x).zone == Zone::Battlefield
+                            self.is_live(x)
+                                && crate::attach::can_be_attached_where_it_is(self, *id, x)
                         }
                     })
             })
@@ -232,12 +235,42 @@ impl Game {
     /// object as it currently exists. Moves use [`Game::cant_enter`], which checks the
     /// object as it would exist on the battlefield (CR 614.17d).
     pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
-        self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
-                self.matches(obj, f, &Ctx::new(Some(*s), *c))
+        self.cant_enter_from_its_zone(obj)
+            || self.statics.restrictions.iter().any(|(s, c, r)| match r {
+                Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
+                    self.matches(obj, f, &Ctx::new(Some(*s), *c))
+                }
+                _ => false,
+            })
+    }
+
+    /// Whether "[cards] in [zones] can't enter the battlefield" stops the object from
+    /// entering: the card is checked as it exists in its current zone, before it would
+    /// move (Kunoros, Hound of Athreos; Grafdigger's Cage).
+    pub fn cant_enter_from_its_zone(&self, obj: ObjectId) -> bool {
+        match self.obj(obj).zone.kind() {
+            Some(zone) => self.cant_enter_from(obj, zone),
+            None => false,
+        }
+    }
+
+    /// Whether "[cards] in [zones] can't enter the battlefield" stops `obj`, as it
+    /// currently exists, from entering from `zone`.
+    pub(crate) fn cant_enter_from(&self, obj: ObjectId, zone: ZoneKind) -> bool {
+        let check = |r: &Restriction, ctx: &Ctx| match r {
+            Restriction::CantEnterFrom { what, zones } => {
+                zones.contains(&zone) && self.matches(obj, what, ctx)
             }
             _ => false,
-        })
+        };
+        self.statics
+            .restrictions
+            .iter()
+            .any(|(s, c, r)| check(r, &Ctx::new(Some(*s), *c)))
+            || self.rule_effects.iter().any(|e| {
+                e.objects.as_ref().is_none_or(|v| v.contains(&obj))
+                    && check(&e.restriction, &Ctx::new(e.source, e.controller))
+            })
     }
 
     /// Zone changes the rules forbid outright; the object stays where it is. Instant and
@@ -758,6 +791,19 @@ impl Game {
                     .entry(link)
                     .or_default()
                     .push(new_id);
+            }
+        }
+        // Counters it's given as it moves to another zone ("exile it with three time
+        // counters on it", see `destinations.rs`); a permanent's are put on it as it
+        // enters, above.
+        if m.to != Zone::Battlefield && !m.etb.counters.is_empty() {
+            let how = crate::event_causes::CounterPut {
+                source: m.source,
+                by: m.by,
+                origin: crate::events::CounterOrigin::Effect,
+            };
+            for (k, n) in m.etb.counters.clone() {
+                self.put_counters(Entity::Object(new_id), &k, n, how);
             }
         }
         if m.to == Zone::Battlefield && self.obj(new_id).zone == Zone::Battlefield {

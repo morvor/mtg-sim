@@ -122,7 +122,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
     };
     let spec = TargetSpec {
         what,
-        min,
+        min: Value::c(min as i32),
         max,
         distinct_from: vec![],
         divide: None,
@@ -130,6 +130,8 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         text: String::new(),
         condition: None,
         together: None,
+        related_to: None,
+        per_player: None,
     };
     Some((spec, any_number, rest))
 }
@@ -230,6 +232,11 @@ fn amount_phrase<'a>(s: &'a str, where_x: &Option<Value>) -> Option<(Value, &'a 
 // Damage
 // ---------------------------------------------------------------------------
 
+/// The controller of the permanent the source is attached to.
+fn attached_controller() -> PlayerRef {
+    PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))
+}
+
 /// Player recipients that aren't targets.
 fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
     let it = || Box::new(b.it.clone());
@@ -260,6 +267,12 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
         ),
         ("that spell's controller", PlayerRef::ControllerOf(it())),
         ("its owner", PlayerRef::OwnerOf(it())),
+        // "~ deals 2 damage to enchanted artifact's controller" (Gremlin Infestation).
+        ("enchanted creature's controller", attached_controller()),
+        ("enchanted artifact's controller", attached_controller()),
+        ("enchanted permanent's controller", attached_controller()),
+        ("enchanted land's controller", attached_controller()),
+        ("equipped creature's controller", attached_controller()),
     ];
     for (p, r) in pairs {
         if let Some(rest) = word(s, p) {
@@ -492,7 +505,11 @@ fn damage_part(
         // CR 601.2d: the division is chosen as the spell is cast; each target gets at
         // least 1. "Any number of targets" may be zero targets (CR 107.1c).
         let (mut spec, any_number, tail) = counted_targets(r2)?;
-        spec.min = if any_number { 0 } else { spec.min.max(1) };
+        if any_number {
+            spec.min = Value::c(0);
+        } else if spec.fixed_min().is_some_and(|m| m < 1) {
+            spec.min = Value::c(1);
+        }
         if any_number {
             spec.max = amount.clone();
         }

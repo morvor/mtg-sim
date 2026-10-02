@@ -117,6 +117,13 @@ impl Renderer<'_> {
             return "fortified land".into();
         }
         match &self.info.enchant {
+            // "Enchant creature card in a graveyard": "enchanted creature" (and "enchanted
+            // creature card" for the card itself, see `move_effect`).
+            Some(n) if n.contains(" card") => {
+                let head = n.split(" card").next().unwrap_or(n);
+                let head = head.rsplit(' ').next().unwrap_or(head);
+                format!("enchanted {head}")
+            }
             // "Enchant artifact or creature" Auras say "enchanted permanent"; "Enchant
             // nonland permanent" ones "enchanted permanent"; "Enchant opponent" ones
             // "enchanted player".
@@ -410,6 +417,23 @@ impl Renderer<'_> {
                 Some(k) => counter_name(k),
                 None => "counter".into(),
             }),
+            // "with three or more +1/+1 counters on it", "with exactly one tide counter on it".
+            Filter::CounterCount(k, cmp, v) => {
+                let noun = match k {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let n = self.value(v);
+                let amount = match cmp {
+                    Cmp::Ge => format!("{n} or more"),
+                    Cmp::Le => format!("{n} or fewer"),
+                    Cmp::Eq => format!("exactly {n}"),
+                    Cmp::Gt => format!("more than {n}"),
+                    Cmp::Lt => format!("fewer than {n}"),
+                    Cmp::Ne => format!("other than {n}"),
+                };
+                np.with.push(format!("{amount} {} on it", plural(&noun)));
+            }
             Filter::HasAbilities => np.with.push("an ability".into()),
             Filter::Source => np.is_self = true,
             Filter::Other => np.other = true,
@@ -423,6 +447,14 @@ impl Renderer<'_> {
             }
             Filter::Objects(_) => np.fixed = Some(self.gap("Filter::Objects")),
             Filter::AttachedToSource => np.fixed = Some(self.attached_noun()),
+            // "target Aura attached to a creature".
+            Filter::AttachedTo(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.post.push(format!("attached to {s}"));
+            }
+            // What an Aura is moved to must be something it can enchant: the rules say so
+            // (CR 303.4j, 701.3b), and the card doesn't.
+            Filter::CanBeAttachedBy(_) => {}
             Filter::Attached => np.status.push("attached".into()),
             Filter::Enchanted => np.status.push("enchanted".into()),
             Filter::Equipped => np.status.push("equipped".into()),
@@ -507,7 +539,15 @@ impl Renderer<'_> {
             Filter::Source => np.other = true,
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
-            Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => np.other = true,
+            // "it gets +1/+1 for each other creature you control": other than "it".
+            Filter::In(s)
+                if matches!(
+                    s.as_ref(),
+                    Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo
+                ) =>
+            {
+                np.other = true
+            }
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
             Filter::HasAbilities => np.with.push("no abilities".into()),

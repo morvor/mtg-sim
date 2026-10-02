@@ -387,6 +387,18 @@ impl Renderer<'_> {
                 }
             }
             StaticEffect::Dice(d) => self.dice_static(d),
+            StaticEffect::AttachOnlyTo(f) => {
+                let n = self.noun_det(f, super::nouns::Det::A);
+                format!("~ can be attached only to {n}")
+            }
+            // "You can't cast ~ during your first, second, or third turns of the game."
+            StaticEffect::CastOnlyIf(Condition::Not(inner))
+                if crate::rule_statics::turns_taken::early_turns_n(inner).is_some() =>
+            {
+                let n = crate::rule_statics::turns_taken::early_turns_n(inner).unwrap_or(1);
+                let l = crate::rule_statics::turns_taken::ordinal_list(n);
+                format!("you can't cast ~ during your {l} turns of the game")
+            }
             StaticEffect::CastOnlyIf(c) => {
                 let c = self.cast_only_condition(c);
                 format!("cast ~ only {c}")
@@ -413,6 +425,16 @@ impl Renderer<'_> {
             StaticEffect::LegendRuleExempt(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("the \"legend rule\" doesn't apply to {n}")
+            }
+            StaticEffect::DamageNotRemoved(f) => {
+                let n = self.affected_subject(f);
+                format!("damage isn't removed from {n} during cleanup steps")
+            }
+            StaticEffect::CountersRemain => {
+                let me = self.me();
+                format!(
+                    "counters remain on {me} as it moves to any zone other than a player's hand or library"
+                )
             }
         }
     }
@@ -990,6 +1012,31 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackAsThoughHaste {
+                attackers,
+                defender,
+            } => {
+                let a = if matches!(attackers, Filter::Type(CardType::Creature)) {
+                    "all creatures".to_string()
+                } else {
+                    subj(self, attackers)
+                };
+                match defender {
+                    None => format!("{a} can attack as though it had haste"),
+                    Some(d) => {
+                        let d = match d {
+                            PlayerFilter::Opponent => "your opponents".to_string(),
+                            d => self.player_filter_object(d),
+                        };
+                        format!(
+                            "{a} can attack {d} and planeswalkers {d} control as though those creatures had haste"
+                        )
+                    }
+                }
+            }
+            Restriction::BlockAsThoughUntapped(f) => {
+                format!("{} can block as though it were untapped", subj(self, f))
+            }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
             Restriction::MaxAttackers(n) => format!(
@@ -1091,8 +1138,61 @@ impl Renderer<'_> {
                 format!("{w} can't activate {s}{m}")
             }
             Restriction::CantBeCountered(f) => format!("{} can't be countered", subj(self, f)),
+            Restriction::CantBeCopied(f) => format!("{} can't be copied", subj(self, f)),
+            Restriction::CantCauseSacrifice { what, by, exile } => {
+                let who = match by {
+                    SacrificeCauses::OpponentsSpellsAndAbilities => {
+                        "spells and abilities your opponents control"
+                    }
+                    SacrificeCauses::YourTriggeredAbilities => "triggered abilities you control",
+                };
+                let verb = if *exile {
+                    "sacrifice or exile"
+                } else {
+                    "sacrifice"
+                };
+                let n = self.noun(what, Num::Many);
+                format!("{who} can't cause you to {verb} {n}")
+            }
+            Restriction::CantPayToCastOrActivate {
+                who,
+                life,
+                sacrifice,
+                mana_abilities,
+            } => {
+                let w = self.player_filter_subject(who);
+                let mut what = Vec::new();
+                if *life {
+                    what.push("pay life".to_string());
+                }
+                if let Some(f) = sacrifice {
+                    what.push(format!("sacrifice {}", self.noun(f, Num::Many)));
+                }
+                let purpose = if *mana_abilities {
+                    "to cast spells or activate abilities"
+                } else {
+                    "to cast spells or to activate abilities that aren't mana abilities"
+                };
+                format!("{w} can't {} {purpose}", what.join(" or "))
+            }
             Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
                 format!("{} can't enter the battlefield", subj(self, f))
+            }
+            Restriction::CantEnterFrom { what, zones } => {
+                let zones: Vec<String> = zones
+                    .iter()
+                    .map(|z| match z {
+                        ZoneKind::Library => "libraries".to_string(),
+                        ZoneKind::Graveyard => "graveyards".to_string(),
+                        ZoneKind::Hand => "hands".to_string(),
+                        z => format!("{z:?}").to_lowercase(),
+                    })
+                    .collect();
+                format!(
+                    "{} in {} can't enter the battlefield",
+                    subj(self, what),
+                    join_list(&zones, "and")
+                )
             }
             Restriction::DoesntUntap(f) => {
                 let s = subj(self, f);
@@ -1163,6 +1263,19 @@ impl Renderer<'_> {
                 }
             }
             Restriction::CantTransform(f) => format!("{} can't transform", subj(self, f)),
+            // "As long as enchanted creature is face down, it can't be turned face up."
+            Restriction::CantTurnFaceUp(Filter::And(v))
+                if v.len() >= 2 && matches!(v.last(), Some(Filter::FaceDown)) =>
+            {
+                let rest = Filter::and(v[..v.len() - 1].to_vec());
+                format!(
+                    "as long as {} is face down, it can't be turned face up",
+                    subj(self, &rest)
+                )
+            }
+            Restriction::CantTurnFaceUp(f) => {
+                format!("{} can't be turned face up", subj(self, f))
+            }
             Restriction::CantSearch(p) => {
                 format!("{} can't search libraries", self.player_filter_subject(p))
             }
@@ -1407,6 +1520,22 @@ impl Renderer<'_> {
                 let w = self.player_filter_subject(p);
                 let v = self.value(v);
                 format!("damage that would reduce {} life total to less than {v} reduces it to {v} instead", nouns::possessive(&w))
+            }
+            // "Creatures your opponents control can't have +1/+1 counters put on them."
+            (
+                E::PutCounters {
+                    on_objects: Some(f),
+                    on_players: None,
+                    kind,
+                },
+                A::Prevent,
+            ) if !matches!(f, Filter::Source) => {
+                let k = match kind {
+                    Some(k) => plural(&counter_name(k)),
+                    None => "counters".into(),
+                };
+                let subj = self.affected_subject(f);
+                format!("{subj} can't have {k} put on them")
             }
             (
                 E::PutCounters {

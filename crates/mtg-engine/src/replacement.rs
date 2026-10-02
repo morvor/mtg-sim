@@ -346,6 +346,24 @@ impl Game {
             .collect()
     }
 
+    /// Whether the proposed event can't happen: a mandatory replacement effect that applies
+    /// to it prevents it ("~ can't have counters put on it", CR 113.6i, 614.1). Used to
+    /// tell whether a player "can" do something before offering it.
+    pub fn would_be_prevented(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| matches!(c.def.action, ReplacementAction::Prevent) && !c.def.optional)
+    }
+
+    /// Whether a self-replacement effect (CR 614.15) applies to the proposed event.
+    pub(crate) fn self_replacement_applies(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| c.def.self_replacement)
+    }
+
     /// The player who chooses among replacement effects for an event (CR 616.1).
     fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {
@@ -810,6 +828,26 @@ impl Game {
     /// Whether a "can't enter the battlefield" effect stops this move (CR 614.17d),
     /// checking the object as it would exist on the battlefield.
     pub(crate) fn cant_enter(&mut self, m: &MoveEv) -> bool {
+        // "[cards] in [zones] can't enter the battlefield": checked against the card in its
+        // zone. A card put onto the battlefield face down (manifested, cloaked) is turned
+        // face down first, so it's checked as the face-down 2/2 creature card (CR 701.40a,
+        // 701.58a, 708.3; Grafdigger's Cage makes manifesting from a library impossible).
+        if m.to == Zone::Battlefield {
+            if m.etb.face_down.is_none() {
+                if self.cant_enter_from_its_zone(m.obj) {
+                    return true;
+                }
+            } else if let Some(zone) = self.obj(m.obj).zone.kind() {
+                let any = self.statics.restrictions.iter().any(
+                    |(_, _, r)| matches!(r, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                ) || self.rule_effects.iter().any(
+                    |e| matches!(&e.restriction, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                );
+                if any && self.with_hypothetical_entry(m, |g| g.cant_enter_from(m.obj, zone)) {
+                    return true;
+                }
+            }
+        }
         let any = self.statics.restrictions.iter().any(|(_, _, r)| {
             matches!(
                 r,
@@ -1189,9 +1227,15 @@ impl Game {
                     // applied once: its instruction happens once, for all the damage
                     // (once for each recipient if it's about the recipient).
                     let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    // An instruction that doesn't count the damage happens for each
+                    // damage event (one counter per source, Nine Lives); shield counters
+                    // are one effect for all of it (CR 122.1c).
+                    let per_event = crate::prevention::followup_each_event(&e)
+                        && !crate::counter_rules::is_shield_prevention(&cand.key);
                     let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
                     let this = recipient(&c);
                     match self.prevention_followups.as_mut() {
+                        Some(list) if per_event => list.push((key, c, e)),
                         Some(list) => match list.iter_mut().find(|(k, c0, _)| {
                             *k == key && (!per_recipient || recipient(c0) == this)
                         }) {
@@ -1293,7 +1337,11 @@ impl Game {
                     .into_iter()
                     .filter(|o| *o != m.obj)
                     .collect();
-                let chooser = m.by.unwrap_or(cand.controller);
+                // "You may have ~ enter as a copy": "you" is the player it enters under
+                // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
+                // e.g. each player for their own card put onto the battlefield by Show
+                // and Tell.
+                let chooser = m.etb.controller.or(m.by).unwrap_or(cand.controller);
                 let min = if optional { 0 } else { 1 };
                 let chosen = self.ask_objects(
                     chooser,
@@ -1323,9 +1371,11 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Move(mut m)) => {
+                // CR 614.6: the modified event moves it to the whole destination (tapped,
+                // under whose control, with counters, your choice of position, ...).
                 let owner = self.obj(m.obj).owner;
-                m.to = Zone::of_kind(dest.zone, owner);
-                m.pos = dest.position;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                self.redirect_move(&prepared, &mut m, owner, &ctx);
                 // CR 607.2b, 614.14: a card exiled by a replacement effect is exiled with
                 // (linked to) the effect's source.
                 if dest.zone == ZoneKind::Exile && cand.source.is_some() {
@@ -1336,13 +1386,15 @@ impl Game {
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {
                 let owner = self.obj(obj).owner;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                let etb = self.destination_etb(&prepared, owner, &ctx);
                 vec![ReplEvent::Move(MoveEv {
                     obj,
-                    to: Zone::of_kind(dest.zone, owner),
-                    pos: dest.position,
+                    to: prepared.zone(owner),
+                    pos: prepared.position(),
                     cause: MoveCause::Destroy,
                     by: None,
-                    etb: EtbInfo::default(),
+                    etb,
                     source: cand.source,
                 })]
             }

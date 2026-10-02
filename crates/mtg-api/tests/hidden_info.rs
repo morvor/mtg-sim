@@ -206,3 +206,40 @@ fn events_dont_link_a_hidden_draw_to_where_the_card_went() {
     let draw = for_p1.iter().find(|e| e.kind == "draw").unwrap();
     assert!(draw.objects.contains(&now.0), "{draw:?}");
 }
+
+#[test]
+fn every_player_sees_a_face_down_permanents_public_characteristics() {
+    cr!("708.2", "708.2a", "613.2b");
+    // Cyber Conversion turns P1's Hill Giant face down: "It's a 2/2 Cyberman artifact
+    // creature." Every player sees a nameless 2/2 Cyberman artifact creature with its
+    // +1/+1 counter, and keeps tracking it by the same id; only P1 sees the Giant.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(
+        Entity::Object(giant),
+        mtg_engine::types::counters::PLUS1,
+        1,
+        None,
+    );
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Cyber Conversion");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.g.current(giant), giant);
+    for viewer in [P0, P1] {
+        let obs = observe(&t.g, Some(viewer));
+        let fd = obs.battlefield.iter().find(|o| o.id == giant.0).unwrap();
+        assert!(fd.face_down);
+        assert_eq!(fd.card.name, None);
+        assert_eq!((fd.card.power, fd.card.toughness), (Some(3), Some(3)));
+        let j = json(&fd.card);
+        assert!(
+            j.contains("Cyberman") && j.contains("artifact"),
+            "{viewer:?}: {j}"
+        );
+        assert!(!j.contains("Giant"), "{viewer:?}: {j}");
+    }
+    let p0 = json(&observe(&t.g, Some(P0)));
+    assert!(!p0.contains("Hill Giant"), "{p0}");
+}

@@ -175,6 +175,7 @@ impl Renderer<'_> {
                 let s = self.search(e);
                 (who, s, false)
             }
+            Effect::SearchCards(spec) => (spec.who.clone(), self.search_cards(spec), false),
             Effect::CreateToken {
                 controller,
                 spec,
@@ -271,6 +272,13 @@ impl Renderer<'_> {
                 };
                 let s = self.sel(sel, Case::Obj);
                 format!("double the number of {k} on {s}")
+            }
+            // "If it doesn't have suspend, it gains suspend."
+            Effect::ForEach { sel, .. }
+                if crate::oracle::patterns::r702_062_gains_suspend::is_gains_suspend(e) =>
+            {
+                let s = self.sel(sel, Case::Subj);
+                format!("if {s} doesn't have suspend, it gains suspend")
             }
             // "Return the exiled card to the battlefield": each card linked to this object.
             Effect::ForEach {
@@ -477,7 +485,10 @@ impl Renderer<'_> {
             Effect::Exile {
                 what, face_down, ..
             } => {
-                let w = self.sel(what, Case::Obj);
+                let w = match self.enchanted_card(false) {
+                    Some(c) if matches!(what, Sel::AttachedTo) => c,
+                    _ => self.sel(what, Case::Obj),
+                };
                 if *face_down {
                     format!("exile {w} face down")
                 } else {
@@ -578,6 +589,31 @@ impl Renderer<'_> {
                     }
                 }
             }
+            Effect::RemoveCountersUpTo { what, kind, max } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let t = self.sel(what, Case::Obj);
+                match max {
+                    None => format!("remove any number of {} from {t}", plural(&noun)),
+                    Some(v) => {
+                        let (c, w) = self.counted(v, &noun);
+                        format!("remove up to {c} from {t}{}", w.unwrap_or_default())
+                    }
+                }
+            }
+            // "Choose a counter on target permanent. Put an additional counter of that kind
+            // on that permanent."
+            Effect::ChooseCounterKind { from, then } => {
+                let f = self.sel(from, Case::Obj);
+                let inner = self.effect(then);
+                let k = crate::ability::CHOSEN_COUNTER_KIND;
+                let inner = inner
+                    .replace(&format!("{k} counters"), "counters of that kind")
+                    .replace(&format!("{k} counter"), "counter of that kind");
+                format!("choose a counter on {f}. {inner}")
+            }
             Effect::MoveCounters { from, to, kind, n } => {
                 let noun = match kind {
                     Some(k) => counter_name(k),
@@ -601,6 +637,33 @@ impl Renderer<'_> {
                     Some(k) => format!("put {f} {k} counters on {t}"),
                     None => format!("put {f} counters on {t}"),
                 }
+            }
+            // "Exile that card with three time counters on it instead of putting it into
+            // your graveyard as it resolves. Then if the exiled card doesn't have suspend,
+            // it gains suspend." (see `kw/suspend_as_it_resolves.rs`)
+            Effect::Modify {
+                what: Sel::TriggerSpell,
+                mods,
+                ..
+            } if matches!(mods.as_slice(), [Modification::AddAbility(a)]
+                if crate::kw::suspend_as_it_resolves::parse_marker(&a.text).is_some()) =>
+            {
+                let [Modification::AddAbility(a)] = mods.as_slice() else {
+                    return self.gap("exile as it resolves");
+                };
+                let Some((kind, n, suspend)) =
+                    crate::kw::suspend_as_it_resolves::parse_marker(&a.text)
+                else {
+                    return self.gap("exile as it resolves");
+                };
+                let (c, _) = self.counted(&Value::c(n as i32), &counter_name(&kind));
+                let mut s = format!(
+                    "exile that card with {c} on it instead of putting it into your graveyard as it resolves"
+                );
+                if suspend {
+                    s.push_str(". Then if the exiled card doesn't have suspend, it gains suspend");
+                }
+                s
             }
             Effect::Modify {
                 what,
@@ -633,6 +696,18 @@ impl Renderer<'_> {
                 }
                 if d == "this turn" && r.contains(" can't be blocked except by ") {
                     return r.replacen(" except by ", " this turn except by ", 1);
+                }
+                // "You choose which creatures block this combat and how those creatures
+                // block."
+                if let Some((a, b)) = r.split_once(" block and how ") {
+                    if !d.is_empty() {
+                        let d = if d == "until end of combat" {
+                            "this combat"
+                        } else {
+                            &d
+                        };
+                        return format!("{a} block {d} and how {b}");
+                    }
                 }
                 // "Target creature blocks this turn if able."
                 if d == "this turn" {
@@ -869,6 +944,22 @@ impl Renderer<'_> {
             }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
                 let w = self.sel(what, Case::Obj);
+                // "attach ~ to another instant card in a graveyard": other than the card it
+                // enchants.
+                if let Sel::Choose {
+                    filter: Filter::And(v),
+                    ..
+                } = to
+                {
+                    if let [Filter::Type(t), Filter::Card, Filter::InZone(ZoneKind::Graveyard), Filter::Not(n)] =
+                        v.as_slice()
+                    {
+                        if matches!(&**n, Filter::In(s) if matches!(**s, Sel::AttachedTo)) {
+                            let t = t.word().to_lowercase();
+                            return format!("attach {w} to another {t} card in a graveyard");
+                        }
+                    }
+                }
                 let t = self.sel(to, Case::Obj);
                 format!("attach {w} to {t}")
             }
@@ -969,6 +1060,7 @@ impl Renderer<'_> {
             | Effect::BecomeMonarch { .. }
             | Effect::TakeInitiative { .. }
             | Effect::Search { .. }
+            | Effect::SearchCards(_)
             | Effect::CreateEmblem { .. } => unreachable_text(),
             Effect::SetLife { who, n } => {
                 let p = self.player(who, Case::Poss);
@@ -1371,6 +1463,45 @@ impl Renderer<'_> {
                 let u = until_event(until);
                 format!("{w} phases out until {u}")
             }
+            // "Counter target spell. If that spell is countered this way, exile it instead of
+            // putting it into its owner's graveyard."
+            Effect::SelfReplace {
+                replacement:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::ZoneChange {
+                                filter,
+                                from: Some(ZoneKind::Stack),
+                                to: Some(ZoneKind::Graveyard),
+                            },
+                        action: ReplacementAction::MoveInstead(d),
+                        ..
+                    },
+                effect,
+            } if countered_this_way(effect, filter).is_some() => {
+                let only = countered_this_way(effect, filter).flatten();
+                let e = self.effect(effect);
+                let which = match only {
+                    Some(Filter::PermanentCard) => "a permanent spell".into(),
+                    Some(f) => {
+                        let n = self.noun_det(f, Det::A);
+                        format!("{n} spell")
+                    }
+                    None => "that spell".into(),
+                };
+                let instead = if d.zone == ZoneKind::Exile {
+                    let mut w = String::new();
+                    for (k, n) in &d.with_counters {
+                        let (c, _) = self.counted(n, &counter_name(k));
+                        w.push_str(&format!(" with {c} on it"));
+                    }
+                    format!("exile it{w} instead of putting it into its owner's graveyard")
+                } else {
+                    let dest = self.destination_phrase(d, false, false);
+                    format!("put it {dest} instead of into its owner's graveyard")
+                };
+                format!("{e}. If {which} is countered this way, {instead}")
+            }
             Effect::SelfReplace {
                 replacement,
                 effect,
@@ -1414,6 +1545,12 @@ impl Renderer<'_> {
                 }
             }
             Effect::CopyCard { what, named } => match named {
+                // "copy the enchanted instant card" (an Aura enchanting a card in a
+                // graveyard).
+                None if matches!(what, Sel::AttachedTo) && self.enchanted_card(true).is_some() => {
+                    let w = self.enchanted_card(true).unwrap_or_default();
+                    format!("copy {w}")
+                }
                 None => {
                     let w = self.sel(what, Case::Obj);
                     format!("copy {w}")
@@ -1841,10 +1978,10 @@ impl Renderer<'_> {
             Condition::Not(inner) if matches!(inner.as_ref(), Condition::PrevHappened) => {
                 self.if_effect(&Condition::PrevHappened, otherwise, then)
             }
-            // "Sacrifice it" needs no "if you control it" (CR 701.21a).
+            // "Sacrifice it" needs no "if you control it" (CR 701.21a), nor does "you may
+            // sacrifice it. If you do, ..." (the check moved before the option).
             Condition::SelMatches(s, Filter::ControlledBy(PlayerRel::You))
-                if else_empty
-                    && matches!(then, Effect::SacrificeObjects { what } if format!("{what:?}") == format!("{s:?}")) =>
+                if else_empty && starts_by_sacrificing(then, s) =>
             {
                 self.effect(then)
             }
@@ -1968,9 +2105,32 @@ impl Renderer<'_> {
         }
     }
 
+    /// "the enchanted instant card" / "the enchanted card", for an Aura that enchants a card
+    /// in a graveyard ("Enchant instant card in a graveyard").
+    fn enchanted_card(&mut self, with_type: bool) -> Option<String> {
+        let e = self.info.enchant.clone()?;
+        let head = e.split(" card").next().filter(|_| e.contains(" card"))?;
+        Some(if with_type {
+            format!("the enchanted {head} card")
+        } else {
+            "the enchanted card".into()
+        })
+    }
+
     /// Moving objects between zones.
     fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
         let mut w = self.sel(what, Case::Obj);
+        // An Aura enchanting a card in a graveyard: "return enchanted creature card to the
+        // battlefield" (Animate Dead).
+        if matches!(what, Sel::AttachedTo)
+            && self
+                .info
+                .enchant
+                .as_deref()
+                .is_some_and(|e| e.contains(" card"))
+        {
+            w.push_str(" card");
+        }
         // An ability that functions in a hidden or public zone moves the card from there
         // ("Return ~ from your graveyard to your hand", CR 113.6m).
         if matches!(what, Sel::This) {
@@ -1978,6 +2138,9 @@ impl Renderer<'_> {
                 // Left out when the ability already said where it is ("if ~ is in your
                 // graveyard, ... return it to your hand").
                 FunctionZone::Graveyard => w.push_str(" {opt:from your graveyard}"),
+                FunctionZone::Battlefield if self.attached_left => {
+                    w.push_str(" {opt:from your graveyard}")
+                }
                 FunctionZone::Hand if to.zone != ZoneKind::Hand => w.push_str(" from your hand"),
                 FunctionZone::Exile => w.push_str(" from exile"),
                 _ => {}
@@ -2053,6 +2216,9 @@ impl Renderer<'_> {
             ZoneKind::Hand => format!("to {owner} hand"),
             ZoneKind::Graveyard => format!("into {owner} graveyard"),
             ZoneKind::Exile => String::new(),
+            ZoneKind::Library if to.position_choice.len() == 2 => {
+                format!("on your choice of the top or bottom of {owner} library")
+            }
             ZoneKind::Library => match to.position {
                 LibraryPosition::Top => format!("on top of {owner} library"),
                 LibraryPosition::Bottom => format!("on the bottom of {owner} library"),
@@ -2181,6 +2347,105 @@ impl Renderer<'_> {
             s.push_str(&format!(", put {pron} {dest}"));
         }
         if *shuffle {
+            s.push_str(", then shuffle");
+        }
+        s
+    }
+
+    /// A search of one or more zones for one or more kinds of cards (`SearchSpec`).
+    fn search_cards(&mut self, spec: &SearchSpec) -> String {
+        let whose =
+            if same_player(&spec.who, &spec.whose) || matches!(spec.whose, PlayerRef::Iterated) {
+                self.possessive_for(&spec.who)
+            } else {
+                self.player(&spec.whose, Case::Poss)
+            };
+        let zone = |z: &ZoneKind| match z {
+            ZoneKind::Library => "library",
+            ZoneKind::Graveyard => "graveyard",
+            ZoneKind::Hand => "hand",
+            ZoneKind::Exile => "exile",
+            ZoneKind::Battlefield => "battlefield",
+            _ => "zone",
+        };
+        let zones: Vec<&str> = spec.zones.iter().map(zone).collect();
+        let joiner = if spec.zones_optional { "and/or" } else { "and" };
+        let zones = match zones.as_slice() {
+            [] => String::new(),
+            [one] => (*one).to_string(),
+            [init @ .., last] => format!("{} {joiner} {last}", init.join(", ")),
+        };
+        let mut many = false;
+        let parts: Vec<String> = spec
+            .parts
+            .iter()
+            .map(|p| {
+                let det = match (&p.count, p.up_to) {
+                    _ if p.all => Det::Count("all".into()),
+                    (Value::Const(1), false) => Det::A,
+                    (Value::Const(n), _) if *n >= 99 => Det::Count("any number of".into()),
+                    (Value::Const(n), false) => Det::Count(number_word(*n)),
+                    (Value::Const(n), true) => Det::UpTo(number_word(*n)),
+                    (other, up_to) => {
+                        let v = self.value(other);
+                        if up_to {
+                            Det::UpTo(v)
+                        } else {
+                            Det::Count(v)
+                        }
+                    }
+                };
+                if p.all || p.up_to || !matches!(p.count, Value::Const(1)) {
+                    many = true;
+                }
+                self.noun_det(&p.filter, det)
+            })
+            .collect();
+        if parts.len() > 1 {
+            many = true;
+        }
+        let parts = match parts.as_slice() {
+            [] => String::new(),
+            [one] => one.clone(),
+            [init @ .., last] => format!("{} and {last}", init.join(", ")),
+        };
+        let may = if spec.optional { "may " } else { "" };
+        let mut s = format!("{may}search {whose} {zones} for {parts}");
+        if spec.distinct_names {
+            s.push_str(" with different names");
+        }
+        let pron = if many { "them" } else { "it" };
+        if spec.reveal {
+            s.push_str(&format!(", reveal {pron}"));
+        }
+        if spec.shuffle == SearchShuffle::Before {
+            s.push_str(&format!(", then shuffle and put {pron} on top"));
+            return s;
+        }
+        let own = same_player(&spec.who, &spec.whose);
+        let dests: Vec<String> = spec
+            .dests
+            .iter()
+            .map(|d| {
+                let mut alts = vec![self.destination_phrase(&d.to, many, own)];
+                for o in &d.or {
+                    alts.push(self.destination_phrase(o, many, own));
+                }
+                let phrase = alts.join(" or ");
+                match &d.count {
+                    Some(n) => {
+                        let (a, _) = self.amount(n);
+                        format!("{a} {phrase}")
+                    }
+                    None if spec.dests.len() > 1 => format!("the rest {phrase}"),
+                    None => format!("{pron} {phrase}"),
+                }
+            })
+            .collect();
+        if !dests.is_empty() {
+            s.push_str(&format!(", put {}", dests.join(" and ")));
+        }
+        if spec.shuffle == SearchShuffle::After {
             s.push_str(", then shuffle");
         }
         s
@@ -2618,6 +2883,14 @@ impl Renderer<'_> {
                 }
                 Modification::RemoveKeyword(k) => {
                     parts.push(format!("loses {}", self.keyword_kind_word(*k)))
+                }
+                Modification::LoseKeyword(k) => {
+                    let t = k
+                        .text
+                        .as_deref()
+                        .map(|t| t.to_lowercase())
+                        .unwrap_or_else(|| self.keyword_kind_word(k.kind));
+                    parts.push(format!("loses \"{t}\""))
                 }
                 Modification::RemoveAllAbilities => parts.push("loses all abilities".into()),
                 Modification::CantHaveKeyword(k) => {
@@ -3543,4 +3816,52 @@ pub(crate) fn third_person(vp: &str) -> String {
         v => format!("{v}s"),
     };
     format!("{v}{rest}")
+}
+
+/// For a counter effect wrapped in a self-replacement effect for the countered spell's move
+/// from the stack to a graveyard (see `oracle/patterns/replacements_counter.rs`): `Some`
+/// with the kind of spell that moves elsewhere ("if an artifact or creature spell is
+/// countered this way"), if only some do.
+fn countered_this_way<'a>(effect: &'a Effect, filter: &'a Filter) -> Option<Option<&'a Filter>> {
+    let what = match effect {
+        Effect::CounterSpell { what } => what,
+        Effect::PayOptional {
+            then, otherwise, ..
+        } if matches!(**then, Effect::Noop) => match &**otherwise {
+            Effect::CounterSpell { what } => what,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let is_what = |f: &Filter| matches!(f, Filter::In(s) if same_sel(s, what));
+    match filter {
+        f if is_what(f) => Some(None),
+        Filter::And(v) if v.len() == 2 && is_what(&v[0]) => Some(Some(&v[1])),
+        _ => None,
+    }
+}
+
+/// Whether `e` is "sacrifice [s]", or "you may sacrifice [s]. If you do, ...": nothing in
+/// it happens unless you sacrifice `s`.
+fn starts_by_sacrificing(e: &Effect, s: &Sel) -> bool {
+    let sacrifices = |e: &Effect| matches!(e, Effect::SacrificeObjects { what } if format!("{what:?}") == format!("{s:?}"));
+    match e {
+        Effect::Seq(v) => match v.split_first() {
+            Some((
+                Effect::May {
+                    who: PlayerRef::You,
+                    effect,
+                },
+                rest,
+            )) => {
+                sacrifices(effect)
+                    && rest.iter().all(|x| {
+                        matches!(x, Effect::If { cond: Condition::PrevHappened, otherwise, .. }
+                            if matches!(**otherwise, Effect::Noop))
+                    })
+            }
+            _ => false,
+        },
+        e => sacrifices(e),
+    }
 }

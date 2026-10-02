@@ -63,7 +63,8 @@ fn a_target_for_each_kick_each_one_different() {
     assert_eq!(t.obj_now(giant).damage, 2);
     assert_eq!(t.life(P1), 18);
     // The same target can't be chosen twice: an answer naming the Bears twice isn't
-    // legal, and the spell doesn't get the Bears as two of its targets.
+    // legal, and the spell doesn't get the Bears as two of its targets; it still has
+    // exactly two different targets, one more than the number of times it was kicked.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Mountain", 5);
@@ -78,8 +79,8 @@ fn a_target_for_each_kick_each_one_different() {
     let mut distinct = chosen.clone();
     distinct.sort();
     distinct.dedup();
-    assert!(!chosen.is_empty() && chosen.len() < 2);
-    assert_eq!(distinct, chosen);
+    assert_eq!(chosen.len(), 2);
+    assert_eq!(distinct.len(), chosen.len());
     // Strength of the Tajuru ({X}{G}{G}, multikicker {1}) kicked once with X = 2: two
     // different target creatures get two +1/+1 counters each.
     let mut t = TestGame::new(2);

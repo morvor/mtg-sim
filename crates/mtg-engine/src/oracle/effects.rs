@@ -192,6 +192,11 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
+    // cast, even after "it" has come to mean something else.
+    if matches!(it, Sel::TriggerSpell) {
+        b.named.push(("that spell".into(), Sel::TriggerSpell));
+    }
     b.it = it;
     b.it_player = it_player;
     let effect = parse_effect_text(t, &mut b)?;
@@ -212,6 +217,34 @@ fn parse_modal(
     let (head, rest) = t.split_once('\n')?;
     let hl = head.to_lowercase();
     let hl = hl.trim().trim_end_matches(['—', ':', '.', ' ']);
+    // "Each mode must target a different player" (see `mode_players.rs`).
+    let (hl, different_players) =
+        match hl.strip_suffix(". each mode must target a different player") {
+            Some(h) => (h, true),
+            None => (hl, false),
+        };
+    // "You may choose two": that many modes, or none (see `Modal::optional`).
+    let (hl, optional) = match hl.strip_prefix("you may ") {
+        Some(h) if matches!(h, "choose one" | "choose two" | "choose three") => (h, true),
+        _ => (hl, false),
+    };
+    // "Choose one. X is the number of spells you've cast this turn." (Gnostro, Voice of the
+    // Crags): the value of X in each mode, determined as the ability resolves.
+    let (hl, x_is) = match hl.split_once(". x is ") {
+        Some((h, v)) => (h, Some(v)),
+        None => (hl, None),
+    };
+    let x_value = match x_is {
+        Some(v) => {
+            let mut b = Builder::new(ctx);
+            let (value, rest) = super::statics::parse_value_phrase(v, &mut b)?;
+            if !b.targets.is_empty() || !rest.trim().is_empty() {
+                return None;
+            }
+            Some(value)
+        }
+        None => None,
+    };
     let fixed = match hl {
         "choose one" => Some((1, 1)),
         "choose two" => Some((2, 2)),
@@ -245,7 +278,10 @@ fn parse_modal(
             b.it = it.clone();
             b.it_player = it_player.clone();
         }
-        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        let mut effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        if let Some(v) = &x_value {
+            effect = Effect::Seq(vec![Effect::SetX { value: v.clone() }, effect]);
+        }
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,
@@ -269,6 +305,8 @@ fn parse_modal(
         modes,
         per_mode_cost: false,
         chooser: header.chooser,
+        different_players,
+        optional,
     })
 }
 
@@ -302,16 +340,19 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        // A quoted ability that ends its sentence ("... with \"~ can't block.\" Creatures
-        // you control ...") ends it inside the quote.
+        // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
+        // creature put onto the battlefield with ~.\" Put target creature card ..."): the
+        // next sentence starts with a capital letter.
         let quote_ends_sentence = *ch == '"'
             && !in_quote
             && i > 0
             && chars[i - 1] == '.'
-            && i + 1 < chars.len()
-            && chars[i + 1] == ' ';
+            && chars.get(i + 1) == Some(&' ')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_uppercase() || *c == '~');
         if quote_ends_sentence
-            || (*ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' '))
+            || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
         {
             let s = cur.trim().to_string();
             if !s.is_empty() {
@@ -508,7 +549,33 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             effect: Box::new(e),
         });
     }
-    if let Some((cond, rest)) = parse_leading_if(l, b) {
+    // "If you control a Fish, Octopus, or Otter, draw a card.": when the text after the
+    // first comma isn't an instruction, the condition may go on (read by the patterns).
+    let before_if = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let leading_if = parse_leading_if(l, b).and_then(|(cond, rest)| {
+        if !rest.contains(", ") {
+            return Some((cond, rest));
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let subject_is_source;
+        let rest2 = match rest.strip_prefix("it ") {
+            Some(r) if l.starts_with("if ~ ") => {
+                subject_is_source = format!("~ {r}");
+                subject_is_source.as_str()
+            }
+            _ => rest,
+        };
+        let ok = parse_clause(rest2, b).is_some();
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        if !ok {
+            // Read again by the patterns: nothing the condition added stays.
+            b.targets.truncate(before_if.0);
+            (b.it, b.it_player) = (before_if.1.clone(), before_if.2.clone());
+        }
+        ok.then_some((cond, rest))
+    });
+    if let Some((cond, rest)) = leading_if {
         // "If ~ was kicked, it deals 2 damage ...": the subject "it" is the condition's.
         let subject_is_source;
         let rest = match rest.strip_prefix("it ") {
@@ -609,8 +676,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 7] = [
+    let pairs: [(&str, Sel); 11] = [
         ("~", Sel::This),
+        // An Aura enchanting a card in a graveyard ("Enchant creature card in a
+        // graveyard", CR 303.4a): that card.
+        ("enchanted creature card", Sel::AttachedTo),
+        ("enchanted instant card", Sel::AttachedTo),
+        ("enchanted card", Sel::AttachedTo),
+        ("the enchanted card", Sel::AttachedTo),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
         // Auras with "enchant permanent/land/artifact/...": the object it's attached to
@@ -638,24 +711,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((sel, rest.to_string()));
         }
     }
-    // An Aura's "enchanted Swamp", "enchanted Plains" ("Enchant Swamp"): the object it's
-    // attached to (CR 303.4), not every enchanted object of that kind.
-    if b.ctx.type_line.subtypes.iter().any(|t| t == "Aura") {
-        if let Some(r) = s.strip_prefix("enchanted ") {
-            let (w, rest) = split_word(r);
-            if (w == "plains" || !w.ends_with('s')) && subtype_word(w).is_some() {
-                if matches!(b.it, Sel::This)
-                    || super::patterns::oracle_hardening_referents::is_no_referent(&b.it)
-                {
-                    b.it = Sel::AttachedTo;
-                }
-                let rest = if rest.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {rest}")
-                };
-                return Some((Sel::AttachedTo, rest));
+    // "enchanted Forest" (the Genjus: "Enchant Forest"): the permanent it's attached to.
+    if let Some(r) = s.strip_prefix("enchanted ") {
+        let w = r.split(' ').next().unwrap_or("");
+        let rest = &r[w.len()..];
+        if super::phrases::subtype_word(w).is_some() && !w.ends_with(',') {
+            if matches!(b.it, Sel::This)
+                || super::patterns::oracle_hardening_referents::is_no_referent(&b.it)
+            {
+                b.it = Sel::AttachedTo;
             }
+            return Some((Sel::AttachedTo, rest.to_string()));
         }
     }
     // The longest phrase that names the object ("the creature an opponent controls"
@@ -829,6 +895,21 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             r.to_string(),
         ));
     }
+    // "~'s controller sacrifices it": the source's controller (or owner); "it" is ~.
+    for (p, owner) in [("~'s controller", false), ("~'s owner", true)] {
+        if let Some(r) = s.strip_prefix(p) {
+            if super::patterns::oracle_hardening_referents::is_no_referent(&b.it) {
+                b.it = Sel::This;
+            }
+            let this = Box::new(Sel::This);
+            let who = if owner {
+                PlayerRef::OwnerOf(this)
+            } else {
+                PlayerRef::ControllerOf(this)
+            };
+            return Some((who, r.to_string()));
+        }
+    }
     if let Some(r) = s
         .strip_prefix("its owner")
         .or_else(|| s.strip_prefix("their owner"))
@@ -902,6 +983,10 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
         }
+    }
+    // "for as long as it has a flood counter on it" (CR 611.2b).
+    if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
+        return (d, r);
     }
     (Duration::Permanent, t)
 }
@@ -1066,11 +1151,11 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             }
             // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
             // target gets at least 1 (CR 601.2d).
-            spec.min = if r2.starts_with("any number of ") {
+            spec.min = Value::c(if r2.starts_with("any number of ") {
                 0
             } else {
                 1
-            };
+            });
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");

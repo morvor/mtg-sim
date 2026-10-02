@@ -112,6 +112,11 @@ fn parse_triggered_at(
                 parsed
             };
             if let Some(cond) = parsed {
+                // "Whenever you scry, if ~ is tapped, you may untap it": with no object of
+                // the trigger event's own, "it" is the condition's subject.
+                if matches!(it, Sel::None) && c.starts_with("~ ") && body_it.is_none() {
+                    body_it = Some(Sel::This);
+                }
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];
                 // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the
@@ -198,6 +203,10 @@ fn parse_triggered_at(
 /// ~ from your graveyard to your hand") and the trigger condition doesn't put it there
 /// (CR 113.6m).
 pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
+    // "Whenever a creature you control dies while ~ is in your graveyard" (CR 113.6).
+    if super::patterns::trigger_grammar_events::requires_source_in_graveyard(trigger) {
+        return FunctionZone::Graveyard;
+    }
     match trigger {
         TriggerCond::CastSpell {
             filter: Filter::Source,
@@ -223,9 +232,11 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         TriggerCond::Dies(f)
         | TriggerCond::LeavesBattlefield(f)
         | TriggerCond::ZoneChange { filter: f, .. }
-            if mentions_source(f) =>
+            if mentions_source(f) || matches!(f, Filter::AttachedToSource) =>
         {
-            return FunctionZone::Battlefield
+            // (An Aura's "when enchanted creature dies, return ~ from your graveyard"
+            // triggers while the Aura is on the battlefield, CR 603.10a.)
+            return FunctionZone::Battlefield;
         }
         // Several trigger conditions (CR 603.1b), such as "When you cycle this card and
         // when this creature dies": one that triggers from wherever the card is combined
@@ -636,14 +647,19 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             if !end(tail).is_empty() {
                 return None;
             }
+            // "Whenever a nonland permanent an opponent owns enters under your control,
+            // they lose life ...": "they" is the owner the subject names.
+            let who = if suffix.contains("under your control")
+                && super::patterns::trigger_grammar_filters::names_other_owner(&f)
+            {
+                PlayerRef::OwnerOf(Box::new(Sel::TriggerObject))
+            } else {
+                PlayerRef::ControllerOf(Box::new(Sel::TriggerObject))
+            };
             if suffix.contains("under your control") {
                 f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
             }
-            return Some((
-                TriggerCond::EntersBattlefield(f),
-                obj(),
-                PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
-            ));
+            return Some((TriggerCond::EntersBattlefield(f), obj(), who));
         }
     }
     // "[filter] dies"

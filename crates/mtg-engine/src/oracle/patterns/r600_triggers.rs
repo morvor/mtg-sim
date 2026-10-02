@@ -73,6 +73,15 @@ fn f_reflexive_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !refers || l.contains("target") {
         return false;
     }
+    // (After a payment, the reflexive ability is the last of a sequence; see
+    // `reflexive_after_payment`.)
+    let prev = match prev {
+        Effect::Seq(v) => match v.last_mut() {
+            Some(last) => last,
+            None => return false,
+        },
+        e => e,
+    };
     let Effect::If {
         cond,
         then,
@@ -250,7 +259,18 @@ fn do_this_only_once(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         return None;
     }
     let body = t.strip_suffix("Do this only once each turn.")?.trim_end();
-    let a = crate::oracle::triggers::parse_triggered(body, ctx)?;
+    // The triggered ability before it, as the compiler reads it on its own (including
+    // whole-ability patterns: "you may draw that many cards", Terrasymbiosis).
+    let a = match crate::oracle::triggers::parse_triggered(body, ctx) {
+        Some(a) => a,
+        None => {
+            let mut v = crate::oracle::parse_ability(body, ctx)?;
+            if v.len() != 1 {
+                return None;
+            }
+            v.pop()?
+        }
+    };
     let AbilityKind::Triggered(mut tr) = a.kind.clone() else {
         return None;
     };

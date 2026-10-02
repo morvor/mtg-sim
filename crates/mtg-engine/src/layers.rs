@@ -343,7 +343,9 @@ impl Game {
                         ..Default::default()
                     }
                 } else {
-                    crate::facedown::face_down_characteristics(self, *id)
+                    let mut fd = crate::facedown::face_down_characteristics(self, *id);
+                    self.apply_face_down_listed(&mut fd, *id);
+                    fd
                 };
                 self.objects[id.0 as usize].chars = fd;
             }
@@ -523,6 +525,40 @@ impl Game {
     }
 
     fn expire_dependent_effects(&mut self) {
+        // "For as long as it has a [kind] counter on it" (CR 611.2b): an object that no
+        // longer has one stops being affected for good.
+        for i in 0..self.effects.len() {
+            let (Duration::WhileAffectedHasCounter(kind), Affected::Objects(v)) =
+                (&self.effects[i].duration, &self.effects[i].affected)
+            else {
+                continue;
+            };
+            let keep: Vec<ObjectId> = v
+                .iter()
+                .copied()
+                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .collect();
+            if keep.len() != v.len() {
+                self.effects[i].affected = Affected::Objects(keep);
+            }
+        }
+        // Characteristics listed for a permanent turned face down (CR 708.2a): one that's
+        // turned face up stops being affected for good.
+        for i in 0..self.effects.len() {
+            let (Duration::WhileFaceDown, Affected::Objects(v)) =
+                (&self.effects[i].duration, &self.effects[i].affected)
+            else {
+                continue;
+            };
+            let keep: Vec<ObjectId> = v
+                .iter()
+                .copied()
+                .filter(|o| self.is_live(*o) && self.obj(*o).face_down)
+                .collect();
+            if keep.len() != v.len() {
+                self.effects[i].affected = Affected::Objects(keep);
+            }
+        }
         let mut remove: Vec<u32> = Vec::new();
         for e in &self.effects {
             // "For as long as that creature has a bounty counter on it, it has ...": a
@@ -583,6 +619,27 @@ impl Game {
         self.replacements.retain(|e| !rp.contains(&e.id));
     }
 
+    /// The characteristics listed by the effects that turned the face-down permanent `id`
+    /// face down ("It becomes a 2/2 Cyberman artifact creature", CR 708.2a): they're its
+    /// face-down characteristics (layer 1b, CR 613.2b), and so its copiable values.
+    fn apply_face_down_listed(&self, c: &mut Characteristics, id: ObjectId) {
+        let mut listed: Vec<&ContinuousEffect> = self
+            .effects
+            .iter()
+            .filter(|e| {
+                matches!(e.duration, Duration::WhileFaceDown)
+                    && matches!(&e.affected, Affected::Objects(v) if v.contains(&id))
+            })
+            .collect();
+        listed.sort_by_key(|e| e.timestamp);
+        for e in listed {
+            let ctx = Ctx::new(e.source, e.controller);
+            for m in &e.mods {
+                apply_mod(c, m, self, &ctx, id);
+            }
+        }
+    }
+
     pub(crate) fn effect_expired(
         &self,
         d: &Duration,
@@ -621,7 +678,12 @@ impl Game {
         let mut effs: Vec<LayerEff> = Vec::new();
         for (i, e) in self.effects.iter().enumerate() {
             let key = EffKey::Resolved(i);
-            if e.layer1.is_none() && has_layer_mod(&e.mods, layer) && !done.contains(&key) {
+            // Characteristics listed for a face-down permanent apply in layer 1b.
+            if e.layer1.is_none()
+                && !matches!(e.duration, Duration::WhileFaceDown)
+                && has_layer_mod(&e.mods, layer)
+                && !done.contains(&key)
+            {
                 effs.push(LayerEff {
                     key,
                     ts: crate::stickers::effect_timestamp(self, e),
@@ -1722,6 +1784,9 @@ pub fn apply_mod(
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
+        Modification::LoseKeyword(k) => c.abilities.retain(|a| {
+            !matches!(&a.kind, AbilityKind::Keyword(kw) if crate::keywords::same_instance(kw, k))
+        }),
         Modification::RemoveAllAbilities => c.abilities.clear(),
         Modification::CantHaveKeyword(k) => c
             .abilities

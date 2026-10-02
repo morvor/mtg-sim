@@ -30,6 +30,9 @@ impl Renderer<'_> {
     pub(crate) fn custom_effect(&mut self, name: &str) -> String {
         let me = |r: &mut Self| r.me();
         let s: String = match name {
+            // Bookkeeping: the number of cards a card action affected, per player
+            // (`kw/hand_graveyard_actions.rs`).
+            crate::kw::hand_graveyard_actions::RECORD_THAT_MANY => String::new(),
             "case: becomes solved" => format!("{} becomes solved", me(self)),
             "flip this permanent" => format!("flip {}", me(self)),
             "end the turn" => "end the turn".into(),
@@ -182,7 +185,9 @@ impl Renderer<'_> {
         let adj = |s: &str| (true, s.to_string());
         let rel = |s: &str| (false, s.to_string());
         match name {
-            "saddled" | "suspected" | "monstrous" | "renowned" | "transformed" => adj(name),
+            "saddled" | "suspected" | "monstrous" | "renowned" | "transformed" | "damaged" => {
+                adj(name)
+            }
             "saddle:saddled it this turn" => rel("that saddled it this turn"),
             "crew:crewed it this turn" => rel("that crewed it this turn"),
             "convoke:convoked it" => rel("that convoked it"),
@@ -222,6 +227,7 @@ impl Renderer<'_> {
     pub(crate) fn custom_value(&mut self, name: &str) -> String {
         match name {
             "party_size" => "the number of creatures in your party".into(),
+            crate::kw::hand_graveyard_actions::THAT_MANY => "that many".into(),
             "spell_targets_beyond_first" => "the number of targets beyond the first".into(),
             "opus:mana spent to cast that spell" => {
                 "the amount of mana spent to cast that spell".into()
@@ -684,7 +690,10 @@ impl Renderer<'_> {
         match name {
             "players can't cycle cards" => "players can't cycle cards".into(),
             "combat: controller chooses how creatures block" => {
-                "you choose which creatures block this combat and how those creatures block".into()
+                "you choose which creatures block and how those creatures block".into()
+            }
+            "combat: controller chooses which creatures attack" => {
+                "you choose which creatures attack".into()
             }
             "combat: controller chooses how opponents' creatures block" => {
                 "you choose how those creatures block".into()

@@ -316,6 +316,10 @@ pub struct EventInfo {
     /// The mana produced, for "whenever [a permanent] is tapped for mana" ("add one mana of
     /// any type that land produced").
     pub mana: Vec<ManaType>,
+    /// For a zone change, why the object moved ("whenever a player mills a nonland card",
+    /// "whenever a land enters without being played"): see `kw::trigger_event_causes`.
+    #[serde(default)]
+    pub cause: Option<crate::events::MoveCause>,
 }
 
 /// The kind of object on the stack.
@@ -335,6 +339,11 @@ pub struct ChosenMode {
     pub targets: Vec<Vec<Entity>>,
     /// Division of damage/counters among targets (CR 601.2d), per slot.
     pub divided: Vec<Vec<u32>>,
+    /// For a slot whose targets are chosen for each player ("for each opponent, ... up
+    /// to one target creature that player controls", `TargetSpec::per_player`): the
+    /// player each target was chosen for, parallel to `targets`. Empty otherwise.
+    #[serde(default)]
+    pub target_players: Vec<Vec<PlayerId>>,
 }
 
 /// Stack-specific data for spells and abilities on the stack.

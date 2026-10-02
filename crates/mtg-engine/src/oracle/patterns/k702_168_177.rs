@@ -675,7 +675,7 @@ fn exile_creatures_and_or_graveyard_cards(l: &str, b: &mut Builder) -> Option<Ef
         ]),
     ]);
     let spec = TargetSpec {
-        min: 0,
+        min: Value::c(0),
         max: n,
         ..TargetSpec::object(filter, text)
     };

@@ -13,8 +13,9 @@ use crate::oracle::phrases::end;
 
 /// The filter a rule-modifying effect uses for its subject: a class of objects stays a
 /// class (it can affect objects that join it later, CR 611.2c); specific objects are
-/// locked in as the effect begins. Other groups ("creatures target player controls")
-/// aren't handled.
+/// locked in as the effect begins. A class of objects a target player controls
+/// ("creatures target player controls") stays a class of the objects that player
+/// controls (the player is fixed as the effect begins, see `fix_restriction`).
 /// Whether `what`, parsed from the subject text `subject`, may be the source itself: a
 /// pronoun with nothing else to refer to ("that token" after creating a token, "those
 /// creatures" after a group) falls back to the source, which would put the restriction on
@@ -28,8 +29,14 @@ fn names_source_faithfully(subject: &str, what: &Sel) -> bool {
 }
 
 fn subject_filter(what: &Sel) -> Option<Filter> {
+    let target_players_class = |f: &Filter| match f {
+        Filter::And(v) => v.iter().all(|x| {
+            is_class_filter(x) || matches!(x, Filter::ControlledBy(PlayerRel::Target(_)))
+        }),
+        _ => false,
+    };
     match what {
-        Sel::All(f) if is_class_filter(f) => Some(f.clone()),
+        Sel::All(f) if is_class_filter(f) || target_players_class(f) => Some(f.clone()),
         Sel::All(_) | Sel::None | Sel::Players(_) => None,
         _ => Some(Filter::In(Box::new(what.clone()))),
     }
@@ -51,6 +58,8 @@ fn lockable(r: &Restriction) -> bool {
             | Restriction::MustBlockAttacker { .. }
             | Restriction::CantBeBlockedBy { .. }
             | Restriction::AttackDespiteDefender(_)
+            | Restriction::AttackAsThoughHaste { .. }
+            | Restriction::BlockAsThoughUntapped(_)
             | Restriction::DamageByToughness(_)
             | Restriction::AssignsNoCombatDamage(_)
     )

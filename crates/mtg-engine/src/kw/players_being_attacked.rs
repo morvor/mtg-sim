@@ -14,7 +14,9 @@ use std::collections::BTreeSet;
 /// `Value::Custom` name: the number of players being attacked.
 pub const PLAYERS_BEING_ATTACKED: &str = "players being attacked";
 
-/// The players being attacked in the current combat.
+/// The players being attacked in the current combat. A player who has left the game
+/// isn't being attacked any more (CR 800.4a, 800.4e), even though the creatures attacking
+/// them are still attacking creatures.
 pub fn players_being_attacked(g: &Game) -> BTreeSet<PlayerId> {
     g.combat
         .as_ref()
@@ -22,7 +24,7 @@ pub fn players_being_attacked(g: &Game) -> BTreeSet<PlayerId> {
             c.attackers
                 .iter()
                 .filter_map(|a| match a.target {
-                    Some(Entity::Player(p)) => Some(p),
+                    Some(Entity::Player(p)) if g.player(p).in_game() => Some(p),
                     _ => None,
                 })
                 .collect()
