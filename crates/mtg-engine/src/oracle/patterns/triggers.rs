@@ -737,12 +737,14 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         if x != "or more creatures" {
             return None;
         }
+        // "those creatures" are the creatures the player attacked with, whatever has
+        // happened to them since.
         return Some((
             TriggerCond::Where {
                 trigger: Box::new(base),
                 cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::c(n)),
             },
-            Sel::None,
+            Sel::TriggerObjects,
             tp(),
         ));
     }
