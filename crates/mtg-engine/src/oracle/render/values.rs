@@ -486,6 +486,15 @@ impl Renderer<'_> {
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
+            // CR 702.62b: a card is suspended if it's in exile, has suspend, and has a
+            // time counter on it.
+            Condition::And(v)
+                if format!("{v:?}")
+                    == "[SelMatches(This, InZone(Exile)), SelMatches(This, HasKeyword(Suspend)), \
+                        Compare(CountersOn(This, Some(\"time\")), Gt, Const(0))]" =>
+            {
+                "~ is suspended".into()
+            }
             // "if you have more cards in hand than each opponent": no opponent has at
             // least as many.
             Condition::Not(inner)
