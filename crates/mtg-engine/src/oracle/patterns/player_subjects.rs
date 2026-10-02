@@ -499,6 +499,19 @@ fn predicate(
 fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
+    // "that player may draw a card if a player other than you lost life this turn": the
+    // condition is the ability's ("you" is its controller), checked first.
+    if let Some((head, c)) = l.rsplit_once(" if ") {
+        if let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) {
+            if let Some(e) = player_subject(head, b) {
+                return Some(Effect::If {
+                    cond,
+                    then: Box::new(e),
+                    otherwise: Box::new(Effect::Noop),
+                });
+            }
+        }
+    }
     let saved_targets = b.targets.len();
     let saved_player = b.it_player.clone();
     let r = (|| {
@@ -655,7 +668,8 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             if pred.starts_with("may ") {
                 return None;
             }
-            let e = instruction(pred, None, b)?;
+            let orig = plural_to_singular(pred);
+            let e = instruction(pred, orig.as_deref(), b)?;
             with_outer_x(e, |e| {
                 Effect::seq(vec![
                     e.clone(),
@@ -736,6 +750,10 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             };
             b.named
                 .push((ACCEPTED_NAME.to_string(), Sel::Var(ACCEPTED)));
+            if is_search(&e) {
+                b.named
+                    .push((SEARCHED_NAME.to_string(), Sel::Var(ACCEPTED)));
+            }
             let pre = x_used.then_some(Effect::StoreValue {
                 var: OUTER_X,
                 value: Value::X,
@@ -796,6 +814,39 @@ fn each_player_who_does(l: &str, b: &mut Builder) -> Option<Effect> {
         }),
     })
 }
+
+/// Marks that the players who accepted "each [player] may search their library ..."
+/// searched (a player who chooses to search searches, even if they find nothing).
+const SEARCHED_NAME: &str = "\u{1}the players who searched";
+
+fn is_search(e: &Effect) -> bool {
+    match e {
+        Effect::Search { .. } => true,
+        Effect::Seq(v) => v.first().is_some_and(is_search),
+        _ => false,
+    }
+}
+
+/// "Then each player who searched their library this way shuffles." after "each player
+/// may search their library for ...".
+fn each_player_who_searched_shuffles(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.named.iter().any(|(p, _)| p == SEARCHED_NAME) {
+        return None;
+    }
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l != "each player who searched their library this way shuffles" {
+        return None;
+    }
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::Var(ACCEPTED),
+        effect: Box::new(Effect::Shuffle {
+            who: PlayerRef::Iterated,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each player who searched their library this way shuffles", priority: 150, parse: each_player_who_searched_shuffles } }
 
 inventory::submit! { EffectPattern { name: "each player who does [instruction]", priority: 150, parse: each_player_who_does } }
 
