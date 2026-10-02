@@ -77,9 +77,23 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     let mut prev_changeling = false;
     // Per line: the body of the triggered ability it renders.
     let mut bodies: Vec<Option<String>> = Vec::new();
+    let mut skip = 0;
     for (i, a) in abilities.iter().enumerate() {
         while bodies.len() < out.lines.len() {
             bodies.push(None);
+        }
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        // "Creature cards you own that aren't on the battlefield have flash": compiled as
+        // one ability for each zone (a continuous effect applies in one zone).
+        if let Some((n, merged)) = off_battlefield_group(&abilities[i..]) {
+            let line = r.ability(&merged);
+            let line = line.replacen(" you own ", " you own that aren't on the battlefield ", 1);
+            out.lines.push(line);
+            skip = n - 1;
+            continue;
         }
         if let Some(n) = backup_n(a, &abilities[i + 1..]) {
             out.lines.push(format!("Backup {n}"));
@@ -129,6 +143,58 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     merge_chapters(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
+}
+
+/// Consecutive static abilities that are the same but for the zone of the cards they
+/// affect, covering every zone but the battlefield a card can be played from: (how many,
+/// the ability with the zone left out).
+fn off_battlefield_group(abilities: &[Ability]) -> Option<(usize, Ability)> {
+    fn split(a: &Ability) -> Option<(ZoneKind, String, StaticAbility)> {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let StaticEffect::Continuous { affected, mods } = &s.effect else {
+            return None;
+        };
+        let Filter::And(v) = affected else {
+            return None;
+        };
+        let zone = v.iter().find_map(|f| match f {
+            Filter::InZone(z) => Some(*z),
+            _ => None,
+        })?;
+        let rest: Vec<Filter> = v
+            .iter()
+            .filter(|f| !matches!(f, Filter::InZone(_)))
+            .cloned()
+            .collect();
+        let mut s2 = s.clone();
+        s2.effect = StaticEffect::Continuous {
+            affected: Filter::And(rest),
+            mods: mods.clone(),
+        };
+        let key = format!("{:?}{:?}", s2.effect, s2.condition);
+        Some((zone, key, s2))
+    }
+    let (_, key, first) = split(abilities.first()?)?;
+    let mut zones = Vec::new();
+    for a in abilities {
+        match split(a) {
+            Some((z, k, _)) if k == key => zones.push(z),
+            _ => break,
+        }
+    }
+    let needed = [
+        ZoneKind::Hand,
+        ZoneKind::Graveyard,
+        ZoneKind::Exile,
+        ZoneKind::Library,
+    ];
+    if !needed.iter().all(|z| zones.contains(z)) || zones.contains(&ZoneKind::Battlefield) {
+        return None;
+    }
+    let def = AbilityDef::new(AbilityKind::Static(first), "");
+    Some((zones.len(), def))
 }
 
 /// See [`RenderedFace::merged`]: "When A, X." + "When B, X." = "When A or B, X."

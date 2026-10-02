@@ -495,14 +495,16 @@ impl Renderer<'_> {
         m: &PlayerModification,
     ) -> String {
         let subj = match who {
-            PlayerRef::Each(PlayerFilter::Opponent) => "your opponents".to_string(),
-            PlayerRef::EachOpponent => "your opponents".into(),
+            PlayerRef::Each(PlayerFilter::Opponent) | PlayerRef::EachOpponent => {
+                "{alt:your opponents|each opponent}".to_string()
+            }
             PlayerRef::EachPlayer => "each player".into(),
             other => self.player(other, Case::Subj),
         };
         let poss = match subj.as_str() {
             "you" => "your".to_string(),
             "your opponents" => "your opponents'".into(),
+            "{alt:your opponents|each opponent}" => "{alt:your opponents'|each opponent's}".into(),
             "each player" => "each player's".into(),
             s => nouns::possessive(s),
         };
