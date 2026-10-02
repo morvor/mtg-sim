@@ -307,6 +307,12 @@ pub trait KeywordRules: Sync + Send {
     fn damage_source_colors(&self, g: &Game, source: ObjectId) -> Option<ColorSet> {
         None
     }
+    /// Whether the step or phase `step` of `active`'s turn that's about to begin is
+    /// skipped (CR 614.1b, 614.10) because of a rule this implementation defines (for a
+    /// skipped combat phase, each of its steps).
+    fn skips_step(&self, g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+        false
+    }
     /// Whether damage marked on the permanent `id` isn't removed in the cleanup step (an
     /// exception to CR 514.2).
     fn keeps_damage_in_cleanup(&self, g: &Game, id: ObjectId) -> bool {
@@ -899,6 +905,11 @@ pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) 
             crate::casting::matches_with_chars(g, source, &chars, f, ctx)
         }
     }
+}
+
+/// See [`KeywordRules::skips_step`].
+pub fn skips_step(g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+    registry().iter().any(|r| r.skips_step(g, step, active))
 }
 
 /// See [`KeywordRules::keeps_damage_in_cleanup`].
