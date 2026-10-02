@@ -59,6 +59,14 @@ impl Renderer<'_> {
         };
         match k.kind {
             KeywordKind::Enchant => match &k.filter {
+                // "enchant creature put onto the battlefield with ~" (CR 607.2c).
+                Some(Filter::And(v))
+                    if v.len() == 2
+                        && matches!(&v[1], Filter::In(s) if matches!(**s, Sel::Linked)) =>
+                {
+                    let n = self.noun_det(&v[0], Det::Bare);
+                    format!("enchant {n} put onto the battlefield with ~")
+                }
                 Some(f) => {
                     let n = self.noun_det(f, Det::Bare);
                     format!("enchant {n}")

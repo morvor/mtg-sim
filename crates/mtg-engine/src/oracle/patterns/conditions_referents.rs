@@ -13,7 +13,8 @@
 //!   discarded card", "it has greater power or toughness than ~";
 //! - "that player has two or fewer cards in hand", "that player controls more lands than
 //!   you", "that player is you", "it's not their turn", "its controller is poisoned";
-//! - "you control that creature", "an opponent controls that creature";
+//! - "you control that creature", "you controlled that permanent", "an opponent
+//!   controls that creature";
 //! - "X is 5 or more".
 //!
 //! [`parse_condition_with`] is the Builder-aware condition entry point: the effect parser
@@ -416,7 +417,8 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
     // "that land" can't be a target creature ("Whenever a land you control enters, tap
     // target creature an opponent controls. If that land is an Island, ..."): the phrase
     // names something the parser didn't track.
-    if let (Some(noun), Sel::Target(slot)) = (c.strip_prefix("that ").map(|r| split_word(r).0), &sel)
+    if let (Some(noun), Sel::Target(slot)) =
+        (c.strip_prefix("that ").map(|r| split_word(r).0), &sel)
     {
         let noun = noun.trim_end_matches("'s");
         if let Some(TargetKind::Object(f)) = b.targets.get(*slot as usize).map(|t| &t.what) {
@@ -493,6 +495,9 @@ fn special(c: &str, b: &mut Builder) -> Option<Condition> {
     }
     for (p, rel, neg) in [
         ("you control ", PlayerRel::You, false),
+        // "If you controlled that permanent, draw a card." (Kellan, Inquisitive Prodigy):
+        // its controller as it last existed if it left (CR 608.2h).
+        ("you controlled ", PlayerRel::You, false),
         ("you don't control ", PlayerRel::You, true),
         ("an opponent controls ", PlayerRel::Opponent, false),
         ("another player controls ", PlayerRel::NotYou, false),
@@ -590,9 +595,10 @@ fn game_state(c: &str, b: &mut Builder) -> Option<Condition> {
         "it's day" => Condition::IsDay,
         "it's your turn" => Condition::YourTurn,
         "it's not your turn" => Condition::NotYourTurn,
-        "it's your main phase" => {
-            Condition::And(vec![Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)])
-        }
+        "it's your main phase" => Condition::And(vec![
+            Condition::YourTurn,
+            Condition::Phase(PhaseCond::MainPhase),
+        ]),
         "it's an opponent's turn" => {
             Condition::PlayerMatches(PlayerRef::ActivePlayer, PlayerFilter::Opponent)
         }
@@ -701,7 +707,10 @@ fn game_state_phrases(c: &str, b: &mut Builder) -> Option<Condition> {
         ));
     }
     // "there are no echo counters on ~", "there are three or more counters on it"
-    if let Some(r) = c.strip_prefix("there are ").or_else(|| c.strip_prefix("there is ")) {
+    if let Some(r) = c
+        .strip_prefix("there are ")
+        .or_else(|| c.strip_prefix("there is "))
+    {
         let (body, on) = r.rsplit_once(" on ")?;
         let (s, rest) = subject(on, b)?;
         let Subject::Object(sel) = s else {
@@ -831,13 +840,19 @@ fn is_state(sel: &Sel, s: &str, neg: bool, b: &mut Builder) -> Option<Condition>
         if !matches!(sel, Sel::This) {
             return None;
         }
+        // "exactly one Aura" (Timber Paladin) is "one Aura".
+        let r = r.strip_prefix("exactly ").unwrap_or(r);
         let (cmp, n, rest) = amount_cmp(r)?;
         let (f, _, tail) = parse_object_phrase(rest.trim())?;
         if !end(tail).is_empty() {
             return None;
         }
+        // The Auras attached to it (not the object it's attached to).
         Condition::Compare(
-            Value::Count(Filter::and(vec![f, Filter::AttachedToSource])),
+            Value::Count(Filter::and(vec![
+                f,
+                Filter::AttachedToAnyOf(Box::new(sel.clone())),
+            ])),
             cmp,
             n,
         )
@@ -923,7 +938,8 @@ pub(crate) fn object_state(s: &str) -> Option<Filter> {
         .strip_prefix("a ")
         .or_else(|| parts[0].strip_prefix("an "))
         .unwrap_or(parts[0]);
-    let separate = parts.len() > 1 && (first.contains(' ') || parts.iter().all(|p| !p.contains(' ')));
+    let separate =
+        parts.len() > 1 && (first.contains(' ') || parts.iter().all(|p| !p.contains(' ')));
     if !separate {
         if let Some(f) = state_filter(s) {
             return Some(f);
@@ -1056,9 +1072,7 @@ fn possessive(sel: &Sel, r: &str, b: &mut Builder) -> Option<Condition> {
         ("toughness ", Stat::Toughness),
     ] {
         if let Some(r) = r.strip_prefix(p) {
-            let r = r
-                .strip_prefix("is ")
-                .or_else(|| r.strip_prefix("was "))?;
+            let r = r.strip_prefix("is ").or_else(|| r.strip_prefix("was "))?;
             if let Some(k) = r.strip_prefix("different from its base ") {
                 if p == "power " && k == "power" {
                     return Some(Condition::SelMatches(
@@ -1069,7 +1083,10 @@ fn possessive(sel: &Sel, r: &str, b: &mut Builder) -> Option<Condition> {
                 return None;
             }
             // "its power is greater than ~'s"
-            if let Some(o) = r.strip_prefix("greater than ").and_then(|o| o.strip_suffix("'s")) {
+            if let Some(o) = r
+                .strip_prefix("greater than ")
+                .and_then(|o| o.strip_suffix("'s"))
+            {
                 let other = other_object(o, b)?;
                 return Some(Condition::Compare(stat.of(sel), Cmp::Gt, stat.of(&other)));
             }
@@ -1087,7 +1104,8 @@ fn counters(sel: &Sel, h: &str) -> Option<Condition> {
     let body = [" on it", " on ~", " on him", " on her", " on them"]
         .iter()
         .find_map(|s| h.strip_suffix(s))?;
-    if let Some((cmp, n, kind)) = super::statics_conditions::counters_on_it(&format!("{body} on it"))
+    if let Some((cmp, n, kind)) =
+        super::statics_conditions::counters_on_it(&format!("{body} on it"))
     {
         return Some(Condition::Compare(
             Value::CountersOn(Box::new(sel.clone()), kind),
@@ -1120,8 +1138,7 @@ fn counters(sel: &Sel, h: &str) -> Option<Condition> {
 /// "shares a color with [object]", "shares a creature type with ...", "shares a card
 /// type with ...".
 fn shares(sel: &Sel, x: &str, b: &mut Builder) -> Option<Condition> {
-    let (mk, r): (fn(Box<Sel>) -> Filter, &str) = if let Some(r) = x.strip_prefix("a color with ")
-    {
+    let (mk, r): (fn(Box<Sel>) -> Filter, &str) = if let Some(r) = x.strip_prefix("a color with ") {
         (Filter::SharesColor, r)
     } else if let Some(r) = x.strip_prefix("a creature type with ") {
         (Filter::SharesCreatureType, r)
@@ -1215,9 +1232,9 @@ fn player_condition(p: &PlayerRef, r: &str, b: &mut Builder) -> Option<Condition
                 f.clone(),
                 Filter::ControllerMatches(Box::new(PlayerFilter::Ref(Box::new(p.clone())))),
             ]);
-            let others = PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(
-                Box::new(p.clone()),
-            ))));
+            let others = PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                p.clone(),
+            )))));
             return Some(Condition::Not(Box::new(Condition::PlayerMatches(
                 others,
                 PlayerFilter::Controls(Box::new(f), Cmp::Ge, Box::new(Value::Count(theirs))),
@@ -1256,7 +1273,11 @@ fn player_condition(p: &PlayerRef, r: &str, b: &mut Builder) -> Option<Condition
                 None => continue,
             }
         };
-        let Some(kind) = rest.trim().strip_suffix(" counters").or_else(|| rest.trim().strip_suffix(" counter")) else {
+        let Some(kind) = rest
+            .trim()
+            .strip_suffix(" counters")
+            .or_else(|| rest.trim().strip_suffix(" counter"))
+        else {
             continue;
         };
         if kind.contains(' ') || kind == "cards" {
@@ -1453,7 +1474,11 @@ mod tests {
         let tl = TypeLine::parse("Instant");
         let c = ctx(&tl);
         let mut b = Builder::new(&c);
-        for s in ["it's white", "that creature was a human", "that player is you"] {
+        for s in [
+            "it's white",
+            "that creature was a human",
+            "that player is you",
+        ] {
             assert!(parse_condition_with(s, &mut b).is_none(), "{s}");
         }
     }
