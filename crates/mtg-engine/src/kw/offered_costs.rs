@@ -35,6 +35,7 @@
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::casting::CastOption;
+use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
@@ -200,11 +201,157 @@ pub fn label(g: &Game, method: &CastMethod, cost: &Cost, src: &AltCostSource) ->
     }
 }
 
+/// `Filter::Custom` prefix, followed by the name of an optional additional cost the
+/// object whose ability the filter is in offers: "a spell for which that cost was paid"
+/// ("Those spells cost {G} less to cast if you paid life this way.").
+pub const PAID_OFFERED_COST: &str = "offered optional cost paid:";
+
+/// `Value::Custom` prefix, followed by the name of an optional additional cost the object
+/// whose ability the value is in offers: how many times it was paid for the spell (or the
+/// permanent entering from it) the value is about — the amount of mana paid for "you may
+/// pay any amount of mana" ("that creature enters with that many additional +1/+1
+/// counters on it").
+pub const PAID_OFFERED_AMOUNT: &str = "offered optional cost amount paid:";
+
+/// The name recorded in a spell's `CastInfo::paid` for the optional additional cost `name`
+/// the object `src` offers: each object's is its own (Defiler of Vigor: "You may only pay
+/// the additional cost once per permanent spell", once for each Defiler).
+pub fn paid_name(name: &str, src: ObjectId) -> SmolStr {
+    SmolStr::new(format!("{name}@{}", src.0))
+}
+
+/// Announces the optional additional costs and choices between additional costs other
+/// objects offer for `spell` (with the characteristics `chars`) as `p` casts it
+/// (CR 601.2b, 118.8): "As an additional cost to cast green permanent spells, you may pay 2
+/// life." Each object's cost is offered once; what's chosen is added to `extra` and
+/// recorded in `paid` under [`paid_name`]. A cost that can't be paid can't be chosen.
+pub fn announce(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    chars: &Characteristics,
+    extra: &mut Cost,
+    paid: &mut Vec<SmolStr>,
+) {
+    let offers: Vec<(ObjectId, CostChange)> = g
+        .statics
+        .cost_modifiers
+        .iter()
+        .filter(|(src, ctl, cm)| {
+            let CostTarget::Spells(f) = &cm.applies_to else {
+                return false;
+            };
+            if !matches!(
+                cm.change,
+                CostChange::OptionalAdditionalCost { .. } | CostChange::AdditionalCostChoice(_)
+            ) {
+                return false;
+            }
+            let ctx = Ctx::new(Some(*src), *ctl);
+            g.player_rel_matches(cm.who, p, &ctx)
+                && crate::spell_costs::spells_change_applies(g, spell, f, &cm.change, &ctx)
+        })
+        .map(|(src, _, cm)| (*src, cm.change.clone()))
+        .collect();
+    for (src, change) in offers {
+        let from = g.obj(src).chars.name.clone();
+        match change {
+            // "You may pay any amount of mana" ({X}): the player announces how much
+            // (CR 601.2b), recorded once for each mana.
+            CostChange::OptionalAdditionalCost { name, cost }
+                if cost.parts.is_empty() && cost.mana.as_ref().is_some_and(|m| m.has_x()) =>
+            {
+                let n = match g.ask(
+                    p,
+                    Decision::OptionalCost {
+                        source: spell,
+                        name: format!("{name} ({from})"),
+                        repeatable: true,
+                    },
+                ) {
+                    Answer::Number(n) if n > 0 => n as u32,
+                    Answer::Bool(true) => 1,
+                    _ => 0,
+                }
+                .min(g.max_mana_available(p));
+                if n > 0 {
+                    crate::casting::add_cost(extra, &Cost::mana(crate::mana::ManaCost::generic(n)));
+                    for _ in 0..n {
+                        paid.push(paid_name(&name, src));
+                    }
+                }
+            }
+            CostChange::OptionalAdditionalCost { name, cost } => {
+                if g.can_pay_cost_optimistic(p, &cost, Some(spell), chars)
+                    && matches!(
+                        g.ask(
+                            p,
+                            Decision::OptionalCost {
+                                source: spell,
+                                name: format!("{name} ({from})"),
+                                repeatable: false,
+                            }
+                        ),
+                        Answer::Bool(true)
+                    )
+                {
+                    crate::casting::add_cost(extra, &cost);
+                    paid.push(paid_name(&name, src));
+                }
+            }
+            CostChange::AdditionalCostChoice(options) => {
+                let payable: Vec<(SmolStr, Cost)> = options
+                    .iter()
+                    .filter(|(_, c)| g.can_pay_cost_optimistic(p, c, Some(spell), chars))
+                    .cloned()
+                    .collect();
+                let pool = if payable.is_empty() { options } else { payable };
+                let i = g.ask_option(
+                    p,
+                    Some(spell),
+                    &format!("Choose an additional cost to pay ({from})"),
+                    pool.iter().map(|(n, _)| n.to_string()).collect(),
+                );
+                if let Some((name, cost)) = pool.into_iter().nth(i) {
+                    crate::casting::add_cost(extra, &cost);
+                    paid.push(paid_name(&name, src));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 struct OfferedCosts;
 
 impl KeywordRules for OfferedCosts {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    /// [`PAID_OFFERED_COST`]: the spell's controller paid the optional additional cost of
+    /// that name the filter's source offers (`ctx.source`).
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        let cost = name.strip_prefix(PAID_OFFERED_COST)?;
+        let Some(src) = ctx.source else {
+            return Some(false);
+        };
+        let want = paid_name(cost, src);
+        // A spell on the stack, or one entering the battlefield as it resolves.
+        let o = g.obj(id);
+        let cast = o.stack.as_ref().map(|si| &si.cast).or(o.cast.as_deref());
+        Some(cast.is_some_and(|c| c.was_cast && c.paid.iter().any(|x| *x == want)))
+    }
+
+    /// [`PAID_OFFERED_AMOUNT`]: how many times the spell `ctx.cast` describes (the one a
+    /// replacement effect modifies as it enters) had that cost of `ctx.source`'s paid.
+    fn custom_value(&self, _g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        let cost = name.strip_prefix(PAID_OFFERED_AMOUNT)?;
+        let (Some(src), Some(cast)) = (ctx.source, ctx.cast.as_ref()) else {
+            return Some(0);
+        };
+        let want = paid_name(cost, src);
+        Some(cast.paid.iter().filter(|x| **x == want).count() as i64)
     }
 }
 

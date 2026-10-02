@@ -842,7 +842,11 @@ impl Renderer<'_> {
             }
             CostChange::OptionalAdditionalCost { cost, .. } => {
                 let c = self.cost_as_payment(cost);
-                format!("as an additional cost to cast ~, you may {c}")
+                if matches!(cm.applies_to, CostTarget::ThisSpell) {
+                    format!("as an additional cost to cast ~, you may {c}")
+                } else {
+                    format!("as an additional cost to cast {target}, you may {c}")
+                }
             }
             CostChange::AdditionalCostChoice(v) => {
                 let parts: Vec<String> = v.iter().map(|(_, c)| self.cost_as_payment(c)).collect();

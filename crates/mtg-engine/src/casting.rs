@@ -2667,7 +2667,7 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 let cands: Vec<ObjectId> = self
-                    .cost_zone_cards(p, *zone)
+                    .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
@@ -2803,6 +2803,39 @@ impl Game {
                 let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
                 self.can_pay_cost_optimistic(p, &flat, src, &chars)
             }
+        }
+    }
+
+    /// The cards an exile cost of `p`'s with the filter `filter` may exile from `zone`: from
+    /// `p`'s own, unless the filter says whose they are ("Exile a Fungus card from a
+    /// graveyard": owned by any player, `Filter::OwnedBy` among its parts), then from that
+    /// zone of each such player (CR 118.3, 404.1).
+    fn exile_cost_cards(
+        &self,
+        p: PlayerId,
+        zone: ZoneKind,
+        filter: &Filter,
+        ctx: &Ctx,
+    ) -> Vec<ObjectId> {
+        let owner = match filter {
+            Filter::And(v) => v.iter().find_map(|f| match f {
+                Filter::OwnedBy(r) => Some(*r),
+                _ => None,
+            }),
+            Filter::OwnedBy(r) => Some(*r),
+            _ => None,
+        };
+        match (zone, owner) {
+            (ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library, Some(rel))
+                if rel != PlayerRel::You =>
+            {
+                self.players_in_game()
+                    .into_iter()
+                    .filter(|q| self.player_rel_matches(rel, *q, ctx))
+                    .flat_map(|q| self.cost_zone_cards(q, zone))
+                    .collect()
+            }
+            _ => self.cost_zone_cards(p, zone),
         }
     }
 
@@ -3040,7 +3073,7 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let cands: Vec<ObjectId> = self
-                    .cost_zone_cards(p, *zone)
+                    .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
