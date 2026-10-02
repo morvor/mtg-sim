@@ -7,8 +7,11 @@ use crate::types::Entity;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
+use crate::events::{Event, MoveCause};
 use crate::oracle::patterns::zone_move_grammar::{
-    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, RANDOM_COUNT, RANDOM_PICK, RANDOM_POOL,
+    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN,
+    ENTERED_UNDER_YOUR_CONTROL_THIS_TURN, MILLED_THIS_TURN, RANDOM_COUNT, RANDOM_PICK,
+    RANDOM_POOL,
 };
 use crate::types::ObjectId;
 
@@ -36,9 +39,35 @@ impl KeywordRules for ZoneMoves {
         true
     }
 
-    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
-        (name == DEALT_DAMAGE_THIS_TURN)
-            .then(|| g.history.damage_sources.iter().any(|(s, _)| *s == id))
+    fn on_event(&self, g: &mut Game, ev: &Event) {
+        if let Event::ZoneChange { new, cause, by, .. } = ev {
+            match cause {
+                MoveCause::Mill => g.history.milled.push(*new),
+                MoveCause::Discard => {
+                    if let Some(p) = by {
+                        g.history.discarded.push((*p, *new));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        match name {
+            DEALT_DAMAGE_THIS_TURN => Some(g.history.damage_sources.iter().any(|(s, _)| *s == id)),
+            MILLED_THIS_TURN => Some(g.history.milled.contains(&id)),
+            DISCARDED_BY_YOU_THIS_TURN => {
+                Some(g.history.discarded.contains(&(ctx.controller, id)))
+            }
+            ENTERED_UNDER_YOUR_CONTROL_THIS_TURN => Some(
+                g.history
+                    .permanents_entered
+                    .iter()
+                    .any(|e| e.id == id && e.controller == ctx.controller),
+            ),
+            _ => None,
+        }
     }
 
     /// "Has all activated abilities of all [kind] cards exiled with ~" (layer 6): the
