@@ -974,3 +974,25 @@ fn wakka_checks_as_the_end_step_begins_whoever_put_the_counter() {
     t.resolve_all();
     assert_eq!(t.counters(bears, counters::PLUS1), 1);
 }
+
+#[test]
+fn stocking_the_pantry_counts_counters_you_put_on_your_creatures() {
+    cr!("122.6");
+    supported("Stocking the Pantry");
+    // "Whenever you put one or more +1/+1 counters on a creature you control, put a supply
+    // counter on this enchantment."
+    let mut t = TestGame::new(2);
+    let pantry = t.battlefield(P0, "Stocking the Pantry");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    // P1 puts counters on P0's creature, P0 on P1's: no.
+    put_plus1(&mut t, theirs, mine, 2);
+    put_plus1(&mut t, pantry, theirs, 1);
+    assert_eq!(t.counters(pantry, "supply"), 0);
+    // P0 puts two counters on P0's creature: one trigger.
+    put_plus1(&mut t, pantry, mine, 2);
+    assert_eq!(t.counters(pantry, "supply"), 1);
+    // A creature entering under P0's control with a counter: P0 put it.
+    cast_and_resolve(&mut t, P0, "Star Pupil", &[]);
+    assert_eq!(t.counters(pantry, "supply"), 2);
+}
