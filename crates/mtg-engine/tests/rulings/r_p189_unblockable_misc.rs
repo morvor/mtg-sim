@@ -125,7 +125,7 @@ fn hexdrinker_set_pt_overrides_later_levels() {
     assert_eq!(t.counters(hd, "level"), 3);
     assert_eq!(t.pt(hd), (1, 1));
     // The level ability still gives protection from instants.
-    assert!(t.obj(hd).chars.abilities.len() > 1);
+    assert!(t.obj(hd).has_keyword(KeywordKind::Protection));
 }
 
 // ---------------------------------------------------------------------------
@@ -337,10 +337,7 @@ fn teysa_spirit_even_if_not_destroyed() {
         "Teysa, Envoy of Ghosts",
         "You get a Spirit creature token even if Teysa’s triggered ability doesn’t destroy the creature (perhaps because it regenerated or has indestructible)."
     );
-    let (t, attacker) = teysa_hit_by("Darksteel Myr");
-    // Darksteel Myr is 0/1: give it power through an indestructible attacker instead.
-    let _ = attacker;
-    let _ = t;
+    // Avacyn, Angel of Hope has indestructible.
     let (t, attacker) = teysa_hit_by("Avacyn, Angel of Hope");
     assert!(t.on_battlefield(attacker));
     assert_eq!(spirits(&t, P0), 1);
@@ -367,6 +364,11 @@ fn gilded_scuttler_targets_an_already_tapped_creature() {
     t.resolve_all();
     assert!(t.obj(bears).tapped);
     assert_eq!(t.counters(bears, "stun"), 1);
+    // The stun counter keeps it from untapping once.
+    t.g.untap(bears);
+    t.g.flush_events();
+    assert!(t.obj(bears).tapped);
+    assert_eq!(t.counters(bears, "stun"), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +562,20 @@ fn shay_cormac_any_bounty_counter() {
 // Emissary of Soulfire: exalted counters (CR 122.1b, 702.83).
 // ---------------------------------------------------------------------------
 
+/// Emissary of Soulfire (with `energy` energy counters) puts an exalted counter on
+/// `target` once per entry of `times`; returns Emissary.
+fn emissary_exalts(t: &mut TestGame, energy: u32, target: ObjectId, times: usize) -> ObjectId {
+    let em = t.battlefield(P0, "Emissary of Soulfire");
+    t.g.players[0].counters.insert("energy".into(), energy);
+    for _ in 0..times {
+        t.activate(P0, em, 0, &[Entity::Object(target)])
+            .expect("pay {E}{E}: an exalted counter");
+        t.resolve_all();
+    }
+    t.g.recompute();
+    em
+}
+
 #[test]
 fn exalted_counters_give_that_many_instances() {
     cr!("122.1b", "702.83a", "702.83b");
@@ -570,11 +586,12 @@ fn exalted_counters_give_that_many_instances() {
     supported("Emissary of Soulfire");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.g.add_counters(Entity::Object(bears), "exalted", 2, None);
-    t.g.recompute();
+    emissary_exalts(&mut t, 4, bears, 2);
+    assert_eq!(t.counters(bears, "exalted"), 2);
+    assert_eq!(t.g.player(P0).counters.get("energy").copied().unwrap_or(0), 0);
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
     t.resolve_all();
-    assert_eq!(t.pt(bears), (4, 4));
+    assert_eq!(t.pt(bears), (4, 4), "two instances of exalted: +2/+2");
 }
 
 #[test]
@@ -588,8 +605,8 @@ fn exalted_attacks_alone_only_as_declared() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P0, "Hill Giant");
-    t.g.add_counters(Entity::Object(bears), "exalted", 1, None);
-    t.g.recompute();
+    emissary_exalts(&mut t, 2, bears, 1);
+    assert_eq!(t.counters(bears, "exalted"), 1);
     attack_with(
         &mut t,
         &[(bears, Entity::Player(P1)), (giant, Entity::Player(P1))],

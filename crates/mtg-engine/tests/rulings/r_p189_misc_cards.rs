@@ -105,11 +105,20 @@ fn mausoleum_secrets_swamp_is_colorless() {
         "Mausoleum Secrets",
         "A land card that produces black mana, even a Swamp, normally has no color."
     );
+    // Mausoleum Secrets searches for "a black card" (its undergrowth search itself
+    // isn't supported yet): a Swamp in the library isn't one, though the card is.
     let mut t = TestGame::new(2);
+    let secrets = t.library_top(P0, "Mausoleum Secrets");
     let swamp = t.library_top(P0, "Swamp");
     let on_bf = t.battlefield(P0, "Swamp");
+    let black = mtg_engine::ability::Filter::Color(Color::Black);
+    let ctx = mtg_engine::eval::Ctx::new(None, P0);
+    assert!(t.g.matches(secrets, &black, &ctx));
+    assert!(!t.g.matches(swamp, &black, &ctx));
     assert!(t.obj(swamp).chars.colors.is_colorless());
     assert!(t.obj(on_bf).chars.colors.is_colorless());
+    // Even though it produces black mana.
     t.activate(P0, on_bf, 0, &[]).unwrap();
     assert_eq!(t.g.player(P0).mana_pool.count(ManaType::B), 1);
+    assert!(!t.g.matches(on_bf, &black, &ctx));
 }
