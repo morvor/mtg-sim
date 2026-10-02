@@ -619,8 +619,17 @@ impl<'a> Renderer<'a> {
                 }
                 (Some(a), Some(b)) => format!("{} or {}", self.count_word(a), self.count_word(b)),
                 (Some(1), None) if m.per_mode_cost => "one or more".to_string(),
-                // "Choose one. If ~ was cast using teamwork, choose both instead."
-                (Some(a), None) if matches!(&m.max, Value::If(..)) => {
+                // "Choose one. If ~ was cast using teamwork, choose both instead." (the
+                // minimum may change with the maximum)
+                (min, None)
+                    if matches!(&m.max, Value::If(..))
+                        && (min.is_some() || format!("{:?}", m.min) == format!("{:?}", m.max)) =>
+                {
+                    let a = match (min, &m.max) {
+                        (Some(a), _) => a,
+                        (None, Value::If(_, _, no)) => no.as_const().unwrap_or(1),
+                        _ => 1,
+                    };
                     let Value::If(c, yes, no) = &m.max else {
                         return self.gap("modal max");
                     };
