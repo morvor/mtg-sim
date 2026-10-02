@@ -152,6 +152,21 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Anaphora (plural).",
     },
     Equivalence {
+        pattern: r"(\bon |\bto |^|[.,:—] |\{alt:|\|)each of them\b",
+        replacement: "${1}them",
+        why: "An instruction about a group of objects is about each of them: \"put a +1/+1 \
+              counter on each of them\" and \"put a +1/+1 counter on them\" put one counter on \
+              every object of the group (a counter is put on an object, CR 122.1), and \"each \
+              of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
+    },
+    Equivalence {
+        pattern: r"\bat the beginning of each of your postcombat main phases\b",
+        replacement: "at the beginning of your postcombat main phase",
+        why: "CR 505.1a: every main phase of a turn after the first is a postcombat main \
+              phase, so an ability that triggers at the beginning of your postcombat main \
+              phase triggers at each of them.",
+    },
+    Equivalence {
         pattern: r"\b(until end of turn|this turn)\. (?:it's|it is) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
         replacement: "in addition to its other types $1",
         why: "CR 205.1b: an effect that says the object is \"still a [type]\" and one that \
