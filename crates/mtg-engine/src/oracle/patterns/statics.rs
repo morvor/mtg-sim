@@ -217,8 +217,11 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((f, ""));
         }
     }
-    // "named ~": the same name as this object (CR 201.2).
-    if let Some(r) = t.strip_prefix("named ~") {
+    // "named ~", "with the same name as ~": the same name as this object (CR 201.2a).
+    if let Some(r) = t
+        .strip_prefix("named ~")
+        .or_else(|| t.strip_prefix("with the same name as ~"))
+    {
         if r.is_empty() || r.starts_with([' ', ',']) {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
@@ -669,20 +672,29 @@ fn parse_group(s: &str) -> Option<Subject> {
         } else {
             (s, false)
         };
-    // Whole phrases joined by "and": "Goblins you control and Elementals you control".
+    // Whole phrases joined by "and": "Goblins you control and Elementals you control",
+    // "all Forests and all Saprolings".
     let parts = split_list(s);
+    let each_quantified =
+        quantified && parts.len() >= 2 && parts[1..].iter().all(|p| p.starts_with("all "));
     let f = if parts.len() >= 2 {
         let whole: Option<Vec<Filter>> = parts
             .iter()
             .map(|p| {
+                let p = if each_quantified {
+                    p.strip_prefix("all ").unwrap_or(p)
+                } else {
+                    p
+                };
                 whole_object_phrase(p).and_then(|(f, plural)| (plural || quantified).then_some(f))
             })
             .collect();
         whole.filter(|v| {
-            // Only when each part stands alone (names its controller); "Wolves and
-            // Werewolves you control" shares one suffix.
-            v.iter()
-                .all(|f| filter_mentions(f, &|x| matches!(x, Filter::ControlledBy(_))))
+            // Only when each part stands alone (names its controller, or has its own
+            // "all"); "Wolves and Werewolves you control" shares one suffix.
+            each_quantified
+                || v.iter()
+                    .all(|f| filter_mentions(f, &|x| matches!(x, Filter::ControlledBy(_))))
         })
     } else {
         None
