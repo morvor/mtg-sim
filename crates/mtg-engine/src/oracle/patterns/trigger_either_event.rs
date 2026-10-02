@@ -26,14 +26,16 @@ fn either_event(r: &str) -> Option<Parsed> {
         let (Some(pa), Some(pb)) = (condition(a), condition(b)) else {
             continue;
         };
-        if matches!(pa.0, TriggerCond::Batched { .. } | TriggerCond::AnyOf(_))
-            || matches!(pb.0, TriggerCond::Batched { .. } | TriggerCond::AnyOf(_))
+        let batch = super::trigger_grammar_events::is_batched;
+        if batch(&pa.0)
+            || batch(&pb.0)
+            || matches!(pa.0, TriggerCond::AnyOf(_))
+            || matches!(pb.0, TriggerCond::AnyOf(_))
         {
             return None;
         }
-        let same = |x: &dyn std::fmt::Debug, y: &dyn std::fmt::Debug| {
-            format!("{x:?}") == format!("{y:?}")
-        };
+        let same =
+            |x: &dyn std::fmt::Debug, y: &dyn std::fmt::Debug| format!("{x:?}") == format!("{y:?}");
         let it = if same(&pa.1, &pb.1) {
             pa.1.clone()
         } else {

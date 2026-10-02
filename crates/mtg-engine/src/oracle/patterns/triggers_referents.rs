@@ -59,9 +59,14 @@ fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let before = end(l);
-    let s = that_possessives_to_its(before);
+    let mut s = that_possessives_to_its(before);
     if s == before {
         return None;
+    }
+    // "... equal to that creature's toughness to the creature's controller" (Creature
+    // Bond): "the creature" is the same one.
+    if before.contains("that creature's ") {
+        s = s.replace("the creature's ", "its ");
     }
     parse_clause(&s, b)
 }
@@ -79,6 +84,9 @@ pub(crate) fn that_possessives_to_its(s: &str) -> String {
         "that artifact's ",
         "that enchantment's ",
         "that token's ",
+        // "where X is that Saga's mana value" (the Saga whose final chapter ability
+        // resolved).
+        "that saga's ",
     ] {
         s = s.replace(p, "its ");
     }

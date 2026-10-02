@@ -110,16 +110,18 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
                 let t = t.trim().strip_prefix("or more ")?;
                 (n.as_const()? as u32, t)
             };
-            let rest = rest.strip_suffix('s').unwrap_or(rest);
+            let singular = rest.strip_suffix('s').unwrap_or(rest);
             // "you attack with N or more creatures" is the general attack trigger
             // (oracle/patterns/triggers.rs); this handles a quality ("Knights").
-            if who == PlayerRel::You && rest == "creature" {
+            if who == PlayerRel::You && singular == "creature" {
                 return None;
             }
+            // The plural as written ("Elves"), else with its "s" dropped.
+            let filter = object_filter(rest).or_else(|| object_filter(singular))?;
             return Some((
                 TriggerCond::PlayerAttacksWith {
                     who,
-                    filter: object_filter(rest)?,
+                    filter,
                     min,
                 },
                 obj,
