@@ -1841,10 +1841,10 @@ impl Renderer<'_> {
             Condition::Not(inner) if matches!(inner.as_ref(), Condition::PrevHappened) => {
                 self.if_effect(&Condition::PrevHappened, otherwise, then)
             }
-            // "Sacrifice it" needs no "if you control it" (CR 701.21a).
+            // "Sacrifice it" needs no "if you control it" (CR 701.21a), nor does "you may
+            // sacrifice it. If you do, ..." (the check moved before the option).
             Condition::SelMatches(s, Filter::ControlledBy(PlayerRel::You))
-                if else_empty
-                    && matches!(then, Effect::SacrificeObjects { what } if format!("{what:?}") == format!("{s:?}")) =>
+                if else_empty && starts_by_sacrificing(then, s) =>
             {
                 self.effect(then)
             }
@@ -3546,4 +3546,29 @@ pub(crate) fn third_person(vp: &str) -> String {
         v => format!("{v}s"),
     };
     format!("{v}{rest}")
+}
+
+/// Whether `e` is "sacrifice [s]", or "you may sacrifice [s]. If you do, ...": nothing in
+/// it happens unless you sacrifice `s`.
+fn starts_by_sacrificing(e: &Effect, s: &Sel) -> bool {
+    let sacrifices = |e: &Effect| matches!(e, Effect::SacrificeObjects { what } if format!("{what:?}") == format!("{s:?}"));
+    match e {
+        Effect::Seq(v) => match v.split_first() {
+            Some((
+                Effect::May {
+                    who: PlayerRef::You,
+                    effect,
+                },
+                rest,
+            )) => {
+                sacrifices(effect)
+                    && rest.iter().all(|x| {
+                        matches!(x, Effect::If { cond: Condition::PrevHappened, otherwise, .. }
+                            if matches!(**otherwise, Effect::Noop))
+                    })
+            }
+            _ => false,
+        },
+        e => sacrifices(e),
+    }
 }
