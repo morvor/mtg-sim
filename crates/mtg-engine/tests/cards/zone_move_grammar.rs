@@ -4,6 +4,7 @@
 
 use mtg_engine::card::card;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::*;
@@ -590,4 +591,150 @@ fn zone_move_texts_compile() {
     ] {
         assert_compiles(name, text);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Follow-ups to moves
+// ---------------------------------------------------------------------------
+
+#[test]
+fn barrel_down_sokenzan_counts_the_mountains_returned_this_way() {
+    cr!("608.2c");
+    assert_supported("Barrel Down Sokenzan");
+    let mut t = TestGame::new(2);
+    let m = t.lands(P0, "Mountain", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Two Mountains returned: 4 damage.
+    t.answer_choose(P0, &[o(m[0]), o(m[1])]);
+    let spell = t.hand(P0, "Barrel Down Sokenzan");
+    t.cast(P0, spell).target(giant).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.named_on_battlefield("Mountain").len(), 1);
+    assert!(t.in_graveyard(P1, "Hill Giant"), "{}", t.dump_log());
+}
+
+#[test]
+fn aberrant_return_puts_creatures_onto_the_battlefield_with_a_minus_counter() {
+    cr!("122.6", "110.2a");
+    assert_supported("Aberrant Return");
+    let mut t = TestGame::new(2);
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 6);
+    let spell = t.hand(P0, "Aberrant Return");
+    t.cast(P0, spell).target(giant).go();
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.obj(g[0]).controller, P0);
+    assert_eq!(t.counters(g[0], "-1/-1"), 1);
+    assert_eq!(t.pt(g[0]), (2, 2));
+}
+
+#[test]
+fn coiling_oracle_puts_a_land_onto_the_battlefield_and_anything_else_into_your_hand() {
+    cr!("701.20a");
+    assert_supported("Coiling Oracle");
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Forest");
+    t.enter(P0, "Coiling Oracle");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    t.library_top(P0, "Grizzly Bears");
+    t.enter(P0, "Coiling Oracle");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn venser_s_diffusion_returns_a_suspended_card() {
+    cr!("702.62b");
+    assert_supported("Venser's Diffusion");
+    let mut t = TestGame::new(2);
+    let bolt = t.exile(P1, "Rift Bolt");
+    t.g.objects[bolt.0 as usize]
+        .counters
+        .insert("time".into(), 1);
+    // An exiled card that isn't suspended can't be chosen.
+    t.exile(P1, "Lightning Bolt");
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Venser's Diffusion");
+    t.cast(P0, spell).target(bolt).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Rift Bolt"));
+    // A nonland permanent.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Venser's Diffusion");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn keen_eyed_curator_grows_with_four_card_types_exiled_with_it() {
+    cr!("607.2a", "205.2a");
+    assert_supported("Keen-Eyed Curator");
+    let mut t = TestGame::new(2);
+    let curator = t.battlefield(P0, "Keen-Eyed Curator");
+    let cards = [
+        t.graveyard(P1, "Grizzly Bears"),
+        t.graveyard(P1, "Forest"),
+        t.graveyard(P1, "Lightning Bolt"),
+    ];
+    for c in cards {
+        t.lands(P0, "Wastes", 1);
+        t.activate(P0, curator, 0, &[o(c)]).expect("exile");
+        t.resolve_all();
+    }
+    assert_eq!(t.pt(curator), (3, 3));
+    let div = t.graveyard(P1, "Divination");
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, curator, 0, &[o(div)]).expect("exile");
+    t.resolve_all();
+    assert_eq!(t.pt(curator), (7, 7));
+    assert!(t.obj(curator).has_keyword(KeywordKind::Trample));
+}
+
+#[test]
+fn scrap_mastery_swaps_each_players_artifacts_at_the_same_time() {
+    cr!("608.2e", "110.2a");
+    assert_supported("Scrap Mastery");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Ornithopter");
+    t.graveyard(P1, "Memnite");
+    t.battlefield(P0, "Millstone");
+    t.battlefield(P1, "Mind Stone");
+    // A creature that isn't an artifact stays.
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 5);
+    let spell = t.hand(P0, "Scrap Mastery");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let thopter = t.named_on_battlefield("Ornithopter");
+    let memnite = t.named_on_battlefield("Memnite");
+    assert_eq!((thopter.len(), memnite.len()), (1, 1));
+    assert_eq!(t.obj(thopter[0]).controller, P0);
+    assert_eq!(t.obj(memnite[0]).controller, P1);
+    assert!(t.in_graveyard(P0, "Millstone"));
+    assert!(t.in_graveyard(P1, "Mind Stone"));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn swift_warkite_returns_the_creature_at_the_next_end_step() {
+    cr!("603.7");
+    assert_supported("Swift Warkite");
+    let mut t = TestGame::new(2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[o(bears)]);
+    t.enter(P0, "Swift Warkite");
+    t.resolve_all();
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    assert!(t.obj(b[0]).has_keyword(KeywordKind::Haste));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
 }
