@@ -16,7 +16,7 @@ use crate::oracle::phrases::{end, find_group_phrase, parse_object_phrase};
 const CHOSEN: Var = vars::USER + 1791;
 
 fn together(grp: TargetGroup) -> Filter {
-    Filter::Together(Box::new(grp))
+    Filter::Together(grp)
 }
 
 /// "search your library for up to N [cards] with different names, put them ...": the

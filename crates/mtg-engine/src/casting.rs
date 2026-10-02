@@ -32,6 +32,12 @@ pub struct CastOption {
     pub any_time: bool,
     /// Name recorded in `CastInfo::paid` (e.g. "flashback", "dash").
     pub tag: Option<&'static str>,
+    /// The permission an effect gives that this way of casting the card from outside its
+    /// owner's hand uses (CR 601.3), with its terms; `None` when no such permission is
+    /// needed (cast from the hand, or with a rule's or the card's own permission such as
+    /// flashback's) or the card is cast while an effect resolves (CR 608.2g). See
+    /// `permissions.rs`.
+    pub permission: Option<crate::permissions::CastPermission>,
 }
 
 impl CastOption {
@@ -44,6 +50,7 @@ impl CastOption {
             flash: false,
             any_time: false,
             tag: None,
+            permission: None,
         }
     }
 }
@@ -57,12 +64,14 @@ pub struct PlayGrant {
     pub free: bool,
     pub source: Option<ObjectId>,
     pub turn: u32,
+    /// The terms the permission comes with ("you may cast that card", a required
+    /// alternative cost, flash, ...).
+    pub terms: PlayTerms,
 }
 
-/// Recorded in `CastInfo::paid` for a spell cast from where an effect's permission for
-/// that card ([`PlayGrant`], "you may cast that card this turn") let its controller cast
-/// it: another permission (such as "once during each of your turns, you may cast a
-/// creature spell from your graveyard") wasn't needed for it.
+/// Recorded in `CastInfo::paid` for a spell cast with an effect's permission for that card
+/// ([`PlayGrant`], "you may cast that card this turn") as the permission its controller
+/// chose to use (see `permissions.rs`).
 pub const CAST_WITH_GRANT: &str = "cast with an effect's permission for the card";
 
 pub fn grant_play_permission(
@@ -82,20 +91,22 @@ pub fn grant_play_permission(
             free,
             source,
             turn,
+            terms: PlayTerms::default(),
         });
     }
 }
 
 /// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
-/// sets ("If you cast a spell this way, pay life equal to its mana value rather than pay
-/// its mana cost."), not for an alternative cost of its own.
+/// requires ("If you cast a spell this way, pay life equal to its mana value rather than
+/// pay its mana cost."), not for an alternative cost of its own (see `permissions.rs`).
 pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
 
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
 /// that are lands can't be cast (CR 305.9). A preparation card is cast only normally
-/// (CR 722.3).
+/// (CR 722.3). A face-down card outside the battlefield (a foretold card, CR 702.143a) is
+/// turned face up as it's cast, with any of these.
 pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
@@ -106,7 +117,7 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
     };
-    if faces.len() == 1 || o.face_down {
+    if faces.len() == 1 || (o.face_down && o.zone == Zone::Battlefield) {
         return vec![FaceState::Front];
     }
     faces
@@ -241,6 +252,7 @@ fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Ve
         free: false,
         source: None,
         turn,
+        terms: PlayTerms::default(),
     });
     let alts: Vec<CastOption> = g
         .cast_options(p, card)
@@ -250,6 +262,11 @@ fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Ve
                 o.method,
                 CastMethod::Alternative(_) | CastMethod::Keyword(_)
             ) && o.alt_cost.is_some()
+        })
+        // The effect is the permission it's cast with.
+        .map(|mut o| {
+            o.permission = None;
+            o
         })
         .collect();
     // The permission pushed above (finding the options doesn't change the grants).
@@ -346,11 +363,14 @@ impl Game {
         // Spells.
         for c in self.castable_zone_cards(p) {
             for opt in self.cast_options(p, c) {
-                if self.can_begin_cast(p, c, &opt) {
-                    out.push(Action::Cast {
-                        card: c,
-                        method: opt.method.clone(),
-                    });
+                let action = Action::Cast {
+                    card: c,
+                    method: opt.method.clone(),
+                };
+                // Several ways with the same method (with different permissions or faces)
+                // are one action: the player chooses among them as they cast it.
+                if !out.contains(&action) && self.can_begin_cast(p, c, &opt) {
+                    out.push(action);
                 }
             }
         }
@@ -446,8 +466,9 @@ impl Game {
     /// Whether a rule or effect allows player `p` to play `card` from where it is, as a
     /// land (`land`) or as a spell with the characteristics `chars` it would have
     /// (CR 601.3, 601.3e, 305.1). Cards in the player's hand are always allowed. A
-    /// permission to cast the card only without paying its mana cost doesn't allow
-    /// casting it any other way, such as for another alternative cost (CR 118.9a); see
+    /// permission that requires casting the card for an alternative cost ("you may cast
+    /// that card without paying its mana cost") doesn't allow casting it any other way,
+    /// such as for another alternative cost (CR 118.9a, 118.9b); see
     /// [`Game::permission_allows_with`].
     pub fn permission_allows(
         &self,
@@ -459,27 +480,21 @@ impl Game {
         self.permission_allows_with(p, card, chars, land, land)
     }
 
-    /// [`Game::permission_allows`], counting permissions to play the card without paying
-    /// its mana cost ("you may cast that card without paying its mana cost") only if
-    /// `free_grants`: they allow it to be cast only that way (CR 118.9a).
+    /// [`Game::permission_allows`], counting permissions that require an alternative cost
+    /// ("without paying its mana cost", "pay life equal to its mana value rather than pay
+    /// its mana cost") only if `with_required_costs`: they allow the card to be cast only
+    /// that way (CR 118.9a, 118.9b). While only cards' own permissions count (see
+    /// `permissions.rs`), effects' permissions don't.
     pub fn permission_allows_with(
         &self,
         p: PlayerId,
         card: ObjectId,
         chars: &Characteristics,
         land: bool,
-        free_grants: bool,
+        with_required_costs: bool,
     ) -> bool {
         let o = self.obj(card);
         if o.zone == Zone::Hand(p) {
-            return true;
-        }
-        // Grants from resolved effects name specific cards ("you may play that card").
-        if self
-            .play_grants
-            .iter()
-            .any(|g| g.player == p && g.object == card && (free_grants || !g.free))
-        {
             return true;
         }
         // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
@@ -490,99 +505,9 @@ impl Game {
         if !land && crate::kw::partner::castable_commanders(self, p).contains(&card) {
             return true;
         }
-        // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission
-        // to cast spells "with certain qualities" only by a player who may look at it
-        // (and then only if the resulting spell has those qualities).
-        if o.zone == Zone::Exile && o.face_down && !crate::zones::may_look(self, p, card) {
-            return false;
-        }
-        for (src, ctl, perm) in &self.statics.play_permissions {
-            // A permission to cast spells only for a cost of its own ("If you cast a spell
-            // this way, pay life equal to its mana value rather than pay its mana cost")
-            // allows casting them only that way (CR 118.9; see
-            // [`Game::permission_cost_options`]).
-            if !land && perm.cost.as_ref().is_some_and(|c| !c.is_free()) {
-                continue;
-            }
-            if self.static_permission_matches(*src, *ctl, perm, p, card, chars, land) {
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Whether the static play permission `perm` of `src` (controlled by `ctl`) lets `p`
-    /// play `card` with the characteristics `chars`, as a land or as a spell, ignoring any
-    /// cost of its own.
-    #[allow(clippy::too_many_arguments)]
-    fn static_permission_matches(
-        &self,
-        src: ObjectId,
-        ctl: PlayerId,
-        perm: &PlayPermission,
-        p: PlayerId,
-        card: ObjectId,
-        chars: &Characteristics,
-        land: bool,
-    ) -> bool {
-        let o = self.obj(card);
-        if (land && !perm.lands) || (!land && !perm.spells) {
-            return false;
-        }
-        let ctx = Ctx::new(Some(src), ctl);
-        if !self.player_rel_matches(perm.who, p, &ctx) {
-            return false;
-        }
-        let in_zone = match perm.zone {
-            ZoneKind::Library => {
-                if perm.top_only {
-                    self.library_top(p) == Some(card)
-                } else {
-                    o.zone == Zone::Library(p)
-                }
-            }
-            ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
-            ZoneKind::Exile => o.zone == Zone::Exile,
-            ZoneKind::Hand => o.zone == Zone::Hand(p),
-            ZoneKind::Command => o.zone == Zone::Command,
-            _ => false,
-        };
-        if !in_zone {
-            return false;
-        }
-        // CR 601.3e: the alternative characteristics the card would have as it's
-        // played are what the permission checks.
-        let f = if land {
-            perm.what.clone()
-        } else {
-            as_spell_filter(&perm.what)
-        };
-        let view = WithChars { id: card, chars };
-        self.matches_view(&view, card, &f, &ctx)
-    }
-
-    /// Ways to cast `card` outside the hand that static permissions with a cost of their
-    /// own allow ("You may play lands and cast spells from the top of your library. If you
-    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
-    /// cost."): that cost is an alternative cost (CR 118.9), so the spell can't be cast
-    /// that way with another one (CR 118.9a).
-    fn permission_cost_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
-        let mut out = Vec::new();
-        for face in castable_faces(self, card) {
-            let chars = self.face_characteristics(card, face);
-            for (src, ctl, perm) in &self.statics.play_permissions {
-                let Some(cost) = perm.cost.as_ref().filter(|c| !c.is_free()) else {
-                    continue;
-                };
-                if self.static_permission_matches(*src, *ctl, perm, p, card, &chars, false) {
-                    let mut opt = CastOption::normal(face);
-                    opt.method = CastMethod::Alternative(PERMISSION_COST);
-                    opt.alt_cost = Some(cost.clone());
-                    out.push(opt);
-                }
-            }
-        }
-        out
+        crate::permissions::allowing(self, p, card, chars, land)
+            .iter()
+            .any(|c| with_required_costs || !c.requires_cost())
     }
 
     /// Whether a static permission lets `p` cast `card` from their hand without paying its
@@ -596,7 +521,7 @@ impl Game {
         self.statics
             .play_permissions
             .iter()
-            .any(|(src, ctl, perm)| {
+            .any(|(src, ctl, perm, _)| {
                 let free = perm.cost.as_ref().is_some_and(Cost::is_free);
                 if !free || !perm.spells || perm.zone != ZoneKind::Hand {
                     return false;
@@ -627,37 +552,7 @@ impl Game {
     /// permitted is decided by [`Game::permission_allows`] (CR 601.3e: the permission
     /// looks at the characteristics the card would have as it's played).
     pub fn permitted_cards(&self, p: PlayerId) -> Vec<ObjectId> {
-        let mut out = Vec::new();
-        for (src, ctl, perm) in &self.statics.play_permissions {
-            let ctx = Ctx::new(Some(*src), *ctl);
-            if !self.player_rel_matches(perm.who, p, &ctx) {
-                continue;
-            }
-            let cards: Vec<ObjectId> = match perm.zone {
-                ZoneKind::Library => {
-                    if perm.top_only {
-                        self.library_top(p).into_iter().collect()
-                    } else {
-                        self.player(p).library.clone()
-                    }
-                }
-                ZoneKind::Graveyard => self.player(p).graveyard.clone(),
-                ZoneKind::Exile => self.exile.clone(),
-                ZoneKind::Hand => self.player(p).hand.clone(),
-                ZoneKind::Command => self.command.clone(),
-                _ => vec![],
-            };
-            for c in cards {
-                if !out.contains(&c) {
-                    out.push(c);
-                }
-            }
-        }
-        for gnt in &self.play_grants {
-            if gnt.player == p && self.is_live(gnt.object) && !out.contains(&gnt.object) {
-                out.push(gnt.object);
-            }
-        }
+        let mut out = crate::permissions::effect_permitted_cards(self, p);
         // CR 722.3c: a prepared permanent's controller may cast its prepare-spell copy.
         // CR 903.8: a player may cast a commander they own from the command zone.
         for c in crate::designations::castable_prepared_copies(self, p)
@@ -699,8 +594,21 @@ impl Game {
         out
     }
 
-    /// Ways a card can be cast by this player from where it is.
+    /// Ways a card can be cast by this player from where it is, each with the permission
+    /// it uses if an effect's permission is needed or chosen for it (CR 601.2, 601.3; see
+    /// `permissions.rs`).
     pub fn cast_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        let all = self.permitted_cast_options(p, card);
+        if crate::permissions::own_only() || !crate::permissions::may_be_permitted(self, p, card) {
+            return all;
+        }
+        let own = crate::permissions::own_permissions_only(|| self.permitted_cast_options(p, card));
+        crate::permissions::attach(self, p, card, own, all)
+    }
+
+    /// The ways of casting `card` that the rules and the permissions that count now allow,
+    /// before the permission each uses is chosen.
+    fn permitted_cast_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let o = self.obj(card);
         let mut out = Vec::new();
         let in_hand = o.zone == Zone::Hand(p);
@@ -708,17 +616,9 @@ impl Game {
         let def = o.card.clone();
         let layout = def.as_ref().map(|d| d.layout);
         if in_hand || permitted {
-            let grant_free = self
-                .play_grants
-                .iter()
-                .any(|g| g.player == p && g.object == card && g.free);
             let push_face = |face: FaceState, out: &mut Vec<CastOption>| {
                 let mut opt = CastOption::normal(face);
                 opt.method = face_method(face);
-                if grant_free {
-                    opt.method = CastMethod::Free;
-                    opt.alt_cost = Some(Cost::free());
-                }
                 out.push(opt);
             };
             match layout {
@@ -726,13 +626,11 @@ impl Game {
                     push_face(FaceState::Half(0), &mut out);
                     push_face(FaceState::Half(1), &mut out);
                     if o.chars.has_keyword(KeywordKind::Fuse) && in_hand {
+                        // Cast from hand without paying its mana cost, both halves can be
+                        // cast that way (CR 702.102a, 702.102c): an effect's permission
+                        // to do so applies to this way too (`permissions.rs`).
                         let mut f = CastOption::normal(FaceState::Fused);
                         f.method = CastMethod::Keyword(KeywordKind::Fuse);
-                        // Cast from hand without paying its mana cost, both halves can be
-                        // cast that way (CR 702.102a, 702.102c).
-                        if grant_free {
-                            f.alt_cost = Some(Cost::free());
-                        }
                         out.push(f);
                     }
                 }
@@ -794,14 +692,13 @@ impl Game {
                 }
             }
             // CR 601.3, 601.3e: outside the hand, each way of casting the card must be
-            // permitted by a rule or effect given the characteristics it would have.
+            // permitted by a rule or effect given the characteristics it would have (with
+            // the terms of the permission it uses, see `permissions.rs`).
             if !in_hand {
                 out.retain(|opt| {
                     let chars = self.option_characteristics(card, opt);
-                    let free = opt.method == CastMethod::Free;
-                    self.permission_allows_with(p, card, &chars, false, free)
+                    self.permission_allows_with(p, card, &chars, false, true)
                 });
-                out.extend(self.permission_cost_options(p, card));
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
@@ -946,6 +843,7 @@ impl Game {
         let chars = crate::kw::with_granted_spell_keywords(self, p, card, &chars);
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
+        crate::permissions::spend_terms(opt.permission.as_ref(), &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
@@ -1103,8 +1001,10 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        // CR 305.1, 601.3: the player announces which permission they're playing it with.
+        let permission = crate::permissions::choose_land_permission(self, p, card);
         self.pay_land_play_cost(p, card)?;
-        self.perform_land_play(p, card);
+        self.perform_land_play(p, card, permission.as_ref());
         Ok(())
     }
 
@@ -1172,13 +1072,18 @@ impl Game {
             return Err(Illegal("can't play that land".into()));
         }
         self.pay_land_play_cost(p, card)?;
-        self.perform_land_play(p, card);
+        self.perform_land_play(p, card, None);
         Ok(())
     }
 
-    /// Puts a land being played onto the battlefield; it counts as a land played this turn
-    /// (CR 305.1, 305.2a).
-    fn perform_land_play(&mut self, p: PlayerId, card: ObjectId) {
+    /// Puts a land being played onto the battlefield with the permission `permission`, if
+    /// an effect's; it counts as a land played this turn (CR 305.1, 305.2a).
+    fn perform_land_play(
+        &mut self,
+        p: PlayerId,
+        card: ObjectId,
+        permission: Option<&crate::permissions::CastPermission>,
+    ) {
         let o = self.obj(card);
         // CR 712.12: a modal double-faced card whose faces are both lands is played with
         // the face its player chooses.
@@ -1200,8 +1105,9 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
-        // "Each land played this way enters tapped" (CR 614.1c).
-        let tapped = crate::kw::play_permission_terms::lands_enter_tapped(self, p, card);
+        // "Each land played this way enters tapped" (CR 614.1d).
+        let tapped = permission.is_some_and(|c| c.terms.lands_enter_tapped);
+        crate::permissions::record_use(self, permission);
         self.play_grants.retain(|g| g.object != card);
         let new = self.move_object_ev(MoveEv {
             obj: card,
@@ -1232,11 +1138,35 @@ impl Game {
         card: ObjectId,
         method: CastMethod,
     ) -> Result<ObjectId, Illegal> {
-        let mut opts: Vec<CastOption> = self
+        // The ways of casting it with this method, each with the permissions it could be
+        // cast with (CR 601.2, 601.3).
+        let mut ways: Vec<Vec<CastOption>> = Vec::new();
+        for o in self
             .cast_options(p, card)
             .into_iter()
             .filter(|o| o.method == method)
-            .collect();
+        {
+            match ways
+                .iter_mut()
+                .find(|w| crate::permissions::same_way(&w[0], &o))
+            {
+                Some(w) => w.push(o),
+                None => ways.push(vec![o]),
+            }
+        }
+        // A way the timing rules don't allow now (with a permission that doesn't give flash,
+        // during combat) isn't offered when another way is allowed (CR 601.3, 702.8a).
+        let timely = |w: &Vec<CastOption>| {
+            let o = &w[0];
+            o.any_time || {
+                let chars = self.option_characteristics(card, o);
+                self.timing_allows_cast(p, card, &chars, o)
+            }
+        };
+        if ways.len() > 1 && ways.iter().any(timely) {
+            ways.retain(timely);
+        }
+        let opts: Vec<CastOption> = ways.iter().map(|w| w[0].clone()).collect();
         if opts.is_empty() {
             return Err(Illegal(format!("no such casting method {method:?}")));
         }
@@ -1277,19 +1207,40 @@ impl Game {
                     *w = format!("{w} {}", cost_label(c));
                 }
             }
+            // Ways that differ by the terms of the permissions they'd be cast with (one
+            // giving flash) are told apart by those (CR 601.2, 601.3).
+            let same: Vec<bool> = options
+                .iter()
+                .map(|w| options.iter().filter(|x| *x == w).count() > 1)
+                .collect();
+            for (w, o) in options
+                .iter_mut()
+                .zip(&opts)
+                .zip(same)
+                .filter_map(|(x, s)| s.then_some(x))
+            {
+                let with = match &o.permission {
+                    Some(c) => crate::permissions::label(self, c),
+                    None => "its own permission".to_string(),
+                };
+                *w = format!("{w} (with {with})");
+            }
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
                 Answer::Index(i) if i < opts.len() => i,
                 // By default, the first way that could be begun (whose cost could be
-                // paid).
-                _ => opts
+                // paid) with one of the permissions it could be cast with.
+                _ => ways
                     .iter()
-                    .position(|o| self.can_begin_cast(p, card, o))
+                    .position(|w| w.iter().any(|o| self.can_begin_cast(p, card, o)))
                     .unwrap_or(0),
             }
         } else {
             0
         };
-        let opt = opts.swap_remove(i);
+        // CR 601.2, 601.3: with several permissions to cast it this way, the player
+        // announces which one they're using.
+        let way = ways.swap_remove(i);
+        let opt = crate::permissions::choose_cast_permission(self, p, card, way);
         let chars = self.option_characteristics(card, &opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
             return Err(Illegal("timing".into()));
@@ -1367,13 +1318,18 @@ impl Game {
             }
         }
         self.stack.push(id);
-        let by_grant = self
-            .play_grants
-            .iter()
-            .any(|g| g.object == card && g.player == p);
+        // CR 601.2, 601.3: the permission it's cast with (an effect's, if one is used) is
+        // used up if it can be used only once each turn.
+        let by_grant = matches!(
+            opt.permission,
+            Some(crate::permissions::CastPermission {
+                kind: crate::permissions::PermissionKind::Grant(_),
+                ..
+            })
+        );
+        crate::permissions::record_use(self, opt.permission.as_ref());
         // "A spell cast this way costs {2} more to cast" (CR 601.2f).
-        let permission_cost_increase =
-            crate::kw::play_permission_terms::grant_cost_increase(self, p, card);
+        let permission_cost_increase = opt.permission.as_ref().map_or(0, |c| c.terms.cost_increase);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1637,6 +1593,19 @@ impl Game {
         if self.cast_prohibited_by_effects(p, id, &proposed) {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
+        // The permission it's cast with must allow the spell as proposed: "a permanent
+        // spell with mana value 2 or less" with the value chosen for X (CR 601.3e).
+        if let Some(c) = &opt.permission {
+            let mut as_proposed = proposed.clone();
+            if let Some(m) = as_proposed.mana_cost.as_mut() {
+                *m = m.with_x(x.max(0) as u32);
+            }
+            if !crate::permissions::still_allows(self, c, card, &as_proposed) {
+                return Err(Illegal(
+                    "the permission doesn't allow the proposed spell".into(),
+                ));
+            }
+        }
 
         // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
         // cost is reduced (CR 118.7e).
@@ -1655,8 +1624,10 @@ impl Game {
         if let Some(m) = total.mana.as_mut() {
             *m = m.with_x(x as u32);
         }
-        // CR 118.14: mana of any type may be spent to cast it.
+        // CR 118.14: mana of any type may be spent to cast it; or mana as though it were
+        // mana of any color, as the permission it's cast with allows (CR 609.4b).
         crate::cost_rules::spend_any_type(self, p, id, &mut total);
+        crate::permissions::spend_terms(opt.permission.as_ref(), &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(id), Some(id), &mut total);
         // CR 702.51a–b: once the total cost is determined, keywords such as convoke may
@@ -1789,7 +1760,10 @@ impl Game {
         }
         // "A spell cast this way costs {2} more to cast": an increase that comes with the
         // permission it's cast with.
-        let more = crate::kw::play_permission_terms::cost_increase(self, p, card);
+        let more = match &opt.permission {
+            Some(c) => c.terms.cost_increase,
+            None => crate::kw::play_permission_terms::cost_increase(self, card),
+        };
         if more > 0 {
             add_cost(&mut cost, &Cost::mana(ManaCost::generic(more)));
         }
@@ -1972,7 +1946,8 @@ impl Game {
             if !self.eval_cond(c, &ctx) {
                 let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                     || act.cost.parts.iter().any(cost_part_has_x);
-                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                    + o.counter(counters::LOYALTY);
                 least_x = has_x
                     .then(|| {
                         (1..=max_x as i32).find(|x| {
@@ -2004,7 +1979,8 @@ impl Game {
             // possible if they are for some value the player could choose.
             let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                 || act.cost.parts.iter().any(cost_part_has_x);
-            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                + o.counter(counters::LOYALTY);
             let for_some_x = has_x
                 && (1..=max_x as i32).any(|x| {
                     let mut c = ctx.clone();
@@ -2109,9 +2085,29 @@ impl Game {
         for (s, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*s), *ctl);
             if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
-                changes.add(self, &mut cost, &cm.change, &ctx);
+                // Its amount may depend on the ability's targets ("{X} less, where X is
+                // the power of the creature it targets").
+                crate::activation_costs::add_change_for_targets(
+                    self,
+                    act,
+                    ctx,
+                    stack,
+                    None,
+                    &cm.change,
+                    &mut cost,
+                    &mut changes,
+                );
             }
         }
+        crate::activation_costs::add_own_cost_changes(
+            self,
+            p,
+            src,
+            act,
+            stack,
+            &mut cost,
+            &mut changes,
+        );
         changes.apply(&mut cost, |_, cur, s| {
             crate::cost_rules::default_half(cur, s)
         });
@@ -2201,7 +2197,7 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = self.max_mana_available(p) as i64;
+            let max = crate::activation_costs::x_bound(self, p, act);
             x = match self.ask(p, Decision::ChooseX { source: src, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
@@ -2767,7 +2763,8 @@ impl Game {
                 // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
                 c.controller = p;
-                crate::draw_rules::can_choose(self, e, &c)
+                crate::cost_effects::payable(self, e, &c).unwrap_or(true)
+                    && crate::draw_rules::can_choose(self, e, &c)
                     && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
@@ -2791,6 +2788,13 @@ impl Game {
             ZoneKind::Hand => self.player(p).hand.clone(),
             ZoneKind::Library => self.player(p).library.clone(),
             ZoneKind::Battlefield => self.permanents_controlled_by(p),
+            // "Exile a spell you control".
+            ZoneKind::Stack => self
+                .stack
+                .iter()
+                .copied()
+                .filter(|o| self.obj(*o).controller == p)
+                .collect(),
             ZoneKind::Exile => self
                 .exile
                 .iter()
@@ -3068,22 +3072,52 @@ impl Game {
                 filter,
                 count,
             } => {
-                let mut n = self.eval_value(count, ctx).max(0) as u32;
-                for o in self.objects_matching(filter, ctx) {
-                    if n == 0 {
-                        break;
-                    }
-                    let kinds: Vec<CounterKind> = match kind {
-                        Some(k) => vec![k.clone()],
-                        None => self.obj(o).counters.keys().cloned().collect(),
+                // The player chooses each counter: which permanent, then which kind
+                // (CR 118.3).
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                for _ in 0..n {
+                    let kinds_on = |g: &Game, o: ObjectId| -> Vec<CounterKind> {
+                        let ob = g.obj(o);
+                        match kind {
+                            Some(k) => (ob.counter(k) > 0).then(|| k.clone()).into_iter().collect(),
+                            None => ob
+                                .counters
+                                .iter()
+                                .filter(|(_, n)| **n > 0)
+                                .map(|(k, _)| k.clone())
+                                .collect(),
+                        }
                     };
-                    for k in kinds {
-                        let r = self.remove_counters_by(Entity::Object(o), &k, n, Some(p));
-                        n -= r;
+                    let cands: Vec<ObjectId> = self
+                        .objects_matching(filter, ctx)
+                        .into_iter()
+                        .filter(|o| !kinds_on(self, *o).is_empty())
+                        .collect();
+                    if cands.is_empty() {
+                        return bad("not enough counters");
                     }
-                }
-                if n > 0 {
-                    return bad("not enough counters");
+                    let Some(o) = self
+                        .ask_objects(
+                            p,
+                            src,
+                            "Choose a permanent to remove a counter from (cost)",
+                            cands,
+                            1,
+                            1,
+                        )
+                        .into_iter()
+                        .next()
+                    else {
+                        return bad("not enough counters");
+                    };
+                    let kinds = kinds_on(self, o);
+                    let names = kinds.iter().map(|k| k.to_string()).collect();
+                    let i =
+                        self.ask_option(p, src, "Choose a kind of counter to remove (cost)", names);
+                    let k = kinds[i.min(kinds.len() - 1)].clone();
+                    if self.remove_counters_by(Entity::Object(o), &k, 1, Some(p)) < 1 {
+                        return bad("not enough counters");
+                    }
                 }
             }
             CostPart::AddCounters { kind, count } => {
@@ -3360,7 +3394,7 @@ fn cost_part_pays_last(c: &CostPart) -> bool {
                 zone: ZoneKind::Library,
                 ..
             }
-    )
+    ) || matches!(c, CostPart::Effect(e) if matches!(&**e, Effect::Move { what: Sel::TopOfLibrary(..), .. }))
 }
 
 pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {

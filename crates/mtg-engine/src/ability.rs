@@ -195,6 +195,19 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "This ability costs {1} less to activate for each ...": changes to this ability's
+    /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
+    #[serde(default)]
+    pub own_cost_changes: Vec<OwnCostChange>,
+}
+
+/// A change an activated ability makes to its own total cost, applying while its condition
+/// holds ("This ability costs {2} less to activate if you control a legendary creature").
+/// Values and conditions are evaluated with the ability's targets once they're chosen.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OwnCostChange {
+    pub change: CostChange,
+    pub condition: Option<Condition>,
 }
 
 impl ActivatedAbility {
@@ -209,6 +222,7 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            own_cost_changes: Vec::new(),
         }
     }
 }
@@ -670,10 +684,19 @@ pub enum TargetGroup {
     /// Each stands for a different card type it has ("for each card type, ... a card of
     /// that type"): an object with several card types counts as any one of them.
     OnePerCardType,
-    /// Their total mana value is at most this ("with total mana value 6 or less").
-    TotalManaValueAtMost(Value),
-    /// Their total power is at most this ("with total power 10 or less").
-    TotalPowerAtMost(Value),
+    /// Their total of a value is at most the value ("with total mana value 6 or less",
+    /// "with total mana value X or less", "with total power 10 or less").
+    TotalAtMost(TotalStat, Box<Value>),
+}
+
+/// What [`TargetGroup::TotalAtMost`] adds up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TotalStat {
+    ManaValue,
+    Power,
+    Toughness,
+    /// Power plus toughness.
+    PowerAndToughness,
 }
 
 impl TargetSpec {
@@ -776,6 +799,10 @@ pub mod vars {
     /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
     /// this way", CR 120.10), as a number.
     pub const EXCESS: Var = 7;
+    /// The object a [`Filter::ValueCmp`] is testing, or that a [`Value::Extreme`] is
+    /// measuring, while its values are evaluated ("with toughness greater than its power",
+    /// "the greatest power among creatures you control"; see `relational.rs`).
+    pub const TESTED: Var = 6;
 }
 
 /// Selects players and/or objects.
@@ -1174,12 +1201,6 @@ pub enum Filter {
     /// An object each of the selected objects could legally be attached to right now
     /// ("another permanent it can enchant", CR 301.5c, 303.4).
     CanBeAttachedBy(Box<Sel>),
-    /// Not a quality of one object but of the objects chosen together with this filter:
-    /// "search your library for up to three artifact cards with different names",
-    /// "sacrifice three artifact tokens with different names". Every object matches it
-    /// on its own; where several objects are chosen (a search, a cost, "choose"), the
-    /// choice must have the relationship (see `target_groups::choose_together`).
-    Together(Box<TargetGroup>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -1249,6 +1270,18 @@ pub enum Filter {
     /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
     /// filter: "activated or triggered ability ... from an artifact source".
     AbilityFrom(Box<Filter>),
+    /// A value of the object compared with another value: the object is in
+    /// [`vars::TESTED`] while both are evaluated ("with toughness greater than its power",
+    /// "with total power and toughness 5 or less", "with the greatest mana value among
+    /// creatures you control"; see `relational.rs`).
+    ValueCmp(Box<Value>, Cmp, Box<Value>),
+    /// A requirement on the objects chosen together for one selection ("up to four cards
+    /// with different names", "any number of creature cards with total mana value 6 or
+    /// less", "sacrifice three artifact tokens with different names"). Every object
+    /// matches it on its own; whatever chooses the objects (target slots, searches,
+    /// choices, costs) checks the group (see `relational.rs`,
+    /// `target_groups::choose_together`).
+    Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1419,6 +1452,10 @@ pub enum Value {
     /// The first value if the condition holds, otherwise the second ("choose one. If you
     /// control a commander as you cast this spell, you may choose both instead").
     If(Box<Condition>, Box<Value>, Box<Value>),
+    /// The greatest (`true`) or least value among the selected objects, each measured with
+    /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
+    /// "the lowest mana value among nonland permanents"); 0 if there are none.
+    Extreme(Box<Value>, Box<Sel>, bool),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
 }
@@ -2331,6 +2368,8 @@ pub enum AbilityClass {
     Any,
     /// Loyalty abilities (CR 606).
     Loyalty,
+    /// Mana abilities (CR 605).
+    Mana,
     /// Abilities a keyword defines ("equip abilities", "cycling costs").
     Keyword(KeywordKind),
 }
@@ -2554,6 +2593,74 @@ pub struct PlayPermission {
     pub spells: bool,
     /// Alternative cost, e.g. "without paying its mana cost" or "by paying life".
     pub cost: Option<Cost>,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 702.8a):
+    /// spells cast with this permission may be cast any time their player could cast an
+    /// instant.
+    #[serde(default)]
+    pub flash: bool,
+}
+
+/// The terms an effect's permission to play particular cards comes with (CR 601.3,
+/// 305.1): what it allows, and how spells cast with it are cast. A player who has several
+/// permissions to play a card chooses which one they're using as they begin to play it,
+/// and gets that one's terms (see `permissions.rs`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayTerms {
+    /// "You may cast that card": a permission to cast it, not to play it as a land (to
+    /// play a card is to play it as a land or cast it, whichever is appropriate; a land
+    /// can't be cast, CR 305.9).
+    #[serde(default)]
+    pub spells_only: bool,
+    /// The alternative cost a spell cast with the permission must be cast for ("If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost.", CR 118.9b): no other alternative cost can be used with it (CR 118.9a).
+    /// `Value::ManaValueOf(Sel::This)` in it is the mana value of the spell the card would
+    /// become (X being 0, CR 107.3b).
+    #[serde(default)]
+    pub alt_cost: Option<Cost>,
+    /// An additional cost a spell cast with the permission must be cast with ("by paying 2
+    /// life in addition to paying its other costs", CR 601.2b, 601.2f); amounts may be
+    /// relative to the spell as for `alt_cost`.
+    #[serde(default)]
+    pub extra_cost: Option<Cost>,
+    /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
+    #[serde(default)]
+    pub flash: bool,
+    /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
+    #[serde(default)]
+    pub cost_increase: u32,
+    /// "Each land played this way enters tapped" (CR 614.1d).
+    #[serde(default)]
+    pub lands_enter_tapped: bool,
+    /// "You may spend mana as though it were mana of any color to cast that spell": for
+    /// spells cast with this permission only (CR 609.4b, 118.14).
+    #[serde(default)]
+    pub spend_as_any_color: bool,
+    /// "Mana of any type can be spent to cast it": for spells cast with this permission
+    /// only (CR 118.14).
+    #[serde(default)]
+    pub spend_any_type: bool,
+}
+
+impl PlayTerms {
+    /// Adds `other`'s terms to these.
+    pub fn merge(&mut self, other: &PlayTerms) {
+        self.spells_only |= other.spells_only;
+        if other.alt_cost.is_some() {
+            self.alt_cost = other.alt_cost.clone();
+        }
+        if let Some(e) = &other.extra_cost {
+            match self.extra_cost.as_mut() {
+                Some(c) => crate::casting::add_cost(c, e),
+                None => self.extra_cost = Some(e.clone()),
+            }
+        }
+        self.flash |= other.flash;
+        self.cost_increase += other.cost_increase;
+        self.lands_enter_tapped |= other.lands_enter_tapped;
+        self.spend_as_any_color |= other.spend_as_any_color;
+        self.spend_any_type |= other.spend_any_type;
+    }
 }
 
 /// Trigger events (CR 603). Filters are relative to the ability's source.
@@ -3539,6 +3646,14 @@ pub enum Effect {
         duration: Duration,
         free: bool,
     },
+    /// The permissions to play cards `effect` gives (`GrantPlayPermission`) come with
+    /// `terms`: "you may cast that card" (not play it as a land), "If you cast a spell
+    /// this way, pay life equal to its mana value rather than pay its mana cost", "you may
+    /// cast them as though they had flash" (see [`PlayTerms`], `permissions.rs`).
+    WithPlayTerms {
+        terms: PlayTerms,
+        effect: Box<Effect>,
+    },
     /// Prevent the next N damage / all damage (CR 615).
     PreventDamage {
         to: Sel,
@@ -3652,6 +3767,18 @@ pub enum UntilEvent {
 }
 
 impl Effect {
+    /// The permissions to play cards this effect gives are permissions to cast them ("you
+    /// may cast that card"): a land can't be played with them (CR 305.9).
+    pub fn cast_only(self) -> Effect {
+        Effect::WithPlayTerms {
+            terms: PlayTerms {
+                spells_only: true,
+                ..Default::default()
+            },
+            effect: Box::new(self),
+        }
+    }
+
     pub fn seq(v: Vec<Effect>) -> Effect {
         let mut out = Vec::new();
         for e in v {

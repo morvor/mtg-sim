@@ -2,7 +2,9 @@
 //! turn, you may cast that card." (Practiced Scrollsmith), "... You may cast it this
 //! turn.": a permission to cast the exiled card (a new object, CR 400.7) for a while,
 //! paying its costs and following the normal timing rules (CR 601.2, 307.1). Only a card
-//! that isn't a land can be cast (CR 305.9): an exiled land card gets no permission.
+//! that isn't a land can be cast (CR 305.9): an exiled land card gets no permission. "...
+//! you may cast that card and you may spend mana as though it were mana of any color to
+//! cast that spell" (Hurl Through Hell): the permission comes with that (CR 609.4b).
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -47,8 +49,18 @@ fn cast_duration(l: &str) -> Option<Duration> {
     }
 }
 
+/// "... and you may spend mana as though it were mana of any color to cast that spell"
+/// (Hurl Through Hell): for the spell cast with that permission (CR 609.4b, 118.14).
+const ANY_COLOR: &str =
+    " and you may spend mana as though it were mana of any color to cast that spell";
+
 fn may_cast_exiled_target(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    let Some(duration) = cast_duration(end(l)) else {
+    let l = end(l);
+    let (l, any_color) = match l.strip_suffix(ANY_COLOR) {
+        Some(r) => (r, true),
+        None => (l, false),
+    };
+    let Some(duration) = cast_duration(l) else {
         return false;
     };
     if !ends_with_exiling_targets(prev) {
@@ -63,11 +75,19 @@ fn may_cast_exiled_target(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
                 card.clone(),
                 Filter::Not(Box::new(Filter::Type(CardType::Land))),
             ),
-            then: Box::new(Effect::GrantPlayPermission {
-                who: PlayerRef::You,
-                what: card,
-                duration,
-                free: false,
+            // A permission to cast it, not to play a land (CR 305.9).
+            then: Box::new(Effect::WithPlayTerms {
+                terms: PlayTerms {
+                    spells_only: true,
+                    spend_as_any_color: any_color,
+                    ..Default::default()
+                },
+                effect: Box::new(Effect::GrantPlayPermission {
+                    who: PlayerRef::You,
+                    what: card,
+                    duration,
+                    free: false,
+                }),
             }),
             otherwise: Box::new(Effect::Noop),
         }),

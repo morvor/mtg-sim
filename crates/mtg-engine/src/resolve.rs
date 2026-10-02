@@ -1074,11 +1074,15 @@ impl Game {
             }
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // "Attach ~ to a creature you control. If you do, ...": whether anything
+                // became attached.
+                let mut any = false;
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
-                        self.attach(o, t);
+                        any |= self.attach(o, t);
                     }
                 }
+                ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
@@ -1839,6 +1843,14 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+            }
+            Effect::WithPlayTerms { terms, effect } => {
+                // The permissions the effect gives come with the terms.
+                let before = self.play_grants.len();
+                self.exec(effect, ctx);
+                for g in self.play_grants.iter_mut().skip(before) {
+                    g.terms.merge(terms);
+                }
             }
             Effect::PreventDamage {
                 to,

@@ -500,6 +500,12 @@ pub struct LeftBattlefield {
     pub blocked: bool,
     pub enchanted: bool,
     pub equipped: bool,
+    /// An Aura, Equipment or Fortification was still attached to the object or player it
+    /// was attached to (which may have left the battlefield at the same time). One whose
+    /// object left the battlefield before it did wasn't attached to anything as it last
+    /// existed there.
+    #[serde(default)]
+    pub attached: bool,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability

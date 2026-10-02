@@ -18,7 +18,7 @@
 //! must have equal toughness or a total mana value or power are compared among the
 //! targets that are still legal.
 
-use crate::ability::{Filter, TargetGroup, TargetSpec, Value};
+use crate::ability::{Filter, TargetGroup, TargetSpec};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::object::{Characteristics, GameObject};
@@ -43,16 +43,13 @@ fn pairwise(objs: &[&GameObject], pair: impl Fn(&GameObject, &GameObject) -> boo
         .all(|(i, a)| objs.iter().skip(i + 1).all(|b| pair(a, b)))
 }
 
-/// The bound of a "total ... N or less" relationship.
-fn bound(g: &Game, v: &Value, ctx: &Ctx) -> i64 {
-    g.eval_value(v, ctx)
-}
-
-/// The values a "total" relationship adds up, for each object.
+/// The value a "total ... N or less" relationship adds up, for one object (last known
+/// information for one that left its zone).
 fn stat(g: &Game, group: &TargetGroup, o: &GameObject) -> i64 {
     match group {
-        TargetGroup::TotalManaValueAtMost(_) => g.mana_value_of(o.id) as i64,
-        TargetGroup::TotalPowerAtMost(_) => o.power() as i64,
+        TargetGroup::TotalAtMost(stat, _) => {
+            crate::relational::total(g, *stat, &[Entity::Object(o.id)])
+        }
         _ => 0,
     }
 }
@@ -110,8 +107,9 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
         TargetGroup::DifferentPowers => pairwise(&objs, |a, b| a.power() != b.power()),
         TargetGroup::EqualToughness => objs.iter().all(|o| o.toughness() == objs[0].toughness()),
         TargetGroup::OnePerCardType => one_per_card_type(&objs),
-        TargetGroup::TotalManaValueAtMost(v) | TargetGroup::TotalPowerAtMost(v) => {
-            objs.iter().map(|o| stat(g, group, o)).sum::<i64>() <= bound(g, v, ctx)
+        // CR 601.2c: "with total mana value 6 or less" limits even a single object.
+        TargetGroup::TotalAtMost(stat, n) => {
+            crate::relational::total(g, *stat, targets) <= g.eval_value(n, ctx)
         }
         TargetGroup::ShareCreatureType => {
             if objs.len() < 2 {
@@ -189,8 +187,7 @@ pub fn holds_on_resolution(
         | TargetGroup::DifferentPowers
         | TargetGroup::EqualToughness
         | TargetGroup::OnePerCardType
-        | TargetGroup::TotalManaValueAtMost(_)
-        | TargetGroup::TotalPowerAtMost(_) => group_ok(g, group, legal, ctx),
+        | TargetGroup::TotalAtMost(..) => group_ok(g, group, legal, ctx),
     }
 }
 
@@ -210,10 +207,7 @@ pub fn find_group(
     }
     // A total is smallest with the smallest values (a value may be negative, so partial
     // totals don't rule anything out).
-    if matches!(
-        group,
-        TargetGroup::TotalManaValueAtMost(_) | TargetGroup::TotalPowerAtMost(_)
-    ) {
+    if matches!(group, TargetGroup::TotalAtMost(..)) {
         let mut v: Vec<Entity> = cands.to_vec();
         v.sort_by_key(|e| e.object().map_or(0, |o| stat(g, group, g.obj(o))));
         v.truncate(n);
@@ -221,23 +215,37 @@ pub fn find_group(
     }
     // The other relationships hold for every part of a group that has them.
     let mut chosen = Vec::new();
-    search(g, group, cands, n, &mut chosen, ctx).then_some(chosen)
+    let mut budget = 10_000u32;
+    search(
+        &|v: &[Entity]| group_ok(g, group, v, ctx),
+        cands,
+        n,
+        &mut chosen,
+        &mut budget,
+    )
+    .then_some(chosen)
 }
 
+/// A group of `n` of the candidates for which `ok` holds of every part (in candidate
+/// order), searched depth first. Bounded: large candidate sets give up rather than search
+/// exponentially.
 fn search(
-    g: &Game,
-    group: &TargetGroup,
+    ok: &dyn Fn(&[Entity]) -> bool,
     cands: &[Entity],
     n: usize,
     chosen: &mut Vec<Entity>,
-    ctx: &Ctx,
+    budget: &mut u32,
 ) -> bool {
     if chosen.len() == n {
         return true;
     }
     for (i, c) in cands.iter().enumerate() {
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
         chosen.push(*c);
-        if group_ok(g, group, chosen, ctx) && search(g, group, &cands[i + 1..], n, chosen, ctx) {
+        if ok(chosen) && search(ok, &cands[i + 1..], n, chosen, budget) {
             return true;
         }
         chosen.pop();
@@ -383,18 +391,52 @@ fn assign(
 // Choices of several objects that aren't targets (`Filter::Together`)
 // ---------------------------------------------------------------------------
 
-/// The relationship a choice of several objects described by `f` must have
-/// ("artifact cards with different names"), if any: its `Filter::Together` part.
-pub fn together_of(f: &Filter) -> Option<&TargetGroup> {
-    match f {
-        Filter::Together(g) => Some(g),
-        Filter::And(v) => v.iter().find_map(together_of),
-        _ => None,
-    }
+/// The relationships a choice of several objects described by `f` must have ("artifact
+/// cards with different names"): its `Filter::Together` parts (see `relational.rs`).
+pub fn together_of(f: &Filter) -> Vec<TargetGroup> {
+    crate::relational::groups_of(f)
 }
 
 fn entities(objs: &[ObjectId]) -> Vec<Entity> {
     objs.iter().map(|o| Entity::Object(*o)).collect()
+}
+
+fn all_ok(g: &Game, groups: &[TargetGroup], chosen: &[Entity], ctx: &Ctx) -> bool {
+    groups.iter().all(|grp| group_ok(g, grp, chosen, ctx))
+}
+
+/// A group of `n` of the candidates that has all the relationships, if there is one.
+fn find_all(
+    g: &Game,
+    groups: &[TargetGroup],
+    cands: &[Entity],
+    n: usize,
+    ctx: &Ctx,
+) -> Option<Vec<Entity>> {
+    match groups {
+        [] => (cands.len() >= n).then(|| cands[..n].to_vec()),
+        [one] => find_group(g, one, cands, n, ctx),
+        _ => {
+            // Smallest totals first, so a total limit is met whenever a group meets it.
+            let mut cands = cands.to_vec();
+            if let Some(t) = groups
+                .iter()
+                .find(|x| matches!(x, TargetGroup::TotalAtMost(..)))
+            {
+                cands.sort_by_key(|e| e.object().map_or(0, |o| stat(g, t, g.obj(o))));
+            }
+            let mut chosen = Vec::new();
+            let mut budget = 10_000u32;
+            search(
+                &|v: &[Entity]| all_ok(g, groups, v, ctx),
+                &cands,
+                n,
+                &mut chosen,
+                &mut budget,
+            )
+            .then_some(chosen)
+        }
+    }
 }
 
 /// Whether `n` of the candidates can be chosen together as `f` requires (a cost such as
@@ -403,13 +445,11 @@ pub fn can_choose_together(g: &Game, f: &Filter, cands: &[ObjectId], n: usize, c
     if cands.len() < n {
         return false;
     }
-    match together_of(f) {
-        None => true,
-        Some(grp) => find_group(g, grp, &entities(cands), n, ctx).is_some(),
-    }
+    let groups = together_of(f);
+    groups.is_empty() || find_all(g, &groups, &entities(cands), n, ctx).is_some()
 }
 
-/// The chosen objects if they have the relationship `f` requires; otherwise the largest
+/// The chosen objects if they have the relationships `f` requires; otherwise the largest
 /// group of them, in choice order, that does, completed to `min` from the candidates if
 /// possible (and kept as large as it can be if not).
 pub fn fit_together(
@@ -420,17 +460,28 @@ pub fn fit_together(
     min: usize,
     ctx: &Ctx,
 ) -> Vec<ObjectId> {
-    let Some(grp) = together_of(f) else {
+    let groups = together_of(f);
+    if groups.is_empty() {
         return picked;
-    };
-    let all = entities(cands);
-    let fitted = fit(g, grp, entities(&picked), &all, min, ctx).unwrap_or_else(|| {
-        // No group of `min` exists: the largest one there is.
-        (0..min)
+    }
+    let mut kept: Vec<Entity> = Vec::new();
+    for e in entities(&picked) {
+        kept.push(e);
+        if !all_ok(g, &groups, &kept, ctx) {
+            kept.pop();
+        }
+    }
+    let fitted = if kept.len() >= min {
+        kept
+    } else {
+        // Completed to `min` if a group of that many exists; otherwise the largest one
+        // there is.
+        let all = entities(cands);
+        (0..=min)
             .rev()
-            .find_map(|k| find_group(g, grp, &all, k, ctx))
+            .find_map(|k| find_all(g, &groups, &all, k, ctx))
             .unwrap_or_default()
-    });
+    };
     fitted.into_iter().filter_map(|e| e.object()).collect()
 }
 

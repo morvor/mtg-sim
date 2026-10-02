@@ -70,7 +70,7 @@ fn return_chosen_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
         if kind.zone().is_some() {
             return None;
         }
-        let together = group.map(|g| Filter::Together(Box::new(g)));
+        let together = group.map(Filter::Together);
         let filter = Filter::and(vec![
             kind,
             Filter::InZone(ZoneKind::Graveyard),

@@ -610,7 +610,9 @@ impl Game {
             },
             Filter::HasAbilities => !c.has_no_abilities(),
             Filter::Source => ctx.source == Some(id),
-            Filter::Other => ctx.source != Some(id),
+            // "Another": not the source, nor the card it became after it left
+            // ("When ~ dies, return another target artifact card from your graveyard").
+            Filter::Other => ctx.source.is_none_or(|s| s != id && self.current(s) != id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
             // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
             Filter::Objects(v) => v.iter().any(|x| {
@@ -626,8 +628,6 @@ impl Game {
             Filter::AttachedTo(sel) => o
                 .attached_to
                 .is_some_and(|h| self.eval_sel(sel, ctx).contains(&h)),
-            // A relationship among the objects chosen, not a quality of one of them.
-            Filter::Together(_) => true,
             Filter::CanBeAttachedBy(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()
@@ -759,6 +759,11 @@ impl Game {
                 }
                 _ => false,
             },
+            Filter::ValueCmp(lhs, cmp, rhs) => {
+                crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
+            }
+            // Checked by whatever chooses the objects together (`relational.rs`).
+            Filter::Together(_) => true,
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }
@@ -1038,7 +1043,8 @@ impl Game {
         match v {
             Value::Const(n) => *n as i64,
             Value::X => ctx.x as i64,
-            Value::Count(f) => self.objects_matching(f, ctx).len() as i64,
+            Value::Count(f) => crate::relational::count(self, f, ctx)
+                .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
             Value::CountPlayers(f) => self
                 .players_in_game()
@@ -1242,6 +1248,9 @@ impl Game {
                     set = set.union(self.obj(o).chars.colors);
                 }
                 set.count() as i64
+            }
+            Value::Extreme(of, sel, greatest) => {
+                crate::relational::extreme(self, of, sel, *greatest, ctx)
             }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)

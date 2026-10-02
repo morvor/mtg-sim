@@ -66,6 +66,17 @@ impl<'c> Builder<'c> {
     }
     pub fn add_target(&mut self, mut spec: TargetSpec, text: &str) -> u8 {
         spec.text = text.to_string();
+        // "target creature card with lesser mana value": the object "it" means as the
+        // target is described (see `patterns::filters_relational`); left unresolved
+        // (and so not understood) if "it" has no antecedent.
+        if super::patterns::filters_relational::mentions_referent(&spec) {
+            let it = super::patterns::pronoun_groups::singular_it(self);
+            if super::patterns::filters_relational::names_one_object(&it) {
+                if let Some(s) = super::patterns::filters_relational::substitute(&spec, &it) {
+                    spec = s;
+                }
+            }
+        }
         // "another target creature" / "up to one other target creature" after earlier
         // targets: different objects from those (CR 115.3 allows the same object for
         // different instances of "target" unless the text says otherwise).
@@ -330,14 +341,31 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             super::patterns::conditional_followups::group_condition_run(&mut effects);
         }
         // Sentences that modify the previous one ("It can't be regenerated.").
+        let before_followup = (b.it.clone(), b.targets.len());
         let followed_up = match effects.last_mut() {
             Some(prev) => crate::oracle_ext::apply_followup_ext(&s, prev, b),
             None => false,
         };
+        // "You may reveal a card that shares a creature type with that creature from among
+        // them ...": a qualifier's "it" in the sentence (see `patterns::filters_relational`).
+        if followed_up {
+            if let Some(prev) = effects.pop() {
+                let e = super::patterns::filters_relational::resolve_in_sentence(
+                    prev,
+                    b,
+                    before_followup,
+                )?;
+                effects.push(e);
+            }
+        }
         if followed_up {
             b.sentences += 1;
         } else {
-            let Some(mut e) = parse_sentence(&s, b) else {
+            let before = (b.it.clone(), b.targets.len());
+            let parsed = parse_sentence(&s, b).and_then(|e| {
+                super::patterns::filters_relational::resolve_in_sentence(e, b, before)
+            });
+            let Some(mut e) = parsed else {
                 super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
                 groups::abandon(b, outer_group);
                 return None;
@@ -592,6 +620,10 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         }
         return Some((sel, rest));
     }
+    // "the creature with the least power" (see `patterns::filters_relational`).
+    if let Some(r) = super::patterns::filters_relational::definite_extreme(s, b) {
+        return Some(r);
+    }
     if let Some((slot, text)) = &b.chosen_creature {
         let still_there = b
             .targets
@@ -683,6 +715,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     }
     if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
         let (f, _, rest) = parse_object_phrase(r)?;
+        let f = super::patterns::filters_relational::resolve_referent(f, b)?;
         // "each creature blocking it"
         let (f, rest) = match super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
             Some((f, r)) => (f, r),
@@ -694,6 +727,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     // Bare plural noun phrases ("creatures you control") mean all such objects.
     if let Some((f, plural, rest)) = parse_object_phrase(s) {
         if plural {
+            let f = super::patterns::filters_relational::resolve_referent(f, b)?;
             let (f, rest) = bind_target_player(f, rest, b);
             return Some((Sel::All(f), rest));
         }
@@ -883,6 +917,16 @@ fn signed_value(s: &str) -> Option<Value> {
 
 /// The main pattern list. Each returns Some if it fully understands the clause.
 pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "it" in an object qualifier ("search for a creature card with lesser mana value")
+    // means what "it" meant as the clause began (see `patterns::filters_relational`).
+    let it = super::patterns::pronoun_groups::singular_it(b);
+    let e = parse_simple_clause(l, b)?;
+    let e = super::patterns::filters_relational::resolve_clause(e, &it);
+    super::patterns::filters_relational::note_sacrificed(&e, b);
+    Some(e)
+}
+
+fn parse_simple_clause(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     type P = fn(&str, &mut Builder) -> Option<Effect>;
     const PATTERNS: &[P] = &[
@@ -977,6 +1021,12 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     let (to, tail) = damage_recipients(rest, b)?;
     if !end(&tail).is_empty() {
         return None;
+    }
+    if let Sel::Target(n) = to {
+        let spec = &mut b.targets[n as usize];
+        if spec.text == "any other target" {
+            super::patterns::damage_removal::other_than_damage_source(spec, &src);
+        }
     }
     let to = other_than_subject(to, &src);
     Some(Effect::DealDamage {

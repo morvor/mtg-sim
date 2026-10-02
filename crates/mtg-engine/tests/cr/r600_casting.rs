@@ -93,6 +93,7 @@ fn casting_an_opponents_card_makes_the_caster_its_controller() {
         free: false,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     let s = t.cast(P0, bears).go();
     assert_eq!(t.obj(s).controller, P0);

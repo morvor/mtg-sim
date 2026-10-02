@@ -37,7 +37,7 @@ fn one_card_per_card_type(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
     {
         return false;
     }
-    *filter = Filter::Together(Box::new(TargetGroup::OnePerCardType));
+    *filter = Filter::Together(TargetGroup::OnePerCardType);
     // At most one card for each card type there is; the relationship limits it further.
     *take = Value::c(crate::types::CardType::ALL.len() as i32);
     *take_up_to = true;

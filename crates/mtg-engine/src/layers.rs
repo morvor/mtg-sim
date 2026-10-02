@@ -1000,13 +1000,23 @@ impl Game {
                     .get(*idx as usize)
                     .and_then(|k| keyword_counter(k))
                 {
-                    let a = keyword_counter_ability(&kw);
-                    if !trial {
-                        // Abilities the keyword stands for have the counters' timestamp
-                        // (CR 613.7a, 613.7c).
-                        st.grants.insert((*obj, a.uid), e.ts.0);
+                    // Each keyword counter is one instance of the keyword (CR 122.1b):
+                    // a creature with two exalted counters has exalted twice.
+                    let n = self
+                        .obj(*obj)
+                        .counters
+                        .iter()
+                        .find(|(k, _)| k.as_str() == KEYWORD_COUNTERS[*idx as usize])
+                        .map_or(1, |(_, n)| (*n).max(1));
+                    for i in 0..n {
+                        let a = keyword_counter_ability(&kw, i);
+                        if !trial {
+                            // Abilities the keyword stands for have the counters'
+                            // timestamp (CR 613.7a, 613.7c).
+                            st.grants.insert((*obj, a.uid), e.ts.0);
+                        }
+                        self.objects[obj.0 as usize].chars.abilities.push(a);
                     }
-                    self.objects[obj.0 as usize].chars.abilities.push(a);
                 }
             }
         }
@@ -1220,9 +1230,12 @@ impl Game {
                         st.replacements
                             .push((id, ctl, o.timestamp, a.clone(), r.clone()))
                     }
-                    StaticEffect::PlayPermission(p) => {
-                        st.play_permissions.push((id, ctl, p.clone()))
-                    }
+                    StaticEffect::PlayPermission(p) => st.play_permissions.push((
+                        id,
+                        ctl,
+                        p.clone(),
+                        crate::kw::once_each_turn_cast::once_slot(s),
+                    )),
                     StaticEffect::FlashPermission { who, what } => {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
                     }
@@ -1245,7 +1258,7 @@ impl Game {
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone()));
+                        st.play_permissions.push((src, *p, pp.clone(), None));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."
@@ -1426,12 +1439,15 @@ pub fn keyword_counter(k: &str) -> Option<Keyword> {
     Some(Keyword::new(kind))
 }
 
-fn keyword_counter_ability(kw: &Keyword) -> Ability {
+/// The ability the `i`th keyword counter of a kind grants; each instance has its own
+/// uid, so instances that aren't redundant (exalted) each work.
+fn keyword_counter_ability(kw: &Keyword, i: u32) -> Ability {
     use std::sync::OnceLock;
-    static CACHE: OnceLock<std::sync::Mutex<HashMap<KeywordKind, Ability>>> = OnceLock::new();
+    type Cache = HashMap<(KeywordKind, u32), Ability>;
+    static CACHE: OnceLock<std::sync::Mutex<Cache>> = OnceLock::new();
     let m = CACHE.get_or_init(Default::default);
     let mut g = m.lock().unwrap();
-    g.entry(kw.kind)
+    g.entry((kw.kind, i))
         .or_insert_with(|| AbilityDef::new(AbilityKind::Keyword(kw.clone()), kw.kind.name()))
         .clone()
 }
