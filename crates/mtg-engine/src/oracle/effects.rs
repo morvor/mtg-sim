@@ -906,6 +906,19 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let to = other_than_subject(to, &src);
+    // "... deals damage to any other target": other than the object dealing it.
+    if let Sel::Target(i) = &to {
+        if let Some(t) = b.targets.get_mut(*i as usize) {
+            if matches!(t.what, TargetKind::AnyTarget)
+                && t.distinct_from.is_empty()
+                && t.text.starts_with("any other target")
+            {
+                if let Some(f) = super::patterns::damage_removal::any_other_than(&src) {
+                    t.what = TargetKind::ObjectOrPlayer(f, PlayerFilter::Any);
+                }
+            }
+        }
+    }
     Some(Effect::DealDamage {
         source: src,
         amount,

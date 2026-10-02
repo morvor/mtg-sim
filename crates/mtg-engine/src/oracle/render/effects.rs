@@ -546,8 +546,23 @@ impl Renderer<'_> {
                     (restriction, duration)
                 {
                     let s = self.restriction_subject(f);
+                    // An object you control: its controller's next untap step is yours.
+                    let yours_now = match f {
+                        Filter::Source => true,
+                        Filter::In(sel) => match sel.as_ref() {
+                            Sel::This => true,
+                            Sel::Target(i) => self.targets.get(*i as usize).is_some_and(|t| {
+                                matches!(&t.what, TargetKind::Object(tf)
+                                    if values::split_controller(tf).0 == Some(PlayerRel::You))
+                            }),
+                            _ => false,
+                        },
+                        _ => false,
+                    };
                     let whose = if values::split_controller(f).0 == Some(PlayerRel::You) {
                         "your"
+                    } else if yours_now {
+                        "{alt:its controller's|your}"
                     } else {
                         "its controller's"
                     };

@@ -123,6 +123,19 @@ impl Renderer<'_> {
                     (Some(c), true) => format!("{c} other targets"),
                 };
             }
+            // "any other target": other than the object dealing the damage.
+            TargetKind::ObjectOrPlayer(Filter::And(v), PlayerFilter::Any)
+                if count.is_none()
+                    && matches!(v.as_slice(), [Filter::Or(kinds), other]
+                        if kinds.len() == 3
+                            && kinds.iter().all(|k| matches!(k,
+                                Filter::Type(CardType::Creature | CardType::Planeswalker | CardType::Battle)))
+                            && (matches!(other, Filter::Other)
+                                || matches!(other, Filter::Not(x)
+                                    if matches!(x.as_ref(), Filter::In(_))))) =>
+            {
+                return "any other target".into();
+            }
             TargetKind::ObjectOrPlayer(f, pf) => {
                 let o = self.noun(f, num);
                 let p = self.player_filter_noun(pf, num);

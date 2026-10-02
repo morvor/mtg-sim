@@ -303,3 +303,36 @@ fn return_this_card_from_your_graveyard_triggers_in_the_graveyard() {
     assert!(!t.g.is_live(fire), "it triggered and returned");
     assert!(t.in_hand(P0, "Punishing Fire"));
 }
+
+/// "When this Aura enters, enchanted creature deals damage equal to its power to any other
+/// target": "other" is other than the enchanted creature, which can't be the target.
+#[test]
+fn any_other_target_excludes_the_object_dealing_the_damage() {
+    cr!("115.4", "115.1");
+    assert_round_trips("Pain for All");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    let aura = t.hand(P0, "Pain for All");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    t.cast(P0, aura).go();
+    t.resolve_all();
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 2, "the Aura's target, then the trigger's");
+    assert!(!offered[1].contains(&Entity::Object(mine)));
+    assert!(offered[1].contains(&Entity::Object(theirs)));
+    assert!(offered[1].contains(&Entity::Player(P1)));
+    assert!(!t.on_battlefield(theirs), "dealt 2 damage");
+}

@@ -285,6 +285,27 @@ fn players_of(prev: Option<&Sel>, b: &Builder) -> Option<PlayerRel> {
     }
 }
 
+/// "Any other target" when the source of the damage is the object `src`: a creature,
+/// planeswalker, or battle (CR 115.4) other than that object. `None` when `src` isn't an
+/// object that could be a target.
+pub fn any_other_than(src: &Sel) -> Option<Filter> {
+    let other = match src {
+        Sel::This => Filter::Other,
+        Sel::AttachedTo | Sel::TriggerObject | Sel::Target(_) | Sel::Var(_) => {
+            Filter::Not(Box::new(Filter::In(Box::new(src.clone()))))
+        }
+        _ => return None,
+    };
+    Some(Filter::and(vec![
+        Filter::Or(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::Type(crate::types::CardType::Planeswalker),
+            Filter::Type(crate::types::CardType::Battle),
+        ]),
+        other,
+    ]))
+}
+
 /// One recipient item. `prev` is the preceding item in an "and" list.
 fn recipient_item(
     s: &str,
@@ -302,6 +323,13 @@ fn recipient_item(
     if let Some(r) = word(s, "any other target") {
         let mut spec = TargetSpec::any_target();
         spec.distinct_from = (0..b.targets.len() as u8).collect();
+        // With no earlier target, "other" is other than the object dealing the damage
+        // ("enchanted creature deals damage equal to its power to any other target").
+        if spec.distinct_from.is_empty() {
+            if let Some(f) = any_other_than(src) {
+                spec.what = TargetKind::ObjectOrPlayer(f, PlayerFilter::Any);
+            }
+        }
         let slot = b.add_target(spec, "any other target");
         return Some((Sel::Target(slot), r.to_string()));
     }
