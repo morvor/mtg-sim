@@ -1972,7 +1972,7 @@ impl Game {
             if !self.eval_cond(c, &ctx) {
                 let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                     || act.cost.parts.iter().any(cost_part_has_x);
-                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                let max_x = self.activation_max_x(p, src, act);
                 least_x = has_x
                     .then(|| {
                         (1..=max_x as i32).find(|x| {
@@ -2004,7 +2004,7 @@ impl Game {
             // possible if they are for some value the player could choose.
             let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                 || act.cost.parts.iter().any(cost_part_has_x);
-            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let max_x = self.activation_max_x(p, src, act);
             let for_some_x = has_x
                 && (1..=max_x as i32).any(|x| {
                     let mut c = ctx.clone();
@@ -2201,7 +2201,7 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = self.max_mana_available(p) as i64;
+            let max = self.activation_max_x(p, src, act) as i64;
             x = match self.ask(p, Decision::ChooseX { source: src, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
@@ -3219,6 +3219,18 @@ impl Game {
     }
 
     /// Rough upper bound of mana the player could produce now (for choosing X).
+    /// The greatest X `p` could announce for an activated ability (CR 107.3a): as much
+    /// as their mana (and the source's loyalty) can pay for. When X is only in other costs
+    /// ("Sacrifice an artifact with mana value X"), mana doesn't limit it.
+    fn activation_max_x(&self, p: PlayerId, src: ObjectId, act: &ActivatedAbility) -> u32 {
+        let paid = self.max_mana_available(p) + self.obj(src).counter(counters::LOYALTY);
+        if act.cost.mana.as_ref().is_some_and(|m| m.has_x()) {
+            paid
+        } else {
+            paid.max(20)
+        }
+    }
+
     pub fn max_mana_available(&self, p: PlayerId) -> u32 {
         self.player(p).mana_pool.total() as u32
             + crate::mana_abilities::potential_mana_count(self, p, None)

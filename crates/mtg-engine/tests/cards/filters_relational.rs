@@ -125,7 +125,7 @@ fn grammar_reads_relational_qualifiers() {
 
 #[test]
 fn clement_returns_only_a_creature_with_lesser_mana_value_than_the_entering_one() {
-    cr!("608.2b", "115.1");
+    cr!("115.1", "601.2c");
     let mut t = TestGame::new(2);
     let clement = t.battlefield(P0, "Clement, the Worrywort"); // mana value 3
     let bears = t.battlefield(P0, "Grizzly Bears"); // 2
@@ -144,7 +144,7 @@ fn clement_returns_only_a_creature_with_lesser_mana_value_than_the_entering_one(
 
 #[test]
 fn vedalken_shackles_compares_power_with_the_number_of_islands() {
-    cr!("608.2h", "115.1");
+    cr!("115.1", "601.2c");
     let mut t = TestGame::new(2);
     let shackles = t.battlefield(P0, "Vedalken Shackles");
     t.lands(P0, "Island", 2);
@@ -185,7 +185,7 @@ fn gilt_leaf_winnower_targets_creatures_whose_power_and_toughness_differ() {
 
 #[test]
 fn cut_down_adds_power_and_toughness() {
-    cr!("608.2b");
+    cr!("601.2c");
     ruling!(
         "Cut Down",
         "The total power and toughness of a creature is determined by adding"
@@ -207,7 +207,7 @@ fn cut_down_adds_power_and_toughness() {
 
 #[test]
 fn drown_in_the_loch_counts_the_targets_controllers_graveyard() {
-    cr!("700.2", "608.2b");
+    cr!("700.2", "601.2c");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant"); // mana value 4
     let wurm = t.battlefield(P1, "Craw Wurm"); // mana value 6
@@ -231,7 +231,7 @@ fn drown_in_the_loch_counts_the_targets_controllers_graveyard() {
 
 #[test]
 fn porphyry_nodes_destroys_the_creature_with_the_least_power() {
-    cr!("608.2c");
+    cr!("608.2d");
     ruling!(
         "Porphyry Nodes",
         "The first ability of Porphyry Nodes doesn't target"
@@ -390,7 +390,7 @@ fn protean_hulk_finds_creatures_with_total_mana_value_six_or_less() {
 
 #[test]
 fn shared_summons_finds_cards_with_different_names() {
-    cr!("201.2", "701.23a");
+    cr!("201.2b", "701.23a");
     let mut t = TestGame::new(2);
     let a = t.library_top(P0, "Grizzly Bears");
     let b = t.library_top(P0, "Grizzly Bears");
@@ -421,7 +421,7 @@ fn shared_summons_finds_cards_with_different_names() {
 
 #[test]
 fn spreading_plague_destroys_other_creatures_sharing_a_color_with_the_entering_one() {
-    cr!("105.2", "608.2c");
+    cr!("105.2");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Spreading Plague");
     let bears = t.battlefield(P1, "Grizzly Bears"); // green
@@ -435,7 +435,7 @@ fn spreading_plague_destroys_other_creatures_sharing_a_color_with_the_entering_o
 
 #[test]
 fn izzet_staticaster_damages_every_other_creature_named_like_the_target() {
-    cr!("201.2", "608.2c");
+    cr!("201.2a");
     ruling!(
         "Izzet Staticaster",
         "Other creatures with that name are not targeted"
@@ -456,7 +456,7 @@ fn izzet_staticaster_damages_every_other_creature_named_like_the_target() {
 
 #[test]
 fn crown_of_vigor_pumps_the_enchanted_creature_and_those_sharing_a_type() {
-    cr!("608.2c", "205.3m");
+    cr!("205.3m");
     let mut t = TestGame::new(2);
     let elves = t.battlefield(P0, "Llanowar Elves"); // Elf Druid
     let other_elf = t.battlefield(P1, "Elvish Mystic"); // Elf Druid
@@ -510,7 +510,7 @@ fn ancient_ooze_counts_the_total_mana_value_of_other_creatures() {
 
 #[test]
 fn uncage_the_menagerie_finds_creatures_with_mana_value_x_and_different_names() {
-    cr!("201.2", "107.3a");
+    cr!("201.2b", "107.3a");
     let mut t = TestGame::new(2);
     let a = t.library_top(P0, "Grizzly Bears"); // 2
     let b = t.library_top(P0, "Grizzly Bears"); // 2
@@ -529,7 +529,7 @@ fn uncage_the_menagerie_finds_creatures_with_mana_value_x_and_different_names() 
 
 #[test]
 fn booby_trap_names_a_card_other_than_a_basic_land() {
-    cr!("201.4", "607.5a");
+    cr!("201.4");
     let mut t = TestGame::new(2);
     // A basic land card's name isn't a legal choice: nothing is named.
     t.answer(P0, DecisionKind::Name, Answer::Text("Forest".into()));
@@ -549,7 +549,7 @@ fn booby_trap_names_a_card_other_than_a_basic_land() {
 
 #[test]
 fn reciprocate_exiles_only_a_creature_that_dealt_damage_to_you_this_turn() {
-    cr!("120.3a", "400.7");
+    cr!("400.7");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
@@ -565,6 +565,27 @@ fn reciprocate_exiles_only_a_creature_that_dealt_damage_to_you_this_turn() {
     assert!(!cands.contains(&giant.into()), "didn't deal damage to you");
     t.resolve();
     assert!(t.in_exile("Grizzly Bears"));
+    // CR 400.7: a creature that dealt damage, left the battlefield and returned is a new
+    // object, which dealt no damage this turn.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 18);
+    let in_hand = t
+        .g
+        .move_object(bears, mtg_engine::object::Zone::Hand(P1), mtg_engine::events::MoveCause::Effect, None)
+        .unwrap();
+    let back = t
+        .g
+        .move_object(in_hand, mtg_engine::object::Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None)
+        .unwrap();
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 1);
+    let r = t.hand(P0, "Reciprocate");
+    // Neither the returned Grizzly Bears nor the Hill Giant is a legal target.
+    assert!(t.cast(P0, r).target(back).try_go().is_err());
+    let _ = giant;
 }
 
 // ---------------------------------------------------------------------------
@@ -573,7 +594,7 @@ fn reciprocate_exiles_only_a_creature_that_dealt_damage_to_you_this_turn() {
 
 #[test]
 fn legions_to_ashes_exiles_the_target_and_that_players_tokens_with_its_name() {
-    cr!("201.2", "608.2c");
+    cr!("201.2a");
     ruling!("Legions to Ashes", "The target permanent need not be a token");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -591,7 +612,7 @@ fn legions_to_ashes_exiles_the_target_and_that_players_tokens_with_its_name() {
 
 #[test]
 fn deputy_of_detention_exiles_that_players_other_permanents_with_the_name() {
-    cr!("201.2", "610.3");
+    cr!("201.2a");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Grizzly Bears");
@@ -608,7 +629,7 @@ fn deputy_of_detention_exiles_that_players_other_permanents_with_the_name() {
 
 #[test]
 fn surgical_extraction_may_leave_cards_even_in_the_graveyard() {
-    cr!("701.23b", "201.2");
+    cr!("701.23b", "201.2a");
     ruling!(
         "Surgical Extraction",
         "you can choose to leave some or all of the cards with the same name"
@@ -634,7 +655,7 @@ fn surgical_extraction_may_leave_cards_even_in_the_graveyard() {
 
 #[test]
 fn extirpate_exiles_every_copy_in_the_graveyard() {
-    cr!("701.23b", "201.2");
+    cr!("201.2a");
     ruling!(
         "Extirpate",
         "but you do have to exile the cards from the player's graveyard"
@@ -690,15 +711,20 @@ fn yorvo_gets_a_second_counter_only_if_the_creature_is_still_stronger() {
     t.enter(P0, "Craw Wurm");
     t.resolve_all();
     assert_eq!(t.counters(yorvo, "+1/+1"), base + 2);
+    // A 7/7 against Yorvo's power 6: greater before the first counter, not after it.
+    assert_eq!(t.pt(yorvo).0, 6);
+    t.enter(P0, "Pelakka Wurm");
+    t.resolve_all();
+    assert_eq!(t.counters(yorvo, "+1/+1"), base + 3);
     // A 1/1: not greater.
     t.enter(P0, "Llanowar Elves");
     t.resolve_all();
-    assert_eq!(t.counters(yorvo, "+1/+1"), base + 3);
+    assert_eq!(t.counters(yorvo, "+1/+1"), base + 4);
 }
 
 #[test]
 fn cloudstone_curio_returns_a_permanent_sharing_a_permanent_type() {
-    cr!("110.4", "608.2c");
+    cr!("110.4");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Cloudstone Curio");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -715,7 +741,7 @@ fn cloudstone_curio_returns_a_permanent_sharing_a_permanent_type() {
 
 #[test]
 fn spawnbroker_compares_with_the_first_targets_power() {
-    cr!("115.1", "608.2b");
+    cr!("115.1", "601.2c");
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Hill Giant"); // power 3
     let small = t.battlefield(P1, "Grizzly Bears"); // 2
@@ -735,7 +761,7 @@ fn spawnbroker_compares_with_the_first_targets_power() {
 
 #[test]
 fn highcliff_felidar_destroys_each_opponents_greatest_creature() {
-    cr!("608.2d", "101.4");
+    cr!("608.2d");
     let mut t = TestGame::new(3);
     let a = t.battlefield(P1, "Grizzly Bears"); // 2
     let b = t.battlefield(P1, "Hill Giant"); // 3
@@ -753,7 +779,7 @@ fn highcliff_felidar_destroys_each_opponents_greatest_creature() {
 
 #[test]
 fn an_ability_after_a_comma_list_describes_its_last_item() {
-    cr!("115.1", "702.9b");
+    cr!("115.1", "601.2c");
     // Return to the Earth: "Destroy target artifact, enchantment, or creature with flying."
     let mut t = TestGame::new(2);
     let artifact = t.battlefield(P1, "Ornithopter"); // an artifact creature with flying
@@ -782,7 +808,7 @@ fn an_ability_after_a_comma_list_describes_its_last_item() {
 
 #[test]
 fn fear_fire_foes_damages_the_other_creatures_of_the_targets_controller() {
-    cr!("120.3e", "608.2c");
+    cr!("120.3e");
     let mut t = TestGame::new(2);
     let target = t.battlefield(P1, "Hill Giant");
     let theirs = t.battlefield(P1, "Llanowar Elves");
@@ -813,4 +839,191 @@ fn crown_of_doom_cant_be_given_to_its_owner() {
     assert!(!cands.contains(&Entity::Player(P0)), "its owner");
     t.resolve();
     assert_eq!(t.obj_now(crown).controller, P1);
+    // Its new controller can't give it back to its owner either.
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Plains", 2);
+    t.activate(P1, crown, 0, &[Entity::Player(P2)]).unwrap();
+    let cands = last_target_candidates(&t, P1);
+    assert!(cands.contains(&Entity::Player(P2)));
+    assert!(cands.contains(&Entity::Player(P1)));
+    assert!(!cands.contains(&Entity::Player(P0)), "its owner");
+    t.resolve();
+    assert_eq!(t.obj_now(crown).controller, P2);
 }
+
+// ---------------------------------------------------------------------------
+// Referents of comparisons and plural pronouns
+// ---------------------------------------------------------------------------
+
+#[test]
+fn hammerhead_tyrant_compares_with_the_cast_spells_mana_value() {
+    cr!("115.1", "601.2c");
+    // "with mana value less than or equal to that spell's mana value": the spell's, not
+    // the permanent's own (which would allow any permanent).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hammerhead Tyrant");
+    let bears = t.battlefield(P1, "Grizzly Bears"); // 2
+    let giant = t.battlefield(P1, "Hill Giant"); // 4
+    t.lands(P0, "Forest", 2);
+    let c = t.hand(P0, "Grizzly Bears"); // a spell with mana value 2
+    t.answer_targets(P0, &[bears.into()]);
+    t.cast(P0, c).go();
+    t.settle();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&bears.into()));
+    assert!(!cands.contains(&giant.into()), "mana value 4 is greater than 2");
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(giant));
+}
+
+#[test]
+fn rally_the_righteous_pumps_every_creature_it_untapped() {
+    cr!("105.2", "608.2c");
+    // "Untap target creature and each other creature that shares a color with it. Those
+    // creatures get +2/+0 until end of turn.": all of them, not just the target.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears"); // green
+    let elves = t.battlefield(P0, "Llanowar Elves"); // green
+    let giant = t.battlefield(P0, "Hill Giant"); // red
+    t.g.tap(bears);
+    t.g.tap(elves);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Plains", 1);
+    let c = t.hand(P0, "Rally the Righteous");
+    t.cast(P0, c).target(bears).go();
+    t.resolve();
+    assert!(!t.obj_now(bears).tapped && !t.obj_now(elves).tapped);
+    assert_eq!(t.pt(bears), (4, 2));
+    assert_eq!(t.pt(elves), (3, 1));
+    assert_eq!(t.pt(giant), (3, 3), "shares no color with the target");
+}
+
+#[test]
+fn mirror_box_counts_other_creatures_with_each_creatures_own_name() {
+    cr!("201.2a", "613.4c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mirror Box");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.recompute();
+    // Two other Grizzly Bears each.
+    assert_eq!(t.pt(a), (4, 4));
+    assert_eq!(t.pt(b), (4, 4));
+    assert_eq!(t.pt(c), (4, 4));
+    assert_eq!(t.pt(giant), (3, 3));
+    assert_eq!(t.pt(theirs), (2, 2));
+}
+
+#[test]
+fn vulpine_harvester_compares_with_the_attackers_total_power() {
+    cr!("508.1m", "608.2c");
+    ruling!(
+        "Vulpine Harvester",
+        "If the artifact card’s mana value is greater than the total power, it stays in your graveyard"
+    );
+    // "if its mana value is less than or equal to their total power": the attacking
+    // Phyrexians' total power, not the target's.
+    for (two, returned) in [(false, false), (true, true)] {
+        let mut t = TestGame::new(2);
+        let fox = t.battlefield(P0, "Vulpine Harvester"); // 3/3 Phyrexian
+        let mut attackers = vec![(fox, Entity::Player(P1))];
+        if two {
+            let other = t.battlefield(P0, "Vulpine Harvester");
+            attackers.push((other, Entity::Player(P1)));
+        }
+        let card = t.graveyard(P0, "Solemn Simulacrum"); // mana value 4
+        t.answer_targets(P0, &[card.into()]);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.attack(&attackers, &[]);
+        assert_eq!(
+            t.named_on_battlefield("Solemn Simulacrum").len() == 1,
+            returned,
+            "total power {}",
+            if two { 6 } else { 3 }
+        );
+    }
+}
+
+
+#[test]
+fn scrap_welder_returns_a_card_with_mana_value_less_than_the_sacrificed_ones() {
+    cr!("107.3a", "601.2c");
+    ruling!(
+        "Scrap Welder",
+        "A card with mana value equal to X is not a legal target"
+    );
+    // X is the sacrificed artifact's mana value, which mana doesn't limit: no lands.
+    let mut t = TestGame::new(2);
+    let welder = t.battlefield(P0, "Scrap Welder");
+    let solemn = t.battlefield(P0, "Solemn Simulacrum"); // 4
+    let gnomes = t.graveyard(P0, "Bottle Gnomes"); // 3
+    let icy = t.graveyard(P0, "Icy Manipulator"); // 4
+    t.answer(P0, DecisionKind::X, Answer::Number(4));
+    t.activate(P0, welder, 0, &[gnomes.into()]).unwrap();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&gnomes.into()));
+    assert!(!cands.contains(&icy.into()), "mana value equal to X");
+    t.resolve_all();
+    assert!(!t.on_battlefield(solemn));
+    assert_eq!(t.named_on_battlefield("Bottle Gnomes").len(), 1);
+}
+
+#[test]
+fn moorland_rescuer_uses_its_last_power_and_returns_only_other_cards() {
+    cr!("608.2h", "601.2c");
+    ruling!(
+        "Moorland Rescuer",
+        "uses the power Moorland Rescuer had when it was last on the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    let rescuer = t.battlefield(P0, "Moorland Rescuer"); // 4/4
+    t.g.add_counters(rescuer.into(), "+1/+1", 2, None); // power 6
+    let a = t.graveyard(P0, "Grizzly Bears"); // 2
+    let b = t.graveyard(P0, "Gray Ogre"); // 2
+    let c = t.graveyard(P0, "Grizzly Bears"); // 2
+    t.answer_choose(P0, &[a.into(), b.into(), c.into()]);
+    t.g.destroy(rescuer, None);
+    t.resolve_all();
+    // Total power 6 is within its last power, 6 (its card has power 4 in the graveyard).
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+    assert_eq!(t.named_on_battlefield("Gray Ogre").len(), 1);
+    assert!(t.in_exile("Moorland Rescuer"));
+    // "Other creature cards": the card itself isn't among the choices.
+    let offered: Vec<Entity> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert!(!offered.contains(&t.g.current(rescuer).into()));
+    assert!(offered.contains(&a.into()));
+}
+
+#[test]
+fn another_card_in_a_dies_trigger_isnt_the_dead_creatures_card() {
+    cr!("400.7", "115.1");
+    ruling!(
+        "Myr Retriever",
+        "If Myr Retriever dies at the same time as another artifact you own, its ability can target that other artifact card"
+    );
+    let mut t = TestGame::new(2);
+    let myr = t.battlefield(P0, "Myr Retriever");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.g.destroy(myr, None);
+    t.g.destroy(thopter, None);
+    t.settle();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&t.g.current(thopter).into()));
+    assert!(
+        !cands.contains(&t.g.current(myr).into()),
+        "another artifact card: not Myr Retriever itself"
+    );
+}
+

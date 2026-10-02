@@ -831,7 +831,15 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// What's counted by "for each [...]" or "the number of [...]" (singular or plural
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
-    parse_for_each_inner(s, it).or_else(|| super::value_grammar::whole_count(s, it))
+    let v = parse_for_each_inner(s, it).or_else(|| super::value_grammar::whole_count(s, it))?;
+    // "for each other creature you control with the same name as that creature" (Mirror
+    // Box): a relational qualifier's "it" is what "it" means here (each affected object).
+    match it {
+        Some(sel) if super::filters_relational::mentions_referent(&v) => {
+            super::filters_relational::substitute(&v, sel)
+        }
+        _ => Some(v),
+    }
 }
 
 fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {

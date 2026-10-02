@@ -494,6 +494,12 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
     let (stat, x) = stat_word(r)?;
     let (cmp, x) = cmp_phrase(x.trim_start())?;
     if let Some((other, rest)) = own_stat(x) {
+        // "with mana value less than or equal to its mana value" (Hammerhead Tyrant, after
+        // normalizing "that spell's"): an object's stat compared with the same stat is
+        // about another object, "it".
+        if other == stat {
+            return Some((stat_filter(stat, cmp, stat_of(stat, referent())), rest));
+        }
         return Some((
             Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(tested(other))),
             rest,
@@ -1361,6 +1367,22 @@ pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("their total ") {
         let (stat, rest) = stat_word(r)?;
         let (sel, _) = crate::oracle::effects::object_ref("them", b)?;
+        // Only a group named earlier: the objects of a "one or more" trigger or targets of
+        // a plural target phrase. Not a single target ("return target artifact card ... if
+        // its mana value is less than or equal to their total power" is about the
+        // attackers) nor objects an instruction of this sentence just moved ("exile the top
+        // X cards of your library, where X is their total power").
+        let plural = match &sel {
+            Sel::TriggerObjects => true,
+            Sel::Target(i) => b
+                .targets
+                .get(*i as usize)
+                .is_some_and(|t| t.max.as_const() != Some(1)),
+            _ => false,
+        };
+        if !plural {
+            return None;
+        }
         return Some((stat_of(stat, sel), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the total ") {

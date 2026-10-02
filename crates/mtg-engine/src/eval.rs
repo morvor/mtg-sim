@@ -607,7 +607,9 @@ impl Game {
             },
             Filter::HasAbilities => !c.has_no_abilities(),
             Filter::Source => ctx.source == Some(id),
-            Filter::Other => ctx.source != Some(id),
+            // "Another": not the source, nor the card it became after it left
+            // ("When ~ dies, return another target artifact card from your graveyard").
+            Filter::Other => ctx.source.is_none_or(|s| s != id && self.current(s) != id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
             // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
             Filter::Objects(v) => v.iter().any(|x| {

@@ -22,8 +22,8 @@ fn creature_types(c: &Characteristics) -> impl Iterator<Item = &Subtype> {
 }
 
 /// Whether these targets, taken together, have the relationship. Objects that left their
-/// zone are compared using their last known information. `ctx` gives X for
-/// [`TargetGroup::TotalAtMostX`].
+/// zone are compared using their last known information. `ctx` evaluates the limit of
+/// [`TargetGroup::TotalAtMost`].
 pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) -> bool {
     let objs: Vec<&crate::object::GameObject> = targets
         .iter()
