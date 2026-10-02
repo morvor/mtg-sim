@@ -504,3 +504,20 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
     }
     false
 }
+
+/// Called as a decision is asked for: a choice the rules demand of a player — the targets
+/// of an ability that has to have targets, the order of simultaneous triggered abilities
+/// — is part of the mandatory actions around it, so it doesn't interrupt a stretch of
+/// them (CR 104.4b, 732.5: no player can be forced to end a loop, and choosing what the
+/// looping objects call for doesn't end it).
+pub(crate) fn note_decision(g: &mut Game, d: &crate::decision::Decision) {
+    use crate::decision::Decision;
+    let required = match d {
+        Decision::ChooseTargets { min, .. } => *min >= 1,
+        Decision::Order { .. } => true,
+        _ => false,
+    };
+    if required && g.end.loop_mark == g.actions_taken {
+        g.end.loop_mark += 1;
+    }
+}

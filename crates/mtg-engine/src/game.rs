@@ -1116,6 +1116,7 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        crate::game_end::note_decision(self, &decision);
         self.actions_taken += 1;
         // CR 800.4g, 800.4h: another player makes a choice a player who left would make.
         let player = crate::multiplayer::substitute_chooser(self, player, &decision);
