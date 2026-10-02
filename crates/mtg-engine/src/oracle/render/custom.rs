@@ -36,7 +36,7 @@ impl Renderer<'_> {
                 "each player reveals the top card of their library".into()
             }
             "reveal top card if it shares a creature type with ~" => format!(
-                "look at the top card of your library. If it shares a creature type with {}, you may reveal it",
+                "if it shares a creature type with {}, you may reveal it",
                 me(self)
             ),
             "forecast:reveal this card from your hand" => {
@@ -77,7 +77,10 @@ impl Renderer<'_> {
                     None => (self.gap("divided counters without amount"), None),
                 };
                 let t = self.target_mention(slot, players::Case::Obj);
-                let c = c.trim_start_matches("a ").trim_start_matches("an ").to_string();
+                let c = c
+                    .trim_start_matches("a ")
+                    .trim_start_matches("an ")
+                    .to_string();
                 format!("distribute {c} among {t}{}", w.unwrap_or_default())
             }
             other => return self.gap(format!("Effect::Custom({other})")),

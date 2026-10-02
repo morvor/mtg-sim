@@ -53,6 +53,8 @@ pub(crate) struct Np {
     alts: Vec<String>,
     /// "card", "token", "spell", "permanent".
     kind: Option<&'static str>,
+    /// "permanent card" (CR 110.4b): "Rebel permanent card", "nonland permanent card".
+    permanent_card: bool,
     controller: Option<PlayerRel>,
     controller_matches: Option<String>,
     owner: Option<PlayerRel>,
@@ -116,6 +118,19 @@ impl Renderer<'_> {
             // "Enchant artifact or creature" Auras say "enchanted permanent"; "Enchant
             // nonland permanent" ones "enchanted permanent"; "Enchant opponent" ones
             // "enchanted player".
+            // "Enchant green or white creature": the alternatives are adjectives.
+            Some(n)
+                if n.contains(" or ")
+                    && n.rsplit_once(' ').is_some_and(|(adjs, _)| {
+                        adjs.split_whitespace()
+                            .map(|a| a.trim_end_matches(','))
+                            .filter(|a| *a != "or")
+                            .all(|a| CardType::from_word(a).is_none())
+                    }) =>
+            {
+                let head = n.rsplit(' ').next().unwrap_or(n);
+                format!("enchanted {head}")
+            }
             Some(n) if n.contains(" or ") || n.contains(", ") => "enchanted permanent".into(),
             Some(n) if n == "opponent" => "enchanted player".into(),
             Some(n) => {
@@ -243,7 +258,7 @@ impl Renderer<'_> {
             Filter::Monocolored => np.colors.push("monocolored".into()),
             Filter::Permanent => np.kind = Some("permanent"),
             Filter::PermanentCard => {
-                np.quality.push("permanent".into());
+                np.permanent_card = true;
                 np.kind = Some("card");
             }
             Filter::Spell | Filter::SpellOnStack => np.kind = Some("spell"),
@@ -483,6 +498,9 @@ impl Renderer<'_> {
         if !np.alts.is_empty() {
             let conj = if self.alt_and { "and" } else { "or" };
             words.push(join_list(&np.alts, conj));
+        }
+        if np.permanent_card {
+            words.push("permanent".into());
         }
         match np.kind {
             Some("permanent") if !words.is_empty() => {}

@@ -167,6 +167,40 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               land for mana\" and \"a land is tapped for mana\" are the same event.",
     },
     Equivalence {
+        pattern: r"\b(you|they)'ve\b",
+        replacement: "$1",
+        why: "\"If you've gained life this turn\" and \"if you gained life this turn\" ask \
+              the same thing.",
+    },
+    Equivalence {
+        pattern: r"\b(draws?) an additional card\b",
+        replacement: "$1 a card",
+        why: "A triggered draw is in addition to the normal draw anyway (CR 504.1).",
+    },
+    Equivalence {
+        pattern: r"\bsupport (\d+|x|one|two|three|four|five|six)\b",
+        replacement: "put a +1/+1 counter on each of up to $1 other target creatures",
+        why: "CR 701.41a: \"Support N\" on a permanent means \"Put a +1/+1 counter on each \
+              of up to N other target creatures.\"",
+    },
+    Equivalence {
+        pattern: r"(^|\. )([^.]+?) can't block (~|it)(\.|$)",
+        replacement: "$1~ can't be blocked by $2$4",
+        why: "\"Creatures with power less than ~'s power can't block it\" and \"~ can't be \
+              blocked by creatures with power less than its power\" are the same \
+              blocking restriction (CR 509.1b).",
+    },
+    Equivalence {
+        pattern: r"\bthe exiled (card|creature|permanent)s\b",
+        replacement: "the exiled $1",
+        why: "Grammatical number.",
+    },
+    Equivalence {
+        pattern: r"\bremove any number of (\S+) counters\b",
+        replacement: "remove x $1 counters",
+        why: "A cost of X counters is paid with any number of them (CR 107.3).",
+    },
+    Equivalence {
         pattern: r"\band/or\b",
         replacement: "and",
         why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
@@ -451,7 +485,13 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
             Some((_, d)) => d.to_string(),
             None => t,
         };
-        for part in t.split(' ') {
+        // A brace token ({T}, {alt:...}) is one token, spaces included.
+        let parts: Vec<&str> = if t.starts_with('{') {
+            vec![t.as_str()]
+        } else {
+            t.split(' ').collect()
+        };
+        for part in parts {
             let p = if part == "an" {
                 "a".to_string()
             } else {
@@ -924,8 +964,65 @@ pub fn check_card(def: &CardDef) -> CardCheck {
 /// Whether two normalized token sequences are the same. The renderer's `~it` (the object
 /// itself, just mentioned) matches "~" or "it": cards refer to an object that a trigger
 /// condition just named either by its name or by "it".
+///
+/// A rendering can also say that a part is optional, `{opt:it}`, or give alternative
+/// wordings, `{alt:that player|its controller}`, where the AST alone can't tell which one a
+/// card uses for the same meaning ("~ gets +1/+0 and can't be blocked" / "~ gets +1/+0.
+/// It can't be blocked.").
 pub fn tokens_match(a: &[String], b: &[String]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| token_eq(x, y))
+    seq_match(a, b) || seq_match(b, a)
+}
+
+/// An `{opt:...}` / `{alt:...|...}` token: (optional, alternatives).
+fn special_token(t: &str) -> Option<(bool, Vec<Vec<String>>)> {
+    if let Some(inner) = t.strip_prefix("{opt:").and_then(|x| x.strip_suffix('}')) {
+        return Some((true, vec![normalize_unit(inner)]));
+    }
+    if let Some(inner) = t.strip_prefix("{alt:").and_then(|x| x.strip_suffix('}')) {
+        return Some((false, inner.split('|').map(normalize_unit).collect()));
+    }
+    None
+}
+
+/// Matches `r` (which may contain special tokens) against `o`.
+fn seq_match(r: &[String], o: &[String]) -> bool {
+    fn go(
+        r: &[String],
+        o: &[String],
+        i: usize,
+        j: usize,
+        failed: &mut std::collections::HashSet<(usize, usize)>,
+    ) -> bool {
+        if i == r.len() {
+            return j == o.len();
+        }
+        if failed.contains(&(i, j)) {
+            return false;
+        }
+        let ok = match special_token(&r[i]) {
+            Some((optional, alts)) => {
+                (optional && go(r, o, i + 1, j, failed))
+                    || alts.iter().any(|alt| {
+                        j + alt.len() <= o.len()
+                            && alt.iter().zip(&o[j..]).all(|(x, y)| token_eq(x, y))
+                            && go(r, o, i + 1, j + alt.len(), failed)
+                    })
+            }
+            None => j < o.len() && token_eq(&r[i], &o[j]) && go(r, o, i + 1, j + 1, failed),
+        };
+        if !ok {
+            failed.insert((i, j));
+        }
+        ok
+    }
+    // Fast path: no special tokens.
+    if !r
+        .iter()
+        .any(|t| t.starts_with("{opt:") || t.starts_with("{alt:"))
+    {
+        return r.len() == o.len() && r.iter().zip(o).all(|(x, y)| token_eq(x, y));
+    }
+    go(r, o, 0, 0, &mut std::collections::HashSet::new())
 }
 
 /// Token equality for [`tokens_match`].

@@ -110,6 +110,12 @@ impl Renderer<'_> {
                         return format!("remove all {} from ~", plural(&counter_name(kind)));
                     }
                 }
+                // "Remove any number of storage counters from ~: Add {W} for each storage
+                // counter removed this way."
+                if matches!(count, Value::X) {
+                    self.x_for_each =
+                        Some(format!("for each {} removed this way", counter_name(kind)));
+                }
                 let (c, w) = self.counted(count, &counter_name(kind));
                 format!("remove {c} from ~{}", w.unwrap_or_default())
             }
@@ -261,14 +267,18 @@ impl Renderer<'_> {
             ActivationTiming::OpponentsTurn => restr.push("during an opponent's turn".into()),
             ActivationTiming::CombatWindow(ct) => restr.push(self.combat_timing(&ct)),
         }
+        // CR 702.142a: a boast ability can be activated only if the creature attacked this
+        // turn and only once each turn; that's what "Boast —" says.
+        let boast = self.keyword_ability == Some(crate::keywords::KeywordKind::Boast);
         match a.max_per_turn {
+            Some(1) if boast => {}
             None => {}
             Some(1) => restr.push("once each turn".into()),
             Some(2) => restr.push("twice each turn".into()),
             Some(n) => restr.push(format!("{} times each turn", number_word(n as i32))),
         }
         let solved = a.condition.as_ref().is_some_and(super::is_solved);
-        match a.condition.as_ref().filter(|_| !solved) {
+        match a.condition.as_ref().filter(|_| !solved && !boast) {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
                 if let ActivationTiming::CombatWindow(_) = a.timing {

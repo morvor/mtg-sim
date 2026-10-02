@@ -259,6 +259,13 @@ pub struct Renderer<'a> {
     pub(crate) trigger_player: Option<&'static str>,
     /// A hand was just revealed: a card chosen from it is "from it".
     pub(crate) revealed_hand: bool,
+    /// What X stands for when the cost defined it ("for each storage counter removed this
+    /// way").
+    pub(crate) x_for_each: Option<String>,
+    /// The trigger condition names an opponent ("a land an opponent controls enters").
+    pub(crate) trigger_names_opponent: bool,
+    /// The keyword an activated ability is introduced by ("Boast — ...").
+    pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
 }
 
 impl<'a> Renderer<'a> {
@@ -279,6 +286,9 @@ impl<'a> Renderer<'a> {
             var_defs: Vec::new(),
             trigger_player: None,
             revealed_hand: false,
+            x_for_each: None,
+            trigger_names_opponent: false,
+            keyword_ability: None,
         }
     }
 
@@ -347,10 +357,14 @@ impl<'a> Renderer<'a> {
         self.var_defs.clear();
         self.trigger_player = None;
         self.revealed_hand = false;
+        self.x_for_each = None;
+        self.trigger_names_opponent = false;
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),
             AbilityKind::Activated(act) => {
+                self.keyword_ability = crate::keyword_impls::ability_from_keyword(a);
                 let s = self.activated(act);
+                self.keyword_ability = None;
                 // "Exhaust — {2}{R}: ..." (CR 702.177a), "Power-up — ...", "Boast — ...":
                 // keywords that modify the activated ability they introduce, recognized
                 // the same way the engine recognizes them.

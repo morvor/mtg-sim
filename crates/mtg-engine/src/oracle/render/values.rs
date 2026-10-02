@@ -128,7 +128,11 @@ impl Renderer<'_> {
                 )
             }
             Value::SpellsCastThisTurn(p, f) => {
-                let n = self.noun(f, Num::Many);
+                let n = if matches!(f, Filter::Any | Filter::Spell) {
+                    "spells".to_string()
+                } else {
+                    self.noun(f, Num::Many)
+                };
                 let n = if n.contains("spell") {
                     n
                 } else {
@@ -285,6 +289,14 @@ impl Renderer<'_> {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
             Condition::Not(inner) => self.negated_condition(inner),
+            // "If you cast it from your hand".
+            Condition::And(v)
+                if v.len() == 2
+                    && matches!(v[0], Condition::WasCast)
+                    && matches!(v[1], Condition::CastFrom(_)) =>
+            {
+                self.condition(&v[1])
+            }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")
@@ -604,6 +616,21 @@ impl Renderer<'_> {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
         }
+        // "you have two or more opponents".
+        if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
+        {
+            return format!("you have {} or more opponents", number_word(*n));
+        }
+        // "creatures you control have total power 8 or greater".
+        if let (Value::PowerOf(s), Value::Const(n)) = (a, b) {
+            if let Sel::All(f) = s.as_ref() {
+                let noun = self.noun_det(f, Det::Plural);
+                return format!(
+                    "{noun} have total power {}",
+                    cmp_phrase(cmp, &n.to_string())
+                );
+            }
+        }
         if let (Value::Custom(name), Value::Const(n)) = (a, b) {
             if let Some(s) = self.custom_compare(name, cmp, *n) {
                 return s;
@@ -764,7 +791,15 @@ impl Renderer<'_> {
                 } else {
                     format!("{w} has")
                 };
-                let noun = self.noun(f, if min <= 1 { Num::One } else { Num::Many });
+                let noun = if matches!(f, Filter::Any | Filter::Spell) {
+                    if min <= 1 {
+                        "spell".to_string()
+                    } else {
+                        "spells".to_string()
+                    }
+                } else {
+                    self.noun(f, if min <= 1 { Num::One } else { Num::Many })
+                };
                 let noun = if noun.contains("spell") {
                     noun
                 } else if min <= 1 {

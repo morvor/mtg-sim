@@ -85,6 +85,8 @@ impl Renderer<'_> {
             self.trigger_player = Some("that spell's controller");
         }
         let trig = self.trigger_text(&t.trigger);
+        self.trigger_names_opponent =
+            trig.contains("an opponent controls") || trig.contains("your opponents control");
         let saved_salient = self.self_salient;
         self.self_salient = trig.contains('~');
         let mut s = trig;
@@ -628,6 +630,26 @@ impl Renderer<'_> {
                 let p = self.is_predicate(f, false);
                 let p = p.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(p);
                 Ev::new(e.subj, format!("{} while {p}", e.vp))
+            }
+            // "Whenever you cast a spell during an opponent's turn".
+            TriggerCond::Where {
+                trigger,
+                cond: cond @ (Condition::NotYourTurn | Condition::YourTurn),
+            } => {
+                let e = self.trigger_event(trigger, det);
+                let when = match cond {
+                    Condition::NotYourTurn => "during an opponent's turn",
+                    _ => "during your turn",
+                };
+                Ev::new(e.subj, format!("{} {when}", e.vp))
+            }
+            // "Whenever you roll a 1".
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(n)),
+            } if matches!(trigger.as_ref(), TriggerCond::RollDie(_)) => {
+                let e = self.trigger_event(trigger, det);
+                Ev::new(e.subj, format!("roll {}", with_article(&n.to_string())))
             }
             TriggerCond::Where { trigger, cond } => {
                 let e = self.trigger_event(trigger, det);

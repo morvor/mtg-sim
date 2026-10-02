@@ -37,6 +37,12 @@ pub enum Case {
 
 fn decline(s: String, case: Case) -> String {
     match case {
+        // Alternative wordings each take the possessive.
+        Case::Poss if s.starts_with("{alt:") && s.ends_with('}') => {
+            let inner = &s["{alt:".len()..s.len() - 1];
+            let alts: Vec<String> = inner.split('|').map(possessive).collect();
+            format!("{{alt:{}}}", alts.join("|"))
+        }
         Case::Poss => possessive(&s),
         _ => s,
     }
@@ -371,6 +377,14 @@ impl Renderer<'_> {
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
             PlayerRef::Target(i) => return self.target_mention(*i, case),
+            // "Whenever a land enters under an opponent's control, that player loses 2
+            // life": the opponent the trigger named.
+            PlayerRef::ControllerOf(sel)
+                if self.trigger_names_opponent
+                    && matches!(sel.as_ref(), Sel::TriggerObject | Sel::TriggerLki) =>
+            {
+                "{alt:that player|its controller}".into()
+            }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} controller")

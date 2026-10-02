@@ -1011,7 +1011,7 @@ impl Renderer<'_> {
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
                     A::EnterAsCopy { filter, optional } => {
-                        let n = self.noun_det(filter, Det::A);
+                        let n = format!("any {}", self.noun(filter, Num::One));
                         if *optional {
                             format!("you may have {subj} enter as a copy of {n} on the battlefield")
                         } else {

@@ -246,6 +246,15 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Obj);
                 format!("double the number of {k} on {s}")
             }
+            // "Return the exiled card to the battlefield": each card linked to this object.
+            Effect::ForEach {
+                sel: Sel::Linked | Sel::CreatorLinked,
+                var,
+                effect,
+            } => {
+                self.var_defs.push((*var, Sel::CreatorLinked, false));
+                self.effect(effect)
+            }
             Effect::ForEach { sel, effect, .. } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
@@ -512,6 +521,10 @@ impl Renderer<'_> {
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
+                // "~ can attack this turn as though it didn't have defender."
+                if d == "this turn" && r.contains(" as though ") {
+                    return r.replacen(" as though ", " this turn as though ", 1);
+                }
                 // "Target creature blocks this turn if able."
                 if d == "this turn" {
                     if let Some(x) = r.strip_suffix(" each combat if able") {
@@ -1239,7 +1252,8 @@ impl Renderer<'_> {
                     Duration::EndOfTurn | Duration::ThisTurn => " this turn",
                     _ => "",
                 };
-                let vp = self.mods_vp(mods, true);
+                // "The next noncreature spell you cast this turn has affinity for artifacts."
+                let vp = self.mods_vp(mods, false);
                 format!("the next {f} you cast{d} {vp}")
             }
             Effect::CopySpellRetargeted { what, target } => {
@@ -1316,6 +1330,46 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "~ gets +1/+0 until end of turn and can't be blocked this turn."
+            if let (Some(Effect::Modify { .. }), Some(Effect::AddRestriction { .. })) =
+                (v.get(i), v.get(i + 1))
+            {
+                let a = self.effect(&v[i]);
+                let b = self.effect(&v[i + 1]);
+                let rest = ["~it ", "it ", "they ", "them "]
+                    .iter()
+                    .find_map(|p| b.strip_prefix(p));
+                match rest {
+                    // Cards say both "... and can't be blocked" and "... It can't be
+                    // blocked".
+                    Some(r) => parts.push(format!("{a} and {{opt:it}} {r}")),
+                    None => {
+                        parts.push(a);
+                        parts.push(b);
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            // "Exile ~ with three time counters on it."
+            if let (
+                Some(Effect::Exile {
+                    what,
+                    face_down: false,
+                    ..
+                }),
+                Some(Effect::AddCounters { what: w2, kind, n }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                let same = same_sel(what, w2) || matches!(w2, Sel::Var(x) if *x == vars::IT);
+                if same {
+                    let w = self.sel(what, Case::Obj);
+                    let (c, _) = self.counted(n, &counter_name(kind));
+                    parts.push(format!("exile {w} with {c} on it"));
+                    i += 2;
+                    continue;
+                }
+            }
             // "Put two +1/+1 counters and a flying counter on ~."
             if let Effect::AddCounters { what, .. } = &v[i] {
                 let mut j = i + 1;
@@ -2490,6 +2544,10 @@ impl Renderer<'_> {
                     Value::Count(f) => {
                         let n = self.for_each_noun(f);
                         format!("{sym} for each {}", n)
+                    }
+                    Value::X if self.x_for_each.is_some() => {
+                        let fe = self.x_for_each.clone().unwrap_or_default();
+                        format!("{sym} {fe}")
                     }
                     other => {
                         let s = self.value(other);
