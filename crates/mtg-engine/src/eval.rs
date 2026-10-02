@@ -979,10 +979,13 @@ impl Game {
                 .iter()
                 .map(|o| self.obj(*o).power() as i64)
                 .sum(),
+            // CR 607.3: several objects ("the total toughness of creatures you control")
+            // give several answers, which are summed.
             Value::ToughnessOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.obj(*o).toughness() as i64),
+                .iter()
+                .map(|o| self.obj(*o).toughness() as i64)
+                .sum(),
             // CR 607.3: several objects give several answers, which are summed.
             Value::ManaValueOf(s) => self
                 .eval_sel_objects(s, ctx)
