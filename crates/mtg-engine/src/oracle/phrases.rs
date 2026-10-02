@@ -481,7 +481,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
-            // "target creature with the same name as this creature" (Evil Twin, CR 201.2).
+            // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("your team controls") {
             // CR 102.4: "your team" means "you and/or your teammates".

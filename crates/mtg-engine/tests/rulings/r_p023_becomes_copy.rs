@@ -1,6 +1,6 @@
 //! Rulings batch P023 — permanents that become a copy of a creature: becoming a copy of a
 //! token copies the original characteristics the effect that created it gave it and
-//! doesn't make the permanent a token (CR 707.2, 111.4); becoming a copy of something
+//! doesn't make the permanent a token (CR 707.2, 111.3); becoming a copy of something
 //! that's copying something else copies what it copies (CR 707.3).
 
 use crate::r_p023_common::*;
@@ -25,7 +25,7 @@ fn fleeting_reflection(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn fleeting_reflection_copying_a_token() {
-    cr!("707.2", "111.4", "611.2a");
+    cr!("707.2", "111.3");
     ruling!(
         "Fleeting Reflection",
         "If the copied creature is a token, the first target creature copies the original characteristics of that token as stated by the effect that created that token."
@@ -38,7 +38,7 @@ fn fleeting_reflection_copying_a_token() {
 
 #[test]
 fn fleeting_reflection_copying_a_clone() {
-    cr!("707.3", "611.2a");
+    cr!("707.3");
     ruling!(
         "Fleeting Reflection",
         "If the copied creature is copying something else, then the first target creature becomes a copy of whatever that creature copied."
@@ -67,7 +67,7 @@ fn muddle_copies(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn muddle_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Muddle, the Ever-Changing",
         "If the copied creature is a token, Muddle copies the original characteristics of that token as stated by the effect that created that token, with the stated exception."
@@ -108,7 +108,7 @@ fn hallcreeper_copies(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn silent_hallcreeper_copying_a_token() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Silent Hallcreeper",
         "If the copied creature is a token, Silent Hallcreeper copies the original characteristics of that token as stated by the effect that created that token."

@@ -1,6 +1,6 @@
 //! Shared helpers for rulings batch P023 (`r_p023_*.rs`): copying a token copies the
 //! original characteristics the creating effect gave it, and copying something that's
-//! copying something else copies what it copies (CR 707.2, 707.3, 111.4); {X} in a copied
+//! copying something else copies what it copies (CR 707.2, 707.3, 111.3); {X} in a copied
 //! mana cost is 0 (CR 107.3, 202.3).
 
 #![allow(dead_code)]

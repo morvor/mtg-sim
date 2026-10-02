@@ -2,9 +2,9 @@
 //! that refers to creatures "with the same name as this creature" (Evil Twin, Callidus
 //! Assassin, Mocking Doppelganger, Pirated Copy): choosing a token copies the original
 //! characteristics the effect that created the token gave it, and the permanent doesn't
-//! become a token (CR 707.2, 111.4); choosing something that's copying something else
+//! become a token (CR 707.2, 111.3); choosing something that's copying something else
 //! copies what it copies (CR 707.3); the granted ability is part of the copy (CR 707.9a)
-//! and "the same name" is the copied name (CR 201.2).
+//! and "the same name" is the copied name (CR 201.2a).
 
 use crate::r_p023_common::*;
 use crate::r_s01_common::supported;
@@ -34,7 +34,7 @@ fn twin_destroys(t: &mut TestGame, twin: ObjectId, victim: ObjectId) {
 
 #[test]
 fn evil_twin_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a", "201.2");
+    cr!("707.2", "111.3", "707.9a", "201.2a");
     ruling!(
         "Evil Twin",
         "If the chosen creature is a token, Evil Twin copies the original characteristics of that token as stated by the effect that created the token. Evil Twin is not a token in this case."
@@ -50,7 +50,7 @@ fn evil_twin_copying_a_token() {
 
 #[test]
 fn evil_twin_copying_a_clone() {
-    cr!("707.3", "707.9a", "201.2");
+    cr!("707.3", "707.9a", "201.2a");
     ruling!(
         "Evil Twin",
         "If the chosen creature is copying something else (for example, if the chosen creature is another Evil Twin), then your Evil Twin enters the battlefield as whatever the chosen creature copied."
@@ -82,7 +82,7 @@ fn assassin_copies(t: &mut TestGame, what: ObjectId, victim: ObjectId) -> Object
 
 #[test]
 fn callidus_assassin_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a", "201.2");
+    cr!("707.2", "111.3", "707.9a", "201.2a");
     ruling!(
         "Callidus Assassin",
         "If the chosen creature is a token, Callidus Assassin copies the original characteristics of that token as stated by the effect that created the token. Callidus Assassin is not a token in this case."
@@ -96,7 +96,7 @@ fn callidus_assassin_copying_a_token() {
 
 #[test]
 fn callidus_assassin_copying_a_clone() {
-    cr!("707.3", "707.9a", "201.2");
+    cr!("707.3", "707.9a", "201.2a");
     ruling!(
         "Callidus Assassin",
         "If the chosen creature is copying something else (for example, if the chosen creature is another Callidus Assassin), then your Callidus Assassin enters the battlefield as whatever the chosen creature copied."
@@ -111,7 +111,7 @@ fn callidus_assassin_copying_a_clone() {
 
 #[test]
 fn mocking_doppelganger_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a", "701.15b");
+    cr!("707.2", "111.3", "707.9a", "701.15b");
     ruling!(
         "Mocking Doppelganger",
         "If the chosen creature is a token, Mocking Doppelganger copies the original characteristics of that token, except for the added ability. Mocking Doppelganger doesn't become a token in this case."
@@ -170,7 +170,7 @@ fn pirated_copy_connects(t: &mut TestGame, pc: ObjectId, damage: i32) {
 
 #[test]
 fn pirated_copy_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a", "707.9b");
+    cr!("707.2", "111.3", "707.9a", "707.9b");
     ruling!(
         "Pirated Copy",
         "If the chosen creature is a token, Pirated Copy copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Pirated Copy is not a token, even when copying one."
@@ -198,4 +198,29 @@ fn pirated_copy_copying_a_clone() {
     assert_angel(&t, pc, true);
     assert!(t.obj_now(pc).has_keyword(KeywordKind::Vigilance));
     pirated_copy_connects(&mut t, pc, 4);
+}
+
+#[test]
+fn pirated_copys_ability_triggers_only_for_creatures_with_its_name() {
+    cr!("201.2a", "707.9a");
+    supported("Pirated Copy");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Runeclaw Bear");
+    let pc = enter_copying(&mut t, P0, "Pirated Copy", bears);
+    assert_eq!(t.obj_now(pc).chars.name, "Grizzly Bears");
+    unsick(&mut t, bears);
+    unsick(&mut t, other);
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let hand = t.hand_size(P0);
+    // Pirated Copy stays home: the other Grizzly Bears triggers it, Runeclaw Bear doesn't.
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[(bears, Entity::Player(P1)), (other, Entity::Player(P1))],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.hand_size(P0), hand + 1);
 }

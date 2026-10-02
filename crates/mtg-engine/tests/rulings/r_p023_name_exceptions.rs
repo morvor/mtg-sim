@@ -3,7 +3,7 @@
 //! token copies the original characteristics the effect that created it gave it and
 //! doesn't make the permanent a token (nor stop a token being one); copying something
 //! that's copying something else copies what it copies; {X} in the copied mana cost is 0
-//! (CR 707.2, 707.3, 707.9b, 111.4, 107.3m, 202.3e).
+//! (CR 707.2, 707.3, 707.9b, 111.3, 107.3m, 202.3e).
 
 use crate::r_p023_common::*;
 use crate::r_s01_common::supported;
@@ -54,7 +54,7 @@ fn is_legendary(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn sarkhan_copying_a_dragon_token() {
-    cr!("707.2", "111.4", "707.9b", "611.2a");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Sarkhan, Soul Aflame",
         "If the copied Dragon is a token, Sarkhan copies the original characteristics of that token as stated by the effect that created that token, with the noted exceptions."
@@ -130,7 +130,7 @@ fn kimahri_copies(t: &mut TestGame, kimahri: ObjectId, what: ObjectId) {
 
 #[test]
 fn kimahri_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Kimahri, Valiant Guardian",
         "If the copied creature is a token, Kimahri copies the original characteristics of that token as stated by the effect that created the token, with the listed exceptions."
@@ -182,7 +182,7 @@ fn imitator_attacks(t: &mut TestGame, imitator: ObjectId, what: ObjectId) {
 
 #[test]
 fn sunfrill_imitator_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Sunfrill Imitator",
         "If the copied creature is a token, Sunfrill Imitator copies the original characteristics of that token as stated by the effect that created the token. Copying a token doesn't make Sunfrill Imitator a token."
@@ -203,7 +203,7 @@ fn sunfrill_imitator_copying_a_token() {
 
 #[test]
 fn a_sunfrill_imitator_token_copying_a_nontoken_stays_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Sunfrill Imitator",
         "Similarly, if Sunfrill Imitator itself is a token, copying a nontoken permanent doesn't make it stop being a token."

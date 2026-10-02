@@ -1091,7 +1091,7 @@ pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
         );
     }
     if let Some(r) = s.strip_prefix("~ or another ") {
-        // "~ or another creature with the same name" (as ~; Pirated Copy, CR 201.2).
+        // "~ or another creature with the same name" (as ~; Pirated Copy, CR 201.2a).
         let (r, same_name) = match r.strip_suffix(" with the same name") {
             Some(x) => (x, true),
             None => (r, false),

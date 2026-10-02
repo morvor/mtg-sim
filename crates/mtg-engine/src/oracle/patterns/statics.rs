@@ -214,7 +214,7 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((f, ""));
         }
     }
-    // "named ~", "with the same name as ~": the same name as this object (CR 201.2).
+    // "named ~", "with the same name as ~": the same name as this object (CR 201.2a).
     if let Some(r) = t
         .strip_prefix("named ~")
         .or_else(|| t.strip_prefix("with the same name as ~"))

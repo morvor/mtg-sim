@@ -60,14 +60,11 @@ fn only_colors(s: &str) -> Option<ColorSet> {
     (!colors.is_colorless()).then_some(colors)
 }
 
-/// "an artifact", "an artifact creature": card types only, replacing the copied ones.
+/// "an artifact": a single card type replacing the copied ones (CR 205.1a). Not "an
+/// artifact creature", which keeps the prior card types and subtypes (CR 205.1b).
 fn only_card_types(s: &str) -> Option<Vec<CardType>> {
     let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
-    let types: Vec<CardType> = s
-        .split_whitespace()
-        .map(CardType::from_word)
-        .collect::<Option<_>>()?;
-    (!types.is_empty()).then_some(types)
+    Some(vec![CardType::from_word(s)?])
 }
 
 /// "4/4" → (4, 4).

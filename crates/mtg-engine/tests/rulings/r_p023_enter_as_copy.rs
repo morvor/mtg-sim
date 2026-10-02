@@ -1,7 +1,7 @@
 //! Rulings batch P023 — permanents that enter as a copy of a creature ("You may have this
 //! creature enter as a copy of ..."): choosing a token copies the original
 //! characteristics the effect that created the token gave it, and the permanent doesn't
-//! become a token (CR 707.2, 111.4); choosing something that's copying something else
+//! become a token (CR 707.2, 111.3); choosing something that's copying something else
 //! copies what it copies, as modified by that copy effect's exceptions (CR 707.3,
 //! 707.9b); a copied {X} is 0 (CR 107.3i, 202.3).
 
@@ -60,7 +60,7 @@ fn abilities_with(t: &TestGame, id: ObjectId, s: &str) -> usize {
 
 #[test]
 fn gigantoplasm_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Gigantoplasm",
         "If the chosen creature is a token, Gigantoplasm copies the original characteristics of that token as stated by the effect that created the token. Gigantoplasm isn't a token, even if it's copying one."
@@ -92,7 +92,7 @@ fn gigantoplasm_copying_another_gigantoplasm() {
 
 #[test]
 fn glasspool_mimic_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Glasspool Mimic // Glasspool Shore",
         "If the chosen creature is a token, Glasspool Mimic copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Glasspool Mimic doesn't become a token in this case."
@@ -114,7 +114,7 @@ fn glasspool_mimic_copying_a_clone() {
 
 #[test]
 fn visage_bandit_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Visage Bandit",
         "If the copied creature is a token, Visage Bandit copies the original characteristics of that token as stated by the effect that created that token, with the stated exceptions."
@@ -138,7 +138,7 @@ fn visage_bandit_copying_a_clone() {
 
 #[test]
 fn mercurial_pretender_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Mercurial Pretender",
         "If the chosen creature is a token, Mercurial Pretender copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Mercurial Pretender is not a token, even when copying one."
@@ -167,7 +167,7 @@ fn mercurial_pretender_copying_another_mercurial_pretender() {
 
 #[test]
 fn mirror_image_copying_a_token() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Mirror Image",
         "If the chosen creature is a token, Mirror Image copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Mirror Image doesn't become a token in this case."
@@ -187,7 +187,7 @@ fn mirror_image_copying_a_clone() {
 
 #[test]
 fn stunt_double_copying_a_token() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Stunt Double",
         "If the chosen creature is a token, Stunt Double copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Stunt Double isn’t a token."
@@ -207,7 +207,7 @@ fn stunt_double_copying_a_clone() {
 
 #[test]
 fn clone_copying_a_token() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Clone",
         "If the copied creature is a token, Clone copies the original characteristics of that token as stated by the effect that created the token."
@@ -237,7 +237,7 @@ fn vizier_of_many_faces_copying_a_clone() {
 
 #[test]
 fn progenitor_mimic_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Progenitor Mimic",
         "If the chosen creature is a token, Progenitor Mimic copies the original characteristics of that token as stated by the effect that put it onto the battlefield. Copying a token doesn't make Progenitor Mimic become a token."
@@ -250,7 +250,7 @@ fn progenitor_mimic_copying_a_token() {
 
 #[test]
 fn mirrorhall_mimic_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Mirrorhall Mimic // Ghastly Mimicry",
         "If the chosen creature is a token, Mirrorhall Mimic copies the original characteristics of that token as stated by the effect that put the token onto the battlefield, except it's a Spirit. Mirrorhall Mimic doesn't become a token in this case."
@@ -272,7 +272,7 @@ fn mirrorhall_mimic_copying_a_clone() {
 
 #[test]
 fn phantasmal_image_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Phantasmal Image",
         "If the chosen creature is a token, Phantasmal Image copies the original characteristics of that token as stated by the effect that created the token. Phantasmal Image is not a token in this case."
@@ -294,7 +294,7 @@ fn phantasmal_image_copying_a_clone() {
 
 #[test]
 fn sakashimas_student_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Sakashima's Student",
         "If the chosen creature is a token, Sakashima's Student copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Sakashima's Student is not a token."
@@ -316,7 +316,7 @@ fn sakashimas_student_copying_a_clone() {
 
 #[test]
 fn synth_infiltrator_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Synth Infiltrator",
         "If the copied creature is a token, Synth Infiltrator copies the original characteristics of that token as stated by the effect that created that token, with the noted exceptions."
@@ -340,7 +340,7 @@ fn synth_infiltrator_copying_a_clone() {
 
 #[test]
 fn copycrook_copying_a_token() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Copycrook",
         "If the chosen permanent is a token, Copycrook copies the original characteristics of that token as stated by the effect that put the token onto the battlefield, with the listed exception. Copycrook does not become a token."
@@ -362,7 +362,7 @@ fn copycrook_copying_a_clone() {
 
 #[test]
 fn dacks_duplicate_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Dack's Duplicate",
         "If the chosen creature is a token, Dack's Duplicate copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Dack's Duplicate is not a token, even when copying one."
@@ -386,7 +386,7 @@ fn dacks_duplicate_copying_a_clone() {
 
 #[test]
 fn quicksilver_gargantuan_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Quicksilver Gargantuan",
         "If the chosen creature is a token, your Quicksilver Gargantuan copies the original characteristics of that token as stated by the effect that put the token onto the battlefield, except for its power and toughness. Your Quicksilver Gargantuan is not a token."
@@ -408,7 +408,7 @@ fn quicksilver_gargantuan_copying_a_clone() {
 
 #[test]
 fn malleable_impostor_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Malleable Impostor",
         "If the chosen permanent is a token, Malleable Impostor copies the original characteristics of that token as stated by the effect that put the token onto the battlefield, with the listed exceptions."
@@ -431,7 +431,7 @@ fn malleable_impostor_copying_a_clone() {
 
 #[test]
 fn deceptive_frostkite_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Deceptive Frostkite",
         "If the copied creature is a token, Deceptive Frostkite copies the original characteristics of that token as stated by the effect that created the token, with the listed exceptions."
@@ -456,7 +456,7 @@ fn deceptive_frostkite_copying_a_clone() {
 
 #[test]
 fn jwari_shapeshifter_copying_an_ally_token() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Jwari Shapeshifter",
         "If the chosen creature is a token, your Jwari Shapeshifter copies the original characteristics of that token as stated by the effect that put the token onto the battlefield. Your Jwari Shapeshifter is not a token."
@@ -557,7 +557,7 @@ fn assert_effigy(t: &mut TestGame, effigy: ObjectId, name: &str, color: Color) {
 
 #[test]
 fn machine_gods_effigy_copying_a_token() {
-    cr!("707.2", "111.4", "707.9b", "205.1a");
+    cr!("707.2", "111.3", "707.9b", "205.1a");
     ruling!(
         "Machine God's Effigy",
         "If the chosen creature is a token, Machine God’s Effigy copies the original characteristics of that token as stated by the effect that created the token, plus the listed exceptions. Machine God’s Effigy is not a token, even when copying one."

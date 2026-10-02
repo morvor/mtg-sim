@@ -1,6 +1,6 @@
 //! Rulings batch P023 — effects that create a token that's a copy of a creature: if the
 //! copied creature is a token, the new token copies the original characteristics the
-//! effect that created that token gave it (CR 707.2, 111.4); if it's copying something
+//! effect that created that token gave it (CR 707.2, 111.3); if it's copying something
 //! else, the new token is whatever it copied, as modified by that copy effect's
 //! exceptions (CR 707.3, 707.9b); a copied {X} is 0 (CR 107.3g, 202.3e).
 
@@ -92,7 +92,7 @@ fn legendary(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn self_reflection_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Self-Reflection",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -102,7 +102,7 @@ fn self_reflection_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn cackling_counterpart_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Cackling Counterpart",
         "If the copied creature is a token, the token that’s created copies the original characteristics of that token as stated by the effect that created the token."
@@ -112,7 +112,7 @@ fn cackling_counterpart_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn quasiduplicate_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Quasiduplicate",
         "If the copied creature is itself a token, the token created by Quasiduplicate copies the original characteristics of that token as stated by the effect that created it."
@@ -122,7 +122,7 @@ fn quasiduplicate_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn fated_infatuation_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Fated Infatuation",
         "If the copied creature is a token, the token created by Fated Infatuation copies the original characteristics of that token as stated by the effect that put the token onto the battlefield."
@@ -132,7 +132,7 @@ fn fated_infatuation_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn rally_the_galadhrim_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Rally the Galadhrim",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token."
@@ -142,7 +142,7 @@ fn rally_the_galadhrim_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn quantum_misalignment_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Quantum Misalignment",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -152,7 +152,7 @@ fn quantum_misalignment_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn replicate_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "709.3");
+    cr!("707.2", "111.3", "709.3");
     ruling!(
         "Repudiate // Replicate",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -194,7 +194,7 @@ fn cast_replicate(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
 
 #[test]
 fn supplant_form_copies_a_returned_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "608.2h");
+    cr!("707.2", "111.3", "608.2h");
     ruling!(
         "Supplant Form",
         "If the copied creature is a token, the token created by Supplant Form copies the original characteristics of that token as stated by the effect that put it onto the battlefield."
@@ -206,7 +206,7 @@ fn supplant_form_copies_a_returned_tokens_original_characteristics() {
 
 #[test]
 fn sublime_epiphany_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "700.2");
+    cr!("707.2", "111.3", "700.2");
     ruling!(
         "Sublime Epiphany",
         "If the copied creature is itself a token, the token created by Sublime Epiphany copies the original characteristics of that token as stated by the effect that created it."
@@ -216,7 +216,7 @@ fn sublime_epiphany_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn mirage_mockery_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "700.2");
+    cr!("707.2", "111.3", "700.2");
     ruling!(
         "Mirage Mockery",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created that token."
@@ -226,7 +226,7 @@ fn mirage_mockery_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn clone_legion_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Clone Legion",
         "If the copied creature is a token, the token created by Clone Legion copies the original characteristics of that token as stated by the effect that put the token onto the battlefield."
@@ -249,7 +249,7 @@ fn clone_legion_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn croaking_counterpart_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Croaking Counterpart",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created that token, with the exceptions noted above."
@@ -268,7 +268,7 @@ fn croaking_counterpart_copies_a_tokens_original_characteristics_with_the_except
 
 #[test]
 fn electroduplicate_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Electroduplicate",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token, with the listed exceptions."
@@ -279,7 +279,7 @@ fn electroduplicate_copies_a_tokens_original_characteristics_with_the_exceptions
 
 #[test]
 fn kindle_the_inner_flame_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Kindle the Inner Flame",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token, with the listed exceptions."
@@ -290,7 +290,7 @@ fn kindle_the_inner_flame_copies_a_tokens_original_characteristics_with_the_exce
 
 #[test]
 fn ember_island_production_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Ember Island Production",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token, with the listed exceptions."
@@ -313,7 +313,7 @@ fn ember_island_production_copies_what_a_clone_is_copying_with_the_exceptions() 
 
 #[test]
 fn hate_mirage_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Hate Mirage",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -342,7 +342,7 @@ fn hate_mirage_copies_what_a_clone_is_copying() {
 
 #[test]
 fn tempt_with_reflections_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Tempt with Reflections",
         "If the copied creature is a token, the tokens created by Tempt with Reflections copy the original characteristics of that token as stated by the effect that put the token onto the battlefield."
@@ -382,7 +382,7 @@ fn tempt_with_reflections_copies_what_a_clone_is_copying() {
 
 #[test]
 fn aggressive_biomancy_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "707.9a");
+    cr!("707.2", "111.3", "707.9a");
     ruling!(
         "Aggressive Biomancy",
         "If the copied creature is itself a token, the tokens created by Aggressive Biomancy copy the original characteristics of that token as stated by the effect that created it, with the listed exception."
@@ -431,7 +431,7 @@ fn aggressive_biomancy_copies_what_a_clone_is_copying() {
 
 #[test]
 fn here_comes_a_new_hero_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Here Comes a New Hero!",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -453,7 +453,7 @@ fn here_comes_a_new_hero_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn here_comes_a_new_hero_treats_x_in_the_copied_cost_as_zero() {
-    cr!("107.3g", "202.3e", "115.4");
+    cr!("107.3g", "202.3e");
     ruling!(
         "Here Comes a New Hero!",
         "If the copied creature has {X} in its mana cost, X is 0. This is also true when calculating the mana value of a creature on the battlefield in order to determine whether or not the creature is a legal target for this spell."
@@ -483,7 +483,7 @@ fn here_comes_a_new_hero_treats_x_in_the_copied_cost_as_zero() {
 
 #[test]
 fn orthion_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Orthion, Hero of Lavabrink",
         "If the copied creature is a token, the token that’s created copies the original characteristics of that token as stated by the effect that created that token."
@@ -505,7 +505,7 @@ fn orthion_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn the_fire_crystal_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "The Fire Crystal",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -548,7 +548,7 @@ fn fire_crystal_copy(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
 
 #[test]
 fn tempestra_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Tempestra, Dame of Games",
         "If the copied creature is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created the token."
@@ -592,7 +592,7 @@ fn tempestra_copy(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn the_jolly_balloon_man_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "The Jolly Balloon Man",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token, with the stated exceptions."
@@ -621,7 +621,7 @@ fn the_jolly_balloon_man_copies_a_tokens_original_characteristics_with_the_excep
 
 #[test]
 fn helm_of_the_host_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Helm of the Host",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token."
@@ -641,7 +641,7 @@ fn helm_of_the_host_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn penumbra_umbra_copies_a_tokens_original_characteristics_with_the_exception() {
-    cr!("707.2", "111.4", "707.9b", "603.10a");
+    cr!("707.2", "111.3", "707.9b", "603.10a");
     ruling!(
         "Penumbra Umbra",
         "If the copied creature is a token, the new token that’s created copies the original characteristics of that token, with the exception noted above."
@@ -703,7 +703,7 @@ fn legendary_wolf(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn ratadrabik_copies_a_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9b", "603.10a");
+    cr!("707.2", "111.3", "707.9b", "603.10a");
     ruling!(
         "Ratadrabik of Urborg",
         "If the copied creature is a token, the new token that’s created copies the original characteristics of that token as stated by the effect that created that token, with the exceptions noted above."
@@ -752,7 +752,7 @@ fn nightmare_shepherd_treats_x_in_the_copied_cost_as_zero() {
 
 #[test]
 fn felhide_spiritbinder_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Felhide Spiritbinder",
         "If the copied creature is a token, the token created by Felhide Spiritbinder copies the original characteristics of that token as stated by the effect that put the token onto the battlefield."
@@ -778,7 +778,7 @@ fn felhide_spiritbinder_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn flamerush_rider_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "508.4");
+    cr!("707.2", "111.3", "508.4");
     ruling!(
         "Flamerush Rider",
         "If the copied creature is a token, the token created by Flamerush Rider copies the original characteristics of that token as stated by the effect that put it onto the battlefield."
@@ -802,7 +802,7 @@ fn flamerush_rider_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn shaun_copies_a_legendary_tokens_original_characteristics_with_the_exceptions() {
-    cr!("707.2", "111.4", "707.9b");
+    cr!("707.2", "111.3", "707.9b");
     ruling!(
         "Shaun, Father of Synths",
         "If the copied creature is a token, the token that’s created copies the original characteristics of that token as stated by the effect that created that token, with the noted exceptions."
@@ -855,7 +855,7 @@ fn shaun_copies_what_a_clone_is_copying_with_the_exceptions() {
 
 #[test]
 fn grub_copies_a_blighted_tokens_original_characteristics() {
-    cr!("707.2", "111.4", "701.68a");
+    cr!("707.2", "111.3", "701.68a");
     ruling!(
         "Grub, Storied Matriarch // Grub, Notorious Auntie",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token, with the listed exception."
@@ -910,7 +910,7 @@ fn grub_copy(t: &mut TestGame, grub: ObjectId, what: ObjectId) -> ObjectId {
 
 #[test]
 fn mirror_room_copies_a_tokens_original_characteristics_with_the_exception() {
-    cr!("707.2", "111.4", "707.9b", "709.5");
+    cr!("707.2", "111.3", "707.9b", "709.5");
     ruling!(
         "Mirror Room // Fractured Realm",
         "If the copied creature is a token, the token that's created copies the original characteristics of that token as stated by the effect that created that token, with the stated exception."
