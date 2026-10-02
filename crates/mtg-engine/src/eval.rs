@@ -53,6 +53,11 @@ pub struct Ctx {
     /// of ..., except it has this ability", CR 707.9a).
     #[serde(default)]
     pub reflexive_parent: Option<Box<crate::ability::Ability>>,
+    /// While another player performs part of the resolving spell or ability
+    /// ([`crate::ability::Effect::AsPlayer`]): that spell's or ability's controller, who
+    /// controls the delayed and reflexive triggered abilities it creates (CR 603.7d–e).
+    #[serde(default)]
+    pub resolving_controller: Option<PlayerId>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -464,6 +469,13 @@ impl Game {
             Filter::ControllerMatches(pf) => {
                 self.player_filter_matches(pf, self.filter_controller(view, id), ctx)
             }
+            Filter::ControlledByPlayer(r) => self
+                .eval_players(r, ctx)
+                .contains(&self.filter_controller(view, id)),
+            Filter::OwnedByPlayer(r) => self.eval_players(r, ctx).contains(&o.owner),
+            Filter::AttachedToAnyOf(sel) => o
+                .attached_to
+                .is_some_and(|e| self.eval_sel(sel, ctx).contains(&e)),
             Filter::InZone(z) => o.zone.kind() == Some(*z),
             // Only permanents have status (CR 110.5d).
             Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
@@ -1238,6 +1250,13 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
+            Value::Aggregate(op, stat, sel) => {
+                crate::aggregates::aggregate(self, *op, stat, sel, ctx)
+            }
+            Value::DistinctAmong(what, sel) => {
+                crate::aggregates::distinct_among(self, *what, sel, ctx)
+            }
+            Value::OverPlayers(op, f, v) => crate::aggregates::over_players(self, *op, f, v, ctx),
             Value::Sum(v) => v.iter().map(|x| self.eval_value(x, ctx)).sum(),
             Value::Diff(a, b) => self.eval_value(a, ctx) - self.eval_value(b, ctx),
             Value::Mul(a, b) => self.eval_value(a, ctx) * self.eval_value(b, ctx),

@@ -470,6 +470,7 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
         Some((head, v)) => (head, Some(v)),
         None => (l, None),
     };
+    let first_target = b.targets.len();
     // The source comes first (its target, if any, is first in the text).
     let (src, rest) = damage_source(l, verb, b)?;
     // "X ... where X is its power": "its" is the source, unless an earlier instruction
@@ -503,6 +504,14 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
             break;
         }
         r = t.strip_prefix("and ")?.to_string();
+    }
+    // The defined X is also the number of targets ("to each of up to X targets, where X
+    // is the number of times he was kicked").
+    if let Some(x) = &where_x {
+        let x = super::r107_numbers::nonnegative(x.clone());
+        for i in first_target..b.targets.len() {
+            b.targets[i] = super::r107_numbers::substitute_x_in_target(&b.targets[i], &x)?;
+        }
     }
     Some(Effect::seq(effects))
 }

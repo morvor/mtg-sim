@@ -71,6 +71,8 @@ pub fn propose(
         return Err(Illegal("an empty shortcut".into()));
     }
     let mut trial = g.clone();
+    // A trial run: its events never happen.
+    trial.observer = None;
     trial.set_agents(
         (0..g.players.len())
             .map(|_| Box::new(PassiveAgent) as Box<dyn Agent>)
