@@ -332,6 +332,12 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::untap_choice::custom_condition(g, name, ctx) {
         return b;
     }
+    // Activation timings ("during their draw step", "before the end step").
+    if let Some(b) =
+        crate::oracle::patterns::activation_restrictions::custom_condition(g, name, ctx)
+    {
+        return b;
+    }
     // Step-based casting restrictions ("only if you've been attacked this step").
     if let Some(b) = crate::oracle::patterns::restrictions_timing::custom_condition(g, name, ctx) {
         return b;

@@ -195,6 +195,14 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "Only your opponents may activate this ability" (CR 602.2): an opponent of the
+    /// source's controller may activate it, and its controller can't.
+    #[serde(default)]
+    pub only_opponents: bool,
+    /// "Activate only once": how many times the ability may be activated over the
+    /// object's existence (CR 400.7: a new object can activate it again).
+    #[serde(default)]
+    pub max_total: Option<u32>,
     /// "This ability costs {1} less to activate for each ...": changes to this ability's
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
@@ -222,6 +230,8 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            only_opponents: false,
+            max_total: None,
             own_cost_changes: Vec::new(),
         }
     }

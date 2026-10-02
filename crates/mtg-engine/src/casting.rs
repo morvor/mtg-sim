@@ -1863,7 +1863,11 @@ impl Game {
             Zone::Battlefield | Zone::Stack => o.controller,
             _ => o.owner,
         };
-        if who != p && !act.any_player {
+        if who != p && !act.any_player && !act.only_opponents {
+            return false;
+        }
+        // "Only your opponents may activate this ability" (CR 602.2).
+        if act.only_opponents && !self.are_opponents(who, p) {
             return false;
         }
         // CR 801.6: not the abilities of an object outside the player's range of influence.
@@ -1934,6 +1938,12 @@ impl Game {
         }
         if let Some(max) = act.max_per_turn {
             if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
+                return false;
+            }
+        }
+        // "Activate only once": over the object's existence (CR 400.7).
+        if let Some(max) = act.max_total {
+            if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
                 return false;
             }
         }
