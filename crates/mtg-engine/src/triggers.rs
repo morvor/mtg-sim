@@ -253,8 +253,21 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
-            let TriggerCond::Batched { trigger, per } = &t.trigger else {
-                continue;
+            let (trigger, per) = match &t.trigger {
+                TriggerCond::Batched { trigger, per } => (trigger, per),
+                // A batched alternative of a trigger with several conditions ("when
+                // enchanted creature becomes tapped or is dealt damage"); the other
+                // alternatives trigger per event.
+                TriggerCond::AnyOf(v) => {
+                    match v.iter().find_map(|c| match c {
+                        TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                        _ => None,
+                    }) {
+                        Some(x) => x,
+                        None => continue,
+                    }
+                }
+                _ => continue,
             };
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
