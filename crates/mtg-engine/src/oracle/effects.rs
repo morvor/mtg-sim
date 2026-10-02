@@ -70,7 +70,8 @@ impl<'c> Builder<'c> {
         // target is described (see `patterns::filters_relational`); left unresolved
         // (and so not understood) if "it" has no antecedent.
         if super::patterns::filters_relational::mentions_referent(&spec) {
-            if let Some(s) = super::patterns::filters_relational::substitute(&spec, &self.it) {
+            let it = super::patterns::pronoun_groups::singular_it(self);
+            if let Some(s) = super::patterns::filters_relational::substitute(&spec, &it) {
                 spec = s;
             }
         }

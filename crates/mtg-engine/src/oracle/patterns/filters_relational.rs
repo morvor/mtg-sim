@@ -111,12 +111,13 @@ pub fn resolve_referent(f: Filter, b: &Builder) -> Option<Filter> {
     if !mentions_referent(&f) {
         return Some(f);
     }
-    let f = if matches!(b.it, Sel::This) {
+    let it = super::pronoun_groups::singular_it(b);
+    let f = if matches!(it, Sel::This) {
         f
     } else {
-        other_than_it(f, &b.it)
+        other_than_it(f, &it)
     };
-    substitute(&f, &b.it)
+    substitute(&f, &it)
 }
 
 /// A filter whose top-level "other" (not the source) means other than `it`.
@@ -222,6 +223,14 @@ fn tail_of<'a>(t: &'a str, rest: &str) -> Option<&'a str> {
 
 /// A value phrase ("the number of lands you control", "that creature's power", "X").
 pub fn value_in(t: &str) -> Option<(Value, &str)> {
+    // "that damage": the damage dealt by the triggering event ("Whenever ~ deals combat
+    // damage to a player, you may put an artifact card with mana value less than or equal
+    // to that damage from your hand onto the battlefield").
+    if let Some(r) = t.strip_prefix("that damage") {
+        if word_end(r) {
+            return Some((Value::EventAmount, r));
+        }
+    }
     let (v, rest) = with_builder(|b| super::r107_numbers::value_phrase(t, b))?;
     // A value naming an object ("the number of counters on it") ends at the object.
     let rest = tail_of(t, &rest)?;
@@ -384,6 +393,20 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
             return Some((stat_filter(stat, cmp, stat_of(stat, obj)), rest));
         }
     }
+    // "with the same total power and toughness [as ...]" (Wild Pair).
+    if let Some(x) = r.strip_prefix("the same total power and toughness") {
+        let (obj, rest) = match x.trim_start().strip_prefix("as ") {
+            Some(o) => object_in(o)?,
+            None => (referent(), x),
+        };
+        let total = |s: Sel| Value::Sum(vec![stat_of(Stat::Power, s.clone()), stat_of(Stat::Toughness, s)]);
+        let f = Filter::ValueCmp(
+            Box::new(total(Sel::Var(vars::TESTED))),
+            Cmp::Eq,
+            Box::new(total(obj)),
+        );
+        return Some((f, rest));
+    }
     // "with the same mana value [as that permanent]"
     if let Some(x) = r.strip_prefix("the same ") {
         let (stat, rest) = stat_word(x)?;
@@ -422,6 +445,37 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
     if let Some((other, rest)) = own_stat(x) {
         return Some((
             Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(tested(other))),
+            rest,
+        ));
+    }
+    // "with mana value less than or equal to the number of cards in its controller's
+    // graveyard" (Drown in the Loch): "its" is the object described.
+    if x.contains("its controller") || x.contains("its owner") {
+        let its = |p: &str| {
+            let sel = Box::new(Sel::Var(vars::TESTED));
+            if p == "controller" {
+                PlayerRef::ControllerOf(sel)
+            } else {
+                PlayerRef::OwnerOf(sel)
+            }
+        };
+        let mut found = None;
+        for p in ["controller", "owner"] {
+            for (zone, hand) in [("graveyard", false), ("hand", true)] {
+                let phrase = format!("the number of cards in its {p}'s {zone}");
+                if let Some(r) = x.strip_prefix(phrase.as_str()) {
+                    let v = if hand {
+                        Value::HandSize(its(p))
+                    } else {
+                        Value::GraveyardSize(its(p))
+                    };
+                    found = Some((v, r));
+                }
+            }
+        }
+        let (v, rest) = found?;
+        return Some((
+            Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v)),
             rest,
         ));
     }
@@ -578,7 +632,21 @@ fn other_than<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     if matches!(sel, Sel::All(_)) {
         return None;
     }
-    Some((Filter::not(Filter::In(Box::new(sel))), rest))
+    let mut f = vec![Filter::not(Filter::In(Box::new(sel)))];
+    let mut rest = rest;
+    // "other than that creature or ~": neither of them.
+    while let Some(r2) = rest
+        .trim_start()
+        .strip_prefix("or ")
+        .or_else(|| rest.trim_start().strip_prefix("and "))
+    {
+        let Some((sel2, r3)) = object_in(r2).filter(|(s, _)| !matches!(s, Sel::All(_))) else {
+            break;
+        };
+        f.push(Filter::not(Filter::In(Box::new(sel2))));
+        rest = r3;
+    }
+    Some((Filter::and(f), rest))
 }
 
 inventory::submit! { FilterSuffixPattern { name: "relational: with [stat] compared", priority: 100, parse: with_comparison } }
@@ -603,6 +671,7 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
     if !same_it || b.targets.len() != n {
         return Some(e);
     }
+    let it = super::pronoun_groups::singular_it(b);
     Some(substitute(&e, &it).unwrap_or(e))
 }
 
@@ -977,7 +1046,18 @@ fn subject_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(before);
         b.it = saved_it.clone();
     };
-    let Some((x, hrest)) = object_ref(head, b) else {
+    // The subject ("enchanted creature and other creatures ... get"), or the object an
+    // instruction ends with ("put a +1/+1 counter on that creature and each other
+    // creature you control that shares a creature type with it").
+    let whole = object_ref(head, b).filter(|(_, r)| r.trim().is_empty());
+    let subject = whole.is_some();
+    let found = whole.or_else(|| {
+        ["that creature", "that permanent", "it", "~", "enchanted creature", "equipped creature"]
+            .iter()
+            .filter(|p| head.ends_with(&format!(" {p}")))
+            .find_map(|p| object_ref(p, b))
+    });
+    let Some((x, hrest)) = found else {
         restore(b);
         return None;
     };
@@ -1009,15 +1089,21 @@ fn subject_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         // The rest of the instruction, said of the subject alone.
         let tail = rest.trim_start();
-        let tail = tail.strip_prefix("each ").unwrap_or(tail);
-        let mut tail = tail.to_string();
-        for (p, s) in [("get ", "gets "), ("gain ", "gains "), ("have ", "has ")] {
-            if let Some(r) = tail.strip_prefix(p) {
-                tail = format!("{s}{r}");
+        let rewritten = if subject {
+            let tail = tail.strip_prefix("each ").unwrap_or(tail);
+            let mut tail = tail.to_string();
+            for (p, s) in [("get ", "gets "), ("gain ", "gains "), ("have ", "has ")] {
+                if let Some(r) = tail.strip_prefix(p) {
+                    tail = format!("{s}{r}");
+                }
             }
-        }
-        let tail = tail.replace(" and gain ", " and gains ");
-        let rewritten = format!("{head} {tail}");
+            let tail = tail.replace(" and gain ", " and gains ");
+            format!("{head} {tail}")
+        } else if tail.is_empty() {
+            head.to_string()
+        } else {
+            return None;
+        };
         let e = parse_clause(&rewritten, b)?;
         if b.targets.len() != before {
             return None;
