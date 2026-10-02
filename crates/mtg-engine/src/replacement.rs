@@ -346,6 +346,24 @@ impl Game {
             .collect()
     }
 
+    /// Whether the proposed event can't happen: a mandatory replacement effect that applies
+    /// to it prevents it ("~ can't have counters put on it", CR 113.6i, 614.1). Used to
+    /// tell whether a player "can" do something before offering it.
+    pub fn would_be_prevented(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| matches!(c.def.action, ReplacementAction::Prevent) && !c.def.optional)
+    }
+
+    /// Whether a self-replacement effect (CR 614.15) applies to the proposed event.
+    pub(crate) fn self_replacement_applies(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| c.def.self_replacement)
+    }
+
     /// The player who chooses among replacement effects for an event (CR 616.1).
     fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {
@@ -1329,9 +1347,11 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Move(mut m)) => {
+                // CR 614.6: the modified event moves it to the whole destination (tapped,
+                // under whose control, with counters, your choice of position, ...).
                 let owner = self.obj(m.obj).owner;
-                m.to = Zone::of_kind(dest.zone, owner);
-                m.pos = dest.position;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                self.redirect_move(&prepared, &mut m, owner, &ctx);
                 // CR 607.2b, 614.14: a card exiled by a replacement effect is exiled with
                 // (linked to) the effect's source.
                 if dest.zone == ZoneKind::Exile && cand.source.is_some() {
@@ -1342,13 +1362,15 @@ impl Game {
             }
             (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {
                 let owner = self.obj(obj).owner;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                let etb = self.destination_etb(&prepared, owner, &ctx);
                 vec![ReplEvent::Move(MoveEv {
                     obj,
-                    to: Zone::of_kind(dest.zone, owner),
-                    pos: dest.position,
+                    to: prepared.zone(owner),
+                    pos: prepared.position(),
                     cause: MoveCause::Destroy,
                     by: None,
-                    etb: EtbInfo::default(),
+                    etb,
                     source: cand.source,
                 })]
             }

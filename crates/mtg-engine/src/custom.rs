@@ -51,6 +51,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::zones::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "with a mana ability", "with enchant creature" (search descriptions, CR 701.23).
+    if let Some(b) = crate::search_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     // "a loyalty ability" being activated (CR 606).
     if let Some(b) = crate::stack_ability_filters::custom_filter(g, name, id, ctx) {
         return b;
@@ -371,6 +375,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
         "creature_died_under_your_control_this_turn" => {
             h.creatures_died.iter().any(|o| g.obj(*o).controller == you)
         }
+        "creature_died_under_an_opponents_control_this_turn" => h
+            .creatures_died
+            .iter()
+            .any(|o| g.are_opponents(you, g.obj(*o).controller)),
         "you_descended_this_turn" => h.descended.get(&you).is_some_and(|n| *n > 0),
         "card_left_your_graveyard_this_turn" => {
             h.cards_left_graveyard.get(&you).is_some_and(|n| *n > 0)
@@ -589,6 +597,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     }
     // A merged or melded commander returning to the command zone (CR 903.9c).
     if crate::commander_rules::custom_effect(g, name, ctx) {
+        return;
+    }
+    // Putting the cards a search found on top of a library in any order (CR 701.23).
+    if crate::search_rules::custom_effect(g, name, ctx) {
         return;
     }
     // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).

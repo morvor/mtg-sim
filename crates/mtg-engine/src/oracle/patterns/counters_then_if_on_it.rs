@@ -37,7 +37,9 @@ pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder
     };
     let lower = s.to_lowercase();
     let l = end(&lower);
-    let Some(r) = l.strip_prefix("then if ") else {
+    // "If it has six or more quest counters on it, sacrifice it." right after putting a
+    // counter on ~ (Last Light of Durin's Day): "it" is the source too.
+    let Some(r) = l.strip_prefix("then if ").or_else(|| l.strip_prefix("if ")) else {
         return false;
     };
     let Some((cond_s, clause)) = r.split_once(", ") else {
@@ -108,6 +110,22 @@ pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder
     // "Then sacrifice it if it has five or more bloodstain counters on it. When you do,
     // ...": a later "if you do"/"when you do" is about the sacrifice, which didn't happen if
     // the condition was false (see `Effect::If`).
+    // "sacrifice it": a later "if you do" asks whether it was sacrificed (when the
+    // condition doesn't hold, it wasn't).
+    // (Other "sacrifice ..." clauses are parsed below.)
+    if matches!(clause, "sacrifice it" | "sacrifice ~") {
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![
+            old,
+            Effect::If {
+                cond,
+                then: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]);
+        b.it = Sel::This;
+        return true;
+    }
     let (optional, clause) = match clause.strip_prefix("you may ") {
         Some(c) => (true, c),
         None => (false, clause),

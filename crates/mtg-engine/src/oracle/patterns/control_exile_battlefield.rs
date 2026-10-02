@@ -64,9 +64,11 @@ fn p_put_onto_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
     let (what, tail) = object_ref(r, b)?;
     // Specific objects: targets or objects named earlier. (Choosing "a creature card"
     // from a zone is a different instruction.)
+    // "Put enchanted creature card onto the battlefield" (Dance of the Dead): the card an
+    // Aura enchants in a graveyard.
     if !matches!(
         what,
-        Sel::Target(_) | Sel::This | Sel::TriggerObject | Sel::Var(_)
+        Sel::Target(_) | Sel::This | Sel::TriggerObject | Sel::Var(_) | Sel::AttachedTo
     ) {
         return None;
     }

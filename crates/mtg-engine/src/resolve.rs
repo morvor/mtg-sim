@@ -81,9 +81,9 @@ impl Game {
                     self.exec(then, ctx);
                 } else {
                     // "If it's a permanent card, you may put it onto the battlefield. If
-                    // you do, ...", "Then if it has three or more doom counters on it,
-                    // sacrifice ~. When you do, ...": an instruction that wasn't performed
-                    // wasn't done.
+                    // you do, ...", "Then if there are three or more collection counters
+                    // on it, sacrifice it. If you do, ...": an instruction whose condition
+                    // didn't hold wasn't done (also "... sacrifice ~. When you do, ...").
                     if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
@@ -1506,6 +1506,7 @@ impl Game {
                 ctx.prev_happened = searched;
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
+            Effect::SearchCards(spec) => crate::search_rules::perform(self, spec, ctx),
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {
                     self.shuffle_library(p);
@@ -2400,6 +2401,10 @@ impl Game {
             self.fix_excluded_objects(f, ctx);
             if filter_references_specific(f) {
                 *f = Filter::Any;
+            } else {
+                // "Creatures target player controls don't untap ...": the objects that
+                // player controls, whichever they are later.
+                *f = self.bind_target_players(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2444,6 +2449,33 @@ impl Game {
                 **inner = Filter::Objects(self.named_objects(inner, ctx));
             }
             _ => {}
+        }
+    }
+
+    /// Replaces "controlled by the target player" in a filter kept beyond this resolution
+    /// with the player chosen as that target.
+    fn bind_target_players(&self, f: &Filter, ctx: &Ctx) -> Filter {
+        match f {
+            Filter::ControlledBy(PlayerRel::Target(k)) => {
+                let ps = ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(PlayerFilter::Is(*p)),
+                        _ => None,
+                    })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            Filter::And(v) => {
+                Filter::And(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            Filter::Or(v) => {
+                Filter::Or(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            other => other.clone(),
         }
     }
 
@@ -2513,88 +2545,40 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
-        let controller = to
-            .controller
-            .as_ref()
-            .and_then(|r| self.eval_player(r, ctx));
-        // "under its owner's control" / "under their owners' control": each object
-        // enters under its own owner's control.
-        let owners_control = matches!(to.controller, Some(PlayerRef::OwnerOf(_)));
-        let mut counters: Vec<(CounterKind, u32)> = Vec::new();
-        for (k, v) in &to.with_counters {
-            counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
-        }
-        // CR 508.4: each object put onto the battlefield attacking has its own attack
-        // target, chosen by the player who'll control it.
-        let mut attack: Vec<Option<Entity>> = Vec::with_capacity(objs.len());
-        for o in &objs {
-            let target = if to.attacking && self.is_live(*o) {
-                let owner = self.obj(*o).owner;
-                let who = if owners_control {
-                    owner
-                } else {
-                    controller.unwrap_or(ctx.controller)
-                };
-                self.attack_target_for_new_attacker(who, ctx)
-            } else {
-                None
-            };
-            attack.push(target);
-        }
-        let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
-            Some((
-                ctx.source,
-                ctx.controller,
-                self.fix_mods(&to.with_mods, ctx),
-            ))
-        } else {
-            None
-        };
-        // "Put onto the battlefield attached to [x]": `None` if x is undefined
-        // (CR 301.5e, 303.4i).
-        let attach_to = match (&to.attached_to, to.zone) {
-            (Some(sel), ZoneKind::Battlefield) => Some(self.resolve_sel(sel, ctx).first().copied()),
-            _ => None,
-        };
-        let moves: Vec<MoveEv> = objs
-            .iter()
-            .zip(attack)
-            .filter(|(o, _)| self.is_live(**o))
-            .map(|(o, attack)| {
-                let owner = self.obj(*o).owner;
-                MoveEv {
-                    obj: *o,
-                    to: Zone::of_kind(to.zone, owner),
-                    pos: to.position,
-                    cause: MoveCause::Effect,
-                    by: Some(ctx.controller),
-                    etb: EtbInfo {
-                        tapped: to.tapped,
-                        counters: counters.clone(),
-                        controller: if to.zone == ZoneKind::Battlefield && owners_control {
-                            Some(owner)
-                        } else if to.zone == ZoneKind::Battlefield {
-                            Some(controller.unwrap_or(ctx.controller))
-                        } else {
-                            None
-                        },
-                        face_down: if to.face_down {
-                            Some(KeywordKind::Morph)
-                        } else {
-                            None
-                        },
-                        transformed: to.transformed,
-                        attacking: attack,
-                        with_mods: with_mods.clone(),
-                        attach_to: attach_to.flatten(),
-                        attach_specified: attach_to.is_some(),
-                        ..Default::default()
-                    },
-                    source: ctx.source,
-                }
-            })
-            .collect();
+        let moves = self.destination_moves(objs, to, ctx);
         self.move_objects(moves).into_iter().flatten().collect()
+    }
+
+    /// The moves that put `objs` into `to` (see [`Self::move_to_destination`]), for
+    /// moving them together with others at the same time.
+    pub fn destination_moves(
+        &mut self,
+        objs: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
+        let objs: Vec<ObjectId> = objs.into_iter().filter(|o| self.is_live(*o)).collect();
+        if objs.is_empty() {
+            return vec![];
+        }
+        // "Under its owner's control", "tapped", "with N counters", "your choice of the top
+        // or bottom" ...: see `destinations.rs`.
+        let dest = self.prepare_destination(to, ctx);
+        let mut moves: Vec<MoveEv> = Vec::with_capacity(objs.len());
+        for o in &objs {
+            let owner = self.obj(*o).owner;
+            let etb = self.destination_etb(&dest, owner, ctx);
+            moves.push(MoveEv {
+                obj: *o,
+                to: dest.zone(owner),
+                pos: dest.position(),
+                cause: MoveCause::Effect,
+                by: Some(ctx.controller),
+                etb,
+                source: ctx.source,
+            });
+        }
+        moves
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each
@@ -2627,7 +2611,7 @@ impl Game {
     /// What a creature put onto the battlefield attacking attacks when the effect doesn't
     /// say: its controller (`controller`) chooses (CR 508.4), by default what the source is attacking if
     /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
-    fn attack_target_for_new_attacker(
+    pub(crate) fn attack_target_for_new_attacker(
         &mut self,
         controller: PlayerId,
         ctx: &Ctx,

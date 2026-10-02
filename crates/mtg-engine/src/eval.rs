@@ -1400,6 +1400,15 @@ impl Game {
             Condition::SelNonEmpty(s) => !self.eval_sel(s, ctx).is_empty(),
             Condition::SelMatches(s, f) => {
                 let objs = self.eval_sel_objects(s, ctx);
+                // "If it's on the battlefield" (Animate Dead): a source that has since
+                // moved to another zone is a new object there (CR 400.7), so the object
+                // the ability is from isn't in any zone now.
+                if matches!(s, Sel::This)
+                    && f.zone().is_some()
+                    && objs.iter().any(|o| !self.is_live(*o))
+                {
+                    return false;
+                }
                 !objs.is_empty() && objs.iter().all(|o| self.matches(*o, f, ctx))
             }
             Condition::PlayerMatches(r, f) => self
