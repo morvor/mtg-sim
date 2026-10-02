@@ -594,6 +594,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
+        } else if let Some(r) = t.strip_prefix("an opponent owns") {
+            (Filter::OwnedBy(PlayerRel::Opponent), r)
         } else if let Some(r) = t
             .strip_prefix("in your graveyard")
             .or_else(|| t.strip_prefix("from your graveyard"))
