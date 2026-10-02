@@ -343,6 +343,20 @@ impl Renderer<'_> {
                     let s = self.targets_filter(tf);
                     extra.push(s);
                 }
+                // "activated ability from an artifact source".
+                Filter::AbilityFrom(f) => {
+                    let saved = self.default_head.replace("source");
+                    let mut np = super::nouns::Np::default();
+                    self.collect(f, &mut np);
+                    let q = self.np_text(&np, Num::One, false);
+                    self.default_head = saved;
+                    let q = if q.ends_with(" source") || q == "source" {
+                        q
+                    } else {
+                        format!("{q} source")
+                    };
+                    extra.push(format!("from {}", with_article(&q)));
+                }
                 other => {
                     let s = self.noun(other, Num::One);
                     extra.push(s);
@@ -852,13 +866,21 @@ impl Renderer<'_> {
             PlayerFilter::And(v) => {
                 let mut head = base("player");
                 let mut quals = Vec::new();
+                // "each other opponent": other than the player the text named.
+                let mut other_than_named = false;
                 for x in v {
                     match x {
                         PlayerFilter::Any => {}
                         PlayerFilter::Opponent => head = base("opponent"),
                         PlayerFilter::NotYou => head = base("other player"),
+                        PlayerFilter::Not(n) if matches!(n.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::TriggerPlayer | PlayerRef::Target(_))) => {
+                            other_than_named = true
+                        }
                         other => quals.push(self.player_quality(other)),
                     }
+                }
+                if other_than_named {
+                    head = format!("other {head}");
                 }
                 if quals.is_empty() {
                     head

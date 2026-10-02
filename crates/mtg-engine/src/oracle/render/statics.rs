@@ -2527,13 +2527,15 @@ impl Renderer<'_> {
                 };
                 format!("prevent all {kind} that would be dealt{to_s}{by}")
             }
+            // Damage is always dealt by a source (CR 120.1): "if a source would deal
+            // damage to you" is "if damage would be dealt to you".
             A::PreventAmount(v) => {
                 let v = self.value(v);
                 match &src {
                     Some(s) => {
                         format!("if {s} would deal {kind}{to_s}, prevent {v} of that damage")
                     }
-                    None => format!("if {kind} would be dealt{to_s}, prevent {v} of that damage"),
+                    None => format!("if {{alt:{kind} would be dealt{to_s}|a source would deal {kind}{to_s}}}, prevent {v} of that damage"),
                 }
             }
             A::PreventAndThen(amount, e) => {
@@ -2547,7 +2549,7 @@ impl Renderer<'_> {
                 };
                 match &src {
                     Some(s) => format!("if {s} would deal {kind}{to_s}, {p}. {e}"),
-                    None => format!("if {kind} would be dealt{to_s}, {p}. {e}"),
+                    None => format!("if {{alt:{kind} would be dealt{to_s}|a source would deal {kind}{to_s}}}, {p}. {e}"),
                 }
             }
             // "The next 1 damage that would be dealt to target creature this turn is dealt

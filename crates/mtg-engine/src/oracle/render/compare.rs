@@ -125,6 +125,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               is what \"if it has\" asks of it.",
     },
     Equivalence {
+        pattern: r"\b(opponents?) you have\b",
+        replacement: "$1",
+        why: "\"For each opponent you have\" counts your opponents (CR 102.2, 102.3).",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

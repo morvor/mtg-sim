@@ -396,6 +396,9 @@ impl Renderer<'_> {
                     restr.push("during your turn".into());
                 }
             }
+            // CR 702.178a: "Max speed — [ability]": the object has the ability as long as
+            // your speed is 4.
+            Some(Condition::MaxSpeed) => {}
             Some(c) => {
                 let c = self.condition(c);
                 restr.push(format!("if {c}"));
@@ -403,6 +406,9 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        if matches!(a.condition, Some(Condition::MaxSpeed)) && !solved && !boast {
+            s = format!("Max speed — {s}");
+        }
         for oc in &a.own_cost_changes {
             let c = self.own_cost_change(oc);
             s = join_words(&[s, c]);

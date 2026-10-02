@@ -654,10 +654,12 @@ impl Renderer<'_> {
             Filter::ManaValueOfChosenQuality => {
                 np.with.push("mana value of the chosen quality".into())
             }
+            // "activated ability from an artifact source".
             Filter::AbilityFrom(f) => {
-                let s = self.noun(f, Num::One);
-                np.post.push(format!("from {} source", article(&s)));
-                np.post.push(s);
+                let saved = self.default_head.replace("source");
+                let s = self.noun_det(f, Det::A);
+                self.default_head = saved;
+                np.post.push(format!("from {s}"));
             }
             Filter::Custom(name)
                 if crate::kw::basic_effects::same_name_as_another_sel(name).is_some() =>
