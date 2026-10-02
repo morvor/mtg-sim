@@ -95,7 +95,8 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
     let faces = match o.card.as_ref().map(|d| (d.layout, d.faces.len())) {
-        Some((Layout::Split, 2)) => vec![FaceState::Half(0), FaceState::Half(1)],
+        // A split card with three halves too (There // They're // Their).
+        Some((Layout::Split, n)) if n >= 2 => (0..n as u8).map(FaceState::Half).collect(),
         Some((Layout::Adventure, 2)) => vec![FaceState::Front, FaceState::Half(1)],
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
@@ -121,8 +122,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 }
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
-fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
+fn choose_face_to_cast(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    only: Option<&[FaceState]>,
+) -> FaceState {
     let mut faces = castable_faces(g, card);
+    // Only the faces an effect lets the player cast (CR 601.3e).
+    if let Some(only) = only {
+        faces.retain(|f| only.contains(f));
+    }
     // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
     // CR 702.127a).
     let allowed: Vec<FaceState> = faces
@@ -155,12 +165,24 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    cast_during_resolution_as(g, p, card, method, None)
+}
+
+/// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
+/// the characteristics the effect allows, CR 601.3e), if given.
+pub fn cast_during_resolution_as(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    method: CastMethod,
+    only: Option<&[FaceState]>,
+) -> Result<ObjectId, Illegal> {
     // CR 702.61a: while a spell with split second is on the stack, no other spell can be
     // cast, even as part of a resolving ability's effect.
     if g.split_second_on_stack() {
         return Err(Illegal("a spell with split second is on the stack".into()));
     }
-    let face = choose_face_to_cast(g, p, card);
+    let face = choose_face_to_cast(g, p, card, only);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
     // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
@@ -300,10 +322,19 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Listing what could be done only checks legality: it doesn't exercise the
+        // abilities it consults (see `structure`).
+        crate::structure::unlogged(|| self.legal_actions_now(p))
+    }
+
+    fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
             for c in self.playable_land_cards(p) {
+                if !self.can_pay_land_play_cost(p, c) {
+                    continue;
+                }
                 out.push(Action::PlayLand { card: c });
             }
         }
@@ -1016,8 +1047,46 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
+    }
+
+    /// The mana a player pays to play a land card that has a mana cost (Glade of the
+    /// Pump Spells: "You have to pay {2}{G} to play this land as your land drop"). Lands
+    /// normally have no mana cost; one put onto the battlefield by an effect isn't played,
+    /// so nothing is paid.
+    fn land_play_cost(&self, card: ObjectId) -> Option<ManaCost> {
+        let o = self.try_obj(card)?;
+        if !o.chars.is_land() {
+            return None;
+        }
+        o.chars.mana_cost.clone().filter(|m| !m.symbols.is_empty())
+    }
+
+    fn can_pay_land_play_cost(&self, p: PlayerId, card: ObjectId) -> bool {
+        let Some(m) = self.land_play_cost(card) else {
+            return true;
+        };
+        let spend = SpendContext {
+            check_only: true,
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::plan_payment(self, p, &m, &spend, Some(card)).is_some()
+    }
+
+    fn pay_land_play_cost(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
+        let Some(m) = self.land_play_cost(card) else {
+            return Ok(());
+        };
+        let spend = SpendContext {
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::pay_mana(self, p, &m, &spend, Some(card))
+            .map(|_| ())
+            .ok_or_else(|| Illegal("can't pay the land's mana cost".into()))
     }
 
     /// Plays a land during the resolution of a spell or ability that instructs `p` to
@@ -1046,6 +1115,7 @@ impl Game {
         if self.land_play_prohibited(p, card) {
             return Err(Illegal("can't play that land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
     }
@@ -1582,6 +1652,7 @@ impl Game {
             crate::designations::prepared_copy_left_exile(self, card);
         }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
+        crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
             spell: id,
             player: p,
@@ -2092,6 +2163,7 @@ impl Game {
                 .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
+            crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.

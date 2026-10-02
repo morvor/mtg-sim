@@ -68,6 +68,14 @@ pub enum Decision {
         min: u32,
         max: u32,
         allow_repeat: bool,
+        /// The modes that may be chosen (by index): the others have no legal targets or
+        /// were chosen before ("choose one that hasn't been chosen", CR 700.2).
+        #[serde(default)]
+        available: Vec<usize>,
+        /// For modes with pawprints (CR 700.2i): the most pawprints the chosen modes may
+        /// have in total (a mode's pawprints are the `{P}` symbols that begin its text).
+        #[serde(default)]
+        pawprint_budget: Option<u32>,
     },
     /// Announce X (CR 107.3). Answer `Number`.
     ChooseX { source: ObjectId, max: i64 },
