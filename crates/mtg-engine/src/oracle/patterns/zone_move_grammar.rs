@@ -957,6 +957,11 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                 // "~ from your hand", "~ from exile", "~ from your graveyard or from exile":
                 // only from there.
                 if let Some((f, _, r)) = from_zone(&rest, b, subject) {
+                    // An ability functions in one zone (CR 113.6m): "~ from your
+                    // graveyard or from exile" would need two.
+                    if matches!(sel, Sel::This) && matches!(f.zone(), None) && matches!(f, Filter::Or(_) | Filter::And(_)) && format!("{f:?}").matches("InZone").count() > 1 {
+                        return None;
+                    }
                     // The source may have moved since the ability triggered (an Aura
                     // put into a graveyard): the object it became (CR 400.7).
                     let which = match sel {
@@ -1464,13 +1469,25 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(rest.trim()).is_empty() {
                 return None;
             }
+            // An object target ("choose target opponent" is another pattern's).
+            if !matches!(
+                b.targets.get(slot as usize).map(|t| &t.what),
+                Some(TargetKind::Object(_))
+            ) {
+                return None;
+            }
             b.it = Sel::Target(slot);
             return Some(Effect::Noop);
         }
         let (qty, r2) = quantity(&r)?;
         let Qty::Exactly(n) = qty else { return None };
         let d = described(r2, b, &subject)?;
-        if !end(d.rest.trim()).is_empty() || !located(&d.filter) || d.opponents_choice {
+        // Cards in a zone (choosing permanents is another pattern's).
+        if !end(d.rest.trim()).is_empty()
+            || !names_cards(&d.filter)
+            || !located(&d.filter)
+            || d.opponents_choice
+        {
             return None;
         }
         let e = if d.random {
@@ -1699,6 +1716,172 @@ fn note_moved(b: &mut Builder) {
     }
 }
 
+/// Where an activated ability whose effect moves its own card functions (CR 113.6m):
+/// "Put ~ from exile onto the battlefield" (exile), "Put ~ from your hand onto the
+/// battlefield" (the hand), "Return ~ and target land card from your graveyard to the
+/// battlefield" (the graveyard). `effect`: the lowercase effect text.
+pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
+    for verb in ["return ~", "put ~", "return this card", "put this card"] {
+        for (i, _) in effect.match_indices(verb) {
+            let after = &effect[i + verb.len()..];
+            if after.starts_with(" from exile") {
+                return Some(FunctionZone::Exile);
+            }
+            if after.starts_with(" from your hand") {
+                return Some(FunctionZone::Hand);
+            }
+            if let Some(list) = after.strip_prefix(" and ") {
+                // The zone named once for the list ("~ and up to one other target creature
+                // card from your graveyard").
+                let stop = list.find(" to ").or_else(|| list.find(" onto ")).unwrap_or(list.len());
+                if list[..stop].ends_with(" from your graveyard") {
+                    return Some(FunctionZone::Graveyard);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The last move of an effect (through sequences, "you may" and conditions).
+fn last_move_mut(e: &mut Effect) -> Option<&mut Effect> {
+    if matches!(e, Effect::Move { .. }) {
+        return Some(e);
+    }
+    match e {
+        Effect::Seq(v) => last_move_mut(v.last_mut()?),
+        Effect::May { effect, .. } => last_move_mut(effect),
+        Effect::If { then, otherwise, .. } if matches!(**otherwise, Effect::Noop) => {
+            last_move_mut(then)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a selection is known to be creatures.
+fn creature_sel(what: &Sel, b: &Builder) -> bool {
+    fn has_creature(f: &Filter) -> bool {
+        match f {
+            Filter::Type(crate::types::CardType::Creature) => true,
+            Filter::And(v) => v.iter().any(has_creature),
+            Filter::Or(v) => !v.is_empty() && v.iter().all(has_creature),
+            _ => false,
+        }
+    }
+    match what {
+        Sel::Target(slot) => b
+            .targets
+            .get(*slot as usize)
+            .is_some_and(|t| matches!(&t.what, TargetKind::Object(f) if has_creature(f))),
+        Sel::All(f) | Sel::Choose { filter: f, .. } => has_creature(f),
+        Sel::Union(v) => !v.is_empty() && v.iter().all(|s| creature_sel(s, b)),
+        _ => false,
+    }
+}
+
+/// "It's a 1/1 Spirit creature with flying in addition to its other types.", "Each of them
+/// is a 1/1 Spirit in addition to its other types.", "Those creatures are Vampires in
+/// addition to their other types.", "It's an artifact in addition to its other types.",
+/// "They are 5/5 Elemental creatures in addition to their other types." after a move onto
+/// the battlefield: an effect of the move that applies as each permanent enters
+/// (CR 611.2e; `Destination::with_mods`).
+fn f_enters_in_addition(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    use crate::types::{CardType, Color, ColorSet};
+    let l = end(l);
+    let Some(r) = [
+        "it's ",
+        "it is ",
+        "that creature is ",
+        "each of them is ",
+        "they're ",
+        "they are ",
+        "those creatures are ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p)) else {
+        return false;
+    };
+    let (x, colors_too) = if let Some(x) = r
+        .strip_suffix(" in addition to its other colors and types")
+        .or_else(|| r.strip_suffix(" in addition to their other colors and types"))
+    {
+        (x, true)
+    } else if let Some(x) = r
+        .strip_suffix(" in addition to its other types")
+        .or_else(|| r.strip_suffix(" in addition to their other types"))
+    {
+        (x, false)
+    } else {
+        return false;
+    };
+    let (x, kw) = match x.split_once(" with ") {
+        Some((a, k)) => match crate::oracle::effects::keyword_mods(k) {
+            Some(m) => (a, m),
+            None => return false,
+        },
+        None => (x, vec![]),
+    };
+    let x = x
+        .strip_prefix("a ")
+        .or_else(|| x.strip_prefix("an "))
+        .unwrap_or(x);
+    let mut pt = None;
+    let mut colors = ColorSet::NONE;
+    let mut types: Vec<CardType> = Vec::new();
+    let mut subtypes: Vec<crate::types::Subtype> = Vec::new();
+    for w in x.split(' ') {
+        if let Some((p, t)) = w.split_once('/') {
+            match (p.parse::<i32>(), t.parse::<i32>()) {
+                (Ok(p), Ok(t)) if pt.is_none() => pt = Some((p, t)),
+                _ => return false,
+            }
+        } else if let Some(c) = Color::from_word(w) {
+            colors.insert(c);
+        } else {
+            match head_noun(w) {
+                Some(Filter::Type(t)) => types.push(t),
+                Some(Filter::Subtype(st)) => subtypes.push(st),
+                _ => return false,
+            }
+        }
+    }
+    if (colors != ColorSet::NONE) != colors_too || (types.is_empty() && subtypes.is_empty()) {
+        return false;
+    }
+    let Some(Effect::Move { what, to }) = last_move_mut(prev) else {
+        return false;
+    };
+    if to.zone != ZoneKind::Battlefield || !to.with_mods.is_empty() {
+        return false;
+    }
+    // Creature types and a power and toughness only for creatures (CR 205.3d, 208.3).
+    let creature = types.contains(&CardType::Creature) || creature_sel(what, b);
+    let creature_types = subtypes
+        .iter()
+        .all(|s| crate::types::subtype_kind(s) == Some(crate::types::SubtypeKind::Creature));
+    if (!subtypes.is_empty() && !(creature && creature_types)) || (pt.is_some() && !creature) {
+        return false;
+    }
+    let mut mods = Vec::new();
+    if colors_too {
+        mods.push(Modification::AddColors(colors));
+    }
+    if !types.is_empty() {
+        mods.push(Modification::AddTypes(types));
+    }
+    if !subtypes.is_empty() {
+        mods.push(Modification::AddSubtypes(subtypes));
+    }
+    if let Some((p, t)) = pt {
+        mods.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+    }
+    mods.extend(kw);
+    to.with_mods = mods;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "zone-move grammar: it's a [P/T] [types] in addition to its other types", priority: 970, apply: f_enters_in_addition } }
+
 /// `Modification::Custom` name prefix (layer 6): "has all activated abilities of all
 /// [kind] cards exiled with ~" — followed by the card type or subtype word, or nothing
 /// for every card. Implemented in `kw/zone_moves.rs`.
@@ -1799,27 +1982,13 @@ pub const MILLED_THIS_TURN: &str = "milled this turn";
 /// `Filter::Custom`: a card the ability's controller discarded this turn (cycling a card
 /// discards it, CR 702.29a), still the object it became.
 pub const DISCARDED_BY_YOU_THIS_TURN: &str = "discarded by you this turn";
-/// `Filter::Custom`: a permanent that entered the battlefield under the ability's
-/// controller's control this turn (and hasn't left since).
-pub const ENTERED_UNDER_YOUR_CONTROL_THIS_TURN: &str = "entered under your control this turn";
 
-/// "that dealt damage this turn" (as a source), "that isn't a God", "that entered the
-/// battlefield under your control this turn" after an object noun.
+/// "that dealt damage this turn" (as a source), "that isn't a God" after an object noun.
 fn f_suffixes<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     if let Some(r) = strip_word(t, "that dealt damage this turn") {
         return Some((Filter::Custom(SmolStr::new(DEALT_DAMAGE_THIS_TURN)), r));
     }
-    for p in [
-        "that entered the battlefield under your control this turn",
-        "that entered under your control this turn",
-    ] {
-        if let Some(r) = strip_word(t, p) {
-            return Some((
-                Filter::Custom(SmolStr::new(ENTERED_UNDER_YOUR_CONTROL_THIS_TURN)),
-                r,
-            ));
-        }
-    }
+
     for p in ["that isn't a ", "that isn't an ", "that aren't "] {
         if let Some(r) = t.strip_prefix(p) {
             let (w, rest) = split_word(r);
@@ -1861,6 +2030,68 @@ mod tests {
         };
         let r = compile(text, &ctx);
         r.unsupported.is_empty().then(|| format!("{:#?}", r.abilities))
+    }
+
+    #[test]
+    fn zone_moves_are_read_compositionally() {
+        for (ty, text) in [
+            // Zone-qualified objects.
+            ("Artifact", "{T}: Put a card exiled with ~ into its owner's hand."),
+            ("Creature", "When ~ dies, put all cards exiled with it onto the battlefield."),
+            ("Creature", "When ~ enters, you may put a land card from your hand or graveyard onto the battlefield tapped."),
+            ("Sorcery", "Put up to X land cards from your hand and/or graveyard onto the battlefield tapped."),
+            ("Sorcery", "Return target card with flashback you own from exile to your hand."),
+            ("Sorcery", "Put target face-up exiled card into its owner's graveyard."),
+            // History qualifiers.
+            ("Sorcery", "Return to your hand all creature cards in your graveyard that were put there from the battlefield this turn."),
+            ("Sorcery", "Put onto the battlefield under your control all creature cards in your opponents' graveyards that were put there from the battlefield this turn."),
+            ("Sorcery", "Return to your hand all cards in your graveyard that you cycled or discarded this turn."),
+            ("Sorcery", "Return each creature that dealt damage this turn to its owner's hand."),
+            // Modifiers.
+            ("Sorcery", "Return target creature card from your graveyard to the battlefield with two additional +1/+1 counters on it."),
+            ("Sorcery", "Return target permanent card from your graveyard to the battlefield with a hexproof counter and an indestructible counter on it."),
+            ("Sorcery", "Return target creature card from an opponent's graveyard to the battlefield under their control."),
+            ("Sorcery", "Return all creature cards from your graveyard to the battlefield. Each of them is a 1/1 Spirit with flying in addition to its other types."),
+            // Lists.
+            ("Sorcery", "Return up to one target creature card and up to one target land card from your graveyard to your hand."),
+            ("Sorcery", "Return up to one target artifact card, up to one target land card, and up to one target non-Aura enchantment card from your graveyard to the battlefield."),
+            ("Sorcery", "Return target creature and target land to their owners' hands."),
+            ("Sorcery", "Return target artifact, enchantment, or legendary card from your graveyard to your hand."),
+            // Owner-side moves.
+            ("Sorcery", "Each player returns all black and all red creature cards from their graveyard to the battlefield."),
+            ("Sorcery", "Return all artifacts target player owns to their hand."),
+            ("Sorcery", "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and Serpents."),
+            // Bounces and chosen cards.
+            ("Creature", "When ~ enters, return another creature you control to its owner's hand."),
+            ("Sorcery", "Return two cards at random from your graveyard to your hand."),
+            ("Sorcery", "Return a Pirate card from your graveyard to your hand, then do the same for Vampire, Dinosaur, and Merfolk."),
+            ("Artifact", "{4}, {T}: Choose a card at random that was exiled with ~. Put that card into its owner's hand."),
+            ("Creature", "When ~ enters, return target creature card of an opponent's choice from your graveyard to your hand."),
+        ] {
+            assert!(compiled(ty, text).is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn unfaithful_zone_moves_are_rejected() {
+        for (ty, text) in [
+            // A card already in that zone.
+            ("Sorcery", "Return a creature card from your graveyard to your graveyard."),
+            // Cards with no zone named.
+            ("Sorcery", "Return a creature card to your hand."),
+            // A spell has no linked abilities to have exiled cards with (CR 607.1).
+            ("Sorcery", "Return the exiled cards to their owner's hand."),
+            // "Another" relative to something the grammar doesn't track.
+            ("Sorcery", "Return another creature card from your graveyard to your hand."),
+            // An ability functions in one zone (CR 113.6m).
+            ("Creature", "{2}: Return ~ from your graveyard or from exile to the battlefield tapped."),
+            // All the cards must come from one graveyard.
+            ("Sorcery", "Put two creature cards from a single graveyard onto the battlefield under your control."),
+            // Unknown modifier.
+            ("Sorcery", "Return target creature card from your graveyard to the battlefield sideways."),
+        ] {
+            assert!(compiled(ty, text).is_none(), "{text}");
+        }
     }
 
     /// `ZM_TYPE="Sorcery" ZM_TEXT="..." cargo test -p mtg-engine --lib zone_move_grammar::tests::debug -- --nocapture`

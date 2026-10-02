@@ -10,7 +10,7 @@ use crate::keywords::KeywordKind;
 use crate::events::{Event, MoveCause};
 use crate::oracle::patterns::zone_move_grammar::{
     ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN,
-    ENTERED_UNDER_YOUR_CONTROL_THIS_TURN, MILLED_THIS_TURN, RANDOM_COUNT, RANDOM_PICK,
+    MILLED_THIS_TURN, RANDOM_COUNT, RANDOM_PICK,
     RANDOM_POOL,
 };
 use crate::types::ObjectId;
@@ -60,12 +60,6 @@ impl KeywordRules for ZoneMoves {
             DISCARDED_BY_YOU_THIS_TURN => {
                 Some(g.history.discarded.contains(&(ctx.controller, id)))
             }
-            ENTERED_UNDER_YOUR_CONTROL_THIS_TURN => Some(
-                g.history
-                    .permanents_entered
-                    .iter()
-                    .any(|e| e.id == id && e.controller == ctx.controller),
-            ),
             _ => None,
         }
     }
