@@ -1419,6 +1419,22 @@ mod tests {
             "that creature is white or blue",
             "it's an enchantment creature or legendary creature",
             "that player is your opponent and has four or more cards in hand",
+            "it's your main phase",
+            "it's an opponent's turn",
+            "it's not their turn",
+            "you don't control a creature named keimi",
+            "you control the creature with the greatest power or tied for the greatest power",
+            "you control more creatures than that spell's controller",
+            "no opponent has more life than that player",
+            "its controller has three or more poison counters",
+            "a graveyard has twenty or more cards in it",
+            "there are no echo counters on ~",
+            "two or more permanents you don't control have an aim counter on them",
+            "you control three or more permanents you don't own",
+            "that land was nonbasic",
+            "it was dealt noncombat damage this turn",
+            "~ is enchanted by two or more auras",
+            "you control a creature with a +1/+1 counter on it",
         ] {
             assert!(parse_condition_with(s, &mut b).is_some(), "{s}");
         }
