@@ -439,11 +439,28 @@ impl Renderer<'_> {
 
     /// "is tapped", "is a creature", "has flying".
     pub(crate) fn is_predicate(&mut self, f: &Filter, negated: bool) -> String {
-        let atoms: Vec<&Filter> = match f {
+        let mut atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],
         };
+        // "is still in its zone" (not an object that has moved since, CR 400.7) is what
+        // "is in your graveyard" says in the present tense.
+        atoms.retain(|a| !matches!(a, Filter::Custom(n) if n == crate::zones::STILL_THERE));
         let mut parts = Vec::new();
+        // "in your graveyard": the zone and its owner.
+        let owned_zone = atoms.iter().find_map(|a| match a {
+            Filter::InZone(z) if *z != ZoneKind::Battlefield && *z != ZoneKind::Exile => Some(*z),
+            _ => None,
+        });
+        if let Some(z) = owned_zone {
+            if atoms
+                .iter()
+                .any(|a| matches!(a, Filter::OwnedBy(PlayerRel::You)))
+            {
+                atoms.retain(|a| !matches!(a, Filter::InZone(_) | Filter::OwnedBy(PlayerRel::You)));
+                parts.push(format!("in your {}", zone_word(z)));
+            }
+        }
         for a in atoms {
             let p = match a {
                 Filter::Tapped => "tapped".to_string(),

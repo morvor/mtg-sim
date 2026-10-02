@@ -88,6 +88,17 @@ impl Renderer<'_> {
         s
     }
 
+    /// A custom filter that is a whole noun phrase ("the creature it haunts").
+    pub(crate) fn custom_noun(&mut self, name: &str) -> Option<String> {
+        Some(match name {
+            // CR 702.55c.
+            crate::kw::haunt::HAUNTED => "the creature ~it haunts".into(),
+            // CR 702.95: "both creatures have flying" / "each of those creatures has ...".
+            crate::kw::soulbond::THE_PAIR => "{alt:each of those creatures|both creatures}".into(),
+            _ => return None,
+        })
+    }
+
     /// A custom object quality: (adjective?, text). Adjectives go before the noun
     /// ("saddled Mount"); other qualities after it ("creature that saddled it this turn").
     pub(crate) fn custom_filter_quality(&mut self, name: &str) -> (bool, String) {
@@ -218,6 +229,8 @@ impl Renderer<'_> {
         let me = |r: &mut Self| r.me();
         match name {
             "you_attacked_this_turn" => "you attacked this turn".into(),
+            crate::kw::storied::HAS_ENDURING_STORY => "you have an enduring story".into(),
+            "foretell:this spell was foretold" => "this spell was foretold".into(),
             "a_player_cast_two_spells_last_turn" => {
                 "a player cast two or more spells last turn".into()
             }
@@ -302,13 +315,15 @@ impl Renderer<'_> {
     /// Whether a custom trigger renders as a complete trigger phrase (with its own
     /// trigger word).
     pub(crate) fn custom_trigger_is_complete(&self, name: &str) -> bool {
-        name == "visit" || name.starts_with("door unlocked:")
+        name == "visit" || name.starts_with("door unlocked:") || name == crate::kw::exert::EXERTED
     }
 
     /// A custom trigger event ("~ mutates", "you unlock this door").
     pub(crate) fn custom_trigger(&mut self, name: &str) -> String {
         match name {
             "visit" => "visit —".into(),
+            // "You may exert ~ as it attacks. When you do, ..." (CR 701.43).
+            crate::kw::exert::EXERTED => "when you do".into(),
             n if n.starts_with("door unlocked:") => "when you unlock this door".into(),
             "mutates:self" => format!("{} mutates", self.me()),
             n if n.starts_with("class becomes level:") => {

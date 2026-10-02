@@ -541,6 +541,11 @@ impl Renderer<'_> {
 
     /// A noun phrase without determiner.
     pub(crate) fn noun(&mut self, f: &Filter, num: Num) -> String {
+        if let Filter::Custom(n) = f {
+            if let Some(s) = self.custom_noun(n) {
+                return s;
+            }
+        }
         let mut np = Np::default();
         self.collect(f, &mut np);
         let s = self.np_text(&np, num, false);
@@ -800,6 +805,11 @@ impl Renderer<'_> {
 
     /// A determiner + noun phrase.
     pub(crate) fn noun_det(&mut self, f: &Filter, det: Det) -> String {
+        if let Filter::Custom(n) = f {
+            if let Some(s) = self.custom_noun(n) {
+                return s;
+            }
+        }
         // "If that creature would die this turn": the selection itself.
         if let Filter::In(sel) = f {
             return self.sel(sel, Case::Obj);

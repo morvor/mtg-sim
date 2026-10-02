@@ -939,40 +939,21 @@ pub fn check_card(def: &CardDef) -> CardCheck {
     for (i, (face, r)) in def.faces.iter().zip(rendered.iter()).enumerate() {
         let names = self_names(def, i);
         let oracle = oracle_units(&face.chars.rules_text, &names);
-        let mine: Vec<String> = r
-            .lines
-            .iter()
-            .flat_map(|l| {
-                let l = self_refs(l, &names);
-                match keyword_items(&l) {
-                    Some(items) => items,
-                    None => vec![l],
+        let mut c = compare_face(&r.lines, &oracle, &names);
+        if !c.0.is_empty() || !c.1.is_empty() {
+            if let Some(m) = &r.merged {
+                let c2 = compare_face(m, &oracle, &names);
+                if c2.0.is_empty() && c2.1.is_empty() {
+                    c = c2;
                 }
-            })
-            .collect();
-        gaps.extend(r.gaps.iter().cloned());
-        let (uo, ur) = diff_units(&oracle, &mine);
-        if !uo.is_empty() || !ur.is_empty() {
-            // Fall back to comparing the whole face in order (one line may compile to
-            // several abilities, or several lines to one).
-            // First with the units that matched one to one left out, then the whole face.
-            let in_order = |o: &[String], m: &[String]| {
-                let all_o: Vec<String> = o.iter().flat_map(|u| normalize_unit(u)).collect();
-                let all_m: Vec<String> = m.iter().flat_map(|u| normalize_unit(u)).collect();
-                let units_m: Vec<Vec<String>> = m.iter().map(|u| normalize_unit(u)).collect();
-                let mut starts = Vec::new();
-                let mut n = 0;
-                for u in o {
-                    starts.push(n);
-                    n += normalize_unit(u).len();
-                }
-                tokens_match(&all_o, &all_m) || shared_subject_match(&all_o, &starts, &units_m)
-            };
-            if !in_order(&uo, &ur) && !in_order(&oracle, &mine) {
-                pass = false;
-                unmatched_oracle.extend(uo);
-                unmatched_rendered.extend(ur);
             }
+        }
+        gaps.extend(r.gaps.iter().cloned());
+        let (uo, ur, mine) = c;
+        if !uo.is_empty() || !ur.is_empty() {
+            pass = false;
+            unmatched_oracle.extend(uo);
+            unmatched_rendered.extend(ur);
         }
         faces.push((oracle, mine));
     }
@@ -987,6 +968,49 @@ pub fn check_card(def: &CardDef) -> CardCheck {
         unmatched_oracle,
         unmatched_rendered,
     }
+}
+
+/// Compares rendered lines with a face's Oracle units: (unmatched Oracle units,
+/// unmatched rendered units, the rendered units), both unmatched lists empty when the face
+/// matches.
+fn compare_face(
+    lines: &[String],
+    oracle: &[String],
+    names: &[String],
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mine: Vec<String> = lines
+        .iter()
+        .flat_map(|l| {
+            let l = self_refs(l, names);
+            match keyword_items(&l) {
+                Some(items) => items,
+                None => vec![l],
+            }
+        })
+        .collect();
+    let (uo, ur) = diff_units(oracle, &mine);
+    if uo.is_empty() && ur.is_empty() {
+        return (uo, ur, mine);
+    }
+    // Fall back to comparing in order (one line may compile to several abilities, or
+    // several lines to one): first with the units that matched one to one left out, then
+    // the whole face.
+    let in_order = |o: &[String], m: &[String]| {
+        let all_o: Vec<String> = o.iter().flat_map(|u| normalize_unit(u)).collect();
+        let all_m: Vec<String> = m.iter().flat_map(|u| normalize_unit(u)).collect();
+        let units_m: Vec<Vec<String>> = m.iter().map(|u| normalize_unit(u)).collect();
+        let mut starts = Vec::new();
+        let mut n = 0;
+        for u in o {
+            starts.push(n);
+            n += normalize_unit(u).len();
+        }
+        tokens_match(&all_o, &all_m) || shared_subject_match(&all_o, &starts, &units_m)
+    };
+    if in_order(&uo, &ur) || in_order(oracle, &mine) {
+        return (Vec::new(), Vec::new(), mine);
+    }
+    (uo, ur, mine)
 }
 
 /// Whether two normalized token sequences are the same. The renderer's `~it` (the object

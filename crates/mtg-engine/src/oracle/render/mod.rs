@@ -58,6 +58,10 @@ pub struct RenderedFace {
     pub lines: Vec<String>,
     /// AST nodes that couldn't be rendered.
     pub gaps: Vec<String>,
+    /// The same rendering with consecutive triggered abilities that do the same thing
+    /// written as one ("When ~ enters or the creature it haunts dies, ..."), when there
+    /// are any: cards print such abilities either way (CR 603.2).
+    pub merged: Option<Vec<String>>,
 }
 
 /// Renders every ability of a face.
@@ -71,7 +75,12 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     let mut r = Renderer::new(info);
     let mut out = RenderedFace::default();
     let mut prev_changeling = false;
+    // Per line: the body of the triggered ability it renders.
+    let mut bodies: Vec<Option<String>> = Vec::new();
     for (i, a) in abilities.iter().enumerate() {
+        while bodies.len() < out.lines.len() {
+            bodies.push(None);
+        }
         if let Some(n) = backup_n(a, &abilities[i + 1..]) {
             out.lines.push(format!("Backup {n}"));
             continue;
@@ -103,10 +112,70 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
             continue;
         }
         out.lines.push(line);
+        bodies.push(match &a.kind {
+            AbilityKind::Triggered(t) if t.intervening_if.is_none() => {
+                Some(format!("{:?}", t.body))
+            }
+            _ => None,
+        });
+    }
+    while bodies.len() < out.lines.len() {
+        bodies.push(None);
+    }
+    out.merged = merge_same_triggers(&out.lines, &bodies);
+    if let Some(m) = &mut out.merged {
+        merge_chapters(m);
     }
     merge_chapters(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
+}
+
+/// See [`RenderedFace::merged`]: "When A, X." + "When B, X." = "When A or B, X."
+fn merge_same_triggers(lines: &[String], bodies: &[Option<String>]) -> Option<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    let mut merged_any = false;
+    let mut i = 0;
+    while i < lines.len() {
+        let mut line = lines[i].clone();
+        while i + 1 < lines.len() && bodies[i].is_some() && bodies[i] == bodies[i + 1] {
+            let next = &lines[i + 1];
+            // The common ending is the effect; what's before it are the trigger events.
+            let a: Vec<char> = line.chars().collect();
+            let b: Vec<char> = next.chars().collect();
+            let common = a
+                .iter()
+                .rev()
+                .zip(b.iter().rev())
+                .take_while(|(x, y)| x == y)
+                .count();
+            // The first ", " inside the common ending.
+            let Some(k) = (a.len() - common..a.len().saturating_sub(1))
+                .find(|&k| a[k] == ',' && a[k + 1] == ' ')
+            else {
+                break;
+            };
+            let kb = b.len() - (a.len() - k);
+            let head_a: String = a[..k].iter().collect();
+            let head_b: String = b[..kb].iter().collect();
+            let tail: String = a[k + 2..].iter().collect();
+            if tail.is_empty() {
+                break;
+            }
+            let event_b = ["Whenever ", "When ", "At "]
+                .iter()
+                .find_map(|p| head_b.strip_prefix(p));
+            let Some(event_b) = event_b else {
+                break;
+            };
+            line = format!("{head_a} or {event_b}, {tail}");
+            merged_any = true;
+            i += 1;
+        }
+        out.push(line);
+        i += 1;
+    }
+    merged_any.then_some(out)
 }
 
 /// CR 702.165a: "Backup N" means "When this creature enters, put N +1/+1 counters on

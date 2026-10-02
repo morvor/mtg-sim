@@ -124,7 +124,50 @@ impl Renderer<'_> {
 
     /// The subject for a static effect on objects: "~", "enchanted creature", "creatures
     /// you control".
+    /// `f` without the "first ... each turn" quality (`kw::first_spell_each_turn`), when
+    /// it has it.
+    fn first_each_turn(f: &Filter) -> Option<Filter> {
+        let first = crate::kw::first_spell_each_turn::FIRST_THIS_TURN;
+        let Filter::And(v) = f else {
+            return None;
+        };
+        if !v
+            .iter()
+            .any(|x| matches!(x, Filter::Custom(n) if n == first))
+        {
+            return None;
+        }
+        let rest: Vec<Filter> = v
+            .iter()
+            .filter(|x| !matches!(x, Filter::Custom(n) if n == first))
+            .cloned()
+            .collect();
+        Some(if rest.len() == 1 {
+            rest.into_iter().next().unwrap_or(Filter::Any)
+        } else {
+            Filter::And(rest)
+        })
+    }
+
+    /// "instant or sorcery spell" (singular, no article).
+    fn spell_noun_one(&mut self, f: &Filter) -> String {
+        let n = self.noun(f, Num::One);
+        let n = n.trim_end_matches(" you control").to_string();
+        if n.contains("spell") {
+            n
+        } else if n == "permanent" || n == "card" {
+            "spell".into()
+        } else {
+            format!("{n} spell")
+        }
+    }
+
     fn affected_subject(&mut self, f: &Filter) -> String {
+        if let Some(base) = Self::first_each_turn(f) {
+            // "The first historic spell you cast each turn has convoke."
+            let n = self.spell_noun_one(&base);
+            return format!("the first {n} you cast each turn");
+        }
         match f {
             Filter::Source => self.me(),
             Filter::AttachedToSource => self.attached_noun(),
@@ -531,6 +574,27 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
+        // "The first creature spell you cast each turn costs {2} less to cast."
+        let first = match &cm.applies_to {
+            CostTarget::Spells(f) => Self::first_each_turn(f),
+            _ => None,
+        };
+        if let Some(base) = first {
+            let n = self.spell_noun_one(&base);
+            let mut cm2 = cm.clone();
+            cm2.applies_to = CostTarget::Spells(base);
+            let s = self.cost_modifier(&cm2);
+            let who = if cm.who == PlayerRel::You {
+                "you".to_string()
+            } else {
+                self.rel_subject(cm.who)
+            };
+            if let Some(i) = s.find(&format!(" {who} cast cost")) {
+                let rest = &s[i + format!(" {who} cast").len()..];
+                return format!("the first {n} {who} cast each turn{rest}");
+            }
+            return s;
+        }
         let target = self.cost_target(&cm.applies_to);
         let is_spell = matches!(cm.applies_to, CostTarget::Spells(_) | CostTarget::ThisSpell);
         let who = match (&cm.applies_to, cm.who) {
@@ -600,6 +664,9 @@ impl Renderer<'_> {
             CostChange::AlternativeCost(c) => {
                 let c = self.cost_as_payment(c);
                 format!("you may {c} rather than pay ~'s mana cost")
+            }
+            CostChange::FlashForAdditionalCost(c) if c.is_free() => {
+                format!("you may cast {} as though it had flash", self.me())
             }
             CostChange::FlashForAdditionalCost(c) => {
                 let c = self.cost(c);
@@ -798,7 +865,7 @@ impl Renderer<'_> {
                 };
                 let c = self.cost(cost);
                 format!(
-                    "{a} can't attack {d}{pw} unless their controller pays {c} for each creature they control that's attacking {d}"
+                    "{a} can't attack {d}{pw} unless their controller pays {c} for each {{alt:creature they control that's attacking {d}|of those creatures}}"
                 )
             }
             Restriction::BlockCost { blockers, cost } => {
@@ -1337,6 +1404,24 @@ impl Renderer<'_> {
 
     fn as_enters(&mut self, subj: &str, e: &Effect) -> String {
         match e {
+            // CR 307.5a: "If you cast it any time a sorcery couldn't have been cast, the
+            // controller of the permanent it becomes sacrifices it at the beginning of the
+            // next cleanup step."
+            Effect::If {
+                cond: Condition::Custom(c),
+                then,
+                otherwise,
+            } if c
+                == crate::oracle::patterns::r307_sorcery_timing::CAST_BY_OWN_FLASH_AT_INSTANT_TIMING
+                && matches!(otherwise.as_ref(), Effect::Noop)
+                && matches!(then.as_ref(), Effect::OnEntry(x)
+                    if matches!(x.as_ref(), Effect::AtNext { step: TriggerStep::Cleanup, effect }
+                        if matches!(effect.as_ref(), Effect::SacrificeObjects { what: Sel::This }))) =>
+            {
+                "if you cast it any time a sorcery couldn't have been cast, the controller of \
+                 the permanent it becomes sacrifices it at the beginning of the next cleanup step"
+                    .into()
+            }
             Effect::If {
                 cond,
                 then,

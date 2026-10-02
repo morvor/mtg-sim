@@ -1336,6 +1336,44 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Each opponent may scry 1": each player chooses whether to take part
+            // (`scry_rules::OPT_IN`), then those who did act.
+            if let (
+                Some(Effect::ForEachPlayer { who, effect: opt }),
+                Some(Effect::Store {
+                    var,
+                    sel: Sel::Var(opted),
+                }),
+                Some(Effect::ForEachPlayer {
+                    who: PlayerRef::Var(v2),
+                    effect: act,
+                }),
+            ) = (v.get(i), v.get(i + 1), v.get(i + 2))
+            {
+                let is_opt_in = matches!(opt.as_ref(), Effect::May { who: PlayerRef::Iterated, effect }
+                    if matches!(effect.as_ref(), Effect::Custom(n) if n == crate::scry_rules::OPT_IN));
+                if is_opt_in && *opted == crate::scry_rules::OPTED && v2 == var {
+                    let inner = match act.as_ref() {
+                        Effect::AsPlayer {
+                            who: PlayerRef::Iterated,
+                            effect,
+                        } => self.effect(effect),
+                        other => {
+                            let saved = self.trigger_player.take();
+                            let s = self.effect(other);
+                            self.trigger_player = saved;
+                            s
+                        }
+                    };
+                    let inner = inner
+                        .replace("that player ", "")
+                        .replace(" your ", " their ");
+                    let w = self.player(who, Case::Subj);
+                    parts.push(format!("{w} may {inner}"));
+                    i += 3;
+                    continue;
+                }
+            }
             // "~ gets +1/+0 until end of turn and can't be blocked this turn."
             if let (Some(Effect::Modify { .. }), Some(Effect::AddRestriction { .. })) =
                 (v.get(i), v.get(i + 1))
@@ -1676,7 +1714,9 @@ impl Renderer<'_> {
         // ("Return ~ from your graveyard to your hand", CR 113.6m).
         if matches!(what, Sel::This) {
             match self.zone {
-                FunctionZone::Graveyard => w.push_str(" from your graveyard"),
+                // Left out when the ability already said where it is ("if ~ is in your
+                // graveyard, ... return it to your hand").
+                FunctionZone::Graveyard => w.push_str(" {opt:from your graveyard}"),
                 FunctionZone::Hand if to.zone != ZoneKind::Hand => w.push_str(" from your hand"),
                 FunctionZone::Exile => w.push_str(" from exile"),
                 _ => {}

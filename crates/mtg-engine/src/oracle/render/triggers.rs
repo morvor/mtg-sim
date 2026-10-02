@@ -88,7 +88,10 @@ impl Renderer<'_> {
         self.trigger_names_opponent =
             trig.contains("an opponent controls") || trig.contains("your opponents control");
         let saved_salient = self.self_salient;
-        self.self_salient = trig.contains('~');
+        // "You may exert ~ as it attacks. When you do, it gets ...": the object was just
+        // named.
+        self.self_salient = trig.contains('~')
+            || matches!(&t.trigger, TriggerCond::Custom(n) if n == crate::kw::exert::EXERTED);
         let mut s = trig;
         if let Some(c) = &t.intervening_if {
             let c = self.condition(c);
