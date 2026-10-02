@@ -109,7 +109,6 @@ fn call_forth_the_tempests_second_cascade_still_uses_eight() {
         "Call Forth the Tempest",
         "No matter what spell you cast with the first cascade ability (or with any cascade abilities that result from casting that spell), the second cascade ability will look for a card with mana value less than Call Forth the Tempest's mana value of 8."
     );
-    // (Call Forth the Tempest's cascades compile; its damage ability doesn't.)
     let mut t = TestGame::new(2);
     stack_library(
         &mut t,
@@ -418,4 +417,36 @@ fn aurora_phoenix_and_the_cascade_trigger_go_on_the_stack_in_either_order() {
         assert_eq!(t.named_on_battlefield("Bloodbraid Elf").len(), 1);
     }
     assert_ne!(tops[0], tops[1]);
+}
+
+#[test]
+fn call_forth_the_tempest_counts_mana_value_of_other_spells_cast_this_turn() {
+    cr!("702.85a", "601.2i", "707.10", "202.3");
+    ruling!(
+        "Call Forth the Tempest",
+        "Count the mana values of all other spells you've cast this turn before Call Forth the Tempest resolved, including any spells that you've cast due to Call Forth the Tempest's cascade abilities."
+    );
+    supported("Call Forth the Tempest");
+    let mut t = TestGame::new(2);
+    // Earlier this turn: Lightning Bolt (1) and Twincast (2), whose copy of the Bolt
+    // wasn't cast and doesn't count.
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Island", 2);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let spell = t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    let twin = t.hand(P0, "Twincast");
+    t.cast(P0, twin).target(spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    // The cascades cast Grizzly Bears (2) and Hill Giant (4).
+    stack_library(&mut t, P0, &["Grizzly Bears", "Hill Giant"]);
+    let colossus = t.battlefield(P1, "Darksteel Colossus");
+    cast_from_hand(&mut t, "Call Forth the Tempest");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // 1 + 2 + 2 + 4: not Call Forth the Tempest itself (8), nor the copy.
+    assert_eq!(t.obj_now(colossus).damage, 9);
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    assert_eq!(t.obj_now(giant).damage, 0);
 }
