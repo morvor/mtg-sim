@@ -412,6 +412,34 @@ pub fn enchant_noun(abilities: &[Ability], info: &FaceInfo) -> Option<String> {
             }
         }
     }
+    // "When ~ enters, it becomes an Aura with enchant creature" (Rageform): the enchant
+    // ability it gains.
+    fn gained_enchant(e: &Effect) -> Option<crate::keywords::Keyword> {
+        match e {
+            Effect::Seq(v) => v.iter().find_map(gained_enchant),
+            Effect::Modify {
+                what: Sel::This,
+                mods,
+                ..
+            } => mods.iter().find_map(|m| match m {
+                Modification::AddKeyword(k) if k.kind == crate::keywords::KeywordKind::Enchant => {
+                    Some(k.clone())
+                }
+                _ => None,
+            }),
+            _ => None,
+        }
+    }
+    for a in abilities {
+        if let AbilityKind::Triggered(t) = &a.kind {
+            if let Some(mut k) = gained_enchant(&t.body.effect) {
+                k.filter = k.filter.map(|f| effects::strip_controller(&f));
+                let mut r = Renderer::new(info);
+                let s = r.keyword_lower(&k);
+                return s.strip_prefix("enchant ").map(|x| x.to_string());
+            }
+        }
+    }
     None
 }
 

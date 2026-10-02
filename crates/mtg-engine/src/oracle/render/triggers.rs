@@ -867,6 +867,20 @@ impl Renderer<'_> {
                     format!("the beginning of {p} {} main phase", ordinal_word(k)),
                 )
             }
+            // "Whenever one or more Demons you control attack a player": the attacked
+            // player is a player (not a planeswalker or battle, CR 508.1b).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::And(cs),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
+                && matches!(cs.as_slice(), [
+                    Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Any),
+                    Condition::Not(n),
+                ] if matches!(n.as_ref(), Condition::SelNonEmpty(Sel::TriggerOtherObject))) =>
+            {
+                let e = self.trigger_event(trigger, det);
+                Ev::new(e.subj, format!("{} a player", e.vp))
+            }
             // "Whenever ~ and at least two other creatures attack".
             TriggerCond::Where { trigger, cond }
                 if matches!(trigger.as_ref(), TriggerCond::Attacks(_))

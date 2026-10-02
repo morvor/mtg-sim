@@ -327,7 +327,12 @@ impl Renderer<'_> {
             StaticEffect::PlayPermission(pp) => self.play_permission(pp),
             StaticEffect::ActivationPermission(ap) => self.activation_permission("you", ap),
             StaticEffect::FlashPermission { who, what } => {
-                let w = self.rel_subject(*who);
+                // "Any player may cast Sliver spells as though they had flash."
+                let w = if matches!(who, PlayerRel::Any) {
+                    "any player".to_string()
+                } else {
+                    self.rel_subject(*who)
+                };
                 let s = self.spell_noun_plural(what);
                 format!("{w} may cast {s} as though they had flash")
             }

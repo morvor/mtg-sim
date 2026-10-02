@@ -608,6 +608,62 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("tap or untap {w}")
             }
+            // "~ gains your choice of flying, deathtouch, or lifelink until end of turn",
+            // "~ gets +2/-2 or -2/+2 until end of turn".
+            Effect::ChooseOne {
+                who: PlayerRef::You,
+                options,
+            } if options.len() > 1
+                && options.iter().all(|(_, e)| {
+                    matches!(e, Effect::Modify { mods, .. } if matches!(mods.as_slice(), [Modification::AddKeyword(_)] | [Modification::ModifyPT(..)]))
+                })
+                && options.windows(2).all(|w| match (&w[0].1, &w[1].1) {
+                    (
+                        Effect::Modify { what: a, duration: da, mods: ma },
+                        Effect::Modify { what: b, duration: db, mods: mb },
+                    ) => {
+                        same_sel(a, b)
+                            && format!("{da:?}") == format!("{db:?}")
+                            && std::mem::discriminant(&ma[0]) == std::mem::discriminant(&mb[0])
+                    }
+                    _ => false,
+                }) =>
+            {
+                let Effect::Modify { what, duration, mods } = &options[0].1 else {
+                    return self.gap("choice of modifications");
+                };
+                let w = self.sel(what, Case::Subj);
+                let d = self.duration(duration);
+                let keywords = matches!(mods[0], Modification::AddKeyword(_));
+                let items: Vec<String> = options
+                    .iter()
+                    .filter_map(|(_, e)| match e {
+                        Effect::Modify { mods, .. } => match &mods[0] {
+                            Modification::AddKeyword(k) => Some(self.keyword_lower(k)),
+                            Modification::ModifyPT(p, t) => {
+                                let p = self.value(p);
+                                let t = self.value(t);
+                                let sign = |s: String| {
+                                    if s.starts_with('-') {
+                                        s
+                                    } else {
+                                        format!("+{s}")
+                                    }
+                                };
+                                Some(format!("{}/{}", sign(p), sign(t)))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                    .collect();
+                let vp = if keywords {
+                    format!("gains your choice of {}", join_list(&items, "or"))
+                } else {
+                    format!("gets {}", join_list(&items, "or"))
+                };
+                join_words(&[format!("{w} {vp}"), d])
+            }
             // "Sacrifice an artifact or discard a card": two simple instructions of yours,
             // one of which you choose.
             Effect::ChooseOne {
@@ -4961,7 +5017,11 @@ impl Becomes {
                 .copied()
                 .filter(|t| !self.add_types.contains(t))
                 .collect();
-            if r.subject_types.is_empty() || self.add_types.is_empty() {
+            // "It becomes an Aura with enchant creature": an Aura is an enchantment
+            // (CR 303.4), so its card types stay, said or not.
+            if self.add_types.is_empty() && self.subtypes.iter().all(|t| t == "Aura") {
+                s.push_str(" {opt:in addition to its other types}");
+            } else if r.subject_types.is_empty() || self.add_types.is_empty() {
                 s.push_str(" in addition to its other types");
             } else if !known.is_empty() {
                 let w: Vec<String> = known.iter().map(|t| t.word().to_string()).collect();
