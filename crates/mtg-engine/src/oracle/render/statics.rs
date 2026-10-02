@@ -1219,12 +1219,27 @@ impl Renderer<'_> {
                     ObjectAction::Equipped => "can't be equipped",
                     ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
                     ObjectAction::Suspected => "can't become suspected",
+                    ObjectAction::Copied => "can't be copied",
                 };
                 format!("{w} {a}")
             }
             Restriction::CantEnterFrom { what } => {
                 let n = self.noun(what, Num::Many);
                 format!("{n} can't enter the battlefield")
+            }
+            Restriction::AttackTogether {
+                attackers,
+                triggers,
+                ..
+            } => {
+                let t = self.noun_det(triggers, Det::A);
+                let a = subj(self, attackers);
+                format!("if {t} attacks, {a} attacks if able")
+            }
+            Restriction::MustAttackOtherThan { attackers, players } => {
+                let a = subj(self, attackers);
+                let p = self.player_filter_object(players);
+                format!("{a} attacks a player other than {p} if able")
             }
             Restriction::AttackOnlyAlone(f) => format!("{} can only attack alone", subj(self, f)),
             Restriction::MaxAttackersAgainst { player, object, n } => {

@@ -2923,6 +2923,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::AttackOnlyAlone(f)
         | Restriction::CantTransform(f) => Some(f),
         Restriction::CantBe { what, .. } => Some(what),
+        Restriction::AttackTogether { attackers, .. }
+        | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
         Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
         Restriction::MinBlockers { attacker, .. }

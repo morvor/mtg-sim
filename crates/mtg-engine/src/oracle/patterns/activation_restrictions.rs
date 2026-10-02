@@ -263,6 +263,35 @@ fn restriction_state(c: &str) -> Option<Condition> {
     None
 }
 
+/// "you've cast another spell this turn", "you've cast another green spell this turn"
+/// (spells other than the one being cast, CR 601.2).
+fn cast_another_spell(c: &str) -> Option<Condition> {
+    let c = crate::oracle::phrases::end(c);
+    match c {
+        "you've cast another spell this turn" => {
+            return Some(Condition::Custom(crate::spell_costs::CAST_ANOTHER_SPELL.into()))
+        }
+        "you've cast another instant or sorcery spell this turn" => {
+            return Some(Condition::Custom(
+                crate::spell_costs::CAST_ANOTHER_INSTANT_OR_SORCERY.into(),
+            ))
+        }
+        _ => {}
+    }
+    let r = c
+        .strip_prefix("you've cast another ")?
+        .strip_suffix(" spell this turn")?;
+    if r.is_empty() {
+        return None;
+    }
+    let color = crate::types::Color::from_word(r)?;
+    Some(Condition::Custom(
+        format!("you_cast_another_spell_this_turn:{}", color.letter()).into(),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "activation restrictions: you've cast another [color] spell this turn", priority: 100, parse: cast_another_spell } }
+
 inventory::submit! { super::ConditionPattern { name: "activation restrictions: source and hand states", priority: 100, parse: restriction_state } }
 
 inventory::submit! { super::ConditionPattern { name: "activation restrictions: you've been attacked this step", priority: 100, parse: attacked_this_step } }

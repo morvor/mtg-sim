@@ -2449,6 +2449,21 @@ pub enum Restriction {
         min: u32,
         max: Option<u32>,
     },
+    /// "If a creature you control attacks, ~ also attacks if able", "If ~ attacks, all
+    /// creatures you control attack if able": each creature matching `attackers` attacks
+    /// if able if another creature matching `triggers` attacks (with `same_controller`,
+    /// one its controller controls) (CR 508.1d).
+    AttackTogether {
+        attackers: Filter,
+        triggers: Filter,
+        same_controller: bool,
+    },
+    /// "[creatures] attack a player other than [players] if able" (the second requirement
+    /// of goad, CR 701.15b, without goading).
+    MustAttackOtherThan {
+        attackers: Filter,
+        players: PlayerFilter,
+    },
     /// "[players] can't block with more than one creature (this combat)" (CR 509.1b).
     MaxBlockersOf {
         who: PlayerFilter,
@@ -2473,6 +2488,8 @@ pub enum ObjectAction {
     EnchantedByOtherAuras,
     /// "can't become suspected" (CR 701.60).
     Suspected,
+    /// "This spell can't be copied" (CR 707.10).
+    Copied,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

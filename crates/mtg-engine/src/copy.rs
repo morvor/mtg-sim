@@ -17,6 +17,10 @@ pub fn copy_spell(
     // copied as it last existed there (CR 608.2h); its old object keeps that information.
     // So is an ability that has left it (countered in response to Rings of Brighthearth's
     // trigger): its object is kept, out of every zone.
+    // "This spell can't be copied."
+    if crate::prohibitions::object_cant(g, spell, crate::ability::ObjectAction::Copied) {
+        return None;
+    }
     let o = g.obj(spell);
     let spell_lki = !g.is_live(spell) && o.kind != ObjKind::StackAbility && o.stack.is_some();
     let ability_lki =

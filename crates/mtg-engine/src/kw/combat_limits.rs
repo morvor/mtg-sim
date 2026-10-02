@@ -35,6 +35,72 @@ impl KeywordRules for CombatLimits {
         }
     }
 
+    /// "If a creature you control attacks, ~ also attacks if able" and "[creatures] attack
+    /// a player other than you if able" (CR 508.1d).
+    fn attack_requirements(&self, g: &Game) -> Vec<crate::combat::AttackRequirement> {
+        use crate::combat::AttackRequirement;
+        let mut out = Vec::new();
+        let rs: Vec<_> = g
+            .all_restrictions()
+            .into_iter()
+            .filter(|(_, _, r, _)| {
+                matches!(
+                    r,
+                    Restriction::AttackTogether { .. } | Restriction::MustAttackOtherThan { .. }
+                )
+            })
+            .collect();
+        if rs.is_empty() {
+            return out;
+        }
+        let players = crate::combat::attacking_players(g);
+        let creatures: Vec<ObjectId> = g
+            .permanents()
+            .filter(|o| o.is_creature() && players.contains(&o.controller))
+            .map(|o| o.id)
+            .collect();
+        for (s, c, r, locked) in rs {
+            let ctx = Ctx::new(s, c);
+            match &r {
+                Restriction::AttackTogether {
+                    attackers,
+                    triggers,
+                    same_controller,
+                } => {
+                    for &a in &creatures {
+                        if !g.restriction_applies(a, attackers, &ctx, &locked) {
+                            continue;
+                        }
+                        let ac = g.obj(a).controller;
+                        let others: Vec<ObjectId> = creatures
+                            .iter()
+                            .copied()
+                            .filter(|o| *o != a && g.matches(*o, triggers, &ctx))
+                            .filter(|o| !same_controller || g.obj(*o).controller == ac)
+                            .collect();
+                        if !others.is_empty() {
+                            out.push(AttackRequirement::AttacksIfAnyAttacks(a, others));
+                        }
+                    }
+                }
+                Restriction::MustAttackOtherThan { attackers, players } => {
+                    let ps: Vec<PlayerId> = g
+                        .player_ids()
+                        .into_iter()
+                        .filter(|p| g.player_filter_matches(players, *p, &ctx))
+                        .collect();
+                    for &a in &creatures {
+                        if g.restriction_applies(a, attackers, &ctx, &locked) {
+                            out.push(AttackRequirement::AttacksPlayerOtherThan(a, ps.clone()));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
     fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
         if decl.is_empty() {
             return true;

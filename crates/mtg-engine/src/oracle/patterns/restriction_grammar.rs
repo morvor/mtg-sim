@@ -54,6 +54,7 @@ fn object_action(x: &str) -> Option<ObjectAction> {
         "be equipped" => ObjectAction::Equipped,
         "be enchanted by other auras" => ObjectAction::EnchantedByOtherAuras,
         "become suspected" => ObjectAction::Suspected,
+        "be copied" => ObjectAction::Copied,
         _ => return None,
     })
 }
@@ -93,6 +94,23 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
         "can't transform" => return Some(vec![Restriction::CantTransform(fc)]),
         "must be blocked each combat if able" => {
             return Some(vec![Restriction::MustBeBlocked(fc)])
+        }
+        // "Enchanted creature gets +1/+1 and has first strike, and all creatures able to
+        // block it do so": each creature able to block the subject blocks it (CR 509.1c).
+        "all creatures able to block it do so" | "all creatures able to block them do so" => {
+            return Some(vec![Restriction::MustBeBlockedByAll(fc)])
+        }
+        "must be blocked" | "must be blocked each combat" => {
+            return Some(vec![Restriction::MustBeBlocked(fc)])
+        }
+        // "can't attack its owner (or planeswalkers its owner controls)".
+        "can't attack its owner" | "can't attack its owner or planeswalkers its owner controls" => {
+            return Some(vec![Restriction::CantAttackPlayer {
+                attackers: fc,
+                defender: PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(Sel::This)))),
+                planeswalkers: p.ends_with("planeswalkers its owner controls"),
+                battles: false,
+            }])
         }
         "can block any number of creatures" | "can block any number of creatures each combat" => {
             return Some(vec![Restriction::ExtraBlocks {
@@ -387,6 +405,22 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         return None;
     }
     let l = end(l.trim());
+    // "As long as ~ is tapped, no more than one creature can attack you each combat."
+    if let Some(r) = l.strip_prefix("as long as ") {
+        let (c, rest) = r.split_once(", ")?;
+        let cond = super::activation_restrictions::condition(c, ctx)?;
+        let mut v = restriction_static(rest, text, ctx)?;
+        for a in &mut v {
+            let AbilityKind::Static(st) = &mut std::sync::Arc::make_mut(a).kind else {
+                return None;
+            };
+            if st.condition.is_some() {
+                return None;
+            }
+            st.condition = Some(cond.clone());
+        }
+        return Some(v);
+    }
     if let Some(rs) = no_more_than(l)
         .or_else(|| all_able_to_block(l))
         .or_else(|| cards_cant_enter(l))
@@ -417,6 +451,58 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
             text,
         )]);
     }
+    // "Noncreature spells with mana value 4 or greater can't be cast."
+    if let Some(subject) = l.strip_suffix(" can't be cast") {
+        let (f, plural) = whole_object_phrase(&union_nouns(subject))?;
+        if !plural || !filter_mentions(&f, &|x| matches!(x, Filter::Spell)) {
+            return None;
+        }
+        let what = crate::oracle::patterns::statics::without_spell(f)?;
+        return Some(static_restrictions(
+            vec![Restriction::CantCast {
+                who: PlayerFilter::Any,
+                what,
+            }],
+            text,
+        ));
+    }
+    // "Players can't draw cards or gain life."
+    if let Some(who) = l
+        .strip_suffix(" can't draw cards or gain life")
+        .and_then(player_group)
+    {
+        return Some(static_restrictions(
+            vec![
+                Restriction::MaxDrawsPerTurn(who.clone(), 0),
+                Restriction::CantGainLife(who),
+            ],
+            text,
+        ));
+    }
+    // "All creatures attack enchanted creature's controller each combat if able."
+    if let Some(d) = l
+        .strip_prefix("all creatures attack ")
+        .and_then(|r| r.strip_suffix(" each combat if able"))
+    {
+        let defender = match d {
+            "enchanted creature's controller" => {
+                PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))))
+            }
+            "you" => PlayerFilter::You,
+            _ => return None,
+        };
+        return Some(static_restrictions(
+            vec![Restriction::MustAttackPlayer {
+                attackers: Filter::creature(),
+                defender,
+            }],
+            text,
+        ));
+    }
+    // "If a creature you control attacks, ~ also attacks if able."
+    if let Some(r) = attack_together(l) {
+        return Some(static_restrictions(vec![r], text));
+    }
     for (head, who) in [
         ("players ", PlayerFilter::Any),
         ("your opponents ", PlayerFilter::Opponent),
@@ -433,6 +519,35 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
 }
 
 inventory::submit! { StaticPattern { name: "restriction grammar: static restrictions", priority: 105, parse: restriction_static } }
+
+/// "Enchanted creature gets +4/+4 and has first strike, and all creatures able to block
+/// it do so.": the rest of the line, and a blocking requirement on the same object(s)
+/// under the same condition (CR 509.1c).
+fn and_all_able_to_block_it(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let head = l
+        .strip_suffix(", and all creatures able to block it do so")
+        .or_else(|| l.strip_suffix(" and all creatures able to block it do so"))?;
+    let head_text = &text[..head.len()];
+    let mut abilities = crate::oracle::statics::parse_static(&format!("{head_text}."), ctx)?;
+    let AbilityKind::Static(first) = &abilities.first()?.kind else {
+        return None;
+    };
+    let StaticEffect::Continuous { affected, .. } = &first.effect else {
+        return None;
+    };
+    if !matches!(affected, Filter::AttachedToSource | Filter::Source) {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::MustBeBlockedByAll(
+        affected.clone(),
+    )));
+    s.condition = first.condition.clone();
+    abilities.push(AbilityDef::new(AbilityKind::Static(s), text));
+    Some(abilities)
+}
+
+inventory::submit! { StaticPattern { name: "restriction grammar: ..., and all creatures able to block it do so", priority: 105, parse: and_all_able_to_block_it } }
 
 // ---------------------------------------------------------------------------
 // Effects
@@ -608,6 +723,27 @@ fn players_cant_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let (dur, main) = effect_duration(l)?;
     let (subject, pred) = main.split_once(" can't ")?;
     let who = effect_players(subject, b)?;
+    // "Each opponent can't block with more than one creature this combat."
+    if let Some(rs) = players_cant_use(&who, &format!("can't {pred}")) {
+        return Some(add(rs, dur));
+    }
+    // "You can't attack that player this turn."
+    if let Some(d) = pred.strip_prefix("attack ") {
+        let defender = effect_players(d, b)?;
+        let attackers = match who {
+            PlayerFilter::You => Filter::creature().you_control(),
+            _ => return None,
+        };
+        return Some(add(
+            vec![Restriction::CantAttackPlayer {
+                attackers,
+                defender,
+                planeswalkers: false,
+                battles: false,
+            }],
+            dur,
+        ));
+    }
     let rs = match pred {
         "gain life" => vec![Restriction::CantGainLife(who)],
         "search libraries" => vec![Restriction::CantSearch(who)],
@@ -645,10 +781,21 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((pronoun, poss, r)) => (pronoun.to_string(), Some(format!("{poss} activated abilities {r}"))),
         None => (main.to_string(), None),
     };
+    // "~ and up to one other target creature can't be blocked this turn": both.
+    let (main, first) = match main.strip_prefix("~ and ") {
+        Some(r) if possessive.is_none() => (r.to_string(), Some(Filter::Source)),
+        _ => (main, None),
+    };
     let (what, rest) = crate::oracle::effects::object_ref(&main, b)?;
     let rest = possessive.unwrap_or(rest);
     let subject = main.strip_suffix(rest.as_str()).unwrap_or(&main).trim();
-    let f = subject_filter(&what, subject)?;
+    let mut f = subject_filter(&what, subject)?;
+    if let Some(first) = first {
+        if !matches!(what, Sel::Target(_)) {
+            return None;
+        }
+        f = Filter::Or(vec![first, f]);
+    }
     let rs = restriction_predicate(end(&rest), &f)?;
     // Only restrictions a resolving effect can lock onto the objects it names.
     let ok = rs.iter().all(|r| {
@@ -695,6 +842,40 @@ fn restriction_class(f: &Filter) -> bool {
     }
 }
 
+/// Subjects naming what an earlier instruction did: "each creature dealt damage this
+/// way" (fixed as the effect begins, CR 608.2c).
+fn damaged_this_way(subject: &str) -> Option<Filter> {
+    matches!(
+        subject,
+        "each creature dealt damage this way"
+            | "creatures dealt damage this way"
+            | "a creature dealt damage this way"
+    )
+    .then(|| {
+        Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::DAMAGED))),
+            Filter::creature(),
+        ])
+    })
+}
+
+/// The subject at the start of `s` and the rest: [`damaged_this_way`] or an object
+/// reference.
+fn effect_subject(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    for p in [
+        "each creature dealt damage this way",
+        "creatures dealt damage this way",
+        "a creature dealt damage this way",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((damaged_this_way(p)?, rest.to_string()));
+        }
+    }
+    let (what, rest) = crate::oracle::effects::object_ref(s, b)?;
+    let subject = s.strip_suffix(rest.as_str()).unwrap_or(s).trim();
+    Some((subject_filter(&what, subject)?, rest))
+}
+
 /// The filter of a restriction's subject: a class of objects, or the specific objects
 /// named (locked in as the effect begins).
 fn subject_filter(what: &Sel, subject: &str) -> Option<Filter> {
@@ -727,11 +908,15 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         (Some(_), _) if !l.ends_with(" each combat if able") => return None,
         (_, d) => d,
     };
-    let (what, rest) = crate::oracle::effects::object_ref(body, b)?;
-    let subject = body.strip_suffix(rest.as_str()).unwrap_or(body).trim();
-    let f = subject_filter(&what, subject)?;
+    let (f, rest) = effect_subject(body, b)?;
     let rest = rest.trim();
-    let rs = if matches!(rest, "attacks or blocks" | "attack or block") {
+    let rs = if matches!(rest, "attacks" | "attack") {
+        vec![Restriction::MustAttack(f)]
+    } else if matches!(rest, "blocks" | "block") {
+        vec![Restriction::MustBlock(f)]
+    } else if matches!(rest, "must be blocked" | "must be blocked each combat") {
+        vec![Restriction::MustBeBlocked(f)]
+    } else if matches!(rest, "attacks or blocks" | "attack or block") {
         vec![Restriction::MustAttack(f.clone()), Restriction::MustBlock(f)]
     } else if let Some(p) = rest
         .strip_prefix("attacks ")
@@ -780,6 +965,180 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "restriction grammar: requirements with a player or object", priority: 110, parse: requirement_effect } }
+
+/// "[objects] don't untap during [whose] next untap step" (CR 502.3): for specific
+/// objects, through their controllers' next untap steps; for a group a player controls,
+/// through that player's next untap step; "during your next untap step", through its
+/// controller's.
+fn doesnt_untap_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (subject, whose) = l
+        .split_once(" don't untap during ")
+        .or_else(|| l.split_once(" doesn't untap during "))?;
+    let whose = whose
+        .strip_suffix(" next untap step")
+        .or_else(|| whose.strip_suffix(" next untap steps"))?;
+    // "Creatures don't untap during target player's next untap step": the creatures that
+    // player controls.
+    if let Some(pf) = whose.strip_suffix("'s").and_then(|w| match w {
+        "target player" => Some(PlayerFilter::Any),
+        "target opponent" => Some(PlayerFilter::Opponent),
+        _ => None,
+    }) {
+        let (f, plural) = whole_object_phrase(subject)?;
+        if !plural || filter_mentions(&f, &|x| matches!(x, Filter::ControlledBy(_))) {
+            return None;
+        }
+        let text = if matches!(pf, PlayerFilter::Any) {
+            "target player"
+        } else {
+            "target opponent"
+        };
+        let slot = b.add_target(TargetSpec::player(pf, text), text);
+        b.it_player = PlayerRef::Target(slot);
+        return Some(Effect::AddRestriction {
+            restriction: Restriction::DoesntUntap(Filter::and(vec![
+                f,
+                Filter::ControlledBy(PlayerRel::Target(slot)),
+            ])),
+            duration: Duration::ThroughNextUntapStep,
+        });
+    }
+    let (what, rest) = crate::oracle::effects::object_ref(subject, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let duration = match whose {
+        "its controller's" | "their controller's" | "their controllers'" => {
+            Duration::ThroughNextUntapStep
+        }
+        "your" => Duration::ThroughYourNextUntapStep,
+        _ => return None,
+    };
+    // Specific objects only: groups use the patterns that bind their player.
+    let f = match &what {
+        Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject => Filter::In(Box::new(what)),
+        Sel::This if subject.starts_with('~') => Filter::In(Box::new(what)),
+        _ => return None,
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::DoesntUntap(f),
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: [objects] don't untap during a next untap step", priority: 110, parse: doesnt_untap_effect } }
+
+/// "All creatures your opponents control able to block that creature this turn do so."
+fn all_able_to_block_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("all ")?;
+    let (r, dur) = if let Some(r) = r.strip_suffix(" this turn do so") {
+        (r, Duration::EndOfTurn)
+    } else if let Some(r) = r.strip_suffix(" this combat do so") {
+        (r, Duration::EndOfCombat)
+    } else {
+        return None;
+    };
+    let (blockers, attacker) = r.split_once(" able to block ")?;
+    let (bf, plural) = whole_object_phrase(blockers)?;
+    if !plural || !restriction_class(&bf) {
+        return None;
+    }
+    let (what, rest) = crate::oracle::effects::object_ref(attacker, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let a = subject_filter(&what, attacker)?;
+    if !matches!(a, Filter::In(_)) {
+        return None;
+    }
+    Some(add(
+        vec![Restriction::MustBlockAttacker {
+            blocker: bf,
+            attacker: a,
+        }],
+        dur,
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: all [creatures] able to block [it] this turn do so", priority: 110, parse: all_able_to_block_effect } }
+
+/// "If [a creature ...] attacks, [creatures] (also) attack(s) if able" (CR 508.1d).
+fn attack_together(l: &str) -> Option<Restriction> {
+    let r = l.strip_prefix("if ")?;
+    let (trigger, rest) = r.split_once(" attacks, ")?;
+    let attackers = rest
+        .strip_suffix(" also attacks if able")
+        .or_else(|| rest.strip_suffix(" attacks if able"))
+        .or_else(|| rest.strip_suffix(" attack if able"))?;
+    let triggers = match trigger {
+        "~" => Filter::Source,
+        _ => {
+            let t = trigger.strip_prefix("a ").or_else(|| trigger.strip_prefix("an "))?;
+            let (f, plural) = whole_object_phrase(t)?;
+            if plural {
+                return None;
+            }
+            f
+        }
+    };
+    let (attackers, same_controller) = match attackers {
+        "~" => (Filter::Source, false),
+        "all creatures that opponent controls" | "all creatures that player controls" => {
+            // Each opponent's creatures attack if one of that player's creatures does.
+            if !filter_mentions(&triggers, &|x| matches!(x, Filter::ControlledBy(_))) {
+                return None;
+            }
+            (Filter::creature(), true)
+        }
+        _ => {
+            let a = attackers.strip_prefix("all ")?;
+            let (f, plural) = whole_object_phrase(a)?;
+            if !plural {
+                return None;
+            }
+            (f, false)
+        }
+    };
+    Some(Restriction::AttackTogether {
+        attackers,
+        triggers,
+        same_controller,
+    })
+}
+
+/// "Until your next turn, creatures your opponents control attack each combat if able
+/// and attack a player other than you if able."
+fn attack_other_than_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (lead, l) = leading_duration(l);
+    let dur = lead?;
+    let (subject, other) = l
+        .strip_suffix(" attack a player other than you if able")
+        .or_else(|| l.strip_suffix(" attacks a player other than you if able"))
+        .map(|r| (r, PlayerFilter::You))?;
+    let subject = subject
+        .strip_suffix(" attack each combat if able and")
+        .or_else(|| subject.strip_suffix(" attacks each combat if able and"))?;
+    let (what, rest) = crate::oracle::effects::object_ref(subject, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let f = subject_filter(&what, subject)?;
+    Some(add(
+        vec![
+            Restriction::MustAttack(f.clone()),
+            Restriction::MustAttackOtherThan {
+                attackers: f,
+                players: other,
+            },
+        ],
+        dur,
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: attack a player other than you if able", priority: 110, parse: attack_other_than_effect } }
 
 /// A list of whole groups as a subject: "Green creatures and white creatures", "White
 /// creatures and blue creatures".
@@ -880,6 +1239,87 @@ fn even_odd_mana_value<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)>
 }
 
 inventory::submit! { FilterSuffixPattern { name: "restriction grammar: with even/odd mana values", priority: 100, parse: even_odd_mana_value } }
+
+/// "This spell can't be copied." (CR 707.10): a static ability that functions while the
+/// spell is on the stack.
+fn cant_be_copied(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() || !matches!(block.trim(), "~ can't be copied." | "This spell can't be copied.") {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBe {
+        what: Filter::Source,
+        action: ObjectAction::Copied,
+    }));
+    s.zone = FunctionZone::Stack;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), block)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "restriction grammar: this spell can't be copied", priority: 100, parse: cant_be_copied } }
+
+/// "with {X} in their mana costs", "with {X} in its mana cost" (CR 107.3).
+fn with_x_in_mana_cost<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    for p in ["with {x} in their mana costs", "with {x} in its mana cost"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                return Some((Filter::HasX, rest));
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { FilterSuffixPattern { name: "restriction grammar: with {X} in their mana costs", priority: 100, parse: with_x_in_mana_cost } }
+
+/// "Until your next turn, up to one target creature gets -3/-0 and its activated
+/// abilities can't be activated.": the P/T change and the restriction, both for the
+/// duration.
+fn pump_and_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (lead, main) = leading_duration(l);
+    let dur = lead?;
+    let (first, second) = main.split_once(" and ")?;
+    let gets = first.find(" gets ")?;
+    let dur_text = match dur {
+        Duration::UntilYourNextTurn => "until your next turn",
+        Duration::EndOfTurn => "until end of turn",
+        _ => return None,
+    };
+    let modify =
+        crate::oracle::effects::parse_simple(&format!("{first} {dur_text}"), b)?;
+    let Effect::Modify { what, .. } = &modify else {
+        return None;
+    };
+    let subject = first[..gets].trim();
+    let f = subject_filter(what, subject)?;
+    let rs = restriction_predicate(second, &f)?;
+    if rs.is_empty() {
+        return None;
+    }
+    let mut v = vec![modify];
+    v.push(add(rs, dur));
+    Some(Effect::seq(v))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: [duration], [object] gets +X/+Y and [restriction]", priority: 110, parse: pump_and_restriction_effect } }
+
+/// "with no abilities", "with abilities" (CR 113).
+fn with_abilities<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    for (p, has) in [("with no abilities", false), ("with abilities", true)] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                let f = if has {
+                    Filter::HasAbilities
+                } else {
+                    Filter::not(Filter::HasAbilities)
+                };
+                return Some((f, rest));
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { FilterSuffixPattern { name: "restriction grammar: with (no) abilities", priority: 100, parse: with_abilities } }
 
 #[cfg(test)]
 mod tests {
