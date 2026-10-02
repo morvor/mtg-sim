@@ -347,23 +347,30 @@ impl Game {
                 // "Each creature you control deals damage equal to its power to ...": every
                 // one of those objects deals its own damage, all at the same time (CR
                 // 120.2); the amount is evaluated for each of them (`vars::AFFECTED`).
-                let srcs: Vec<ObjectId> = match source {
-                    Sel::All(_) | Sel::Union(_) => self.resolve_objects(source, ctx),
-                    _ => self.damage_source(source, ctx).into_iter().collect(),
+                let multi = matches!(source, Sel::All(_) | Sel::Union(_));
+                let srcs: Vec<ObjectId> = if multi {
+                    self.resolve_objects(source, ctx)
+                } else {
+                    self.damage_source(source, ctx).into_iter().collect()
                 };
                 let recipients = self.resolve_sel(to, ctx);
                 if !srcs.is_empty() {
                     let mut evs = Vec::new();
                     for &src in &srcs {
-                        let saved = ctx.vars.insert(vars::AFFECTED, vec![Entity::Object(src)]);
+                        // Only the several-sources form binds "its" (the compiler reads it
+                        // as `vars::AFFECTED` there); a single source leaves the variables
+                        // as they are.
+                        let saved = multi
+                            .then(|| ctx.vars.insert(vars::AFFECTED, vec![Entity::Object(src)]));
                         let n = self.eval_value(amount, ctx).max(0) as u32;
                         match saved {
-                            Some(v) => {
+                            Some(Some(v)) => {
                                 ctx.vars.insert(vars::AFFECTED, v);
                             }
-                            None => {
+                            Some(None) => {
                                 ctx.vars.remove(&vars::AFFECTED);
                             }
+                            None => {}
                         }
                         evs.extend(recipients.iter().map(|r| (src, *r, n)));
                     }

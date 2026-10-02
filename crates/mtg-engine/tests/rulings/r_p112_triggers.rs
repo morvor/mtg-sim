@@ -159,6 +159,24 @@ fn chatterfang_squirrels_share_the_creation_instructions_but_not_the_abilities()
         assert!(t.obj_now(*id).tapped);
         assert!(attacking(&t, *id));
     }
+    // Geist of Saint Traft: "Exile that token at end of combat" exiles the Squirrel too.
+    supported("Geist of Saint Traft");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Chatterfang, Squirrel General");
+    let geist = t.battlefield(P0, "Geist of Saint Traft");
+    attack_with(&mut t, &[(geist, Entity::Player(P1))]);
+    t.resolve_all();
+    let squirrel = with_subtype(&t, P0, "Squirrel")
+        .into_iter()
+        .filter(|id| t.obj_now(*id).is_token())
+        .collect::<Vec<_>>();
+    let angel = with_subtype(&t, P0, "Angel");
+    assert_eq!((squirrel.len(), angel.len()), (1, 1));
+    assert!(t.obj_now(squirrel[0]).tapped && attacking(&t, squirrel[0]));
+    t.advance_to_step(Step::EndOfCombat);
+    t.resolve_all();
+    assert!(!t.on_battlefield(angel[0]));
+    assert!(!t.on_battlefield(squirrel[0]));
     // A Clue: the Squirrel doesn't get the Clue's ability.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Chatterfang, Squirrel General");

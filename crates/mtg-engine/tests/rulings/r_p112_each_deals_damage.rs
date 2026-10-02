@@ -38,18 +38,98 @@ fn bartz_and_boko_each_other_bird_deals_its_own_power() {
     supported("Bartz and Boko");
     let mut t = TestGame::new(2);
     let crow = t.battlefield(P0, "Storm Crow");
-    let hawk = t.battlefield(P0, "Vampire Nighthawk");
-    let myr = t.battlefield(P1, "Darksteel Myr");
-    t.answer_targets(P0, &[myr.into()]);
+    let fisher = t.battlefield(P0, "Aven Fisher");
+    t.battlefield(P0, "Vampire Nighthawk"); // not a Bird
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.answer_targets(P0, &[wurm.into()]);
     t.enter(P0, "Bartz and Boko");
     t.g.flush_events();
     t.settle();
     t.resolve_all();
-    // Storm Crow (1) and Vampire Nighthawk (2) — not Bartz and Boko (4) itself. Nighthawk
-    // isn't a Bird: only the Crow deals damage.
-    assert_eq!(damage_on(&t, myr), 1);
-    assert_eq!(damage_sources(&t, myr), vec![crow]);
-    let _ = hawk;
+    // Storm Crow (1) and Aven Fisher (2), each dealing its own power — not Bartz and Boko
+    // (4) itself, and not the Nighthawk.
+    assert_eq!(damage_on(&t, wurm), 3);
+    let mut srcs = damage_sources(&t, wurm);
+    srcs.sort();
+    assert_eq!(srcs, vec![crow, fisher]);
+}
+
+/// P0 controls `mine`, P1 controls `target`; P0 casts Kamahl's Will's second mode
+/// targeting it. Returns the game and the ids of `mine` and the target.
+fn kamahls_will(mine: &[&str], target: &str) -> (TestGame, Vec<ObjectId>, ObjectId) {
+    supported("Kamahl's Will");
+    let mut t = TestGame::new(2);
+    let ids = mine.iter().map(|n| t.battlefield(P0, n)).collect();
+    let tgt = t.battlefield(P1, target);
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 3);
+    let card = t.hand(P0, "Kamahl's Will");
+    t.cast(P0, card).modes(&[1]).target(tgt).go();
+    t.resolve_all();
+    (t, ids, tgt)
+}
+
+#[test]
+fn several_sources_each_have_their_own_lifelink_and_infect() {
+    cr!("120.2", "120.3d", "120.3e", "120.3f");
+    // Ajani's Sunstriker (2, lifelink), Grizzly Bears (2) and Glistener Elf (1, infect)
+    // each deal their own damage to Indomitable Ancients (2/10) at once.
+    let (t, _, anc) = kamahls_will(
+        &["Ajani's Sunstriker", "Grizzly Bears", "Glistener Elf"],
+        "Indomitable Ancients",
+    );
+    assert_eq!(damage_sources(&t, anc).len(), 3);
+    // Only the Sunstriker's 2 damage gains life.
+    assert_eq!(t.life(P0), 22);
+    // Only the Elf's 1 damage became a -1/-1 counter; the rest is marked.
+    assert_eq!(t.counters(anc, counters::MINUS1), 1);
+    assert_eq!(damage_on(&t, anc), 4);
+    assert!(t.on_battlefield(anc));
+}
+
+#[test]
+fn several_sources_deathtouch_comes_from_its_own_source() {
+    cr!("120.2", "702.2b", "120.3f");
+    // 4 damage to a 2/10, but 2 of it from Vampire Nighthawk (deathtouch, lifelink).
+    let (t, _, anc) = kamahls_will(&["Vampire Nighthawk", "Grizzly Bears"], "Indomitable Ancients");
+    assert!(!t.on_battlefield(anc));
+    assert_eq!(t.life(P0), 22);
+    // Without the Nighthawk, the same 4 damage doesn't destroy it.
+    let (t, _, anc) = kamahls_will(&["Grizzly Bears", "Grizzly Bears"], "Indomitable Ancients");
+    assert!(t.on_battlefield(anc));
+    assert_eq!(damage_on(&t, anc), 4);
+}
+
+#[test]
+fn several_sources_prevention_applies_to_each_source() {
+    cr!("120.2", "702.16e");
+    // Paladin en-Vec has protection from black: Vampire Nighthawk's damage is prevented (no
+    // lifelink, no deathtouch), Glistener Elf's isn't.
+    let (t, _, paladin) = kamahls_will(&["Vampire Nighthawk", "Glistener Elf"], "Paladin en-Vec");
+    assert!(t.on_battlefield(paladin));
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.counters(paladin, counters::MINUS1), 1);
+    assert_eq!(damage_on(&t, paladin), 0);
+}
+
+#[test]
+fn several_sources_each_trigger_deals_damage_abilities_with_their_own_amount() {
+    cr!("120.2", "603.2");
+    // Spirit Link on Grizzly Bears: "you gain that much life" is the Bears' 2, not the
+    // 2 + 3 dealt with Hill Giant.
+    supported("Spirit Link");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    crate::r_s06_common::attach_new(&mut t, P0, "Spirit Link", bears);
+    let anc = t.battlefield(P1, "Indomitable Ancients");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 3);
+    let card = t.hand(P0, "Kamahl's Will");
+    t.cast(P0, card).modes(&[1]).target(anc).go();
+    t.resolve_all();
+    assert_eq!(damage_on(&t, anc), 5);
+    assert_eq!(t.life(P0), 22);
 }
 
 #[test]
