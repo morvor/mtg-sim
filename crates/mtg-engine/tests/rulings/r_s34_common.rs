@@ -6,8 +6,17 @@
 #![allow(dead_code)]
 
 use crate::r_s08_common::mana_value;
+use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::*;
+
+/// The alternative-cost method P0 could cast `card` with now.
+pub fn alternative(t: &mut TestGame, card: ObjectId) -> CastMethod {
+    crate::r_s07_common::cast_methods(t, P0, card)
+        .into_iter()
+        .find(|m| matches!(m, CastMethod::Alternative(_)))
+        .expect("an alternative cost")
+}
 
 /// Endless One ({X} 0/0, "This creature enters with X +1/+1 counters on it."), cast by
 /// `p` with X = `x` and resolved: an X/X whose mana value on the battlefield is 0.

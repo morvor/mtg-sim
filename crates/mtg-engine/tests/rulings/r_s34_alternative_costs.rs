@@ -9,17 +9,8 @@ use crate::r_s08_common::mana_value;
 use crate::r_s20_common::sram_expertise;
 use crate::r_s34_common::*;
 use mtg_engine::decision::Answer;
-use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::*;
-
-/// The alternative-cost method P0 could cast `card` with now.
-fn alternative(t: &mut TestGame, card: ObjectId) -> CastMethod {
-    crate::r_s07_common::cast_methods(t, P0, card)
-        .into_iter()
-        .find(|m| matches!(m, CastMethod::Alternative(_)))
-        .expect("an alternative cost")
-}
 
 #[test]
 fn runeflare_trap_cast_for_its_alternative_cost_is_still_mana_value_6() {

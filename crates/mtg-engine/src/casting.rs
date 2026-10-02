@@ -1415,8 +1415,25 @@ impl Game {
                         .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
                 max = if mana_x { max.min(power) } else { power };
             }
+            // An alternative cost that uses an object described with X ("exile a blue
+            // card with mana value X from your hand", CR 107.3a): X must be a value it
+            // can be paid with, at most the mana available if mana is paid for X too.
+            let x_values = opt
+                .alt_cost
+                .as_ref()
+                .and_then(|c| crate::x_cost_filters::payable_x_values(self, p, Some(id), c));
+            if let (Some(vals), Some(c)) = (&x_values, &opt.alt_cost) {
+                let bound = vals.iter().copied().max().unwrap_or(0);
+                max = if c.mana.as_ref().is_some_and(|m| m.has_x()) {
+                    max.min(bound)
+                } else {
+                    bound
+                };
+            }
             x = match self.ask(p, Decision::ChooseX { source: id, max }) {
-                Answer::Number(n) if n >= 0 => n,
+                Answer::Number(n) if n >= 0 && x_values.as_ref().is_none_or(|v| v.contains(&n)) => {
+                    n
+                }
                 _ => max.max(0),
             };
         }
@@ -2271,8 +2288,16 @@ impl Game {
     ) -> bool {
         let ctx = Ctx::new(src, p);
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
+        // CR 107.3a: parts that use an object described with X can be paid if they could
+        // be for some value of X.
+        if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
+        {
+            return false;
+        }
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx) {
+            if !crate::x_cost_filters::part_has_x_filter(part)
+                && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx)
+            {
                 return false;
             }
         }
@@ -2354,7 +2379,7 @@ impl Game {
     /// "Tap an untapped [permanent] you control" (CR 118.3). `untaps_src`: likewise, the
     /// cost also has {Q}, so the source can't be one of the tapped permanents untapped for
     /// "Untap a tapped [permanent] you control".
-    fn cost_part_payable(
+    pub(crate) fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
@@ -3101,13 +3126,14 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
         // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
         CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
-        CostPart::Discard { count, .. }
-        | CostPart::Exile { count, .. }
-        | CostPart::ReturnToHand { count, .. }
-        | CostPart::RemoveCounters { count, .. }
+        // "Exile a blue card with mana value X from your hand" (CR 107.3a).
+        CostPart::Discard { count, filter, .. }
+        | CostPart::Exile { count, filter, .. }
+        | CostPart::ReturnToHand { count, filter }
+        | CostPart::TapUntapped { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
         | CostPart::AddCounters { count, .. }
-        | CostPart::TapUntapped { count, .. }
         | CostPart::UntapTapped { count, .. }
         | CostPart::PayPlayerCounters { count, .. }
         // "Reveal X green cards from your hand" (Martyr of Spores).
@@ -3121,7 +3147,7 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
 }
 
 /// Whether a filter compares a characteristic with X ("power X or greater").
-fn filter_mentions_x(f: &Filter) -> bool {
+pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
     match f {
         Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
             matches!(**v, Value::X)
