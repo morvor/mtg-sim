@@ -44,6 +44,7 @@ fn once_each_turn_cast(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<
         spells: true,
         cost: None,
         flash: false,
+        terms: Default::default(),
     }));
     s.condition = Some(Condition::And(vec![
         Condition::YourTurn,

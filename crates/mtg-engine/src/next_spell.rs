@@ -43,6 +43,19 @@ pub fn exec_next_spell(
     });
 }
 
+/// Whether the waiting effect lets the next matching spell be cast as though it had flash
+/// ("The next creature spell you cast this turn can be cast as though it had flash.",
+/// CR 601.3b; "... has flash"): it's still waiting this turn.
+pub fn gives_flash(g: &Game, e: &NextSpellEffect) -> bool {
+    let current = !matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+        || e.created_turn == g.turn.number;
+    current
+        && e.mods.iter().any(|m| {
+            matches!(m, Modification::AddKeyword(k)
+                if k.kind == crate::keywords::KeywordKind::Flash)
+        })
+}
+
 /// Static abilities of the form "[filter] spells you cast have [ability]" create
 /// one-shot effects that make spells gain the ability as they're cast (CR 610.5), rather
 /// than applying continuously to spells on the stack ("[filter] spells you control have

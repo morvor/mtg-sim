@@ -26,6 +26,12 @@ use crate::oracle::phrases::{end, parse_object_phrase, split_word};
 fn ends_optional(e: &Effect) -> bool {
     match e {
         Effect::May { .. } | Effect::PayOptional { .. } => true,
+        // "You may cast it without paying its mana cost", "you may cast a spell from among
+        // them": the player chooses whether to cast (and the effect records whether a
+        // card was cast or played).
+        Effect::CastCard { optional, what, .. } | Effect::PlayCard { optional, what, .. } => {
+            *optional || matches!(what, Sel::Choose { up_to: true, .. })
+        }
         Effect::Seq(v) => v.last().is_some_and(ends_optional),
         _ => false,
     }
@@ -375,6 +381,13 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
 /// object the previous instruction acted on).
 fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool)> {
     let c = c.strip_suffix(" this way")?;
+    // "that creature dies this way", "a white creature dies this way": it's put into a
+    // graveyard from the battlefield (CR 700.4).
+    if let Some(np) = c.strip_suffix(" dies").or_else(|| c.strip_suffix(" die")) {
+        let as_put = format!("{np} is put into a graveyard this way");
+        let (f, verb_, _, that) = this_way_condition(&as_put)?;
+        return Some((f, verb_, "put into a graveyard", that));
+    }
     // "you exiled a land card", "that player discards an artifact card".
     for p in ["you ", "that player ", "the player "] {
         if let Some(r) = c.strip_prefix(p) {
@@ -505,6 +518,10 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             }
             (v, Some(t.clone()))
         }
+        // "Destroy target creature. If a white creature dies this way, ~ deals damage to
+        // that creature's controller equal to the creature's power": the destroyed
+        // creature as it last existed on the battlefield.
+        (Some(t), "put into a graveyard", false) => (vec![any_matches.clone()], Some(t.clone())),
         _ => (vec![any_matches.clone()], Some(Sel::Var(THIS_WAY))),
     };
     let cond = if conds.len() == 1 {

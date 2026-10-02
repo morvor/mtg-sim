@@ -306,6 +306,9 @@ impl Game {
             ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::AttackedThisTurn => {
+                self.turn.active == p && !self.history.attackers.is_empty()
+            }
             // CR 810.10d: poisoned if the team has a poison counter.
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
@@ -420,6 +423,7 @@ impl Game {
                 .into_iter()
                 .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
+            PlayerRef::LinkedNoted => crate::linked_notes::players(self, ctx),
         }
     }
 
@@ -1048,6 +1052,8 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
+            // CR 607.1, 607.2e (see `linked_notes.rs`).
+            Sel::LinkedNoted => crate::linked_notes::entities(self, ctx),
             Sel::TopOfLibrary(r, n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
                 self.eval_players(r, ctx)

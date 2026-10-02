@@ -56,6 +56,16 @@ pub fn parse_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             // (CR 113.6b).
             let from_graveyard =
                 super::patterns::graveyard_order::requires_source_in_graveyard(&cond);
+            // "As long as there are three or more cards exiled with ~, it gets +3/+3":
+            // "it" is the object the condition names.
+            let own;
+            let rest = match rest.strip_prefix("it ") {
+                Some(r) if c.contains('~') && !c.contains("it ") => {
+                    own = format!("~ {r}");
+                    own.as_str()
+                }
+                _ => rest,
+            };
             let mut abilities = parse_static_inner(rest, text, ctx)?;
             for a in abilities.iter_mut() {
                 if let AbilityKind::Static(s) = &a.kind {

@@ -229,6 +229,7 @@ fn creature_caster() -> CardDef {
             spells: true,
             cost: None,
             flash: false,
+            terms: Default::default(),
         })))
         .build()
 }

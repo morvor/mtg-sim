@@ -38,6 +38,17 @@ pub fn same_instance(a: &Keyword, b: &Keyword) -> bool {
     a.kind == b.kind && text(a) == text(b) && (a.text.is_some() || a.n == b.n)
 }
 
+/// Whether a keyword instance has the quality: with `Some`, exactly that quality (its
+/// filter, "protection from red", "islandwalk"); with `None`, any quality ("bands with
+/// other [quality]" rather than plain banding).
+pub fn has_quality(k: &Keyword, quality: Option<&Filter>) -> bool {
+    match (quality, &k.filter) {
+        (None, f) => f.is_some(),
+        (Some(q), Some(f)) => format!("{q:?}") == format!("{f:?}"),
+        (Some(_), None) => false,
+    }
+}
+
 impl Keyword {
     pub fn new(kind: KeywordKind) -> Keyword {
         Keyword {

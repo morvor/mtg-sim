@@ -496,6 +496,21 @@ pub fn parse_compound(p: &str) -> Option<Vec<CostPart>> {
         let first = crate::oracle::costs::parse_cost_part(a)?;
         return Some(vec![first, self_followup(b)?]);
     }
+    // "Discard a card and sacrifice a creature": two parts, each with its own verb.
+    if let Some((a, b)) = p.split_once(" and ") {
+        let second = split_word(b).0;
+        if matches!(
+            second,
+            "discard" | "sacrifice" | "exile" | "pay" | "tap" | "return" | "reveal" | "remove"
+        ) {
+            if let (Some(x), Some(y)) = (
+                crate::oracle::costs::parse_cost_part(a),
+                crate::oracle::costs::parse_cost_part(b),
+            ) {
+                return Some(vec![x, y]);
+            }
+        }
+    }
     let (verb, rest) = split_word(p);
     if !matches!(verb, "sacrifice" | "exile") {
         return None;
