@@ -2376,6 +2376,54 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Prevent all combat damage that would be dealt to and dealt by that creature
+            // this turn."
+            if let (
+                Some(Effect::AddReplacement {
+                    def: a,
+                    duration: da,
+                    uses: None,
+                }),
+                Some(Effect::AddReplacement {
+                    def: b,
+                    duration: db,
+                    uses: None,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if let (
+                    ReplacementEvent::Damage {
+                        source: Filter::Any,
+                        to_players: None,
+                        to_objects: Some(Filter::In(to)),
+                        combat_only: ca,
+                    },
+                    ReplacementEvent::Damage {
+                        source: Filter::In(by),
+                        to_players: Some(PlayerFilter::Any),
+                        to_objects: Some(Filter::Any),
+                        combat_only: cb,
+                    },
+                ) = (&a.event, &b.event)
+                {
+                    if same_sel(to, by)
+                        && ca == cb
+                        && matches!(a.action, ReplacementAction::Prevent)
+                        && matches!(b.action, ReplacementAction::Prevent)
+                        && format!("{da:?}") == format!("{db:?}")
+                    {
+                        let kind = if *ca { "combat damage" } else { "damage" };
+                        let w = self.sel(to, Case::Obj);
+                        let d = self.duration(da);
+                        parts.push(join_words(&[
+                            format!("prevent all {kind} that would be dealt to and dealt by {w}"),
+                            d,
+                        ]));
+                        i += 2;
+                        continue;
+                    }
+                }
+            }
             // "Put that pile into your hand and the other into your graveyard."
             if let (
                 Some(Effect::Move {
