@@ -142,3 +142,51 @@ fn savage_gorger_an_opponent_paying_life_lost_life() {
     t.resolve_all();
     assert_eq!(t.counters(gorger, "+1/+1"), 1);
 }
+
+/// The special action Channel offers `p` now, if any.
+fn channel_action(t: &mut TestGame, p: PlayerId) -> Option<mtg_engine::decision::Action> {
+    crate::r_s08_common::actions_of(t, p).into_iter().find(|a| {
+        matches!(
+            a,
+            mtg_engine::decision::Action::Special(
+                mtg_engine::decision::SpecialAction::Offer { .. }
+            )
+        )
+    })
+}
+
+#[test]
+fn channel_once_your_life_total_is_0_you_cant_pay_any_more_life() {
+    cr!("119.4", "104.3b", "116.2c");
+    ruling!(
+        "Channel",
+        "Once your life total is 0, you can't pay any more life, even if you've somehow not lost the game yet."
+    );
+    supported("Channel");
+    // P0 controls Platinum Angel ("You can't lose the game and your opponents can't win
+    // the game.") and, at 2 life, casts Channel ("Until end of turn, any time you could
+    // activate a mana ability, you may pay 1 life. If you do, add {C}.").
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Platinum Angel");
+    crate::r_s25_common::cast_new(&mut t, P0, "Channel", &[]);
+    t.resolve_all();
+    set_life(&mut t, P0, 2);
+    for life in [1, 0] {
+        let pay = channel_action(&mut t, P0).expect("Channel's action");
+        t.g.perform_action(P0, pay).unwrap();
+        t.settle();
+        assert_eq!(t.life(P0), life);
+    }
+    assert_eq!(t.g.player(P0).mana_pool.mana.len(), 2);
+    assert!(!t.g.player(P0).has_lost);
+    // At 0 life, P0 can't pay 1 life any more: the action isn't offered.
+    assert!(channel_action(&mut t, P0).is_none());
+    assert_eq!(t.life(P0), 0);
+    assert_eq!(t.g.player(P0).mana_pool.mana.len(), 2);
+    // The two {C} pay for Mind Stone ({2}).
+    let stone = t.hand(P0, "Mind Stone");
+    t.cast(P0, stone).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(stone));
+    assert!(t.g.player(P0).mana_pool.mana.is_empty());
+}
