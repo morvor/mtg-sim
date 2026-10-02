@@ -244,6 +244,12 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Listing what could be done only checks legality: it doesn't exercise the
+        // abilities it consults (see `structure`).
+        crate::structure::unlogged(|| self.legal_actions_now(p))
+    }
+
+    fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {

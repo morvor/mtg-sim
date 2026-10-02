@@ -57,7 +57,7 @@ fn tread_upon_pumps_and_grants_trample() {
 
 #[test]
 fn impeccable_timing_damages_an_attacking_creature() {
-    cr!("608.2", "506.4", "120.3e");
+    cr!("608.2", "115.1", "120.3e", "704.5g");
     // "Impeccable Timing deals 3 damage to target attacking or blocking creature."
     supported("Impeccable Timing");
     let mut t = TestGame::new(2);
@@ -321,6 +321,15 @@ fn mountain_goat_cant_be_blocked_while_defender_controls_a_mountain() {
     cr!("702.14c");
     // "Mountainwalk"
     supported("Mountain Goat");
+    let mut t = TestGame::new(2);
+    let goat = t.battlefield(P0, "Mountain Goat");
+    let wall = t.battlefield(P1, "Grizzly Bears");
+    // Without a Mountain, it can be blocked.
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(goat, Entity::Player(P1))], &[(wall, goat)]);
+    assert_eq!(t.life(P1), 20, "blocked");
+    assert!(!t.on_battlefield(goat), "the 1/1 goat died to the 2/2 blocker");
+
     let mut t = TestGame::new(2);
     let goat = t.battlefield(P0, "Mountain Goat");
     let wall = t.battlefield(P1, "Grizzly Bears");

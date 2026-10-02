@@ -590,10 +590,30 @@ pub fn record(a: &AbilityDef, name: &str, how: &'static str) {
 thread_local! {
     static SEEN: std::cell::RefCell<HashSet<(u64, &'static str)>> =
         std::cell::RefCell::new(HashSet::new());
+    /// Nesting depth of [`unlogged`] sections on this thread.
+    static UNLOGGED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Runs `f` without recording anything it consults: for code that only checks what would
+/// be legal (listing legal actions), which doesn't exercise the abilities it looks at.
+#[inline]
+pub fn unlogged<T>(f: impl FnOnce() -> T) -> T {
+    if !enabled() {
+        return f();
+    }
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            UNLOGGED.with(|u| u.set(u.get().saturating_sub(1)));
+        }
+    }
+    UNLOGGED.with(|u| u.set(u.get() + 1));
+    let _guard = Guard;
+    f()
 }
 
 fn record_slow(a: &AbilityDef, name: &str, how: &'static str) {
-    if matches!(a.kind, AbilityKind::Unsupported(_)) {
+    if matches!(a.kind, AbilityKind::Unsupported(_)) || UNLOGGED.with(|u| u.get() > 0) {
         return;
     }
     let key = (a.uid, how);

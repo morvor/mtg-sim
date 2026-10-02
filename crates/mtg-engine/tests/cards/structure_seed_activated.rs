@@ -221,7 +221,7 @@ fn harbor_bandit_cant_be_blocked_this_turn() {
 
 #[test]
 fn thallid_germinator_removes_spore_counters_for_a_saproling() {
-    cr!("602.2", "122.8");
+    cr!("602.2", "118.3");
     // "Remove three spore counters from this creature: Create a 1/1 green Saproling
     // creature token."
     supported("Thallid Germinator");
@@ -242,6 +242,13 @@ fn dimir_locket_draws_two_paid_with_hybrid_mana() {
     cr!("602.2", "107.4e");
     // "{U/B}{U/B}{U/B}{U/B}, {T}, Sacrifice this artifact: Draw two cards."
     supported("Dimir Locket");
+    let mut t = TestGame::new(2);
+    let locket = t.battlefield(P0, "Dimir Locket");
+    t.lands(P0, "Mountain", 4);
+    assert!(
+        t.activate(P0, locket, 1, &[]).is_err(),
+        "{{U/B}} can't be paid with red mana"
+    );
     let mut t = TestGame::new(2);
     let locket = t.battlefield(P0, "Dimir Locket");
     t.lands(P0, "Island", 2);

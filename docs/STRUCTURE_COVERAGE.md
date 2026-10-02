@@ -12,9 +12,9 @@ Every ability of every supported card (paper, legal in some format, fully unders
 
 | | Count | Exercised | % |
 |---|---:|---:|---:|
-| Distinct structures | 17550 | 3745 | 21.3% |
-| Card abilities (card, structure) | 41526 | 24587 | 59.2% |
-| Supported cards with abilities (structure-verified) | 22371 | 7944 | 35.5% |
+| Distinct structures | 17550 | 3746 | 21.3% |
+| Card abilities (card, structure) | 41526 | 24588 | 59.2% |
+| Supported cards with abilities (structure-verified) | 22371 | 7945 | 35.5% |
 
 22692 of 31099 cards are supported (321 of them have no abilities).
 
@@ -22,7 +22,7 @@ Every ability of every supported card (paper, legal in some format, fully unders
 |---|---:|---:|---:|
 | activated | 3648 | 413 | 11.3% |
 | keyword | 401 | 286 | 71.3% |
-| mana | 275 | 65 | 23.6% |
+| mana | 275 | 66 | 24.0% |
 | spell | 3193 | 807 | 25.3% |
 | static | 3039 | 1012 | 33.3% |
 | triggered | 6994 | 1162 | 16.6% |

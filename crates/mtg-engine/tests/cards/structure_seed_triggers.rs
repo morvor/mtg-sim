@@ -9,7 +9,7 @@ use mtg_engine::*;
 
 #[test]
 fn raucous_theater_enters_tapped_and_surveils_1() {
-    cr!("603.6a", "701.25a", "614.1c");
+    cr!("603.6a", "701.25a", "614.1d");
     // "This land enters tapped. When this land enters, surveil 1."
     supported("Raucous Theater");
     let mut t = TestGame::new(2);

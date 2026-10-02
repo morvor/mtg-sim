@@ -96,6 +96,23 @@ fn fetid_heath_filters_hybrid_mana_into_two() {
 }
 
 #[test]
+fn cadaverous_bloom_adds_one_of_two_two_mana_combinations() {
+    cr!("605.1a", "106.1a");
+    // "Exile a card from your hand: Add {B}{B} or {G}{G}."
+    supported("Cadaverous Bloom");
+    let mut t = TestGame::new(2);
+    let bloom = t.battlefield(P0, "Cadaverous Bloom");
+    t.hand(P0, "Grizzly Bears");
+    // Choose the second combination, {G}{G}.
+    t.answer(P0, DecisionKind::Option, decision::Answer::Index(1));
+    t.activate(P0, bloom, 0, &[]).unwrap();
+    assert_eq!(t.hand_size(P0), 0, "the card was exiled as the cost");
+    let pool = &t.g.player(P0).mana_pool;
+    assert_eq!(pool.count(ManaType::G), 2);
+    assert_eq!(pool.mana.len(), 2);
+}
+
+#[test]
 fn frenzied_rage_gives_plus_two_plus_one_and_menace() {
     cr!("702.5a", "613.4c", "702.111a");
     // "Enchant creature / Enchanted creature gets +2/+1 and has menace."
@@ -131,7 +148,7 @@ fn lonely_arroyo_deals_1_damage_to_target_opponent() {
 
 #[test]
 fn rockfall_vale_enters_untapped_with_two_other_lands() {
-    cr!("614.1c", "614.12");
+    cr!("614.1d");
     // "This land enters tapped unless you control two or more other lands."
     supported("Rockfall Vale");
     let mut t = TestGame::new(2);
@@ -144,7 +161,7 @@ fn rockfall_vale_enters_untapped_with_two_other_lands() {
 
 #[test]
 fn spire_garden_enters_untapped_with_two_or_more_opponents() {
-    cr!("614.1c", "102.2");
+    cr!("614.1d", "102.2");
     // "This land enters tapped unless you have two or more opponents."
     supported("Spire Garden");
     let mut t = TestGame::new(2);
@@ -157,7 +174,7 @@ fn spire_garden_enters_untapped_with_two_or_more_opponents() {
 
 #[test]
 fn theorix_annex_enters_untapped_with_a_planeswalker() {
-    cr!("614.1c");
+    cr!("614.1d");
     // "This land enters tapped unless you control a planeswalker."
     supported("Theorix Annex");
     let mut t = TestGame::new(2);
@@ -278,5 +295,7 @@ fn igneous_inspiration_deals_damage_and_learns() {
     t.cast(P0, s).target(P1).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
-    assert_eq!(t.hand_size(P0), 1);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"), "discarded to learn");
+    assert_eq!(t.hand_size(P0), 1, "and drew a card");
+    assert!(!t.in_hand(P0, "Grizzly Bears"));
 }
