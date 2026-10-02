@@ -79,7 +79,13 @@ fn glasspool_mimic_cant_copy_a_creature_entering_at_the_same_time() {
         "Glasspool Mimic // Glasspool Shore",
         "If Glasspool Mimic somehow enters the battlefield at the same time as another creature, it can't become a copy of that creature"
     );
-    cant_copy_what_enters_with_it("Glasspool Mimic // Glasspool Shore", P0, "Grizzly Bears", P0, "Hill Giant");
+    cant_copy_what_enters_with_it(
+        "Glasspool Mimic // Glasspool Shore",
+        P0,
+        "Grizzly Bears",
+        P0,
+        "Hill Giant",
+    );
 }
 
 #[test]
@@ -89,7 +95,13 @@ fn machine_god_s_effigy_cant_copy_a_creature_entering_at_the_same_time() {
         "Machine God's Effigy",
         "If Machine God’s Effigy somehow enters the battlefield at the same time as another creature, it can’t become a copy of that creature"
     );
-    cant_copy_what_enters_with_it("Machine God's Effigy", P0, "Grizzly Bears", P1, "Hill Giant");
+    cant_copy_what_enters_with_it(
+        "Machine God's Effigy",
+        P0,
+        "Grizzly Bears",
+        P1,
+        "Hill Giant",
+    );
 }
 
 #[test]
@@ -129,7 +141,13 @@ fn mirrorhall_mimic_cant_copy_a_creature_entering_at_the_same_time() {
         "Mirrorhall Mimic // Ghastly Mimicry",
         "If Mirrorhall Mimic somehow enters the battlefield at the same time as another creature, it can't become a copy of that creature"
     );
-    cant_copy_what_enters_with_it("Mirrorhall Mimic // Ghastly Mimicry", P0, "Grizzly Bears", P1, "Hill Giant");
+    cant_copy_what_enters_with_it(
+        "Mirrorhall Mimic // Ghastly Mimicry",
+        P0,
+        "Grizzly Bears",
+        P1,
+        "Hill Giant",
+    );
 }
 
 #[test]
@@ -139,7 +157,13 @@ fn mocking_doppelganger_cant_copy_a_creature_entering_at_the_same_time() {
         "Mocking Doppelganger",
         "If Mocking Doppelganger somehow enters the battlefield at the same time as another creature an opponent controls, it can't become a copy of that creature"
     );
-    cant_copy_what_enters_with_it("Mocking Doppelganger", P0, "Grizzly Bears", P1, "Hill Giant");
+    cant_copy_what_enters_with_it(
+        "Mocking Doppelganger",
+        P0,
+        "Grizzly Bears",
+        P1,
+        "Hill Giant",
+    );
 }
 
 #[test]
@@ -179,7 +203,13 @@ fn quicksilver_gargantuan_cant_copy_a_creature_entering_at_the_same_time() {
         "Quicksilver Gargantuan",
         "If Quicksilver Gargantuan somehow enters at the same time as another creature (due to Mass Polymorph or Liliana Vess's third ability, for example), Quicksilver Gargantuan can't become a copy of that creature"
     );
-    cant_copy_what_enters_with_it("Quicksilver Gargantuan", P0, "Grizzly Bears", P1, "Hill Giant");
+    cant_copy_what_enters_with_it(
+        "Quicksilver Gargantuan",
+        P0,
+        "Grizzly Bears",
+        P1,
+        "Hill Giant",
+    );
 }
 
 #[test]
@@ -222,5 +252,8 @@ fn renegade_doppelgangers_copy_effect_ends_as_damage_is_removed() {
     assert_eq!(o.chars.colors, ColorSet::single(Color::Blue));
     assert_eq!(t.pt(dopp), (0, 1));
     assert_eq!(o.damage, 0);
-    assert_eq!(abilities_with(&t, dopp, "Whenever another creature you control enters"), 1);
+    assert_eq!(
+        abilities_with(&t, dopp, "Whenever another creature you control enters"),
+        1
+    );
 }
