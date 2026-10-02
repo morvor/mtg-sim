@@ -1535,3 +1535,60 @@ fn put_another_counter(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "relational: put another [kind] counter on [object]", priority: 150, parse: put_another_counter } }
+
+/// "creature with the greatest mana value among creatures they control", "permanent they
+/// control that shares a card type with the sacrificed permanent": one of the iterated
+/// player's objects with a relational quality (for "[each opponent] chooses a ...",
+/// `players_choose_permanent.rs`). Returns the head noun and the filter, with "they" as
+/// [`PlayerRel::Iterated`] and "it" resolved.
+pub fn their_object<'a>(r: &'a str, b: &Builder) -> Option<(&'a str, Filter)> {
+    let noun = r.split([' ', ',']).next()?;
+    if head_noun(noun).is_none() {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural {
+        return None;
+    }
+    let t = tail.trim_start();
+    let (f, tail) = match t
+        .strip_prefix("they control")
+        .or_else(|| t.strip_prefix("that player controls"))
+    {
+        Some(r2) => {
+            let so_far = Filter::and(vec![f.clone(), Filter::ControlledBy(THEY)]);
+            let (ext, r2) = match with_extreme(r2.trim_start(), &so_far) {
+                Some((m, r3)) => (m, r3),
+                None => (Filter::Any, r2),
+            };
+            let probe = format!("cards{r2}");
+            let (more, _, tail2) = parse_object_phrase(&probe)?;
+            let more = match more {
+                Filter::Card => Filter::Any,
+                Filter::And(v) => Filter::and(
+                    v.into_iter()
+                        .filter(|x| !matches!(x, Filter::Card))
+                        .collect(),
+                ),
+                other => other,
+            };
+            (
+                Filter::and(vec![so_far, ext, more]),
+                &r2[r2.len() - tail2.len()..],
+            )
+        }
+        None => (f, tail),
+    };
+    if !end(tail).trim().is_empty() {
+        return None;
+    }
+    let json = serde_json::to_string(&f).ok()?;
+    // Only qualifiers this file adds; the player's own objects.
+    if !json.contains(&they_needle()) {
+        return None;
+    }
+    let with = serde_json::to_string(&Filter::ControlledBy(PlayerRel::Iterated)).ok()?;
+    let f: Filter = serde_json::from_str(&json.replace(&they_needle(), &with)).ok()?;
+    let f = resolve_referent(f, b)?;
+    Some((noun, f))
+}

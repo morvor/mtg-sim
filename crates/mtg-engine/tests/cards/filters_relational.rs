@@ -732,3 +732,21 @@ fn spawnbroker_compares_with_the_first_targets_power() {
     assert_eq!(t.obj_now(small).controller, P0);
     assert_eq!(t.obj_now(mine).controller, P1);
 }
+
+#[test]
+fn highcliff_felidar_destroys_each_opponents_greatest_creature() {
+    cr!("608.2d", "101.4");
+    let mut t = TestGame::new(3);
+    let a = t.battlefield(P1, "Grizzly Bears"); // 2
+    let b = t.battlefield(P1, "Hill Giant"); // 3
+    let c = t.battlefield(P2, "Llanowar Elves"); // 1
+    let d = t.battlefield(P2, "Craw Wurm"); // 6
+    let mine = t.battlefield(P0, "Craw Wurm");
+    t.enter(P0, "Highcliff Felidar");
+    t.resolve_all();
+    assert!(t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+    assert!(t.on_battlefield(c));
+    assert!(!t.on_battlefield(d));
+    assert!(t.on_battlefield(mine));
+}
