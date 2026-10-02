@@ -65,6 +65,16 @@ mod probe {
                 eprintln!("U {x}: {}", if u.is_empty() { "OK".to_string() } else { u.join(" | ") });
                 continue;
             }
+            if let Some(x) = l.strip_prefix("TB:") {
+                let (tr, body) = x.split_once('|').unwrap();
+                let tl = crate::types::TypeLine::parse("Creature — Elf");
+                let ctx = CompileContext { card_name: "Probe", full_name: "Probe", type_line: &tl, layout: crate::card::Layout::Normal, face_index: 0, keywords: &[], power: Some("2"), toughness: Some("2") };
+                match crate::oracle::triggers::parse_trigger_condition(tr) {
+                    Some((t, it, p)) => eprintln!("TB {tr:?} => {t:?} it={it:?}\n   body => {:?}", effects::parse_trigger_body(body, &ctx, it.clone(), p)),
+                    None => eprintln!("TB {tr:?} => trigger FAIL"),
+                }
+                continue;
+            }
             if let Some(x) = l.strip_prefix("P:") {
                 eprintln!("P {x:?} => {:?}", crate::oracle::phrases::parse_object_phrase(x));
                 continue;

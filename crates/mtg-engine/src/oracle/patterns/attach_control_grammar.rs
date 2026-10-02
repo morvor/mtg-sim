@@ -115,6 +115,17 @@ fn attachments(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             ));
         }
     }
+    // "all Equipment attached to that creature" (Rhuk, Hexgold Nabber).
+    if let Some(r) = s.strip_prefix("all ") {
+        if r.contains("attached to ") {
+            let saved = (b.targets.len(), b.it.clone());
+            if let Some((f, rest)) = attached_objects(r, b) {
+                return Some((Sel::All(f), rest));
+            }
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+        }
+    }
     // "all Auras and Equipment you control".
     if let Some(r) = s.strip_prefix("all ") {
         if let Some((f, true, rest)) = noun_phrase(r) {
@@ -383,10 +394,13 @@ inventory::submit! { super::FilterSuffixPattern { name: "attach grammar: with an
 
 inventory::submit! { EffectPattern { name: "attach grammar: unattach [object]", priority: 101, parse: p_unattach } }
 
-/// Whether a filter says what its objects are attached to.
+/// Whether a filter says what its objects are attached to (something the text refers
+/// to: not a pronoun without an antecedent).
 fn names_host(f: &Filter) -> bool {
     match f {
-        Filter::AttachedToAnyOf(_) | Filter::AttachedTo(_) => true,
+        Filter::AttachedToAnyOf(sel) | Filter::AttachedTo(sel) => {
+            !matches!(**sel, Sel::None) && !is_no_referent(sel)
+        }
         Filter::And(v) => v.iter().any(names_host),
         _ => false,
     }
@@ -418,17 +432,22 @@ pub(crate) fn attached_objects(s: &str, b: &mut Builder) -> Option<(Filter, Stri
 /// all permanents attached to creatures".
 fn attached_selection(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
-    // "[object] and all [objects attached to it]": both.
+    // "[object] and all [objects attached to it]": both. "Any number of target creatures
+    // and all Auras attached to them": attached to any of them.
     if let Some((head, group)) = s.split_once(" and all ") {
         if !head.contains("attached to ") || head.starts_with("all ") {
             let (first, rest) = object_ref(head, b)?;
             if !end(&rest).is_empty() || matches!(first, Sel::Choose { .. }) {
                 return None;
             }
+            let group = match group.strip_suffix(" attached to them") {
+                Some(g) if matches!(first, Sel::Target(_)) => format!("{g} attached to it"),
+                _ => group.to_string(),
+            };
             if matches!(first, Sel::Target(_)) {
                 b.it = first.clone();
             }
-            let (f, rest) = attached_objects(group, b)?;
+            let (f, rest) = attached_objects(&group, b)?;
             return Some((Sel::Union(vec![first, Sel::All(f)]), rest));
         }
     }
@@ -822,3 +841,51 @@ fn p_delayed_on_stored(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: unattach it at the beginning of the next end step", priority: 110, parse: p_delayed_on_stored } }
+
+/// "That player attaches ~ to a land of their choice." (Steam Vines): the player named
+/// performs the instruction and chooses the recipient.
+fn p_player_attaches(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    let (subject, r) = l.split_once(" attaches ")?;
+    let r = r.strip_suffix(" of their choice")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let (who, rest) = player_ref(subject, b)?;
+        if !end(&rest).is_empty() || matches!(who, PlayerRef::You) {
+            return None;
+        }
+        match p_attach(&format!("attach {r}"), b)? {
+            Effect::Attach {
+                what,
+                to:
+                    Sel::Choose {
+                        filter,
+                        count,
+                        up_to,
+                        store,
+                        ..
+                    },
+            } => Some(Effect::Attach {
+                what,
+                to: Sel::Choose {
+                    chooser: who,
+                    filter,
+                    count,
+                    up_to,
+                    store,
+                },
+            }),
+            _ => None,
+        }
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "attach grammar: [player] attaches [object] to [object] of their choice", priority: 110, parse: p_player_attaches } }

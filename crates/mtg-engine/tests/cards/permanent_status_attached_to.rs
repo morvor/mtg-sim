@@ -362,3 +362,49 @@ fn daybreak_coronet_enchants_only_a_creature_with_another_aura() {
     t.settle();
     assert!(t.in_graveyard(P0, "Daybreak Coronet"));
 }
+
+#[test]
+fn silence_the_believers_exiles_the_targets_and_the_auras_attached_to_them() {
+    cr!("608.2c", "601.2f");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Llanowar Elves");
+    let on_a = t.battlefield(P1, "Holy Strength");
+    let on_other = t.battlefield(P1, "Pacifism");
+    assert!(t.g.attach(on_a, Entity::Object(a)));
+    assert!(t.g.attach(on_other, Entity::Object(other)));
+    let spell = t.hand(P0, "Silence the Believers");
+    t.lands(P0, "Swamp", 7);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_exile("Holy Strength"));
+    // An Aura attached to another creature stays.
+    assert!(t.on_battlefield(on_other));
+}
+
+#[test]
+fn steam_vines_that_player_attaches_it_to_a_land_of_their_choice() {
+    cr!("701.3a", "303.4");
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P1, "Forest");
+    let island = t.battlefield(P1, "Island");
+    let vines = t.battlefield(P0, "Steam Vines");
+    assert!(t.g.attach(vines, Entity::Object(forest)));
+    t.answer_choose(P1, &[Entity::Object(island)]);
+    t.g.tap(forest);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Forest"));
+    assert_eq!(t.life(P1), 19);
+    assert!(t.on_battlefield(vines));
+    assert_eq!(t.obj_now(vines).attached_to, Some(Entity::Object(island)));
+    // P1 chose.
+    assert!(t.asked().iter().any(|(p, d)| *p == P1
+        && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })));
+}

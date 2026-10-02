@@ -792,3 +792,20 @@ fn names_face_down(f: &Filter) -> bool {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: look at face-down permanents", priority: 110, parse: p_look_at_face_down } }
+
+/// "exile a card from the top of your library for each opponent you have" (Wall of
+/// Mourning; "face down" is read by [`p_exile_face_down`]): the top N cards.
+fn p_exile_top_for_each(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("exile a card from the top of your library for each ")?;
+    let n = super::statics::parse_for_each(r, None)?;
+    Some(Effect::Exile {
+        what: Sel::TopOfLibrary(PlayerRef::You, n),
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: exile a card from the top of your library for each [...]", priority: 110, parse: p_exile_top_for_each } }

@@ -626,3 +626,14 @@ fn smoke_teller_looks_at_target_face_down_creature() {
     assert!(t.g.obj(theirs).face_down);
     assert_eq!(t.pt(theirs), (2, 2));
 }
+
+#[test]
+fn wall_of_mourning_exiles_a_card_face_down_for_each_opponent() {
+    cr!("406.3");
+    let mut t = TestGame::new(3);
+    let size = t.library_size(P0);
+    t.enter(P0, "Wall of Mourning");
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), size - 2);
+    assert_eq!(exiled_face_down(&t).len(), 2);
+}
