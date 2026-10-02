@@ -1242,7 +1242,16 @@ impl Game {
                 match &s.effect {
                     StaticEffect::Continuous { .. } => {}
                     StaticEffect::Restriction(r) => st.restrictions.push((id, ctl, r.clone())),
-                    StaticEffect::CostModifier(c) => st.cost_modifiers.push((id, ctl, c.clone())),
+                    StaticEffect::CostModifier(c) => {
+                        crate::kw::offered_costs::collect(
+                            &mut st.offered_alt_costs,
+                            id,
+                            ctl,
+                            c,
+                            s.condition.as_ref(),
+                        );
+                        st.cost_modifiers.push((id, ctl, c.clone()))
+                    }
                     StaticEffect::Replacement(r) => {
                         st.replacements
                             .push((id, ctl, o.timestamp, a.clone(), r.clone()))
@@ -1268,6 +1277,13 @@ impl Game {
             match (&e.effect, e.source) {
                 (PlayerModification::CostModifier(cm), Some(src)) => {
                     for p in &e.players {
+                        crate::kw::offered_costs::collect(
+                            &mut st.offered_alt_costs,
+                            src,
+                            *p,
+                            cm,
+                            None,
+                        );
                         st.cost_modifiers.push((src, *p, cm.clone()));
                     }
                 }

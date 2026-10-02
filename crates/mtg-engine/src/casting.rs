@@ -38,6 +38,11 @@ pub struct CastOption {
     /// flashback's) or the card is cast while an effect resolves (CR 608.2g). See
     /// `permissions.rs`.
     pub permission: Option<crate::permissions::CastPermission>,
+    /// The object whose static ability offers `alt_cost` ("You may pay {W}{U}{B}{R}{G}
+    /// rather than pay the mana cost for spells you cast"), with the once-each-turn use it
+    /// is; `None` for the card's own alternative costs and a permission's. See
+    /// `kw/offered_costs.rs`.
+    pub alt_source: Option<crate::kw::offered_costs::AltCostSource>,
 }
 
 impl CastOption {
@@ -51,6 +56,7 @@ impl CastOption {
             any_time: false,
             tag: None,
             permission: None,
+            alt_source: None,
         }
     }
 }
@@ -599,11 +605,19 @@ impl Game {
     /// `permissions.rs`).
     pub fn cast_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let all = self.permitted_cast_options(p, card);
-        if crate::permissions::own_only() || !crate::permissions::may_be_permitted(self, p, card) {
-            return all;
-        }
-        let own = crate::permissions::own_permissions_only(|| self.permitted_cast_options(p, card));
-        crate::permissions::attach(self, p, card, own, all)
+        let mut out = if crate::permissions::own_only()
+            || !crate::permissions::may_be_permitted(self, p, card)
+        {
+            all
+        } else {
+            let own =
+                crate::permissions::own_permissions_only(|| self.permitted_cast_options(p, card));
+            crate::permissions::attach(self, p, card, own, all)
+        };
+        // Each of those ways for an alternative cost another object offers, if it has none
+        // yet (CR 118.9, 118.9a, 601.2b).
+        crate::kw::offered_costs::extend_cast_options(self, p, card, &mut out);
+        out
     }
 
     /// The ways of casting `card` that the rules and the permissions that count now allow,
@@ -1179,10 +1193,14 @@ impl Game {
             let mut options: Vec<String> = opts
                 .iter()
                 .map(|o| {
-                    let way = match (&o.tag, &o.alt_cost) {
-                        (Some(t), _) => t.to_string(),
-                        (None, Some(c)) => format!("{c:?}"),
-                        (None, None) => format!("{:?}", o.method),
+                    let way = match (&o.tag, &o.alt_cost, &o.alt_source) {
+                        (Some(t), _, _) => t.to_string(),
+                        // An alternative cost another object offers, named with it.
+                        (None, Some(c), Some(s)) => {
+                            crate::kw::offered_costs::label(self, &o.method, c, s)
+                        }
+                        (None, Some(c), None) => format!("{c:?}"),
+                        (None, None, _) => format!("{:?}", o.method),
                     };
                     if faces_differ {
                         format!("{way}: {}", self.face_characteristics(card, o.face).name)
@@ -1328,6 +1346,8 @@ impl Game {
             })
         );
         crate::permissions::record_use(self, opt.permission.as_ref());
+        // So is a once-each-turn alternative cost another object offers.
+        crate::kw::offered_costs::record_use(self, opt.alt_source.as_ref());
         // "A spell cast this way costs {2} more to cast" (CR 601.2f).
         let permission_cost_increase = opt.permission.as_ref().map_or(0, |c| c.terms.cost_increase);
         self.play_grants.retain(|g| g.object != card);
@@ -3368,7 +3388,7 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
 }
 
 /// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.
-fn cost_label(c: &Cost) -> String {
+pub(crate) fn cost_label(c: &Cost) -> String {
     match (&c.mana, c.parts.is_empty()) {
         (Some(m), true) => format!("{m}"),
         (Some(m), false) => format!("{m} + {:?}", c.parts),

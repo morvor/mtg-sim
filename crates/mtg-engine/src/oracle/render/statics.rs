@@ -75,6 +75,19 @@ impl Renderer<'_> {
             self.subject_types = self.info.card_types.iter().collect();
         }
         let e = match &s.condition {
+            // A once-each-turn permission or alternative cost ("Once during each of your
+            // turns, you may cast a creature spell from your graveyard", see
+            // `kw/once_each_turn_cast.rs`).
+            Some(c) if crate::kw::once_each_turn_cast::condition_slot(c).is_some() => {
+                let yours = matches!(c, Condition::And(v) if v.iter().any(|x| matches!(x, Condition::YourTurn)));
+                let e = self.static_effect(&s.effect);
+                let when = if yours {
+                    "once during each of your turns"
+                } else {
+                    "once each turn"
+                };
+                format!("{when}, {}", lower_first(&e))
+            }
             // Cost modifiers state their condition with "if" ("This spell costs {2} less
             // to cast if ...").
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
@@ -807,6 +820,11 @@ impl Renderer<'_> {
                     format!("as an additional cost to cast {target}, {c}")
                 }
             }
+            // An alternative cost offered for the spells a player casts (CR 118.9; see
+            // `kw/offered_costs.rs`).
+            CostChange::AlternativeCost(c) if matches!(cm.applies_to, CostTarget::Spells(_)) => {
+                self.offered_alternative_cost(&cm.applies_to, c, &target, &who)
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
@@ -834,6 +852,96 @@ impl Renderer<'_> {
                 )
             }
         }
+    }
+
+    /// An alternative cost offered for the spells `t` describes (CR 118.9): "You may cast
+    /// Dragon spells without paying their mana costs", "You may pay {W}{U}{B}{R}{G} rather
+    /// than pay the mana cost for spells you cast", "... for a creature spell you cast from
+    /// exile", "you may cast an enchantment spell by paying life equal to its mana value
+    /// rather than paying its mana cost" (see `kw/offered_costs.rs`).
+    fn offered_alternative_cost(
+        &mut self,
+        t: &CostTarget,
+        c: &Cost,
+        target: &str,
+        who: &str,
+    ) -> String {
+        let CostTarget::Spells(f) = t else {
+            return String::new();
+        };
+        if c.mana.is_none() && c.parts.is_empty() {
+            return format!("you may cast {target} without paying their mana costs");
+        }
+        let (kind, quals) = self.offered_spells(f);
+        if let [CostPart::PayLife(Value::ManaValueOf(s))] = c.parts.as_slice() {
+            if c.mana.is_none() && matches!(**s, Sel::This) {
+                let a = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                    "an"
+                } else {
+                    "a"
+                };
+                return format!(
+                    "you may cast {a} {kind}{quals} by paying life equal to its mana value rather than paying its mana cost"
+                );
+            }
+        }
+        let c = self.cost_as_payment(c);
+        format!("you may {c} rather than pay the mana cost for {kind}s{who}{quals}")
+    }
+
+    /// The spells an offered alternative cost is for, as a kind of spell ("Zombie creature
+    /// spell") and the qualifiers that follow "you cast" ("from exile", "that you don't
+    /// own", "with mana value 3 or less").
+    fn offered_spells(&mut self, f: &Filter) -> (String, String) {
+        let parts: Vec<Filter> = match f {
+            Filter::And(v) => v
+                .iter()
+                .flat_map(|x| match x {
+                    Filter::And(w) => w.clone(),
+                    other => vec![other.clone()],
+                })
+                .collect(),
+            Filter::Any => vec![],
+            other => vec![other.clone()],
+        };
+        let mut kind = Vec::new();
+        let mut quals = String::new();
+        for p in parts {
+            match &p {
+                Filter::Or(v) if matches!(v.as_slice(), [Filter::InZone(a), Filter::CastFrom(b)] if a == b) =>
+                {
+                    let Filter::InZone(z) = v[0] else {
+                        continue;
+                    };
+                    quals.push_str(match z {
+                        ZoneKind::Exile => " from exile",
+                        ZoneKind::Hand => " from your hand",
+                        ZoneKind::Graveyard => " from your graveyard",
+                        _ => " from somewhere",
+                    });
+                }
+                Filter::Not(x) if matches!(**x, Filter::OwnedBy(PlayerRel::You)) => {
+                    quals.push_str(" that you don't own")
+                }
+                Filter::ManaValue(Cmp::Le, v) => match &**v {
+                    Value::Const(n) => quals.push_str(&format!(" with mana value {n} or less")),
+                    other => {
+                        let v = self.value(other);
+                        quals.push_str(&format!(" with mana value X or less, where X is {v}"));
+                    }
+                },
+                Filter::Spell => {}
+                _ => kind.push(p),
+            }
+        }
+        let kind = if kind.is_empty() {
+            "spell".to_string()
+        } else {
+            kind.push(Filter::Spell);
+            let n = self.spell_noun_plural(&Filter::and(kind));
+            n.strip_suffix('s').unwrap_or(&n).to_string()
+        };
+        (kind, quals)
     }
 
     /// "{1}" / "{1} for each artifact you control" / "{X}, where X is ...".

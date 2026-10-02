@@ -14,10 +14,10 @@
 //! you forage" triggers.
 //!
 //! "You may collect evidence N rather than pay the mana cost for spells you cast"
-//! ([`ALT_COST_PREFIX`], Conspiracy Unraveler) is an alternative cost for the spells its
-//! controller casts, from their hand or wherever else they may cast them
-//! ([`EvidenceInsteadOfMana`]); paying it isn't the linked additional cost, so "if
-//! evidence was collected" stays false.
+//! (Conspiracy Unraveler) is an alternative cost offered for the spells its controller
+//! casts, from their hand or wherever else they may cast them (`kw/offered_costs.rs`,
+//! [`ALT_COST_METHOD`]); paying it isn't the linked additional cost, so "if evidence was
+//! collected" stays false.
 
 use super::*;
 
@@ -27,11 +27,10 @@ pub const COLLECTED_EVIDENCE: &str = "collect evidence";
 pub const FORAGED: &str = "forage";
 /// The name of the optional additional cost "you may collect evidence N" (CR 701.59c).
 pub const EVIDENCE_COST: &str = "collect evidence";
-/// `StaticEffect::Custom` name prefix, followed by N: "You may collect evidence N rather
-/// than pay the mana cost for spells you cast."
-pub const ALT_COST_PREFIX: &str = "collect evidence instead of mana cost:";
-/// The `CastMethod::Alternative` id of that alternative cost.
-pub const ALT_COST_METHOD: u64 = 0x0E1D_E4CE_0701_0059;
+/// The `CastMethod::Alternative` id of a spell cast for "You may collect evidence N rather
+/// than pay the mana cost for spells you cast": that of any alternative cost another object
+/// offers.
+pub const ALT_COST_METHOD: u64 = crate::kw::offered_costs::OFFERED_ALT_COST;
 
 fn total_mana_value(g: &Game, cards: &[ObjectId]) -> u32 {
     cards.iter().map(|c| g.mana_value_of(*c)).sum()
@@ -245,52 +244,3 @@ impl KeywordActionRules for Forage {
 }
 
 inventory::submit! { KeywordActionRegistration(&Forage) }
-
-/// Casting spells from hand by collecting evidence rather than paying their mana cost.
-pub struct EvidenceInsteadOfMana;
-
-impl crate::kw::KeywordRules for EvidenceInsteadOfMana {
-    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
-        &[]
-    }
-
-    fn global_cast_options(
-        &self,
-        g: &Game,
-        p: PlayerId,
-        card: ObjectId,
-    ) -> Vec<crate::casting::CastOption> {
-        // "For spells you cast": from the hand, or from wherever else the player may cast
-        // the card (a permission to cast it, a prepare-spell copy, a commander, CR 601.3)
-        // — but never together with another alternative cost (CR 118.9a), such as a
-        // permission to cast it without paying its mana cost or a keyword's own cost
-        // (flashback, foretell, ...), which isn't among these permissions.
-        let o = g.obj(card);
-        let castable_here = o.zone == Zone::Hand(p)
-            || (g.permitted_cards(p).contains(&card)
-                && g.permission_allows(p, card, &o.chars, false));
-        let free = g
-            .play_grants
-            .iter()
-            .any(|gr| gr.player == p && gr.object == card && gr.free);
-        if !castable_here || free {
-            return vec![];
-        }
-        let Some(n) = g
-            .statics
-            .customs
-            .iter()
-            .filter(|(_, ctl, _)| *ctl == p)
-            .filter_map(|(_, _, name)| name.strip_prefix(ALT_COST_PREFIX)?.parse::<u32>().ok())
-            .min()
-        else {
-            return vec![];
-        };
-        let mut opt = crate::casting::CastOption::normal(crate::object::FaceState::Front);
-        opt.method = crate::object::CastMethod::Alternative(ALT_COST_METHOD);
-        opt.alt_cost = Some(Cost::free().with(CostPart::CollectEvidence(n)));
-        vec![opt]
-    }
-}
-
-inventory::submit! { crate::kw::KeywordRegistration(&EvidenceInsteadOfMana) }
