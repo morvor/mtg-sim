@@ -83,6 +83,17 @@ fn intervening_if_that_player_has_two_or_fewer_cards_in_hand() {
     }
     t.advance_to(P1, Step::Draw);
     assert_eq!(t.life(P1), 20);
+    // Two cards as the upkeep starts, three by the time the ability resolves: nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hellfire Mongrel");
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "the ability triggered");
+    for _ in 0..3 {
+        t.hand(P1, "Forest");
+    }
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]
@@ -99,7 +110,8 @@ fn intervening_if_it_had_a_counter_looks_back() {
     let lieutenant = t.battlefield(P0, "Basri's Lieutenant");
     let plain = t.battlefield(P0, "Grizzly Bears");
     let marked = t.battlefield(P0, "Grizzly Bears");
-    t.g.add_counters(Entity::Object(marked), "+1/+1", 1, None);
+    // Two counters: the ability still triggers only once.
+    t.g.add_counters(Entity::Object(marked), "+1/+1", 2, None);
     destroy(&mut t, plain);
     t.resolve_all();
     let knights = |t: &TestGame| {
@@ -116,7 +128,7 @@ fn intervening_if_it_had_a_counter_looks_back() {
 
 #[test]
 fn if_enchanted_creature_is_untapped_tap_it() {
-    cr!("603.4", "303.4");
+    cr!("603.4", "303.4m");
     ruling!(
         "Narcolepsy",
         "the ability triggers only if the enchanted creature is untapped as any player"
@@ -136,7 +148,10 @@ fn if_enchanted_creature_is_untapped_tap_it() {
 #[test]
 fn if_x_is_5_or_more() {
     cr!("107.3", "608.2c");
-    ruling!("Martial Coup", "Martial Coup checks the number you chose for X");
+    ruling!(
+        "Martial Coup",
+        "Martial Coup checks the number you chose for X"
+    );
     // Martial Coup: "Create X 1/1 white Soldier creature tokens. If X is 5 or more,
     // destroy all other creatures."
     assert_supported(&["Martial Coup"]);
@@ -148,12 +163,11 @@ fn if_x_is_5_or_more() {
         t.cast(P0, s).x(x).go();
         t.resolve_all();
         assert_eq!(t.on_battlefield(wurm), survives, "X = {x}");
-        let soldiers = t
-            .g
-            .battlefield
-            .iter()
-            .filter(|id| t.g.obj(**id).chars.has_subtype("Soldier"))
-            .count();
+        let soldiers =
+            t.g.battlefield
+                .iter()
+                .filter(|id| t.g.obj(**id).chars.has_subtype("Soldier"))
+                .count();
         assert_eq!(soldiers as i64, x);
     }
 }
@@ -176,10 +190,7 @@ fn counter_target_spell_if_its_controller_is_poisoned() {
         let cr = t.hand(P0, "Corrupted Resolve");
         t.cast(P0, cr).target(spell).go();
         t.resolve_all();
-        assert_eq!(
-            t.named_on_battlefield("Grizzly Bears").is_empty(),
-            poisoned
-        );
+        assert_eq!(t.named_on_battlefield("Grizzly Bears").is_empty(), poisoned);
     }
 }
 
@@ -217,8 +228,7 @@ fn if_the_player_cant_sacrifice_sacrifice_this() {
     t.advance_to(P1, Step::Draw);
     assert!(!t.on_battlefield(bears));
     assert!(t.on_battlefield(demon));
-    // Next upkeep of P1 (no creatures): the Demon's controller sacrifices it. (P0's own
-    // upkeep in between makes P0 sacrifice the Demon itself, the only creature.)
+    // P1's upkeep with no creatures to sacrifice: the Demon's controller sacrifices it.
     let mut t = TestGame::new(2);
     let demon = t.battlefield(P0, "Woebringer Demon");
     t.advance_to(P1, Step::Draw);
@@ -315,13 +325,12 @@ fn if_a_goblin_is_sacrificed_this_way() {
         t.cast(P0, s).target(P1).go();
         t.resolve_all();
         assert!(!t.on_battlefield(c));
-        let rogues: Vec<ObjectId> = t
-            .g
-            .battlefield
-            .iter()
-            .copied()
-            .filter(|id| t.g.obj(*id).chars.has_subtype("Rogue"))
-            .collect();
+        let rogues: Vec<ObjectId> =
+            t.g.battlefield
+                .iter()
+                .copied()
+                .filter(|id| t.g.obj(*id).chars.has_subtype("Rogue"))
+                .collect();
         assert_eq!(rogues.len(), tokens, "{victim}");
         for r in rogues {
             assert_eq!(t.g.obj(r).controller, P1);
@@ -363,12 +372,11 @@ fn if_the_discarded_card_was_a_zombie_card() {
         t.activate(P0, stockpile, 0, &[]).unwrap();
         t.resolve_all();
         assert!(t.in_graveyard(P0, discard));
-        let zombies = t
-            .g
-            .battlefield
-            .iter()
-            .filter(|id| t.g.obj(**id).chars.has_subtype("Zombie") && t.g.obj(**id).tapped)
-            .count();
+        let zombies =
+            t.g.battlefield
+                .iter()
+                .filter(|id| t.g.obj(**id).chars.has_subtype("Zombie") && t.g.obj(**id).tapped)
+                .count();
         assert_eq!(zombies, usize::from(zombie), "{discard}");
     }
 }
@@ -402,7 +410,10 @@ fn if_you_do_after_a_conditional_you_may() {
     // +1/+1 counter on ~. If that creature was a Cleric, you may draw a card. If you do,
     // you lose 1 life."
     assert_supported(&["Taborax, Hope's Demise"]);
-    for (victim, cleric) in [("Grizzly Bears", false), ("Cleric of the Forward Order", true)] {
+    for (victim, cleric) in [
+        ("Grizzly Bears", false),
+        ("Cleric of the Forward Order", true),
+    ] {
         let mut t = TestGame::new(2);
         let tab = t.battlefield(P0, "Taborax, Hope's Demise");
         let c = t.battlefield(P0, victim);
@@ -486,7 +497,7 @@ fn if_its_not_their_turn() {
 
 #[test]
 fn if_you_control_the_creature_with_the_greatest_power() {
-    cr!("603.4", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Triumph of Ferocity",
         "The ability checks whether you'll draw a card when it resolves."
@@ -521,7 +532,7 @@ fn if_you_control_the_creature_with_the_greatest_power() {
 
 #[test]
 fn if_you_dont_control_a_creature_named() {
-    cr!("201.2", "608.2c");
+    cr!("608.2c");
     // Jiang Yanggu: "-1: If you don't control a creature named Mowu, create Mowu, a
     // legendary 3/3 green Dog creature token."
     assert_supported(&["Jiang Yanggu"]);
@@ -548,10 +559,7 @@ fn if_you_dont_control_a_creature_named() {
 #[test]
 fn counter_if_you_control_more_creatures_than_its_controller() {
     cr!("608.2c");
-    ruling!(
-        "Unified Will",
-        "is checked only as Unified Will resolves"
-    );
+    ruling!("Unified Will", "is checked only as Unified Will resolves");
     // Unified Will: "Counter target spell if you control more creatures than that spell's
     // controller."
     assert_supported(&["Unified Will"]);
@@ -569,13 +577,12 @@ fn counter_if_you_control_more_creatures_than_its_controller() {
         let uw = t.hand(P0, "Unified Will");
         t.cast(P0, uw).target(spell).go();
         t.resolve_all();
-        let p1_bears = t
-            .g
-            .battlefield
-            .iter()
-            .filter(|id| t.g.obj(**id).controller == P1)
-            .filter(|id| t.g.obj(**id).chars.has_name("Grizzly Bears"))
-            .count();
+        let p1_bears =
+            t.g.battlefield
+                .iter()
+                .filter(|id| t.g.obj(**id).controller == P1)
+                .filter(|id| t.g.obj(**id).chars.has_name("Grizzly Bears"))
+                .count();
         assert_eq!(p1_bears, if countered { 1 } else { 2 }, "{mine} creatures");
     }
 }
@@ -602,6 +609,26 @@ fn if_a_graveyard_has_twenty_or_more_cards_draw_three_instead() {
         t.resolve_all();
         assert_eq!(t.hand_size(P0) + 1 - before, drawn, "{cards} cards");
     }
+    // Nineteen cards, and dredge replaces the draw: the milled cards bring the graveyard
+    // to twenty or more, but the number of cards to draw was already determined.
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Life from the Loam");
+    for _ in 0..18 {
+        t.graveyard(P0, "Forest");
+    }
+    t.lands(P0, "Island", 1);
+    let v = t.hand(P0, "Visions of Beyond");
+    let before = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.cast(P0, v).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Life from the Loam"));
+    assert!(t.graveyard_size(P0) >= 20);
+    assert_eq!(
+        t.hand_size(P0),
+        before,
+        "Visions left, Life from the Loam returned"
+    );
 }
 
 #[test]
@@ -682,12 +709,11 @@ fn if_the_sacrificed_creatures_toughness_was_four_two_food_instead() {
         t.answer_choose(P0, &[Entity::Object(c)]);
         t.activate(P0, oven, 0, &[]).unwrap();
         t.resolve_all();
-        let foods = t
-            .g
-            .battlefield
-            .iter()
-            .filter(|id| t.g.obj(**id).chars.has_subtype("Food"))
-            .count();
+        let foods =
+            t.g.battlefield
+                .iter()
+                .filter(|id| t.g.obj(**id).chars.has_subtype("Food"))
+                .count();
         assert_eq!(foods, food, "{victim}");
     }
 }
@@ -716,7 +742,11 @@ fn if_you_dont_put_it_onto_the_battlefield_put_it_into_your_hand() {
         t.answer_yes(P0, yes);
         t.cast(P0, s).target(card).go();
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield(c).len(), usize::from(onto), "{c} {yes}");
+        assert_eq!(
+            t.named_on_battlefield(c).len(),
+            usize::from(onto),
+            "{c} {yes}"
+        );
         assert_eq!(t.in_hand(P0, c), !onto, "{c} {yes}");
     }
 }
@@ -732,14 +762,22 @@ fn otherwise_put_that_card_into_your_hand() {
     // that card onto the battlefield if it's a permanent card with mana value 3 or less.
     // Otherwise, put that card into your hand."
     assert_supported(&["Matter Reshaper"]);
-    for (top, onto) in [("Grizzly Bears", true), ("Craw Wurm", false), ("Lightning Bolt", false)] {
+    for (top, onto) in [
+        ("Grizzly Bears", true),
+        ("Craw Wurm", false),
+        ("Lightning Bolt", false),
+    ] {
         let mut t = TestGame::new(2);
         let m = t.battlefield(P0, "Matter Reshaper");
         t.library_top(P0, top);
         t.answer_yes(P0, true);
         destroy(&mut t, m);
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield(top).len(), usize::from(onto), "{top}");
+        assert_eq!(
+            t.named_on_battlefield(top).len(),
+            usize::from(onto),
+            "{top}"
+        );
         assert_eq!(t.in_hand(P0, top), !onto, "{top}");
     }
 }
@@ -750,7 +788,11 @@ fn if_attacking_you_may_put_it_on_top_instead() {
     // Sweep Away: "Return target creature to its owner's hand. If that creature is
     // attacking, you may put it on top of its owner's library instead."
     assert_supported(&["Sweep Away"]);
-    for (attacking, yes, on_top) in [(false, true, false), (true, true, true), (true, false, false)] {
+    for (attacking, yes, on_top) in [
+        (false, true, false),
+        (true, true, true),
+        (true, false, false),
+    ] {
         let mut t = TestGame::new(2);
         t.lands(P0, "Island", 3);
         let bears = t.battlefield(P1, "Grizzly Bears");
@@ -835,7 +877,6 @@ fn if_you_control_three_or_more_permanents_you_dont_own() {
     }
 }
 
-
 #[test]
 fn whenever_a_creature_enters_if_you_cast_it() {
     cr!("603.4", "601.2a");
@@ -914,14 +955,21 @@ fn if_its_a_creature_card_about_the_card_a_player_chose() {
     // Graveyard Shovel: "{2}, {T}: Target player exiles a card from their graveyard. If it's
     // a creature card, you gain 2 life."
     assert_supported(&["Graveyard Shovel"]);
-    for (c, gain) in [("Grizzly Bears", 2), ("Forest", 0)] {
+    // The targeted player chooses between a creature card and a land card.
+    for (c, other, gain) in [
+        ("Grizzly Bears", "Forest", 2),
+        ("Forest", "Grizzly Bears", 0),
+    ] {
         let mut t = TestGame::new(2);
         t.lands(P0, "Plains", 2);
         let shovel = t.battlefield(P0, "Graveyard Shovel");
-        t.graveyard(P1, c);
+        let chosen = t.graveyard(P1, c);
+        t.graveyard(P1, other);
+        t.answer_choose(P1, &[Entity::Object(chosen)]);
         t.activate(P0, shovel, 0, &[Entity::Player(P1)]).unwrap();
         t.resolve_all();
-        assert!(t.in_exile(c));
+        assert!(t.in_exile(c), "{c}");
+        assert!(t.in_graveyard(P1, other), "{c}");
         assert_eq!(t.life(P0), 20 + gain, "{c}");
     }
 }
@@ -946,6 +994,16 @@ fn if_that_player_controls_a_nonblack_nonland_permanent() {
     t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P1, Step::Draw);
     assert_eq!(t.life(P1), 19);
+    // Checked again as it resolves: the Bears are gone by then.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Urborg Stalker");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "the ability triggered");
+    destroy(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]

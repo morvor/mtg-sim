@@ -311,6 +311,11 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         } else {
             None
         };
+        // "If it was a creature card, ... If it was a land card, ... Otherwise, ...": the
+        // alternative to the whole run of conditions.
+        if x_defined.is_none() && s.to_lowercase().starts_with("otherwise, ") {
+            super::patterns::conditional_followups::group_condition_run(&mut effects);
+        }
         // Sentences that modify the previous one ("It can't be regenerated.").
         let followed_up = match effects.last_mut() {
             Some(prev) => crate::oracle_ext::apply_followup_ext(&s, prev, b),

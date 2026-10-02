@@ -94,8 +94,12 @@ fn parse_triggered_at(
             {
                 match super::patterns::conditions_referents::intervening(c, ctx, &it, &it_player) {
                     Some((cond, subject)) => {
-                        if let (Some(sel @ Sel::AttachedTo), Sel::This) = (&subject, &it) {
-                            body_it = Some(sel.clone());
+                        match (&subject, &it) {
+                            (Some(sel @ Sel::AttachedTo), Sel::This) => body_it = Some(sel.clone()),
+                            // "Whenever you cast an instant or sorcery spell, if ~ has fewer
+                            // than three charge counters on it, put a charge counter on it."
+                            (Some(Sel::This), _) => body_it = Some(Sel::This),
+                            _ => {}
                         }
                         Some(cond)
                     }

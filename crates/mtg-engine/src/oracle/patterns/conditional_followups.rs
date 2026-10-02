@@ -245,10 +245,9 @@ fn legendary_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     }
     let legendary = Filter::Supertype(crate::types::Supertype::Legendary);
     match rest.trim() {
-        "isn't legendary" | "is not legendary" => Some(Condition::SelMatches(
-            sel,
-            Filter::Not(Box::new(legendary)),
-        )),
+        "isn't legendary" | "is not legendary" => {
+            Some(Condition::SelMatches(sel, Filter::Not(Box::new(legendary))))
+        }
         "is legendary" => Some(Condition::SelMatches(sel, legendary)),
         _ => None,
     }
@@ -275,6 +274,31 @@ fn if_and_object_condition(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "if [condition] and [object] isn't legendary, [instruction]", priority: 250, parse: if_and_object_condition } }
 
+/// Groups a trailing run of two or more conditional instructions about the same object
+/// ("If it was a creature card, create a 2/2 black Rogue creature token. If it was a land
+/// card, create a Treasure token.") into one effect, for an "Otherwise, ..." that follows
+/// them all.
+pub(crate) fn group_condition_run(effects: &mut Vec<Effect>) {
+    let subject_of = |e: &Effect| match e {
+        Effect::If { cond, otherwise, .. } if matches!(**otherwise, Effect::Noop) => {
+            super::conditions_this_way::cond_subject(cond).map(|s| format!("{s:?}"))
+        }
+        _ => None,
+    };
+    let Some(subject) = effects.last().and_then(subject_of) else {
+        return;
+    };
+    let run = effects
+        .iter()
+        .rev()
+        .take_while(|e| subject_of(e).as_ref() == Some(&subject))
+        .count();
+    if run >= 2 {
+        let tail = effects.split_off(effects.len() - run);
+        effects.push(Effect::Seq(tail));
+    }
+}
+
 /// "Otherwise, [instruction]." after a conditional instruction ("You lose life equal to
 /// that card's mana value if ~ isn't saddled. Otherwise, each opponent loses that much
 /// life.", Caustic Bronco): what happens if the condition doesn't hold.
@@ -285,6 +309,31 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "You may put that card onto the battlefield if it's a permanent card ... Otherwise,
     // ...": the condition's alternative.
     super::conditions_this_way::normalize_may_if(prev);
+    // "If it was a creature card, ... If it was a land card, ... Otherwise, ...": the
+    // alternative to every one of a run of conditions about the same object.
+    let earlier: Vec<Condition> = match &*prev {
+        Effect::Seq(v) if v.len() >= 2 => {
+            let subject_of = |e: &Effect| match e {
+                Effect::If {
+                    cond, otherwise, ..
+                } if matches!(**otherwise, Effect::Noop) => {
+                    super::conditions_this_way::cond_subject(cond)
+                        .map(|s| (format!("{s:?}"), cond.clone()))
+                }
+                _ => None,
+            };
+            match subject_of(&v[v.len() - 1]) {
+                Some((subject, _)) => v[..v.len() - 1]
+                    .iter()
+                    .rev()
+                    .map_while(|e| subject_of(e).filter(|(s, _)| *s == subject))
+                    .map(|(_, c)| c)
+                    .collect(),
+                None => vec![],
+            }
+        }
+        _ => vec![],
+    };
     let last = match prev {
         Effect::Seq(v) => v.last_mut(),
         other => Some(other),
@@ -335,6 +384,13 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                 return false;
             }
         }
+    }
+    if !earlier.is_empty() {
+        e = Effect::If {
+            cond: Condition::Not(Box::new(Condition::Or(earlier))),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        };
     }
     **otherwise = e;
     true
