@@ -21,18 +21,41 @@ impl Game {
         if self.result.is_some() || self.end.restart.is_some() {
             return;
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c), and those of the instructions before
+        // it are checked for triggers before it happens (CR 603.2, 603.10).
+        self.action_boundary();
         if self.dirty {
             self.recompute();
         }
-        // Each instruction is a separate action: events it causes form their own batch for
-        // "one or more" triggers (CR 603.2c, 608.2c).
-        self.end_event_batch();
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        if crate::trigger_timing::is_sequencing(e) {
+            self.exec_effect(e, ctx);
+        } else {
+            self.atomically(|g| g.exec_effect(e, ctx));
+        }
+    }
+
+    /// Performs one effect (see [`Game::exec`]).
+    fn exec_effect(&mut self, e: &Effect, ctx: &mut Ctx) {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
+                // "Create a [token] and a [token]" is one instruction that the compiler
+                // splits into one creation per kind: the tokens enter at the same time, as
+                // one batch of events (CR 603.2c, 608.2c). The compiler gives separate
+                // creation sentences ("Create A. Then create B.") the same shape, but no
+                // card prints creation sentences with nothing else between or around them,
+                // and a sequence with any other instruction keeps one batch per element.
+                // Being one event, it's also checked for triggers as a whole (`exec` runs
+                // it atomically, see `trigger_timing`).
+                let together = crate::trigger_timing::creates_tokens_together(v);
+                if together {
+                    self.end_event_batch();
+                    self.batch_hold += 1;
+                }
                 for (i, x) in v.iter().enumerate() {
                     self.exec(x, ctx);
                     // CR 727.4: the rest of an effect that restarted the game happens as the
@@ -44,6 +67,9 @@ impl Game {
                     // CR 603.8: state triggers trigger as soon as the game state matches,
                     // even momentarily during a resolution.
                     self.check_state_triggers();
+                }
+                if together {
+                    self.batch_hold -= 1;
                 }
             }
             Effect::If {
@@ -1946,6 +1972,9 @@ impl Game {
             Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
+            Effect::TokensEnterWithCounters { counters, effect } => {
+                crate::tokens::enter_with_counters(self, counters, effect, ctx)
+            }
         }
     }
 
