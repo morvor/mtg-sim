@@ -133,7 +133,9 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
         restore(b);
     }
     if let Some((sel, rest)) = object_ref(s, b) {
-        if end(&rest).is_empty() {
+        // A spell that was cast isn't what counters are put on or removed from ("Whenever
+        // an opponent casts a spell, ... remove a time counter from it": not understood).
+        if end(&rest).is_empty() && !matches!(sel, Sel::TriggerSpell) {
             return Some(sel);
         }
     }
@@ -363,6 +365,12 @@ fn add(what: &Sel, q: &Qty, kind: CounterKind) -> Option<Effect> {
     })
 }
 
+/// A value phrase with nothing after it.
+fn amount_value(a: &str, b: &mut Builder) -> Option<Value> {
+    let (v, rest) = super::value_grammar::parse_value(a, b)?;
+    end(&rest).is_empty().then_some(v)
+}
+
 /// "put [items] on [holder] [equal to V]": one put instruction.
 fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("put ")?;
@@ -387,6 +395,7 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((h, a)) if equal && amount_before.is_none() => (h, Some(a.to_string())),
         _ => (holder_s, None),
     };
+    let before = amount_before.is_some();
     let amount = amount_before.or(amount_after);
     if equal != amount.is_some() {
         return None;
@@ -399,6 +408,12 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
             None => put_options(&items, b)?,
         }
     };
+    // The amount and the holder are read in text order: "equal to its power on up to one
+    // target creature" ("its" is what the text was about before the target).
+    let mut value = None;
+    if before {
+        value = Some(amount_value(amount.as_deref()?, b)?);
+    }
     let mut what = holder(holder_s, b)?;
     if let Sel::Choose {
         count: Value::Const(1),
@@ -410,23 +425,24 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
         *store = Some(CHOSEN);
         b.it = Sel::Var(CHOSEN);
     }
-    let amount = match amount {
-        Some(a) => {
-            let (v, rest) = super::value_grammar::parse_value(&a, b)?;
-            if !end(&rest).is_empty() {
-                return None;
-            }
-            Some(v)
+    if !before {
+        if let Some(a) = &amount {
+            value = Some(amount_value(a, b)?);
         }
-        None => None,
-    };
+    }
+    let amount = value;
     let mut effects = Vec::new();
     for (q, kind) in options {
         let mut e = add(&what, &q, kind.clone())?;
         if let Some(v) = &amount {
             e = super::r107_numbers::substitute_x(&e, v)?;
         }
-        effects.push((format!("{kind} counter"), e));
+        let label = match &q {
+            Qty::Exact(Value::Const(1)) => format!("{kind} counter"),
+            Qty::Exact(Value::Const(n)) => format!("{n} {kind} counters"),
+            _ => format!("{kind} counters"),
+        };
+        effects.push((label, e));
     }
     if effects.len() == 1 {
         return effects.pop().map(|(_, e)| e);
@@ -591,3 +607,45 @@ fn after_removal(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "counter grammar: ... counters removed this way", priority: 50, apply: after_removal } }
+
+/// "remove all +1/+1 counters from ~, and it deals that much damage to each creature",
+/// "remove [counters] from [holder] and [instruction with "that many"]": the number of
+/// counters removed.
+fn remove_and_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("remove ") {
+        return None;
+    }
+    for sep in [", and ", " and ", ", then "] {
+        let Some((a, c)) = l.split_once(sep) else {
+            continue;
+        };
+        if !(c.contains("that much") || c.contains("that many")) {
+            continue;
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let parsed = (|| {
+            let removal = remove_counters(a, b)?;
+            let c = c.replace("that much", "x").replace("that many", "x");
+            let e = crate::oracle::effects::parse_clause(&c, b)?;
+            let e = super::r107_numbers::substitute_x(&e, &Value::Var(REMOVED))?;
+            Some(Effect::Seq(vec![
+                removal,
+                Effect::StoreValue {
+                    var: REMOVED,
+                    value: Value::Prev,
+                },
+                e,
+            ]))
+        })();
+        if parsed.is_some() {
+            return parsed;
+        }
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: remove counters and [that much]", priority: 60, parse: remove_and_that_much } }

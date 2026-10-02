@@ -159,6 +159,11 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
+    // cast, even after "it" has come to mean something else.
+    if matches!(it, Sel::TriggerSpell) {
+        b.named.push(("that spell".into(), Sel::TriggerSpell));
+    }
     b.it = it;
     b.it_player = it_player;
     let effect = parse_effect_text(t, &mut b)?;
