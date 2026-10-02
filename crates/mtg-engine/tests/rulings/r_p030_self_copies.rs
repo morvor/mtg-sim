@@ -705,3 +705,31 @@ fn a_cytoshaped_phytohydra_s_token_stays_a_phytohydra() {
     assert_eq!(t.obj_now(bears).chars.name, "Grizzly Bears");
     assert_eq!(t.obj_now(tok).chars.name, "Sprouting Phytohydra");
 }
+
+#[test]
+fn vaultborn_tyrant_s_token_copies_only_printed_values_plus_the_exception() {
+    cr!("707.2", "707.9b", "603.4", "603.10a");
+    ruling!(
+        "Vaultborn Tyrant",
+        "Except for the listed exception, the token copies exactly what is printed on Vaultborn Tyrant and nothing else (unless Vaultborn Tyrant was copying something else; see below). It doesn’t copy whether Vaultborn Tyrant was tapped or untapped, whether it had any counters on it or Auras and Equipment attached to it, or any non-copy effects that changed its power, toughness, types, color, and so on."
+    );
+    supported("Vaultborn Tyrant");
+    // "When this creature dies, if it's not a token, create a token that's a copy of it,
+    // except it's an artifact in addition to its other types."
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Vaultborn Tyrant");
+    crate::r_s26_common::dress_up(&mut t, v);
+    crate::r_s06_common::attach_new(&mut t, P0, "Rancor", v);
+    kill(&mut t, v);
+    t.resolve_all();
+    let tok = one_token(&t, P0, "Vaultborn Tyrant");
+    assert_eq!(t.pt(tok), (6, 6));
+    assert!(fresh(&t, tok));
+    let o = t.obj_now(tok);
+    assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
+    assert!(o.chars.colors.contains(Color::Green) && !o.chars.colors.contains(Color::Blue));
+    // The token isn't "not a token": it makes no copy when it dies.
+    kill(&mut t, tok);
+    t.resolve_all();
+    assert!(tokens_named(&t, P0, "Vaultborn Tyrant").is_empty());
+}
