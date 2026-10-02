@@ -854,6 +854,43 @@ impl Renderer<'_> {
         }
     }
 
+    /// "This ability costs {1} less to activate for each legendary creature you control",
+    /// "... during your turn", "... if you control an artifact" (an activated ability's own
+    /// cost change, CR 601.2f).
+    pub(crate) fn own_cost_change(&mut self, oc: &OwnCostChange) -> String {
+        let (dir, amt, tail) = match &oc.change {
+            CostChange::IncreaseGeneric(v) => {
+                let (a, t) = self.cost_amount(v);
+                ("more", a, t)
+            }
+            CostChange::ReduceGeneric(v) => {
+                let (a, t) = self.cost_amount(v);
+                ("less", a, t)
+            }
+            CostChange::IncreaseMana(m) => ("more", m.to_string(), String::new()),
+            CostChange::ReduceMana { mana, .. } => ("less", mana.to_string(), String::new()),
+            CostChange::ReduceColored(c, v) => {
+                let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
+                match v {
+                    Value::Const(n) if *n > 0 => ("less", sym.repeat(*n as usize), String::new()),
+                    other => {
+                        let v = self.value(other);
+                        ("less", sym.to_string(), format!(" for each {v}"))
+                    }
+                }
+            }
+            other => {
+                return self.gap(format!("own cost change {other:?}"));
+            }
+        };
+        let cond = match &oc.condition {
+            None => String::new(),
+            Some(Condition::YourTurn) => " during your turn".into(),
+            Some(c) => format!(" if {}", self.condition(c)),
+        };
+        format!("This ability costs {amt} {dir} to activate{tail}{cond}.")
+    }
+
     /// "{1}" / "{1} for each artifact you control" / "{X}, where X is ...".
     fn cost_amount(&mut self, v: &Value) -> (String, String) {
         match v {

@@ -30,11 +30,21 @@ impl Renderer<'_> {
                 parts.push("{Q}".into());
             }
         }
+        // "Remove three quest counters from ~ and sacrifice it": a later cost names the
+        // object again as "it".
+        let mut named_self = false;
         for p in &c.parts {
             match p {
                 CostPart::Tap | CostPart::Untap | CostPart::Loyalty(_) => {}
                 other => {
-                    let s = self.cost_part(other);
+                    let mut s = self.cost_part(other);
+                    if named_self {
+                        s = s.replace(" ~ ", " ~it ");
+                        if let Some(x) = s.strip_suffix(" ~") {
+                            s = format!("{x} ~it");
+                        }
+                    }
+                    named_self |= s.contains('~');
                     parts.push(capitalize(&s));
                 }
             }
@@ -318,6 +328,10 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        for oc in &a.own_cost_changes {
+            let c = self.own_cost_change(oc);
+            s = join_words(&[s, c]);
+        }
         if !restr.is_empty() {
             let r: Vec<String> = restr
                 .iter()

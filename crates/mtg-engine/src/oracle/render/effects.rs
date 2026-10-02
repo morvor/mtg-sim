@@ -2850,7 +2850,9 @@ impl Renderer<'_> {
                     if keywords.is_empty() && abilities.is_empty() {
                         parts.push(GRANTS.into());
                     }
+                    let saved = std::mem::replace(&mut self.granted_keyword, true);
                     keywords.push(self.keyword_lower(k));
+                    self.granted_keyword = saved;
                     // A granted cost keyword without a cost uses the mana cost:
                     // "gains flashback until end of turn. The flashback cost is equal to
                     // its mana cost."

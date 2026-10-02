@@ -1,5 +1,5 @@
 //! `roundtrip [--card NAME] [--filter TEXT] [--limit N] [--write PATH] [--check] [--ast]
-//! [--list] [--clusters N]`: renders every fully supported card's compiled abilities back
+//! [--list] [--all] [--clusters N]`: renders every fully supported card's compiled abilities back
 //! to Oracle-style text ([`mtg_engine::oracle::render`]) and compares it with the card's
 //! Oracle text.
 //!
@@ -7,6 +7,8 @@
 //! * `--filter TEXT`: only cards whose Oracle text contains TEXT (case-insensitive).
 //! * `--limit N`: with `--list`, print at most N mismatching cards (default 20).
 //! * `--list`: print mismatching cards with both sides.
+//! * `--all`: print every checked card with both sides (to diff the compiler's output
+//!   before and after a change).
 //! * `--write PATH`: write the Markdown report (and `docs/roundtrip-passing.txt`, the
 //!   checked-in list of passing cards that must stay passing).
 //! * `--check`: exit 1 if a card in `docs/roundtrip-passing.txt` no longer passes.
@@ -106,6 +108,7 @@ struct Options {
     ast: bool,
     clusters: usize,
     list: bool,
+    all: bool,
 }
 
 fn parse(args: &[String]) -> Options {
@@ -118,6 +121,7 @@ fn parse(args: &[String]) -> Options {
         ast: false,
         clusters: 0,
         list: false,
+        all: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -146,6 +150,7 @@ fn parse(args: &[String]) -> Options {
             "--check" => o.check = true,
             "--ast" => o.ast = true,
             "--list" => o.list = true,
+            "--all" => o.all = true,
             _ => {}
         }
         i += 1;
@@ -191,6 +196,7 @@ fn print_card(r: &CardCheck) {
         println!("  gap: {g}");
     }
     if !r.pass {
+        println!("  cluster: {}", cluster_key(r));
         for u in &r.unmatched_oracle {
             println!("  - {}", normalize_unit(u).join(" "));
         }
@@ -270,6 +276,11 @@ pub fn run(args: &[String]) {
     );
     if o.list {
         for r in failing.iter().take(o.limit) {
+            print_card(r);
+        }
+    }
+    if o.all {
+        for r in &results {
             print_card(r);
         }
     }

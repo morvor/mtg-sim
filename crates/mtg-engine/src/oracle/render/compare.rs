@@ -265,6 +265,15 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Contraction.",
     },
     Equivalence {
+        pattern: r"\bif (it|its|thatit|thatit's|that-object|~it|~it's|~|~'s|the sacrificed (?:creature|permanent|artifact)(?:'s)?)((?: power| toughness)?) was\b",
+        replacement: "if $1$2 is",
+        why: "A condition about an object checked after it left its zone (\"Destroy target \
+              creature. If it was attacking, ...\", \"When ~ dies, if it was a Human\") is \
+              judged by the object's last known information (CR 608.2h, 400.7), which is \
+              what the past tense describes; the ability language has one condition for both \
+              and the engine evaluates a moved object by its last known information.",
+    },
+    Equivalence {
         pattern: r"\b(adds?) an additional\b",
         replacement: "$1",
         why: "A triggered mana ability's mana is added in addition to the mana the \

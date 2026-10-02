@@ -325,8 +325,12 @@ impl Renderer<'_> {
         }
         if !self.introduced[idx] {
             self.introduced[idx] = true;
-            self.self_salient = false;
+            // "~ deals 1 damage to target creature blocking it": the object itself, just
+            // named, may still be "it" in a target's blocking relation to it.
+            let was = std::mem::replace(&mut self.self_salient, false);
+            let saved = std::mem::replace(&mut self.self_before_target, was && !self.other_salient);
             let p = self.target_phrase(i);
+            self.self_before_target = saved;
             return decline(p, case);
         }
         if self.slot_is_player(i) {
@@ -366,6 +370,7 @@ impl Renderer<'_> {
         };
         match s {
             Sel::None => self.gap("Sel::None"),
+            Sel::This if self.granted_keyword => it(case),
             Sel::This => {
                 let m = self.me();
                 decline(m, case)

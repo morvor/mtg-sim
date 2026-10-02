@@ -348,9 +348,15 @@ impl Renderer<'_> {
                 let who = self.rel_object(*r);
                 np.post.push(format!("attacking {who}"));
             }
+            Filter::BlockingSource if self.self_before_target => {
+                np.post.push("blocking ~it".into())
+            }
             Filter::BlockingSource => {
                 let m = self.me();
                 np.post.push(format!("blocking {m}"))
+            }
+            Filter::BlockedBySource if self.self_before_target => {
+                np.post.push("blocked by ~it".into())
             }
             Filter::BlockedBySource => {
                 let m = self.me();
