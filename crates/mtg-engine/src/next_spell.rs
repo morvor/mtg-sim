@@ -186,6 +186,57 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
     g.dirty = true;
 }
 
+/// As the spell becomes cast (CR 601.2i): an ability a static ability of an object made
+/// the spell gain as it was put on the stack ("Spells you cast with mana value 6 or
+/// greater have cascade") is lost if that static ability no longer applies to it — e.g.
+/// its source was sacrificed or changed control while the spell's costs were paid
+/// (Imoti, Celebrant of Bounty and Party Thrasher rulings). Abilities from effects
+/// waiting for "the next spell you cast" (CR 611.2f) aren't affected.
+pub fn recheck_static_cast_grants(g: &mut Game, spell: ObjectId) {
+    g.recompute();
+    let mut drop: Vec<u32> = Vec::new();
+    for e in &g.effects {
+        let (Some(src), Affected::Objects(v)) = (e.source, &e.affected) else {
+            continue;
+        };
+        if v.as_slice() != [spell] || e.layer1.is_some() {
+            continue;
+        }
+        let mods = format!("{:?}", e.mods);
+        let o = g.obj(src);
+        // The static ability (of the source as it last existed) that granted this.
+        let Some(s) = o.chars.abilities.iter().find_map(|a| match &a.kind {
+            AbilityKind::Static(s)
+                if is_cast_grant(s)
+                    && matches!(&s.effect, StaticEffect::Continuous { mods: m, .. }
+                        if format!("{m:?}") == mods) =>
+            {
+                Some(s)
+            }
+            _ => None,
+        }) else {
+            continue;
+        };
+        let StaticEffect::Continuous { affected, .. } = &s.effect else {
+            continue;
+        };
+        let ctx = Ctx::new(Some(src), o.controller);
+        let applies = g.is_live(src)
+            && g.ability_functions(o, s.zone, s.is_cda)
+            && !s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx))
+            && g.matches(spell, affected, &ctx);
+        if !applies {
+            drop.push(e.id);
+        }
+    }
+    if !drop.is_empty() {
+        g.effects.retain(|e| !drop.contains(&e.id));
+        g.carried_effects.retain(|id| !drop.contains(id));
+        g.dirty = true;
+        g.recompute();
+    }
+}
+
 /// Whether a granted keyword stands for an ability that functions on the battlefield
 /// (CR 400.7b).
 fn functions_on_battlefield(m: &Modification) -> bool {

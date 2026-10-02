@@ -94,7 +94,7 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
     count_creates(e, &mut creates);
     let last = last_instruction_mut(e);
     match last {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
             b.it = Sel::Var(vars::CREATED);
         }
         Effect::Search { .. } => {
@@ -223,7 +223,7 @@ fn count_creates(e: &Effect, n: &mut usize) {
             count_creates(then, n);
             count_creates(otherwise, n);
         }
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => *n += 1,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => *n += 1,
         _ => {}
     }
 }

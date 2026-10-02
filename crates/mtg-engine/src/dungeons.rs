@@ -181,6 +181,8 @@ fn complete(g: &mut Game, p: PlayerId, d: ObjectId) {
     g.log(|g| format!("{p} completes {}", g.obj(d).chars.name));
     g.move_object(d, Zone::Outside(p), MoveCause::StateBased, Some(p));
     g.players[p.idx()].dungeons_completed += 1;
+    let name = g.obj(d).chars.name.clone();
+    g.players[p.idx()].completed_dungeons.push(name);
     // "As long as you've completed a dungeon" statics change (CR 611.3a).
     g.dirty = true;
     g.emit(Event::Custom {
