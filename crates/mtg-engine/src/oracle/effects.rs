@@ -933,7 +933,19 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         // "Each creature you control deals damage equal to its power": "its" is each of
         // the sources in turn (the executor binds `vars::AFFECTED` to each).
         let multi = matches!(src, Sel::All(_) | Sel::Union(_));
-        let saved_it = multi.then(|| std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)));
+        // "Whenever you cast a spell, you may put a charge counter on ~. If you do, ~
+        // deals damage equal to the number of charge counters on it": a spell on the
+        // stack has no counters, so "it" is the subject, not the triggering spell.
+        let counters_on_subject = matches!(src, Sel::This)
+            && matches!(b.it, Sel::TriggerSpell)
+            && r.contains(" counters on it ");
+        let saved_it = if multi {
+            Some(std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)))
+        } else if counters_on_subject {
+            Some(std::mem::replace(&mut b.it, Sel::This))
+        } else {
+            None
+        };
         let parsed = super::statics::parse_value_phrase(r, b);
         if let Some(it) = saved_it {
             b.it = it;
@@ -952,7 +964,8 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            spec.min = 1;
+            // "Any number of targets" may be zero targets (CR 107.1c).
+            spec.min = 0;
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");

@@ -86,7 +86,11 @@ fn two_winding_constrictors_add_two() {
         }
         let bears = t.battlefield(P0, "Grizzly Bears");
         put(&mut t, bears, counters::PLUS1, 1);
-        assert_eq!(t.counters(bears, counters::PLUS1), 1 + n, "{n} Constrictors");
+        assert_eq!(
+            t.counters(bears, counters::PLUS1),
+            1 + n,
+            "{n} Constrictors"
+        );
     }
 }
 
@@ -156,7 +160,11 @@ fn twenty_toed_toad_and_spellbook_apply_in_timestamp_order() {
     t.battlefield(P0, "Spellbook");
     t.battlefield(P0, "Twenty-Toed Toad");
     t.g.recompute();
-    assert_eq!(t.g.player(P0).max_hand_size, Some(20), "Spellbook, then Toad");
+    assert_eq!(
+        t.g.player(P0).max_hand_size,
+        Some(20),
+        "Spellbook, then Toad"
+    );
 }
 
 #[test]
@@ -193,12 +201,7 @@ fn cast_in_cleanup(t: &mut TestGame, card: ObjectId) {
         card: Option<ObjectId>,
     }
     impl Agent for InCleanup {
-        fn decide(
-            &mut self,
-            g: &mtg_engine::game::Game,
-            p: PlayerId,
-            d: &Decision,
-        ) -> Answer {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
             if matches!(d, Decision::Priority { .. }) && g.turn.step == Step::Cleanup {
                 if let Some(card) = self.card.take() {
                     return Answer::Action(Action::Cast {
@@ -238,10 +241,7 @@ fn midnight_oil_discarding_in_cleanup_gives_another_cleanup_step() {
     let inspiration = t.hand(P0, "Inspiration");
     let bears: Vec<_> = (0..3).map(|_| t.hand(P0, "Grizzly Bears")).collect();
     // The first cleanup step: four cards, so two Bears are discarded (Inspiration kept).
-    t.answer_choose(
-        P0,
-        &[Entity::Object(bears[0]), Entity::Object(bears[1])],
-    );
+    t.answer_choose(P0, &[Entity::Object(bears[0]), Entity::Object(bears[1])]);
     cast_in_cleanup(&mut t, inspiration);
     let seen = watch(
         &mut t,

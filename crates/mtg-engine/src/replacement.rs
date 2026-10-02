@@ -478,13 +478,22 @@ impl Game {
                 continue;
             }
             if let Some(t) = entering_target {
+                // Only the source itself: "Source", or a conjunction including it
+                // (compleated: "Source and entering").
+                fn only_source(f: &Filter) -> bool {
+                    match f {
+                        Filter::Source => true,
+                        Filter::And(v) => v.iter().any(only_source),
+                        _ => false,
+                    }
+                }
                 let only_itself = src == t
                     && matches!(
-                        d.event,
+                        &d.event,
                         ReplacementEvent::PutCounters {
-                            on_objects: Some(Filter::Source),
+                            on_objects: Some(f),
                             ..
-                        }
+                        } if only_source(f)
                     );
                 if entering_now(self, src) && !only_itself {
                     continue;

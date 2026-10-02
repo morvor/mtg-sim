@@ -102,7 +102,10 @@ fn cathedral_acolyte_ward_for_any_counter_and_stays_after_it_leaves() {
     // Removing the Acolyte now doesn't stop the ward ability.
     destroy(&mut t, acolyte);
     t.resolve_all();
-    assert!(t.on_battlefield(bears), "Bolt countered: P1 couldn't pay {{1}}");
+    assert!(
+        t.on_battlefield(bears),
+        "Bolt countered: P1 couldn't pay {{1}}"
+    );
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     // Without a counter, no ward.
     let mut t = TestGame::new(2);
