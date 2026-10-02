@@ -149,6 +149,7 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 .into_iter()
                 .any(|p| !g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_))))
         }
+        Effect::SearchCards(spec) => crate::search_rules::possible(g, spec, ctx),
         _ => true,
     }
 }

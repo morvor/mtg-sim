@@ -60,7 +60,12 @@ pub fn parse_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             for a in abilities.iter_mut() {
                 if let AbilityKind::Static(s) = &a.kind {
                     let mut s2 = s.clone();
-                    s2.condition = Some(cond.clone());
+                    // Keep an inner condition ("..., your opponents can't cast spells
+                    // during your turn"): both must hold.
+                    s2.condition = Some(match s2.condition.take() {
+                        Some(inner) => Condition::And(vec![cond.clone(), inner]),
+                        None => cond.clone(),
+                    });
                     if from_graveyard {
                         s2.zone = FunctionZone::Graveyard;
                     }

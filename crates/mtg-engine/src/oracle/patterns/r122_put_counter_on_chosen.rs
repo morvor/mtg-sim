@@ -9,7 +9,7 @@ use crate::oracle::costs::counter_kind;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 
-fn put_counter_on_chosen(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn put_counter_on_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = strip(end(l), "put")?;
     let (n, r) = parse_number(r)?;
     let (kind, r) = counter_kind(r)?;
@@ -23,6 +23,10 @@ fn put_counter_on_chosen(l: &str, _b: &mut Builder) -> Option<Effect> {
     if plural || !end(tail).is_empty() {
         return None;
     }
+    // "Put a +1/+1 counter on a creature you control. It gains double strike until end
+    // of turn.": "it" is the chosen permanent.
+    let store = super::counter_grammar::CHOSEN;
+    b.it = Sel::Var(store);
     Some(Effect::AddCounters {
         what: Sel::Choose {
             chooser: PlayerRef::You,
@@ -33,7 +37,7 @@ fn put_counter_on_chosen(l: &str, _b: &mut Builder) -> Option<Effect> {
             ]),
             count: Value::c(1),
             up_to: false,
-            store: None,
+            store: Some(store),
         },
         kind,
         n,
