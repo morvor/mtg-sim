@@ -724,6 +724,10 @@ pub struct TargetSpec {
     /// `patterns::choice_grammar_random`).
     #[serde(default)]
     pub random: bool,
+    /// "target ... of their choice": another player chooses this target (the player the
+    /// phrase names, e.g. the player whose upkeep it is), not the controller (CR 601.2c).
+    #[serde(default)]
+    pub chosen_by: Option<PlayerRef>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
@@ -793,6 +797,7 @@ impl TargetSpec {
             related_to: None,
             per_player: None,
             random: false,
+            chosen_by: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {

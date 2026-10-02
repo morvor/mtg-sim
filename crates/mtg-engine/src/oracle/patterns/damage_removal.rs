@@ -133,6 +133,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         related_to: None,
         per_player: None,
         random: false,
+        chosen_by: None,
     };
     Some((spec, any_number, rest))
 }

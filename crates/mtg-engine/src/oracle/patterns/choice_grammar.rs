@@ -102,6 +102,18 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if named.is_some() {
         return named;
     }
+    // "Whenever a player attacks enchanted player ..., that attacking player ...".
+    if let Some(r) = s.strip_prefix("that attacking player") {
+        let attacking = crate::oracle::raw_text().to_lowercase().contains("whenever a player attacks");
+        if b.in_trigger
+            && attacking
+            && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            && (r.is_empty() || r.starts_with(' '))
+        {
+            return Some((b.it_player.clone(), r.to_string()));
+        }
+        return None;
+    }
     if let Some(r) = s.strip_prefix("that source's controller") {
         if b.in_trigger && (r.is_empty() || r.starts_with(' ')) {
             return Some((
@@ -357,3 +369,72 @@ fn you_imperative(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: you [verb] (imperative)", priority: 996, parse: you_imperative } }
+
+/// "destroy target nonartifact creature that player controls of their choice" (The
+/// Abyss), "that creature's controller may have target creature of their choice get
+/// -3/-3" (Death Match), "that attacking player may tap or untap target permanent of their
+/// choice" (Curse of Inertia), "destroy target creature of your choice": the target is
+/// chosen by the player "their" refers to (the sentence's subject, or else "that
+/// player"), as the spell or ability is put on the stack (CR 601.2c).
+fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (k, theirs) = match (l.find(" of their choice"), l.find(" of your choice")) {
+        (Some(k), _) => (k, true),
+        (None, Some(k)) => (k, false),
+        _ => return None,
+    };
+    // Right after a target phrase.
+    let before = &l[..k];
+    let t = before.rfind("target ")?;
+    if before[t..].contains(", ") || before[t..].contains(" and ") {
+        return None;
+    }
+    let phrase = if theirs { " of their choice" } else { " of your choice" };
+    let text = format!("{before}{}", &l[k + phrase.len()..]);
+    if text.contains(" of their choice") || text.contains(" of your choice") {
+        return None;
+    }
+    // Who "their" is: a player subject ("that creature's controller may have ...").
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let chooser = if theirs {
+        let subject = ["may have ", "may tap ", "may "]
+            .iter()
+            .find_map(|m| l.find(&format!(" {m}")).map(|i| &l[..i]));
+        let who = match subject {
+            Some(s) => {
+                let (who, rest) = crate::oracle::effects::player_ref(s, b)?;
+                if !end(&rest).is_empty() {
+                    b.targets.truncate(saved.0);
+                    (b.it, b.it_player) = (saved.1, saved.2);
+                    return None;
+                }
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+                who
+            }
+            None => b.it_player.clone(),
+        };
+        if super::oracle_hardening_referents::is_no_player_referent(&who)
+            || matches!(who, PlayerRef::You)
+        {
+            return None;
+        }
+        Some(who)
+    } else {
+        None
+    };
+    let first = b.targets.len();
+    let e = crate::oracle::effects::parse_sentence(&text, b)?;
+    // The target named right before "of their choice" (the last one the sentence added).
+    let Some(slot) = (first..b.targets.len()).rev().find(|i| {
+        matches!(b.targets[*i].what, TargetKind::Object(_))
+    }) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    b.targets[slot].chosen_by = chooser;
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: target ... of their choice", priority: 85, parse: target_of_their_choice } }

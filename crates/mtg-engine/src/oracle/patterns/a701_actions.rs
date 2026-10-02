@@ -582,6 +582,7 @@ fn support(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         related_to: None,
         per_player: None,
         random: false,
+        chosen_by: None,
     };
     let body = Body {
         targets: vec![spec],
