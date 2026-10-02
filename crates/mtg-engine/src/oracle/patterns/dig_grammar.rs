@@ -175,6 +175,40 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "dig: [instruction] for each card put [somewhere] this way", priority: 150, apply: for_each_put_this_way }
 }
+inventory::submit! {
+    FollowupPattern { name: "dig: if it's a double-faced card, you may transform it", priority: 150, apply: transform_if_double_faced }
+}
+
+/// "If it's a double-faced card, you may transform it." after putting a card from among
+/// them onto the battlefield (Nick Fury, Agent of S.H.I.E.L.D.): the permanent it became.
+fn transform_if_double_faced(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if it's a double-faced card, you may transform it" {
+        return false;
+    }
+    let to_battlefield = steps_rev(prev).first().is_some_and(|s| {
+        matches!(s, DigStep::Take { to, .. } if to.zone == ZoneKind::Battlefield)
+    });
+    if !to_battlefield || !matches!(prev, Effect::Seq(v) if matches!(v.last(), Some(Effect::DigStep(_)))) {
+        return false;
+    }
+    let it = Sel::Var(vars::IT);
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::SelMatches(
+                it.clone(),
+                Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
+            ),
+            then: Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(Effect::Transform { what: it }),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
 
 /// The dig steps of an effect, last first.
 fn steps_rev(e: &Effect) -> Vec<&DigStep> {
@@ -528,6 +562,19 @@ fn source_then_steps(l: &str, b: &mut Builder) -> Option<Effect> {
 /// to them).
 fn put_this_way(c: &str) -> Option<Condition> {
     let c = end(c);
+    // "if you revealed it this way" (Fisher's Talent): whether a card was revealed by the
+    // previous selection ([`DigStep::Take`] stores the cards it revealed).
+    if matches!(c, "you revealed it this way" | "you revealed a card this way") {
+        return Some(Condition::Exists(Filter::In(Box::new(Sel::Var(vars::REVEALED)))));
+    }
+    // "If you didn't put the revealed card onto the battlefield this way" (Break Out): the
+    // card revealed from among them is still in the library.
+    if c == "you didn't put the revealed card onto the battlefield this way" {
+        return Some(Condition::Exists(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN))),
+            Filter::InZone(ZoneKind::Library),
+        ])));
+    }
     if matches!(
         c,
         "you didn't put a card into your hand this way"
@@ -1398,7 +1445,17 @@ fn chooses_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "you may reveal that card", "you may reveal it" after looking at the top card: the
 /// card is revealed (or not), and stays where it is.
-fn reveal_that_card(l: &str) -> Option<Vec<Effect>> {
+fn reveal_that_card(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
+    // "reveal it if it's a land card" (Fisher's Talent): only a card of that kind.
+    let (l, filter) = match l.split_once(" if it's ") {
+        Some((x, desc)) => {
+            let desc = desc
+                .strip_prefix("a ")
+                .or_else(|| desc.strip_prefix("an "))?;
+            (x, dig_card_filter(desc, b)?)
+        }
+        None => (l, Filter::Any),
+    };
     if !matches!(l, "reveal that card" | "reveal it") {
         return None;
     }
@@ -1407,7 +1464,7 @@ fn reveal_that_card(l: &str) -> Option<Vec<Effect>> {
     Some(vec![Effect::DigStep(Box::new(DigStep::Take {
         from: dug_sel(),
         chooser: PlayerRef::You,
-        filter: Filter::Any,
+        filter,
         each_of: vec![],
         count: Some(Value::c(1)),
         up_to: false,
@@ -1435,7 +1492,7 @@ fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (false, l),
     };
     let v = parse_put_found(r, b)
-        .or_else(|| reveal_that_card(r))
+        .or_else(|| reveal_that_card(r, b))
         .or_else(|| parse_rest(r, &rest_sel(b)).map(|e| vec![e]))?;
     let e = Effect::seq(v);
     Some(if may {

@@ -1056,6 +1056,28 @@ fn psychic_surgery_exiles_one_of_the_top_two_after_an_opponent_shuffles() {
     assert_eq!(t.g.player(P1).library.last(), Some(&top[0]));
 }
 
+#[test]
+fn break_out_puts_a_cheap_creature_onto_the_battlefield_or_into_hand() {
+    cr!("701.20a", "608.2c");
+    assert_supported("Break Out");
+    for (creature, onto) in [("Grizzly Bears", true), ("Grizzly Bears", false), ("Shivan Dragon", true)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 1);
+        t.lands(P0, "Forest", 1);
+        let ids = stack(&mut t, P0, &["Shock", creature, "Forest"]);
+        let spell = t.hand(P0, "Break Out");
+        t.answer_choose(P0, &[Entity::Object(ids[1])]);
+        t.answer_yes(P0, onto);
+        t.cast(P0, spell).go();
+        t.resolve();
+        let cheap = creature == "Grizzly Bears";
+        let on_battlefield = t.named_on_battlefield(creature).len() == 1;
+        assert_eq!(on_battlefield, cheap && onto, "{creature} {onto}");
+        assert_eq!(t.in_hand(P0, creature), !(cheap && onto), "{creature} {onto}");
+        assert_eq!(library_names(&t, P0)[0], "Filler");
+    }
+}
+
 /// Cards the dig grammar made fully supported (each with its dig, library position or
 /// shuffle text compiled); the families are exercised by the tests above.
 #[test]
@@ -1217,6 +1239,8 @@ fn dig_grammar_cards_are_supported() {
         "Screaming Swarm",
         "Orcish Librarian",
         "Dakra Mystic",
+        "Break Out",
+        "Nick Fury, Agent of S.H.I.E.L.D.",
     ] {
         assert_supported(name);
     }
