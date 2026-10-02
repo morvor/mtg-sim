@@ -1698,10 +1698,15 @@ impl Game {
         // prohibition that applies to the spell as proposed (e.g. to the mana value it has
         // with the chosen X) makes the casting illegal (CR 601.3a, 601.6).
         let proposed = self.obj(id).chars.clone();
-        // (Also as the card in the zone it's cast from: "Players can't cast spells from
-        // graveyards" applies to a spell with {X} proposed from a graveyard.)
+        // (Also as the card in the zone it's cast from, with the chosen X: "Players can't
+        // cast spells from graveyards" applies to a spell with {X} proposed from a
+        // graveyard.)
+        let mut from_zone = proposed.clone();
+        if let Some(m) = from_zone.mana_cost.as_mut() {
+            *m = m.with_x(x.max(0) as u32);
+        }
         if self.cast_prohibited_by_effects(p, id, &proposed)
-            || self.cast_prohibited_by_effects(p, card, &proposed)
+            || self.cast_prohibited_by_effects(p, card, &from_zone)
         {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
