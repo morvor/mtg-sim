@@ -1651,6 +1651,18 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
     // "[... from their hand] onto the battlefield from their hand" (the zone after the
     // destination) is read with the objects; anything else left over isn't understood.
     dbg_zm!("ZM tail {tail:?}");
+    // "Return all cards exiled with ~ to their owner's hand and you lose that much life":
+    // as much life as the number of cards moved.
+    let (tail, after) = match tail.trim() {
+        "and you lose that much life" => (
+            String::new(),
+            Some(Effect::LoseLife {
+                who: PlayerRef::You,
+                n: Value::CountSel(Box::new(Sel::Var(vars::IT))),
+            }),
+        ),
+        _ => (tail, None),
+    };
     if !end(tail.trim()).is_empty() {
         return None;
     }
@@ -1679,6 +1691,7 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(e);
     }
     pre.push(Effect::Move { what: sel, to });
+    pre.extend(after);
     let mut e = Effect::seq(pre);
     if subject.may {
         e = Effect::May {
@@ -1764,6 +1777,66 @@ pub fn returned_this_way(r: &str, b: &Builder) -> Option<(Value, String)> {
     };
     Some((Value::Count(f), rest.to_string()))
 }
+
+/// "Sacrifice them at the beginning of the next end step.", "Return it to your hand at the
+/// beginning of the next end step." after a move (whose objects "it" names), with sentences in
+/// between that don't change what "it" is ("That creature gains haste."): the moved
+/// permanents, stored now (CR 603.7; a permanent that left in the meantime is a new
+/// object the delayed trigger can't find, CR 400.7).
+fn p_delayed_after_move(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::Var(vars::IT)) || b.sentences == 0 {
+        return None;
+    }
+    let (verb, r, step) = super::damage_removal::delayed_parts(end(l))?;
+    let tail = ["it", "them", "that creature", "those creatures"]
+        .iter()
+        .find_map(|p| strip_word(r, p))?;
+    super::damage_removal::delayed_removal(verb, Sel::Var(vars::IT), tail.trim(), step)
+}
+
+inventory::submit! { EffectPattern { name: "zone-move grammar: [sacrifice/return] it at the beginning of the next end step (after a move)", priority: 970, parse: p_delayed_after_move } }
+
+/// The cards Living End's first step exiled.
+const EXILED_BY_EACH: Var = vars::USER + 7404;
+
+/// "Each player exiles all creature cards from their graveyard, then sacrifices all
+/// creatures they control, then puts all cards they exiled this way onto the battlefield."
+/// (Living End, Scrap Mastery): no player makes a choice, so each step is performed by all
+/// the players at the same time (CR 608.2e), and each player's cards enter under that
+/// player's control (CR 110.2a).
+fn p_each_player_exile_sacrifice_return(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("each player exiles all ")?;
+    let (cards, r) = r.split_once(" from their graveyard, then sacrifices all ")?;
+    let (perms, r) = r.split_once(" they control, then ")?;
+    if r != "puts all cards they exiled this way onto the battlefield" {
+        return None;
+    }
+    let (cf, _, t1) = parse_object_phrase(cards)?;
+    let (pf, plural, t2) = parse_object_phrase(perms)?;
+    if !t1.trim().is_empty() || !t2.trim().is_empty() || !plural || !names_cards(&cf) || names_cards(&pf) {
+        return None;
+    }
+    let exiled = Sel::Var(EXILED_BY_EACH);
+    let mut to = Destination::battlefield();
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(exiled.clone())));
+    Some(Effect::seq(vec![
+        Effect::Exile {
+            what: Sel::All(Filter::and(vec![cf, Filter::InZone(ZoneKind::Graveyard)])),
+            face_down: false,
+            link: false,
+        },
+        Effect::Store {
+            var: EXILED_BY_EACH,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::SacrificeObjects {
+            what: Sel::All(Filter::and(vec![pf, Filter::InZone(ZoneKind::Battlefield)])),
+        },
+        Effect::Move { what: exiled, to },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "zone-move grammar: each player exiles ..., sacrifices ..., then puts the exiled cards onto the battlefield", priority: 970, parse: p_each_player_exile_sacrifice_return } }
 
 fn note_moved(b: &mut Builder) {
     if !b.named.iter().any(|(n, _)| n == MOVED) {

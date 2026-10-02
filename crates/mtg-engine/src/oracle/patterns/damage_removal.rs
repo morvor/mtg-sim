@@ -1021,7 +1021,12 @@ pub(crate) fn delayed_removal(
             then: Box::new(Effect::SacrificeObjects { what: delayed }),
             otherwise: Box::new(Effect::Noop),
         },
-        ("return", "to its owner's hand" | "to their owners' hands" | "to their owner's hand") => {
+        // "Return it to your hand": a card goes to its owner's hand (CR 400.3).
+        (
+            "return",
+            "to its owner's hand" | "to their owners' hands" | "to their owner's hand"
+            | "to your hand",
+        ) => {
             Effect::Move {
                 what: delayed,
                 to: Destination::zone(ZoneKind::Hand),
