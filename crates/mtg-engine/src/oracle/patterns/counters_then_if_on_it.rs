@@ -58,7 +58,7 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((kind, c)) = super::counters_resources_counters::kind_then_on(c) else {
         return false;
     };
-    if end(c) != "it" || kind.as_ref().is_some_and(|k| *k != changed) {
+    if !matches!(end(c), "it" | "~") || kind.as_ref().is_some_and(|k| *k != changed) {
         return false;
     }
     let kind = kind.unwrap_or(changed);

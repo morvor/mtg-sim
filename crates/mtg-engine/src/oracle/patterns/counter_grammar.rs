@@ -168,6 +168,42 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
             }
         }
     }
+    // "Put a loyalty counter on Ajani." (Ajani Resolute), "Put a +1/+1 counter on
+    // Liliana." (Liliana the Repentant): a legendary card named by its first name, which
+    // is also a planeswalker type (so the compiler doesn't read it as a name).
+    if !s.contains(' ') && !s.is_empty() {
+        let name = b.ctx.card_name.to_lowercase();
+        let first = b.ctx.card_name.split(' ').next().unwrap_or_default();
+        let pw_type = crate::types::subtype_kinds(first)
+            .contains(&crate::types::SubtypeKind::Planeswalker);
+        if b.ctx.type_line.supertypes.contains(crate::types::Supertype::Legendary)
+            && pw_type
+            && name.strip_prefix(s).is_some_and(|r| r.starts_with(' '))
+        {
+            return Some(Sel::This);
+        }
+    }
+    // "that Hero", "that Saga": the object the text is about, named by its type.
+    if let Some(noun) = s.strip_prefix("that ") {
+        if !noun.contains(' ')
+            && matches!(b.it, Sel::TriggerObject | Sel::Target(_))
+            && parse_object_phrase(noun).is_some_and(|(_, plural, tail)| !plural && tail.is_empty())
+        {
+            return Some(b.it.clone());
+        }
+    }
+    // "a creature they control" in a trigger about a player: that player.
+    let they;
+    let s = match s.strip_suffix(" they control") {
+        Some(head)
+            if b.in_trigger
+                && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) =>
+        {
+            they = format!("{head} that player controls");
+            &they[..]
+        }
+        _ => s,
+    };
     // "each creature each opponent controls": the creatures opponents control.
     let each_opp;
     let s = if s.starts_with("each ") && s.ends_with(" each opponent controls") {
@@ -518,7 +554,35 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
 /// counters on another target creature, and three +1/+1 counters on a third target
 /// creature.", "Put a +1/+1 counter on that Hero and a +1/+1 counter on ~.").
 fn put_counters(l: &str, b: &mut Builder) -> Option<Effect> {
-    let r = end(l).strip_prefix("put ")?;
+    let l = end(l);
+    // "they lose 1 life and you put a -1/-1 counter on ...".
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    // "put a +1/+1 counter on each of them for every three cards in your graveyard": that
+    // many for each full group of three (rounded down).
+    if let Some((head, every)) = l.rsplit_once(" for every ") {
+        let (k, r) = parse_number(every)?;
+        let Value::Const(k) = k else {
+            return None;
+        };
+        if k < 2 {
+            return None;
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let count = super::value_grammar::parse_value(&format!("the number of {r}"), b)
+            .filter(|(_, rest)| end(rest).is_empty())
+            .map(|(v, _)| v);
+        let e = count.and_then(|count| {
+            let e = put_counters(head, b)?;
+            super::damage_removal_foreach::multiply(e, Value::Div(Box::new(count), k, false))
+        });
+        if e.is_none() {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            b.it_player = saved.2;
+        }
+        return e;
+    }
+    let r = l.strip_prefix("put ")?;
     let r = r.replace(" a second target ", " another target ");
     let r = r.replace(" a third target ", " another target ");
     if let Some(e) = put_one(&format!("put {r}"), b) {
@@ -556,7 +620,9 @@ pub const REMOVED: Var = vars::USER + 4122;
 fn last_removal(e: &mut Effect) -> Option<&mut Effect> {
     if matches!(
         e,
-        Effect::RemoveCounters { .. } | Effect::RemoveCountersUpTo { .. }
+        Effect::RemoveCounters { .. }
+            | Effect::RemoveCountersUpTo { .. }
+            | Effect::MoveCounters { .. }
     ) {
         return Some(e);
     }
@@ -572,11 +638,16 @@ fn last_removal(e: &mut Effect) -> Option<&mut Effect> {
 
 /// "[kind] counter(s) removed this way", "counters were removed this way".
 fn removed_this_way(thing: &str) -> bool {
-    let Some(t) = thing
-        .strip_suffix(" removed this way")
-        .or_else(|| thing.strip_suffix(" were removed this way"))
-        .or_else(|| thing.strip_suffix(" was removed this way"))
-    else {
+    let Some(t) = [
+        " were removed this way",
+        " was removed this way",
+        " removed this way",
+        " are moved this way",
+        " were moved this way",
+        " moved this way",
+    ]
+    .iter()
+    .find_map(|p| thing.strip_suffix(p)) else {
         return false;
     };
     counter_noun(t).is_some_and(|(_, r)| r.trim().is_empty())
@@ -591,19 +662,29 @@ fn after_removal(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     }
     let l = end(l);
+    // "that much"/"that many" become X below: not where the text has an X of its own.
+    if l.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+        return false;
+    }
     let count = Value::Var(REMOVED);
-    let e = if let Some(r) = l.strip_prefix("if no ") {
+    let cond_form = [("if no ", Cmp::Eq, 0), ("if one or more ", Cmp::Ge, 1)]
+        .into_iter()
+        .find_map(|(p, cmp, n)| l.strip_prefix(p).map(|r| (r, cmp, n)));
+    let e = if let Some((r, cmp, n)) = cond_form {
         let Some((thing, clause)) = r.split_once(", ") else {
             return false;
         };
         if !removed_this_way(thing) {
             return false;
         }
-        let Some(e) = crate::oracle::effects::parse_clause(clause, b) else {
+        // "you gain that much life": the number of counters.
+        let Some(e) = crate::oracle::effects::parse_clause(&clause.replace("that much", "x"), b)
+            .and_then(|e| super::r107_numbers::substitute_x(&e, &count))
+        else {
             return false;
         };
         Effect::If {
-            cond: Condition::Compare(count, Cmp::Eq, Value::c(0)),
+            cond: Condition::Compare(count, cmp, Value::c(n)),
             then: Box::new(e),
             otherwise: Box::new(Effect::Noop),
         }
@@ -624,9 +705,20 @@ fn after_removal(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         if !removed_this_way(thing) {
             return false;
         }
-        let Some(e) = crate::oracle::effects::parse_clause(clause, b)
-            .and_then(|e| super::damage_removal_foreach::multiply(e, count))
-        else {
+        let Some(e) = crate::oracle::effects::parse_clause(clause, b).and_then(|e| match e {
+            // "Add one mana of any color for each charge counter removed this way": each
+            // of any color.
+            Effect::AddMana {
+                who,
+                mana: ManaProduction::AnyOneColor(Value::Const(1)),
+                restriction,
+            } => Some(Effect::AddMana {
+                who,
+                mana: ManaProduction::AnyCombination(count),
+                restriction,
+            }),
+            e => super::damage_removal_foreach::multiply(e, count),
+        }) else {
             return false;
         };
         e
@@ -678,7 +770,9 @@ fn remove_and_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
         let Some((a, c)) = l.split_once(sep) else {
             continue;
         };
-        if !(c.contains("that much") || c.contains("that many")) {
+        if !(c.contains("that much") || c.contains("that many"))
+            || c.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == "x")
+        {
             continue;
         }
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
@@ -931,3 +1025,138 @@ fn put_or_remove(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counter grammar: put a counter on [holder] or remove one from it", priority: 50, parse: put_or_remove } }
+
+/// "sacrifice it, draw a card, and put a +1/+1 counter on each creature you control": a
+/// list of three or more instructions, one of them about counters, each understood on
+/// its own and performed in order.
+fn instruction_list(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, last) = l.rsplit_once(", and ")?;
+    let mut parts: Vec<&str> = head.split(", ").collect();
+    parts.push(last);
+    if parts.len() < 3
+        || !parts
+            .iter()
+            .any(|p| (p.starts_with("put ") || p.starts_with("remove ")) && p.contains(" counter"))
+    {
+        return None;
+    }
+    let mut out = Vec::new();
+    for p in parts {
+        out.push(crate::oracle::effects::parse_clause(p, b)?);
+    }
+    Some(Effect::Seq(out))
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: A, B, and C with a counter instruction", priority: 450, parse: instruction_list } }
+
+/// "If a creature would deal combat damage to ~, prevent that damage and put a +1/+1
+/// counter on ~." (Ironscale Hydra), "If a source would deal damage to you, prevent that
+/// damage and put an incarnation counter on ~." (Nine Lives): a prevention effect whose
+/// instruction is performed for each damage event it prevents (CR 615.5).
+fn prevent_and_put_counter(l: &str, text: &str, _ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("if ")?;
+    let (source, r) = if let Some(r) = r.strip_prefix("a creature would deal ") {
+        (Filter::creature(), r)
+    } else {
+        (Filter::Any, r.strip_prefix("a source would deal ")?)
+    };
+    let (combat_only, r) = match r.strip_prefix("combat damage to ") {
+        Some(r) => (true, r),
+        None => (false, r.strip_prefix("damage to ")?),
+    };
+    let (to_players, to_objects, r) = if let Some(r) = r.strip_prefix("~, ") {
+        (None, Some(Filter::Source), r)
+    } else {
+        (Some(PlayerFilter::You), None, r.strip_prefix("you, ")?)
+    };
+    let r = r.strip_prefix("prevent that damage and put ")?;
+    let (n, r) = parse_number(r)?;
+    let (kind, r) = counter_noun(r)?;
+    if end(r) != "on ~" {
+        return None;
+    }
+    let def = ReplacementDef {
+        event: ReplacementEvent::Damage {
+            source,
+            to_players,
+            to_objects,
+            combat_only,
+        },
+        action: ReplacementAction::PreventAndThen(
+            None,
+            Box::new(Effect::AddCounters {
+                what: Sel::This,
+                kind: kind?,
+                n,
+            }),
+        ),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "counter grammar: prevent that damage and put a counter on ~", priority: 50, parse: prevent_and_put_counter } }
+
+/// "Exile it with a hit counter on it.", "exile target nonland card from your graveyard
+/// with two time counters on it", "exile a card from your hand with a number of time
+/// counters on it equal to its mana value": the exiled card gets the counters as it's
+/// exiled (CR 122.1, 406.3).
+fn exile_with_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("exile ") {
+        return None;
+    }
+    // "... and it gains suspend" is another instruction.
+    let (l, and_then) = match l.split_once(" on it and ") {
+        Some((a, c)) => (format!("{a} on it"), Some(c.to_string())),
+        None => (l.to_string(), None),
+    };
+    let (head, tail) = l.rsplit_once(" with ")?;
+    let (counters, amount) = match tail.split_once(" on it equal to ") {
+        Some((c, a)) => (c.to_string(), Some(a.to_string())),
+        None => (tail.strip_suffix(" on it")?.to_string(), None),
+    };
+    let (n, r) = if let Some(r) = counters.strip_prefix("a number of ") {
+        (Value::X, r.to_string())
+    } else {
+        let (n, r) = parse_number(&counters)?;
+        (n, r.to_string())
+    };
+    if amount.is_some() != counters.starts_with("a number of ") {
+        return None;
+    }
+    let (kind, r) = counter_noun(&r)?;
+    if !r.trim().is_empty() {
+        return None;
+    }
+    let exile = crate::oracle::effects::parse_clause(head, b)?;
+    if !matches!(exile, Effect::Exile { face_down: false, .. }) {
+        return None;
+    }
+    let exiled = Sel::Var(vars::IT);
+    b.it = exiled.clone();
+    let n = match amount {
+        // "equal to its mana value": the exiled card's.
+        Some(a) => amount_value(&a, b)?,
+        None => n,
+    };
+    let mut out = vec![
+        exile,
+        Effect::AddCounters {
+            what: exiled,
+            kind: kind?,
+            n,
+        },
+    ];
+    if let Some(c) = and_then {
+        out.push(crate::oracle::effects::parse_clause(&c, b)?);
+    }
+    Some(Effect::Seq(out))
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: exile [object] with N counters on it", priority: 50, parse: exile_with_counters } }
