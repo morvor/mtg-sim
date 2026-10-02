@@ -184,3 +184,51 @@ fn becomes_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: becomes the chosen color/type", priority: 940, parse: becomes_chosen } }
+
+/// "choose a creature type other than Wall", "choose a nonbasic land type", "choose a
+/// permanent type", "choose land or nonland": a choice as the spell or ability resolves,
+/// which "that type" / "the chosen type" / "of the chosen kind" then refer to (CR 205.3m,
+/// 205.3i, 110.4).
+fn choose_kind(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let kind = if let Some(t) = r.strip_prefix("a creature type other than ") {
+        let lists = crate::types::subtype_lists();
+        let mut except = Vec::new();
+        for w in t.split(" or ") {
+            let w = w.trim();
+            let found = lists
+                .creature
+                .iter()
+                .find(|x| x.eq_ignore_ascii_case(w))?;
+            except.push(found.clone());
+        }
+        ChoiceKind::CreatureTypeOtherThan(except)
+    } else {
+        match r {
+            "a nonbasic land type" => {
+                let basic = crate::types::subtype_lists().basic_land;
+                ChoiceKind::OneOf(
+                    crate::types::land_types()
+                        .into_iter()
+                        .filter(|t| !basic.contains(&t.as_str()))
+                        .collect(),
+                )
+            }
+            // CR 110.4: the permanent types.
+            "a permanent type" => ChoiceKind::OneOf(
+                ["artifact", "battle", "creature", "enchantment", "land", "planeswalker"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            ),
+            "land or nonland" => ChoiceKind::Word(vec!["land".into(), "nonland".into()]),
+            _ => return None,
+        }
+    };
+    Some(Effect::Choose {
+        who: PlayerRef::You,
+        kind,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: choose a kind of type", priority: 90, parse: choose_kind } }

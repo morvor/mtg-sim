@@ -230,9 +230,84 @@ pub fn they_as_that_player(s: &str) -> Option<String> {
 /// control fewer lands than you, ...", "~ deals 3 damage to that player and 1 damage to
 /// each creature they control."
 fn they_the_chosen_player(l: &str, b: &mut Builder) -> Option<Effect> {
-    chosen_player(b)?;
+    let who = chosen_player(b)?;
+    // "If they lost life this turn, ...", "If they control fewer lands than you, create a
+    // number of ... tokens equal to the difference."
+    if let Some(r) = end(l).strip_prefix("if they ") {
+        let (c, rest) = r.split_once(", ")?;
+        let (cond, difference) = chosen_player_condition(c, &who)?;
+        let rest = they_as_that_player(rest).unwrap_or_else(|| rest.to_string());
+        let then = match (rest.contains(" equal to the difference"), difference) {
+            (true, Some(diff)) => {
+                let t = rest
+                    .replacen("a number of ", "x ", 1)
+                    .replacen(" equal to the difference", "", 1);
+                let e = crate::oracle::effects::parse_sentence(&t, b)?;
+                super::r107_numbers::substitute_x(&e, &diff)?
+            }
+            (true, None) => return None,
+            _ => crate::oracle::effects::parse_sentence(&rest, b)?,
+        };
+        return Some(Effect::If {
+            cond,
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
     let t = they_as_that_player(l)?;
     crate::oracle::effects::parse_sentence(&t, b)
+}
+
+/// A condition about the chosen player ("they lost life this turn", "they control fewer
+/// lands than you", "they have more life than you"), and for a comparison of numbers,
+/// "the difference" between them.
+fn chosen_player_condition(c: &str, who: &PlayerRef) -> Option<(Condition, Option<Value>)> {
+    if c == "lost life this turn" {
+        return Some((
+            Condition::Compare(Value::LifeLostThisTurn(who.clone()), Cmp::Ge, Value::c(1)),
+            None,
+        ));
+    }
+    if let Some(x) = c.strip_prefix("have more life than you") {
+        if !x.is_empty() {
+            return None;
+        }
+        let (a, y) = (Value::LifeTotal(who.clone()), Value::LifeTotal(PlayerRef::You));
+        return Some((
+            Condition::Compare(a.clone(), Cmp::Gt, y.clone()),
+            Some(Value::Diff(Box::new(a), Box::new(y))),
+        ));
+    }
+    let (fewer, r) = if let Some(r) = c.strip_prefix("control fewer ") {
+        (true, r)
+    } else if let Some(r) = c.strip_prefix("control more ") {
+        (false, r)
+    } else {
+        return None;
+    };
+    let noun = r.strip_suffix(" than you")?;
+    let (f, true, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let theirs = Value::Count(Filter::and(vec![
+        f.clone(),
+        Filter::ControlledByPlayer(Box::new(who.clone())),
+    ]));
+    let yours = Value::Count(Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]));
+    Some(if fewer {
+        (
+            Condition::Compare(theirs.clone(), Cmp::Lt, yours.clone()),
+            Some(Value::Diff(Box::new(yours), Box::new(theirs))),
+        )
+    } else {
+        (
+            Condition::Compare(theirs.clone(), Cmp::Gt, yours.clone()),
+            Some(Value::Diff(Box::new(theirs), Box::new(yours))),
+        )
+    })
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: they (the chosen player)", priority: 995, parse: they_the_chosen_player } }
@@ -252,19 +327,22 @@ fn serial_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it_player.clone(),
         b.group.clone(),
     );
-    let mut effects = Vec::new();
+    let mut acc = Effect::Noop;
     for p in parts.iter().copied().chain(std::iter::once(last)) {
-        // Each part is an instruction of its own ("you draw a card"), not a list item.
-        match crate::oracle::effects::parse_simple(p, b) {
-            Some(e) => effects.push(e),
-            None => {
-                b.targets.truncate(saved.0);
-                (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
-                return None;
-            }
+        // Each part is an instruction of its own ("you draw a card"), not a list item, or
+        // one about what the earlier ones did ("you choose a nonland card from it").
+        if let Some(e) = crate::oracle::effects::parse_simple(p, b) {
+            acc = Effect::seq(vec![acc, e]);
+            continue;
         }
+        if !matches!(acc, Effect::Noop) && crate::oracle_ext::apply_followup_ext(p, &mut acc, b) {
+            continue;
+        }
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
+        return None;
     }
-    Some(Effect::seq(effects))
+    Some(acc)
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: A, B, and C (a series of instructions)", priority: 990, parse: serial_instructions } }
@@ -438,3 +516,25 @@ fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: target ... of their choice", priority: 85, parse: target_of_their_choice } }
+
+/// "that player reveals their hand and you choose a nonland card from it": an instruction
+/// joined by "and" to one about what it did (read like the next sentence would be).
+fn and_followup(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (a, c) = l.split_once(" and ")?;
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    let mut e = crate::oracle::effects::parse_simple(a, b)?;
+    if crate::oracle_ext::apply_followup_ext(c, &mut e, b) {
+        return Some(e);
+    }
+    b.targets.truncate(saved.0);
+    (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
+    None
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: A and [followup of A]", priority: 993, parse: and_followup } }

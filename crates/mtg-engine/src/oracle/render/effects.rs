@@ -3127,6 +3127,9 @@ impl Renderer<'_> {
             ChoiceKind::Colors => "one or more colors".into(),
             ChoiceKind::OneOf(v) => join_list(v, "or"),
             ChoiceKind::CreatureType => "a creature type".into(),
+            ChoiceKind::CreatureTypeOtherThan(v) => {
+                format!("a creature type other than {}", join_list(v, "or"))
+            }
             ChoiceKind::CardName => "a card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),

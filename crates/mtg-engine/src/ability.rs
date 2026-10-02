@@ -4075,6 +4075,8 @@ pub enum ChoiceKind {
     /// (and as the chosen type/color when the word is one).
     OneOf(Vec<String>),
     CreatureType,
+    /// "choose a creature type other than Wall": any creature type but those listed.
+    CreatureTypeOtherThan(Vec<String>),
     CardName,
     /// A card name of a nonland card, etc.
     CardNameFiltered(String),

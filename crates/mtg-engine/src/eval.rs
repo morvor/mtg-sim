@@ -1495,13 +1495,9 @@ impl Game {
 /// inside an `And`).
 fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
     match f {
-        Filter::Or(v) if !v.is_empty() => v
-            .iter()
-            .map(|x| match x {
-                Filter::InZone(z) => Some(*z),
-                _ => None,
-            })
-            .collect(),
+        // "a nonland card from their hand or a card from their graveyard": each
+        // alternative's zone.
+        Filter::Or(v) if !v.is_empty() => v.iter().map(|x| x.zone()).collect(),
         Filter::And(v) => v.iter().find_map(alternative_zones),
         _ => None,
     }
