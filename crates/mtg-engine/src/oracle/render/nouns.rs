@@ -105,6 +105,11 @@ pub(crate) fn is_plain_number(v: &str) -> bool {
 
 pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
     match cmp {
+        // "with mana value less than or equal to that damage": the event's amount.
+        Cmp::Le if v == "that much" => {
+            "{alt:that much or less|less than or equal to that damage|less than or equal to that much}"
+                .into()
+        }
         Cmp::Le if !is_plain_number(v) => format!("less than or equal to {v}"),
         Cmp::Ge if !is_plain_number(v) => format!("greater than or equal to {v}"),
         // "with mana value 3" / "with mana value equal to the number of ...".

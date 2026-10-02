@@ -40,7 +40,10 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Target creature ... gets +X/+X ..., where X is its power\" used the source's power, not the target's | Winged Temple of Orazca (Fatal Frenzy now compiles) | `r107_numbers::where_x_is_parts` |\n\
 | \"Whenever ... this turn, put three +1/+1 counters on it. It gains trample ...\": the second sentence was the creating ability's own instruction (about the source) | The Last Ronin | `patterns/this_turn_trigger_followup.rs` |\n\
 | \"~ deals damage to any target equal to that card's mana value\": \"that card\" was the damage's target | Undying Flames | `damage_removal::damage_part` |\n\
-| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\n\
+| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\
+| \"As long as you have 30 or more life and an opponent has 10 or less life\" was read as one condition, \"you have 30 or less life\" (tests for this and the rows below in `tests/cards/roundtrip_tail_1.rs`) | Blood Baron of Vizkopa | `statics::parse_condition_core` (the whole rest) |\n\
+| \"Choose up to one target creature. If it's suspected, exile it.\": \"it\" was the source | Agrus Kos, Spirit of Justice | `a701_action_triggers::designation_condition` (only \"~\"; \"it\" is the referent grammar's) |\n\
+| \"Add {B} or {G} for each permanent destroyed this way\", \"Add X {G} or X {W}\": the count was dropped (one mana) | Culling Ritual, Muerra, Trash Tactician, Brigid, Doun's Mind | `effects::p_add_mana` (only symbols), `damage_removal_foreach::multiply`, `mana_production::add_amount` |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";

@@ -323,6 +323,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               and the engine evaluates a moved object by its last known information.",
     },
     Equivalence {
+        pattern: r"\b(spells?) in your (hand|graveyard) ((?:with|that shares?) [^.,]+?) without paying\b",
+        replacement: "$1 $3 in your $2 without paying",
+        why: "\"Cast a spell in your hand with mana value 4 or less\" and \"... a spell with \
+              mana value 4 or less in your hand\": the same qualities, in either order.",
+    },
+    Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
         replacement: "if $1 has",
         why: "The same for what an object had (\"When ~ dies, if it had no time counters on \
