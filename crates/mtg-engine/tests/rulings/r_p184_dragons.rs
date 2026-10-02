@@ -32,7 +32,7 @@ fn try_cast(t: &mut TestGame, card: ObjectId, method: CastMethod) -> bool {
 
 #[test]
 fn temple_of_the_dragon_queen_a_dragon_has_the_dragon_creature_type() {
-    cr!("205.3m", "614.12", "305.7");
+    cr!("205.3m", "614.12", "614.1d");
     ruling!(
         "Temple of the Dragon Queen",
         "A Dragon card is a card with the creature type Dragon in its type line. Similarly, a creature on the battlefield is a Dragon if it has the Dragon creature type. A card that has \"Dragon\" in the name (such as Temple of the Dragon Queen) isn't a Dragon card unless it also has the Dragon creature type."
@@ -434,7 +434,7 @@ fn the_dragon_must_be_controlled_as_the_spell_finishes_being_cast() {
 
 #[test]
 fn korlessa_doesnt_change_when_dragon_spells_can_be_cast() {
-    cr!("307.1", "117.1a", "601.3");
+    cr!("302.1", "117.1a", "601.3");
     ruling!(
         "Korlessa, Scale Singer",
         "Korlessa doesn't change when you can cast Dragon spells. Normally, this means during your main phase when the stack is empty, although flash may change this."

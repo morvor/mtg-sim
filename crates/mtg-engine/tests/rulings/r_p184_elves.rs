@@ -279,7 +279,7 @@ fn prowess_of_the_fair_sees_an_elf_dying_with_it() {
 
 #[test]
 fn elvish_champion_pumps_every_other_elf_but_not_itself() {
-    cr!("611.3a", "613.4c", "702.14c");
+    cr!("611.3a", "613.4c");
     ruling!(
         "Elvish Champion",
         "It affects Elves controlled by all players, not just yours."

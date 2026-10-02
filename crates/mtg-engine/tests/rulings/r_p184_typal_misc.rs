@@ -195,7 +195,7 @@ fn grasp(t: &mut TestGame, target: ObjectId) -> ObjectId {
 
 #[test]
 fn giants_grasp_takes_only_the_permanent_and_only_while_it_remains() {
-    cr!("613.1b", "301.5a", "611.2b");
+    cr!("613.1b", "303.4e", "611.2b");
     ruling!(
         "Giant's Grasp",
         "Gaining control of a nonland permanent doesn't cause you to gain control of any Auras or Equipment attached to it."

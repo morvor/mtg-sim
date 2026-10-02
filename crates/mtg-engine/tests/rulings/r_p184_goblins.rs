@@ -36,7 +36,7 @@ fn two_goblin_kings_pump_each_other() {
 
 #[test]
 fn goblin_warchief_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Goblin Warchief",
         "Goblin Warchief’s effect reduces only generic mana in the cost of Goblin spells you cast. For example, it doesn’t reduce the cost of Skirk Prospector below {R}."
@@ -267,7 +267,7 @@ fn stenchskipper_checks_for_goblins_on_trigger_and_resolution() {
 
 #[test]
 fn general_kreats_token_enters_attacking_without_being_declared() {
-    cr!("508.4", "508.3a", "506.3a");
+    cr!("508.4", "508.3a");
     ruling!(
         "General Kreat, the Boltbringer",
         "Although the token created by General Kreat's first ability enters attacking, it was never declared as an attacker. Abilities that trigger whenever a creature attacks won't trigger. If there are any costs to have a creature attack, those costs won't apply to the token."
@@ -295,7 +295,7 @@ fn general_kreats_token_enters_attacking_without_being_declared() {
 
 #[test]
 fn general_kreat_triggers_for_each_creature_entering_with_it() {
-    cr!("603.6a", "603.10a");
+    cr!("603.6a");
     ruling!(
         "General Kreat, the Boltbringer",
         "If General Kreat enters at the same time as one or more other creatures you control, its last ability will trigger for each of those creatures."

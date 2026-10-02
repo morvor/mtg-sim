@@ -221,7 +221,7 @@ fn morophon_reduces_up_to_one_mana_of_each_color() {
 
 #[test]
 fn realmwalker_doesnt_change_when_creature_spells_can_be_cast() {
-    cr!("307.1", "117.1a", "601.3");
+    cr!("302.1", "117.1a", "601.3");
     ruling!(
         "Realmwalker",
         "Realmwalker doesn't change when you can cast creature spells. Normally, this means during your main phase when the stack is empty, although flash may change this."
@@ -251,7 +251,7 @@ fn realmwalker_doesnt_change_when_creature_spells_can_be_cast() {
 
 #[test]
 fn realmwalker_the_top_card_isnt_in_your_hand() {
-    cr!("702.143a", "702.29a", "701.9a", "401.2");
+    cr!("702.143a", "702.29a", "701.9a");
     ruling!(
         "Realmwalker",
         "The top card of your library isn't in your hand, so you can't foretell it, discard it, or activate any of its activated abilities."
