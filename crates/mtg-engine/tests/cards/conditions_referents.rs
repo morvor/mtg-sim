@@ -947,3 +947,39 @@ fn if_that_player_controls_a_nonblack_nonland_permanent() {
     t.advance_to(P1, Step::Draw);
     assert_eq!(t.life(P1), 19);
 }
+
+#[test]
+fn if_you_dont_put_a_card_into_your_hand_this_way() {
+    cr!("701.23a", "608.2c");
+    // Courier of Comestibles: "When ~ enters, you may search your library for a Food card,
+    // reveal it, put it into your hand, then shuffle. If you don't put a card into your
+    // hand this way, create a Food token."
+    assert_supported(&["Courier of Comestibles"]);
+    let foods = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Food"))
+            .count()
+    };
+    // Searching and finding a Food card: no token.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Gingerbrute");
+    t.answer_yes(P0, true);
+    t.enter(P0, "Courier of Comestibles");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Gingerbrute"));
+    assert_eq!(foods(&t), 0);
+    // Not searching: a Food token.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Gingerbrute");
+    t.answer_yes(P0, false);
+    t.enter(P0, "Courier of Comestibles");
+    t.resolve_all();
+    assert_eq!(foods(&t), 1);
+    // Searching and finding nothing: a Food token.
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Courier of Comestibles");
+    t.resolve_all();
+    assert_eq!(foods(&t), 1);
+}

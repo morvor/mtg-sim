@@ -1475,10 +1475,14 @@ impl Game {
             }
             // CR 701.20a: the cards are revealed while the rest of the effect needs them.
             Effect::RevealHand { who } => {
+                let mut revealed = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     let hand = self.player(p).hand.clone();
                     crate::reveal::reveal_in(self, p, &hand, Some(ctx));
+                    revealed.extend(hand.into_iter().map(Entity::Object));
                 }
+                // "If a card with the chosen name is revealed this way" (CR 701.20a).
+                ctx.set_var(vars::REVEALED, revealed);
             }
             Effect::LookAtHand { who } => {
                 // Looking gives the controller information only; the cards aren't

@@ -294,7 +294,7 @@ struct Verb {
 
 fn verb(v: &str) -> Option<Verb> {
     fn dig_reveal(e: &Effect) -> bool {
-        matches!(e, Effect::Dig { reveal: true, .. })
+        matches!(e, Effect::Dig { reveal: true, .. } | Effect::RevealHand { .. })
     }
     Some(match v {
         "milled" | "mill" => Verb {
@@ -604,7 +604,12 @@ fn if_you_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(Effect::May { who: PlayerRef::You, effect }) = last else {
         return false;
     };
-    let cond = match (c, &**effect) {
+    // The search may be followed by a record of the cards it found.
+    let effect = match &**effect {
+        Effect::Seq(v) if !v.is_empty() => &v[0],
+        e => e,
+    };
+    let cond = match (c, effect) {
         ("you search your library this way", Effect::Search { .. }) => Condition::PrevHappened,
         // The search found and put a card into your hand.
         ("you don't put a card into your hand this way", Effect::Search { to, .. })

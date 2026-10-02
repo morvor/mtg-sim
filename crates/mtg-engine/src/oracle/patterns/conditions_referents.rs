@@ -67,6 +67,7 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
 /// player exiles a card from their graveyard. If it's a creature card, ...").
 fn it_is_source_by_default(c: &str, b: &Builder) -> bool {
     matches!(b.it, Sel::This)
+        && !b.in_trigger
         && b.sentences > 0
         && c.split(' ').any(|w| matches!(w, "it" | "its" | "it's"))
 }
