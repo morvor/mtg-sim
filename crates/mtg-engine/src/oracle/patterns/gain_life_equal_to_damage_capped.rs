@@ -79,3 +79,25 @@ fn gain_life_capped(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "you gain life equal to the damage dealt, but not more than [the target's life, loyalty, toughness]", priority: 60, apply: gain_life_capped } }
+
+/// The words of the life gain this pattern compiles (`n`: its amount), for the Oracle round
+/// trip: "gain life equal to the damage dealt, but not more ...".
+pub(crate) fn capped_text(n: &Value) -> Option<String> {
+    let capped = |v: &Value| {
+        matches!(v, Value::Min(a, b)
+            if matches!(**a, Value::Prev) && matches!(**b, Value::Var(CAP)))
+    };
+    match n {
+        v if capped(v) => Some(format!("gain life equal to the damage dealt, but not more life than {TAIL}")),
+        Value::Min(a, b)
+            if capped(a)
+                && format!("{b:?}")
+                    == format!("{:?}", crate::payment_rules::mana_spent_on_x_value(ManaType::B)) =>
+        {
+            Some(format!(
+                "gain life equal to the damage dealt, but not more than the amount of {{B}} spent on X, {TAIL}"
+            ))
+        }
+        _ => None,
+    }
+}

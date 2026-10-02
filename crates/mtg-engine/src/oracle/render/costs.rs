@@ -349,10 +349,25 @@ impl Renderer<'_> {
             (false, true) => s.push_str(" X can't be 0."),
             (false, false) => {}
         }
-        // "Spend only black mana on X." (see `payment_rules`).
+        // "Spend only black mana on X." (see `payment_rules`): after each mode of a modal
+        // ability, as the card says it.
         for r in crate::payment_rules::ability_rules(a) {
-            let t = super::statics::cost_rule_text(&r);
-            s.push_str(&format!(" {}.", capitalize(&t)));
+            let t = format!(" {}.", capitalize(&super::statics::cost_rule_text(&r)));
+            if a.body.modal.is_some() && s.contains("\n•") {
+                s = s
+                    .lines()
+                    .map(|l| {
+                        if l.trim_start().starts_with('•') {
+                            format!("{l}{t}")
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            } else {
+                s.push_str(&t);
+            }
         }
         self.zone = saved;
         let _ = third_person;

@@ -735,3 +735,93 @@ fn sunken_palace_copy_may_have_new_targets() {
     assert_eq!(t.zone(a), mtg_engine::object::Zone::Hand(P1));
     assert!(t.on_battlefield(b));
 }
+
+#[test]
+fn sunken_palace_copy_keeps_the_damage_division() {
+    cr!("707.10", "707.10c", "601.2d");
+    ruling!(
+        "Sunken Palace",
+        "If the spell or ability has damage divided as it was cast or activated, the division can't be changed (although the targets receiving that damage still can)."
+    );
+    supported("Sunken Palace");
+    supported("Arc Lightning");
+    // Arc Lightning ({2}{R}: 3 damage divided among one, two, or three targets), cast with
+    // the Palace's {U} and two Mountains: 2 to Grizzly Bears A, 1 to P1. The copy changes
+    // its first target to Bears B, which gets that 2.
+    let mut t = TestGame::new(2);
+    palace_mana(&mut t);
+    t.lands(P0, "Mountain", 2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    let arc = t.hand(P0, "Arc Lightning");
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 1]));
+    t.cast(P0, arc)
+        .targets(&[Entity::Object(a), Entity::Player(P1)])
+        .go();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.answer_targets(P0, &[]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn thunderscape_familiar_reduces_a_black_and_green_spell_by_1() {
+    cr!("601.2f", "118.7a");
+    ruling!(
+        "Thunderscape Familiar",
+        "If a spell is both black and green, you pay {1} less, not {2} less."
+    );
+    supported("Thunderscape Familiar");
+    supported("Moldering Karok");
+    // Moldering Karok ({2}{B}{G}) costs {1}{B}{G}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thunderscape Familiar");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Forest", 1);
+    let karok = t.hand(P0, "Moldering Karok");
+    assert!(!castable(&mut t, P0, karok));
+    t.lands(P0, "Wastes", 1);
+    assert!(castable(&mut t, P0, karok));
+    t.cast(P0, karok).go();
+    t.resolve();
+    assert!(t.on_battlefield(karok));
+}
+
+#[test]
+fn a_cost_reducer_sacrificed_to_pay_the_cost_still_reduces_it() {
+    cr!("601.2f", "601.2h");
+    ruling!(
+        "Thunderscape Familiar",
+        "If this card is sacrificed to pay part of a spell’s cost, the cost reduction still applies."
+    );
+    ruling!(
+        "Helm of Awakening",
+        "If this card is sacrificed to pay part of a spell's cost, the cost reduction still applies."
+    );
+    supported("Altar's Reap");
+    supported("Shrapnel Blast");
+    // Altar's Reap ({1}{B}, sacrifice a creature: draw two cards) sacrificing Thunderscape
+    // Familiar: the total cost {B} was locked in before the Familiar was sacrificed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thunderscape Familiar");
+    t.lands(P0, "Swamp", 1);
+    let reap = t.hand(P0, "Altar's Reap");
+    let hand = t.hand_size(P0);
+    t.cast(P0, reap).go();
+    assert!(t.in_graveyard(P0, "Thunderscape Familiar"));
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+    // Shrapnel Blast ({1}{R}, sacrifice an artifact: 5 damage) sacrificing Helm of
+    // Awakening ("Spells cost {1} less to cast"): one Mountain pays {R}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Helm of Awakening");
+    t.lands(P0, "Mountain", 1);
+    let blast = t.hand(P0, "Shrapnel Blast");
+    t.cast(P0, blast).target(P1).go();
+    assert!(t.in_graveyard(P0, "Helm of Awakening"));
+    t.resolve();
+    assert_eq!(t.life(P1), 15);
+}

@@ -327,6 +327,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Pronoun number: \"their\" and \"its\" (grammatical number is ignored, see \
               singularization).",
     },
+    Equivalence {
+        pattern: r"\bwhen you spend this mana to\b",
+        replacement: "when that mana is spent to",
+        why: "Mana goes to the pool of the player its ability's effect names, here the \
+              ability's controller (\"you\", CR 106.4), so \"when you spend this mana\" is \
+              when that mana is spent (CR 106.6).",
+    },
 ];
 
 /// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and

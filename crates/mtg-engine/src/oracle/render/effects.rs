@@ -88,6 +88,16 @@ impl Renderer<'_> {
                     false,
                 )
             }
+            // "You gain life equal to the damage dealt, but not more life than ..." (see
+            // `gain_life_equal_to_damage_capped`).
+            Effect::GainLife { who, n }
+                if crate::oracle::patterns::gain_life_equal_to_damage_capped::capped_text(n)
+                    .is_some() =>
+            {
+                let t = crate::oracle::patterns::gain_life_equal_to_damage_capped::capped_text(n)
+                    .unwrap_or_default();
+                (who.clone(), t, true)
+            }
             Effect::GainLife { who, n } => {
                 let (a, w) = self.amount(n);
                 (
