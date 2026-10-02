@@ -142,3 +142,20 @@ fn patrician_geist_doesnt_reduce_spells_cast_from_another_players_graveyard() {
     assert_eq!(cost(&t, mine), Some(2));
     assert_eq!(cost(&t, theirs), Some(3));
 }
+
+#[test]
+fn feast_of_dreams_can_target_an_unenchanted_enchantment_creature() {
+    cr!("115.1", "205.2a");
+    // "Destroy target enchanted creature or enchantment creature.": it was read as
+    // "enchanted (creature or enchantment) creature", leaving out enchantment creatures
+    // that aren't enchanted.
+    supported("Feast of Dreams");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let ram = t.battlefield(P1, "Nyx-Fleece Ram");
+    t.lands(P0, "Swamp", 2);
+    let spell = t.hand(P0, "Feast of Dreams");
+    t.cast(P0, spell).target(Entity::Object(ram)).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Nyx-Fleece Ram"));
+}

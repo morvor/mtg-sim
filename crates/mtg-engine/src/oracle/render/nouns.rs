@@ -122,6 +122,51 @@ pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
 }
 
 impl Renderer<'_> {
+    /// `[A and Q, B and Q]` where Q is who controls or owns them: "A or B [Q]".
+    fn shared_tail_union(&mut self, v: &[Filter], det: Det) -> Option<String> {
+        if v.len() < 2 || !matches!(det.num(), Num::One) {
+            return None;
+        }
+        let is_q = |f: &Filter| matches!(f, Filter::ControlledBy(_) | Filter::OwnedBy(_));
+        let mut shared: Option<String> = None;
+        let mut rests = Vec::new();
+        for x in v {
+            let Filter::And(parts) = x else { return None };
+            let (q, rest): (Vec<&Filter>, Vec<&Filter>) = parts.iter().partition(|p| is_q(p));
+            if q.is_empty() || rest.is_empty() {
+                return None;
+            }
+            let key = format!("{q:?}");
+            match &shared {
+                None => shared = Some(key),
+                Some(k) if *k == key => {}
+                Some(_) => return None,
+            }
+            rests.push((Filter::and(rest.into_iter().cloned().collect()), x.clone()));
+        }
+        let (r0, full0) = rests.first()?.clone();
+        let with = self.noun_det(&full0, det.clone());
+        let without = self.noun_det(&r0, det.clone());
+        let tail = with.strip_prefix(without.as_str())?.to_string();
+        if tail.is_empty() || tail.contains('{') {
+            return None;
+        }
+        let parts: Vec<String> = rests
+            .iter()
+            .map(|(r, _)| self.noun_det(r, det.clone()))
+            .collect();
+        let full: Vec<String> = rests
+            .iter()
+            .map(|(_, f)| self.noun_det(f, det.clone()))
+            .collect();
+        // Cards say it once or for each.
+        Some(format!(
+            "{{alt:{}{tail}|{}}}",
+            join_list(&parts, "or"),
+            join_list(&full, "or")
+        ))
+    }
+
     /// "with lesser mana value", "with greater power": compared with the same quality of
     /// the object the ability is about (itself, or the object or spell that triggered
     /// it), which the card leaves unsaid.
@@ -317,6 +362,8 @@ impl Renderer<'_> {
                     // "Red spells and white spells you cast cost {1} less to cast."
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::Many)).collect();
                     np.fixed = Some(join_list(&alts, "and"));
+                } else if let Some(s) = self.shared_tail_union(v, Det::Bare) {
+                    np.fixed = Some(s);
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
                     np.fixed = Some(join_list(&alts, "or"));
@@ -1193,6 +1240,11 @@ impl Renderer<'_> {
             }
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {
+                // "enchanted creature or enchantment creature you control": a quality all
+                // the alternatives share, said once after them.
+                if let Some(s) = self.shared_tail_union(v, det.clone()) {
+                    return s;
+                }
                 return match det.num() {
                     Num::One => {
                         let parts: Vec<String> =
