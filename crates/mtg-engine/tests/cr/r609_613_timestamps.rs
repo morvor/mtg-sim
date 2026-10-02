@@ -247,6 +247,7 @@ fn transforming_gives_a_new_timestamp() {
     def.faces.push(FaceDef {
         chars: back,
         unsupported: vec![],
+        manual: vec![],
         star_power: false,
         star_toughness: false,
     });

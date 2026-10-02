@@ -83,3 +83,15 @@ pub fn begin(g: &mut Game, searcher: PlayerId, owner: PlayerId, ctx: &Ctx) -> bo
 pub fn library_shuffled(g: &mut Game, owner: PlayerId) {
     g.searches.open.retain(|(_, o, _)| *o != owner);
 }
+
+/// `Condition::Custom`: the player of the current "for each player" iteration can search
+/// libraries. One who can't can't choose to search ("each player may search their
+/// library ..."), so they don't shuffle either (CR 701.23, 118.12b).
+pub const ITERATED_CAN_SEARCH: &str = "search: the player can search libraries";
+
+pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    (name == ITERATED_CAN_SEARCH).then(|| {
+        ctx.iter_player
+            .is_none_or(|p| !g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_))))
+    })
+}

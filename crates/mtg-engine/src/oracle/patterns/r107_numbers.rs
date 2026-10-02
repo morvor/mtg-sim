@@ -167,6 +167,21 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         }
     };
     let it = b.it.clone();
+    // "..., where X is the number of creature cards in your graveyard as you cast this
+    // spell" (Undercity Upheaval): X is read as the spell is cast. That's when X is used
+    // if it's only the number of targets or the amount divided among them (CR 601.2c-d),
+    // so nothing else may use it.
+    if let Some(v) = value_s
+        .strip_suffix(" as you cast ~")
+        .or_else(|| value_s.strip_suffix(" as you cast this spell"))
+    {
+        let (x, tail) = value_phrase(v, b)?;
+        if !end(&tail).is_empty() {
+            return None;
+        }
+        let e = where_x_is_parts(&clause, v, b, it)?;
+        return (!format!("{e:?}").contains(&format!("{:?}", nonnegative(x)))).then_some(e);
+    }
     where_x_is_parts(&clause, value_s, b, it)
 }
 
@@ -187,7 +202,17 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
     // what a later "its" refers to, unless the clause names another.
     let value_it = std::mem::replace(&mut b.it, it.clone());
     let first_target = b.targets.len();
-    let e = crate::oracle::effects::parse_clause(clause, b)?;
+    // The clause's X has a value (e.g. "create an X/X token, where X is ...").
+    let marker = super::tokens_x_x::X_DEFINED;
+    let marked = !b.named.iter().any(|(n, _)| n == marker);
+    if marked {
+        b.named.push((marker.to_string(), Sel::None));
+    }
+    let e = crate::oracle::effects::parse_clause(clause, b);
+    if marked {
+        b.named.retain(|(n, _)| n != marker);
+    }
+    let e = e?;
     if format!("{:?}", b.it) == format!("{it:?}") {
         b.it = value_it;
     }
@@ -197,7 +222,15 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
     for i in first_target..b.targets.len() {
         b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
     }
-    substitute_x(&e, &x)
+    let e = substitute_x(&e, &x)?;
+    // "Create an X/X ... token, where X is .... It deals X damage to you.": the token's X
+    // is the X of the following instructions too.
+    if matches!(e, Effect::CreateTokenWithPT { .. }) {
+        b.named
+            .push((super::tokens_x_x::X_DEFINED.to_string(), Sel::None));
+        return Some(Effect::seq(vec![Effect::SetX { value: x }, e]));
+    }
+    Some(e)
 }
 
 inventory::submit! { EffectPattern { name: "r107 where x is", priority: 70, parse: where_x_is } }

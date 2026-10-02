@@ -45,6 +45,12 @@ fn main() {
         "pub ",
     );
     gen(
+        &root.join("src/cards"),
+        &["mod"],
+        &out.join("card_mods.rs"),
+        "pub ",
+    );
+    gen(
         &root.join("src/oracle/patterns"),
         &["mod"],
         &out.join("oracle_pattern_mods.rs"),

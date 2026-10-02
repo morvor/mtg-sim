@@ -1562,6 +1562,9 @@ pub fn apply_mod(
         // Every creature type (CR 205.3m, 702.73a), kept as a flag rather than a list of
         // every creature type (see `Characteristics::has_subtype`).
         Modification::AllCreatureTypes => c.all_creature_types = true,
+        Modification::Custom { name, .. } => {
+            crate::kw::custom_modification(g, name, c, ctx, _target)
+        }
         Modification::RemoveAllCreatureTypes => {
             c.subtypes.retain(|s| !is_creature_type(s));
             c.all_creature_types = false;
