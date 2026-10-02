@@ -659,6 +659,13 @@ impl Renderer<'_> {
             {
                 "{alt:that player|its controller}".into()
             }
+            // An Aura attached to a player (CR 303.4): "enchanted player".
+            PlayerRef::ControllerOf(sel)
+                if matches!(sel.as_ref(), Sel::AttachedTo)
+                    && self.attached_noun() == "enchanted player" =>
+            {
+                "enchanted player".into()
+            }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} controller")
@@ -818,6 +825,15 @@ impl Renderer<'_> {
                 )
             }
             PlayerFilter::Monarch => "who is the monarch".into(),
+            // "Each opponent attacking that player": an opponent controlling a creature
+            // attacking that player (CR 506.4: the attacking player controls the
+            // attackers).
+            PlayerFilter::Controls(f, Cmp::Ge, v)
+                if matches!(f.as_ref(), Filter::Custom(n) if n == "attacking the event's player")
+                    && matches!(v.as_ref(), Value::Const(1)) =>
+            {
+                "{alt:who controls a permanent attacking that player|attacking that player}".into()
+            }
             PlayerFilter::Controls(f, c, v) => {
                 let n = self.count_phrase(f, *c, v);
                 format!("who controls {n}")

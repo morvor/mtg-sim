@@ -2,6 +2,7 @@
 
 use super::effects::lower_first;
 use super::nouns::Det;
+use super::players::Case;
 use super::*;
 
 /// A trigger event as (subject, verb phrase) so that conditions on the same subject can
@@ -200,6 +201,16 @@ impl Renderer<'_> {
     pub(crate) fn trigger_event_parts(&mut self, t: &TriggerCond) -> (String, String) {
         let e = self.trigger_event(t, Det::A);
         (e.subj, e.vp)
+    }
+
+    /// `trigger_event_parts` without side effects on target introduction or gaps.
+    fn trigger_event_peek(&mut self, t: &TriggerCond) -> (String, String) {
+        let saved_i = self.introduced.clone();
+        let saved_g = self.gaps.len();
+        let r = self.trigger_event_parts(t);
+        self.introduced = saved_i;
+        self.gaps.truncate(saved_g);
+        r
     }
 
     /// Event with a determiner for its object ("a creature" / "one or more creatures").
@@ -836,6 +847,31 @@ impl Renderer<'_> {
             } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "monstrous") => {
                 Ev::new(self.me(), "becomes monstrous")
             }
+            // "Whenever enchanted player draws a card": a player's event, for one player.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Ref(p)),
+            } if self.trigger_event_peek(trigger).0 == "a player" => {
+                let e = self.trigger_event(trigger, det);
+                let who = self.player(p, Case::Subj);
+                Ev::new(who, e.vp)
+            }
+            // "Whenever a creature attacks enchanted player": attacking that player (not a
+            // planeswalker or battle).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::And(v),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
+                && matches!(v.as_slice(), [Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Ref(_)), Condition::Not(n)]
+                    if matches!(n.as_ref(), Condition::SelNonEmpty(Sel::TriggerOtherObject))) =>
+            {
+                let [Condition::PlayerMatches(_, PlayerFilter::Ref(p)), _] = v.as_slice() else {
+                    return Ev::new("", self.gap("attacks a player"));
+                };
+                let e = self.trigger_event(trigger, det);
+                let who = self.player(p, Case::Obj);
+                Ev::new(e.subj, format!("{} {who}", e.vp))
+            }
             // "Whenever ~ attacks while you control two or more artifacts".
             TriggerCond::Where { trigger, cond } => {
                 // "Whenever an opponent mills a nonland card", "whenever an opponent draws a
@@ -888,6 +924,13 @@ impl Renderer<'_> {
                         format!(" with {} or more {n}", number_word(*m as i32))
                     }
                 };
+                // "Whenever enchanted player is attacked".
+                if a == "a player" && w == " with one or more creatures" {
+                    return Ev::new(
+                        "",
+                        format!("{{alt:a player attacks {d}{w}|{d} is attacked}}"),
+                    );
+                }
                 Ev::new(a, format!("attack {d}{w}"))
             }
             TriggerCond::AttachChanged {

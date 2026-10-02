@@ -9,7 +9,58 @@ use super::*;
 impl Renderer<'_> {
     /// At `v[i]` of a sequence: such instructions, how many they are and their text.
     pub(crate) fn tail_seq_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
-        self.chosen_source_prevention(v, i).map(|s| (2, s))
+        self.chosen_source_prevention(v, i)
+            .map(|s| (2, s))
+            .or_else(|| self.does_the_same(v, i).map(|s| (2, s)))
+    }
+
+    /// "Create a Gold token. Each opponent attacking that player does the same.": each of
+    /// those players does what you did (as if they were "you").
+    fn does_the_same(&mut self, v: &[Effect], i: usize) -> Option<String> {
+        let (
+            first,
+            Some(
+                second @ Effect::ForEachPlayer {
+                    who: PlayerRef::Each(pf),
+                    effect,
+                },
+            ),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        let Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: inner,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        if format!("{first:?}") != format!("{inner:?}") || matches!(first, Effect::Seq(_)) {
+            return None;
+        }
+        let a = self.effect(first);
+        let b = self.effect(second);
+        let attacking = format!(
+            "{:?}",
+            PlayerFilter::And(vec![
+                PlayerFilter::Opponent,
+                PlayerFilter::Controls(
+                    Box::new(Filter::Custom("attacking the event's player".into())),
+                    Cmp::Ge,
+                    Box::new(Value::Const(1)),
+                ),
+            ])
+        );
+        let subj = if format!("{pf:?}") == attacking {
+            "each opponent attacking that player".to_string()
+        } else {
+            self.player(&PlayerRef::Each(pf.clone()), Case::Subj)
+        };
+        if a.is_empty() || b.is_empty() || b.contains('\n') {
+            return None;
+        }
+        Some(format!("{a}. {{alt:{b}|{subj} does the same}}"))
     }
 
     /// "Choose a [quality] source. Prevent the damage it would deal": "the next time a
