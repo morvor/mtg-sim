@@ -758,6 +758,28 @@ impl Renderer<'_> {
                     _ => n,
                 };
             }
+            // "Counter target spell unless its controller pays {1}. That player discards a
+            // card": the controller named before, the one player the text names (no player
+            // target, no other player the event names).
+            PlayerRef::ControllerOf(sel)
+                if matches!(case, Case::Subj)
+                    && matches!(
+                        sel.as_ref(),
+                        Sel::Target(_) | Sel::TriggerObject | Sel::TriggerLki
+                    )
+                    && self.trigger_player.is_none()
+                    && !self.targets.iter().any(|t| {
+                        matches!(
+                            t.what,
+                            TargetKind::Player(_)
+                                | TargetKind::AnyTarget
+                                | TargetKind::ObjectOrPlayer(..)
+                        )
+                    }) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} controller|that player}}")
+            }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} controller")

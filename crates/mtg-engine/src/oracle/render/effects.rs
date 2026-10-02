@@ -3587,7 +3587,17 @@ impl Renderer<'_> {
             other => self.value(other),
         };
         let pron = if many { "them" } else { "it" };
-        let take_s = if matches!(filter, Filter::Any) {
+        // "Put all land cards revealed this way into your hand and the rest into your
+        // graveyard": every matching card.
+        let take_all = !take_up_to && matches!(take, Value::Const(k) if *k >= 99);
+        let take_s = if take_all && !matches!(filter, Filter::Any) {
+            let from = if reveal {
+                "{alt:revealed this way|from among them}"
+            } else {
+                "from among them"
+            };
+            format!("put all {} {from} {d}", plural(&noun))
+        } else if matches!(filter, Filter::Any) {
             if take_up_to {
                 format!("put up to {count} of them {d}")
             } else {
@@ -3652,7 +3662,7 @@ impl Renderer<'_> {
             s.push_str(&format!(". {}", capitalize(&take_s)));
             return s;
         }
-        if matches!(filter, Filter::Any) {
+        if matches!(filter, Filter::Any) || take_all {
             s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         } else {
             s.push_str(&format!(". {}. Put {left} {rest}", capitalize(&take_s)));
@@ -3851,7 +3861,25 @@ impl Renderer<'_> {
             }
         }
         self.subject_types = self.sel_types(what);
-        let w = self.sel(what, Case::Subj);
+        let group = match what {
+            Sel::All(f) => Some(f.clone()),
+            Sel::Var(v) => self.var_defs.iter().find_map(|(x, s, used)| match s {
+                Sel::All(f) if x == v && !used => Some(f.clone()),
+                _ => None,
+            }),
+            _ => None,
+        };
+        let mut w = self.sel(what, Case::Subj);
+        // "Creatures you control have base power and toughness X/X": all of them, each.
+        if group.is_some()
+            && !w.contains('{')
+            && matches!(mods.first(), Some(Modification::SetPT(..)))
+        {
+            if let Some(rest) = w.strip_prefix("each ") {
+                // (The comparison doesn't tell "creatures" from "creature".)
+                w = format!("{{opt:each}} {rest}");
+            }
+        }
         let (mut vp, tail) = self.mods_vp_split(mods, true);
         self.subject_types.clear();
         let d = self.duration(d);
@@ -4141,7 +4169,7 @@ impl Renderer<'_> {
                         .subtypes
                         .extend(subtypes.iter().map(|x| x.to_string()));
                 }
-                Modification::AllCreatureTypes => parts.push("is every creature type".into()),
+                Modification::AllCreatureTypes => parts.push("{alt:is every creature type|gains all creature types}".into()),
                 // "becomes a 4/4 Dragon artifact creature": the new creature types replace
                 // the old ones (CR 205.1b), which the effect records as removing them.
                 Modification::RemoveAllCreatureTypes
