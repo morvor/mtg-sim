@@ -170,3 +170,68 @@ fn a_clone_of_a_creature_with_vanishing_enters_with_time_counters() {
     assert_eq!(t.obj(c).chars.name, "Chronozoa");
     assert_eq!(t.counters(c, counters::TIME), 3);
 }
+
+// --- Essence of the Wild ---------------------------------------------------------------------
+
+/// P0's Essence of the Wild ("Creatures you control enter as a copy of this creature.").
+fn essence(t: &mut TestGame) -> ObjectId {
+    supported("Essence of the Wild");
+    t.battlefield(P0, "Essence of the Wild")
+}
+
+#[test]
+fn essence_of_the_wild_copies_dont_trigger_their_printed_enters_abilities() {
+    cr!("614.1c", "707.2", "603.6a");
+    ruling!(
+        "Essence of the Wild",
+        "Because creatures you control enter as copies of Essence of the Wild, any \"enters\" triggered abilities printed on such creatures won't trigger."
+    );
+    let mut t = TestGame::new(2);
+    essence(&mut t);
+    let hand = t.hand_size(P0);
+    let elf = t.enter(P0, "Elvish Visionary");
+    t.settle();
+    let elf = t.g.current(elf);
+    assert_eq!(t.obj(elf).chars.name, "Essence of the Wild");
+    assert_eq!(t.pt(elf), (6, 6));
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
+fn essence_of_the_wild_copies_only_its_copiable_values() {
+    cr!("707.2", "614.1c");
+    ruling!(
+        "Essence of the Wild",
+        "Creatures you control don't copy whether Essence of the Wild is tapped or untapped, whether it has any counters on it or any Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, or so on."
+    );
+    let mut t = TestGame::new(2);
+    let e = essence(&mut t);
+    crate::r_s26_common::dress_up(&mut t, e);
+    crate::r_s06_common::attach_new(&mut t, P0, "Rancor", e);
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    let bears = t.g.current(bears);
+    assert_eq!(t.obj(bears).chars.name, "Essence of the Wild");
+    assert_eq!(t.pt(bears), (6, 6));
+    assert!(crate::r_s26_common::fresh(&t, bears));
+    assert!(!t.obj(bears).chars.colors.contains(Color::Blue));
+}
+
+#[test]
+fn external_effects_still_apply_to_an_essence_copy_entering() {
+    cr!("614.1c", "616.1");
+    ruling!(
+        "Essence of the Wild",
+        "External abilities may still affect how a creature enters. For example, if your opponent controls Urabrask the Hidden, which reads, in part, \"Creatures your opponents control enter tapped,\" a creature entering under your control will be a tapped Essence of the Wild."
+    );
+    supported("Urabrask the Hidden");
+    let mut t = TestGame::new(2);
+    essence(&mut t);
+    t.battlefield(P1, "Urabrask the Hidden");
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    let bears = t.g.current(bears);
+    assert_eq!(t.obj(bears).chars.name, "Essence of the Wild");
+    assert!(t.obj(bears).tapped);
+}
