@@ -91,6 +91,13 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
             continue;
         }
         let line = r.ability(a);
+        // CR 702.131a: ascend on an instant or sorcery is a spell ability, compiled next
+        // to the keyword; it's the keyword's meaning, not printed separately.
+        let ascend_spell = matches!(&a.kind, AbilityKind::Spell(s)
+            if matches!(&s.body.effect, Effect::Custom(c) if c == "ascend:spell"));
+        if ascend_spell && out.lines.last().is_some_and(|l| l == "Ascend") {
+            continue;
+        }
         out.lines.push(line);
     }
     merge_chapters(&mut out.lines);

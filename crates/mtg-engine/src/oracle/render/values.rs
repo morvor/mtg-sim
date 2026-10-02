@@ -698,6 +698,7 @@ impl Renderer<'_> {
             );
             return format!("{subj} {pred}");
         }
+        let a_value = a;
         let a = self.value(a);
         // "there are seven or more cards in your graveyard".
         if let (Some(rest), Value::Const(n)) = (a.strip_prefix("the number of "), b) {
@@ -716,6 +717,14 @@ impl Renderer<'_> {
                 Cmp::Ne => None,
             };
             if let Some(q) = q {
+                // "there are three or more oil counters on ~" / "it has three or more oil
+                // counters on it".
+                if let (Value::CountersOn(sel, Some(_)), Some((counters, _))) =
+                    (a_value, rest.split_once(" on "))
+                {
+                    let subj = self.sel(sel, Case::Subj);
+                    return format!("{{alt:there are {q} {rest}|{subj} has {q} {counters} on it}}");
+                }
                 return format!("there are {q} {rest}");
             }
         }

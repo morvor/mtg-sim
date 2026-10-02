@@ -1383,6 +1383,9 @@ impl Renderer<'_> {
             }
             other => {
                 let s = self.effect(other);
+                // "~ enters tapped. As it enters, choose a color.": the object itself is
+                // named again by "it" when another ability on the line named it.
+                let subj = if subj == "~" { "~it" } else { subj };
                 format!("as {subj} enters, {s}")
             }
         }

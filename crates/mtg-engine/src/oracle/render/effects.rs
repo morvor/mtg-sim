@@ -724,6 +724,12 @@ impl Renderer<'_> {
                     (TargetChange::Any, None) => format!("change any targets of {w}"),
                     (TargetChange::ChooseNew, None) => format!("choose new targets for {w}"),
                 };
+                // CR 115.7: changing targets is something the player is allowed to do, so
+                // "Change the target of ..." and "You may change the target of ..." are
+                // the same instruction.
+                if matches!(who, PlayerRef::You) {
+                    return format!("{{opt:you may}} {vp}");
+                }
                 let p = self.player(who, Case::Subj);
                 format!("{p} may {vp}")
             }
@@ -2784,6 +2790,15 @@ impl Renderer<'_> {
             K::Blight => format!("blight {}", num(self)),
             K::EmpowerJace => format!("empower Jace {}", num(self)),
             K::Earthbend if !has_what => format!("earthbend {}", num(self)),
+            // CR 701.66a: "Earthbend N" targets a land you control by definition.
+            K::Earthbend if matches!(what, Sel::Target(_)) => {
+                let w = self.sel(what, Case::Obj);
+                if w == "target land you control" {
+                    format!("earthbend {}", num(self))
+                } else {
+                    format!("earthbend {w} {}", num(self))
+                }
+            }
             K::Waterbend if !has_what => format!("waterbend {}", num(self)),
             K::Clash => {
                 self.after_clash = true;

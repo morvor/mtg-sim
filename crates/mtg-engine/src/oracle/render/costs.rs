@@ -172,7 +172,9 @@ impl Renderer<'_> {
             CostPart::RevealFromHand { filter, count } => {
                 let noun = {
                     let n = self.noun(&filter.clone().in_zone(ZoneKind::Hand), Num::One);
-                    n.trim_end_matches(" in a hand").to_string()
+                    n.trim_end_matches(" in a hand")
+                        .trim_end_matches(" in your hand")
+                        .to_string()
                 };
                 let (c, w) = self.counted(count, &noun);
                 format!("reveal {c} from your hand{}", w.unwrap_or_default())

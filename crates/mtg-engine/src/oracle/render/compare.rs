@@ -937,10 +937,20 @@ pub fn check_card(def: &CardDef) -> CardCheck {
         if !uo.is_empty() || !ur.is_empty() {
             // Fall back to comparing the whole face in order (one line may compile to
             // several abilities, or several lines to one).
-            let all_o: Vec<String> = oracle.iter().flat_map(|u| normalize_unit(u)).collect();
-            let all_m: Vec<String> = mine.iter().flat_map(|u| normalize_unit(u)).collect();
-            let units_m: Vec<Vec<String>> = mine.iter().map(|u| normalize_unit(u)).collect();
-            if !tokens_match(&all_o, &all_m) && !shared_subject_match(&all_o, &units_m) {
+            // First with the units that matched one to one left out, then the whole face.
+            let in_order = |o: &[String], m: &[String]| {
+                let all_o: Vec<String> = o.iter().flat_map(|u| normalize_unit(u)).collect();
+                let all_m: Vec<String> = m.iter().flat_map(|u| normalize_unit(u)).collect();
+                let units_m: Vec<Vec<String>> = m.iter().map(|u| normalize_unit(u)).collect();
+                let mut starts = Vec::new();
+                let mut n = 0;
+                for u in o {
+                    starts.push(n);
+                    n += normalize_unit(u).len();
+                }
+                tokens_match(&all_o, &all_m) || shared_subject_match(&all_o, &starts, &units_m)
+            };
+            if !in_order(&uo, &ur) && !in_order(&oracle, &mine) {
                 pass = false;
                 unmatched_oracle.extend(uo);
                 unmatched_rendered.extend(ur);
@@ -1033,7 +1043,10 @@ pub fn token_eq(x: &str, y: &str) -> bool {
 /// Whether the rendered units, in order, spell the Oracle tokens when a unit may drop
 /// the subject it shares with the previous unit: two abilities printed on one line with
 /// one subject ("Enchanted creature gets +1/+0 and can't be blocked.").
-fn shared_subject_match(oracle: &[String], units: &[Vec<String>]) -> bool {
+///
+/// `starts` are the positions where Oracle units (lines) begin: the shared subject is
+/// left out only inside an Oracle line, never at the start of one.
+fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String>]) -> bool {
     let mut pos = 0;
     for (i, u) in units.iter().enumerate() {
         let fits = |t: &[String], pos: usize| {
@@ -1044,6 +1057,9 @@ fn shared_subject_match(oracle: &[String], units: &[Vec<String>]) -> bool {
             continue;
         }
         let prev = if i > 0 { &units[i - 1] } else { return false };
+        if starts.contains(&pos) {
+            return false;
+        }
         let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
         let mut ok = false;
         for k in (1..=lcp.min(6)).rev() {
