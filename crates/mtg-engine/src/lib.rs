@@ -21,6 +21,7 @@
 
 pub mod ability;
 pub mod actions;
+pub mod activation_costs;
 pub mod adventure;
 pub mod agents;
 pub mod ante;
@@ -119,6 +120,7 @@ pub mod stack_ability_filters;
 pub mod start;
 pub mod stickers;
 pub mod subgame;
+pub mod target_groups;
 pub mod target_rules;
 pub mod teams;
 pub mod testing;

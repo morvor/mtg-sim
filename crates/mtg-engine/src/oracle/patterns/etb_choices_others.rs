@@ -239,12 +239,35 @@ fn graveyard_others_enter_with_counters(block: &str, ctx: &CompileContext) -> Op
 
 /// "You may have ~ enter as a copy of any creature on the battlefield." (CR 707.9,
 /// 614.1c); "You may have ~ enter tapped as a copy of any land on the battlefield."
+/// With a leading condition ("If you attacked this turn, you may have ~ enter as a copy
+/// ..."), the replacement applies only if the condition is true as it enters.
 fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() {
         return None;
     }
     let lower = block.to_lowercase();
     let l = end(&lower);
+    if let Some(r) = l.strip_prefix("if ") {
+        let (c, rest) = r.split_once(", you may have ~ enter ")?;
+        let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+        // `l` is a prefix of the block (lowercased, without its final period).
+        let start = l.len() - rest.len() - "you may have ~ enter ".len();
+        if !block.is_ascii() || !lower[start..].starts_with("you may have ~ enter ") {
+            return None;
+        }
+        let out = enter_as_copy(&block[start..], ctx)?;
+        return Some(
+            out.into_iter()
+                .map(|a| {
+                    let mut kind = a.kind.clone();
+                    if let AbilityKind::Static(st) = &mut kind {
+                        st.condition = Some(cond.clone());
+                    }
+                    AbilityDef::new(kind, block)
+                })
+                .collect(),
+        );
+    }
     let r = l.strip_prefix("you may have ~ enter ")?;
     let (tapped, r) = match r.strip_prefix("tapped ") {
         Some(x) => (true, x),
@@ -259,7 +282,14 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
                 return None;
             }
             let start = l.find(", except ")? + ", except ".len();
-            (a, copy_exceptions(end(&block[start..]), ctx)?)
+            let raw = end(&block[start..]);
+            // Fall back to the token-copy exception grammar ("it's 7/7", "it has haste
+            // and dethrone", "it's an artifact and it has \"...\"").
+            let exc = copy_exceptions(raw, ctx).or_else(|| {
+                let (masked, quotes) = super::statics::mask_quotes(end(&raw.to_lowercase()))?;
+                super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
+            })?;
+            (a, exc)
         }
         None => (r, vec![]),
     };

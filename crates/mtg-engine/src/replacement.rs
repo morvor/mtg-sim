@@ -344,8 +344,18 @@ impl Game {
                     (None, Some(fc)) => &fc.abilities,
                     (None, None) => &o.chars.abilities,
                 };
+                let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
                 for a in abilities {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // A conditional one ("If you attacked this turn, you may have ~
+                        // enter as a copy ...") applies only if its condition is true as
+                        // the permanent enters.
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &entering_ctx))
+                        {
+                            continue;
+                        }
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).
@@ -1026,9 +1036,15 @@ impl Game {
                     info.amount = prevented as i32;
                     c.event = Some(info);
                     // Applied to simultaneous damage events, a prevention effect is
-                    // applied once: its instruction happens once, for all the damage.
+                    // applied once: its instruction happens once, for all the damage
+                    // (once for each recipient if it's about the recipient).
+                    let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
+                    let this = recipient(&c);
                     match self.prevention_followups.as_mut() {
-                        Some(list) => match list.iter_mut().find(|(k, _, _)| *k == key) {
+                        Some(list) => match list.iter_mut().find(|(k, c0, _)| {
+                            *k == key && (!per_recipient || recipient(c0) == this)
+                        }) {
                             Some((_, first, _)) => {
                                 if let Some(ev) = first.event.as_mut() {
                                     ev.amount += prevented as i32;

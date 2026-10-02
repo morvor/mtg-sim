@@ -1230,6 +1230,14 @@ impl Game {
                             .push((src, *p, PlayerRel::You, f.clone()));
                     }
                 }
+                // "Until end of turn, you may activate loyalty abilities of Jace
+                // planeswalkers you control ... any time you could cast an instant."
+                (PlayerModification::ActivationPermission(perm), Some(src)) => {
+                    for p in &e.players {
+                        st.other
+                            .push((src, *p, StaticEffect::ActivationPermission(perm.clone())));
+                    }
+                }
                 _ => {}
             }
         }

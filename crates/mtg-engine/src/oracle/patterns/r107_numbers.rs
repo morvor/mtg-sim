@@ -33,6 +33,48 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         };
         return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
     }
+    // "the number of cards in their hand minus 4" (Black Vise).
+    if let Some((a, r)) = s.rsplit_once(" minus ") {
+        if let Some((n @ Value::Const(_), tail)) = parse_number(r) {
+            if end(tail).is_empty() {
+                if let Some((v, _)) = value_phrase(a, b).filter(|(_, r)| end(r).is_empty()) {
+                    return Some((Value::Diff(Box::new(v), Box::new(n)), tail.to_string()));
+                }
+            }
+        }
+    }
+    // "the number of times this ability has resolved this turn" (this resolution
+    // included; Bronze Cudgels' ruling).
+    if let Some(r) = s.strip_prefix("the number of times this ability has resolved this turn") {
+        return Some((Value::TimesResolvedThisTurn, r.to_string()));
+    }
+    // "the number of cards in their hand": "their" is "that player" (Black Vise).
+    for p in [
+        "the number of cards in their hand",
+        "the number of cards in that player's hand",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            // With no player mentioned before, "their" has no antecedent here.
+            if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                return None;
+            }
+            return Some((Value::HandSize(b.it_player.clone()), r.to_string()));
+        }
+    }
+    // "3 minus the number of cards in their hand" (The Rack).
+    if let Some((n, r)) = parse_number(s) {
+        if let (Value::Const(_), Some(r)) = (&n, r.trim_start().strip_prefix("minus ")) {
+            let (v, rest) = value_phrase(r, b)?;
+            return Some((Value::Diff(Box::new(n), Box::new(v)), rest));
+        }
+    }
+    // "the revealed card's mana value", after an instruction revealing a card (which "it"
+    // then names, e.g. "Target opponent reveals a card at random from their hand.").
+    if let Some(r) = s.strip_prefix("the revealed card's mana value") {
+        if matches!(b.it, Sel::Var(vars::IT)) && (r.is_empty() || r.starts_with([' ', ','])) {
+            return Some((Value::ManaValueOf(Box::new(b.it.clone())), r.to_string()));
+        }
+    }
     crate::oracle::statics::parse_value_phrase(s, b)
 }
 
@@ -115,9 +157,17 @@ fn subst(
 /// doesn't choose it; the value is determined as the effect is performed).
 fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (clause, value_s) = l.rsplit_once(", where x is ")?;
+    // The sentence's comma may sit inside a closing quote: "create X ... tokens with
+    // "This token can't block," where X is ...".
+    let (clause, value_s) = match l.rsplit_once(", where x is ") {
+        Some((c, v)) => (c.to_string(), v),
+        None => {
+            let (c, v) = l.rsplit_once(",\" where x is ")?;
+            (format!("{c}\""), v)
+        }
+    };
     let it = b.it.clone();
-    where_x_is_parts(clause, value_s, b, it)
+    where_x_is_parts(&clause, value_s, b, it)
 }
 
 /// "[clause], where X is [value]": the value is read first, with pronouns as they are
@@ -278,10 +328,11 @@ fn may_pay_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         },
         modal: None,
     };
-    Some(vec![AbilityDef::new(
-        AbilityKind::Triggered(TriggeredAbility::new(trigger, body)),
-        block,
-    )])
+    let mut tr = TriggeredAbility::new(trigger, body);
+    // "If you do, return ~ from your graveyard to the battlefield": it functions from the
+    // graveyard (CR 113.6m).
+    tr.zone = crate::oracle::triggers::trigger_zone(&tr.trigger, rest);
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), block)])
 }
 
 inventory::submit! { AbilityPattern { name: "r107 may pay trigger", priority: 70, parse: may_pay_trigger } }

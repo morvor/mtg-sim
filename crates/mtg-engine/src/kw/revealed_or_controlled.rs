@@ -5,6 +5,7 @@
 //! a permanent of that kind as they cast it is recorded as [`CONTROLLED`] as it becomes
 //! cast (CR 601.2i). The condition holds if either happened: revealing a card and
 //! controlling one gives no additional benefit, nor can more than one card be revealed.
+//! A copy of the spell (CR 707.10) has the bonus only if a card was revealed.
 
 use crate::ability::*;
 use crate::eval::Ctx;
@@ -71,6 +72,14 @@ impl super::KeywordRules for RevealedOrControlled {
     }
 
     fn on_event(&self, g: &mut Game, ev: &Event) {
+        // A copy copies the reveal (an additional cost paid, CR 707.10), but it wasn't
+        // cast: whether a Dragon was controlled as the original was cast doesn't matter.
+        if let Event::SpellCopied { spell, .. } = ev {
+            if let Some(si) = g.objects[spell.0 as usize].stack.as_mut() {
+                si.cast.paid.retain(|p| p.as_str() != CONTROLLED);
+            }
+            return;
+        }
         let Event::SpellCast { spell, player, .. } = ev else {
             return;
         };
