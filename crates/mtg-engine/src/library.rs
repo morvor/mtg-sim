@@ -248,6 +248,8 @@ pub fn dig(
         .filter(|c| !taken.contains(c))
         .collect();
     let moved = g.move_to_destination(taken, take_to, ctx);
+    // "Look at the top four cards ..., exile one of them face down".
+    crate::zones::looked_then_exiled(g, ctx.controller, &moved);
     ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     ctx.prev_affected = moved.iter().map(|o| Entity::Object(*o)).collect();
     if take == 0 {

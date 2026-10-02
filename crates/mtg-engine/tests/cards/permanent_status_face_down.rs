@@ -124,6 +124,10 @@ fn induced_amnesia_target_player_exiles_their_hand_face_down_and_draws_that_many
 #[test]
 fn hoarding_broodlord_searches_for_a_card_and_exiles_it_face_down() {
     cr!("406.3", "701.23a");
+    ruling!(
+        "Hoarding Broodlord",
+        "As long as that card remains exiled, you may look at it."
+    );
     let mut t = TestGame::new(2);
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.answer_choose(P0, &[Entity::Object(bolt)]);
@@ -132,6 +136,31 @@ fn hoarding_broodlord_searches_for_a_card_and_exiles_it_face_down() {
     let now = t.g.current(bolt);
     assert_eq!(t.zone(now), Zone::Exile);
     assert!(t.g.obj(now).face_down);
+    // Having found it, the searcher may go on looking at it (CR 406.3).
+    assert!(zones::may_look(&t.g, P0, now));
+    assert!(!zones::may_look(&t.g, P1, now));
+}
+
+#[test]
+fn praetors_grasp_only_its_caster_may_look_at_the_card() {
+    cr!("406.3", "701.23a");
+    ruling!(
+        "Praetor's Grasp",
+        "Other players, including the card’s owner, can’t look at the card while it remains exiled."
+    );
+    let mut t = TestGame::new(2);
+    let card = t.library_top(P1, "Serra Angel");
+    let spell = t.hand(P0, "Praetor's Grasp");
+    t.lands(P0, "Swamp", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    let now = t.g.current(card);
+    assert_eq!(t.zone(now), Zone::Exile);
+    assert!(t.g.obj(now).face_down);
+    assert!(zones::may_look(&t.g, P0, now));
+    assert!(!zones::may_look(&t.g, P1, now));
 }
 
 #[test]

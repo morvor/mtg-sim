@@ -77,6 +77,11 @@ fn p_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
     if l.matches(" face down").count() != 1 || l.contains("face-down") || l.contains("face up") {
         return None;
     }
+    // "Look at the top card of that player's library and exile it face down": having
+    // looked at it, the player may go on looking at it (`r406_exile.rs`).
+    if l.contains("look at ") {
+        return None;
+    }
     let (head, tail) = l.split_once(" face down")?;
     if exile_verbs(l) != 1 || exile_verbs(head) != 1 {
         return None;

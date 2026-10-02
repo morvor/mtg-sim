@@ -1545,6 +1545,8 @@ impl Game {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
                         let res = self.move_to_destination(found, to, &mut c);
+                        // "Search your library for a card, exile it face down".
+                        crate::zones::looked_then_exiled(self, p, &res);
                         if *shuffle {
                             self.shuffle_library(owner);
                         }

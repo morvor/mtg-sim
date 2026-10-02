@@ -191,6 +191,11 @@ fn recipient(s: &str, what: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
     // "another creature", "another permanent it can enchant" (Fumble, Aura Graft): one
     // chosen as it's performed, other than the one the attachments are attached to.
     if let Some(r) = s.strip_prefix("another ") {
+        // "another permanent of that type" (Enchantment Alteration): the type of the
+        // permanent it's attached to, not a chosen type.
+        if r.contains(" of that ") {
+            return None;
+        }
         let (f, plural, rest) = noun_phrase(r)?;
         let trimmed = rest.trim_start();
         let rest = trimmed

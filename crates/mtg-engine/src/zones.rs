@@ -618,6 +618,16 @@ pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
         && g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
 }
 
+/// CR 406.3: a player who looked at cards (searching for them, or looking at the top
+/// cards of a library) and then exiled them face down may continue to look at them.
+pub fn looked_then_exiled(g: &mut Game, p: PlayerId, objs: &[ObjectId]) {
+    for o in objs {
+        if g.is_live(*o) && g.obj(*o).zone == Zone::Exile && g.obj(*o).face_down {
+            allow_look(g, p, *o);
+        }
+    }
+}
+
 /// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), or at a
 /// face-down permanent while it remains on the battlefield.
 pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
