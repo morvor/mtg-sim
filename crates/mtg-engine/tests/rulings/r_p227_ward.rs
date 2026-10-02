@@ -296,3 +296,45 @@ fn maha_overwrites_earlier_base_toughness_and_later_ones_overwrite_it() {
     transform(&mut t, bears);
     assert_eq!(t.pt(bears), (3, 3));
 }
+
+/// P0's Loot, the Key to Everything's upkeep trigger resolves with `others` on P0's
+/// battlefield; returns how many cards it exiled from P0's library.
+fn loot_exiles(others: &[&str]) -> usize {
+    supported("Loot, the Key to Everything");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Loot, the Key to Everything");
+    for o in others {
+        t.battlefield(P0, o);
+    }
+    stack_library(&mut t, P0, &["Island"; 6]);
+    let before = t.library_size(P0);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    before - t.library_size(P0)
+}
+
+#[test]
+fn loot_disregards_lands_when_counting_card_types() {
+    cr!("205.2a", "608.2h");
+    ruling!(
+        "Loot, the Key to Everything",
+        "Lands are disregarded when calculating the value of X. For example, if you control an artifact land but no other artifacts, artifact won't count toward the value of X."
+    );
+    // Loot itself doesn't count ("other").
+    assert_eq!(loot_exiles(&[]), 0);
+    // An artifact land: nothing counts.
+    assert_eq!(loot_exiles(&["Darksteel Citadel"]), 0);
+    // Plus Grizzly Bears: creature only.
+    assert_eq!(loot_exiles(&["Darksteel Citadel", "Grizzly Bears"]), 1);
+    // Plus Ornithopter (an artifact creature): artifact and creature.
+    assert_eq!(
+        loot_exiles(&["Darksteel Citadel", "Grizzly Bears", "Ornithopter"]),
+        2
+    );
+    // Plus an enchantment: three.
+    assert_eq!(
+        loot_exiles(&["Darksteel Citadel", "Ornithopter", "Xenograft"]),
+        3
+    );
+}
