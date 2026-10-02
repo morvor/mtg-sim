@@ -1642,7 +1642,10 @@ impl Renderer<'_> {
                         let mut vps = Vec::new();
                         let mut subj = String::new();
                         for (k, e) in v[i..j].iter().enumerate() {
-                            let (w, vp, _) = self.actor_vp(e).expect("peeked");
+                            let Some((w, vp, _)) = self.actor_vp(e) else {
+                                vps.push(self.effect(e));
+                                continue;
+                            };
                             if k == 0 {
                                 subj = self.player(&w, Case::Subj);
                             }

@@ -375,10 +375,11 @@ pub fn self_refs(text: &str, names: &[String]) -> String {
     for n in names {
         s = s.replace(n.as_str(), "~");
     }
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re =
-        RE.get_or_init(|| Regex::new(&format!(r"(?i)\bthis ({})\b", SELF_REFS.join("|"))).unwrap());
-    re.replace_all(&s, "~").to_string()
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    match RE.get_or_init(|| Regex::new(&format!(r"(?i)\bthis ({})\b", SELF_REFS.join("|"))).ok()) {
+        Some(re) => re.replace_all(&s, "~").to_string(),
+        None => s,
+    }
 }
 
 /// The names a card's text may use for itself.
@@ -491,8 +492,10 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
         .to_lowercase();
     s = sentence_rewrites(&s);
     s = s.replace('\n', " ").replace('•', " ");
-    for e in EQUIVALENCES {
-        let re = equivalence_regex(e.pattern);
+    for (e, re) in EQUIVALENCES.iter().zip(equivalence_regexes()) {
+        let Some(re) = re else {
+            continue;
+        };
         s = re.replace_all(&s, e.replacement).to_string();
     }
     // Tokenize: keep {..} symbols, +1/+1, ~, words with apostrophes and hyphens.
@@ -617,45 +620,54 @@ fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     out
 }
 
-fn equivalence_regex(p: &'static str) -> &'static Regex {
-    static CACHE: OnceLock<
-        std::sync::Mutex<std::collections::HashMap<&'static str, &'static Regex>>,
-    > = OnceLock::new();
-    let m = CACHE.get_or_init(Default::default);
-    let mut g = m.lock().unwrap();
-    g.entry(p)
-        .or_insert_with(|| Box::leak(Box::new(Regex::new(p).expect("equivalence regex"))))
+/// The compiled patterns of [`EQUIVALENCES`], in order (`None` for one that doesn't
+/// compile, which the tests check never happens).
+pub fn equivalence_regexes() -> &'static [Option<Regex>] {
+    static CACHE: OnceLock<Vec<Option<Regex>>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        EQUIVALENCES
+            .iter()
+            .map(|e| Regex::new(e.pattern).ok())
+            .collect()
+    })
 }
 
 /// Sentence-level rewrites (word order): a leading "Until end of turn, ..." or "As long
 /// as ..., ..." clause moves to the end of its sentence; "X ..., where X is V" and
 /// "equal to V" forms are made uniform.
 fn sentence_rewrites(s: &str) -> String {
-    static LEAD: OnceLock<Regex> = OnceLock::new();
+    static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
         Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\."#)
-            .unwrap()
+            .ok()
     });
     let mut s = s.to_string();
     // "If C, Y. Otherwise, X." and "X. If C, Y instead." state the same choice.
-    static OTHERWISE: OnceLock<[Regex; 2]> = OnceLock::new();
+    static OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();
     let [instead, otherwise] = OTHERWISE.get_or_init(|| {
         [
-            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), instead ([^.]+)\.").unwrap(),
-            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), ([^.]+)\. otherwise, ([^.]+)\.").unwrap(),
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), instead ([^.]+)\.").ok(),
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), ([^.]+)\. otherwise, ([^.]+)\.").ok(),
         ]
     });
-    s = instead
-        .replace_all(&s, "${1}if $2, $3 instead.")
-        .to_string();
-    s = otherwise
-        .replace_all(&s, "$1$4. if $2, $3 instead.")
-        .to_string();
+    if let Some(instead) = instead {
+        s = instead
+            .replace_all(&s, "${1}if $2, $3 instead.")
+            .to_string();
+    }
+    if let Some(otherwise) = otherwise {
+        s = otherwise
+            .replace_all(&s, "$1$4. if $2, $3 instead.")
+            .to_string();
+    }
     // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
     // if" is something else).
-    static TRAILING_IF: OnceLock<Regex> = OnceLock::new();
+    static TRAILING_IF: OnceLock<Option<Regex>> = OnceLock::new();
     let trailing = TRAILING_IF
-        .get_or_init(|| Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").unwrap());
+        .get_or_init(|| Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").ok());
+    let Some(trailing) = trailing else {
+        return s;
+    };
     s = trailing
         .replace_all(&s, |c: &regex::Captures| {
             let (lead, body, cond) = (&c[1], &c[2], &c[3]);
@@ -676,6 +688,9 @@ fn sentence_rewrites(s: &str) -> String {
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
+    let Some(lead) = lead else {
+        return s;
+    };
     for _ in 0..3 {
         // The clause goes to the end of the sentence, before a "where X is" that defines
         // a number in it.
@@ -723,7 +738,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
         ]
         .into_iter()
-        .map(|(p, r)| (Regex::new(p).unwrap(), r))
+        .filter_map(|(p, r)| Regex::new(p).ok().map(|re| (re, r)))
         .collect()
     })
 }
@@ -943,9 +958,10 @@ fn keyword_items(line: &str) -> Option<Vec<String>> {
                 && (tl.starts_with("from ") || tl.starts_with("and from ") || !starts_kw(&tl))
         });
         if continues {
-            let last = merged.last_mut().unwrap();
-            last.push_str(", ");
-            last.push_str(&t);
+            if let Some(last) = merged.last_mut() {
+                last.push_str(", ");
+                last.push_str(&t);
+            }
         } else {
             if !starts_kw(&tl) {
                 return None;

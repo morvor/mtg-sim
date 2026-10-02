@@ -121,8 +121,10 @@ impl Renderer<'_> {
                 format!("partner with {name}")
             }
             KeywordKind::Cycling if k.filter.is_some() => {
-                let f = k.filter.as_ref().unwrap();
-                let ty = self.cycling_type(f);
+                let ty = match &k.filter {
+                    Some(f) => self.cycling_type(f),
+                    None => String::new(),
+                };
                 let c = k.cost.as_ref().map(|c| cost(self, c)).unwrap_or_default();
                 format!("{ty}cycling{c}")
             }
@@ -154,7 +156,10 @@ impl Renderer<'_> {
                 format!("prototype {c} — {pt}")
             }
             KeywordKind::Ward if k.x.is_some() => {
-                let v = self.value(k.x.as_ref().unwrap());
+                let v = match &k.x {
+                    Some(x) => self.value(x),
+                    None => String::new(),
+                };
                 format!("ward {{X}}, where X is {v}")
             }
             KeywordKind::Suspend if k.n.is_some() && k.cost.is_some() => {
@@ -163,7 +168,7 @@ impl Renderer<'_> {
                     Some(n) => n.to_string(),
                     None => String::new(),
                 };
-                let c = self.cost(k.cost.as_ref().unwrap());
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
                 // CR 702.62a: "Suspend X" comes with "X can't be 0".
                 if k.n == Some(-1) {
                     format!("suspend {n}—{c}. X can't be 0")
@@ -172,7 +177,7 @@ impl Renderer<'_> {
                 }
             }
             KeywordKind::Reinforce if k.n == Some(-1) => {
-                let c = self.cost(k.cost.as_ref().unwrap());
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
                 format!("reinforce X—{c}")
             }
             _ => {

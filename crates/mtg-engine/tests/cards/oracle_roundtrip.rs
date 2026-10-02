@@ -169,6 +169,17 @@ fn equivalent_wordings_compare_equal() {
 }
 
 #[test]
+fn every_equivalence_pattern_compiles() {
+    use mtg_engine::oracle::render::compare::{equivalence_regexes, EQUIVALENCES};
+    let compiled = equivalence_regexes();
+    assert_eq!(compiled.len(), EQUIVALENCES.len());
+    for (e, re) in EQUIVALENCES.iter().zip(compiled) {
+        assert!(re.is_some(), "{} doesn't compile", e.pattern);
+        assert!(!e.why.is_empty());
+    }
+}
+
+#[test]
 fn different_meanings_compare_different() {
     assert!(!same("Destroy target creature.", "Destroy target nonblack creature."));
     assert!(!same("Exile another target creature.", "Exile target creature."));

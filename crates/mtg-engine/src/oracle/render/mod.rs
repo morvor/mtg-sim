@@ -841,10 +841,7 @@ pub fn join_list(items: &[String], conj: &str) -> String {
         0 => String::new(),
         1 => items[0].clone(),
         2 => format!("{} {conj} {}", items[0], items[1]),
-        _ => {
-            let (last, rest) = items.split_last().unwrap();
-            format!("{}, {conj} {last}", rest.join(", "))
-        }
+        n => format!("{}, {conj} {}", items[..n - 1].join(", "), items[n - 1]),
     }
 }
 

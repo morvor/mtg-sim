@@ -205,7 +205,7 @@ impl Renderer<'_> {
                 if v.iter().all(|x| status_word(x).is_some()) {
                     let w: Vec<String> = v
                         .iter()
-                        .map(|x| status_word(x).unwrap().to_string())
+                        .filter_map(|x| status_word(x).map(str::to_string))
                         .collect();
                     np.status.push(join_list(&w, "or"));
                 } else if v.iter().all(|x| matches!(x, Filter::Color(_))) {
