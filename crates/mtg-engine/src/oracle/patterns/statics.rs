@@ -71,13 +71,27 @@ fn quoted_segments(text: &str) -> Vec<&str> {
     out
 }
 
+thread_local! {
+    static QUOTES_NAME_NO_CARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with quoted abilities known not to name the card (their "~" is "this
+/// creature", the object that has the ability): a nested quote the caller checked
+/// against the raw text, such as an ability an emblem grants.
+pub(crate) fn with_quotes_naming_no_card<T>(f: impl FnOnce() -> T) -> T {
+    let prev = QUOTES_NAME_NO_CARD.with(|c| c.replace(true));
+    let r = f();
+    QUOTES_NAME_NO_CARD.with(|c| c.set(prev));
+    r
+}
+
 /// Whether a quoted ability (normalized) names the card itself rather than "this
 /// creature": normalization writes both as `~`, but in an ability granted to another
 /// object only "this creature" means that object; the card's name still means the card
 /// (CR 201.5a: "Equipped creature has '{T}, Sacrifice Blazing Torch: ...'"). Such
 /// abilities are left unsupported. Unknown provenance counts as naming the card.
 pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
-    if !normalized.contains('~') {
+    if !normalized.contains('~') || QUOTES_NAME_NO_CARD.with(|c| c.get()) {
         return false;
     }
     let raw = crate::oracle::raw_text();
@@ -580,10 +594,17 @@ fn group_subject(filter: Filter) -> Subject {
         CardType::Land
     } else if creatures {
         CardType::Creature
-    } else if filter_mentions(&filter, &|x| matches!(x, Filter::Type(CardType::Artifact))) {
+    } else if filter_mentions(&filter, &|x| match x {
+        Filter::Type(CardType::Artifact) => true,
+        // "Clues you control", "Treasures you control": artifact subtypes.
+        Filter::Subtype(s) => subtype_kind(s) == Some(SubtypeKind::Artifact),
+        _ => false,
+    }) {
         CardType::Artifact
-    } else if filter_mentions(&filter, &|x| {
-        matches!(x, Filter::Type(CardType::Enchantment))
+    } else if filter_mentions(&filter, &|x| match x {
+        Filter::Type(CardType::Enchantment) => true,
+        Filter::Subtype(s) => subtype_kind(s) == Some(SubtypeKind::Enchantment),
+        _ => false,
     }) {
         CardType::Enchantment
     } else {

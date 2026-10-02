@@ -152,3 +152,58 @@ fn ellie_deals_damage_and_gains_indestructible() {
     assert!(t.obj_now(ellie).has_keyword(KeywordKind::Indestructible));
     assert!(!t.in_graveyard(P0, "Ellie, Vengeful Hunter"));
 }
+
+#[test]
+fn browbeat_any_player_may_take_the_damage() {
+    cr!("101.4", "608.2c");
+    assert_supported(&["Browbeat", "Breaking Point", "Book Burning"]);
+    // Nobody takes it: target player draws three cards.
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Browbeat");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    t.cast(P0, s).target(P0).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand - 1 + 3);
+    assert_eq!(t.life(P1), 20);
+    // The opponent takes 5: no cards.
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Browbeat");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, true);
+    t.cast(P0, s).target(P0).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.hand_size(P0), hand - 1);
+}
+
+#[test]
+fn vexing_devil_is_sacrificed_if_an_opponent_takes_the_damage() {
+    cr!("101.4", "603.3");
+    ruling!(
+        "Vexing Devil",
+        "chooses whether to be dealt 4 damage, then each other opponent in turn order does the same"
+    );
+    assert_supported(&["Vexing Devil"]);
+    for take in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 1);
+        let d = t.hand(P0, "Vexing Devil");
+        t.answer_yes(P1, take);
+        t.cast(P0, d).go();
+        t.resolve_all();
+        let on = !t.named_on_battlefield("Vexing Devil").is_empty();
+        assert_eq!(on, !take);
+        assert_eq!(t.life(P1), if take { 16 } else { 20 });
+    }
+}
