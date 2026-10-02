@@ -234,12 +234,18 @@ pub fn happened_this_turn(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -
             face_down: a.face_down,
         },
         None => {
-            let e = g
+            // Not on the battlefield as they were put on it, and not as it entered: a card
+            // in another zone (a suspended card's time counters) isn't a permanent
+            // counters were put on (CR 122.6).
+            let Some(e) = g
                 .history
                 .permanents_entered
                 .iter()
                 .rev()
-                .find(|e| e.id == *o)?;
+                .find(|e| e.id == *o)
+            else {
+                return Some(false);
+            };
             let (chars, face_down) = e.as_entered.as_ref()?;
             AsPutView {
                 id: *o,
@@ -255,6 +261,21 @@ pub fn happened_this_turn(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -
             && who.is_none_or(|w| by.is_some_and(|p| g.player_rel_matches(w, p, ctx)))
             && g.matches_view(&view, *o, filter, ctx),
     )
+}
+
+/// Whether `ev` put counters on a permanent: one on the battlefield as they were put on
+/// it, or one entering with them. "Counters being put on an object" refers only to those
+/// (CR 122.6), not to counters put on a card in another zone (a suspended card's time
+/// counters, CR 702.62a), whatever the card is.
+pub fn put_on_permanent(g: &Game, ev: &Event) -> bool {
+    match ev {
+        Event::CountersAdded {
+            target: Entity::Object(o),
+            as_put,
+            ..
+        } => as_put.is_some() || g.obj(*o).zone == crate::object::Zone::Battlefield,
+        _ => false,
+    }
 }
 
 /// Matches the trigger conditions about who put counters or what destroyed or countered
@@ -283,7 +304,10 @@ pub fn trigger_matches(
             },
         ) => {
             let on = match target {
-                Entity::Object(o) => on_objects.as_ref().is_some_and(|f| g.matches(*o, f, ctx)),
+                Entity::Object(o) => {
+                    put_on_permanent(g, ev)
+                        && on_objects.as_ref().is_some_and(|f| g.matches(*o, f, ctx))
+                }
                 Entity::Player(p) => on_players
                     .as_ref()
                     .is_some_and(|f| g.player_filter_matches(f, *p, ctx)),

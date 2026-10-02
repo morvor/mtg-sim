@@ -996,3 +996,109 @@ fn stocking_the_pantry_counts_counters_you_put_on_your_creatures() {
     cast_and_resolve(&mut t, P0, "Star Pupil", &[]);
     assert_eq!(t.counters(pantry, "supply"), 2);
 }
+
+/// P0 casts "Put `n` -1/-1 counters on target creature." (`n` in words) at `target`.
+fn cast_minus1(t: &mut TestGame, target: ObjectId, n: &str) {
+    let def = custom_card(
+        "Wither Away",
+        "Instant",
+        "{0}",
+        None,
+        &format!("Put {n} -1/-1 counters on target creature."),
+    );
+    let spell = t.custom(P0, def, Zone::Hand(P0));
+    t.cast_with(P0, spell, &[Entity::Object(target)]).unwrap();
+}
+
+/// The number of -1/-1 counters put on `obj` by each counters event of this turn.
+fn minus1_events(t: &TestGame, obj: ObjectId) -> Vec<u32> {
+    t.turn_events
+        .iter()
+        .chain(t.g.events.iter())
+        .filter_map(|e| match e {
+            mtg_engine::events::Event::CountersAdded {
+                target: Entity::Object(o),
+                kind,
+                n,
+                ..
+            } if *o == obj && kind.as_str() == counters::MINUS1 => Some(*n),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn nest_of_scarabs_counts_every_counter_put_even_past_toughness() {
+    cr!("122.6");
+    ruling!(
+        "Nest of Scarabs",
+        "If an effect has you put more -1/-1 counters on a creature than it has toughness, you’ll put all of those counters on it and create that many Insects, even if that makes its toughness a negative number."
+    );
+    supported("Nest of Scarabs");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nest of Scarabs");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // Three -1/-1 counters on a 2/2: all three are put on it.
+    cast_minus1(&mut t, bears, "three");
+    t.resolve_all();
+    assert_eq!(minus1_events(&t, bears), vec![3]);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(with_subtype(&t, P0, "Insect").len(), 3);
+}
+
+#[test]
+fn defiant_greatmaw_triggers_on_the_counters_that_kill_it() {
+    cr!("122.6", "704.5f");
+    ruling!(
+        "Defiant Greatmaw",
+        "If you put enough -1/-1 counters on Defiant Greatmaw so that its toughness is 0 or less, its last ability triggers."
+    );
+    supported("Defiant Greatmaw");
+    let mut t = TestGame::new(2);
+    let maw = t.battlefield(P0, "Defiant Greatmaw");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(bears), counters::MINUS1, 1, Some(bears));
+    // Five -1/-1 counters on the 4/5: it dies, and its ability triggers.
+    cast_minus1(&mut t, maw, "five");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve();
+    assert_eq!(minus1_events(&t, maw), vec![5]);
+    assert!(t.in_graveyard(P0, "Defiant Greatmaw"));
+    assert_eq!(
+        triggers_on_stack(&t, "remove a -1/-1 counter from another target creature"),
+        1
+    );
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::MINUS1), 0);
+}
+
+#[test]
+fn earth_kingdom_general_stops_triggering_once_you_gain_life() {
+    cr!("603.2h");
+    ruling!(
+        "Earth Kingdom General",
+        "Once you choose to gain life using Earth Kingdom General's second ability, that ability won't trigger again that turn."
+    );
+    supported("Earth Kingdom General");
+    let mut t = TestGame::new(2);
+    let general = t.battlefield(P0, "Earth Kingdom General");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let trigger = "you may gain that much life";
+    // Declined: it triggers again.
+    t.g.add_counters(Entity::Object(bears), counters::PLUS1, 2, Some(general));
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, trigger), 1);
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    t.g.add_counters(Entity::Object(bears), counters::PLUS1, 3, Some(general));
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, trigger), 1);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    // Once you've gained life, it no longer triggers this turn.
+    t.g.add_counters(Entity::Object(bears), counters::PLUS1, 1, Some(general));
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, trigger), 0);
+}

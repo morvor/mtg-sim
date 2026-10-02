@@ -1315,7 +1315,16 @@ impl Game {
         n: u32,
         source: Option<ObjectId>,
     ) -> u32 {
-        let how = crate::event_causes::CounterPut::by_source(self, source);
+        let mut how = crate::event_causes::CounterPut::by_source(self, source);
+        // Not put by a spell or ability: a permanent's controller puts them, as for the
+        // counters it enters with (CR 122.6a).
+        if how.by.is_none() {
+            if let Entity::Object(o) = target {
+                if self.obj(o).zone == Zone::Battlefield {
+                    how.by = Some(self.obj(o).controller);
+                }
+            }
+        }
         self.put_counters(target, kind, n, how)
     }
 

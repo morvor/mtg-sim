@@ -171,3 +171,79 @@ fn whenever_an_opponent_puts_counters_names_the_putter() {
     t.resolve_all();
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn counters_on_a_card_in_exile_arent_counters_put_on_a_creature() {
+    cr!("122.6", "702.62a");
+    supported("Mikey & Leo, Chaos & Order");
+    supported("Lord Jyscal Guado");
+    // Suspending a creature card exiles it with time counters on it: those aren't counters
+    // put on a creature (only on a permanent, or on an object as it enters).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mikey & Leo, Chaos & Order");
+    t.battlefield(P0, "Lord Jyscal Guado");
+    let card = t.hand(P0, "Veiling Oddity");
+    t.lands(P0, "Island", 2);
+    let hand = t.hand_size(P0);
+    t.g.turn.priority = Some(P0);
+    t.g.perform_action(
+        P0,
+        mtg_engine::decision::Action::Special(mtg_engine::decision::SpecialAction::Suspend {
+            card,
+        }),
+    )
+    .expect("suspend Veiling Oddity");
+    t.settle();
+    assert_eq!(t.counters(t.g.current(card), counters::TIME), 4);
+    assert_eq!(t.stack_len(), 0, "Mikey & Leo doesn't trigger");
+    assert_eq!(t.hand_size(P0), hand - 1);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "Lord Jyscal Guado doesn't trigger");
+    // A counter on a creature P0 controls: both do.
+    let mut t = TestGame::new(2);
+    let mikey = t.battlefield(P0, "Mikey & Leo, Chaos & Order");
+    t.battlefield(P0, "Lord Jyscal Guado");
+    let hand = t.hand_size(P0);
+    t.g.add_counters(Entity::Object(mikey), counters::TIME, 1, Some(mikey));
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+}
+
+#[test]
+fn if_you_would_put_counters_on_your_creature_or_yourself() {
+    cr!("122.6", "606.4", "614.1a");
+    supported("Lae'zel, Vlaakith's Champion");
+    supported("Ajani, Caller of the Pride");
+    // Lae'zel: "If you would put one or more counters on a creature or planeswalker you
+    // control or on yourself, put that many plus one of each of those kinds of counters
+    // on that permanent or player instead."
+    let mut t = TestGame::new(2);
+    let laezel = t.battlefield(P0, "Lae'zel, Vlaakith's Champion");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    // P0 puts one on P0's creature: two.
+    t.g.add_counters(Entity::Object(mine), counters::PLUS1, 1, Some(laezel));
+    assert_eq!(t.counters(mine, counters::PLUS1), 2);
+    // P1 puts one on it: P1 isn't "you".
+    t.g.add_counters(Entity::Object(mine), counters::PLUS1, 1, Some(theirs));
+    assert_eq!(t.counters(mine, counters::PLUS1), 3);
+    // P0 puts one on P1's creature: not a creature P0 controls.
+    t.g.add_counters(Entity::Object(theirs), counters::PLUS1, 1, Some(laezel));
+    assert_eq!(t.counters(theirs, counters::PLUS1), 1);
+    // P0 puts counters on P0 (yourself), not on P1.
+    t.g.add_counters(Entity::Player(P0), "energy", 2, Some(laezel));
+    assert_eq!(t.g.player(P0).counter("energy"), 3);
+    t.g.add_counters(Entity::Player(P1), counters::POISON, 1, Some(laezel));
+    assert_eq!(t.g.player(P1).counter(counters::POISON), 1);
+    // A planeswalker entering under P0's control (4 loyalty) gets one more, and so does a
+    // loyalty cost's counter: not only counters put by an effect.
+    let ajani = t.enter(P0, "Ajani, Caller of the Pride");
+    assert_eq!(t.counters(ajani, counters::LOYALTY), 5);
+    activate(&mut t, P0, ajani, "Put a +1/+1 counter on up to one target creature");
+    assert_eq!(t.counters(ajani, counters::LOYALTY), 7);
+}

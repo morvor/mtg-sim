@@ -9,6 +9,7 @@ use mtg_engine::events::Event;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::*;
 use mtg_engine::*;
 
 /// The (cause, controller) of each Destroyed event of this turn about `obj`.
@@ -161,4 +162,25 @@ fn a_countered_spell_records_what_countered_it() {
     cast(&mut t, P1, "Cancel", &[Entity::Object(bolt)]);
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
+}
+
+#[test]
+fn a_shield_counter_protects_the_aura_a_destroy_effect_destroys_instead() {
+    cr!("122.1c", "614.6", "702.89a");
+    // Murder would destroy the enchanted creature; umbra armor has it destroy the Aura
+    // instead, still as the result of Murder's effect, so the Aura's shield counter
+    // replaces that.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let umbra = t.battlefield(P0, "Hyena Umbra");
+    assert!(t.g.attach(umbra, Entity::Object(bears)));
+    t.g.add_counters(Entity::Object(umbra), counters::SHIELD, 1, Some(umbra));
+    t.g.recompute();
+    t.set_step(P1, Step::PrecombatMain);
+    cast(&mut t, P1, "Murder", &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert!(t.on_battlefield(umbra));
+    assert_eq!(t.counters(umbra, counters::SHIELD), 0);
+    assert!(destroyed(&t, umbra).is_empty());
 }

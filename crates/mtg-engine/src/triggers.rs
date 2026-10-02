@@ -1265,7 +1265,11 @@ impl Game {
                     ..
                 },
             ) => {
-                if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
+                // CR 122.6: counters put on a permanent (or as it enters), not on a card.
+                if kind.as_ref().is_none_or(|x| x == k)
+                    && crate::event_causes::put_on_permanent(self, ev)
+                    && self.matches(*o, filter, &ctx)
+                {
                     // "Whenever a [kind] counter is put on …" triggers for each counter.
                     let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
                     (0..times)
