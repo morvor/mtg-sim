@@ -459,3 +459,123 @@ fn volcano_hellion_echo_cost_is_your_life_total_as_the_ability_resolves() {
     let tapped = lands.iter().filter(|l| t.obj_now(**l).tapped).count();
     assert_eq!(tapped, 17);
 }
+
+#[test]
+fn giants_amulet_giant_wizard_enters_as_a_4_4() {
+    cr!("603.2", "603.6a", "608.2c", "608.2d");
+    ruling!(
+        "Giant's Amulet",
+        "The Giant Wizard creature token enters the battlefield as a 4/4 creature. Any abilities that trigger when a creature with a certain toughness enters the battlefield will see the token enter as a 4/4 creature."
+    );
+    ruling!(
+        "Giant's Amulet",
+        "You decide whether to pay {3}{U} as the enters-the-battlefield ability resolves. If you do, you immediately create the Giant Wizard creature token and attach Giant's Amulet to it."
+    );
+    supported("Giant's Amulet");
+    let mut t = TestGame::new(2);
+    let def = custom_card(
+        "Toughness Watcher",
+        "Enchantment",
+        "{G}",
+        None,
+        "Whenever a creature you control with toughness 5 or greater enters, draw a card.",
+    );
+    t.custom(P0, def, Zone::Battlefield);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 3);
+    let (eq, seen) = equipment_enters(&mut t, "Giant's Amulet", true);
+    assert_eq!(seen, vec![1]);
+    let giant = the_token(&t, P0);
+    assert_eq!(t.obj_now(eq).attached_to, Some(Entity::Object(giant)));
+    assert_eq!(t.pt(giant), (4, 5));
+    assert_eq!(triggered(&t, "toughness 5 or greater"), 0);
+}
+
+#[test]
+fn wolfriders_saddle_wolf_enters_as_a_2_2() {
+    cr!("603.2", "603.6a", "608.2c");
+    ruling!(
+        "Wolfrider's Saddle",
+        "The Wolf token that you create enters the battlefield as a 2/2 creature. Any abilities that trigger when a creature with a certain power enters the battlefield will see the token enter as a 2/2 creature before Wolfrider's Saddle becomes attached."
+    );
+    ruling!(
+        "Wolfrider's Saddle",
+        "No player may take any actions between the time you create the Wolf token and the time Wolfrider's Saddle becomes attached to it."
+    );
+    supported("Wolfrider's Saddle");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elemental Bond");
+    t.battlefield(P0, "Mentor of the Meek");
+    let asked = t.asked().len();
+    let (eq, _) = equipment_enters(&mut t, "Wolfrider's Saddle", true);
+    let wolf = the_token(&t, P0);
+    assert_eq!(t.obj_now(eq).attached_to, Some(Entity::Object(wolf)));
+    assert_eq!(t.pt(wolf), (3, 3));
+    assert_eq!(triggered(&t, "power 2 or less"), 1);
+    assert_eq!(triggered(&t, "power 3 or greater"), 0);
+    assert!(!asked_since(&t, asked)
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+}
+
+#[test]
+fn mask_of_immolation_attaches_before_anyone_can_act() {
+    cr!("608.2c", "117.2e");
+    ruling!(
+        "Mask of Immolation",
+        "No player may take any actions between the time you create the Elemental token and the time Mask of Immolation becomes attached to it."
+    );
+    supported("Mask of Immolation");
+    let mut t = TestGame::new(2);
+    let asked = t.asked().len();
+    let (eq, _) = equipment_enters(&mut t, "Mask of Immolation", true);
+    let elemental = the_token(&t, P0);
+    assert_eq!(t.obj_now(eq).attached_to, Some(Entity::Object(elemental)));
+    assert!(!asked_since(&t, asked)
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+}
+
+#[test]
+fn amassed_army_tokens_enter_as_0_0() {
+    cr!("701.47a", "603.2", "603.6a");
+    ruling!(
+        "Lazotep Sliver",
+        "If you don't control an Army, the Sliver Army token you create enters the battlefield as a 0/0 creature before receiving counters."
+    );
+    ruling!(
+        "Mindless Conscription",
+        "If you don't control an Army, the Zombie Army token that you create enters the battlefield as a 0/0 creature. Any abilities that trigger when a creature with a certain power enters the battlefield, such as that of Mentor of the Meek, will see the token enter as a 0/0 creature before it gets +1/+1 counters."
+    );
+    supported("Lazotep Sliver");
+    supported("Mindless Conscription");
+    // Mindless Conscription: "When this enchantment enters ..., amass Zombies 3."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elemental Bond");
+    t.battlefield(P0, "Mentor of the Meek");
+    t.enter(P0, "Mindless Conscription");
+    t.resolve();
+    let army = the_token(&t, P0);
+    assert_eq!(t.pt(army), (3, 3));
+    assert_eq!(triggered(&t, "power 2 or less"), 1);
+    assert_eq!(triggered(&t, "power 3 or greater"), 0);
+    // Lazotep Sliver (4/4): "Whenever a nontoken Sliver you control dies, amass Slivers 2."
+    let mut t = TestGame::new(2);
+    let sliver = t.battlefield(P0, "Lazotep Sliver");
+    power_two_watcher(&mut t, P0);
+    t.battlefield(P0, "Mentor of the Meek");
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(sliver).go();
+    t.resolve();
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(sliver).go();
+    t.resolve();
+    assert!(!t.on_battlefield(sliver));
+    t.resolve();
+    let army = the_token(&t, P0);
+    assert_eq!(t.pt(army), (2, 2));
+    assert!(t.obj_now(army).chars.has_subtype("Sliver"));
+    assert_eq!(triggered(&t, "power 2 or less"), 1);
+    assert_eq!(triggered(&t, "power 2 or greater"), 0);
+}
