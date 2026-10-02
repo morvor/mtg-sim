@@ -967,11 +967,13 @@ pub(crate) fn player_clause(p: &str) -> Option<PlayerFilter> {
             }
         }
     }
-    // "has more cards in their hand than you", "has more life than you".
-    if let Some(f) = super::choice_grammar_players::compared_with_you(&format!("who {p}")) {
-        return Some(f);
-    }
-    super::statics_conditions::player_predicate(&p)
+    super::statics_conditions::player_predicate(&p).or_else(|| {
+        // "has more cards in their hand than you" (other comparisons with you are read
+        // where conditions are).
+        p.contains(" in their hand ")
+            .then(|| super::choice_grammar_players::compared_with_you(&format!("who {p}")))
+            .flatten()
+    })
 }
 
 /// "three or more", "N or fewer", "no".

@@ -992,6 +992,9 @@ fn referent_zone(prev: Option<&Effect>, b: &Builder) -> Option<ZoneKind> {
         Some(Moved::Cards(z)) => Some(z),
         // The cards an earlier sentence moved, which "it" still means.
         Some(Moved::Unchanged) | None if it_is_moved => Some(ZoneKind::Exile),
+        // A card the text chose where it is ("choose target instant card in your
+        // graveyard", "choose a creature card in your graveyard").
+        Some(Moved::Unchanged) => super::choice_grammar_objects::chosen_card_zone(prev, b),
         _ => None,
     }
 }
@@ -1562,6 +1565,9 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = to_effect(&p, zone, b.ctx) else {
         return false;
     };
+    let Some(e) = super::choice_grammar_objects::permission_for_chosen(e, Some(prev), b) else {
+        return false;
+    };
     // "Put the rest on the bottom of your library in a random order.": the cards chosen
     // among that are still where they were (see `r406_exile_until`).
     if let (Some(z), true) = (zone, stores_among(&e)) {
@@ -1621,7 +1627,8 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     let zone = referent_zone(None, b);
-    to_effect(&p, zone, b.ctx)
+    let e = to_effect(&p, zone, b.ctx)?;
+    super::choice_grammar_objects::permission_for_chosen(e, None, b)
 }
 
 /// "You may cast target instant or sorcery card from your graveyard this turn": a

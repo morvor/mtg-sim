@@ -226,3 +226,23 @@ fn the_three_seasons_three_cards_from_each_graveyard() {
     assert_eq!(t.library_size(P0), l0 + 3, "{}", t.dump_log());
     assert_eq!(t.library_size(P1), l1 + 3);
 }
+
+#[test]
+fn mission_briefing_cast_the_chosen_card_then_exile_it() {
+    cr!("608.2d", "601.2a");
+    compiles("Mission Briefing");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Shock");
+    t.answer_choose(P0, &[e(bolt)]);
+    let spell = t.hand(P0, "Mission Briefing");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), mtg_engine::object::Zone::Graveyard(P0));
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17, "{}", t.dump_log());
+    assert!(t.in_exile("Lightning Bolt"));
+}

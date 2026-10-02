@@ -674,3 +674,60 @@ fn choose_in_each_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose N cards in each graveyard", priority: 114, parse: choose_in_each_graveyard } }
+
+/// The zone of the card(s) "it" means when the text chose them where they are, without
+/// moving them: a target card ("choose target instant card in your graveyard") or cards
+/// an instruction chose and stored ("choose a creature card in your graveyard").
+pub fn chosen_card_zone(prev: Option<&Effect>, b: &Builder) -> Option<ZoneKind> {
+    let zone_of = |f: &Filter| f.zone().filter(|z| *z != ZoneKind::Battlefield);
+    match &b.it {
+        Sel::Target(s) => match &b.targets.get(*s as usize)?.what {
+            TargetKind::Object(f) => zone_of(f),
+            _ => None,
+        },
+        Sel::Var(v) => {
+            // The choice stored in that variable.
+            fn find(e: &Effect, v: Var) -> Option<Filter> {
+                match e {
+                    Effect::Store { var, sel } if *var == v => match sel {
+                        Sel::Choose { filter, .. } => Some(filter.clone()),
+                        Sel::Union(u) => u.iter().find_map(|s| match s {
+                            Sel::Choose { filter, .. } => Some(filter.clone()),
+                            _ => None,
+                        }),
+                        _ => None,
+                    },
+                    Effect::Seq(xs) => xs.iter().rev().find_map(|x| find(x, v)),
+                    _ => None,
+                }
+            }
+            zone_of(&find(prev?, *v)?)
+        }
+        _ => None,
+    }
+}
+
+/// A permission for the cards "it" means (`vars::IT`, see `permission_grammar`), made to
+/// refer to the cards the text chose where they are ([`chosen_card_zone`]) when "it"
+/// means those.
+pub fn permission_for_chosen(e: Effect, prev: Option<&Effect>, b: &Builder) -> Option<Effect> {
+    if matches!(&b.it, Sel::Var(v) if *v == vars::IT) || chosen_card_zone(prev, b).is_none() {
+        return Some(e);
+    }
+    let mut v = serde_json::to_value(&e).ok()?;
+    let from = serde_json::to_value(Sel::Var(vars::IT)).ok()?;
+    let to = serde_json::to_value(&b.it).ok()?;
+    fn walk(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) {
+        if v == from {
+            *v = to.clone();
+            return;
+        }
+        match v {
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, from, to)),
+            _ => {}
+        }
+    }
+    walk(&mut v, &from, &to);
+    serde_json::from_value(v).ok()
+}
