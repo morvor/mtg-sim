@@ -532,8 +532,17 @@ fn referent_possessive(s: &str) -> Option<String> {
     Some(format!("its {rest}"))
 }
 
+/// "2 or the greatest power among Dinosaurs you control, whichever is greater".
+fn whichever_greater(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let (a, r) = parse_number(s)?;
+    let r = strip(r, "or ")?;
+    let (v, tail) = crate::oracle::statics::parse_value_phrase(r, b)?;
+    let tail = tail.trim_start().strip_prefix(", whichever is greater")?;
+    Some((Value::Max(Box::new(a), Box::new(v)), tail.to_string()))
+}
+
 /// "3", "x plus 2", "five times x".
-fn number_expr(s: &str) -> Option<(Value, &str)> {
+pub(crate) fn number_expr(s: &str) -> Option<(Value, &str)> {
     let (n, r) = parse_number(s)?;
     if let Some(x) = strip(r, "plus ") {
         let (m, r2) = parse_number(x)?;
@@ -563,7 +572,10 @@ fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
         if let Some(r) = rest.strip_prefix("damage to ") {
             let (to, r, _) = damage_recipient(r, b)?;
             let r = r.trim_start().strip_prefix("equal to ")?;
-            let (n, r) = crate::oracle::statics::parse_value_phrase(r, b)?;
+            let (n, r) = match whichever_greater(r, b) {
+                Some(x) => x,
+                None => crate::oracle::statics::parse_value_phrase(r, b)?,
+            };
             parts.push((n, to));
             rest = r;
             break;
@@ -602,8 +614,24 @@ inventory::submit! { EffectPattern { name: "basic effects: damage in parts", pri
 fn damage_to_each_of(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (source, r) = damage_subject(l, b)?;
-    let (amount, r) = parse_number(&r)?;
+    let (amount, r) = number_expr(&r)?;
     let r = strip(r, "damage to each of ")?;
+    // "each of up to X targets": that many "any target"s (CR 115.4).
+    if let Some(x) = r.strip_prefix("up to ") {
+        let (n, x) = parse_number(x)?;
+        if end(x) == "targets" {
+            let mut spec = TargetSpec::any_target();
+            spec.min = 0;
+            spec.max = n;
+            spec.text = "up to x targets".to_string();
+            let slot = b.add_target(spec, "targets");
+            return Some(Effect::DealDamage {
+                source,
+                amount,
+                to: Sel::Target(slot),
+            });
+        }
+    }
     let (sels, tail) = object_list(r, b)?;
     if sels.len() < 2 || !end(&tail).is_empty() {
         return None;

@@ -568,11 +568,11 @@ fn sacrifice_group(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 60, parse: sacrifice_group } }
 
-/// "you untap all lands you control" (Sword of Feast and Famine), "you tap ...": the
-/// controller performs the instruction.
+/// "you untap all lands you control" (Sword of Feast and Famine), "you sacrifice a land"
+/// (Redcap Melee): the controller performs the instruction.
 fn you_untap(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("you ")?;
-    if !(r.starts_with("untap ") || r.starts_with("tap ")) {
+    if !(r.starts_with("untap ") || r.starts_with("tap ") || r.starts_with("sacrifice ")) {
         return None;
     }
     crate::oracle::effects::parse_clause(r, b)

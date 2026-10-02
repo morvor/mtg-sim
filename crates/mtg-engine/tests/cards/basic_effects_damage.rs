@@ -297,3 +297,117 @@ fn refuse_damages_the_spells_controller_by_its_mana_value() {
     t.resolve();
     assert_eq!(t.life(P1), 16);
 }
+
+#[test]
+fn craters_claws_deals_x_plus_two_with_a_big_creature() {
+    cr!("107.3");
+    assert_supported("Crater's Claws");
+    for big in [false, true] {
+        let mut t = TestGame::new(2);
+        if big {
+            t.battlefield(P0, "Hill Giant");
+            t.battlefield(P0, "Craw Wurm");
+        }
+        t.lands(P0, "Mountain", 4);
+        let cc = t.hand(P0, "Crater's Claws");
+        t.cast(P0, cc).x(3).target(P1).go();
+        t.resolve();
+        assert_eq!(t.life(P1), if big { 15 } else { 17 }, "{big}");
+    }
+}
+
+#[test]
+fn chocobo_kick_kicked_deals_twice_that_much() {
+    cr!("702.33d");
+    assert_supported("Chocobo Kick");
+    for kicked in [false, true] {
+        let mut t = TestGame::new(2);
+        let mine = t.battlefield(P0, "Grizzly Bears");
+        let theirs = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Forest", 2);
+        if kicked {
+            t.battlefield(P0, "Plains");
+        }
+        let ck = t.hand(P0, "Chocobo Kick");
+        t.cast(P0, ck).kicked(kicked).target(mine).target(theirs).go();
+        t.resolve();
+        // 2 damage, or 4 kicked (the Giant dies).
+        assert_eq!(t.on_battlefield(theirs), !kicked, "{kicked}");
+    }
+}
+
+#[test]
+fn triumphant_chomp_uses_the_greater_amount() {
+    cr!("208.1");
+    assert_supported("Triumphant Chomp");
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Mountain", 1);
+    let tc = t.hand(P0, "Triumphant Chomp");
+    t.cast(P0, tc).target(wurm).go();
+    t.resolve();
+    // No Dinosaurs: 2 damage.
+    assert_eq!(t.obj_now(wurm).damage, 2);
+}
+
+#[test]
+fn crackle_with_power_deals_five_times_x_to_each_of_up_to_x_targets() {
+    cr!("107.3", "115.4");
+    assert_supported("Crackle with Power");
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Mountain", 5);
+    let c = t.hand(P0, "Crackle with Power");
+    t.cast(P0, c)
+        .x(1)
+        .targets(&[Entity::Object(wurm)])
+        .go();
+    t.resolve();
+    assert!(!t.on_battlefield(wurm));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn lava_storm_damages_attackers_or_blockers() {
+    cr!("700.2");
+    assert_supported("Lava Storm");
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(attacker, Entity::Player(P1))]),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        mtg_engine::decision::Answer::Blockers(vec![(blocker, attacker)]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.lands(P1, "Mountain", 5);
+    let ls = t.hand(P1, "Lava Storm");
+    // P1 chooses the attacking creatures.
+    t.answer(P1, DecisionKind::Option, mtg_engine::decision::Answer::Index(0));
+    t.cast(P1, ls).go();
+    t.resolve();
+    assert!(!t.on_battlefield(attacker));
+    assert!(t.on_battlefield(blocker));
+}
+
+#[test]
+fn redcap_melee_sacrifices_a_land_for_a_nonred_permanent() {
+    cr!("701.21a");
+    assert_supported("Redcap Melee");
+    for red in [true, false] {
+        let mut t = TestGame::new(2);
+        let target = t.battlefield(P1, if red { "Raging Goblin" } else { "Grizzly Bears" });
+        t.lands(P0, "Mountain", 2);
+        let rm = t.hand(P0, "Redcap Melee");
+        t.cast(P0, rm).target(target).go();
+        t.resolve();
+        assert!(!t.on_battlefield(target));
+        assert_eq!(t.named_on_battlefield("Mountain").len(), if red { 2 } else { 1 });
+    }
+}

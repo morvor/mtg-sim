@@ -383,3 +383,27 @@ fn sacrifice_alternatives(p: &str) -> Option<CostPart> {
 }
 
 inventory::submit! { super::CostPattern { name: "basic effects: sacrifice one of alternatives", priority: 100, parse: sacrifice_alternatives } }
+
+/// "~ deals 2 damage to each attacking creature or ~ deals 2 damage to each blocking
+/// creature" (Lava Storm): the controller chooses one as it resolves.
+fn one_or_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (a, c) = l.split_once(" or ~ ")?;
+    if !a.starts_with("~ ") {
+        return None;
+    }
+    let c = format!("~ {c}");
+    let saved = b.targets.len();
+    let ea = crate::oracle::effects::parse_clause(a, b)?;
+    let ec = crate::oracle::effects::parse_clause(&c, b)?;
+    // Targets would be chosen for both.
+    if b.targets.len() != saved {
+        return None;
+    }
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![(a.to_string(), ea), (c, ec)],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: [effect] or [effect]", priority: 120, parse: one_or_the_other } }
