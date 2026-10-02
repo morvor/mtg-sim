@@ -509,3 +509,29 @@ fn thorin_no_trigger_if_nothing_became_attached() {
     assert!(t.on_battlefield(giant));
     assert_eq!(t.obj_now(giant).damage, 0);
 }
+
+#[test]
+fn frodo_attaches_an_equipment_with_mana_value_2_or_3() {
+    cr!("701.3a", "202.3");
+    assert_compiles(&["Frodo, Determined Hero"]);
+    let mut t = TestGame::new(2);
+    let star = t.battlefield(P0, "Vulshok Morningstar");
+    let blade = t.battlefield(P0, "Bonesplitter");
+    t.answer_targets(P0, &[Entity::Object(star)]);
+    t.answer_yes(P0, true);
+    let frodo = t.enter(P0, "Frodo, Determined Hero");
+    t.resolve_all();
+    assert_eq!(attached(&t, star), Some(Entity::Object(frodo)));
+    assert_eq!(t.pt(frodo), (4, 4));
+    // Bonesplitter (mana value 1) wasn't a legal target.
+    let offered = t
+        .asked()
+        .into_iter()
+        .find_map(|(q, d)| match d {
+            Decision::ChooseTargets { candidates, .. } if q == P0 => Some(candidates),
+            _ => None,
+        })
+        .expect("no target choice");
+    assert!(offered.contains(&Entity::Object(star)));
+    assert!(!offered.contains(&Entity::Object(blade)));
+}

@@ -150,8 +150,8 @@ mod tests {
     }
 }
 
-/// "with power 4, 5, or 6" (Sarkhan's Unsealing), "with mana value 1, 2, or 3": any of the
-/// listed numbers.
+/// "with power 4, 5, or 6" (Sarkhan's Unsealing), "with mana value 1, 2, or 3", "with mana
+/// value 2 or 3" (Frodo, Determined Hero): any of the listed numbers.
 pub(crate) fn stat_in_list(s: &str) -> Option<(Filter, &str)> {
     let t = s.trim_start();
     let (stat, mut r) = if let Some(r) = t.strip_prefix("with power ") {
@@ -181,7 +181,7 @@ pub(crate) fn stat_in_list(s: &str) -> Option<(Filter, &str)> {
         }
         r = rest.strip_prefix(", ")?;
     }
-    if ns.len() < 3 {
+    if ns.len() < 2 {
         return None;
     }
     let one = |n: i32| {

@@ -1012,3 +1012,73 @@ fn s_look_at_opponents_face_down(
 }
 
 inventory::submit! { super::StaticPattern { name: "face grammar: you may look at face-down creatures your opponents control", priority: 110, parse: s_look_at_opponents_face_down } }
+
+// ---------------------------------------------------------------------------
+// Transforming itself after counting: "Then if there are three or more cards exiled with
+// ~, transform it." (Profane Procession), "Then if there are five or more hatchling
+// counters on it, remove all of them and transform it." (Ludevic's Test Subject).
+// ---------------------------------------------------------------------------
+
+/// "[then] if there are N or more cards exiled with ~, transform it": "it" is the source
+/// (a card in exile can't transform, CR 701.27c), not the card just exiled. "[then] if
+/// there are N or more [kind] counters on it, remove all of them and transform it": "all
+/// of them" are those counters. The sentence, with those words made explicit.
+fn if_counted_transform_it(l: &str) -> Option<String> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("if there are ")?;
+    let (cond, instr) = r.split_once(", ")?;
+    let instr = match instr {
+        "transform it" if cond.ends_with(" cards exiled with ~") => "transform ~".to_string(),
+        "remove all of them and transform it" => {
+            let (_, kind_on) = cond.split_once(" or more ")?;
+            let kind = kind_on.strip_suffix(" counters on it")?;
+            if kind.contains(' ') {
+                return None;
+            }
+            format!("remove all {kind} counters from it and transform it")
+        }
+        _ => return None,
+    };
+    Some(format!("then if there are {cond}, {instr}."))
+}
+
+/// The sentence after the instruction that exiled the card or put the counter on.
+fn f_if_counted_transform_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(s) = if_counted_transform_it(l) else {
+        return false;
+    };
+    // The rewritten sentence as a sentence following `prev` (counters on it), or on its
+    // own.
+    if crate::oracle_ext::apply_followup_ext(&s, prev, b) {
+        return true;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(&s, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: if there are N or more [cards exiled with ~ / counters on it], transform it", priority: 110, apply: f_if_counted_transform_it } }
+
+/// "creatures other than Werewolves and Wolves" (Moonmist), "creatures other than
+/// Phyrexians" (That's No Moonmist): of none of those subtypes.
+fn other_than_subtypes<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("other than ")?;
+    let stop = r.find([',', '.']).unwrap_or(r.len());
+    let (f, plural, tail) = parse_object_phrase(&r[..stop])?;
+    let subtypes = match &f {
+        Filter::Subtype(_) => true,
+        Filter::Or(v) => v.iter().all(|x| matches!(x, Filter::Subtype(_))),
+        _ => false,
+    };
+    if !plural || !subtypes {
+        return None;
+    }
+    let used = stop - tail.len();
+    Some((Filter::not(f), &r[used..]))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "face grammar: other than [subtypes]", priority: 100, parse: other_than_subtypes } }

@@ -1,6 +1,7 @@
 //! Transforming named objects (CR 701.27): "transform up to one target Werewolf you
 //! control", "transform any number of Human Werewolves you control", "transform all
-//! Humans" (pattern in `src/oracle/patterns/face_status_grammar.rs`).
+//! Humans", "then if there are three or more cards exiled with ~, transform it" (patterns
+//! in `src/oracle/patterns/face_status_grammar.rs`).
 
 use mtg_engine::object::FaceState;
 use mtg_engine::testing::*;
@@ -19,6 +20,9 @@ fn transform_cards_compile() {
     assert_compiles(&[
         "Waxing Moon",
         "Tovolar, Dire Overlord // Tovolar, the Midnight Scourge",
+        "Moonmist",
+        "Profane Procession // Tomb of the Dusk Rose",
+        "Ludevic's Test Subject // Ludevic's Abomination",
     ]);
 }
 
@@ -106,4 +110,136 @@ fn seedpod_caretaker_transforms_target_incubator_token() {
     t.resolve_all();
     assert_eq!(t.obj_now(incubator).face, FaceState::Back);
     assert_eq!(t.pt(incubator), (2, 2));
+}
+
+#[test]
+fn moonmist_transforms_humans_and_prevents_combat_damage_by_others() {
+    cr!("701.27a", "615.1");
+    ruling!(
+        "Moonmist",
+        "Moonmist causes any double-faced Human to transform, not just Werewolves."
+    );
+    ruling!(
+        "Moonmist",
+        "even if that creature wasn’t on the battlefield (or was a Werewolf or a Wolf) when Moonmist resolved."
+    );
+    let mut t = TestGame::new(2);
+    let shepherd = t.battlefield(P0, "Gatstaf Shepherd // Gatstaf Howler");
+    let spell = t.hand(P0, "Moonmist");
+    t.lands(P0, "Forest", 2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(shepherd).face, FaceState::Back);
+    // A creature that wasn't on the battlefield as Moonmist resolved isn't a Werewolf or a
+    // Wolf: its combat damage is prevented too.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wolf = t.battlefield(P0, "Timber Wolves");
+    let life = t.life(P1);
+    t.attack(
+        &[
+            (shepherd, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (wolf, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    // Gatstaf Howler (3/3) and Timber Wolves (1/1) deal theirs.
+    assert_eq!(t.life(P1), life - 4);
+}
+
+/// Profane Procession with three activations' worth of mana.
+fn procession(t: &mut TestGame) -> ObjectId {
+    let pp = t.battlefield(P0, "Profane Procession // Tomb of the Dusk Rose");
+    t.lands(P0, "Scrubland", 15);
+    t.set_step(P0, Step::PrecombatMain);
+    pp
+}
+
+#[test]
+fn profane_procession_transforms_once_three_cards_are_exiled_with_it() {
+    cr!("701.27a", "607.2a");
+    let mut t = TestGame::new(2);
+    let pp = procession(&mut t);
+    let foes: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P1, "Grizzly Bears")).collect();
+    for (i, f) in foes.iter().enumerate() {
+        t.activate(P0, pp, 0, &[Entity::Object(*f)]).unwrap();
+        t.resolve_all();
+        assert!(t.in_exile("Grizzly Bears"));
+        let back = t.obj_now(pp).face == FaceState::Back;
+        assert_eq!(back, i == 2, "after {} activations", i + 1);
+    }
+    assert_eq!(t.obj_now(pp).chars.name.as_str(), "Tomb of the Dusk Rose");
+}
+
+#[test]
+fn profane_procession_tokens_dont_count() {
+    cr!("111.7", "607.2a");
+    ruling!(
+        "Profane Procession // Tomb of the Dusk Rose",
+        "They won't count towards the number of cards exiled with it."
+    );
+    let mut t = TestGame::new(2);
+    let pp = procession(&mut t);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    let spec = mtg_engine::replacement::TokenCreate {
+        chars: t.g.obj(bears).copiable.clone(),
+        card: t.g.obj(bears).card.clone(),
+        tapped: false,
+        attacking: None,
+        copy_of: Some(bears),
+        copy_exceptions: vec![],
+    };
+    let token = t.g.create_tokens(P1, spec, 1, None)[0];
+    for f in [bears, other, token] {
+        t.activate(P0, pp, 0, &[Entity::Object(f)]).unwrap();
+        t.resolve_all();
+    }
+    // Two cards and a token were exiled with it.
+    assert_eq!(t.obj_now(pp).face, FaceState::Front);
+}
+
+#[test]
+fn profane_procession_later_activations_dont_transform_it_back() {
+    cr!("701.27f");
+    ruling!(
+        "Profane Procession // Tomb of the Dusk Rose",
+        "Further activations waiting to resolve won't cause Tomb of the Dusk Rose to transform back into Profane Procession"
+    );
+    let mut t = TestGame::new(2);
+    let pp = procession(&mut t);
+    let foes: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P1, "Grizzly Bears")).collect();
+    t.activate(P0, pp, 0, &[Entity::Object(foes[0])]).unwrap();
+    t.resolve_all();
+    // Three activations on the stack at once: the second one to resolve exiles the third
+    // card and transforms it; the last one sees four cards but doesn't transform it back.
+    t.lands(P0, "Scrubland", 5);
+    t.activate(P0, pp, 0, &[Entity::Object(foes[1])]).unwrap();
+    t.activate(P0, pp, 0, &[Entity::Object(foes[2])]).unwrap();
+    let extra = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, pp, 0, &[Entity::Object(extra)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(pp).face, FaceState::Back);
+    assert!(!t.on_battlefield(extra));
+}
+
+#[test]
+fn ludevics_test_subject_transforms_with_five_hatchling_counters() {
+    cr!("701.27a", "122.1");
+    let mut t = TestGame::new(2);
+    let subject = t.battlefield(P0, "Ludevic's Test Subject // Ludevic's Abomination");
+    t.g.add_counters(Entity::Object(subject), "hatchling", 3, None);
+    t.lands(P0, "Island", 4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, subject, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(subject, "hatchling"), 4);
+    assert_eq!(t.obj_now(subject).face, FaceState::Front);
+    t.activate(P0, subject, 0, &[]).unwrap();
+    t.resolve_all();
+    // All of them were removed, and it transformed.
+    assert_eq!(t.obj_now(subject).face, FaceState::Back);
+    assert_eq!(t.counters(subject, "hatchling"), 0);
+    assert_eq!(t.pt(subject), (13, 13));
 }

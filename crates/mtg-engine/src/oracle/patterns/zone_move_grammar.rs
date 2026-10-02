@@ -2220,6 +2220,10 @@ fn f_enters_in_addition(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         "it's ",
         "it is ",
         "that creature is ",
+        // "If it's an artifact, creature, or land card, you may put it onto the battlefield
+        // with a manifestation counter on it. That permanent is an enchantment in addition
+        // to its other types." (Arbiter of the Ideal)
+        "that permanent is ",
         "each of them is ",
         "they're ",
         "they are ",
