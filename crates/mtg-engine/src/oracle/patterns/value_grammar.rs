@@ -556,6 +556,12 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     if let Some(r) = t.strip_prefix("with the same name as ") {
         let (sel, rest) = referent(r, b)?;
         let n = rest.len();
+        // "with the same name as another permanent": another than the object itself
+        // (CR 201.2), not than the source.
+        if r.trim_start().starts_with("another ") {
+            let f = crate::kw::basic_effects::same_name_as_another(&sel)?;
+            return Some((f, &t[t.len() - n..]));
+        }
         return Some((Filter::SameNameAs(Box::new(sel)), &t[t.len() - n..]));
     }
     if let Some(r) = t.strip_prefix("on the battlefield") {
@@ -991,6 +997,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     // "cards revealed this way", "creature cards exiled this way".
     if let Some(v) = super::hand_graveyard_grammar::count_phrase(r, b) {
+        return Some(v);
+    }
+    // "Mountains returned this way".
+    if let Some(v) = super::zone_move_grammar::returned_this_way(r, b) {
         return Some(v);
     }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.

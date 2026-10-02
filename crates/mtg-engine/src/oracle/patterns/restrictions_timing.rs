@@ -105,6 +105,15 @@ fn cast_timing(r: &str) -> Option<Condition> {
                 during_combat: false,
             }),
         ]),
+        // "before combat or during combat before blockers are declared": before the
+        // declare blockers step of the turn's first combat (CR 506.8b, 506.8d).
+        "before combat or during combat before blockers are declared" => {
+            Condition::CombatTiming(CombatTiming {
+                point: CombatPoint::BlockersDeclared,
+                after: false,
+                during_combat: false,
+            })
+        }
         _ => return None,
     })
 }

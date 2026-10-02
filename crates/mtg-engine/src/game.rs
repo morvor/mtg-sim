@@ -484,6 +484,14 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Cards milled this turn (CR 701.17), as the objects they became, and cards
+    /// discarded this turn with the player who discarded each ("a card in a graveyard
+    /// that was milled this turn", "cards you cycled or discarded this turn"). Recorded
+    /// by `kw/zone_moves.rs`.
+    #[serde(default)]
+    pub milled: Vec<ObjectId>,
+    #[serde(default)]
+    pub discarded: Vec<(PlayerId, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -720,6 +728,8 @@ pub struct Game {
     pub planechase: crate::planechase::PlanarState,
     /// Records kept by hand-written card abilities (see `cards/`).
     pub cards: crate::cards::CardState,
+    /// Players and objects abilities noted for their linked abilities (CR 607.1).
+    pub linked_notes: crate::linked_notes::LinkedNotes,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -835,6 +845,7 @@ impl Game {
             multiplayer: Default::default(),
             planechase: Default::default(),
             cards: Default::default(),
+            linked_notes: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),

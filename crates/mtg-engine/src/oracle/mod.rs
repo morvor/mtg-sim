@@ -603,6 +603,11 @@ fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
                 })
         })
     };
+    // "Put ~ from exile onto the battlefield", "Return ~ and target land card from your
+    // graveyard to the battlefield" (see `patterns::zone_move_grammar`).
+    if let Some(z) = patterns::zone_move_grammar::self_move_zone(&e) {
+        return z;
+    }
     if moves_self_from(&c, "hand") || c.contains("discard ~") || c.contains("discard this card") {
         FunctionZone::Hand
     } else if moves_self_from(&c, "graveyard") || moves_self_from(&e, "graveyard") {
