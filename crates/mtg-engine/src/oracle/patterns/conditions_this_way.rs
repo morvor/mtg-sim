@@ -512,6 +512,10 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             }
             (v, Some(t.clone()))
         }
+        // "Destroy target creature. If a white creature dies this way, ~ deals damage to
+        // that creature's controller equal to the creature's power": the destroyed
+        // creature as it last existed on the battlefield.
+        (Some(t), "put into a graveyard", false) => (vec![any_matches.clone()], Some(t.clone())),
         _ => (vec![any_matches.clone()], Some(Sel::Var(THIS_WAY))),
     };
     let cond = if conds.len() == 1 {

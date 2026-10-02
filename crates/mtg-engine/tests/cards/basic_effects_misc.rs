@@ -182,6 +182,37 @@ fn kaervek_and_cinder_cloud_damage_the_creatures_controller() {
         t.resolve();
         assert_eq!(t.life(P1), if white { 18 } else { 20 }, "{white}");
     }
+    // The destroyed creature's power as it last existed on the battlefield (with its
+    // counter), not the card's in the graveyard.
+    let mut t = TestGame::new(2);
+    let lions = t.battlefield(P1, "Savannah Lions");
+    t.g.add_counters(Entity::Object(lions), "+1/+1", 2, None);
+    t.lands(P0, "Mountain", 5);
+    let cc = t.hand(P0, "Cinder Cloud");
+    t.cast(P0, cc).target(lions).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn eye_of_singularity_destroys_permanents_with_the_entering_permanents_name() {
+    cr!("201.2", "603.2");
+    assert_supported("Eye of Singularity");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Eye of Singularity");
+    let old = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Hill Giant");
+    let forest = t.battlefield(P1, "Forest");
+    t.lands(P0, "Forest", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(old));
+    assert!(t.on_battlefield(other));
+    assert!(t.on_battlefield(forest));
+    // "All other permanents": the entering one stays.
+    let _ = bears;
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
 
 #[test]

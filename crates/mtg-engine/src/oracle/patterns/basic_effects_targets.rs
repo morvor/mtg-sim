@@ -803,3 +803,67 @@ fn both_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: destroy both creatures", priority: 150, parse: both_creatures } }
+
+/// "Whenever a permanent other than a basic land enters, destroy all other permanents with
+/// that name" (Eye of Singularity): when the ability chooses no name, "with that name"
+/// (read as the chosen name) is the name of the object the trigger is about (CR 201.2),
+/// and "other" in that phrase is other than that object.
+pub(crate) fn that_name_of_trigger_object(body: &mut Body, it: &Sel, eff: &str) -> Option<()> {
+    let lower = eff.to_lowercase();
+    if !lower.contains("with that name")
+        || !matches!(it, Sel::TriggerObject | Sel::TriggerLki)
+        || lower.matches("name").count() != 1
+    {
+        return Some(());
+    }
+    let mut json = serde_json::to_value(&body.effect).ok()?;
+    let chosen = serde_json::to_value(Filter::ChosenName).ok()?;
+    let other = serde_json::to_value(Filter::Other).ok()?;
+    let same = serde_json::to_value(Filter::SameNameAs(Box::new(it.clone()))).ok()?;
+    let not_it = serde_json::to_value(Filter::not(Filter::In(Box::new(it.clone())))).ok()?;
+    fn walk(
+        v: &mut serde_json::Value,
+        chosen: &serde_json::Value,
+        other: &serde_json::Value,
+        same: &serde_json::Value,
+        not_it: &serde_json::Value,
+    ) -> bool {
+        match v {
+            serde_json::Value::Object(m) => {
+                if let Some(serde_json::Value::Array(parts)) = m.get_mut("And") {
+                    if parts.contains(chosen) {
+                        for p in parts.iter_mut() {
+                            if p == chosen {
+                                *p = same.clone();
+                            } else if p == other {
+                                *p = not_it.clone();
+                            }
+                        }
+                        return true;
+                    }
+                }
+                let mut found = false;
+                for x in m.values_mut() {
+                    found |= walk(x, chosen, other, same, not_it);
+                }
+                found
+            }
+            serde_json::Value::Array(a) => {
+                let mut found = false;
+                for x in a.iter_mut() {
+                    found |= walk(x, chosen, other, same, not_it);
+                }
+                found
+            }
+            x if x == chosen => {
+                *x = same.clone();
+                true
+            }
+            _ => false,
+        }
+    }
+    if walk(&mut json, &chosen, &other, &same, &not_it) {
+        body.effect = serde_json::from_value(json).ok()?;
+    }
+    Some(())
+}

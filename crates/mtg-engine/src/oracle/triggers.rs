@@ -147,7 +147,15 @@ fn parse_triggered_at(
     if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
         return None;
     }
+    let trigger_it = it.clone();
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
+    // "Whenever a permanent other than a basic land enters, destroy all other permanents
+    // with that name": with no name chosen, "that name" is the triggering object's.
+    super::patterns::basic_effects_targets::that_name_of_trigger_object(
+        &mut body,
+        &trigger_it,
+        eff,
+    )?;
     // "Whenever you cast your first spell with {X} in its mana cost each turn, put X +1/+1
     // counters on ~": a triggered ability has no X of its own; X is the spell's (CR 107.3e).
     if casts_spell_with_x(&trigger) {
