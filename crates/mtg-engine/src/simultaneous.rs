@@ -14,7 +14,7 @@
 //! * the permanents they sacrifice are sacrificed together (CR 701.21a);
 //! * the cards they discard are discarded once all of them have chosen;
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
-//!   life gain event (CR 120.3f, 702.15e);
+//!   life gain event (CR 120.3f, 608.2f);
 //! * a search: each searches, then the cards found are moved together.
 //!
 //! An instruction that isn't one of those is performed for each player in turn, in APNAP
@@ -34,12 +34,13 @@
 //! choices, which a player then makes for each object in turn.
 //!
 //! Each player's instructions see what their own earlier instructions did ("it", "if they
-//! do", "that many", choices stored for later): every player has their own view of those
-//! results, starting from the state before the "each player" instruction. What is
-//! collected from all of them is shared: a variable an instruction adds to ("the chosen
-//! creatures": each player's choice added to the others'), and what an
-//! [`Effect::Custom`] instruction stores (the compiler collects the players' choices that
-//! way, e.g. who accepted an offer).
+//! do", "that many", an X they defined, choices stored for later): every player has their
+//! own view of those results, starting from the state before the "each player"
+//! instruction. What is collected from all of them is shared: a variable an instruction
+//! adds to ("the chosen creatures": each player's choice added to the others'), a number
+//! an instruction updates from its own value (a running total, or whether a player has
+//! paid yet), and what an [`Effect::Custom`] instruction stores (the compiler collects the
+//! players' choices that way, e.g. who accepted an offer).
 
 use crate::ability::*;
 use crate::eval::Ctx;
@@ -163,9 +164,16 @@ fn is_bookkeeping(e: &Effect) -> bool {
     )
 }
 
-/// An instruction that adds to what's collected from all the players: a custom one, or one
-/// that stores a variable together with what it already holds.
+/// An instruction that adds to what's collected from all the players: a custom one, one
+/// that stores a variable together with what it already holds, or one that stores a
+/// number it also reads — a running total, or a note that something has already happened
+/// ("any player may pay ... If a player does, ...": the effect follows the first payment
+/// only, while the players after it still get the option, CR 118.12).
 fn collects(e: &Effect) -> bool {
+    adds_to_collected(e) || updates_number(e)
+}
+
+fn adds_to_collected(e: &Effect) -> bool {
     fn mentions(sel: &Sel, var: Var) -> bool {
         match sel {
             Sel::Var(v) => *v == var,
@@ -176,13 +184,54 @@ fn collects(e: &Effect) -> bool {
     match e {
         Effect::Custom(_) => true,
         Effect::Store { var, sel } => mentions(sel, *var),
-        Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => collects(effect),
+        Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
         Effect::If {
             then, otherwise, ..
-        } => collects(then) || collects(otherwise),
-        Effect::Seq(v) => v.iter().any(collects),
+        }
+        | Effect::PayOptional {
+            then, otherwise, ..
+        } => adds_to_collected(then) || adds_to_collected(otherwise),
+        Effect::Seq(v) => v.iter().any(adds_to_collected),
         _ => false,
     }
+}
+
+/// Whether `e` stores a number ([`Effect::StoreValue`]) under a variable it also reads.
+fn updates_number(e: &Effect) -> bool {
+    fn stored(e: &Effect, out: &mut Vec<Var>) {
+        match e {
+            Effect::StoreValue { var, .. } => out.push(*var),
+            Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => stored(effect, out),
+            Effect::If {
+                then, otherwise, ..
+            }
+            | Effect::PayOptional {
+                then, otherwise, ..
+            } => {
+                stored(then, out);
+                stored(otherwise, out);
+            }
+            Effect::Seq(v) => v.iter().for_each(|x| stored(x, out)),
+            _ => {}
+        }
+    }
+    // A variable is read as `{"Var": n}` (`Value::Var`, `Sel::Var`, `PlayerRef::Var`);
+    // the variable an instruction stores into is its `var` field.
+    fn reads(j: &serde_json::Value, vars: &[Var]) -> bool {
+        match j {
+            serde_json::Value::Object(m) => m.iter().any(|(k, x)| {
+                (k == "Var"
+                    && x.as_u64()
+                        .is_some_and(|n| vars.iter().any(|v| u64::from(*v) == n)))
+                    || reads(x, vars)
+            }),
+            serde_json::Value::Array(a) => a.iter().any(|x| reads(x, vars)),
+            _ => false,
+        }
+    }
+    let mut vars = Vec::new();
+    stored(e, &mut vars);
+    !vars.is_empty() && serde_json::to_value(e).is_ok_and(|j| reads(&j, &vars))
 }
 
 /// A decision that only records what the player decided ("each opponent may [accept the
@@ -258,6 +307,10 @@ struct Frame {
     prev_happened: bool,
     prev_value: i64,
     prev_affected: Vec<Entity>,
+    /// The value of X this player's instructions defined ("..., then loses life equal to
+    /// the result": each player's own roll).
+    x: i32,
+    x_defined: bool,
 }
 
 struct Frames {
@@ -282,8 +335,10 @@ struct Snapshot {
 
 impl Frames {
     fn new(g: &Game, mut items: Vec<Item>, as_player: Option<&PlayerRef>, ctx: &Ctx) -> Frames {
-        // Players act in APNAP order (CR 101.4, 608.2f); objects in the order given.
-        let order = g.apnap();
+        // Players act in APNAP order (CR 101.4, 608.2f) — with shared team turns, the
+        // active team's players first (CR 805.6), as for other simultaneous choices (see
+        // `Game::apnap_round`); objects in the order given.
+        let order = g.pregame_order_or_apnap();
         items.sort_by_key(|i| match i {
             Item::Player(p) => order.iter().position(|x| x == p).unwrap_or(usize::MAX),
             Item::Object(..) => 0,
@@ -308,6 +363,8 @@ impl Frames {
                     prev_happened: ctx.prev_happened,
                     prev_value: ctx.prev_value,
                     prev_affected: ctx.prev_affected.clone(),
+                    x: ctx.x,
+                    x_defined: ctx.x_defined,
                 }
             })
             .collect();
@@ -371,6 +428,8 @@ impl Frames {
         ctx.prev_happened = f.prev_happened;
         ctx.prev_value = f.prev_value;
         ctx.prev_affected = f.prev_affected.clone();
+        ctx.x = f.x;
+        ctx.x_defined = f.x_defined;
         Snapshot {
             vars: ctx.vars.clone(),
             nums: ctx.nums.clone(),
@@ -384,6 +443,8 @@ impl Frames {
         f.prev_happened = ctx.prev_happened;
         f.prev_value = ctx.prev_value;
         f.prev_affected = ctx.prev_affected.clone();
+        f.x = ctx.x;
+        f.x_defined = ctx.x_defined;
         if shared {
             return;
         }
@@ -747,6 +808,7 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         }
         for e in &ins.pre {
             frames.run(g, i, e, ctx);
+            record_choice(g, e, p, ctx);
         }
         let plan = match &ins.action {
             Some(a) => {
@@ -785,6 +847,19 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         for e in &ins.post {
             frames.run(g, i, e, ctx);
         }
+    }
+}
+
+/// Records the objects a player chose for an instruction ("choose a card in your hand",
+/// stored for the move afterwards): the players choosing after them know the choice
+/// (CR 101.4b), except a card chosen in a hidden zone, which stays face down (CR 101.4a).
+fn record_choice(g: &mut Game, e: &Effect, p: Option<PlayerId>, ctx: &Ctx) {
+    let (Some(p), Effect::Store { var, sel }) = (p, e) else {
+        return;
+    };
+    if has_choice(sel) && chosen_by(g, &[sel], ctx, Some(p)) {
+        let chosen = ctx.var_objects(*var);
+        g.record_apnap_choice(p, chosen);
     }
 }
 

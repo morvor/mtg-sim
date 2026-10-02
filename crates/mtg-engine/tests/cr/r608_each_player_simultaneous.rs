@@ -155,3 +155,91 @@ fn choices_are_made_before_any_player_acts() {
     assert_eq!(t.hand_size(P0), 0);
     assert_eq!(t.hand_size(P1), 0);
 }
+
+#[test]
+fn with_shared_team_turns_the_active_team_chooses_first() {
+    cr!("805.6", "101.4");
+    // Two-Headed Giant (P0 and P1 against P2 and P3), on P1's team's turn: P1 casts
+    // Exhume. Both players of the active team choose before either player of the other
+    // team, then all four creatures enter together.
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig::two_headed_giant(vec![0, 0, 1, 1]),
+    );
+    t.set_step(P1, Step::PrecombatMain);
+    let mut picks = Vec::new();
+    for p in [P0, P1, P2, P3] {
+        let bears = t.graveyard(p, "Grizzly Bears");
+        t.graveyard(p, "Hill Giant");
+        t.answer_choose(p, &[Entity::Object(bears)]);
+        picks.push(bears);
+    }
+    t.lands(P1, "Swamp", 2);
+    let spell = t.hand(P1, "Exhume");
+    let from = t.asked().len();
+    t.cast(P1, spell).go();
+    t.resolve_all();
+    let order = chooses_since(&t, from);
+    assert_eq!(order.len(), 4, "{order:?}");
+    assert!(order[..2].contains(&P0) && order[..2].contains(&P1), "{order:?}");
+    assert!(order[2..].contains(&P2) && order[2..].contains(&P3), "{order:?}");
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 4);
+}
+
+#[test]
+fn each_player_uses_their_own_x_in_their_next_instruction() {
+    cr!("608.2e", "107.3");
+    // "Each player draws a card, then loses X life, where X is the number of cards in
+    // their hand": everyone draws, then everyone loses life — each player as much as their
+    // own X, not the last player's.
+    use crate::r600_common::CB;
+    use mtg_engine::ability::*;
+    let body = Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(Effect::Seq(vec![
+                Effect::Draw {
+                    who: PlayerRef::You,
+                    n: Value::c(1),
+                },
+                Effect::SetX {
+                    value: Value::HandSize(PlayerRef::You),
+                },
+                Effect::LoseLife {
+                    who: PlayerRef::You,
+                    n: Value::X,
+                },
+            ])),
+        }),
+    };
+    let def = CB::new("Shared Burden")
+        .sorcery()
+        .cost("{0}")
+        .spell(Body::effect(body))
+        .build();
+    let mut t = TestGame::new(3);
+    t.hand(P1, "Forest");
+    for _ in 0..3 {
+        t.hand(P2, "Island");
+    }
+    let spell = t.custom(P0, def, Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    let from = t.g.turn_events.len();
+    t.resolve_all();
+    let mut draws = Vec::new();
+    let mut losses = Vec::new();
+    for (i, e) in t.g.turn_events.iter().enumerate().skip(from) {
+        match e {
+            Event::Drew { .. } => draws.push(i),
+            Event::LifeLost { .. } => losses.push(i),
+            _ => {}
+        }
+    }
+    assert_eq!((draws.len(), losses.len()), (3, 3));
+    assert!(draws.iter().max() < losses.iter().min());
+    // Hands after drawing: P0 1 card, P1 2, P2 4.
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 16);
+}

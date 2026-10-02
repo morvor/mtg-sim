@@ -86,9 +86,13 @@ fn exhume_puts_each_players_creature_onto_the_battlefield_at_the_same_time() {
     t.graveyard(P0, "Hill Giant");
     let clone = t.graveyard(P1, "Clone");
     t.graveyard(P1, "Hill Giant");
-    // When P1 chooses, P0 has chosen but nothing has moved yet.
+    // When P1 chooses, P0 has chosen but nothing has moved yet, and P1 knows P0's choice
+    // (a card in a graveyard, public: CR 101.4b).
     let seen = watch(&mut t, P1, is_choose, |g| {
-        g.find_in_zone(Zone::Graveyard(P0), "Grizzly Bears").len()
+        (
+            g.find_in_zone(Zone::Graveyard(P0), "Grizzly Bears").len(),
+            g.known_apnap_choices(PlayerId(1)),
+        )
     });
     t.answer_choose(P0, &[Entity::Object(bears)]);
     t.answer_choose(P1, &[Entity::Object(clone)]);
@@ -98,7 +102,10 @@ fn exhume_puts_each_players_creature_onto_the_battlefield_at_the_same_time() {
     let from = t.asked().len();
     t.cast(P0, spell).go();
     t.resolve_all();
-    assert_eq!(seen.lock().unwrap().first(), Some(&1));
+    assert_eq!(
+        seen.lock().unwrap().first(),
+        Some(&(1, vec![(P0, Some(vec![bears]))]))
+    );
     let b = t.named_on_battlefield("Grizzly Bears");
     assert_eq!(b.len(), 1, "only P0's Grizzly Bears");
     assert_eq!(t.obj_now(b[0]).controller, P0);
@@ -892,4 +899,204 @@ fn strongarm_tactics_players_who_didnt_discard_a_creature_card_lose_life() {
     assert_eq!(t.life(P0), 16);
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P2), 16);
+}
+
+#[test]
+fn any_player_may_pay_the_effect_happens_for_the_first_payment_only() {
+    cr!("118.12", "101.4");
+    ruling!(
+        "Dash Hopes",
+        "As soon as any player performs the action, the spell is countered, but the remaining players still get the option."
+    );
+    // "Any player may pay 2 life. If a player does, you draw a card." P0 declines, then P1
+    // and P2 both pay: the effect happened as soon as P1 paid, and P2 still got the
+    // option, but P0 draws one card, not two.
+    let def = custom_card(
+        "Toll of Plenty",
+        "Sorcery",
+        "{1}",
+        None,
+        "Any player may pay 2 life. If a player does, you draw a card.",
+    );
+    let mut t = TestGame::new(3);
+    t.answer_yes(P0, false)
+        .answer_yes(P1, true)
+        .answer_yes(P2, true);
+    t.lands(P0, "Forest", 1);
+    let spell = t.custom(P0, def, Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.resolve_all();
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| is_yes_no(d))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P0, P1, P2]);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Dash Hopes in a three-player game: P1 pays 5 life, and P2 still gets the option (and
+    // pays too); Dash Hopes is countered, so the Bolt resolves.
+    supported("Dash Hopes");
+    let mut t = TestGame::new(3);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.lands(P0, "Swamp", 2);
+    let hopes = t.hand(P0, "Dash Hopes");
+    t.cast(P0, hopes).target(Entity::Object(bolt)).go();
+    t.settle();
+    t.answer_yes(P0, false)
+        .answer_yes(P1, true)
+        .answer_yes(P2, true);
+    let from = t.asked().len();
+    t.resolve_all();
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| is_yes_no(d))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P0, P1, P2]);
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.life(P2), 15);
+    assert!(t.in_graveyard(P0, "Dash Hopes"));
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn show_and_tell_players_choose_in_turn_order_face_down_then_the_cards_enter_together() {
+    cr!("101.4", "101.4a", "603.2c");
+    ruling!(
+        "Show and Tell",
+        "The current player chooses first, then each other player chooses in turn order."
+    );
+    supported("Show and Tell");
+    let mut t = TestGame::new(3);
+    t.custom(
+        P0,
+        custom_card(
+            "Arrival Bell",
+            "Enchantment",
+            "{1}",
+            None,
+            "Whenever one or more creatures enter, you gain 1 life.",
+        ),
+        Zone::Battlefield,
+    );
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Elvish Mystic");
+    let giant = t.hand(P1, "Hill Giant");
+    t.hand(P1, "Elvish Mystic");
+    let mystic = t.hand(P2, "Elvish Mystic");
+    t.hand(P2, "Grizzly Bears");
+    t.answer_yes(P0, true)
+        .answer_yes(P1, true)
+        .answer_yes(P2, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P1, &[Entity::Object(giant)]);
+    t.answer_choose(P2, &[Entity::Object(mystic)]);
+    // When P2 chooses, P0's and P1's cards are still in their hands, and P2 knows only that
+    // they chose (the cards stay face down, CR 101.4a).
+    let seen = watch(&mut t, P2, is_choose, |g| {
+        (
+            g.player(PlayerId(0)).hand.len() + g.player(PlayerId(1)).hand.len(),
+            g.known_apnap_choices(PlayerId(2))
+                .iter()
+                .map(|(p, c)| (*p, c.is_some()))
+                .collect::<Vec<_>>(),
+        )
+    });
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Show and Tell");
+    t.cast(P0, spell).go();
+    let from = t.asked().len();
+    t.resolve_all();
+    let order: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| is_choose(d))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P0, P1, P2]);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![(4, vec![(P0, false), (P1, false)])]
+    );
+    for (card, p) in [(bears, P0), (giant, P1), (mystic, P2)] {
+        let c = t.g.current(card);
+        assert!(t.on_battlefield(c));
+        assert_eq!(t.obj_now(c).controller, p);
+    }
+    // The three creatures entered at the same time: one event.
+    assert_eq!(t.life(P0), 21);
+}
+
+#[test]
+fn hunted_wumpus_the_other_players_creatures_enter_together() {
+    cr!("101.4", "608.2f");
+    supported("Hunted Wumpus");
+    let mut t = TestGame::new(3);
+    let clone = t.hand(P1, "Clone");
+    let bears = t.hand(P2, "Grizzly Bears");
+    t.answer_yes(P1, true).answer_yes(P2, true);
+    t.answer_choose(P1, &[Entity::Object(clone)]);
+    t.answer_choose(P2, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    let wumpus = t.enter(P0, "Hunted Wumpus");
+    t.settle();
+    t.answer_choose(P1, &[Entity::Object(wumpus)]);
+    t.resolve_all();
+    // Only the other players were offered the option. (The Clone copying Hunted Wumpus
+    // then offers it to P1's opponents in turn.)
+    let offers: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { source, .. } if *source == Some(wumpus)))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(offers, vec![P1, P2]);
+    assert_eq!(t.obj_now(t.g.current(bears)).controller, P2);
+    // P1's Clone could copy only Hunted Wumpus: P2's Grizzly Bears entered with it.
+    assert_eq!(offered_permanents(&t, P1, from), vec![vec![wumpus]]);
+    assert_eq!(t.named_on_battlefield("Hunted Wumpus").len(), 2);
+}
+
+#[test]
+fn winds_of_change_everyone_shuffles_then_each_draws_as_many_as_they_shuffled() {
+    cr!("608.2e");
+    ruling!(
+        "Winds of Change",
+        "Each player draws a number of cards equal to the number of cards they shuffled into their own library."
+    );
+    supported("Winds of Change");
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Forest");
+        t.library_top(P1, "Island");
+    }
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Hill Giant");
+    for _ in 0..4 {
+        t.hand(P1, "Shock");
+    }
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Winds of Change");
+    t.cast(P0, spell).go();
+    let from = t.g.turn_events.len();
+    t.resolve_all();
+    let mut shuffles = Vec::new();
+    let mut draws = Vec::new();
+    for (i, e) in t.g.turn_events.iter().enumerate().skip(from) {
+        match e {
+            Event::Shuffled { .. } => shuffles.push(i),
+            Event::Drew { .. } => draws.push(i),
+            _ => {}
+        }
+    }
+    assert_eq!(shuffles.len(), 2);
+    assert_eq!(draws.len(), 6);
+    assert!(shuffles.iter().max() < draws.iter().min());
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.hand_size(P1), 4);
 }
