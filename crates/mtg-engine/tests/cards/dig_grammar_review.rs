@@ -104,3 +104,70 @@ fn vivien_champion_of_the_wilds_may_cast_the_face_down_card_only_if_its_a_creatu
         assert_eq!(r.is_ok(), castable, "{pick}: {r:?}");
     }
 }
+
+#[test]
+fn unexpected_results_returns_itself_only_with_the_land_put_onto_the_battlefield() {
+    cr!("701.20a", "608.2c");
+    assert_supported("Unexpected Results");
+    for put in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 2);
+        t.lands(P0, "Island", 2);
+        // A one-card library: the shuffle can't move it.
+        library(&mut t, P0, &["Plains"]);
+        let s = t.hand(P0, "Unexpected Results");
+        t.answer_yes(P0, put);
+        t.cast(P0, s).go();
+        t.resolve();
+        assert_eq!(t.named_on_battlefield("Plains").len(), usize::from(put), "{put}");
+        assert_eq!(t.in_hand(P0, "Unexpected Results"), put, "{put}: {}", t.dump_log());
+        assert_eq!(t.in_graveyard(P0, "Unexpected Results"), !put, "{put}");
+    }
+    // A nonland card may be cast; the spell then goes to the graveyard.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 2);
+    library(&mut t, P0, &["Grizzly Bears"]);
+    let s = t.hand(P0, "Unexpected Results");
+    t.answer_yes(P0, true);
+    t.cast(P0, s).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    assert!(t.in_graveyard(P0, "Unexpected Results"));
+}
+
+#[test]
+fn murmurs_from_beyond_the_opponent_picks_the_card_for_the_graveyard() {
+    cr!("701.20a", "608.2c");
+    assert_supported("Murmurs from Beyond");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    // Top first: Shock, Forest, Grizzly Bears, Plains.
+    let ids = library(&mut t, P0, &["Plains", "Grizzly Bears", "Forest", "Shock"]);
+    t.answer_choose(P1, &[Entity::Object(ids[2])]);
+    let s = t.hand(P0, "Murmurs from Beyond");
+    t.cast(P0, s).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Forest"), "{}", t.dump_log());
+    assert!(t.in_hand(P0, "Shock") && t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t.library_size(P0), 1);
+}
+
+#[test]
+fn erratic_mutation_uses_the_revealed_cards_mana_value_and_bottoms_them() {
+    cr!("701.20a", "608.2c");
+    assert_supported("Erratic Mutation");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Top first: Forest, Llanowar Elves (mana value 1), Shock.
+    let ids = library(&mut t, P0, &["Shock", "Llanowar Elves", "Forest"]);
+    let s = t.hand(P0, "Erratic Mutation");
+    t.cast(P0, s).target(giant).go();
+    t.resolve();
+    assert_eq!(t.pt(giant), (4, 2), "{}", t.dump_log());
+    // Shock wasn't revealed: it's on top, the revealed cards under it.
+    let lib = t.g.player(P0).library.clone();
+    assert_eq!(lib.len(), 3);
+    assert_eq!(*lib.last().unwrap(), ids[0]);
+}

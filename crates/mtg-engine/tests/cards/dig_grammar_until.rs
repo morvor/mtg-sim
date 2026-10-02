@@ -351,7 +351,7 @@ fn expand_the_sphere_proliferates_for_each_land_short_of_two() {
 
 #[test]
 fn stillness_in_motion_restocks_an_empty_library() {
-    cr!("401.2", "701.17a");
+    cr!("701.17a", "608.2c");
     assert_supported("Stillness in Motion");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Stillness in Motion");
