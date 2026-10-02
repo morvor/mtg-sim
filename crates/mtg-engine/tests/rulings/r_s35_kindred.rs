@@ -39,7 +39,7 @@ fn kindred_counts_as_a_card_type_among_cards_in_a_graveyard() {
 
 #[test]
 fn a_kindred_card_has_creature_types_but_isnt_a_creature() {
-    cr!("308.1", "308.2", "205.3m");
+    cr!("308.2", "205.3m");
     ruling!(
         "Morcant's Eyes",
         "Kindred is a card type that allows noncreature cards to have creature types. For example, Morcant's Eyes is an Elf (although not a creature) while on the battlefield and an Elf card (although not a creature card) in zones other than the battlefield."

@@ -31,6 +31,18 @@ pub fn base_filter(power: bool, cmp: Cmp, n: i32) -> Filter {
     Filter::Custom(SmolStr::new(format!("{PREFIX}{stat}{op}{n}")))
 }
 
+/// The base power and toughness of `id` (CR 208.4b). The layer system records them as it
+/// recomputes an object; an object it doesn't recompute (a card in a library without a
+/// characteristic-defining ability) has no effects applied to it, so its base power and
+/// toughness are its printed ones.
+pub fn base_pt(g: &Game, id: ObjectId) -> (Option<i32>, Option<i32>) {
+    let o = g.obj(id);
+    match o.base_pt {
+        (None, None) => (o.chars.power, o.chars.toughness),
+        pt => pt,
+    }
+}
+
 pub struct BasePt;
 
 impl KeywordRules for BasePt {
@@ -54,7 +66,7 @@ impl KeywordRules for BasePt {
             (Cmp::Eq, r.strip_prefix('=')?)
         };
         let n: i64 = n.parse().ok()?;
-        let (p, t) = g.obj(id).base_pt;
+        let (p, t) = base_pt(g, id);
         let v = if power { p } else { t };
         Some(v.is_some_and(|v| cmp.eval(v as i64, n)))
     }

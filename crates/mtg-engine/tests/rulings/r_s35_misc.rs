@@ -160,7 +160,7 @@ fn there_is_at_most_one_monarch() {
 
 #[test]
 fn an_energy_payment_is_made_once_as_the_ability_resolves() {
-    cr!("107.14", "118.12a", "603.12");
+    cr!("107.14", "603.12", "608.2d");
     ruling!(
         "Saheeli, Radiant Creator",
         "Some spells and abilities say that you “may pay” a certain amount of {E}. You can’t pay that amount multiple times to multiply the effect. You simply choose whether or not to pay that amount of {E} as the ability resolves."
@@ -200,11 +200,11 @@ fn an_energy_payment_is_made_once_as_the_ability_resolves() {
         .collect();
     assert_eq!(copies.len(), 1);
     assert_eq!(t.pt(copies[0]), (5, 5));
-    assert!(t
-        .obj_now(copies[0])
-        .chars
-        .card_types
-        .contains(mtg_engine::types::CardType::Artifact));
+    let copy = &t.obj_now(copies[0]).chars;
+    assert!(copy.card_types.contains(mtg_engine::types::CardType::Artifact));
+    assert!(copy.card_types.contains(mtg_engine::types::CardType::Creature));
+    assert!(copy.has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert!(!t.obj_now(bears).chars.has_keyword(mtg_engine::keywords::KeywordKind::Haste));
     // It's sacrificed at the beginning of the next end step.
     t.advance_to(P0, Step::End);
     t.resolve_all();
@@ -318,7 +318,7 @@ fn propaganda_taxes_a_creature_once_in_two_headed_giant() {
 
 #[test]
 fn you_may_call_yourself_a_foe() {
-    cr!("608.2c");
+    cr!("608.2d");
     ruling!(
         "Pir's Whim",
         "You make this choice for yourself as well as each other player. In some rare cases, you may wish to call yourself (or your teammate in a Two-Headed Giant game) a foe. You can do that."

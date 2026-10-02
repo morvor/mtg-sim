@@ -120,17 +120,27 @@ fn sword_of_the_squeak_counts_base_power_or_toughness_one() {
     cr!("208.4b");
     supported("Sword of the Squeak");
     // "Equipped creature gets +1/+1 for each creature you control with base power or
-    // toughness 1." Llanowar Elves (1/1) and Aquamoeba (1/3) count, even pumped; Hill
-    // Giant (3/3) doesn't, nor does a 0/0 Nighthowler that's 1/1.
+    // toughness 1." Llanowar Elves (1/1, made 3/3 by counters) and Aquamoeba (1/3) count;
+    // Hill Giant (3/3) doesn't, nor does a 0/0 Nighthowler that's 2/2.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
     let elves = t.battlefield(P0, "Llanowar Elves");
     t.battlefield(P0, "Aquamoeba");
-    t.battlefield(P0, "Nighthowler");
+    let howler = t.battlefield(P0, "Nighthowler");
     t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Hill Giant");
     crate::r_s13_common::add(&mut t, elves, "+1/+1", 2);
     crate::r_s06_common::attach_new(&mut t, P0, "Sword of the Squeak", giant);
     t.g.recompute();
+    assert_eq!(t.pt(elves), (3, 3));
+    assert_eq!(t.pt(howler), (2, 2));
+    assert_eq!(t.pt(giant), (5, 5));
+    // A creature whose power becomes 1 without its base power changing doesn't count:
+    // Grizzly Bears with a -1/-1 counter.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s13_common::add(&mut t, bears, "-1/-1", 1);
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (1, 1));
     assert_eq!(t.pt(giant), (5, 5));
 }
 
@@ -171,4 +181,88 @@ fn a_bonus_from_a_creatures_own_ability_doesnt_change_its_base_power_and_toughne
     t.resolve_all();
     assert_eq!(t.pt(bears), (5, 5));
     assert_eq!(t.pt(howler), (2, 2));
+}
+
+#[test]
+fn bess_counts_creatures_with_base_power_and_toughness_one_one() {
+    cr!("208.4b", "603.2c", "603.6a");
+    supported("Bess, Soul Nourisher");
+    supported("Raise the Alarm");
+    supported("Walking Ballista");
+    // Bess (1/1): "Whenever one or more other creatures you control with base power and
+    // toughness 1/1 enter, put a +1/+1 counter on Bess. Whenever Bess attacks, each other
+    // creature you control with base power and toughness 1/1 gets +X/+X until end of
+    // turn, where X is the number of +1/+1 counters on Bess."
+    let mut t = TestGame::new(2);
+    let bess = t.battlefield(P0, "Bess, Soul Nourisher");
+    t.lands(P0, "Plains", 4);
+    // Two 1/1 Soldiers entering at once: one trigger, one counter.
+    let alarm = t.hand(P0, "Raise the Alarm");
+    t.cast(P0, alarm).go();
+    t.resolve_all();
+    let soldiers = crate::r_s05_common::tokens_with_subtype(&t, P0, "Soldier");
+    assert_eq!(soldiers.len(), 2);
+    assert_eq!(t.counters(bess, "+1/+1"), 1);
+    // Walking Ballista with X = 1 is a 1/1, but its base power and toughness are 0/0;
+    // Grizzly Bears are 2/2: neither triggers Bess.
+    let ballista = t.hand(P0, "Walking Ballista");
+    t.cast(P0, ballista).x(1).go();
+    t.resolve_all();
+    let ballista = t.named_on_battlefield("Walking Ballista")[0];
+    assert_eq!(t.pt(ballista), (1, 1));
+    let bears = crate::r_s05_common::enter(&mut t, P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.counters(bess, "+1/+1"), 1);
+    // Llanowar Elves (1/1) does.
+    let elves = crate::r_s05_common::enter(&mut t, P0, "Llanowar Elves");
+    t.resolve_all();
+    assert_eq!(t.counters(bess, "+1/+1"), 2);
+    // A +1/+1 counter doesn't change the Elves' base power and toughness.
+    crate::r_s13_common::add(&mut t, elves, "+1/+1", 1);
+    t.g.recompute();
+    assert_eq!(t.pt(elves), (2, 2));
+    // Bess attacks: X is 2. The Soldiers and the Elves get +2/+2; the Ballista and the
+    // Bears don't, and neither does Bess herself.
+    attack_with(&mut t, &[(bess, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(t.pt(soldiers[0]), (3, 3));
+    assert_eq!(t.pt(soldiers[1]), (3, 3));
+    assert_eq!(t.pt(elves), (4, 4));
+    assert_eq!(t.pt(ballista), (1, 1));
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(bess), (3, 3));
+}
+
+#[test]
+fn a_card_in_a_library_has_its_printed_base_power_and_toughness() {
+    cr!("208.4b", "701.23a");
+    // "Search your library for a creature card with base power or toughness 1, reveal it,
+    // put it into your hand, then shuffle." In the library, no effects apply: the cards'
+    // base power and toughness are the printed ones. Llanowar Elves (1/1) and Aquamoeba
+    // (1/3) match; Hill Giant (3/3) doesn't.
+    let tutor = crate::r_s01_common::custom_card(
+        "Squeaky Tutor",
+        "Sorcery",
+        "{G}",
+        None,
+        "Search your library for a creature card with base power or toughness 1, reveal it, put it into your hand, then shuffle.",
+    );
+    let mut t = TestGame::new(2);
+    let elves = t.library_top(P0, "Llanowar Elves");
+    let giant = t.library_top(P0, "Hill Giant");
+    let aquamoeba = t.library_top(P0, "Aquamoeba");
+    t.lands(P0, "Forest", 1);
+    let spell = t.custom(P0, tutor, mtg_engine::object::Zone::Hand(P0));
+    t.answer_choose(P0, &[Entity::Object(aquamoeba)]);
+    let from = t.asked().len();
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let offered: Vec<Entity> = crate::r_s03_common::choice_candidates(&t, from, "")
+        .into_iter()
+        .flatten()
+        .collect();
+    assert!(offered.contains(&Entity::Object(elves)), "{offered:?}");
+    assert!(offered.contains(&Entity::Object(aquamoeba)), "{offered:?}");
+    assert!(!offered.contains(&Entity::Object(giant)), "{offered:?}");
+    assert!(t.in_hand(P0, "Aquamoeba"));
 }
