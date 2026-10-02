@@ -1,6 +1,6 @@
 //! Rulings batch P116 — power-based effects: values of X locked in as an ability or spell
 //! resolves (CR 608.2h), affected sets of "attacking creatures get ..." fixed at
-//! resolution (CR 611.2c), doubling power and toughness (CR 701.11), intervening "if"
+//! resolution (CR 611.2c), doubling power and toughness (CR 701.10), intervening "if"
 //! clauses about power (CR 603.4), and "leaves-the-battlefield" looks at counters
 //! (CR 603.10a).
 
@@ -20,7 +20,7 @@ fn giant_growth(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn unnatural_growths_double_one_after_the_other() {
-    cr!("701.11a", "701.11b", "613.4c");
+    cr!("701.10a", "701.10b", "613.4c");
     ruling!(
         "Unnatural Growth",
         "If you control more than one Unnatural Growth, each one applies independently. For example, if you control two copies of Unnatural Growth, a 2/2 Bear Cub becomes a 4/4 creature when the first ability resolves and then becomes an 8/8 creature when the second one resolves."
@@ -113,7 +113,7 @@ fn nantuko_mentor_x_is_locked_in_on_resolution() {
 
 #[test]
 fn duergar_mine_captain_affects_only_creatures_attacking_as_it_resolves() {
-    cr!("611.2c", "506.4");
+    cr!("611.2c");
     ruling!(
         "Duergar Mine-Captain",
         "This ability affects only creatures that are attacking at the time it resolves. It won’t affect creatures that attack later in the turn."
@@ -181,7 +181,7 @@ fn duergar_mine_captain_affects_only_creatures_attacking_as_it_resolves() {
 
 #[test]
 fn duelcraft_trainer_rechecks_coven_on_resolution() {
-    cr!("603.4", "702.1");
+    cr!("603.4");
     ruling!(
         "Duelcraft Trainer",
         "Duelcraft Trainer's triggered ability checks to see if you have three or more creatures with different powers both when it triggers and as it tries to resolve."
@@ -312,7 +312,7 @@ fn parish_blade_trainee_gives_minus_counters_too() {
 
 #[test]
 fn evolutionary_leap_without_a_creature_card_puts_everything_back() {
-    cr!("701.20a", "401.4");
+    cr!("701.20a");
     ruling!(
         "Evolutionary Leap",
         "If you don't reveal a creature card, you'll reveal all the cards from your library and then put them back in your library in a random order."
@@ -436,6 +436,14 @@ fn hulkling_compares_power_to_power_and_toughness_to_toughness() {
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(t.pt(h), (3, 4));
+    // Greater toughness only: Horned Turtle (1/4) against a 2/3.
+    let mut t = TestGame::new(2);
+    let h = t.battlefield(P0, "Hulkling, Burgeoning Bruiser");
+    t.enter(P0, "Horned Turtle");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(h), (3, 4));
 }
 
 #[test]
@@ -478,7 +486,7 @@ fn primal_empathy_a_shared_greatest_power_draws() {
 
 #[test]
 fn grunn_attacks_alone_only_if_declared_as_the_only_attacker() {
-    cr!("506.5", "701.11b");
+    cr!("506.5", "701.10b");
     ruling!(
         "Grunn, the Lonely King",
         "A creature attacks alone if it's the only creature declared as an attacker during the declare attackers step"

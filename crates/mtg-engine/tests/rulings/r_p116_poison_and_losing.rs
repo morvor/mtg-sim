@@ -1,6 +1,6 @@
 //! Rulings batch P116 — poison counters (CR 704.5c, 122.1f), "attacks and isn't blocked"
 //! triggers (CR 509.1h, 603.2), blocking restrictions checked only as blockers are
-//! declared (CR 509.1b, 506.4), paying life (CR 119.4), and "You can't lose the game and
+//! declared (CR 509.1b, 506.4a), paying life (CR 119.4), and "You can't lose the game and
 //! your opponents can't win the game" (CR 104.3, 104.2b, 101.2, 810.8).
 
 use crate::r_p116_common::*;
@@ -132,7 +132,7 @@ fn swamp_mosquito_triggers_right_after_blockers_are_declared() {
 
 #[test]
 fn paladin_of_predation_stays_blocked_when_the_blockers_power_drops() {
-    cr!("509.1b", "506.4", "509.1h");
+    cr!("509.1b", "506.4a", "509.1h");
     ruling!(
         "Paladin of Predation",
         "Once it has become blocked, reducing the power of a creature blocking Paladin of Predation to less than 2 won't cause it to become unblocked."

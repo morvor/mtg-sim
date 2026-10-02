@@ -33,7 +33,7 @@ fn ability(t: &TestGame, b: ObjectId, text: &str) -> usize {
 
 #[test]
 fn bolas_minus_three_illegal_target_no_draw_indestructible_draws() {
-    cr!("608.2b", "702.12b", "606.3");
+    cr!("608.2b", "702.12b");
     ruling!(
         "Nicol Bolas, the Deceiver",
         "If the target of Nicol Bolas's second ability becomes illegal, the ability doesn't resolve and you won't draw a card. If that target is legal but can't be destroyed, most likely because it has indestructible, you still draw a card."
