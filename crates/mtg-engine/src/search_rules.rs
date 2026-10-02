@@ -359,14 +359,9 @@ fn choose(
         } else {
             forced.len()
         };
-        let decision = crate::decision::Decision::ChooseEntities {
-            source: ctx.source,
-            prompt: "Search: choose cards".into(),
-            candidates: pc.iter().map(|c| Entity::Object(*c)).collect(),
-            min: min as u32,
-            max: n as u32,
-        };
-        let ans = g.ask(p, decision);
+        // The forced cards are found without being offered; the searcher chooses among
+        // the rest (if any).
+        let optional: Vec<ObjectId> = pc.iter().copied().filter(|o| !forced.contains(o)).collect();
         let valid = |g: &Game, v: &[ObjectId]| {
             let mut seen: Vec<ObjectId> = Vec::new();
             v.len() >= min
@@ -378,12 +373,24 @@ fn choose(
                     ok
                 })
         };
-        let picked: Option<Vec<ObjectId>> = match ans {
-            crate::decision::Answer::Entities(v) => {
-                let objs: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();
-                (objs.len() == v.len() && valid(g, &objs)).then_some(objs)
+        let picked: Option<Vec<ObjectId>> = if optional.is_empty() || n <= forced.len() {
+            Some(forced.clone())
+        } else {
+            let decision = crate::decision::Decision::ChooseEntities {
+                source: ctx.source,
+                prompt: "Search: choose cards".into(),
+                candidates: optional.iter().map(|c| Entity::Object(*c)).collect(),
+                min: min.saturating_sub(forced.len()) as u32,
+                max: (n - forced.len()) as u32,
+            };
+            match g.ask(p, decision) {
+                crate::decision::Answer::Entities(v) => {
+                    let mut objs: Vec<ObjectId> = forced.clone();
+                    objs.extend(v.iter().filter_map(|e| e.object()));
+                    (objs.len() == v.len() + forced.len() && valid(g, &objs)).then_some(objs)
+                }
+                _ => None,
             }
-            _ => None,
         };
         let picked = picked.unwrap_or_else(|| {
             // Default (or invalid) answers: the forced cards, then (automated agents

@@ -429,8 +429,9 @@ fn all_cards_with_that_name_in_the_graveyard_are_found() {
     let in_library = t.library_top(P1, "Grizzly Bears");
     let spell = t.hand(P0, "Cranial Extraction");
     t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
-    // The one in the library may be left (a hidden zone, CR 701.23b).
-    t.answer_choose(P0, &[Entity::Object(in_yard)]);
+    // The one in the library may be left (a hidden zone, CR 701.23b); the one in the
+    // graveyard is found without being offered.
+    t.answer_choose(P0, &[]);
     t.cast(P0, spell).target(P1).go();
     t.resolve_all();
     assert_eq!(t.zone(in_library), Zone::Library(P1));
@@ -438,18 +439,18 @@ fn all_cards_with_that_name_in_the_graveyard_are_found() {
     assert!(t.in_exile("Grizzly Bears"));
     assert_eq!(shuffles(&t, P1), 1);
 
-    // An answer leaving the one in the graveyard isn't valid.
-    let mut t = TestGame::new(2);
-    t.lands(P0, "Swamp", 4);
-    let in_yard = t.graveyard(P1, "Grizzly Bears");
-    t.library_top(P1, "Grizzly Bears");
-    let spell = t.hand(P0, "Cranial Extraction");
-    t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
-    t.answer_choose(P0, &[]);
-    t.cast(P0, spell).target(P1).go();
-    t.resolve_all();
-    assert_ne!(t.zone(in_yard), Zone::Graveyard(P1));
-    assert!(!t.in_graveyard(P1, "Grizzly Bears"));
+    let offered: Vec<Entity> = t
+        .asked()
+        .iter()
+        .flat_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+                candidates.clone()
+            }
+            _ => vec![],
+        })
+        .collect();
+    assert!(offered.contains(&Entity::Object(in_library)));
+    assert!(!offered.contains(&Entity::Object(in_yard)));
 }
 
 #[test]
