@@ -155,7 +155,9 @@ fn the_tarrasque_must_fight_if_there_is_a_legal_target() {
         "Fighting is not optional. If there is at least one legal target for The Tarrasque's last ability, it must fight."
     );
     has_ability("The Tarrasque", "it fights target creature defending player controls");
-    only_unsupported("The Tarrasque", "haste and ward {10} as long as it was cast");
+    // (Its "has haste and ward {10} as long as it was cast" compiles too: see
+    // `tests/cards/grant_conditions.rs`.)
+    assert!(card("The Tarrasque").unsupported_text().is_empty());
     // "Whenever The Tarrasque attacks, it fights target creature defending player
     // controls." P0 tries to choose no target: one is chosen anyway.
     let mut t = TestGame::new(2);
