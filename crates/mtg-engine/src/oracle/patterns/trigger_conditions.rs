@@ -36,6 +36,9 @@ fn parse_condition(c: &str) -> Option<Condition> {
         "you attacked this turn" | "you attacked with a creature this turn" => {
             custom("you_attacked_this_turn")
         }
+        "you didn't attack this turn" | "you didn't attack with a creature this turn" => {
+            Condition::Not(Box::new(custom("you_attacked_this_turn")))
+        }
         "a permanent left the battlefield under your control this turn"
         | "a permanent you controlled left the battlefield this turn" => {
             custom("permanent_you_controlled_left_this_turn")
@@ -137,6 +140,7 @@ mod tests {
     fn conditions_parse() {
         for c in [
             "you attacked this turn",
+            "you didn't attack with a creature this turn",
             "a creature died this turn",
             "no spells were cast last turn",
             "a player cast two or more spells last turn",
