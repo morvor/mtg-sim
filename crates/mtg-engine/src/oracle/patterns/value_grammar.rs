@@ -459,9 +459,21 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let n = rest.len();
         return Some((Filter::AttachedToAnyOf(Box::new(sel)), &t[t.len() - n..]));
     }
-    // "exiled with ~" (CR 607.2a: the cards its linked ability exiled).
+    // "exiled with ~" (CR 607.2a: the cards its linked ability exiled); on a card with
+    // delve, the cards exiled to pay for it (CR 702.66a).
     for p in ["exiled with ~", "exiled with it"] {
         if let Some(r) = t.strip_prefix(p) {
+            if b.ctx.keywords.iter().any(|k| k.eq_ignore_ascii_case("delve")) {
+                return word_end(r).then(|| {
+                    (
+                        Filter::and(vec![
+                            Filter::InZone(ZoneKind::Exile),
+                            Filter::Custom(crate::kw::delve::EXILED_WITH_IT.into()),
+                        ]),
+                        r,
+                    )
+                });
+            }
             if word_end(r) && (p.ends_with('~') || matches!(b.it, Sel::This)) {
                 return Some((
                     Filter::and(vec![
