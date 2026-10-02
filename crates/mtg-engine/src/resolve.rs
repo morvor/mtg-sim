@@ -980,11 +980,20 @@ impl Game {
                 new_targets,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
+                let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
                     for _ in 0..n {
-                        crate::copy::copy_spell(self, o, ctx.controller, *new_targets);
+                        copies.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
                     }
                 }
+                // CR 405.3: the copies are put on the stack at once, in the order
+                // their controller chooses.
+                crate::copy::order_copies(self, ctx.controller, &copies);
             }
             Effect::OfferSpecialAction {
                 def,
