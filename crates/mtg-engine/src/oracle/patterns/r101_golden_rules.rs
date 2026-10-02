@@ -12,13 +12,15 @@ inventory::submit! { EffectPattern { name: "additional land this turn", priority
 inventory::submit! { EffectPattern { name: "player can't play lands this turn", priority: 100, parse: cant_play_lands } }
 inventory::submit! { EffectPattern { name: "choose one of each, then sacrifice the rest", priority: 100, parse: keep_one_of_each } }
 
-/// "you may play an additional land this turn" / "you may play N additional lands this
-/// turn" (the sentence parser strips the "you may").
+/// "you may play an additional land this turn" / "you may play [up to] N additional lands
+/// this turn" (the sentence parser strips the "you may").
 fn additional_land(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l
         .strip_prefix("you may play ")
         .or_else(|| l.strip_prefix("play "))?;
+    // "Up to two additional lands" (older wording): playing them is optional anyway.
+    let r = r.strip_prefix("up to ").unwrap_or(r);
     let (n, r) = if let Some(r) = r.strip_prefix("an additional land") {
         (1, r)
     } else {

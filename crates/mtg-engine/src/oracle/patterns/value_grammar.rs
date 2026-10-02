@@ -989,6 +989,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);
     }
+    // "cards revealed this way", "creature cards exiled this way".
+    if let Some(v) = super::hand_graveyard_grammar::count_phrase(r, b) {
+        return Some(v);
+    }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.
     for p in [
         "times ~ was kicked",
@@ -1007,6 +1011,20 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 return Some((Value::TimesKicked, rest.to_string()));
             }
             return None;
+        }
+    }
+    // "the number of cards looked at while scrying this way" in a "whenever you scry"
+    // trigger: how many cards the player looked at (CR 701.22a, 701.22d).
+    if b.in_trigger {
+        for p in [
+            "cards looked at while scrying this way",
+            "card looked at while scrying this way",
+        ] {
+            if let Some(rest) = r.strip_prefix(p) {
+                if word_end(rest) {
+                    return Some((Value::EventAmount, rest.to_string()));
+                }
+            }
         }
     }
     // "for each 1 life you lost" in a "whenever you lose life" trigger: the amount of

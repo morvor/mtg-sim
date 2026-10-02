@@ -115,6 +115,9 @@ fn keep_total_power(g: &mut Game, ctx: &mut Ctx, max: i32) {
         );
         vec![]
     });
+    // What makes them sacrifice (CR 701.21; see `rule_statics::sacrifice_causes`).
+    let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
+    sacrifice.retain(|(o, _)| !g.sacrifice_forbidden(*o, cause.as_ref()));
     let res = g.sacrifice_simultaneously(&sacrifice);
     g.end_apnap_choices(round);
     ctx.prev_value = res.len() as i64;

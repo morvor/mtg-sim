@@ -42,6 +42,21 @@ fn for_each_value(s: &str, b: &mut Builder) -> Option<Value> {
     Some(v)
 }
 
+/// "It gets +1/+1 until end of turn for each other creature you control": "other" is
+/// other than the object getting the bonus (Sigil of Valor ruling), as well as the source.
+fn other_than_it(n: Value, what: &Sel) -> Value {
+    if !matches!(what, Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo) {
+        return n;
+    }
+    match n {
+        Value::Count(Filter::And(mut v)) if v.iter().any(|f| matches!(f, Filter::Other)) => {
+            v.push(Filter::Not(Box::new(Filter::In(Box::new(what.clone())))));
+            Value::Count(Filter::And(v))
+        }
+        other => other,
+    }
+}
+
 fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // ", where x is [value]" (parsed after the subject: "its power" and "that creature's
@@ -117,7 +132,7 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let (p, t) = match for_each {
         Some(f) => {
-            let n = for_each_value(f, b)?;
+            let n = other_than_it(for_each_value(f, b)?, &what);
             let (Some(pc), Some(tc)) = (p.as_const(), t.as_const()) else {
                 return None;
             };
