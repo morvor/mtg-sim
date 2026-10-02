@@ -926,3 +926,236 @@ fn phoenix_returns_targets_with_total_mana_value_6_counting_x_as_0() {
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert!(t.in_graveyard(P0, "Llanowar Elves"));
 }
+
+// ---------------------------------------------------------------------------
+// The other cards of the gap: behavior tests
+// ---------------------------------------------------------------------------
+
+fn chosen_targets(t: &TestGame, id: ObjectId) -> Vec<Entity> {
+    t.obj(id)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .flat_map(|cm| cm.targets.iter().flatten().copied())
+        .collect()
+}
+
+#[test]
+fn unlicensed_hearse_exiles_up_to_two_cards_from_a_single_graveyard() {
+    cr!("115.1", "601.2c", "607.2a");
+    supported("Unlicensed Hearse");
+    let mut t = TestGame::new(2);
+    let hearse = t.battlefield(P0, "Unlicensed Hearse");
+    let mine = t.graveyard(P0, "Grizzly Bears");
+    let a = t.graveyard(P1, "Hill Giant");
+    let b = t.graveyard(P1, "Shock");
+    // Answering a card from each graveyard: the second isn't from the same graveyard, so
+    // only the first is chosen.
+    t.answer_targets(P0, &[Entity::Object(mine), Entity::Object(a)]);
+    let id = t.activate(P0, hearse, 0, &[]).unwrap().unwrap();
+    assert_eq!(chosen_targets(&t, id), vec![Entity::Object(mine)]);
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears"));
+    // As a creature (crewed), its power and toughness count the cards exiled with it.
+    run(
+        &mut t,
+        P0,
+        Effect::Modify {
+            what: Sel::All(Filter::Objects(vec![hearse])),
+            mods: vec![Modification::AddTypes(vec![CardType::Creature])],
+            duration: Duration::EndOfTurn,
+        },
+    );
+    assert_eq!(t.pt(hearse), (1, 1));
+    // Two from P1's graveyard.
+    t.g.objects[hearse.0 as usize].tapped = false;
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    let id = t.activate(P0, hearse, 0, &[]).unwrap().unwrap();
+    assert_eq!(chosen_targets(&t, id).len(), 2);
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.pt(hearse), (3, 3));
+}
+
+#[test]
+fn super_hero_civil_war_two_creatures_with_total_mana_value_6_or_less() {
+    cr!("115.1", "601.2c", "611.2b");
+    supported("The Super Hero Civil War");
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    // The Wurm (6) and the Bears (2) total 8: only the Wurm is taken.
+    t.answer_targets(P0, &[Entity::Object(wurm), Entity::Object(bears)]);
+    let saga = crate::r_s05_common::enter(&mut t, P0, "The Super Hero Civil War");
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(chosen_targets(&t, top), vec![Entity::Object(wurm)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(wurm).controller, P0);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    assert_eq!(t.obj_now(elves).controller, P1);
+    // For as long as the Saga remains: it leaves, control returns.
+    t.g.destroy(saga, None);
+    t.settle();
+    assert_eq!(t.obj_now(wurm).controller, P1);
+}
+
+#[test]
+fn tocasia_returns_artifacts_with_total_mana_value_10_or_less() {
+    cr!("115.1", "601.2c", "602.2b");
+    supported("Tocasia, Dig Site Mentor");
+    let setup = |t: &mut TestGame| -> ObjectId {
+        let tocasia = t.graveyard(P0, "Tocasia, Dig Site Mentor");
+        for c in [ManaType::G, ManaType::W, ManaType::U] {
+            add_mana(t, P0, c, 3);
+        }
+        tocasia
+    };
+    // Steel Hellkite (6), Solemn Simulacrum (4) and Ornithopter (0): 10, all return.
+    let mut t = TestGame::new(2);
+    let tocasia = setup(&mut t);
+    let v = [
+        t.graveyard(P0, "Steel Hellkite"),
+        t.graveyard(P0, "Solemn Simulacrum"),
+        t.graveyard(P0, "Ornithopter"),
+    ];
+    t.answer_targets(P0, &v.map(Entity::Object));
+    t.activate(P0, tocasia, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(
+        names_on_battlefield(&t, P0),
+        sorted(&["Ornithopter", "Solemn Simulacrum", "Steel Hellkite"])
+    );
+    // Myr Battlesphere (7) and Solemn Simulacrum (4): 11, only the first returns.
+    let mut t = TestGame::new(2);
+    let tocasia = setup(&mut t);
+    let v = [
+        t.graveyard(P0, "Myr Battlesphere"),
+        t.graveyard(P0, "Solemn Simulacrum"),
+    ];
+    t.answer_targets(P0, &v.map(Entity::Object));
+    t.activate(P0, tocasia, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Solemn Simulacrum"));
+    assert_eq!(t.named_on_battlefield("Myr Battlesphere").len(), 1);
+}
+
+#[test]
+fn balor_each_mode_targets_a_different_opponent() {
+    cr!("700.2", "700.2d", "603.3c");
+    supported("Balor");
+    let balor_dies = |t: &mut TestGame| {
+        let balor = t.battlefield(P0, "Balor");
+        t.g.destroy(balor, None);
+        t.g.flush_events();
+        t.settle();
+    };
+    // One opponent: only one of the modes can be chosen.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 2]));
+    balor_dies(&mut t);
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(t.obj(top).stack.as_ref().unwrap().chosen.len(), 1);
+    t.resolve_all();
+
+    // Two opponents, two modes: answering P1 for both, the second targets P2.
+    let mut t = TestGame::new(3);
+    for _ in 0..4 {
+        t.hand(P2, "Grizzly Bears");
+    }
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1, 2]));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    balor_dies(&mut t);
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(
+        chosen_targets(&t, top),
+        vec![Entity::Player(P1), Entity::Player(P2)]
+    );
+    t.resolve_all();
+    assert!(!t.on_battlefield(ring));
+    assert_eq!(t.life(P2), 16);
+}
+
+#[test]
+fn splinter_and_leo_each_mode_a_different_player() {
+    cr!("700.2", "700.2d", "603.3c");
+    supported("Splinter & Leo, Father & Son");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 1]));
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    crate::r_s05_common::enter(&mut t, P0, "Splinter & Leo, Father & Son");
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(
+        chosen_targets(&t, top),
+        vec![Entity::Player(P0), Entity::Player(P1)]
+    );
+    t.resolve_all();
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Mutant").len(),
+        1
+    );
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+}
+
+#[test]
+fn age_of_ultron_destroys_up_to_one_creature_of_each_opponent() {
+    cr!("115.1", "601.2c", "608.2b");
+    // Chapter I: "For each opponent, destroy up to one target nonartifact creature that
+    // player controls." (The card's chapter II isn't supported yet.)
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let thopter = t.battlefield(P2, "Ornithopter");
+    let giant = t.battlefield(P2, "Hill Giant");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    crate::r_s05_common::enter(&mut t, P0, "Age of Ultron");
+    let choices: Vec<Vec<Entity>> = asked_since(&t, from)
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(choices.len(), 2);
+    assert_eq!(choices[0], vec![Entity::Object(bears)]);
+    assert_eq!(choices[1], vec![Entity::Object(giant)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(!t.on_battlefield(giant));
+    assert!(t.on_battlefield(thopter) && t.on_battlefield(mine));
+}
+
+#[test]
+fn martyr_of_bones_exiles_up_to_x_cards_from_a_single_graveyard() {
+    cr!("115.1", "601.2c", "601.2b");
+    supported("Martyr of Bones");
+    // "{1}, Reveal X black cards from your hand, Sacrifice this creature: Exile up to X
+    // target cards from a single graveyard." X = 2: two of P1's cards; answering one of
+    // P0's among them leaves only P1's.
+    let mut t = TestGame::new(2);
+    let martyr = t.battlefield(P0, "Martyr of Bones");
+    let r1 = t.hand(P0, "Dark Ritual");
+    let r2 = t.hand(P0, "Dark Ritual");
+    let mine = t.graveyard(P0, "Grizzly Bears");
+    let a = t.graveyard(P1, "Hill Giant");
+    t.graveyard(P1, "Shock");
+    add_mana(&mut t, P0, ManaType::B, 1);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(r1), Entity::Object(r2)]);
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(mine)]);
+    let id = t.activate(P0, martyr, 0, &[]).unwrap().unwrap();
+    assert_eq!(chosen_targets(&t, id), vec![Entity::Object(a)]);
+    t.resolve();
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
