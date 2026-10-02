@@ -237,3 +237,57 @@ fn flame_discharge_and_faerie_fencing_check_what_you_controlled_as_you_cast() {
         assert_eq!(t.on_battlefield(giant), !faerie, "faerie: {faerie}");
     }
 }
+
+#[test]
+fn joyful_stormsculptor_damages_each_opponent() {
+    cr!("702.51a", "603.2");
+    assert_supported("Joyful Stormsculptor");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Joyful Stormsculptor");
+    t.lands(P0, "Mountain", 4);
+    let s = t.hand(P0, "Stoke the Flames");
+    t.cast(P0, s).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.life(P2), 19);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn rampaging_raptor_deals_that_much_damage_to_that_players_planeswalker() {
+    cr!("120.3", "603.2");
+    assert_supported("Rampaging Raptor");
+    let mut t = TestGame::new(2);
+    let raptor = t.battlefield(P0, "Rampaging Raptor");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let mine = t.battlefield(P0, "Jace Beleren");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_targets(P0, &[Entity::Object(jace)]);
+    t.attack(&[(raptor, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert!(!t.on_battlefield(jace));
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn dose_of_dawnglow_blights_only_outside_your_main_phase() {
+    cr!("505.1", "701.68a");
+    assert_supported("Dose of Dawnglow");
+    for main in [true, false] {
+        let mut t = TestGame::new(2);
+        let giant = t.graveyard(P0, "Hill Giant");
+        if main {
+            t.advance_to(P0, Step::PrecombatMain);
+        } else {
+            t.advance_to(P1, Step::PrecombatMain);
+        }
+        t.lands(P0, "Swamp", 5);
+        let s = t.hand(P0, "Dose of Dawnglow");
+        t.cast(P0, s).target(giant).go();
+        t.resolve_all();
+        let back = t.named_on_battlefield("Hill Giant");
+        assert_eq!(back.len(), 1);
+        assert_eq!(t.counters(back[0], "-1/-1"), if main { 0 } else { 2 }, "main: {main}");
+    }
+}

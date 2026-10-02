@@ -674,3 +674,21 @@ fn controlled_as_you_cast(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "basic effects: you controlled a [permanent] as you cast ~", priority: 100, parse: controlled_as_you_cast } }
+
+/// "if it isn't your main phase" (Dose of Dawnglow): "it" is the current phase — neither
+/// your precombat nor your postcombat main phase (CR 505.1).
+fn your_main_phase(c: &str) -> Option<Condition> {
+    let mine = Condition::And(vec![
+        Condition::YourTurn,
+        Condition::Phase(PhaseCond::MainPhase),
+    ]);
+    match end(c) {
+        "it's your main phase" => Some(mine),
+        "it isn't your main phase" | "it's not your main phase" => {
+            Some(Condition::Not(Box::new(mine)))
+        }
+        _ => None,
+    }
+}
+
+inventory::submit! { super::ConditionPattern { name: "basic effects: it is (not) your main phase", priority: 100, parse: your_main_phase } }

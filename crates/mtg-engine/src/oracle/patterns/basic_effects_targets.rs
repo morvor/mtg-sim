@@ -341,6 +341,42 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             return Some((Sel::Players(PlayerRef::You), r.to_string(), false));
         }
     }
+    // "each opponent and each battle they protect" (CR 310.9e)
+    if let Some(r) = s.strip_prefix("each opponent and each battle they protect") {
+        let battles = Filter::and(vec![
+            Filter::Type(crate::types::CardType::Battle),
+            Filter::Custom(crate::kw::basic_effects::protected_by(&PlayerRef::EachOpponent).into()),
+        ]);
+        return Some((
+            Sel::Union(vec![Sel::Players(PlayerRef::EachOpponent), Sel::All(battles)]),
+            r.to_string(),
+            true,
+        ));
+    }
+    // "target planeswalker that player controls or battle that player protects"
+    if let Some(r) =
+        s.strip_prefix("target planeswalker that player controls or battle that player protects")
+    {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::Iterated)
+        {
+            return None;
+        }
+        let who = b.it_player.clone();
+        let f = Filter::Or(vec![
+            Filter::and(vec![
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::ControlledByPlayer(Box::new(who.clone())),
+            ]),
+            Filter::and(vec![
+                Filter::Type(crate::types::CardType::Battle),
+                Filter::Custom(crate::kw::basic_effects::protected_by(&who).into()),
+            ]),
+        ]);
+        let text = "target planeswalker that player controls or battle that player protects";
+        let slot = b.add_target(TargetSpec::one(TargetKind::Object(f), text.to_string()), text);
+        return Some((Sel::Target(slot), r.to_string(), true));
+    }
     // Players: "each other opponent" (other than the one the ability is about), "each
     // opponent", "that player", ...
     let players: [(&str, Option<PlayerRef>); 6] = [

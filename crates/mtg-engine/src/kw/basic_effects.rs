@@ -146,6 +146,17 @@ pub fn remove_keyword(r: &RemoveKeyword) -> crate::ability::Modification {
 /// player clash; whether you won is recorded ("if you win, ...").
 pub const CLASH_WITH_DEFENDING_PLAYER: &str = "basic_effects:clash with defending player";
 
+const PROTECTED_BY: &str = "basic_effects:battle protected by:";
+
+/// `Filter::Custom` name: a battle protected by one of the players `who` refers to
+/// (CR 310.9e: "each battle they protect", "battle that player protects").
+pub fn protected_by(who: &crate::ability::PlayerRef) -> String {
+    format!(
+        "{PROTECTED_BY}{}",
+        serde_json::to_string(who).unwrap_or_default()
+    )
+}
+
 const SOURCE_OF_SLOT: &str = "basic_effects:source of the ability in target slot ";
 
 /// `Filter::Custom` name: the source of the ability chosen in target slot `slot`.
@@ -316,6 +327,14 @@ impl KeywordRules for BasicEffects {
             return Some(blocks_this_turn(g).iter().any(|(b, a)| {
                 (*b == id && other_ok(*a)) || (*a == id && other_ok(*b))
             }));
+        }
+        if let Some(json) = name.strip_prefix(PROTECTED_BY) {
+            let who: crate::ability::PlayerRef = serde_json::from_str(json).ok()?;
+            let Some(p) = crate::battle::protector(g, id) else {
+                return Some(false);
+            };
+            let is_battle = g.obj(id).chars.card_types.contains(CardType::Battle);
+            return Some(is_battle && g.eval_players(&who, ctx).contains(&p));
         }
         if name == SECOND_SPELL_CAST_THIS_TURN {
             return Some(g.history.spells_cast.get(1).is_some_and(|(_, s)| *s == id));
