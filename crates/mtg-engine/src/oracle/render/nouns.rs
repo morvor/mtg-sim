@@ -1018,10 +1018,20 @@ impl Renderer<'_> {
                     None => "in exile".into(),
                 }
             }
-            ZoneKind::Command => return "in the command zone".into(),
-            ZoneKind::Outside => return "from outside the game".into(),
-            ZoneKind::Stack => return "on the stack".into(),
-            ZoneKind::Battlefield => return "on the battlefield".into(),
+            ZoneKind::Command | ZoneKind::Outside | ZoneKind::Stack | ZoneKind::Battlefield => {
+                let z = match z {
+                    ZoneKind::Command => "in the command zone",
+                    ZoneKind::Outside => "from outside the game",
+                    ZoneKind::Stack => "on the stack",
+                    _ => "on the battlefield",
+                };
+                // "a sorcery card you own from outside the game", "a commander you own in
+                // the command zone".
+                return match owner {
+                    Some(o) if o != PlayerRel::Any => format!("{} {z}", self.owns_phrase(o)),
+                    _ => z.into(),
+                };
+            }
             _ => {}
         }
         match owner {
