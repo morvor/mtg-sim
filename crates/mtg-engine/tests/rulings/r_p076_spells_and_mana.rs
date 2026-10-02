@@ -21,6 +21,7 @@ fn there_theyre_their_halves_with_mana_value_2_or_less_can_be_cast() {
         "If an effect allows you to cast a spell with certain characteristics, consider only the characteristics of the spell you’re casting. For example, if an effect allows you to cast an instant or sorcery spell with mana value 2 or less from among cards in your graveyard, you could cast There or They’re this way, but There is right out."
     );
     supported("Sword of Once and Future");
+    supported(THERE);
     // Sword of Once and Future: "... Then you may cast an instant or sorcery spell with
     // mana value 2 or less from your graveyard without paying its mana cost." The card has
     // mana value 6 in the graveyard (CR 709.4), but its halves There ({U}) and They're

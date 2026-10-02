@@ -16,15 +16,9 @@ use mtg_engine::*;
 
 const THERE: &str = "There // They're // Their";
 
-/// There // They're // Their's third half ("Target opponent gains control of target
-/// creature you control.") doesn't compile yet; these split-card rulings don't involve
-/// it, so the card is used as is (its other halves compile).
+/// All three halves of There // They're // Their compile.
 fn there_halves_supported() {
-    let c = mtg_engine::card::card(THERE);
-    assert_eq!(
-        c.unsupported_text(),
-        vec!["Target opponent gains control of target creature you control."]
-    );
+    supported(THERE);
 }
 
 #[test]
