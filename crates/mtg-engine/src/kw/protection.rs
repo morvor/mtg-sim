@@ -53,6 +53,7 @@ impl KeywordRules for Protection {
                                     crate::kw::damage_source_matches(g, source, f, &ctx)
                                 }) =>
                         {
+                            crate::structure::record(a, &ob.chars.name, "keyword");
                             Some(KeywordShield {
                                 holder: target,
                                 id: a.uid,
@@ -151,8 +152,7 @@ pub fn prevents_attachment(g: &Game, t: ObjectId, obj: ObjectId) -> bool {
     let ob = g.obj(t);
     let ctx = Ctx::new(Some(t), ob.controller);
     ob.chars
-        .keywords()
-        .filter(|k| k.kind == KeywordKind::Protection)
+        .keywords_of(KeywordKind::Protection)
         .filter(|k| k.filter.as_ref().is_none_or(|f| g.matches(obj, f, &ctx)))
         .any(|k| !exempts(g, k, t, obj))
 }

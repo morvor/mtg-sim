@@ -286,6 +286,12 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Listing what could be done only checks legality: it doesn't exercise the
+        // abilities it consults (see `structure`).
+        crate::structure::unlogged(|| self.legal_actions_now(p))
+    }
+
+    fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
@@ -1552,6 +1558,7 @@ impl Game {
             crate::designations::prepared_copy_left_exile(self, card);
         }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
+        crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
             spell: id,
             player: p,
@@ -1600,8 +1607,6 @@ impl Game {
                 parts: vec![],
             },
         };
-        // Reductions by mana symbols (CR 118.7a–g), applied after the other changes.
-        let mut mana_reductions: Vec<(ManaCost, bool)> = Vec::new();
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
@@ -1623,8 +1628,8 @@ impl Game {
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
         }
-        // Generic and colored reductions, applied after all increases.
-        let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
+        // CR 601.2f: increases apply as they're found, reductions after all of them.
+        let mut changes = crate::activation_costs::CostChanges::default();
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
             if let AbilityKind::Static(s) = &a.kind {
@@ -1642,28 +1647,11 @@ impl Game {
                                 &mut cost,
                                 &crate::kw::cumulative_upkeep::expand_repeated(self, c, &ctx),
                             ),
-                            CostChange::IncreaseGeneric(v) => {
-                                let n = self.eval_value(v, &ctx).max(0) as u32;
-                                add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
+                            // Alternative and optional costs are announced as the spell
+                            // is cast (see `cost_choices`).
+                            other => {
+                                changes.add(self, &mut cost, other, &ctx);
                             }
-                            // Reductions apply after every increase (CR 601.2f).
-                            CostChange::ReduceGeneric(v) => {
-                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, None))
-                            }
-                            CostChange::ReduceColored(c, v) => {
-                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
-                            }
-                            CostChange::IncreaseMana(m) => {
-                                add_cost(&mut cost, &Cost::mana(m.clone()))
-                            }
-                            CostChange::ReduceMana { mana, colored_only } => {
-                                mana_reductions.push((mana.clone(), *colored_only))
-                            }
-                            // Announced as the spell is cast (see `cost_choices`).
-                            CostChange::AlternativeCost(_)
-                            | CostChange::FlashForAdditionalCost(_)
-                            | CostChange::OptionalAdditionalCost { .. }
-                            | CostChange::AdditionalCostChoice(_) => {}
                         }
                     }
                 }
@@ -1682,65 +1670,13 @@ impl Game {
                 }
                 _ => false,
             };
-            if !applies {
-                continue;
-            }
-            match &cm.change {
-                CostChange::IncreaseGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
-                }
-                CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
-                CostChange::ReduceGeneric(v) => {
-                    reductions.push((self.eval_value(v, &ctx).max(0) as u32, None))
-                }
-                CostChange::ReduceColored(c, v) => {
-                    reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
-                }
-                CostChange::ReduceMana { mana, colored_only } => {
-                    mana_reductions.push((mana.clone(), *colored_only))
-                }
-                CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::AlternativeCost(_)
-                | CostChange::FlashForAdditionalCost(_)
-                | CostChange::OptionalAdditionalCost { .. }
-                | CostChange::AdditionalCostChoice(_) => {}
+            if applies {
+                changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
-        for (n, color) in reductions {
-            match color {
-                None => {
-                    // CR 118.7a: the generic component (and monocolored hybrid symbols
-                    // paid with generic mana, CR 601.2b) ...
-                    let left = match cost.mana.as_mut() {
-                        Some(m) => crate::cost_rules::reduce_generic_and_hybrid(m, n),
-                        None => n,
-                    };
-                    // CR 601.2f: ... then the generic mana of a waterbend cost, which is
-                    // part of the total cost too.
-                    crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
-                }
-                Some(c) => {
-                    if let Some(m) = cost.mana.as_mut() {
-                        for _ in 0..n {
-                            if !m.reduce_colored(c) {
-                                m.reduce_generic(1);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        let mut hybrid = 0;
-        for (by, colored_only) in mana_reductions {
-            if let Some(m) = cost.mana.as_mut() {
-                crate::cost_rules::reduce_by(m, &by, colored_only, |_, cur, s| {
-                    let h = crate::cost_rules::chosen_half(self, card, hybrid, cur, s);
-                    hybrid += 1;
-                    h
-                });
-            }
-        }
+        changes.apply(&mut cost, |i, cur, s| {
+            crate::cost_rules::chosen_half(self, card, i, cur, s)
+        });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
         // Changes applied after all others (e.g. a minimum total cost).
         crate::kw::global_spell_cost(self, p, card, &mut cost);
@@ -1797,9 +1733,19 @@ impl Game {
         if !self.has_priority(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
-        // Timing.
+        // Timing (an effect may let it be activated any time its controller could cast an
+        // instant, CR 602.5d, 606.3).
         let sorcery = act.timing == ActivationTiming::Sorcery || act.is_loyalty;
-        if sorcery && !self.is_sorcery_timing(p) {
+        if sorcery
+            && !self.is_sorcery_timing(p)
+            && !crate::activation_costs::instant_timing_allowed(self, p, src, a, act)
+        {
+            return false;
+        }
+        // CR 602.5e: "Activate only as an instant" — not in the middle of a payment.
+        if act.timing == ActivationTiming::AsInstant
+            && !crate::activation_costs::as_instant_ok(self, p)
+        {
             return false;
         }
         match act.timing {
@@ -1830,13 +1776,18 @@ impl Game {
             }
             _ => {}
         }
-        // Loyalty abilities: once per turn per permanent (CR 606.3).
-        if act.is_loyalty
-            && o.activations_this_turn
+        // Loyalty abilities: once per turn per permanent (CR 606.3), unless an effect
+        // allows more.
+        if act.is_loyalty {
+            let done: u32 = o
+                .activations_this_turn
                 .iter()
-                .any(|(uid, n)| *n > 0 && self.is_loyalty_uid(src, *uid))
-        {
-            return false;
+                .filter(|(uid, _)| self.is_loyalty_uid(src, **uid))
+                .map(|(_, n)| *n)
+                .sum();
+            if done >= crate::activation_costs::loyalty_activations_per_turn(self, p, src, a, act) {
+                return false;
+            }
         }
         if let Some(max) = act.max_per_turn {
             if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
@@ -1877,7 +1828,15 @@ impl Game {
             }
         }
         let cost = self.ability_total_cost(p, src, a, act);
-        self.can_pay_cost_optimistic(p, &cost, Some(src), &o.chars.clone())
+        let chars = o.chars.clone();
+        self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+            // CR 118.9: or an alternative cost it could be activated for.
+            || crate::activation_costs::alternative_costs(self, p, src, a, act)
+                .iter()
+                .any(|(_, alt)| {
+                    let cost = self.ability_total_cost_with(p, src, a, act, None, 0, Some(alt));
+                    self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+                })
     }
 
     fn is_loyalty_uid(&self, src: ObjectId, uid: u64) -> bool {
@@ -1922,56 +1881,44 @@ impl Game {
         a: &Ability,
         act: &ActivatedAbility,
     ) -> Cost {
-        let mut cost = act.cost.clone();
+        self.ability_total_cost_with(p, src, a, act, None, 0, None)
+    }
+
+    /// Total cost of an activated ability (CR 602.2b, 601.2f): its activation cost, or
+    /// the alternative cost `alt` announced for it (CR 118.9), with X announced as `x`,
+    /// plus every cost increase and minus every reduction, which apply after all the
+    /// increases. `stack`: the ability on the stack once its targets are chosen, for
+    /// changes that depend on them; before that (`None`) such a reduction is assumed to
+    /// apply and such an increase not to.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ability_total_cost_with(
+        &self,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        act: &ActivatedAbility,
+        stack: Option<ObjectId>,
+        x: u32,
+        alt: Option<&Cost>,
+    ) -> Cost {
+        let mut cost = match alt {
+            Some(c) => crate::activation_costs::with_alternative(self, src, a, act, c),
+            None => act.cost.clone(),
+        };
+        // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        if let Some(m) = cost.mana.as_mut() {
+            *m = m.with_x(x);
+        }
+        let mut changes = crate::activation_costs::CostChanges::default();
         for (s, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*s), *ctl);
-            let applies = match &cm.applies_to {
-                CostTarget::Abilities(f) => {
-                    self.player_rel_matches(cm.who, p, &ctx) && self.matches(src, f, &ctx)
-                }
-                CostTarget::Keyword(k) => {
-                    self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
-                }
-                CostTarget::KeywordAbilitiesOf(k, f) => {
-                    self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
-                        && self.matches(src, f, &ctx)
-                }
-                // CR 606.4: the cost of a loyalty ability may be modified by other effects.
-                CostTarget::LoyaltyAbilities(f) => {
-                    act.is_loyalty
-                        && self.player_rel_matches(cm.who, p, &ctx)
-                        && self.matches(src, f, &ctx)
-                }
-                _ => false,
-            };
-            if !applies {
-                continue;
-            }
-            match &cm.change {
-                CostChange::IncreaseGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
-                }
-                CostChange::ReduceGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    if let Some(m) = cost.mana.as_mut() {
-                        m.reduce_generic(n);
-                    }
-                }
-                CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
-                CostChange::ReduceMana { mana, colored_only } => {
-                    if let Some(m) = cost.mana.as_mut() {
-                        crate::cost_rules::reduce_by(m, mana, *colored_only, |_, cur, s| {
-                            crate::cost_rules::default_half(cur, s)
-                        });
-                    }
-                }
-                _ => {}
+            if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
+                changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
+        changes.apply(&mut cost, |_, cur, s| {
+            crate::cost_rules::default_half(cur, s)
+        });
         // Keyword rules that change the cost (power-up, CR 702.193a).
         crate::kw::activation_cost(self, p, src, a, &mut cost);
         // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
@@ -2069,10 +2016,8 @@ impl Game {
         ctx.x = x as i32;
         if act.is_mana_ability {
             // CR 605.3: pay costs, then resolve immediately without using the stack.
-            let mut cost = self.ability_total_cost(p, src, a, act);
-            if let Some(m) = cost.mana.as_mut() {
-                *m = m.with_x(x as u32);
-            }
+            let alt = self.announce_alternative_activation_cost(p, src, a, act);
+            let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, alt.as_ref());
             let spend = SpendContext {
                 is_ability: true,
                 card_types: src_chars.card_types,
@@ -2097,6 +2042,7 @@ impl Game {
                 .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
+            crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.
@@ -2134,19 +2080,25 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
-        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost will be paid.
-        if let Some(m) = &act.cost.mana {
+        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
+        // activation cost (at most one) is announced.
+        let alt = self.announce_alternative_activation_cost(p, src, a, act);
+        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost that will be paid
+        // (the activation cost or the alternative cost) will be paid.
+        let announced = match &alt {
+            Some(c) => &c.mana,
+            None => &act.cost.mana,
+        };
+        if let Some(m) = announced {
             crate::cost_rules::announce_phyrexian(self, p, id, m);
         }
         // 602.2b: modes, targets.
         if !self.choose_modes_and_targets(id, &act.body, &mut ctx) {
             return Err(Illegal("no legal targets".into()));
         }
-        // Costs.
-        let mut cost = self.ability_total_cost(p, src, a, act);
-        if let Some(m) = cost.mana.as_mut() {
-            *m = m.with_x(x as u32);
-        }
+        // Costs (CR 601.2f: with the targets chosen).
+        let mut cost =
+            self.ability_total_cost_with(p, src, a, act, Some(id), x as u32, alt.as_ref());
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
@@ -2209,6 +2161,39 @@ impl Game {
         Ok(Some(id))
     }
 
+    /// CR 118.9, 601.2b: offers `p` the alternative costs they may pay rather than the
+    /// activation cost of `a`; returns the one chosen, if any.
+    fn announce_alternative_activation_cost(
+        &mut self,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        act: &ActivatedAbility,
+    ) -> Option<Cost> {
+        let alts = crate::activation_costs::alternative_costs(self, p, src, a, act);
+        if alts.is_empty() {
+            return None;
+        }
+        let mut options = vec!["pay the activation cost".to_string()];
+        for (s, c) in &alts {
+            options.push(format!(
+                "pay {c:?} rather than the activation cost ({})",
+                self.describe(*s)
+            ));
+        }
+        match self.ask(
+            p,
+            Decision::ChooseOption {
+                source: Some(src),
+                prompt: "Alternative cost".into(),
+                options,
+            },
+        ) {
+            Answer::Index(i) if i >= 1 && i <= alts.len() => Some(alts[i - 1].1.clone()),
+            _ => None,
+        }
+    }
+
     /// Records that `p` activated the ability `uid` of `src` (CR 602.2i): this turn, and
     /// over the object's existence ("Activate only once", CR 702.177a).
     fn record_activation(&mut self, p: PlayerId, src: ObjectId, uid: u64) {
@@ -2236,7 +2221,8 @@ impl Game {
                 CostTarget::ThisSpell => !ability && src == *s,
                 CostTarget::Keyword(_)
                 | CostTarget::KeywordAbilitiesOf(..)
-                | CostTarget::LoyaltyAbilities(_) => false,
+                | CostTarget::LoyaltyAbilities(_)
+                | CostTarget::ActivatedAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {
@@ -2385,8 +2371,13 @@ impl Game {
                 if o.tapped != want_tapped {
                     return false;
                 }
-                // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning sickness.
-                !(o.is_creature() && o.summoning_sick && !o.has_keyword(KeywordKind::Haste))
+                // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning
+                // sickness (or a permission to activate them as though it had haste,
+                // CR 609.4).
+                !(o.is_creature()
+                    && o.summoning_sick
+                    && !o.has_keyword(KeywordKind::Haste)
+                    && !crate::activation_costs::as_though_haste(self, p, o.id))
             }
             CostPart::PayLife(v) => self.can_pay_life(p, self.eval_value(v, ctx).max(0) as u32),
             CostPart::Loyalty(n) => {

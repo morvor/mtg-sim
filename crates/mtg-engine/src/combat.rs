@@ -393,7 +393,7 @@ impl Game {
             return false;
         }
         // Landwalk (702.14c)
-        for kw in ak.keywords().filter(|k| k.kind == KeywordKind::Landwalk) {
+        for kw in ak.keywords_of(KeywordKind::Landwalk) {
             if crate::kw::landwalk::landwalk_ignored(self, kw) {
                 continue;
             }

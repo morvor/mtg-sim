@@ -13,12 +13,23 @@ use crate::types::*;
 /// (CR 301.5c, 303.4k, 701.3).
 pub const SOURCE_CAN_ATTACH: &str = "source_can_attach";
 
+/// `Filter::Custom` name: an object enchanted by an Aura the evaluating player controls
+/// ("creatures you control that are enchanted by Auras you control", CR 303.4b).
+pub const ENCHANTED_BY_YOUR_AURA: &str = "enchanted_by_your_aura";
+
 /// Custom filters about attaching. Returns `None` if `name` isn't one.
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-    (name == SOURCE_CAN_ATTACH).then(|| {
-        ctx.source
-            .is_some_and(|s| can_attach(g, s, Entity::Object(id)))
-    })
+    match name {
+        SOURCE_CAN_ATTACH => Some(
+            ctx.source
+                .is_some_and(|s| can_attach(g, s, Entity::Object(id))),
+        ),
+        ENCHANTED_BY_YOUR_AURA => Some(g.attachments_of(Entity::Object(id)).iter().any(|a| {
+            let a = g.obj(*a);
+            a.controller == ctx.controller && a.chars.has_subtype("Aura")
+        })),
+        _ => None,
+    }
 }
 
 /// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
@@ -43,7 +54,7 @@ fn enchant_kw_player(k: &crate::keywords::Keyword) -> Option<PlayerFilter> {
 /// that match all of them (CR 702.5c).
 pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
     let mut fs = Vec::new();
-    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+    for k in chars.keywords_of(KeywordKind::Enchant) {
         if enchant_kw_player(k).is_some() {
             return None; // CR 702.5d: can't enchant permanents.
         }
@@ -59,7 +70,7 @@ pub fn enchant_filter(chars: &Characteristics) -> Option<Filter> {
 /// "Enchant opponent"). Every instance must allow it (CR 702.5c, 702.5d).
 pub fn enchant_player(chars: &Characteristics) -> Option<PlayerFilter> {
     let mut out: Option<PlayerFilter> = None;
-    for k in chars.keywords().filter(|k| k.kind == KeywordKind::Enchant) {
+    for k in chars.keywords_of(KeywordKind::Enchant) {
         let pf = enchant_kw_player(k)?;
         out = Some(match (out, pf) {
             (Some(PlayerFilter::Opponent), _) | (_, PlayerFilter::Opponent) => {

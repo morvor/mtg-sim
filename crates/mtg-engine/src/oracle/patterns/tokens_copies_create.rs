@@ -137,8 +137,10 @@ pub(crate) fn ability_list(
 /// A parsed token description.
 pub(crate) struct TokenDesc {
     pub spec: TokenSpec,
-    /// "that's tapped and attacking".
+    /// "that's tapped and attacking", "that's attacking".
     pub attacking: bool,
+    /// "that's tapped and attacking" (not "that's attacking").
+    pub tapped: bool,
 }
 
 /// Whether an ability is a characteristic-defining ability that sets power and toughness.
@@ -324,6 +326,17 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             attacking = true;
             tapped = true;
             rest = r.trim().to_string();
+        } else if let Some(r) = ["that's attacking", "that are attacking"]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+        {
+            // "a 2/2 white Knight creature token with vigilance that's attacking"
+            // (Sigiled Sword of Valeron): attacking but not tapped (CR 508.4).
+            if attacking {
+                return None;
+            }
+            attacking = true;
+            rest = r.trim().to_string();
         } else {
             return None;
         }
@@ -339,7 +352,6 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
     if attacking && !is_creature {
         return None;
     }
-    let _ = tapped;
     Some(TokenDesc {
         spec: TokenSpec {
             name,
@@ -351,8 +363,10 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             toughness,
             abilities,
             scryfall_name: None,
+            pt_values: None,
         },
         attacking,
+        tapped,
     })
 }
 
@@ -373,7 +387,7 @@ fn one_creation(r: &str, ctx: &CompileContext) -> Option<(TokenSpec, Value, bool
         }
     }
     let d = token_desc(r, ctx)?;
-    Some((d.spec, count, tapped || d.attacking, d.attacking))
+    Some((d.spec, count, tapped || d.tapped, d.attacking))
 }
 
 fn create(spec: TokenSpec, count: Value, tapped: bool, attacking: bool) -> Effect {

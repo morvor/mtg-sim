@@ -48,6 +48,11 @@ pub struct Ctx {
     /// to how the permanent enters made by [`Effect::EnterTapped`] and
     /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
     pub entering: Option<EntryMods>,
+    /// For a reflexive triggered ability (CR 603.12): the printed ability that created it,
+    /// which is what "this ability" in its text refers to ("When you do, ~ becomes a copy
+    /// of ..., except it has this ability", CR 707.9a).
+    #[serde(default)]
+    pub reflexive_parent: Option<Box<crate::ability::Ability>>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -979,10 +984,13 @@ impl Game {
                 .iter()
                 .map(|o| self.obj(*o).power() as i64)
                 .sum(),
+            // CR 607.3: several objects ("the total toughness of creatures you control")
+            // give several answers, which are summed.
             Value::ToughnessOf(s) => self
                 .eval_sel_objects(s, ctx)
-                .first()
-                .map_or(0, |o| self.obj(*o).toughness() as i64),
+                .iter()
+                .map(|o| self.obj(*o).toughness() as i64)
+                .sum(),
             // CR 607.3: several objects give several answers, which are summed.
             Value::ManaValueOf(s) => self
                 .eval_sel_objects(s, ctx)
@@ -1109,13 +1117,15 @@ impl Game {
                     })
                     .count() as i64
             }),
-            Value::SpellsCastThisTurn(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
+            // Summed over the players ("spells your opponents cast this turn").
+            Value::SpellsCastThisTurn(r, f) => {
+                let ps = self.eval_players(r, ctx);
                 self.history
                     .spells_cast
                     .iter()
-                    .filter(|(q, s)| *q == p && self.matches_view(&Current, *s, f, ctx))
+                    .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
                     .count() as i64
-            }),
+            }
             Value::TimesResolvedThisTurn => ctx
                 .source
                 .map(|s| {

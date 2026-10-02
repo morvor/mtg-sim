@@ -972,6 +972,9 @@ impl Game {
                         v
                     }
                 };
+                if !trial && !affected_now.is_empty() {
+                    crate::structure::record(&a, &self.obj(*src).chars.name, "static");
+                }
                 for t in affected_now {
                     self.apply_mods_to(t, mods, layer, &ctx, e.ts.0, st, trial);
                 }
@@ -1187,6 +1190,12 @@ impl Game {
                     }
                 }
                 let ctl = o.controller;
+                if !matches!(
+                    s.effect,
+                    StaticEffect::Continuous { .. } | StaticEffect::Replacement(_)
+                ) {
+                    crate::structure::record(a, &o.chars.name, "static");
+                }
                 match &s.effect {
                     StaticEffect::Continuous { .. } => {}
                     StaticEffect::Restriction(r) => st.restrictions.push((id, ctl, r.clone())),
@@ -1228,6 +1237,14 @@ impl Game {
                     for p in &e.players {
                         st.flash_permissions
                             .push((src, *p, PlayerRel::You, f.clone()));
+                    }
+                }
+                // "Until end of turn, you may activate loyalty abilities of Jace
+                // planeswalkers you control ... any time you could cast an instant."
+                (PlayerModification::ActivationPermission(perm), Some(src)) => {
+                    for p in &e.players {
+                        st.other
+                            .push((src, *p, StaticEffect::ActivationPermission(perm.clone())));
                     }
                 }
                 _ => {}
@@ -1542,6 +1559,9 @@ pub fn apply_mod(
         // Every creature type (CR 205.3m, 702.73a), kept as a flag rather than a list of
         // every creature type (see `Characteristics::has_subtype`).
         Modification::AllCreatureTypes => c.all_creature_types = true,
+        Modification::Custom { name, .. } => {
+            crate::kw::custom_modification(g, name, c, ctx, _target)
+        }
         Modification::RemoveAllCreatureTypes => {
             c.subtypes.retain(|s| !is_creature_type(s));
             c.all_creature_types = false;

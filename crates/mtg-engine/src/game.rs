@@ -640,6 +640,8 @@ pub struct Game {
     pub planechase: crate::planechase::PlanarState,
     /// Records kept by hand-written card abilities (see `cards/`).
     pub cards: crate::cards::CardState,
+    /// Every event, for observers outside the engine (off unless enabled).
+    pub event_feed: crate::event_feed::EventFeed,
 }
 
 impl Game {
@@ -747,6 +749,7 @@ impl Game {
             multiplayer: Default::default(),
             planechase: Default::default(),
             cards: Default::default(),
+            event_feed: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

@@ -560,6 +560,14 @@ pub fn subtype_lists() -> &'static SubtypeLists {
                 }
             }
             v.push("Time Lord".to_string());
+            // Creature types printed on cards in the bundled Scryfall data but missing
+            // from this CR text's 205.3m list: "Athlete" appears only on playtest and
+            // Un- cards (Mystery Booster 2 playtest cards, Unknown Event).
+            for extra in ["Athlete"] {
+                if !v.iter().any(|t| t == extra) {
+                    v.push(extra.to_string());
+                }
+            }
             v
         };
         SubtypeLists {

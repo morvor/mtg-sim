@@ -14,6 +14,11 @@
 //!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
 //!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks; `--raw`:
 //!   exact texts, numbers kept, e.g. to write a hand-written ability's `text`).
+//! * `structure-coverage [--write PATH] [--limit N] [--logs DIR] [--card NAME]` — groups
+//!   supported cards' abilities by compiled structure and reports the structures no test
+//!   exercises (see `structure_coverage.rs` for the command sequence).
+
+mod structure_coverage;
 
 use mtg_data::rules::RuleKind;
 use regex::Regex;
@@ -777,8 +782,9 @@ fn main() {
         Some("rulings-coverage") => rulings_coverage(&args[1..]),
         Some("unsupported") => unsupported(&args[1..]),
         Some("manual-check") => manual_check(),
+        Some("structure-coverage") => structure_coverage::run(&args[1..], repo_root()),
         _ => {
-            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|manual-check> [--write PATH] [--check]");
+            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check> [--write PATH] [--check]");
             std::process::exit(2);
         }
     }
