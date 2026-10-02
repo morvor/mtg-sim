@@ -122,7 +122,7 @@ fn frog_auras_keep_a_vehicle_a_creature() {
 
 #[test]
 fn amphibian_downpour_overwrites_colors_and_types_but_not_supertypes() {
-    cr!("613.1d", "613.1e", "205.1a", "205.4d");
+    cr!("613.1d", "613.1e", "205.1a");
     ruling!(
         "Amphibian Downpour",
         "Amphibian Downpour overwrites all colors and creature types the enchanted creature has. It's just a blue Frog. The creature keeps any supertypes it has (such as legendary) but loses any other card types it has (such as artifact)."
@@ -391,7 +391,7 @@ fn dub_on_a_knight_still_gives_its_bonus() {
 
 #[test]
 fn eldrazi_conscription_doesnt_make_the_creature_an_eldrazi() {
-    cr!("308.1", "205.3d", "303.4");
+    cr!("308.2", "303.4");
     ruling!(
         "Eldrazi Conscription",
         "Eldrazi Conscription is an Eldrazi. However, it doesn't turn the enchanted creature into an Eldrazi."
@@ -445,7 +445,7 @@ fn damage_on(t: &TestGame, id: ObjectId) -> u32 {
 
 #[test]
 fn hope_against_hope_counts_the_enchanted_creature() {
-    cr!("613.4c", "109.4");
+    cr!("613.4c", "109.5");
     ruling!(
         "Hope Against Hope",
         "Hope Against Hope’s second ability counts the enchanted creature, so that creature will normally get at least +1/+1."
@@ -463,7 +463,7 @@ fn hope_against_hope_counts_the_enchanted_creature() {
 
 #[test]
 fn all_that_glitters_counts_itself_and_an_artifact_enchantment_once() {
-    cr!("613.4c", "109.4", "205.2a");
+    cr!("613.4c", "109.5", "205.2a");
     ruling!(
         "All That Glitters",
         "Because All That Glitters is an enchantment, the enchanted creature usually gets at least +1/+1."
@@ -486,7 +486,7 @@ fn all_that_glitters_counts_itself_and_an_artifact_enchantment_once() {
 
 #[test]
 fn ethereal_armor_counts_itself_and_auras_on_opponents_permanents() {
-    cr!("613.4c", "109.4", "303.4e");
+    cr!("613.4c", "109.5", "303.4e");
     ruling!(
         "Ethereal Armor",
         "Ethereal Armor counts each enchantment you control, including itself and any Auras you control that are attached to an opponent or to permanents controlled by an opponent."
@@ -554,11 +554,20 @@ fn withercrowns_base_power_is_modified_by_pumps_and_counters_whenever_they_began
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
     assert!(t.on_battlefield(bears));
+    // Next upkeep, P1 sacrifices it instead and loses no life.
+    t.clear_answers();
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    t.answer_yes(P1, true);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
 
 #[test]
 fn sages_reverie_counts_any_aura_attached_to_a_creature() {
-    cr!("613.4c", "303.4", "109.4");
+    cr!("613.4c", "303.4", "109.5");
     ruling!(
         "Sage's Reverie",
         "An Aura doesn't necessarily need the enchant creature ability for the abilities of Sage's Reverie to count it. For example, an Aura with enchant permanent that's attached to a creature will count."
@@ -583,7 +592,7 @@ fn sages_reverie_counts_any_aura_attached_to_a_creature() {
 
 #[test]
 fn draconic_destiny_makes_the_creature_a_dragon_without_activating_anything() {
-    cr!("205.1b", "613.1c", "113.6");
+    cr!("205.1b", "613.1d");
     ruling!(
         "Draconic Destiny",
         "Being a Dragon isn't part of the activated ability the enchanted creature has. It's a Dragon in addition to its other types whether or not that ability has been activated."

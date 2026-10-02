@@ -98,7 +98,7 @@ fn anointer_priests_entering_together_trigger_for_each_other() {
 
 #[test]
 fn vizier_copying_a_token_copies_what_created_it_and_isnt_a_token() {
-    cr!("707.2", "111.1", "707.10");
+    cr!("707.2", "111.1", "111.3");
     ruling!(
         "Vizier of Many Faces",
         "If the chosen creature is a token, Vizier of Many Faces copies the original characteristics of that token as stated by the effect that created the token. Vizier of Many Faces is not a token in this case unless it's embalmed."
@@ -150,13 +150,21 @@ const CRAB: &str = "Crabomination";
 /// Casts Crabomination (emerge from artifact {5}{B}{B}) for its emerge cost sacrificing
 /// `sac`, with `swamps` Swamps and `generic` Wastes for mana. Whether it could be cast.
 fn emerge_crab(t: &mut TestGame, sac: ObjectId, swamps: usize, generic: usize) -> bool {
-    // (Its enters ability isn't supported; its emerge ability is.)
-    assert!(card(CRAB)
+    // Its emerge ability is supported; only its enters ability (which these rulings
+    // aren't about) may be unsupported.
+    let def = card(CRAB);
+    assert!(def
         .front()
         .chars
         .abilities
         .iter()
         .any(|a| a.text.starts_with("Emerge")));
+    for text in def.unsupported_text() {
+        assert!(
+            text.starts_with("When ~ enters, target opponent exiles"),
+            "unexpected unsupported text: {text}"
+        );
+    }
     t.lands(P0, "Swamp", swamps);
     t.lands(P0, "Wastes", generic);
     let crab = t.hand(P0, CRAB);
@@ -168,7 +176,7 @@ fn emerge_crab(t: &mut TestGame, sac: ObjectId, swamps: usize, generic: usize) -
 
 #[test]
 fn emerge_reduces_only_the_generic_component_of_the_emerge_cost() {
-    cr!("702.119a", "118.7", "118.7c");
+    cr!("702.119a", "118.7");
     ruling!(
         "Crabomination",
         "Colored mana components of emerge costs can't be reduced with emerge."

@@ -70,11 +70,18 @@ fn darksteel_mutation_doesnt_change_colors() {
     );
     assert!(c.has_subtype("Insect") && !c.has_subtype("Angel"));
     assert_eq!(t.pt(angel), (0, 1));
-    // An artifact creature that's an Ornithopter: also no other card types (it's still
-    // colorless).
+    // Ornithopter stays colorless.
     let thopter = t.battlefield(P1, "Ornithopter");
     attach_new(&mut t, P0, MUTATION, thopter);
     assert!(t.obj_now(thopter).chars.colors.is_colorless());
+    // An enchantment creature (Nyx-Fleece Ram) loses its other card types but stays white.
+    supported("Nyx-Fleece Ram");
+    let ram = t.battlefield(P1, "Nyx-Fleece Ram");
+    attach_new(&mut t, P0, MUTATION, ram);
+    let c = &t.obj_now(ram).chars;
+    assert!(!c.is(CardType::Enchantment));
+    assert!(c.is(CardType::Artifact) && c.is(CardType::Creature));
+    assert_eq!(c.colors, ColorSet::single(Color::White));
 }
 
 #[test]
@@ -135,7 +142,7 @@ fn darksteel_mutation_doesnt_overwrite_modifications_or_counters() {
 
 #[test]
 fn imprisoned_in_the_moon_removes_abilities_at_that_time_but_not_later_ones() {
-    cr!("613.1f", "613.7", "305.6");
+    cr!("613.1f", "613.7", "205.1a");
     ruling!(
         "Imprisoned in the Moon",
         "At the time the permanent becomes enchanted, Imprisoned in the Moon causes it to lose all abilities except the noted mana ability. Any abilities the permanent gains after that point will work normally."
@@ -160,6 +167,9 @@ fn imprisoned_in_the_moon_removes_abilities_at_that_time_but_not_later_ones() {
         .abilities
         .iter()
         .any(|a| a.text.contains("Untap")));
+    // It's tapped during P1's turn; it untaps during P0's untap step.
+    t.advance_to(P1, mtg_engine::turn::Step::End);
+    t.g.tap(angel);
     t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
     assert!(!t.obj_now(angel).tapped);
 }

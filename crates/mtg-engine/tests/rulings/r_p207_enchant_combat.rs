@@ -115,7 +115,7 @@ fn trample_over(aura: &str) -> u32 {
 
 #[test]
 fn trample_assigns_the_blockers_toughness_despite_a_destroy_when_damaged_aura() {
-    cr!("702.19c", "510.1c", "702.2c");
+    cr!("702.19c", "510.1c");
     ruling!(
         "Cracked Skull",
         "A creature blocked by a creature enchanted with Cracked Skull still needs to assign damage equal to the enchanted creature's toughness (minus any damage already marked on the enchanted creature) before trampling over to a player, planeswalker, or battle."
@@ -296,6 +296,35 @@ fn distracting_geist_targets_only_creatures_of_the_player_it_attacks() {
     t.resolve_all();
     assert!(t.obj_now(p1s).tapped);
     assert!(!t.obj_now(p2s).tapped);
+    // Clever Distraction (cast with disturb) on the Bears: the Bears' granted ability
+    // targets only P2's creature, the Geist's only P1's.
+    let mut t = TestGame::new(3);
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let card = t.graveyard(P0, "Distracting Geist // Clever Distraction");
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Wastes", 4);
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Keyword(KeywordKind::Disturb))
+        .target(bears)
+        .go();
+    t.resolve_all();
+    assert_eq!(
+        t.named_on_battlefield("Clever Distraction").len(),
+        1,
+        "Clever Distraction isn't on the battlefield"
+    );
+    let p1s = t.battlefield(P1, "Hill Giant");
+    let p2s = t.battlefield(P2, "Hill Giant");
+    let from = t.asked().len();
+    attack_with(
+        &mut t,
+        &[(other, Entity::Player(P1)), (bears, Entity::Player(P2))],
+    );
+    assert_eq!(target_candidates(&t, P0, from), vec![vec![Entity::Object(p2s)]]);
+    t.resolve_all();
+    assert!(!t.obj_now(p1s).tapped);
+    assert!(t.obj_now(p2s).tapped);
 }
 
 #[test]

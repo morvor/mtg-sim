@@ -44,9 +44,20 @@ fn grievous_wound_triggers_after_the_damage_is_dealt() {
     t.resolve_all();
     assert_eq!(t.life(P1), 4);
     // P0 isn't enchanted: damage to P0 doesn't trigger it.
-    t.activate(P0, pyro, 0, &[Entity::Player(P0)]).ok();
+    t.g.untap(pyro);
+    t.activate(P0, pyro, 0, &[Entity::Player(P0)]).unwrap();
+    t.g.resolve_top();
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "half their life"), 0);
     t.resolve_all();
+    assert_eq!(t.life(P0), 19);
     assert_eq!(t.life(P1), 4);
+    // (Its first ability: the enchanted player can't gain life; P0 can.)
+    t.g.gain_life(P1, 3);
+    t.g.gain_life(P0, 3);
+    assert_eq!(t.life(P1), 4);
+    assert_eq!(t.life(P0), 22);
 }
 
 #[test]
@@ -110,7 +121,7 @@ fn an_enchant_opponent_aura_cant_be_attached_to_a_permanent() {
 
 #[test]
 fn psychic_possession_targets_the_opponent_only_as_a_spell() {
-    cr!("303.4a", "303.4f", "702.11c", "115.1");
+    cr!("303.4a", "702.5d", "702.11c", "115.1");
     ruling!(
         "Psychic Possession",
         "Enchanting an opponent works very much like enchanting a permanent. The Aura spell targets the opponent. When it resolves, it enters \"attached\" to that player. Once it's on the battlefield, it no longer targets that player."

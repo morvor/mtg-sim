@@ -143,7 +143,7 @@ fn splinter_twin_tokens_get_enters_abilities_and_enters_with_counters() {
 
 #[test]
 fn shattered_ego_puts_the_creature_into_its_library_then_goes_to_the_graveyard() {
-    cr!("704.5m", "608.2", "401.4");
+    cr!("704.5m", "608.2");
     ruling!(
         "Shattered Ego",
         "As the last ability resolves, the enchanted creature is put into its owner's library. After it resolves, Shattered Ego is put into the graveyard from the battlefield."
@@ -208,7 +208,7 @@ fn inevitable_end_triggers_in_the_creature_controllers_upkeep_who_chooses() {
 
 #[test]
 fn returning_conviction_can_make_marked_damage_lethal() {
-    cr!("120.6", "704.5g", "514.2");
+    cr!("120.6", "704.5g");
     ruling!(
         "Conviction",
         "Because damage remains marked on a creature until it's removed as the turn ends, nonlethal damage dealt to the enchanted creature may become lethal if you return Conviction to its owner's hand during that turn."
@@ -411,7 +411,7 @@ fn arachnus_web_isnt_destroyed_if_the_power_drops_before_it_resolves() {
 
 #[test]
 fn historians_wisdom_checks_the_greatest_power_on_trigger_and_resolution() {
-    cr!("603.4", "608.2b");
+    cr!("603.4");
     ruling!(
         "Historian's Wisdom",
         "Historian's Wisdom has an intervening \"if\" clause in its triggered ability. This means that you will draw a card only if the enchanted permanent is a creature with the greatest power both at the time the ability triggers and at the time that it resolves."
