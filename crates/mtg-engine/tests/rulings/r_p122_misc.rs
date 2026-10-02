@@ -464,3 +464,30 @@ fn markov_warlord_targets_cant_block_any_creature() {
     attack_with(&mut t, &[(giant, Entity::Player(P1))]);
     assert!(!legal_blocks(&mut t, P1, &[(bears, giant)]));
 }
+
+#[test]
+fn two_breeches_track_their_modes_separately() {
+    cr!("700.2b");
+    ruling!(
+        "Breeches, Eager Pillager",
+        "If you somehow control two or more Breeches, Eager Pillager, track which modes have been chosen each turn for each one's ability separately."
+    );
+    supported("Breeches, Eager Pillager");
+    use mtg_engine::decision::Answer;
+    let mut t = TestGame::new(2);
+    // Mirror Gallery: the legend rule doesn't apply.
+    t.battlefield(P0, "Mirror Gallery");
+    let a = t.battlefield(P0, "Breeches, Eager Pillager");
+    let b = t.battlefield(P0, "Breeches, Eager Pillager");
+    t.settle();
+    assert!(t.on_battlefield(a) && t.on_battlefield(b));
+    // Both attack: each Breeches triggers twice. Every trigger asks for the Treasure mode.
+    for _ in 0..4 {
+        t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    }
+    to_combat(&mut t, P0);
+    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    t.resolve_all();
+    let treasures = crate::r_s01_common::with_subtype(&t, P0, "Treasure").len();
+    assert_eq!(treasures, 2, "one Treasure for each Breeches");
+}
