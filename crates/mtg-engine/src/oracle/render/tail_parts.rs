@@ -627,3 +627,43 @@ pub(crate) fn double_pt_parts(
         Some((verb, what, duration))
     }
 }
+
+impl Renderer<'_> {
+    /// What an extra turn's start creates, said of "that turn": "at the beginning of that
+    /// turn's end step, ...", "during that turn, ...".
+    pub(crate) fn extra_turn_effects(&mut self, e: &Effect) -> Option<String> {
+        let parts: Vec<&Effect> = match e {
+            Effect::Seq(v) => v.iter().collect(),
+            e => vec![e],
+        };
+        let mut out = Vec::new();
+        for p in parts {
+            match p {
+                Effect::AtNext {
+                    step: TriggerStep::End,
+                    effect,
+                } => {
+                    let t = self.effect(effect);
+                    out.push(format!("at the beginning of that turn's end step, {t}"));
+                }
+                Effect::AddRestriction {
+                    duration: Duration::EndOfTurn,
+                    ..
+                }
+                | Effect::AddPlayerEffect {
+                    duration: Duration::EndOfTurn,
+                    ..
+                } => {
+                    let t = self.effect(p);
+                    let t = t
+                        .strip_suffix(" this turn")
+                        .or_else(|| t.strip_suffix(" until end of turn"))?
+                        .to_string();
+                    out.push(format!("during that turn, {t}"));
+                }
+                _ => return None,
+            }
+        }
+        Some(out.join(". "))
+    }
+}

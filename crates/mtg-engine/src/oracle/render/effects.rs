@@ -1394,6 +1394,11 @@ impl Renderer<'_> {
             }
             Effect::ExtraTurnWith { who, at_start } => {
                 let base = self.with_subject(who, "take an extra turn after this one", true);
+                // Effects created as that turn starts: "During that turn, damage can't be
+                // prevented. At the beginning of that turn's end step, you lose the game."
+                if let Some(a) = self.extra_turn_effects(at_start) {
+                    return format!("{base}. {a}");
+                }
                 let a = self.effect(at_start);
                 format!("{base}. {a}")
             }
