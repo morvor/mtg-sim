@@ -147,8 +147,7 @@ fn tail_the_suspects_extra_land_plays_are_cumulative() {
         "Kellan, Inquisitive Prodigy // Tail the Suspect",
         "The effect of Tail the Suspect that allows you to play an additional land is cumulative with similar effects."
     );
-    // The Adventure, "Investigate. You may play an additional land this turn.", compiles
-    // (Kellan's attack trigger doesn't).
+    // The Adventure: "Investigate. You may play an additional land this turn."
     let c = mtg_engine::card::card("Kellan, Inquisitive Prodigy // Tail the Suspect");
     assert!(c.faces[1].unsupported.is_empty());
     let mut t = TestGame::new(2);

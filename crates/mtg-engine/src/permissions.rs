@@ -489,12 +489,6 @@ fn choose(
     }
 }
 
-/// Whether the permission `perm` the card `card` is being cast with still allows the
-/// spell it became as proposed, which has the characteristics `proposed` (with the value
-/// chosen for X in its mana cost): its qualities are judged with the choices made in the
-/// proposal, such as its mana value with that X (CR 601.2e, 601.3e; Lurrus of the
-/// Dream-Den ruling), and otherwise as the card was where it was cast from. A permission
-/// for that card allows it however it's proposed.
 /// Whether `card` as the proposed spell `chars` has the qualities `f` a permission asks
 /// for — for a spell with {X} in its mana cost, with some value of X: the player chooses X
 /// as the spell is proposed (CR 601.2b) and its mana value includes that value on the
@@ -524,6 +518,12 @@ fn matches_for_some_x(
 /// The largest value of X [`matches_for_some_x`] tries.
 const MAX_X_CONSIDERED: u32 = 30;
 
+/// Whether the permission `perm` the card `card` is being cast with still allows the
+/// spell it became as proposed, which has the characteristics `proposed` (with the value
+/// chosen for X in its mana cost): its qualities are judged with the choices made in the
+/// proposal, such as its mana value with that X (CR 601.2e, 601.3e; Lurrus of the
+/// Dream-Den ruling), and otherwise as the card was where it was cast from. A permission
+/// for that card allows it however it's proposed.
 pub fn still_allows(
     g: &Game,
     perm: &CastPermission,
