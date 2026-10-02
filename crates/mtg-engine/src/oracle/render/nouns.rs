@@ -65,6 +65,8 @@ pub(crate) struct Np {
     without: Vec<String>,
     rel: Vec<String>,
     post: Vec<String>,
+    /// A quality already says where the object is ("exiled with it").
+    zone_said: bool,
 }
 
 /// CR 205.2a order in which card types are printed together ("artifact creature",
@@ -193,7 +195,21 @@ impl Renderer<'_> {
         match f {
             Filter::Any => {}
             Filter::And(v) => {
+                // The same quality twice says it once.
+                let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    let k = format!("{x:?}");
+                    if seen.contains(&k) {
+                        continue;
+                    }
+                    seen.push(k);
+                    // "with the greatest power among creatures they control".
+                    if let Filter::ValueCmp(a, c, b) = x {
+                        if let Some(q) = self.extreme_quality(a, *c, b, v) {
+                            np.post.push(q);
+                            continue;
+                        }
+                    }
                     self.collect(x, np);
                 }
             }
@@ -320,6 +336,38 @@ impl Renderer<'_> {
                         _ => None,
                     }
                 };
+                // "total power and toughness": the sum of an object's power and toughness.
+                let total = |v: &Value| -> Option<Option<Sel>> {
+                    let Value::Sum(parts) = v else {
+                        return None;
+                    };
+                    match parts.as_slice() {
+                        [Value::PowerOf(p), Value::ToughnessOf(t)]
+                            if format!("{p:?}") == format!("{t:?}") =>
+                        {
+                            let tested =
+                                matches!(p.as_ref(), Sel::Var(crate::ability::vars::TESTED));
+                            Some((!tested).then(|| (**p).clone()))
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(None) = total(a) {
+                    let w = match (total(b), c) {
+                        // "with the same total power and toughness" (as the object named).
+                        (Some(Some(other)), Cmp::Eq) => {
+                            let o = self.sel(&other, Case::Obj);
+                            format!("with the same total power and toughness {{opt:as {o}}}")
+                        }
+                        (None, _) => {
+                            let v = self.value(b);
+                            format!("with total power and toughness {}", cmp_phrase(*c, &v))
+                        }
+                        _ => self.gap("a comparison of values of the object"),
+                    };
+                    np.post.push(w);
+                    return;
+                }
                 let w = match (own(a), own(b)) {
                     (Some(x), Some(y)) => {
                         format!("with {x} {}", cmp_phrase(*c, &format!("its {y}")))
@@ -453,6 +501,23 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
             }
+            // "for each creature card exiled this way": the cards the instruction before
+            // exiled.
+            Filter::In(s)
+                if self.after_exile
+                    && matches!(s.as_ref(), Sel::Var(v)
+                        if *v == crate::oracle::patterns::hand_graveyard_grammar::AFFECTED) =>
+            {
+                np.post.push("exiled this way".into());
+                np.kind.get_or_insert("card");
+            }
+            // "for each card revealed this way".
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(crate::kw::reveal_from_hand::REVEALED)) =>
+            {
+                np.post.push("revealed this way".into());
+                np.kind.get_or_insert("card");
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));
@@ -530,6 +595,24 @@ impl Renderer<'_> {
                 np.with.push(format!("the same name as {s}"));
             }
             Filter::Custom(name) => {
+                if let Some(q) = super::custom_filters::custom_rel(name) {
+                    use super::custom_filters::CustomQuality as Q;
+                    match q {
+                        Q::Rel(s) => np.rel.push(s),
+                        Q::RelInExile(s) => {
+                            np.rel.push(s);
+                            np.zone_said = true;
+                        }
+                        Q::Implied => {}
+                        Q::Kind(k) => np.kind = Some(k),
+                        Q::Adj(a) => np.status.push(a.to_string()),
+                    }
+                    return;
+                }
+                if let Some(s) = self.custom_rel_with_data(name) {
+                    np.rel.push(s);
+                    return;
+                }
                 let (adj, s) = self.custom_filter_quality(name);
                 if adj {
                     np.status.push(s);
@@ -834,6 +917,7 @@ impl Renderer<'_> {
             s.push_str(&join_list(&np.without, "or"));
         }
         match (np.zone, np.owner) {
+            (Some(ZoneKind::Exile), None) if np.zone_said => {}
             (Some(z), owner) if !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
@@ -953,6 +1037,8 @@ impl Renderer<'_> {
                 let p = self.target_player_mention(i);
                 format!("{p} or that planeswalker's controller controls")
             }
+            // "among creatures they control": the player each player is.
+            PlayerRel::Iterated => "{alt:that player controls|they control}".into(),
             other => {
                 let p = self.rel_subject(other);
                 format!("{p} controls")
@@ -982,7 +1068,20 @@ impl Renderer<'_> {
         }
         // "If that creature would die this turn": the selection itself.
         if let Filter::In(sel) = f {
-            return self.sel(sel, Case::Obj);
+            if !matches!(
+                sel.as_ref(),
+                Sel::Var(crate::kw::reveal_from_hand::REVEALED)
+            ) {
+                return self.sel(sel, Case::Obj);
+            }
+        }
+        // "the top card of target player's graveyard".
+        if let Some(s) = self.custom_whole_noun(f) {
+            return s;
+        }
+        // "target creature you control with the greatest power".
+        if let Some(s) = self.extreme_noun(f, &det) {
+            return s;
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".

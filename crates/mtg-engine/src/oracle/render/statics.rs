@@ -99,6 +99,12 @@ impl Renderer<'_> {
                 let e = self.static_effect(&s.effect);
                 format!("during your turn, {}", lower_first(&e))
             }
+            // "Once during each of your turns, you may cast a Zombie creature spell from
+            // your graveyard" (`once_each_turn.rs`).
+            Some(Condition::And(v)) if self.once_each_turn_permission(v, &s.effect).is_some() => {
+                self.once_each_turn_permission(v, &s.effect)
+                    .unwrap_or_default()
+            }
             Some(Condition::NotYourTurn) => {
                 let e = self.static_effect(&s.effect);
                 format!("during turns other than yours, {}", lower_first(&e))
@@ -1776,10 +1782,40 @@ impl Renderer<'_> {
             ) => self.damage_replacement(source, to_players, to_objects, false, true, action),
             // --- Players.
             (E::Draw(p), action) => {
-                let w = self.player_filter_subject(p);
-                let w = if w == "players" { "a player".into() } else { w };
+                // "If you would draw a card except the first one you draw in each of your
+                // draw steps".
+                let (p, except) = match p {
+                    PlayerFilter::And(v)
+                        if v.iter().any(|x| matches!(x, PlayerFilter::Not(f) if matches!(f.as_ref(), PlayerFilter::FirstDrawInDrawStep))) =>
+                    {
+                        let rest: Vec<PlayerFilter> = v
+                            .iter()
+                            .filter(|x| !matches!(x, PlayerFilter::Not(f) if matches!(f.as_ref(), PlayerFilter::FirstDrawInDrawStep)))
+                            .cloned()
+                            .collect();
+                        let rest = match rest.as_slice() {
+                            [one] => one.clone(),
+                            _ => PlayerFilter::And(rest),
+                        };
+                        (rest, true)
+                    }
+                    other => (other.clone(), false),
+                };
+                let w = self.player_filter_subject(&p);
+                let w = match w.as_str() {
+                    "players" => "a player".into(),
+                    "your opponents" if except => "an opponent".into(),
+                    _ => w,
+                };
                 let then = self.replacement_then(action, "");
-                format!("if {w} would draw a card, {then}")
+                let except = if !except {
+                    String::new()
+                } else if w == "you" {
+                    " except the first one you draw in each of your draw steps".into()
+                } else {
+                    " except the first one they draw in each of their draw steps".into()
+                };
+                format!("if {w} would draw a card{except}, {then}")
             }
             (E::DrawCards { who, min }, action) => {
                 let w = self.player_filter_subject(who);
@@ -1996,6 +2032,25 @@ impl Renderer<'_> {
                 let then = self.replacement_then(action, "");
                 format!("if {w} would search a library, {then}")
             }
+            // "If an effect would put one or more counters on a permanent you control, it
+            // puts twice that many of those counters on that permanent instead."
+            (
+                E::PutCountersMatching {
+                    on_objects,
+                    on_players,
+                    kind,
+                    by,
+                    effect_only,
+                },
+                action @ (A::Multiply(_) | A::Add(_)),
+            ) => self.counters_matching_replacement(
+                on_objects.as_ref(),
+                on_players.as_ref(),
+                kind.as_ref(),
+                *by,
+                *effect_only,
+                action,
+            ),
             (event, action) => self.gap(format!(
                 "replacement {:?} / {:?}",
                 std::mem::discriminant(event),

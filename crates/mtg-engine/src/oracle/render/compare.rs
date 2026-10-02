@@ -372,6 +372,14 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               singularization).",
     },
     Equivalence {
+        pattern: r"\bchoose ((?:up to \w+ )?target [^.;:]+?)\. (put|exile|destroy|tap|untap) (?:it|thatit)\b",
+        replacement: "$2 $1",
+        why: "\"Choose target creature card in your graveyard. Return it to the \
+              battlefield.\" is \"Return target creature card in your graveyard to the \
+              battlefield.\": a target is chosen as the spell or ability is put on the \
+              stack (CR 601.2c, 602.2b, 115.1), and \"it\" is that target.",
+    },
+    Equivalence {
         pattern: r"\bwhen you spend this mana to\b",
         replacement: "when that mana is spent to",
         why: "Mana goes to the pool of the player its ability's effect names, here the \
