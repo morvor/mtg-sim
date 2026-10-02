@@ -2000,20 +2000,25 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
-        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost will be paid.
-        if let Some(m) = &act.cost.mana {
-            crate::cost_rules::announce_phyrexian(self, p, id, m);
-        }
         // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
         // activation cost (at most one) is announced.
         let alt = self.announce_alternative_activation_cost(p, src, a, act);
+        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost that will be paid
+        // (the activation cost or the alternative cost) will be paid.
+        let announced = match &alt {
+            Some(c) => &c.mana,
+            None => &act.cost.mana,
+        };
+        if let Some(m) = announced {
+            crate::cost_rules::announce_phyrexian(self, p, id, m);
+        }
         // 602.2b: modes, targets.
         if !self.choose_modes_and_targets(id, &act.body, &mut ctx) {
             return Err(Illegal("no legal targets".into()));
         }
         // Costs (CR 601.2f: with the targets chosen).
-        let cost = self.ability_total_cost_with(p, src, a, act, Some(id), x as u32, alt.as_ref());
-        let mut cost = cost;
+        let mut cost =
+            self.ability_total_cost_with(p, src, a, act, Some(id), x as u32, alt.as_ref());
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the

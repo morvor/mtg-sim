@@ -1,6 +1,5 @@
 //! CR 602.2b with 601.2f, 118.7 and 118.9: an activated ability's total cost — cost
-//! increases before reductions, colored reductions, reductions that keep one mana, and
-//! alternative activation costs.
+//! increases before reductions, colored reductions, and reductions that keep one mana.
 
 use super::r600_common::*;
 use mtg_engine::ability::*;
@@ -74,8 +73,12 @@ fn a_colored_reduction_reduces_that_color_then_generic_mana() {
     );
     let p = t.custom(P0, pinger("{2}{R}"), Zone::Battlefield);
     assert_eq!(total(&mut t, p), "{1}");
-    let q = t.custom(P0, pinger("{U}{U}"), Zone::Battlefield);
-    assert_eq!(total(&mut t, q), "{U}{U}");
+    // A cost with no red mana: the reduction applies to its generic mana (CR 118.7b),
+    // never to its other colored mana.
+    let q = t.custom(P0, pinger("{3}{U}"), Zone::Battlefield);
+    assert_eq!(total(&mut t, q), "{1}{U}");
+    let r = t.custom(P0, pinger("{U}{U}"), Zone::Battlefield);
+    assert_eq!(total(&mut t, r), "{U}{U}");
 }
 
 #[test]

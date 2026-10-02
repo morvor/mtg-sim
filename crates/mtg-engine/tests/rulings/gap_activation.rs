@@ -110,7 +110,7 @@ fn reductions_apply_after_increases() {
 
 #[test]
 fn training_grounds_reduces_x_once_announced() {
-    cr!("601.2f", "107.3b");
+    cr!("601.2f", "107.3a");
     ruling!(
         "Training Grounds",
         "If you control Training Grounds and you activate the ability with X equal to 5, you'll have to pay only {3}{B}{B}."
@@ -175,38 +175,48 @@ fn zirda_reduces_non_mana_abilities_down_to_one_mana() {
     // A cycling cost of {2} (in any zone) becomes {1}.
     let plowbeast = t.hand(P0, "Yoked Plowbeast");
     assert_eq!(mana(&mut t, P0, plowbeast, 0, 0), "{1}");
-    // A mana ability that costs mana isn't affected: Azorius Signet's
-    // "{1}, {T}: Add {W}{U}." (with {2} more from Suppression Field, it would be).
-    t.battlefield(P0, "Suppression Field");
-    let signet = t.battlefield(P0, "Azorius Signet");
-    assert_eq!(mana(&mut t, P0, signet, 0, 0), "{1}");
-    assert_eq!(mana(&mut t, P0, ballista, 0, 0), "{4}");
-    // An opponent's abilities aren't affected ("Abilities you activate"): {4} + {2}.
+    // A mana ability that costs mana isn't affected: Cabal Coffers's
+    // "{2}, {T}: Add {B} for each Swamp you control." still costs {2}.
+    let coffers = t.battlefield(P0, "Cabal Coffers");
+    assert_eq!(mana(&mut t, P0, coffers, 0, 0), "{2}");
+    // An opponent's abilities aren't affected ("Abilities you activate").
     let theirs = t.battlefield(P1, "Walking Ballista");
-    assert_eq!(mana(&mut t, P1, theirs, 0, 0), "{6}");
+    assert_eq!(mana(&mut t, P1, theirs, 0, 0), "{4}");
 }
 
 #[test]
-fn kopala_taxes_abilities_targeting_merfolk_once() {
-    cr!("601.2c", "601.2f", "602.2b");
+fn suppression_field_taxes_abilities_but_not_mana_abilities_that_cost_mana() {
+    cr!("601.2f", "605.1a");
     ruling!(
-        "Kopala, Warden of Waves",
-        "Spells and abilities that target more than one Merfolk you control cost only {2} more to cast or activate."
+        "Suppression Field",
+        "(A “mana ability” is an ability that produces mana, not an ability that costs mana.)"
     );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Suppression Field");
+    let coffers = t.battlefield(P0, "Cabal Coffers");
+    assert_eq!(mana(&mut t, P0, coffers, 0, 0), "{2}");
+    // Any player's abilities, of permanents or of cards in hand.
+    let ballista = t.battlefield(P1, "Walking Ballista");
+    assert_eq!(mana(&mut t, P1, ballista, 0, 0), "{6}");
+    let plowbeast = t.hand(P0, "Yoked Plowbeast");
+    assert_eq!(mana(&mut t, P0, plowbeast, 0, 0), "{4}");
+}
+
+#[test]
+fn kopala_taxes_abilities_that_target_a_merfolk_once_the_targets_are_chosen() {
+    cr!("601.2c", "601.2f", "602.2b");
     supported("Kopala, Warden of Waves");
     let mut t = TestGame::new(2);
     let kopala = t.battlefield(P0, "Kopala, Warden of Waves");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
     // With no lands, P1 can't pay {2} to target Kopala (a Merfolk) ...
-    let before = t.g.clone();
     assert!(t
         .activate(P1, sorcerer, 0, &[Entity::Object(kopala)])
         .is_err());
-    t.g = before;
     // ... but can target a non-Merfolk.
     assert!(t.activate(P1, sorcerer, 0, &[Entity::Object(bears)]).is_ok());
-    // With two lands it can target Kopala, paying {2} more once.
+    // With lands, it can target Kopala, paying {2} more.
     let mut t = TestGame::new(2);
     let kopala = t.battlefield(P0, "Kopala, Warden of Waves");
     let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
@@ -216,6 +226,53 @@ fn kopala_taxes_abilities_targeting_merfolk_once() {
         .is_ok());
     let tapped = lands.iter().filter(|l| t.obj_now(**l).tapped).count();
     assert_eq!(tapped, 2);
+    // Kopala's controller's own abilities aren't taxed.
+    let own = t.battlefield(P0, "Prodigal Sorcerer");
+    assert!(t.activate(P0, own, 0, &[Entity::Object(kopala)]).is_ok());
+}
+
+#[test]
+fn kopala_taxes_spells_and_abilities_with_several_merfolk_targets_only_once() {
+    cr!("601.2c", "601.2f", "602.2b");
+    ruling!(
+        "Kopala, Warden of Waves",
+        "Spells and abilities that target more than one Merfolk you control cost only {2} more to cast or activate."
+    );
+    // An ability: "{T}: Tap two target creatures." costs {2}, not {4}.
+    let mut t = TestGame::new(2);
+    let kopala = t.battlefield(P0, "Kopala, Warden of Waves");
+    let merfolk = t.battlefield(P0, "Merfolk of the Pearl Trident");
+    let tapper = t.custom(
+        P1,
+        custom_card(
+            "Test Tapper",
+            "Artifact",
+            "{1}",
+            None,
+            "{T}: Tap two target creatures.",
+        ),
+        Zone::Battlefield,
+    );
+    let lands = t.lands(P1, "Island", 5);
+    t.answer_targets(P1, &[Entity::Object(kopala), Entity::Object(merfolk)]);
+    assert!(t.activate(P1, tapper, 0, &[]).is_ok());
+    let tapped = lands.iter().filter(|l| t.obj_now(**l).tapped).count();
+    assert_eq!(tapped, 2);
+    t.resolve_all();
+    assert!(t.obj_now(kopala).tapped && t.obj_now(merfolk).tapped);
+    // A spell: Arc Trail ({1}{R}) targeting both costs {3}{R}, not {5}{R}.
+    let mut t = TestGame::new(2);
+    let kopala = t.battlefield(P0, "Kopala, Warden of Waves");
+    let merfolk = t.battlefield(P0, "Merfolk of the Pearl Trident");
+    let lands = t.lands(P1, "Mountain", 7);
+    t.set_step(P1, Step::PrecombatMain);
+    let arc = t.hand(P1, "Arc Trail");
+    t.cast(P1, arc)
+        .target(Entity::Object(kopala))
+        .target(Entity::Object(merfolk))
+        .go();
+    let tapped = lands.iter().filter(|l| t.obj_now(**l).tapped).count();
+    assert_eq!(tapped, 4);
 }
 
 #[test]
@@ -264,9 +321,42 @@ fn new_perspectives_cycles_for_zero_but_still_discards() {
 }
 
 #[test]
+fn new_perspectives_needs_seven_cards_and_covers_typecycling() {
+    cr!("118.9", "702.29e", "702.29f");
+    ruling!(
+        "New Perspectives",
+        "Certain older cards have variants of cycling, such as basic landcycling or Wizardcycling. New Perspectives gives these abilities an alternate activation cost as well."
+    );
+    supported("Twisted Abomination");
+    // Six cards in hand: no alternative cost, and no mana to cycle.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "New Perspectives");
+    let card = t.hand(P0, "Yoked Plowbeast");
+    while t.hand_size(P0) < 6 {
+        t.hand(P0, "Grizzly Bears");
+    }
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    assert!(t.activate(P0, card, 0, &[]).is_err());
+    assert!(t.in_hand(P0, "Yoked Plowbeast"));
+    // Seven: "Swampcycling {2}" can be activated for {0}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "New Perspectives");
+    t.library_top(P0, "Swamp");
+    let abomination = t.hand(P0, "Twisted Abomination");
+    while t.hand_size(P0) < 7 {
+        t.hand(P0, "Grizzly Bears");
+    }
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    // (Its second activated ability; the first is "{B}: Regenerate".)
+    assert!(t.activate(P0, abomination, 1, &[]).is_ok());
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Twisted Abomination"));
+    assert!(t.in_hand(P0, "Swamp"));
+}
+
+#[test]
 fn forge_anew_pays_zero_for_the_first_equip_each_of_your_turns_at_instant_speed() {
     cr!("118.9", "118.9a", "602.5d");
-    ruling!("Forge Anew", "Reconfigure is not an equip ability.");
     supported("Forge Anew");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Forge Anew");
@@ -291,6 +381,48 @@ fn forge_anew_pays_zero_for_the_first_equip_each_of_your_turns_at_instant_speed(
     t.lands(P0, "Plains", 1);
     t.set_step(P1, Step::BeginningOfCombat);
     assert!(t.activate(P0, sword, 0, &[Entity::Object(bears)]).is_err());
+}
+
+#[test]
+fn forge_anew_covers_equip_variants_but_not_reconfigure() {
+    cr!("118.9", "702.6c", "702.151a");
+    ruling!("Forge Anew", "Reconfigure is not an equip ability.");
+    supported("Lizard Blades");
+    supported("Dúnedain Blade");
+    // Main phase, no lands: reconfigure ({2}) gets no {0} alternative cost ...
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Forge Anew");
+    let human = t.battlefield(P0, "Elite Vanguard");
+    let blades = t.battlefield(P0, "Lizard Blades");
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    assert!(t
+        .activate(P0, blades, 0, &[Entity::Object(human)])
+        .is_err());
+    // ... but "Equip Human {1}" is an equip ability.
+    let blade = t.battlefield(P0, "Dúnedain Blade");
+    t.clear_answers();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    assert!(t.activate(P0, blade, 0, &[Entity::Object(human)]).is_ok());
+    t.resolve_all();
+    assert_eq!(
+        t.obj_now(t.g.current(blade)).attached_to,
+        Some(Entity::Object(human))
+    );
+    // In combat on P0's turn, with mana for it, reconfigure still can't be activated:
+    // only equip abilities get instant timing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Forge Anew");
+    let human = t.battlefield(P0, "Elite Vanguard");
+    let blades = t.battlefield(P0, "Lizard Blades");
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(t
+        .activate(P0, blades, 0, &[Entity::Object(human)])
+        .is_err());
+    let blade = t.battlefield(P0, "Dúnedain Blade");
+    t.clear_answers();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    assert!(t.activate(P0, blade, 0, &[Entity::Object(human)]).is_ok());
 }
 
 #[test]
@@ -396,6 +528,66 @@ fn the_wandering_emperor_activates_at_instant_speed_the_turn_she_entered() {
     t.g.dirty = true;
     t.set_step(P1, Step::DeclareAttackers);
     assert!(t.activate(P0, emperor, 1, &[]).is_err());
+}
+
+#[test]
+fn jaces_machinations_lets_jace_activate_at_instant_speed_until_end_of_turn() {
+    cr!("606.3");
+    supported("Jace's Machinations");
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let jace = t.battlefield(P0, "Jace Beleren");
+    t.lands(P0, "Island", 3);
+    t.set_step(P0, Step::BeginningOfCombat);
+    // "−1: Target player draws a card." Not in combat without the permission.
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_err());
+    let machinations = t.hand(P0, "Jace's Machinations");
+    t.cast(P0, machinations).go();
+    t.resolve_all();
+    let hand = t.hand_size(P0);
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_ok());
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Still once per turn (CR 606.3).
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_err());
+    // The permission ends with the turn.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_err());
+}
+
+#[test]
+fn teferi_emblem_allows_one_loyalty_activation_on_each_players_turn() {
+    cr!("606.3");
+    ruling!(
+        "Teferi, Temporal Archmage",
+        "you could activate a planeswalker’s loyalty ability once on your turn and once on each of your opponents’ turns"
+    );
+    supported("Teferi, Temporal Archmage");
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let teferi = t.battlefield(P0, "Teferi, Temporal Archmage");
+    t.g.objects[teferi.0 as usize]
+        .counters
+        .insert("loyalty".into(), 10);
+    // "−10: You get an emblem with ..."
+    assert!(t.activate(P0, teferi, 2, &[]).is_ok());
+    t.resolve_all();
+    let jace = t.battlefield(P0, "Jace Beleren");
+    // Without the emblem's permission this would need a main phase of P0's turn.
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_ok());
+    t.resolve_all();
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_err());
+    // On the opponent's turn, once more.
+    t.advance_to(P1, Step::Upkeep);
+    let jace = t.g.current(jace);
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_ok());
+    t.resolve_all();
+    assert!(t.activate(P0, jace, 1, &[Entity::Player(P0)]).is_err());
 }
 
 #[test]
