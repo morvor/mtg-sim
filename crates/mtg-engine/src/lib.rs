@@ -24,6 +24,7 @@ pub mod actions;
 pub mod activation_costs;
 pub mod adventure;
 pub mod agents;
+pub mod aggregates;
 pub mod ante;
 pub mod apnap;
 pub mod as_though;
@@ -140,6 +141,7 @@ pub mod untap_choice;
 pub mod untap_limits;
 pub mod until;
 pub mod variants;
+pub mod x_cost_filters;
 pub mod zones;
 
 pub use card::{card, CardDb, CardDef};
