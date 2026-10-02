@@ -613,8 +613,8 @@ impl Game {
                 return true;
             }
             // CR 702.11b hexproof (and "hexproof from", 702.11d). An ability's qualities
-            // are those of its source (CR 113.7).
-            let quality_source = source.map(|s| self.ability_source_of(s));
+            // are those of its source (CR 113.7), except a quality naming the kind of
+            // ability ("hexproof from activated and triggered abilities").
             // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
             let ignore_hexproof =
                 crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
@@ -623,8 +623,8 @@ impl Game {
                     match &kw.filter {
                         None => return true,
                         Some(f) => {
-                            if let Some(s) = quality_source {
-                                if self.matches(s, f, &Ctx::new(Some(o), ob.controller)) {
+                            if let Some(s) = source {
+                                if crate::kw::hexproof::quality_stops(self, f, o, s) {
                                     return true;
                                 }
                             }
