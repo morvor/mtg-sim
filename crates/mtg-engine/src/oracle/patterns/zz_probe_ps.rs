@@ -59,6 +59,26 @@ mod probe {
             if l.is_empty() {
                 continue;
             }
+            if let Some(x) = l.strip_prefix("P:") {
+                eprintln!("P {x:?} => {:?}", crate::oracle::phrases::parse_object_phrase(x));
+                continue;
+            }
+            if let Some(x) = l.strip_prefix("T:") {
+                eprintln!("T {x:?} => {:?}", crate::oracle::phrases::parse_target(x));
+                continue;
+            }
+            if let Some(x) = l.strip_prefix("C:") {
+                let tl = crate::types::TypeLine::parse("Creature — Elf");
+                let ctx = CompileContext { card_name: "Probe", full_name: "Probe", type_line: &tl, layout: crate::card::Layout::Normal, face_index: 0, keywords: &[], power: Some("2"), toughness: Some("2") };
+                eprintln!("C {x:?} => {:?}", crate::oracle::statics::parse_condition(x, &ctx));
+                continue;
+            }
+            if let Some(x) = l.strip_prefix("E:") {
+                let tl = crate::types::TypeLine::parse("Sorcery");
+                let ctx = CompileContext { card_name: "Probe", full_name: "Probe", type_line: &tl, layout: crate::card::Layout::Normal, face_index: 0, keywords: &[], power: None, toughness: None };
+                eprintln!("E {x:?} => {:?}", crate::oracle::effects::parse_body(x, &ctx));
+                continue;
+            }
             let Some(def) = crate::card::CardDb::global().get(l) else {
                 eprintln!("?? {l}");
                 continue;

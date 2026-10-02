@@ -230,7 +230,9 @@ fn p_attach(l: &str, b: &mut Builder) -> Option<Effect> {
             b.it = saved.1.clone();
             let n = b.targets.len();
             let (to, rest) = recipient(t, &what, b)?;
-            if !end(&rest).is_empty() {
+            // "Return ~ ..., then attach it to that creature": a pronoun that came out as
+            // the attachment itself isn't understood (it can't be attached to itself).
+            if !end(&rest).is_empty() || format!("{to:?}") == format!("{what:?}") {
                 return None;
             }
             if let Sel::Choose { store, .. } = &what {
@@ -352,7 +354,7 @@ fn names_host(f: &Filter) -> bool {
 /// that creature", "Auras and Equipment attached to target creature", "permanents
 /// attached to creatures"), read with the builder so "it" and "that creature" mean what
 /// they refer to. Returns the filter (on the battlefield) and the rest.
-fn attached_objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+pub(crate) fn attached_objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
     if !s.contains("attached to ") {
         return None;
     }

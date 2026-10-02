@@ -797,6 +797,8 @@ impl Game {
                 who,
                 duration,
             } => {
+                // "If they do, ...": whether a player gained control of something.
+                ctx.prev_happened = false;
                 // CR 611.2b (Master Thief).
                 if self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
@@ -812,6 +814,7 @@ impl Game {
                 if objs.is_empty() {
                     return;
                 }
+                ctx.prev_happened = objs.iter().any(|o| self.obj(*o).controller != p);
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 self.effects.push(ContinuousEffect {

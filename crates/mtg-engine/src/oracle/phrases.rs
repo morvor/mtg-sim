@@ -215,6 +215,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         if rest == "commander" {
             return Some(Filter::not(Filter::Commander));
         }
+        // "nonattacking creatures" (CR 506.4).
+        if rest == "attacking" {
+            return Some(Filter::not(Filter::Attacking));
+        }
     }
     if let Some(s) = Supertype::from_word(w) {
         return Some(Filter::Supertype(s));
