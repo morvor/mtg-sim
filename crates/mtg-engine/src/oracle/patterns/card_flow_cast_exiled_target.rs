@@ -63,12 +63,16 @@ fn may_cast_exiled_target(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
                 card.clone(),
                 Filter::Not(Box::new(Filter::Type(CardType::Land))),
             ),
-            then: Box::new(Effect::GrantPlayPermission {
-                who: PlayerRef::You,
-                what: card,
-                duration,
-                free: false,
-            }),
+            // A permission to cast it, not to play a land (CR 305.9).
+            then: Box::new(
+                Effect::GrantPlayPermission {
+                    who: PlayerRef::You,
+                    what: card,
+                    duration,
+                    free: false,
+                }
+                .cast_only(),
+            ),
             otherwise: Box::new(Effect::Noop),
         }),
     };

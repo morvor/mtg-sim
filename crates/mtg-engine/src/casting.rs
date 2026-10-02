@@ -101,7 +101,8 @@ pub fn grant_play_permission(
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
 /// that are lands can't be cast (CR 305.9). A preparation card is cast only normally
-/// (CR 722.3).
+/// (CR 722.3). A face-down card outside the battlefield (a foretold card, CR 702.143a) is
+/// turned face up as it's cast, with any of these.
 pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
@@ -112,7 +113,7 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
     };
-    if faces.len() == 1 || o.face_down {
+    if faces.len() == 1 || (o.face_down && o.zone == Zone::Battlefield) {
         return vec![FaceState::Front];
     }
     faces

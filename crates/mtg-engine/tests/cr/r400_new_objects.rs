@@ -70,6 +70,7 @@ fn graveyard_paragon() -> CardDef {
             lands: false,
             spells: true,
             cost: None,
+            flash: false,
         })))
         .ability(stat(StaticEffect::CastGrant {
             zone: ZoneKind::Graveyard,
@@ -275,6 +276,7 @@ fn graveyard_warden() -> CardDef {
             lands: true,
             spells: false,
             cost: None,
+            flash: false,
         })))
         .ability(stat(StaticEffect::CastGrant {
             zone: ZoneKind::Graveyard,

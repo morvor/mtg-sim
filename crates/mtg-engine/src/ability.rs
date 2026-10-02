@@ -2392,6 +2392,11 @@ pub struct PlayPermission {
     pub spells: bool,
     /// Alternative cost, e.g. "without paying its mana cost" or "by paying life".
     pub cost: Option<Cost>,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 702.8a):
+    /// spells cast with this permission may be cast any time their player could cast an
+    /// instant.
+    #[serde(default)]
+    pub flash: bool,
 }
 
 /// The terms an effect's permission to play particular cards comes with (CR 601.3,
@@ -3506,6 +3511,18 @@ pub enum UntilEvent {
 }
 
 impl Effect {
+    /// The permissions to play cards this effect gives are permissions to cast them ("you
+    /// may cast that card"): a land can't be played with them (CR 305.9).
+    pub fn cast_only(self) -> Effect {
+        Effect::WithPlayTerms {
+            terms: PlayTerms {
+                spells_only: true,
+                ..Default::default()
+            },
+            effect: Box::new(self),
+        }
+    }
+
     pub fn seq(v: Vec<Effect>) -> Effect {
         let mut out = Vec::new();
         for e in v {

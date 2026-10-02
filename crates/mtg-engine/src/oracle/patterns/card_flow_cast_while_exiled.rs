@@ -46,7 +46,9 @@ fn may_cast_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         // The permission is for that object: it ends when the card leaves exile.
         duration: Duration::Permanent,
         free: false,
-    }];
+    }
+    // A permission to cast it, not to play a land (CR 305.9).
+    .cast_only()];
     if any_type {
         grant.push(Effect::SpendAnyTypeMana {
             who: PlayerRef::You,

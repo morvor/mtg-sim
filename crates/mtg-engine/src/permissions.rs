@@ -100,11 +100,14 @@ pub fn own_permissions_only<R>(f: impl FnOnce() -> R) -> R {
 }
 
 /// The terms of a static permission: one to cast spells from somewhere other than the
-/// hand for an alternative cost requires that cost (CR 118.9b). ("You may cast spells from
+/// hand for an alternative cost requires that cost (CR 118.9b) ("You may cast spells from
 /// your hand without paying their mana costs" offers an alternative cost instead, see
-/// `casting.rs`.)
+/// `casting.rs`); spells cast with one may have flash.
 fn static_terms(perm: &PlayPermission) -> (bool, PlayTerms) {
-    let mut terms = PlayTerms::default();
+    let mut terms = PlayTerms {
+        flash: perm.flash,
+        ..Default::default()
+    };
     let mut free = false;
     if perm.zone != ZoneKind::Hand {
         match &perm.cost {
