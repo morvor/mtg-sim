@@ -342,3 +342,44 @@ fn scheming_symmetry_each_of_them_searches() {
     assert_eq!(top1, "Lightning Bolt", "{}", t.dump_log());
     assert_eq!(top2, "Grizzly Bears");
 }
+
+#[test]
+fn choice_of_damnations_lose_that_much_life() {
+    cr!("608.2d");
+    ruling!(
+        "Choice of Damnations",
+        "After the opponent chooses a number, Choice of Damnations’ controller may choose to make that opponent either lose that much life or make that opponent sacrifice permanents."
+    );
+    compiles("Choice of Damnations");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    t.answer(P1, DecisionKind::Number, mtg_engine::decision::Answer::Number(7));
+    t.answer_yes(P0, true);
+    let spell = t.hand(P0, "Choice of Damnations");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 13, "{}", t.dump_log());
+}
+
+#[test]
+fn choice_of_damnations_sacrifice_all_but_that_many() {
+    cr!("608.2d", "701.21a");
+    ruling!(
+        "Choice of Damnations",
+        "If the opponent must sacrifice all but a number of permanents, that opponent chooses that many permanents and then sacrifices the rest."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    let keep = t.battlefield(P1, "Grizzly Bears");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Forest");
+    t.answer(P1, DecisionKind::Number, mtg_engine::decision::Answer::Number(1));
+    t.answer_yes(P0, false);
+    t.answer_choose(P1, &[Entity::Object(keep)]);
+    let spell = t.hand(P0, "Choice of Damnations");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.on_battlefield(keep), "{}", t.dump_log());
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
