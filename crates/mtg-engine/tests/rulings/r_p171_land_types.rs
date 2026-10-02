@@ -15,10 +15,8 @@ use mtg_engine::testing::*;
 use mtg_engine::*;
 
 /// (reveal land, the land types it asks for, a land card with one of those types).
-const REVEAL_LANDS: [(&str, &str); 2] = [
-    ("Choked Estuary", "Island"),
-    ("Foreboding Ruins", "Swamp"),
-];
+const REVEAL_LANDS: [(&str, &str); 2] =
+    [("Choked Estuary", "Island"), ("Foreboding Ruins", "Swamp")];
 
 #[test]
 fn a_land_entering_from_hand_at_the_same_time_can_be_revealed() {
@@ -232,7 +230,8 @@ fn infernal_harvest_returns_x_swamps_once_as_it_is_cast() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let card = t.hand(P0, "Infernal Harvest");
     t.answer(P0, DecisionKind::X, Answer::Number(0));
-    t.cast_with(P0, card, &[]).expect("cast Infernal Harvest for X = 0");
+    t.cast_with(P0, card, &[])
+        .expect("cast Infernal Harvest for X = 0");
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Infernal Harvest"));
     assert!(swamps.iter().all(|s| t.on_battlefield(*s)));
