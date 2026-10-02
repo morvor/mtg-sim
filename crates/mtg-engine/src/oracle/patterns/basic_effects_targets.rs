@@ -248,7 +248,7 @@ fn sels_len(s: &Sel) -> usize {
     }
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: [verb] several targets", priority: 48, parse: verb_targets } }
+inventory::submit! { EffectPattern { name: "basic effects: [verb] several targets", priority: 150, parse: verb_targets } }
 
 /// A player-or-object target the core phrase parser doesn't read: "target player or
 /// battle", "target opponent or battle", "another target battle or opponent".
@@ -302,7 +302,7 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
                     let slot = b.add_target(spec, rep);
                     return Some((Sel::Target(slot), r.to_string(), false));
                 }
-                let (sel, rest) = object_ref(&format!("{rep}{r}"), b)?;
+                let (sel, rest) = one_target(&format!("{rep}{r}"), b)?;
                 return Some((sel, rest, false));
             }
         }
@@ -311,6 +311,106 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
         if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
             return Some((Sel::Players(PlayerRef::You), r.to_string(), false));
         }
+    }
+    // Players: "each other opponent" (other than the one the ability is about), "each
+    // opponent", "that player", ...
+    let players: [(&str, Option<PlayerRef>); 6] = [
+        (
+            "each other opponent",
+            (!super::oracle_hardening_referents::is_no_player_referent(&b.it_player)).then(|| {
+                PlayerRef::Each(PlayerFilter::And(vec![
+                    PlayerFilter::Opponent,
+                    PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(b.it_player.clone())))),
+                ]))
+            }),
+        ),
+        ("each opponent", Some(PlayerRef::EachOpponent)),
+        ("each player", Some(PlayerRef::EachPlayer)),
+        ("each other player", Some(PlayerRef::EachOtherPlayer)),
+        ("defending player", Some(PlayerRef::DefendingPlayer)),
+        (
+            "that player",
+            (!super::oracle_hardening_referents::is_no_player_referent(&b.it_player))
+                .then(|| b.it_player.clone()),
+        ),
+    ];
+    for (p, who) in players {
+        if let Some(r) = s.strip_prefix(p) {
+            if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
+                return Some((Sel::Players(who?), r.to_string(), true));
+            }
+        }
+    }
+    // "each creature without flying that player controls": the player an earlier part of
+    // the text named.
+    if let Some(r) = s.strip_prefix("each ") {
+        if let Some(i) = r.find(" that player controls") {
+            if !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                let (f, plural, tail) = parse_object_phrase(&r[..i])?;
+                if plural || !end(tail).is_empty() {
+                    return None;
+                }
+                let f = Filter::and(vec![
+                    f,
+                    Filter::ControlledByPlayer(Box::new(b.it_player.clone())),
+                ]);
+                let rest = &r[i + " that player controls".len()..];
+                return Some((Sel::All(f), rest.to_string(), true));
+            }
+        }
+    }
+    // "enchanted artifact's controller", "target spell's controller".
+    if let Some(i) = s.find("'s controller") {
+        let head = &s[..i];
+        let rest = &s[i + "'s controller".len()..];
+        let who = if head.starts_with("enchanted ") || head.starts_with("equipped ") {
+            let (sel, tail) = object_ref(head, b)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            sel
+        } else if head.starts_with("target ") {
+            let (spec, tail) = parse_target(head)
+                .or_else(|| super::basic_effects_counter::stack_target(head))?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            let slot = b.add_target(spec, head);
+            Sel::Target(slot)
+        } else {
+            return None;
+        };
+        return Some((
+            Sel::Players(PlayerRef::ControllerOf(Box::new(who))),
+            rest.to_string(),
+            true,
+        ));
+    }
+    // "any target that isn't a Dinosaur", "any target that was dealt damage this turn"
+    if let Some(r) = s.strip_prefix("any target that ") {
+        let any = Filter::Or(vec![
+            Filter::creature(),
+            Filter::Type(crate::types::CardType::Planeswalker),
+            Filter::Type(crate::types::CardType::Battle),
+        ]);
+        let (objects, players, rest) = if let Some(x) = r.strip_prefix("was dealt damage this turn") {
+            (Filter::DealtDamageThisTurn, PlayerFilter::DealtDamageThisTurn, x)
+        } else {
+            let x = r.strip_prefix("isn't a ").or_else(|| r.strip_prefix("isn't an "))?;
+            let (f, plural, x) = parse_object_phrase(x)?;
+            if plural {
+                return None;
+            }
+            // A player is never an object.
+            (Filter::not(f), PlayerFilter::Any, x)
+        };
+        let text = s[..s.len() - rest.len()].trim().to_string();
+        let spec = TargetSpec::one(
+            TargetKind::ObjectOrPlayer(Filter::and(vec![any, objects]), players),
+            text.clone(),
+        );
+        let slot = b.add_target(spec, &text);
+        return Some((Sel::Target(slot), rest.to_string(), true));
     }
     // "target player who attacked this turn"
     if let Some(r) = s.strip_prefix("target player who attacked this turn") {
@@ -325,31 +425,111 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
     Some((sel, rest, false))
 }
 
+/// The subject of a damage sentence: "~ deals", "it deals", "he deals", or "[object]
+/// deals" (one object). Returns the source and the rest after "deals ".
+fn damage_subject(l: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    if let Some(r) = l.strip_prefix("~ deals ") {
+        return Some((Sel::This, r.to_string()));
+    }
+    for p in ["it deals ", "he deals ", "she deals "] {
+        if let Some(r) = l.strip_prefix(p) {
+            let it = super::pronoun_groups::singular_it(b);
+            if super::oracle_hardening_referents::is_no_referent(&it) {
+                return None;
+            }
+            return Some((it, r.to_string()));
+        }
+    }
+    // "Gideon deals 1 damage to that player" (Gideon the Oathless): a legendary card
+    // called by the first word of its name.
+    if b.ctx
+        .type_line
+        .supertypes
+        .contains(crate::types::Supertype::Legendary)
+    {
+        if let Some((first, _)) = b.ctx.card_name.split_once(' ') {
+            let first = first.trim_end_matches(',').to_lowercase();
+            if let Some(r) = l
+                .strip_prefix(first.as_str())
+                .and_then(|r| r.strip_prefix(" deals "))
+            {
+                return Some((Sel::This, r.to_string()));
+            }
+        }
+    }
+    // "Target creature an opponent controls deals damage equal to its power to ...".
+    if super::pronoun_groups::plural_pronoun(l).is_some() || l.starts_with("each ") {
+        return None;
+    }
+    let (sel, rest) = object_ref(l, b)?;
+    if matches!(sel, Sel::All(_) | Sel::Union(_) | Sel::Players(_)) {
+        return None;
+    }
+    let r = rest.trim_start().strip_prefix("deals ")?;
+    Some((sel, r.to_string()))
+}
+
+/// The amount of one part: "3 damage to", "that much damage to" (the triggering event's
+/// amount), "damage equal to [value] to" ("its" being the source). Returns the amount and
+/// the recipient text.
+fn damage_amount(s: &str, source: &Sel, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(r) = s.strip_prefix("that much damage to ") {
+        if !b.in_trigger {
+            return None;
+        }
+        return Some((Value::EventAmount, r.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("damage equal to ") {
+        let saved = std::mem::replace(&mut b.it, source.clone());
+        let parsed = crate::oracle::statics::parse_value_phrase(r, b);
+        b.it = saved;
+        let (v, rest) = parsed?;
+        let rest = rest.trim_start().strip_prefix("to ")?;
+        return Some((v, rest.to_string()));
+    }
+    let (n, r) = number_expr(s)?;
+    let r = strip(r, "damage to ")?;
+    Some((n, r.to_string()))
+}
+
+/// "3", "x plus 2", "five times x".
+fn number_expr(s: &str) -> Option<(Value, &str)> {
+    let (n, r) = parse_number(s)?;
+    if let Some(x) = strip(r, "plus ") {
+        let (m, r2) = parse_number(x)?;
+        return Some((Value::Sum(vec![n, m]), r2));
+    }
+    if let Some(x) = strip(r, "times ") {
+        let (m, r2) = parse_number(x)?;
+        return Some((Value::Mul(Box::new(n), Box::new(m)), r2));
+    }
+    Some((n, r))
+}
+
 /// "~ deals 2 damage to any target, 2 damage to another target, and 3 damage to a third
 /// target", "it deals 3 damage to another target battle or opponent and 2 damage to up to
 /// one target creature", "~ deals 4 damage to target player who attacked this turn and 4
-/// damage to you": several amounts, each to its own recipient, dealt at the same time
-/// (CR 120.2).
+/// damage to you", "it deals that much damage to each other opponent", "target creature an
+/// opponent controls deals damage equal to its power to another target creature that
+/// player controls": one source, one or more amounts each to its own recipient, all dealt
+/// at the same time (CR 120.2).
 fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (source, r) = if let Some(r) = l.strip_prefix("~ deals ") {
-        (Sel::This, r)
-    } else if let Some(r) = l.strip_prefix("it deals ") {
-        if !matches!(b.it, Sel::This) {
-            return None;
-        }
-        (Sel::This, r)
-    } else {
-        return None;
-    };
+    let (source, r) = damage_subject(l, b)?;
     let mut parts = Vec::new();
-    let mut special = false;
-    let mut rest = r.to_string();
+    let mut rest = r;
     loop {
-        let (n, r) = parse_number(&rest)?;
-        let r = strip(r, "damage to ")?.to_string();
-        let (to, r, sp) = damage_recipient(&r, b)?;
-        special |= sp;
+        // "damage to target spell's controller equal to that spell's mana value"
+        if let Some(r) = rest.strip_prefix("damage to ") {
+            let (to, r, _) = damage_recipient(r, b)?;
+            let r = r.trim_start().strip_prefix("equal to ")?;
+            let (n, r) = crate::oracle::statics::parse_value_phrase(r, b)?;
+            parts.push((n, to));
+            rest = r;
+            break;
+        }
+        let (n, r) = damage_amount(&rest, &source, b)?;
+        let (to, r, _) = damage_recipient(&r, b)?;
         parts.push((n, to));
         rest = r;
         let next = [", and ", ", ", " and "]
@@ -360,7 +540,7 @@ fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
             _ => break,
         }
     }
-    if (parts.len() < 2 && !special) || !end(&rest).is_empty() {
+    if !end(&rest).is_empty() {
         return None;
     }
     Some(Effect::seq(
@@ -375,29 +555,54 @@ fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
     ))
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: damage in several parts", priority: 48, parse: damage_parts } }
+inventory::submit! { EffectPattern { name: "basic effects: damage in parts", priority: 150, parse: damage_parts } }
 
 /// "~ deals 4 damage to each of up to one target creature, up to one target player, and/or
 /// up to one target planeswalker": one amount to each object or player named.
 fn damage_to_each_of(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let r = l
-        .strip_prefix("~ deals ")
-        .or_else(|| l.strip_prefix("it deals ").filter(|_| matches!(b.it, Sel::This)))?;
-    let (amount, r) = parse_number(r)?;
+    let (source, r) = damage_subject(l, b)?;
+    let (amount, r) = parse_number(&r)?;
     let r = strip(r, "damage to each of ")?;
     let (sels, tail) = object_list(r, b)?;
     if sels.len() < 2 || !end(&tail).is_empty() {
         return None;
     }
     Some(Effect::DealDamage {
-        source: Sel::This,
+        source,
         amount,
         to: Sel::Union(sels),
     })
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: damage to each of several targets", priority: 48, parse: damage_to_each_of } }
+inventory::submit! { EffectPattern { name: "basic effects: damage to each of several targets", priority: 150, parse: damage_to_each_of } }
+
+/// "Each creature deals 1 damage to its controller." (Rakdos Charm): each object deals
+/// damage to its own controller, all at the same time (CR 120.2).
+fn each_deals_to_its_controller(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("each ")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural {
+        return None;
+    }
+    let r = rest.trim_start().strip_prefix("deals ")?;
+    let (n, r) = parse_number(r)?;
+    if strip(r, "damage to its controller").is_none_or(|x| !x.is_empty()) {
+        return None;
+    }
+    const EACH: Var = vars::USER + 3330;
+    Some(Effect::ForEach {
+        sel: Sel::All(f),
+        var: EACH,
+        effect: Box::new(Effect::DealDamage {
+            source: Sel::Var(EACH),
+            amount: n,
+            to: Sel::Players(PlayerRef::ControllerOf(Box::new(Sel::Var(EACH)))),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: each [object] deals damage to its controller", priority: 150, parse: each_deals_to_its_controller } }
 
 #[cfg(test)]
 mod tests {
@@ -465,3 +670,16 @@ mod builder_tests {
         });
     }
 }
+
+/// "~ gains swampwalk until end of turn and deals 1 damage to you", "it gets +3/+3 until
+/// end of turn and deals 3 damage to each opponent": the second instruction's subject is
+/// the first one's, the source.
+fn deals_without_subject(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("deals ")?;
+    if !matches!(super::pronoun_groups::singular_it(b), Sel::This) {
+        return None;
+    }
+    damage_parts(&format!("~ deals {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: deals damage (subject of the previous instruction)", priority: 150, parse: deals_without_subject } }

@@ -975,6 +975,11 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
+    // "Each creature deals 1 damage to its controller": each to its own controller (see
+    // `patterns::basic_effects_targets`).
+    if matches!(src, Sel::All(_)) && end(&rest).ends_with(" damage to its controller") {
+        return None;
+    }
     let rest = rest.as_str();
     let owned_tail: String;
     let (amount, rest) = if let Some(r) = rest.strip_prefix("damage equal to ") {
