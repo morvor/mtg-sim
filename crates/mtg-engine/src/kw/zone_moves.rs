@@ -7,7 +7,10 @@ use crate::types::Entity;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
-use crate::oracle::patterns::zone_move_grammar::{RANDOM_COUNT, RANDOM_PICK, RANDOM_POOL};
+use crate::oracle::patterns::zone_move_grammar::{
+    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, RANDOM_COUNT, RANDOM_PICK, RANDOM_POOL,
+};
+use crate::types::ObjectId;
 
 /// `Effect::Custom`: picks [`RANDOM_COUNT`] of the objects in [`RANDOM_POOL`] at random
 /// (all of them if there are fewer) and stores them in [`RANDOM_PICK`].
@@ -30,6 +33,57 @@ impl KeywordRules for ZoneMoves {
         pool.shuffle(&mut g.rng);
         pool.truncate(n);
         ctx.vars.insert(RANDOM_PICK, pool);
+        true
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        (name == DEALT_DAMAGE_THIS_TURN)
+            .then(|| g.history.damage_sources.iter().any(|(s, _)| *s == id))
+    }
+
+    /// "Has all activated abilities of all [kind] cards exiled with ~" (layer 6): the
+    /// activated abilities of the cards the source's linked abilities exiled that are
+    /// still in exile (CR 607.2a), including activated abilities of keywords.
+    fn custom_modification(
+        &self,
+        g: &Game,
+        name: &str,
+        chars: &mut crate::object::Characteristics,
+        ctx: &Ctx,
+        _target: ObjectId,
+    ) -> bool {
+        let Some(kind) = name.strip_prefix(ACTIVATED_ABILITIES_OF_EXILED) else {
+            return false;
+        };
+        let card_type = crate::types::CardType::from_word(kind);
+        let mut gained = Vec::new();
+        for e in g.eval_sel(&crate::ability::Sel::Linked, ctx) {
+            let Entity::Object(c) = e else { continue };
+            let o = g.obj(c);
+            if !o.is_card() || !matches!(o.zone, crate::object::Zone::Exile) {
+                continue;
+            }
+            let ok = kind.is_empty()
+                || match card_type {
+                    Some(t) => o.chars.card_types.contains(t),
+                    None => o.chars.has_subtype(kind),
+                };
+            if !ok {
+                continue;
+            }
+            for a in &o.chars.abilities {
+                match &a.kind {
+                    crate::ability::AbilityKind::Activated(_) => gained.push(a.clone()),
+                    crate::ability::AbilityKind::Keyword(k) => gained.extend(
+                        crate::keyword_impls::derived_abilities(k).into_iter().filter(|d| {
+                            matches!(d.kind, crate::ability::AbilityKind::Activated(_))
+                        }),
+                    ),
+                    _ => {}
+                }
+            }
+        }
+        chars.abilities.extend(gained);
         true
     }
 }

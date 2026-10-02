@@ -36,6 +36,15 @@ use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 use smol_str::SmolStr;
 
+macro_rules! dbg_zm {
+    ($($t:tt)*) => {
+        #[cfg(test)]
+        if std::env::var("ZM_DEBUG").is_ok() {
+            eprintln!($($t)*);
+        }
+    };
+}
+
 /// The candidates a random choice is made among, how many are picked, and the pick.
 pub const RANDOM_POOL: Var = vars::USER + 7400;
 pub const RANDOM_PICK: Var = vars::USER + 7401;
@@ -352,6 +361,24 @@ fn history<'a>(s: &'a str, b: &Builder) -> Option<(Filter, &'a str)> {
             ));
         }
     }
+    // "that were put into your graveyard from the battlefield this turn" (Fell Shepherd).
+    for (p, from) in [
+        ("that were put into your graveyard from the battlefield this turn", "battlefield"),
+        ("that was put into your graveyard from the battlefield this turn", "battlefield"),
+        ("that were put into your graveyard this turn", ""),
+        ("that were put into your graveyard from anywhere this turn", ""),
+    ] {
+        if let Some(r) = strip_word(t, p) {
+            return Some((
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::You),
+                    Filter::Custom(SmolStr::new(format!("{PUT_THERE_THIS_TURN}{from}"))),
+                ]),
+                r,
+            ));
+        }
+    }
     for (p, var) in [
         ("milled this way", vars::IT),
         ("put into a graveyard this way", vars::IT),
@@ -441,7 +468,9 @@ fn is_target_phrase(s: &str) -> bool {
         return false;
     };
     let head = s[..i].trim();
-    if head.is_empty() || matches!(head, "another" | "any number of" | "one, two, or three") {
+    if head.is_empty()
+        || matches!(head, "another" | "any number of" | "one, two, or three" | "one or two")
+    {
         return true;
     }
     let head = head.strip_prefix("up to ").unwrap_or(head);
@@ -521,6 +550,12 @@ fn described(
     subject: &Subject,
 ) -> Option<(Filter, bool, bool, String)> {
     let (adj, s) = zone_adjectives(s.trim_start());
+    // The next item of a list ("artifact card, up to one target land card, and ...")
+    // isn't part of this phrase: it's left for the list.
+    let (s, next_items) = match next_item_at(s) {
+        Some(i) => (&s[..i], &s[i..]),
+        None => (s, ""),
+    };
     // The shared phrase parser reads some zone phrases ("from your hand") but not others
     // ("from your hand or graveyard"): the zone is read here.
     let cut = s
@@ -542,9 +577,124 @@ fn described(
     if !subject.is_you() {
         b.it_player = subject.who.clone();
     }
-    let parsed = super::value_grammar::objects(head, b);
+    // The reading that understands more of the phrase.
+    let parsed = match (super::value_grammar::objects(head, b), alternatives(head, b)) {
+        (Some(a), Some(c)) => Some(if c.1.len() < a.1.len() { c } else { a }),
+        (a, c) => a.or(c),
+    };
     b.it_player = outer_player;
+    dbg_zm!("ZM described head {head:?} parsed {parsed:?}");
     let (filter, rest) = parsed?;
+    // "outlaw creature cards": the shared parser leaves "cards" after a batch noun.
+    let (filter, rest) = match strip_word(rest.trim_start(), "cards").or_else(|| strip_word(rest.trim_start(), "card")) {
+        Some(r) if !names_cards(&filter) => (Filter::and(vec![filter, Filter::Card]), r.to_string()),
+        _ => (filter, rest),
+    };
+    // "cards each with mana value X or less".
+    let rest = match rest.trim_start().strip_prefix("each with ") {
+        Some(r) => {
+            let (f, r2) = super::value_grammar::objects(&format!("card with {r}"), b)?;
+            let f = Filter::and(vec![filter.clone(), f]);
+            let r = finish_described(f, adj, r2, tail, b, subject)?;
+            return Some((r.0, r.1, r.2, format!("{}{next_items}", r.3)));
+        }
+        None => rest,
+    };
+    let r = finish_described(filter, adj, rest, tail, b, subject)?;
+    Some((r.0, r.1, r.2, format!("{}{next_items}", r.3)))
+}
+
+/// Where the next item of a list starts in `s` (at its separator): ", up to one target
+/// land card", " and target land", ", and a land card".
+fn next_item_at(s: &str) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    for sep in [", and/or ", ", and ", ", ", " and/or ", " and "] {
+        for (i, _) in s.match_indices(sep) {
+            let after = &s[i + sep.len()..];
+            let starts_item = (is_target_phrase(after)
+                && after.find("target ").is_some_and(|j| after[..j].split(' ').count() <= 6))
+                || ["up to ", "a ", "an ", "another ", "all ", "each ", "~ "]
+                    .iter()
+                    .any(|p| after.starts_with(p));
+            if starts_item && best.is_none_or(|b| i < b) {
+                best = Some(i);
+            }
+        }
+    }
+    best
+}
+
+/// "artifact or non-Aura enchantment card", "artifact, enchantment, or legendary card",
+/// "Angel, Demon, or Dragon creature card": alternatives (each adjectives and a type or
+/// subtype) before the noun and qualifiers they share.
+fn alternatives(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    let mut alts: Vec<Filter> = Vec::new();
+    let mut cur: Vec<Filter> = Vec::new();
+    let mut rest = s.trim_start();
+    loop {
+        let (w, r) = split_word(rest);
+        let comma = w.ends_with(',');
+        let w = w.trim_end_matches(',');
+        if w.is_empty() {
+            return None;
+        }
+        // The type or subtype that ends an alternative.
+        if let Some(h) = head_noun(w).filter(|h| matches!(h, Filter::Type(_) | Filter::Subtype(_))) {
+            // A type followed by a noun that narrows it ends the list ("Dragon creature
+            // card").
+            let next = split_word(r).0.trim_end_matches(',');
+            let narrows = !comma && !matches!(next, "or" | "and/or") && head_noun(next).is_some();
+            if narrows {
+                if alts.is_empty() {
+                    return None;
+                }
+                cur.push(h);
+                alts.push(Filter::and(std::mem::take(&mut cur)));
+                rest = r;
+                break;
+            }
+            cur.push(h);
+            alts.push(Filter::and(std::mem::take(&mut cur)));
+            rest = r;
+            let t = rest.trim_start();
+            if let Some(r2) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
+                rest = r2;
+                continue;
+            }
+            if comma {
+                continue;
+            }
+            break;
+        }
+        // "artifact, enchantment, or legendary card": the last alternative is adjectives
+        // only, before the shared noun.
+        if matches!(w, "card" | "cards" | "permanent" | "permanents") {
+            if alts.is_empty() || cur.is_empty() {
+                return None;
+            }
+            alts.push(Filter::and(std::mem::take(&mut cur)));
+            break;
+        }
+        // An adjective of the alternative ("non-Aura").
+        cur.push(adjective(w)?);
+        rest = r;
+    }
+    if alts.len() < 2 || !cur.is_empty() {
+        return None;
+    }
+    // The shared noun and qualifiers: "card with mana value 3 or less", "creature card".
+    let (f, r) = super::value_grammar::objects(rest, b)?;
+    Some((Filter::and(vec![Filter::Or(alts), f]), r))
+}
+
+fn finish_described(
+    filter: Filter,
+    adj: Vec<Filter>,
+    rest: String,
+    tail: &str,
+    b: &mut Builder,
+    subject: &Subject,
+) -> Option<(Filter, bool, bool, String)> {
     let mut filter = Filter::and(adj.into_iter().chain([filter]).collect());
     let mut rest = format!("{rest}{tail}");
     let mut random = false;
@@ -617,6 +767,10 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         (Value::c(0), n, r.trim_start())
     } else if let Some(r) = t.strip_prefix("any number of ") {
         (Value::c(0), Value::c(99), r)
+    } else if let Some(r) = t.strip_prefix("one, two, or three ") {
+        (Value::c(1), Value::c(3), r)
+    } else if let Some(r) = t.strip_prefix("one or two ") {
+        (Value::c(1), Value::c(2), r)
     } else if let Some((n, r)) = parse_number(t).filter(|(_, r)| r.trim_start().starts_with("target ")) {
         (n.clone(), n, r.trim_start())
     } else {
@@ -626,7 +780,9 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         Some(r) => (true, r),
         None => (false, r.strip_prefix("target ")?),
     };
-    let (filter, others, random, rest) = described(r, b, subject)?;
+    let d = described(r, b, subject);
+    dbg_zm!("ZM target described {r:?} -> {d:?}");
+    let (filter, others, random, rest) = d?;
     if random || !continues(&rest) {
         return None;
     }
@@ -1115,8 +1271,10 @@ fn p_move(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
+    dbg_zm!("ZM clause {l:?}");
     let (subject, _verb, r) = subject_verb(l, b)?;
     let r = r.as_str();
+    dbg_zm!("ZM subject {subject:?} rest {r:?} it {:?} group {:?}", b.it, b.group);
     // Inverted order: "return to your hand all ...", "put onto the battlefield under your
     // control all ...".
     let (items, mut to, tail) = if r.starts_with("to ") || r.starts_with("onto ") {
@@ -1126,6 +1284,7 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
         (items, to, tail)
     } else {
         let (items, rest) = items(r, b, &subject)?;
+        dbg_zm!("ZM items {items:?} rest {rest:?}");
         let (to, after) = dest_zone(&rest)?;
         (items, to, after.to_string())
     };
@@ -1146,8 +1305,28 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let others = items.iter().any(|i| i.others_zone);
     let tail = modifiers(&tail, &mut to, &sel, &subject, others).to_string();
+    // "Return all creatures to their owners' hands except for Merfolk, Krakens, ...".
+    let (sel, sels, tail) = match except_for(&tail) {
+        Some(ex) => {
+            let sels: Vec<Sel> = sels
+                .iter()
+                .map(|s| match s {
+                    Sel::All(f) => Some(Sel::All(Filter::and(vec![f.clone(), Filter::not(ex.clone())]))),
+                    _ => None,
+                })
+                .collect::<Option<_>>()?;
+            let sel = if sels.len() == 1 {
+                sels[0].clone()
+            } else {
+                Sel::Union(sels.clone())
+            };
+            (sel, sels, String::new())
+        }
+        None => (sel, sels, tail),
+    };
     // "[... from their hand] onto the battlefield from their hand" (the zone after the
     // destination) is read with the objects; anything else left over isn't understood.
+    dbg_zm!("ZM tail {tail:?}");
     if !end(tail.trim()).is_empty() {
         return None;
     }
@@ -1233,11 +1412,119 @@ fn each_players_all(subject: &Subject, sels: &[Sel], pre: &[Effect], to: &Destin
     Some(Effect::Move { what, to })
 }
 
+/// "except for Krakens, Leviathans, Octopuses, and Serpents", "except for Giants, Wizards,
+/// and lands": the objects of those kinds stay.
+fn except_for(s: &str) -> Option<Filter> {
+    let r = s.trim_start().strip_prefix("except for ")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    (plural && end(rest.trim()).is_empty()).then_some(f)
+}
+
 fn note_moved(b: &mut Builder) {
     if !b.named.iter().any(|(n, _)| n == MOVED) {
         b.named.push((MOVED.to_string(), Sel::Var(vars::IT)));
     }
 }
+
+/// `Modification::Custom` name prefix (layer 6): "has all activated abilities of all
+/// [kind] cards exiled with ~" — followed by the card type or subtype word, or nothing
+/// for every card. Implemented in `kw/zone_moves.rs`.
+pub const ACTIVATED_ABILITIES_OF_EXILED: &str = "has all activated abilities of cards exiled with it:";
+
+/// "~ has all activated abilities of all creature cards exiled with it.", "Creatures you
+/// control have all activated abilities of all land cards exiled with ~.": the permanents
+/// have the abilities of the cards the source's linked abilities exiled that are still in
+/// exile (layer 6, CR 613.1f, 607.2a).
+fn s_activated_abilities_of_exiled(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (who, r) = l
+        .split_once(" has all activated abilities of all ")
+        .or_else(|| l.split_once(" have all activated abilities of all "))?;
+    let r = r
+        .strip_suffix(" exiled with ~")
+        .or_else(|| r.strip_suffix(" exiled with it"))?;
+    let kind = match r {
+        "cards" => String::new(),
+        _ => {
+            let k = r.strip_suffix(" cards")?;
+            if crate::types::CardType::from_word(k).is_some() {
+                k.to_string()
+            } else {
+                let title = k[..1].to_uppercase() + &k[1..];
+                if !crate::types::is_creature_type(&title) {
+                    return None;
+                }
+                title
+            }
+        }
+    };
+    let affected = if who == "~" {
+        Filter::Source
+    } else {
+        let (f, plural, rest) = super::statics::object_phrase(who)?;
+        if !plural || !rest.trim().is_empty() {
+            return None;
+        }
+        f
+    };
+    let st = StaticAbility::new(StaticEffect::Continuous {
+        affected,
+        mods: vec![Modification::Custom {
+            name: SmolStr::new(format!("{ACTIVATED_ABILITIES_OF_EXILED}{kind}")),
+            layer: Layer::L6Ability,
+        }],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "zone-move grammar: has all activated abilities of cards exiled with ~", priority: 970, parse: s_activated_abilities_of_exiled } }
+
+/// "there are three or more cards exiled with ~", "there are four or more card types
+/// among cards exiled with ~" (CR 607.2a).
+fn c_exiled_with_count(c: &str) -> Option<Condition> {
+    let r = end(c.trim()).strip_prefix("there are ")?;
+    let (n, r) = parse_number(r)?;
+    n.as_const()?;
+    let r = r.trim_start().strip_prefix("or more ")?;
+    if !(r.ends_with("exiled with ~") || r.ends_with("exiled with it")) {
+        return None;
+    }
+    let r = r.replace("exiled with it", "exiled with ~");
+    let v = super::value_grammar::whole_count(&r, None)?;
+    Some(Condition::Compare(v, Cmp::Ge, n))
+}
+
+inventory::submit! { super::ConditionPattern { name: "zone-move grammar: there are N or more cards exiled with ~", priority: 970, parse: c_exiled_with_count } }
+
+/// `Filter::Custom`: a source that dealt damage this turn ("each creature that dealt
+/// damage this turn").
+pub const DEALT_DAMAGE_THIS_TURN: &str = "dealt damage this turn (as a source)";
+
+/// "that dealt damage this turn" (as a source), "that isn't a God" after an object noun.
+fn f_suffixes<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    if let Some(r) = strip_word(t, "that dealt damage this turn") {
+        return Some((Filter::Custom(SmolStr::new(DEALT_DAMAGE_THIS_TURN)), r));
+    }
+    for p in ["that isn't a ", "that isn't an ", "that aren't "] {
+        if let Some(r) = t.strip_prefix(p) {
+            let (w, rest) = split_word(r);
+            let w = w.trim_end_matches(',');
+            let f = head_noun(w)?;
+            if !matches!(f, Filter::Type(_) | Filter::Subtype(_)) {
+                return None;
+            }
+            let n = rest.len();
+            return Some((Filter::not(f), &r[r.len() - n..]));
+        }
+    }
+    None
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "zone-move grammar: that dealt damage this turn, that isn't a [type]", priority: 970, parse: f_suffixes } }
 
 inventory::submit! { EffectPattern { name: "zone-move grammar: return/put [objects] [from zone] to [zone] [modifiers]", priority: 970, parse: p_move } }
 
@@ -1273,6 +1560,17 @@ mod tests {
                 let Some((ty, text)) = line.split_once('|') else { continue };
                 let ok = compiled(ty, text).is_some();
                 println!("{} {text}", if ok { "OK  " } else { "FAIL" });
+            }
+        }
+        if let Ok(file) = std::env::var("ZM_CARDS") {
+            for name in std::fs::read_to_string(file).unwrap_or_default().lines() {
+                let Some(c) = crate::card::CardDb::global().get(name) else {
+                    println!("?? {name}");
+                    continue;
+                };
+                for u in c.unsupported_text() {
+                    println!("{name} || {}", u.replace('\n', " / "));
+                }
             }
         }
         if let Ok(text) = std::env::var("ZM_TEXT") {
