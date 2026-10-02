@@ -185,8 +185,13 @@ impl Renderer<'_> {
                 } else {
                     "on the bottom of"
                 };
+                let order = if matches!(count, Value::Const(1)) {
+                    ""
+                } else {
+                    " in any order"
+                };
                 format!(
-                    "put {c} from your hand {pos} your library{}",
+                    "put {c} from your hand {pos} your library{order}{}",
                     w.unwrap_or_default()
                 )
             }

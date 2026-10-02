@@ -123,6 +123,7 @@ impl Renderer<'_> {
             Effect::Shuffle { who } => (who.clone(), "shuffle".into(), false),
             Effect::RevealHand { who } => {
                 let p = self.possessive_for(who);
+                self.revealed_hand = true;
                 (who.clone(), format!("reveal {p} hand"), false)
             }
             Effect::Sacrifice { who, filter, count } => {
@@ -328,7 +329,16 @@ impl Renderer<'_> {
             Effect::Store { sel, .. } => match sel {
                 Sel::Choose { chooser, .. } => {
                     let c = self.player(chooser, Case::Subj);
-                    let s = self.sel(&strip_chooser(sel), Case::Obj);
+                    let mut s = self.sel(&strip_chooser(sel), Case::Obj);
+                    // "Target opponent reveals their hand. You choose a nonland card from
+                    // it."
+                    if self.revealed_hand {
+                        if let Some(i) = s.find(" in ") {
+                            if s.ends_with(" hand") {
+                                s = format!("{} from it", &s[..i]);
+                            }
+                        }
+                    }
                     if c == "you" {
                         format!("choose {s}")
                     } else {
@@ -1817,8 +1827,27 @@ impl Renderer<'_> {
         };
         let look = if reveal { "reveal" } else { "look at" };
         let mut s = self.with_subject(who, &format!("{look} {top}"), false);
-        // Only looking ("Look at the top card of your library.").
+        // Only looking ("Look at the top card of your library."), or looking and
+        // putting them back ("then put them back in any order").
         if matches!(take, Value::Const(0)) {
+            if rest_to.zone == ZoneKind::Library
+                && rest_to.position == LibraryPosition::Top
+                && !matches!(n, Value::Const(1))
+            {
+                s.push_str(". Put them back in any order");
+            }
+            return s;
+        }
+        // Taking every card looked at: "reveal the top card of your library and put that
+        // card into your hand".
+        if matches!(filter, Filter::Any) && !take_up_to && format!("{take:?}") == format!("{n:?}") {
+            let many = !matches!(take, Value::Const(1));
+            let mut d = self.destination_phrase(take_to, many, true);
+            if take_to.zone == ZoneKind::Hand {
+                d = format!("into {p} hand");
+            }
+            let pron = if many { "them" } else { "it" };
+            s.push_str(&format!(". Put {pron} {d}"));
             return s;
         }
         let noun = self.card_noun(filter);
@@ -1851,7 +1880,7 @@ impl Renderer<'_> {
             } else {
                 what
             };
-            let may = if take_up_to { "you may " } else { "" };
+            let may = if take_up_to && !many { "you may " } else { "" };
             if !reveal && take_to.zone == ZoneKind::Hand {
                 format!("{may}reveal {what} from among them and put {pron} {d}")
             } else {
@@ -2159,7 +2188,17 @@ impl Renderer<'_> {
                     if keywords.is_empty() && abilities.is_empty() {
                         parts.push(GRANTS.into());
                     }
-                    keywords.push(self.keyword_lower(k))
+                    keywords.push(self.keyword_lower(k));
+                    // A granted cost keyword without a cost uses the mana cost:
+                    // "gains flashback until end of turn. The flashback cost is equal to
+                    // its mana cost."
+                    use crate::keywords::KeywordKind as K;
+                    if k.cost.is_none()
+                        && matches!(k.kind, K::Flashback | K::Madness | K::Replicate | K::Escape | K::Disturb | K::Warp)
+                    {
+                        let n = k.kind.name().to_lowercase();
+                        where_clauses.push(format!(". The {n} cost is equal to its mana cost"));
+                    }
                 }
                 Modification::AddKeywordX(k, v) => {
                     let s = self.keyword_lower(k);

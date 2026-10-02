@@ -123,7 +123,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               battlefield\").",
     },
     Equivalence {
-        pattern: r"\bwith (x|\d+|an?) additional\b",
+        pattern: r"\bwith (x|\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) additional\b",
         replacement: "with $1",
         why: "Counters an object enters with are put on it in addition to any others it \
               would enter with (CR 614.1c, 122.6).",

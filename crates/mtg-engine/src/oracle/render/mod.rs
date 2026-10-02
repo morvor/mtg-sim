@@ -254,6 +254,11 @@ pub struct Renderer<'a> {
     /// Selections stored in variables by the ability being rendered ("other creatures
     /// you control gain ..." stored, then modified): the first mention is the phrase.
     pub(crate) var_defs: Vec<(Var, Sel, bool)>,
+    /// How the trigger's player is called in the ability being rendered ("that spell's
+    /// controller" for a targeting trigger).
+    pub(crate) trigger_player: Option<&'static str>,
+    /// A hand was just revealed: a card chosen from it is "from it".
+    pub(crate) revealed_hand: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -272,6 +277,8 @@ impl<'a> Renderer<'a> {
             default_head: None,
             after_clash: false,
             var_defs: Vec::new(),
+            trigger_player: None,
+            revealed_hand: false,
         }
     }
 
@@ -338,6 +345,8 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.trigger_player = None;
+        self.revealed_hand = false;
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),
             AbilityKind::Activated(act) => {

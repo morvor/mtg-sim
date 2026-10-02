@@ -71,6 +71,19 @@ impl Renderer<'_> {
         let saved_zone = self.zone;
         self.zone = t.zone;
         self.self_salient = false;
+        // "this creature deals 2 damage to that spell's controller".
+        fn targeted(t: &TriggerCond) -> bool {
+            match t {
+                TriggerCond::BecomesTarget { .. } => true,
+                TriggerCond::Where { trigger, .. } | TriggerCond::Batched { trigger, .. } => {
+                    targeted(trigger)
+                }
+                _ => false,
+            }
+        }
+        if targeted(&t.trigger) {
+            self.trigger_player = Some("that spell's controller");
+        }
         let trig = self.trigger_text(&t.trigger);
         let saved_salient = self.self_salient;
         self.self_salient = trig.contains('~');

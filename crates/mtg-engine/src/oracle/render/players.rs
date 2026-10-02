@@ -379,6 +379,9 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} owner")
             }
+            PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
+                self.trigger_player.unwrap_or("that player").into()
+            }
             PlayerRef::TriggerPlayer | PlayerRef::Iterated | PlayerRef::Var(_) => {
                 "that player".into()
             }

@@ -7,6 +7,37 @@ use super::players::Case;
 use super::values::split_controller;
 use super::*;
 
+/// A verb phrase with plural agreement: "gets +1/+1 and has flying" → "get +1/+1 and
+/// have flying" (the comparison ignores agreement; this keeps renderings readable).
+pub(crate) fn plural_vp(vp: &str) -> String {
+    let fix = |w: &str| -> String {
+        match w {
+            "gets" => "get".into(),
+            "has" => "have".into(),
+            "is" => "are".into(),
+            "gains" => "gain".into(),
+            "loses" => "lose".into(),
+            "can't" | "can" => w.into(),
+            other => other.into(),
+        }
+    };
+    let mut out = Vec::new();
+    let mut first = true;
+    for part in vp.split(" and ") {
+        let (w, rest) = match part.split_once(' ') {
+            Some((w, r)) => (w, format!(" {r}")),
+            None => (part, String::new()),
+        };
+        if first || ["gets", "has", "is", "gains", "loses"].contains(&w) {
+            out.push(format!("{}{rest}", fix(w)));
+        } else {
+            out.push(part.to_string());
+        }
+        first = false;
+    }
+    out.join(" and ")
+}
+
 fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
     p(f) || match f {
         Filter::And(v) | Filter::Or(v) => v.iter().any(|x| filter_has(x, p)),
@@ -119,7 +150,15 @@ impl Renderer<'_> {
                 }
                 let subj = self.affected_subject(affected);
                 let vp = self.mods_vp(mods, false);
-                format!("{subj} {vp}")
+                let plural = !matches!(
+                    affected,
+                    Filter::Source | Filter::AttachedToSource | Filter::In(_)
+                );
+                if plural {
+                    format!("{subj} {}", plural_vp(&vp))
+                } else {
+                    format!("{subj} {vp}")
+                }
             }
             StaticEffect::PlayerEffect { affected, effect } => {
                 let who = self.player_filter_as_ref(affected);
@@ -295,6 +334,14 @@ impl Renderer<'_> {
                 let v = self.value(a);
                 format!("{subj} power and toughness are each equal to {v}")
             }
+            // "its toughness is equal to that number plus 1".
+            (Some(a), Some(Value::Sum(v)))
+                if v.len() == 2 && format!("{:?}", v[0]) == format!("{a:?}") =>
+            {
+                let a = self.value(a);
+                let k = self.value(&v[1]);
+                format!("{subj} power is equal to {a} and its toughness is equal to that number plus {k}")
+            }
             (Some(a), Some(b)) => {
                 let a = self.value(a);
                 let b = self.value(b);
@@ -399,6 +446,9 @@ impl Renderer<'_> {
     }
 
     fn spell_noun_plural(&mut self, f: &Filter) -> String {
+        if matches!(f, Filter::Source) {
+            return self.me();
+        }
         let n = self.noun(f, Num::Many);
         if n.contains("spell") {
             n
@@ -951,6 +1001,9 @@ impl Renderer<'_> {
                 let subj = self.enters_subject(f);
                 let it = if subj == "~" { "it" } else { "it" };
                 match action {
+                    A::EnterTapped if subj != "~" && subj != "~it" => {
+                        format!("{subj} enter tapped")
+                    }
                     A::EnterTapped => format!("{subj} enters tapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
