@@ -319,8 +319,7 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
     // Qualifiers after the zone ("with four or more card types among them" isn't one).
     let t = rest.trim_start().to_string();
     if t.starts_with("other than ") {
-        let probe = format!("cards {}", t.strip_prefix("other than ")?);
-        let (f2, _, r2) = parse_object_phrase(&probe)?;
+        let (f2, _, r2) = parse_object_phrase(t.strip_prefix("other than ")?)?;
         let f2 = split_zone(f2).0;
         filter = Filter::and(vec![filter, Filter::not(f2)]);
         rest = r2.to_string();
@@ -446,6 +445,18 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
             filter,
         });
     }
+    // "You discard your hand", "that player discards their hand": the whole hand (even a
+    // hand of no cards is discarded).
+    if ["your hand", "their hand", "his or her hand"].contains(&end(&r)) {
+        let own = match end(&r) {
+            "your hand" => !third,
+            _ => third,
+        };
+        if !own {
+            return None;
+        }
+        return Some(record(Effect::DiscardHand { who }, b));
+    }
     let r = r.strip_suffix(" at random").map_or(r.clone(), str::to_string);
     let (c, rest) = cards(&r, b, Some(&who))?;
     if !end(&rest).is_empty() {
@@ -455,7 +466,6 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     if c.zone.is_some_and(|z| z != ZoneKind::Hand) || c.any_owner {
         return None;
     }
-    let _ = third;
     let (adj, _, _) = split_zone(c.filter.clone());
     let e = match &c.qty {
         Qty::Exactly(n) => Effect::Discard {
@@ -698,11 +708,52 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: shuffle card
 /// life": after an action of this grammar, its number of cards.
 fn p_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    if !acted(b) || !l.contains("that many") {
+    if !acted(b) || !(l.contains("that many") || l.contains("that much")) {
         return None;
     }
     // X must not mean anything else in the clause.
     if l.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+        return None;
+    }
+    if let Some(e) = that_many_part(l, b) {
+        return Some(e);
+    }
+    // "draw that many cards and add that much {R}": each part on its own.
+    let (x, y) = l.split_once(" and ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let part = |s: &str, b: &mut Builder| {
+        if s.contains("that many") || s.contains("that much") {
+            that_many_part(s, b)
+        } else {
+            parse_clause(s, b)
+        }
+    };
+    match (part(x, b), part(y, b)) {
+        (Some(ex), Some(ey)) => Some(Effect::seq(vec![ex, ey])),
+        _ => {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            None
+        }
+    }
+}
+
+/// One instruction using "that many" ("draw that many cards plus one") or "that much
+/// [mana]" ("add that much {R}").
+fn that_many_part(l: &str, b: &mut Builder) -> Option<Effect> {
+    let that_many = Value::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::THAT_MANY));
+    // "add that much {R}": one mana of that type for each.
+    if let Some(r) = l.strip_prefix("add that much {") {
+        let e = parse_clause(&format!("add {{{r}"), b)?;
+        return match e {
+            Effect::AddMana {
+                mana: ManaProduction::Fixed(ref syms),
+                ..
+            } if syms.len() == 1 => scale(e, that_many),
+            _ => None,
+        };
+    }
+    if !l.contains("that many") {
         return None;
     }
     // "that many cards plus one".
@@ -723,7 +774,6 @@ fn p_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     };
-    let that_many = Value::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::THAT_MANY));
     let v = if plus == 0 {
         that_many
     } else {
@@ -766,9 +816,16 @@ pub fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 /// "[instruction] for each card revealed this way", "you gain 2 life for each creature
-/// card exiled this way".
+/// card exiled this way", "For each creature card exiled this way, you gain 1 life.".
 fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (clause, thing) = end(l).rsplit_once(" for each ")?;
+    let l = end(l);
+    let (clause, thing) = match l.strip_prefix("for each ") {
+        Some(r) => {
+            let (thing, clause) = r.split_once(", ")?;
+            (clause, thing)
+        }
+        None => l.rsplit_once(" for each ")?,
+    };
     if !thing.ends_with(" this way") {
         return None;
     }
@@ -782,7 +839,81 @@ fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     };
-    super::damage_removal_foreach::multiply(e, count)
+    let r = scale(e, count);
+    if r.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    r
+}
+
+/// `e` performed `count` times over, as one instruction (the number is determined once,
+/// CR 608.2h): an amount multiplied, a cost paid that many times (CR 118.12), that many
+/// cards chosen at once.
+fn scale(e: Effect, count: Value) -> Option<Effect> {
+    let times = |k: i32| {
+        if k == 1 {
+            count.clone()
+        } else {
+            Value::Mul(Box::new(Value::c(k)), Box::new(count.clone()))
+        }
+    };
+    match e {
+        // "Add {C}{C} for each card revealed this way".
+        Effect::AddMana {
+            who,
+            mana: ManaProduction::Fixed(syms),
+            restriction,
+        } if syms.len() > 1 && syms.iter().all(|s| *s == syms[0]) => Some(Effect::AddMana {
+            who,
+            mana: ManaProduction::Amount(syms[0], times(syms.len() as i32)),
+            restriction,
+        }),
+        // "Counter target spell unless its controller pays {1} for each card revealed this
+        // way": the mana cost paid that many times.
+        Effect::PayOptional {
+            who,
+            cost,
+            then,
+            otherwise,
+        } if cost.parts.is_empty() && cost.mana.is_some() && matches!(*then, Effect::Noop) => {
+            Some(Effect::PayOptional {
+                who,
+                cost: Cost {
+                    mana: None,
+                    parts: vec![CostPart::Repeated {
+                        cost: Box::new(cost),
+                        times: count,
+                    }],
+                },
+                then,
+                otherwise,
+            })
+        }
+        // "Return an enchantment card from your graveyard to your hand for each card
+        // revealed this way": that many cards chosen.
+        Effect::Move {
+            what:
+                Sel::Choose {
+                    chooser,
+                    filter,
+                    count: Value::Const(k),
+                    up_to,
+                    store,
+                },
+            to,
+        } => Some(Effect::Move {
+            what: Sel::Choose {
+                chooser,
+                filter,
+                count: times(k),
+                up_to,
+                store,
+            },
+            to,
+        }),
+        e => super::damage_removal_foreach::multiply(e, count),
+    }
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: for each card [verb] this way", priority: 960, parse: p_for_each_this_way } }
@@ -908,6 +1039,10 @@ fn p_put_object(l: &str, b: &mut Builder) -> Option<Effect> {
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let (what, rest) = match some_of_them(&r, b, &who) {
         Some((sel, rest)) => (sel, rest.to_string()),
+        None if r.contains(" from target ") => {
+            let (sel, rest) = targets_in_target_players_graveyard(&r, b)?;
+            (sel, rest.to_string())
+        }
         None => match chosen_permanent(&r, &who) {
             Some(x) => x,
             None => crate::oracle::effects::object_ref(&r, b)?,
@@ -1388,3 +1523,113 @@ fn f_otherwise_may_put_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: otherwise, you may put it ...", priority: 89, apply: f_otherwise_may_put_it } }
+
+/// `clause` (with "x" standing for a number) read with x = `v`.
+fn clause_with_value(clause: &str, v: &Value, b: &mut Builder) -> Option<Effect> {
+    if clause
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| *w == "x")
+        .count()
+        != 1
+    {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = crate::oracle::patterns::value_grammar::with_x_defined(true, || parse_clause(clause, b));
+    let Some(e) = e else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    super::r107_numbers::substitute_x(&e, v)
+}
+
+/// "draw cards equal to the number of cards discarded this way", "target player draws as
+/// many cards as they discarded this way": the cards the earlier action affected.
+fn p_draw_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if l.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+        return None;
+    }
+    let (head, thing) = if let Some((h, t)) = l.split_once(" cards equal to the number of ") {
+        (h.to_string(), t.to_string())
+    } else {
+        // "draws as many cards as they discarded this way".
+        let (h, t) = l.split_once(" as many cards as ")?;
+        let verb = t
+            .strip_prefix("they ")
+            .or_else(|| t.strip_prefix("you "))
+            .or_else(|| t.strip_prefix("that player "))?;
+        (h.to_string(), format!("cards {verb}"))
+    };
+    if !head.ends_with("draw") && !head.ends_with("draws") {
+        return None;
+    }
+    let (v, tail) = this_way_count(&thing, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    clause_with_value(&format!("{head} x cards"), &v, b)
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: draw cards equal to the number [verb] this way", priority: 960, parse: p_draw_this_way } }
+
+/// "X target cards from target player's graveyard", "any number of target artifact cards
+/// from target player's graveyard": the player is chosen first (its target slot comes
+/// first), and the cards must be in that player's graveyard (CR 115.1, 601.2c).
+fn targets_in_target_players_graveyard<'a>(s: &'a str, b: &mut Builder) -> Option<(Sel, &'a str)> {
+    for (p, pf) in [
+        (" from target player's graveyard", PlayerFilter::Any),
+        (" from target opponent's graveyard", PlayerFilter::Opponent),
+    ] {
+        let Some(i) = s.find(p) else { continue };
+        let (head, rest) = (&s[..i], &s[i + p.len()..]);
+        if !head.contains("target ") {
+            return None;
+        }
+        let probe = format!("{head} from a graveyard");
+        let (mut spec, tail) = parse_target(&probe)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let TargetKind::Object(f) = &spec.what else {
+            return None;
+        };
+        if !has_card_head(f) {
+            return None;
+        }
+        let it = b.it.clone();
+        let player = b.add_target(TargetSpec::player(pf, p.trim_start().trim_start_matches("from ")), "target player");
+        spec.what = TargetKind::Object(Filter::and(vec![
+            f.clone(),
+            Filter::OwnedBy(PlayerRel::Target(player)),
+        ]));
+        b.it = it;
+        let slot = b.add_target(spec, head);
+        b.it_player = PlayerRef::Target(player);
+        return Some((Sel::Target(slot), rest));
+    }
+    None
+}
+
+/// "Exile X target cards from target player's graveyard."
+fn p_exile_targets_from_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("exile ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (what, rest) = targets_in_target_players_graveyard(r, b)?;
+    if !end(rest).is_empty() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    Some(record(
+        Effect::Exile {
+            what,
+            face_down: false,
+            link: false,
+        },
+        b,
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile target cards from target player's graveyard", priority: 960, parse: p_exile_targets_from_target_player } }
