@@ -59,6 +59,9 @@ fn parse_condition(c: &str) -> Option<Condition> {
         "a creature died under your control this turn" => {
             custom("creature_died_under_your_control_this_turn")
         }
+        "a creature died under an opponent's control this turn" => {
+            custom("creature_died_under_an_opponents_control_this_turn")
+        }
         "you descended this turn" => custom("you_descended_this_turn"),
         "a card left your graveyard this turn" => custom("card_left_your_graveyard_this_turn"),
         "you've cast a noncreature spell this turn" => {

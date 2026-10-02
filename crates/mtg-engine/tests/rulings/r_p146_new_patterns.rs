@@ -376,3 +376,69 @@ fn prosper_mystic_arcanum_and_playing_a_land_from_exile() {
         mtg_engine::object::CastMethod::Normal
     ));
 }
+
+const SIDEQUEST: &str = "Sidequest: Hunt the Mark // Yiazmat, Ultimate Mark";
+
+#[test]
+fn sidequest_hunt_the_mark_checks_as_the_end_step_begins() {
+    cr!("603.4", "513.1", "700.4");
+    ruling!(
+        "Sidequest: Hunt the Mark // Yiazmat, Ultimate Mark",
+        "Sidequest: Hunt the Mark's last ability checks at the moment it would trigger to see if a creature died under an opponent's control this turn."
+    );
+    supported(SIDEQUEST);
+    // "At the beginning of your end step, if a creature died under an opponent's control
+    // this turn, create a Treasure token. Then if you control three or more Treasures,
+    // transform this enchantment."
+    // No creature died: no trigger, and a creature dying during the end step is too late.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, SIDEQUEST);
+    assert_eq!(into_end_step(&mut t), 0);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    destroy(&mut t, bears);
+    assert_eq!(stacked_triggers(&t), 0);
+    // Only P0's own creature died: no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, SIDEQUEST);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    destroy(&mut t, mine);
+    assert_eq!(into_end_step(&mut t), 0);
+    // An opponent's creature died earlier: a Treasure (one Treasure: no transformation).
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, SIDEQUEST);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    destroy(&mut t, theirs);
+    assert_eq!(into_end_step(&mut t), 1);
+    t.resolve_all();
+    assert_eq!(treasures(&t, P0), 1);
+    assert_eq!(t.obj(s).chars.name, "Sidequest: Hunt the Mark");
+}
+
+#[test]
+fn sidequest_hunt_the_mark_enters_destroys_and_transforms_into_yiazmat() {
+    cr!("701.27a", "712.8e", "608.2c");
+    // "When this enchantment enters, destroy up to one target creature."
+    let mut t = TestGame::new(2);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(theirs)]);
+    let s = t.enter(P0, SIDEQUEST);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // With two Treasures already, the third makes it transform.
+    create_token(&mut t, P0, "Treasure");
+    create_token(&mut t, P0, "Treasure");
+    end_step(&mut t, P0);
+    assert_eq!(treasures(&t, P0), 3);
+    assert_eq!(t.obj(s).chars.name, "Yiazmat, Ultimate Mark");
+    assert!(t.obj(s).is(mtg_engine::types::CardType::Creature));
+    // Yiazmat: "{1}{B}, Sacrifice another creature or artifact: Yiazmat gains
+    // indestructible until end of turn. Tap it."
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 2);
+    let tr = tokens(&t, P0)[0];
+    t.answer_choose(P0, &[obj(tr)]);
+    activate_resolve(&mut t, P0, s, 0, &[]);
+    assert!(!t.on_battlefield(tr));
+    assert!(t.obj(s).has_keyword(KeywordKind::Indestructible));
+    assert!(t.obj(s).tapped);
+}
