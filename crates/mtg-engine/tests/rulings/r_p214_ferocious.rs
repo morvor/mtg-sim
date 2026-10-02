@@ -165,7 +165,8 @@ fn wild_slash_keeps_applying_after_the_creature_leaves() {
     t.cast(P0, ws).target(bears).go();
     t.resolve_all();
     destroy(&mut t, wurm);
-    // Later that turn: a prevention shield on the Giant, then Shock (2) + 1 more damage.
+    // Later that turn: a prevention shield on the Giant, then Shock: its 2 damage isn't
+    // prevented.
     salve(&mut t, giant);
     let shock = t.hand(P0, "Shock");
     t.cast(P0, shock).target(giant).go();

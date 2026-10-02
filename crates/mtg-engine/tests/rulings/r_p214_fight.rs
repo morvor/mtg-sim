@@ -221,7 +221,7 @@ fn gargoss_controller_chooses_what_it_fights() {
 
 #[test]
 fn apex_altisaur_may_fight_several_times_in_a_row() {
-    cr!("701.14a", "702.19b", "603.2");
+    cr!("701.14a", "603.2");
     ruling!(
         "Apex Altisaur",
         "If Apex Altisaur fights a creature while either of its abilities is resolving, being dealt damage this way causes its second ability to trigger. It may fight several times in a row this way."

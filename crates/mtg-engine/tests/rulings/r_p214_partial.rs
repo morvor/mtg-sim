@@ -30,6 +30,15 @@ fn has_ability(name: &str, needle: &str) {
     );
 }
 
+/// Asserts that `name`'s only unsupported text is the one block containing `needle` (an
+/// ability the rulings tested here don't concern).
+fn only_unsupported(name: &str, needle: &str) {
+    let c = card(name);
+    let u = c.unsupported_text();
+    assert_eq!(u.len(), 1, "{name}: {u:?}");
+    assert!(u[0].contains(needle), "{name}: {u:?}");
+}
+
 /// Power of the Rohirrim Chargers on the battlefield.
 fn chargers_power(g: &Game) -> i32 {
     let id = g.find_in_zone(Zone::Battlefield, "Rohirrim Chargers")[0];
@@ -44,6 +53,7 @@ fn rohirrim_chargers_is_exerted_as_it_is_declared_as_an_attacker() {
         "You can exert Rohirrim Chargers as you declare it as an attacking creature. You can't do so later in combat, and creatures put onto the battlefield attacking can't be exerted. Any abilities that trigger on exerting an attacking creature will resolve before blockers are declared."
     );
     has_ability("Rohirrim Chargers", "exert");
+    only_unsupported("Rohirrim Chargers", "reveal cards from the top of your library until");
     supported("Trueheart Twins");
     // Rohirrim Chargers (4/4): "You may exert this creature as it attacks." Trueheart Twins:
     // "Whenever you exert a creature, creatures you control get +1/+0 until end of turn."
@@ -104,6 +114,8 @@ fn tap_and_freeze_and_stun_counters_dont_exert_rohirrim_chargers() {
         "Rohirrim Chargers",
         "You can't exert a creature unless an effect allows you to do so. Similar effects that \"tap and freeze\" a creature or put stun counters on a creature don't exert that creature."
     );
+    has_ability("Rohirrim Chargers", "exert");
+    only_unsupported("Rohirrim Chargers", "reveal cards from the top of your library until");
     supported("Decision Paralysis");
     // Trueheart Twins would see an exert.
     let mut t = TestGame::new(2);
@@ -143,6 +155,7 @@ fn the_tarrasque_must_fight_if_there_is_a_legal_target() {
         "Fighting is not optional. If there is at least one legal target for The Tarrasque's last ability, it must fight."
     );
     has_ability("The Tarrasque", "it fights target creature defending player controls");
+    only_unsupported("The Tarrasque", "haste and ward {10} as long as it was cast");
     // "Whenever The Tarrasque attacks, it fights target creature defending player
     // controls." P0 tries to choose no target: one is chosen anyway.
     let mut t = TestGame::new(2);
@@ -168,6 +181,7 @@ fn domri_leaving_before_its_fight_resolves_loses_the_bonus() {
         "Domri, Anarch of Bolas",
         "Target creature you control fights target creature you don't control.",
     );
+    only_unsupported("Domri, Anarch of Bolas", "Creature spells you cast this turn can't be countered");
     // Domri: "Creatures you control get +1/+0." and "−2: Target creature you control
     // fights target creature you don't control." Grizzly Bears (3/2 with Domri) fight
     // Hill Giant (3/3).
@@ -209,6 +223,7 @@ fn strax_dies_before_glory_of_battle_can_save_it() {
         "Strax, Sontaran Nurse",
         "Whenever ~ deals damage to a creature, put a +1/+1 counter on ~.",
     );
+    only_unsupported("Strax, Sontaran Nurse", "Grenades!");
     supported("Prey Upon");
     supported("Feral Krushok");
     // Strax (5/5): "Glory of Battle — Whenever Strax deals damage to a creature, put a

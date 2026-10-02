@@ -93,22 +93,28 @@ fn a_creature_returned_by_devoted_crop_mate_doesnt_see_the_exert() {
     supported("Battlefield Scavenger");
     // Battlefield Scavenger (mana value 2): "Whenever you exert a creature, you may discard
     // a card. If you do, draw a card."
+    // Control: a Battlefield Scavenger already on the battlefield sees the exert.
+    let mut t = TestGame::new(2);
+    let mate = t.battlefield(P0, "Devoted Crop-Mate");
+    t.battlefield(P0, "Battlefield Scavenger");
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(mate, Entity::Player(P1))]);
+    assert!(exerted(&t, mate));
+    assert_eq!(triggers_on_stack(&t, "discard a card"), 1);
+    // Returned by the Crop-Mate's exert trigger: it doesn't.
     let mut t = TestGame::new(2);
     let mate = t.battlefield(P0, "Devoted Crop-Mate");
     let scav = t.graveyard(P0, "Battlefield Scavenger");
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[Entity::Object(scav)]);
-    t.attack(&[(mate, Entity::Player(P1))], &[]);
+    attack_with(&mut t, &[(mate, Entity::Player(P1))]);
     assert!(exerted(&t, mate));
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
     let scav = t.g.current(scav);
     assert!(t.on_battlefield(scav));
-    // Its exert trigger never triggered (nothing asked to discard, nothing on the stack).
-    assert!(t
-        .g
-        .log
-        .iter()
-        .all(|l| !l.text.contains("Battlefield Scavenger") || !l.text.contains("trigger")));
-    assert!(t.g.stack.is_empty());
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(triggers_on_stack(&t, "discard a card"), 0);
 }
 
 #[test]
