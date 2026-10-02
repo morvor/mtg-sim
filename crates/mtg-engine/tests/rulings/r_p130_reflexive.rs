@@ -4,6 +4,7 @@
 //! may respond to it.
 
 use crate::r_p130_common::*;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -562,18 +563,52 @@ fn intis_exiled_land_follows_normal_timing_rules() {
     supported("Inti, Seneschal of the Sun");
     let mut t = TestGame::new(2);
     let inti = t.battlefield(P0, "Inti, Seneschal of the Sun");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let card = t.hand(P0, "Hill Giant");
     let land = t.library_top(P0, "Mountain");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(card)]);
-    t.answer_targets(P0, &[obj(inti)]);
-    attack_with(&mut t, &[(inti, Entity::Player(P1))]);
+    t.answer_targets(P0, &[obj(bears)]);
+    attack_with(
+        &mut t,
+        &[(inti, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
     t.resolve_all();
     assert!(t.in_exile("Mountain"));
-    assert_eq!(t.counters(inti, "+1/+1"), 1);
+    // The target gets the counter and trample ("It gains trample" is part of the
+    // reflexive ability).
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert!(t.obj_now(bears).chars.has_keyword(KeywordKind::Trample));
+    assert!(!t.obj_now(inti).chars.has_keyword(KeywordKind::Trample));
     // During combat the land can't be played.
     assert!(!can_play_land(&mut t, P0, land));
     t.advance_to(P0, Step::PostcombatMain);
     assert!(can_play_land(&mut t, P0, land));
 }
 
+
+#[test]
+fn spined_tyrranax_targets_when_you_pay_and_that_creature_gains_trample() {
+    cr!("603.12", "702.19a");
+    ruling!(
+        "Spined Tyrranax",
+        "You don't choose a target for Spiked Tyrranax's ability at the time it triggers."
+    );
+    supported("Spined Tyrranax");
+    let mut t = TestGame::new(2);
+    let tyr = t.battlefield(P0, "Spined Tyrranax");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    let from = t.asked().len();
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.settle();
+    no_target_yet(&t, P0, from);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(bears)]);
+    resolve_into_reflexive(&mut t, &[obj(bears)]);
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert!(t.obj_now(bears).chars.has_keyword(KeywordKind::Trample));
+    assert!(!t.obj_now(tyr).chars.has_keyword(KeywordKind::Trample));
+}
