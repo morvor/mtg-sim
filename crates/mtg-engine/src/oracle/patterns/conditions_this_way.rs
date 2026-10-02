@@ -639,3 +639,60 @@ fn if_you_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "if you search/draw this way, [effect]", priority: 150, apply: if_you_did_this_way } }
+
+/// "Target player exiles a card from their graveyard. If it's a creature card, ...": when
+/// "it" has no more specific antecedent (the source of a permanent's ability, or none in
+/// a spell), it's the object the previous instruction acted on, if that instruction
+/// chose it (a card a player chose, the top card of a library).
+fn if_it_after_chosen_object(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    use crate::oracle::patterns::oracle_hardening_referents::is_no_referent;
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    if !(c.starts_with("it ") || c.starts_with("it's ") || c.starts_with("its "))
+        || x.ends_with(" instead")
+        || !(matches!(b.it, Sel::This) || is_no_referent(&b.it))
+    {
+        return false;
+    }
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    let chosen = |s: &Sel| matches!(s, Sel::Choose { .. } | Sel::TopOfLibrary(..));
+    let found = match last {
+        Some(Effect::Exile { what, .. } | Effect::Move { what, .. }) => chosen(what),
+        _ => false,
+    };
+    if !found {
+        return false;
+    }
+    let saved = b.it.clone();
+    b.it = Sel::Var(vars::IT);
+    let Some(cond) = super::conditions_referents::parse_condition_with(c, b) else {
+        b.it = saved;
+        return false;
+    };
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        b.it = saved;
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    let mut v = match old {
+        Effect::Seq(v) => v,
+        other => vec![other],
+    };
+    v.push(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if it [state] after an instruction about a chosen object", priority: 150, apply: if_it_after_chosen_object } }

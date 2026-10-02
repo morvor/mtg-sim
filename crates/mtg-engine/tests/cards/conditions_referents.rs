@@ -835,3 +835,115 @@ fn if_you_control_three_or_more_permanents_you_dont_own() {
     }
 }
 
+
+#[test]
+fn whenever_a_creature_enters_if_you_cast_it() {
+    cr!("603.4", "601.2a");
+    // The Sibsig Ceremony: "Creature spells you cast cost {2} less to cast. Whenever a
+    // creature you control enters, if you cast it, destroy that creature, then create a
+    // 2/2 black Zombie Druid creature token."
+    assert_supported(&["The Sibsig Ceremony"]);
+    let zombies = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Druid"))
+            .count()
+    };
+    // Cast: destroyed, and a token.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Sibsig Ceremony");
+    // Craw Wurm ({4}{G}{G}) costs {2} less.
+    t.lands(P0, "Forest", 4);
+    let wurm = t.hand(P0, "Craw Wurm");
+    t.cast(P0, wurm).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Craw Wurm").is_empty());
+    assert_eq!(zombies(&t), 1);
+    // Put onto the battlefield without being cast: nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Sibsig Ceremony");
+    t.enter(P0, "Craw Wurm");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+    assert_eq!(zombies(&t), 0);
+}
+
+#[test]
+fn if_you_didnt_cast_it_from_your_hand() {
+    cr!("603.4", "601.2a");
+    ruling!(
+        "Chainer, Nightmare Adept",
+        "if it wasn't cast at all and is entering the battlefield from anywhere"
+    );
+    // Chainer, Nightmare Adept: "Whenever a nontoken creature you control enters, if you
+    // didn't cast it from your hand, it gains haste until your next turn."
+    let text = "Whenever a nontoken creature you control enters, if you didn't cast it from your hand, it gains haste until your next turn.";
+    assert!(!card("Chainer, Nightmare Adept")
+        .unsupported_text()
+        .iter()
+        .any(|u| *u == text));
+    let haste = |t: &TestGame, c: ObjectId| {
+        t.obj_now(c)
+            .chars
+            .has_keyword(mtg_engine::keywords::KeywordKind::Haste)
+    };
+    // Cast from hand: no haste.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Chainer, Nightmare Adept");
+    t.lands(P0, "Forest", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    let b = t.named_on_battlefield("Grizzly Bears")[0];
+    assert!(!haste(&t, b));
+    // Put onto the battlefield: haste.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Chainer, Nightmare Adept");
+    let b = t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert!(haste(&t, b));
+}
+
+#[test]
+fn if_its_a_creature_card_about_the_card_a_player_chose() {
+    cr!("608.2c");
+    ruling!(
+        "Graveyard Shovel",
+        "The targeted player chooses which card to exile when the ability resolves."
+    );
+    // Graveyard Shovel: "{2}, {T}: Target player exiles a card from their graveyard. If it's
+    // a creature card, you gain 2 life."
+    assert_supported(&["Graveyard Shovel"]);
+    for (c, gain) in [("Grizzly Bears", 2), ("Forest", 0)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Plains", 2);
+        let shovel = t.battlefield(P0, "Graveyard Shovel");
+        t.graveyard(P1, c);
+        t.activate(P0, shovel, 0, &[Entity::Player(P1)]).unwrap();
+        t.resolve_all();
+        assert!(t.in_exile(c));
+        assert_eq!(t.life(P0), 20 + gain, "{c}");
+    }
+}
+
+#[test]
+fn if_that_player_controls_a_nonblack_nonland_permanent() {
+    cr!("603.4");
+    ruling!(
+        "Urborg Stalker",
+        "This ability checks whether the player controls any nonblack, nonland permanents twice"
+    );
+    // Urborg Stalker: "At the beginning of each player's upkeep, if that player controls a
+    // nonblack, nonland permanent, ~ deals 1 damage to that player."
+    assert_supported(&["Urborg Stalker"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Urborg Stalker");
+    t.lands(P1, "Forest", 2);
+    t.advance_to(P1, Step::Draw);
+    assert_eq!(t.life(P1), 20, "lands only");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Urborg Stalker");
+    t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::Draw);
+    assert_eq!(t.life(P1), 19);
+}

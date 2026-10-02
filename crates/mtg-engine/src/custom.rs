@@ -16,6 +16,11 @@ pub const HAS_NONMANA_ACTIVATED_ABILITY: &str = "has_nonmana_activated_ability";
 /// (CR 707.12), unlike a copy put onto the stack (CR 707.10): "a spell you've cast".
 pub const WAS_CAST: &str = "was_cast";
 
+/// A permanent that was a spell that was cast ("if you cast it" about a creature that
+/// entered), and one that was cast from its owner's hand (CR 601.2a).
+pub const PERMANENT_WAS_CAST: &str = "permanent_was_cast";
+pub const PERMANENT_CAST_FROM_HAND: &str = "permanent_cast_from_hand";
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
@@ -61,6 +66,12 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
             .stack
             .as_deref()
             .is_some_and(|si| si.cast.was_cast),
+        PERMANENT_WAS_CAST => g.obj(id).cast.as_deref().is_some_and(|c| c.was_cast),
+        PERMANENT_CAST_FROM_HAND => g
+            .obj(id)
+            .cast
+            .as_deref()
+            .is_some_and(|c| c.was_cast && c.from == Some(crate::ability::ZoneKind::Hand)),
         // "Equipment attached to it" where "it" is each object an effect applies to.
         "attached_to_affected" => ctx
             .vars

@@ -525,6 +525,39 @@ fn special(c: &str, b: &mut Builder) -> Option<Condition> {
             });
         }
     }
+    // "you cast it", "you didn't cast it from your hand": about a permanent that was a
+    // spell (the trigger's object: "Whenever a creature you control enters, if you cast
+    // it, ..."). The source's own cast status is the core's (CR 601.2a).
+    for (p, neg, name) in [
+        ("you cast ", false, crate::custom::PERMANENT_WAS_CAST),
+        ("you didn't cast ", true, crate::custom::PERMANENT_WAS_CAST),
+    ] {
+        let Some(r) = c.strip_prefix(p) else {
+            continue;
+        };
+        let (who, from_hand) = match r.strip_suffix(" from your hand") {
+            Some(w) => (w, true),
+            None => (r, false),
+        };
+        if !matches!(who, "it" | "that creature" | "him" | "her") {
+            continue;
+        }
+        let sel = it_referent(b)?;
+        if matches!(sel, Sel::This) {
+            return None;
+        }
+        let name = if from_hand {
+            crate::custom::PERMANENT_CAST_FROM_HAND
+        } else {
+            name
+        };
+        let cond = Condition::SelMatches(sel, Filter::Custom(name.into()));
+        return Some(if neg {
+            Condition::Not(Box::new(cond))
+        } else {
+            cond
+        });
+    }
     // "X is 5 or more", "X is 3".
     if let Some(r) = c.strip_prefix("x is ") {
         let (cmp, v) = value_cmp(r, b)?;
@@ -641,6 +674,19 @@ fn game_state_phrases(c: &str, b: &mut Builder) -> Option<Condition> {
         return Some(Condition::PlayerMatches(
             others,
             PlayerFilter::Life(Cmp::Lt, Box::new(Value::LifeTotal(p))),
+        ));
+    }
+    // "no cards are in that graveyard" (the graveyard of the card an earlier instruction
+    // named).
+    if c == "no cards are in that graveyard" {
+        let it = it_referent(b)?;
+        if matches!(it, Sel::This) {
+            return None;
+        }
+        return Some(Condition::Compare(
+            Value::GraveyardSize(PlayerRef::OwnerOf(Box::new(it))),
+            Cmp::Eq,
+            Value::c(0),
         ));
     }
     // "there are no echo counters on ~", "there are three or more counters on it"

@@ -47,7 +47,22 @@ fn parse_triggered_at(
     let subject_is_source;
     let el = eff.to_lowercase();
     if let Some(r) = el.strip_prefix("if ") {
-        if let Some((c, _)) = r.split_once(", ") {
+        // The condition ends at the first comma that doesn't continue a list of adjectives
+        // ("if that player controls a nonblack, nonland permanent, ...").
+        let continues_list = |before: &str, rest: &str| {
+            let last = before.rsplit(' ').next().unwrap_or("");
+            let next = split_word(rest).0.trim_end_matches(',');
+            matches!(next, "or" | "and" | "and/or")
+                || (adjective(last).is_some()
+                    && head_noun(last).is_none()
+                    && (adjective(next).is_some() || head_noun(next).is_some()))
+        };
+        let split = r
+            .match_indices(", ")
+            .map(|(i, _)| i)
+            .find(|&i| !continues_list(&r[..i], &r[i + 2..]))
+            .map(|i| (&r[..i], &r[i + 2..]));
+        if let Some((c, _)) = split {
             // Conditions are parsed without a referent: "it" in them means the source
             // ("When ~ enters, if you cast it"), so it can't refer to another object
             // ("Whenever a creature enters, if you cast it" is about that creature).
