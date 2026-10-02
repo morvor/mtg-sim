@@ -261,6 +261,18 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     let what = match r {
         "~" => Sel::This,
         "it" if matches!(b.it, Sel::This | Sel::TriggerObject) => b.it.clone(),
+        // "remove a +1/+1 counter from target creature an opponent controls" (Bloodcrazed
+        // Hoplite): one target object, nothing after it.
+        _ if r.starts_with("target ") || r.starts_with("another target ") => {
+            let saved = b.targets.len();
+            match crate::oracle::effects::object_ref(r, b) {
+                Some((sel @ Sel::Target(_), tail)) if end(&tail).is_empty() => sel,
+                _ => {
+                    b.targets.truncate(saved);
+                    return None;
+                }
+            }
+        }
         _ => return None,
     };
     Some(Effect::RemoveCounters {

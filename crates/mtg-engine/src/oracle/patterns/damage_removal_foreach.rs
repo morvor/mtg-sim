@@ -69,6 +69,78 @@ pub(crate) fn multiply(e: Effect, count: Value) -> Option<Effect> {
             tapped,
             attacking,
         },
+        // "Target player discards a card for each Swamp you control".
+        Effect::Discard {
+            who,
+            n,
+            random,
+            filter,
+        } => Effect::Discard {
+            who,
+            n: times(&n)?,
+            random,
+            filter,
+        },
+        // "Target opponent sacrifices a creature of their choice for each ...": that many
+        // at once.
+        Effect::Sacrifice { who, filter, count: c } => Effect::Sacrifice {
+            who,
+            filter,
+            count: times(&c)?,
+        },
+        Effect::RemoveCounters { what, kind, n } => Effect::RemoveCounters {
+            what,
+            kind,
+            n: times(&n)?,
+        },
+        Effect::Scry { who, n } => Effect::Scry { who, n: times(&n)? },
+        Effect::Surveil { who, n } => Effect::Surveil { who, n: times(&n)? },
+        // "investigate for each goaded creature you control" (CR 701.16a: investigate
+        // that many times).
+        Effect::KeywordAction {
+            action: KeywordAction::Investigate,
+            who,
+            what,
+            n,
+        } => Effect::KeywordAction {
+            action: KeywordAction::Investigate,
+            who,
+            what,
+            n: times(&n)?,
+        },
+        // "Target creature gets +1/+1 until end of turn for each of its colors": the
+        // bonus multiplied (determined once, CR 608.2h).
+        Effect::Modify {
+            what,
+            mods,
+            duration,
+        } if mods.len() == 1 && matches!(mods[0], Modification::ModifyPT(..)) => {
+            let Modification::ModifyPT(p, t) = &mods[0] else {
+                return None;
+            };
+            Effect::Modify {
+                what,
+                mods: vec![Modification::ModifyPT(times(p)?, times(t)?)],
+                duration,
+            }
+        }
+        Effect::CreateTokenWithPT {
+            spec,
+            power,
+            toughness,
+            count: c,
+            controller,
+            tapped,
+            attacking,
+        } => Effect::CreateTokenWithPT {
+            spec,
+            power,
+            toughness,
+            count: times(&c)?,
+            controller,
+            tapped,
+            attacking,
+        },
         // "Exile the top card of your library for each [thing]".
         Effect::Exile {
             what: Sel::TopOfLibrary(who, n),
@@ -96,6 +168,21 @@ fn count_of(s: &str, b: &mut Builder) -> Option<Value> {
         }
         return Some(Value::CountSel(Box::new(sel)));
     }
+    // "for each of its colors", "for each of that spell's colors": how many colors it
+    // has (CR 105.2).
+    if let Some(r) = s.strip_prefix("of ") {
+        let r = end(r);
+        let who = r
+            .strip_suffix("'s colors")
+            .or_else(|| (r == "its colors").then_some("it"))?;
+        let saved = b.targets.len();
+        let (sel, rest) = crate::oracle::effects::object_ref(who, b)?;
+        if !rest.trim().is_empty() || b.targets.len() != saved {
+            b.targets.truncate(saved);
+            return None;
+        }
+        return Some(Value::DistinctAmong(Among::Colors, Box::new(sel)));
+    }
     let (v, rest) = parse_value_phrase(&format!("the number of {s}"), b)?;
     if !end(&rest).trim().is_empty() {
         return None;
@@ -108,10 +195,35 @@ fn p_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
     // "for each creature card milled this way" counts the cards the preceding mill
     // instruction milled (CR 701.17c); other "this way" counts are handled elsewhere.
     if thing.ends_with("destroyed this way")
-        || (thing.contains(" this way") && !end(thing).ends_with(" milled this way"))
+        || (thing.contains(" this way")
+            && !end(thing).ends_with(" milled this way")
+            // An amount chosen for the cost ("for each counter removed this way").
+            && super::cost_parts::paid_this_way(thing).is_none())
     {
         return None;
     }
+    // The instruction first: what it names is what a pronoun in the counted phrase
+    // refers to ("Target creature gets +1/+1 until end of turn for each of its colors",
+    // "Each opponent ... for each creature they control"), and its targets come first.
+    let (saved_targets, saved_it, saved_player) = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    if let Some(e) = parse_clause(clause, b) {
+        // "Each creature your opponents control gets -1/-1 ... for each poison counter its
+        // controller has": "its" is each affected object in turn (CR 608.2h).
+        let it = b.it.clone();
+        if matches!(&e, Effect::Modify { what: Sel::All(_), .. }) {
+            b.it = Sel::Var(vars::AFFECTED);
+        }
+        let count = count_of(thing, b);
+        b.it = it;
+        if let Some(count) = count {
+            if let Some(e) = multiply(e, count) {
+                return Some(e);
+            }
+        }
+    }
+    b.targets.truncate(saved_targets);
+    b.it = saved_it;
+    b.it_player = saved_player;
     let count = count_of(thing, b)?;
     let e = parse_clause(clause, b)?;
     multiply(e, count)

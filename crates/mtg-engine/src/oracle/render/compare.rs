@@ -28,6 +28,13 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        replacement: "$1$2 $3 $4$5 that player $6",
+        why: "As below, for a targeted player: \"target player draws three cards and \
+              loses 3 life\" is \"target player draws three cards and that player loses 3 \
+              life\" (the same player, CR 115.1).",
+    },
+    Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3 $4$5 $2 $6",
         why: "A clause without a subject after \"and\", \"then\", or a comma shares the \

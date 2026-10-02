@@ -21,18 +21,41 @@ impl Game {
         if self.result.is_some() || self.end.restart.is_some() {
             return;
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c), and those of the instructions before
+        // it are checked for triggers before it happens (CR 603.2, 603.10).
+        self.action_boundary();
         if self.dirty {
             self.recompute();
         }
-        // Each instruction is a separate action: events it causes form their own batch for
-        // "one or more" triggers (CR 603.2c, 608.2c).
-        self.end_event_batch();
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        if crate::trigger_timing::is_sequencing(e) {
+            self.exec_effect(e, ctx);
+        } else {
+            self.atomically(|g| g.exec_effect(e, ctx));
+        }
+    }
+
+    /// Performs one effect (see [`Game::exec`]).
+    fn exec_effect(&mut self, e: &Effect, ctx: &mut Ctx) {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
+                // "Create a [token] and a [token]" is one instruction that the compiler
+                // splits into one creation per kind: the tokens enter at the same time, as
+                // one batch of events (CR 603.2c, 608.2c). The compiler gives separate
+                // creation sentences ("Create A. Then create B.") the same shape, but no
+                // card prints creation sentences with nothing else between or around them,
+                // and a sequence with any other instruction keeps one batch per element.
+                // Being one event, it's also checked for triggers as a whole (`exec` runs
+                // it atomically, see `trigger_timing`).
+                let together = crate::trigger_timing::creates_tokens_together(v);
+                if together {
+                    self.end_event_batch();
+                    self.batch_hold += 1;
+                }
                 for (i, x) in v.iter().enumerate() {
                     self.exec(x, ctx);
                     // CR 727.4: the rest of an effect that restarted the game happens as the
@@ -44,6 +67,9 @@ impl Game {
                     // CR 603.8: state triggers trigger as soon as the game state matches,
                     // even momentarily during a resolution.
                     self.check_state_triggers();
+                }
+                if together {
+                    self.batch_hold -= 1;
                 }
             }
             Effect::If {
@@ -149,9 +175,12 @@ impl Game {
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
                     let saved = ctx.controller;
+                    let saved_resolving = ctx.resolving_controller;
+                    ctx.resolving_controller.get_or_insert(saved);
                     ctx.controller = p;
                     self.exec(effect, ctx);
                     ctx.controller = saved;
+                    ctx.resolving_controller = saved_resolving;
                 }
             }
             Effect::Repeat { times, effect } => {
@@ -316,7 +345,11 @@ impl Game {
                 }
             }
             Effect::Move { what, to } => {
-                let objs = self.resolve_objects(what, ctx);
+                let objs: Vec<ObjectId> = self
+                    .resolve_objects(what, ctx)
+                    .into_iter()
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
+                    .collect();
                 let res = self.move_to_destination(objs, to, ctx);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let res = crate::merge::found_all(self, res);
@@ -344,20 +377,45 @@ impl Game {
                 }
             }
             Effect::DealDamage { source, amount, to } => {
-                let src = self.damage_source(source, ctx);
-                let n = self.eval_value(amount, ctx).max(0) as u32;
+                // "Each creature you control deals damage equal to its power to ...": every
+                // one of those objects deals its own damage, all at the same time (CR
+                // 120.2); the amount is evaluated for each of them (`vars::AFFECTED`).
+                let multi = matches!(source, Sel::All(_) | Sel::Union(_));
+                let srcs: Vec<ObjectId> = if multi {
+                    self.resolve_objects(source, ctx)
+                } else {
+                    self.damage_source(source, ctx).into_iter().collect()
+                };
                 let recipients = self.resolve_sel(to, ctx);
-                if let Some(src) = src {
-                    let evs = recipients.into_iter().map(|r| (src, r, n)).collect();
+                if !srcs.is_empty() {
+                    let mut evs = Vec::new();
+                    for &src in &srcs {
+                        // Only the several-sources form binds "its" (the compiler reads it
+                        // as `vars::AFFECTED` there); a single source leaves the variables
+                        // as they are.
+                        let saved = multi
+                            .then(|| ctx.vars.insert(vars::AFFECTED, vec![Entity::Object(src)]));
+                        let n = self.eval_value(amount, ctx).max(0) as u32;
+                        match saved {
+                            Some(Some(v)) => {
+                                ctx.vars.insert(vars::AFFECTED, v);
+                            }
+                            Some(None) => {
+                                ctx.vars.remove(&vars::AFFECTED);
+                            }
+                            None => {}
+                        }
+                        evs.extend(recipients.iter().map(|r| (src, *r, n)));
+                    }
                     let before = self.events.len();
                     self.deal_damage_batch(evs, false);
-                    self.record_damaged(src, before, ctx);
+                    self.record_damaged(&srcs, before, ctx);
                     // "The damage dealt this way": the total actually dealt to all the
                     // recipients, as modified by replacement and prevention (CR 120.4b).
                     ctx.prev_value = self.events[before.min(self.events.len())..]
                         .iter()
                         .map(|e| match e {
-                            Event::Damage { source, amount, .. } if *source == src => {
+                            Event::Damage { source, amount, .. } if srcs.contains(source) => {
                                 *amount as i64
                             }
                             _ => 0,
@@ -409,7 +467,7 @@ impl Game {
                         .collect();
                     let before = self.events.len();
                     self.deal_damage_batch(evs, false);
-                    self.record_damaged(src, before, ctx);
+                    self.record_damaged(&[src], before, ctx);
                 }
             }
             Effect::Fight { a, b } => {
@@ -441,6 +499,7 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
                 for t in self.resolve_sel(what, ctx) {
+                    let t = self.found_after_move(t, ctx);
                     placed += self.add_counters(t, kind, k, ctx.source);
                 }
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
@@ -541,6 +600,7 @@ impl Game {
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
                     .filter(|o| self.is_live(*o))
                     .collect();
                 if objs.is_empty() {
@@ -1001,11 +1061,15 @@ impl Game {
             }
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // "Attach ~ to a creature you control. If you do, ...": whether anything
+                // became attached.
+                let mut any = false;
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
-                        self.attach(o, t);
+                        any |= self.attach(o, t);
                     }
                 }
+                ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
@@ -1197,6 +1261,7 @@ impl Game {
                 ctx.prev_value = discarded.len() as i64;
                 ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
+                ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
@@ -1476,10 +1541,14 @@ impl Game {
             }
             // CR 701.20a: the cards are revealed while the rest of the effect needs them.
             Effect::RevealHand { who } => {
+                let mut revealed = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     let hand = self.player(p).hand.clone();
                     crate::reveal::reveal_in(self, p, &hand, Some(ctx));
+                    revealed.extend(hand.into_iter().map(Entity::Object));
                 }
+                // "If a card with the chosen name is revealed this way" (CR 701.20a).
+                ctx.set_var(vars::REVEALED, revealed);
             }
             Effect::LookAtHand { who } => {
                 // Looking gives the controller information only; the cards aren't
@@ -1566,18 +1635,22 @@ impl Game {
                 // CR 603.7a: it won't trigger on events that happened before it was created.
                 self.flush_events();
                 let id = self.new_effect_id();
+                let (controller, performer) = delayed_controller(ctx);
+                let mut saved = crate::transform_rules::delayed_ctx(self, ctx);
+                saved.resolving_controller = None;
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
                     source: ctx.source,
-                    controller: ctx.controller,
+                    controller,
                     trigger: trigger.clone(),
                     body: (**body).clone(),
                     once: *once,
-                    ctx: crate::transform_rules::delayed_ctx(self, ctx),
+                    ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
+                    performer,
                 });
             }
             Effect::Reflexive { body } => {
@@ -1598,38 +1671,48 @@ impl Game {
                     .filter(|s| self.obj(*s).is_spell())
                     .or(ctx.source);
                 let mut saved = ctx.clone();
+                saved.resolving_controller = None;
                 if saved.reflexive_parent.is_none() {
                     saved.reflexive_parent = self.resolving_ability(ctx).map(Box::new);
                 }
+                let (controller, performer) = delayed_controller(ctx);
+                let mut body = (**body).clone();
+                if let Some(p) = performer {
+                    body = performed_by(body, p);
+                }
                 self.pending_triggers.push(PendingTrigger {
                     source: src.unwrap_or(ObjectId(0)),
-                    controller: ctx.controller,
+                    controller,
                     ability,
                     event: ctx.event.clone().unwrap_or_default(),
                     source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
                     saved: Some(saved),
-                    body: Some((**body).clone()),
+                    body: Some(body),
                     order: self.trigger_order,
                 });
             }
             Effect::AtNext { step, effect } => {
                 self.flush_events();
                 let id = self.new_effect_id();
+                let (controller, performer) = delayed_controller(ctx);
+                let mut saved = ctx.clone();
+                saved.resolving_controller = None;
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
                     source: ctx.source,
-                    controller: ctx.controller,
+                    controller,
                     trigger: TriggerCond::BeginningOf {
                         step: *step,
                         whose: PlayerRel::Any,
                     },
                     body: Body::effect((**effect).clone()),
                     once: true,
-                    ctx: ctx.clone(),
+                    ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
+                    performer,
                 });
             }
             Effect::CreateEmblem { who, abilities } => {
@@ -1640,8 +1723,13 @@ impl Game {
             Effect::RestartGame { keep } => {
                 crate::restart::request_restart(self, keep.as_ref(), ctx);
             }
-            Effect::KeepAndSacrificeRest { who, among, keep } => {
-                crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, ctx);
+            Effect::KeepAndSacrificeRest {
+                who,
+                among,
+                keep,
+                up_to,
+            } => {
+                crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, *up_to, ctx);
             }
             Effect::WinGame { who } => {
                 // CR 104.2b, 104.3f: players named together win simultaneously.
@@ -1742,6 +1830,14 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+            }
+            Effect::WithPlayTerms { terms, effect } => {
+                // The permissions the effect gives come with the terms.
+                let before = self.play_grants.len();
+                self.exec(effect, ctx);
+                for g in self.play_grants.iter_mut().skip(before) {
+                    g.terms.merge(terms);
+                }
             }
             Effect::PreventDamage {
                 to,
@@ -1888,6 +1984,9 @@ impl Game {
             Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
+            Effect::TokensEnterWithCounters { counters, effect } => {
+                crate::tokens::enter_with_counters(self, counters, effect, ctx)
+            }
         }
     }
 
@@ -1915,11 +2014,19 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
+                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
                 let picked: Vec<Entity> =
                     crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
                         .into_iter()
                         .map(Entity::Object)
                         .collect();
+                // Objects chosen together must meet the group requirements ("any number
+                // of cards with different names"; see `relational.rs`).
+                let picked = if crate::relational::groups_of(filter).is_empty() {
+                    picked
+                } else {
+                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
+                };
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
@@ -2030,6 +2137,28 @@ impl Game {
         }
     }
 
+    /// CR 400.7j: an object an earlier part of the same effect moved to a public zone can
+    /// be found by later parts of it ("Exile target creature and put two time counters on
+    /// it"): the object it became, when that instruction recorded it.
+    fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+        let Entity::Object(o) = e else {
+            return e;
+        };
+        if self.is_live(o) {
+            return e;
+        }
+        let now = self.current(o);
+        let moved = ctx
+            .vars
+            .get(&vars::IT)
+            .is_some_and(|v| v.contains(&Entity::Object(now)));
+        if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
+            Entity::Object(now)
+        } else {
+            e
+        }
+    }
+
     pub fn resolve_objects(&mut self, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
         self.resolve_sel(sel, ctx)
             .into_iter()
@@ -2040,7 +2169,7 @@ impl Game {
     /// Records the objects that were actually dealt damage by `src` since event index
     /// `before` (after replacement and prevention) as "dealt damage this way"
     /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
-    fn record_damaged(&mut self, src: ObjectId, before: usize, ctx: &mut Ctx) {
+    fn record_damaged(&mut self, srcs: &[ObjectId], before: usize, ctx: &mut Ctx) {
         let mut damaged: Vec<Entity> = Vec::new();
         for ev in &self.events[before.min(self.events.len())..] {
             if let Event::Damage {
@@ -2050,7 +2179,7 @@ impl Game {
                 ..
             } = ev
             {
-                if *source == src && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
+                if srcs.contains(source) && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
                     damaged.push(Entity::Object(*o));
                 }
             }
@@ -2746,3 +2875,34 @@ pub fn describe_cost(c: &Cost) -> String {
 
 #[allow(dead_code)]
 fn unused(_: Event) {}
+
+/// The controller of a delayed or reflexive triggered ability created now, and the player
+/// who performs it when that's someone else: while another player performs part of the
+/// resolving spell or ability ([`Effect::AsPlayer`], "they may pay {1}. If they do, they
+/// draw a card at the beginning of the next end step"), the triggered ability is
+/// controlled by the spell's or ability's controller (CR 603.7d–e, 603.12) and that
+/// player performs it.
+pub(crate) fn delayed_controller(ctx: &Ctx) -> (PlayerId, Option<PlayerId>) {
+    match ctx.resolving_controller {
+        Some(c) if c != ctx.controller => (c, Some(ctx.controller)),
+        _ => (ctx.controller, None),
+    }
+}
+
+/// `body` (of a triggered ability) performed by player `p` ("you" in it is `p`).
+pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
+    let wrap = |e: &mut Effect| {
+        let inner = std::mem::replace(e, Effect::Noop);
+        *e = Effect::AsPlayer {
+            who: PlayerRef::Player(p),
+            effect: Box::new(inner),
+        };
+    };
+    wrap(&mut body.effect);
+    if let Some(m) = body.modal.as_mut() {
+        for mode in &mut m.modes {
+            wrap(&mut mode.effect);
+        }
+    }
+    body
+}

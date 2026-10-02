@@ -163,8 +163,8 @@ pub fn finish_introduced(e: Effect, b: &mut Builder, intro: Introduced) -> Effec
     let Some(before) = intro.0 else {
         return e;
     };
-    let mentioned = serde_json::to_string(&e)
-        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
+    let mentioned =
+        serde_json::to_string(&e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
     if mentioned {
         return e;
     }

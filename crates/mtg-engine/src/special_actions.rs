@@ -42,6 +42,10 @@ pub struct KeywordMark {
     /// A cost the effect that marked it gave it (a foretell cost other than the card's
     /// printed one, CR 702.143d).
     pub cost: Option<Cost>,
+    /// A cost the effect gave it that is the mana cost of the face or half it's cast as,
+    /// reduced by this much generic mana ("Its foretell cost is its mana cost reduced by
+    /// {2}").
+    pub mana_cost_reduced_by: Option<u32>,
 }
 
 /// Special-action state kept by the game.
@@ -91,6 +95,20 @@ pub fn mark_with_cost(g: &mut Game, obj: ObjectId, kind: KeywordKind, cost: Opti
         kind,
         turn,
         cost,
+        mana_cost_reduced_by: None,
+    });
+}
+
+/// Marks `obj` as foretold/plotted/... this turn, with a cost the marking effect gives it
+/// equal to the mana cost of the face it's cast as reduced by {`n`}.
+pub fn mark_with_reduced_mana_cost(g: &mut Game, obj: ObjectId, kind: KeywordKind, n: u32) {
+    let turn = g.turn.number;
+    g.special.marks.push(KeywordMark {
+        obj,
+        kind,
+        turn,
+        cost: None,
+        mana_cost_reduced_by: Some(n),
     });
 }
 
@@ -302,9 +320,7 @@ pub fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {
         Ok(_) => true,
         Err(_) => {
-            let agents = g.agents.clone();
-            *g = snapshot;
-            g.agents = agents;
+            g.roll_back(snapshot);
             false
         }
     }

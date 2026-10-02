@@ -321,6 +321,39 @@ pub fn any_other_than(src: &Sel) -> Option<Filter> {
     ]))
 }
 
+/// "Any other target": other than the object dealing the damage too ("enchanted creature
+/// deals damage equal to its power to any other target", "~ deals 3 damage to any other
+/// target"). A targeted source is covered by `distinct_from`.
+pub(crate) fn other_than_damage_source(spec: &mut TargetSpec, src: &Sel) {
+    if !matches!(spec.what, TargetKind::AnyTarget) {
+        return;
+    }
+    let not_source = match src {
+        Sel::This => Filter::Other,
+        Sel::AttachedTo => Filter::Not(Box::new(Filter::AttachedToSource)),
+        // Another object named as the source ("that creature deals damage ... to any
+        // other target"), when no earlier target already keeps it apart.
+        _ if spec.distinct_from.is_empty() => {
+            if let Some(f) = any_other_than(src) {
+                spec.what = TargetKind::ObjectOrPlayer(f, PlayerFilter::Any);
+            }
+            return;
+        }
+        _ => return,
+    };
+    spec.what = TargetKind::ObjectOrPlayer(
+        Filter::and(vec![
+            Filter::Or(vec![
+                Filter::creature(),
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::Type(crate::types::CardType::Battle),
+            ]),
+            not_source,
+        ]),
+        PlayerFilter::Any,
+    );
+}
+
 /// One recipient item. `prev` is the preceding item in an "and" list.
 fn recipient_item(
     s: &str,
@@ -338,18 +371,14 @@ fn recipient_item(
     if let Some(r) = word(s, "any other target") {
         let mut spec = TargetSpec::any_target();
         spec.distinct_from = (0..b.targets.len() as u8).collect();
-        // With no earlier target, "other" is other than the object dealing the damage
-        // ("enchanted creature deals damage equal to its power to any other target").
-        if spec.distinct_from.is_empty() {
-            if let Some(f) = any_other_than(src) {
-                spec.what = TargetKind::ObjectOrPlayer(f, PlayerFilter::Any);
-            }
-        }
+        other_than_damage_source(&mut spec, src);
         let slot = b.add_target(spec, "any other target");
         return Some((Sel::Target(slot), r.to_string()));
     }
     if let Some(r) = s.strip_prefix("each ") {
         let (f, _, rest) = parse_object_phrase(r)?;
+        // "each other creature with the same name as that creature".
+        let f = super::filters_relational::resolve_referent(f, b)?;
         let (f, rest) = bind_target_player(f, rest, b);
         let t = rest.trim_start();
         // "each opponent and each creature they control", "target player and each
@@ -498,6 +527,7 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
         Some((head, v)) => (head, Some(v)),
         None => (l, None),
     };
+    let first_target = b.targets.len();
     // The source comes first (its target, if any, is first in the text).
     let (src, rest) = damage_source(l, verb, b)?;
     // "X ... where X is its power": "its" is the source, unless an earlier instruction
@@ -531,6 +561,14 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
             break;
         }
         r = t.strip_prefix("and ")?.to_string();
+    }
+    // The defined X is also the number of targets ("to each of up to X targets, where X
+    // is the number of times he was kicked").
+    if let Some(x) = &where_x {
+        let x = super::r107_numbers::nonnegative(x.clone());
+        for i in first_target..b.targets.len() {
+            b.targets[i] = super::r107_numbers::substitute_x_in_target(&b.targets[i], &x)?;
+        }
     }
     Some(Effect::seq(effects))
 }

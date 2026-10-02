@@ -456,6 +456,9 @@ pub struct Renderer<'a> {
     /// The trigger condition is about the object itself ("Whenever ~ attacks"), so the
     /// triggering object is the object itself.
     pub(crate) trigger_is_self: bool,
+    /// Numbers remembered by `Effect::StoreValue` ("X ..., where X is ..."): the value,
+    /// and whether a later mention (rendered "X") needs its definition.
+    pub(crate) stored_values: Vec<(Var, Value, bool)>,
     /// Card types of the subject of a "becomes" effect, when known ("It's still a land").
     pub(crate) subject_types: Vec<CardType>,
     /// Rendering an "each [noun]" phrase: "each creature your opponents control".
@@ -501,6 +504,7 @@ impl<'a> Renderer<'a> {
             self_named_in_clause: false,
             event_scope: false,
             trigger_is_self: false,
+            stored_values: Vec::new(),
             subject_types: Vec::new(),
             each_mode: false,
             alt_and: false,
@@ -603,6 +607,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.stored_values.clear();
         self.trigger_player = None;
         self.revealed_hand = false;
         self.x_for_each = None;
@@ -655,7 +660,61 @@ impl<'a> Renderer<'a> {
             }
             return format!("{head} {modes}");
         }
-        self.with_targets(&b.targets, |r| r.effect_sentences(&b.effect))
+        self.with_targets(&b.targets, |r| {
+            let s = r.effect_sentences(&b.effect);
+            r.define_stored_x(s)
+        })
+    }
+
+    /// "You draw X cards and you lose X life, where X is ...": the number the
+    /// instructions remembered (`Effect::StoreValue`), defined once, at the end of the
+    /// sentence that last mentions it.
+    fn define_stored_x(&mut self, s: String) -> String {
+        let mut defs: Vec<Value> = Vec::new();
+        for (_, v, used) in self.stored_values.iter_mut() {
+            if *used {
+                *used = false;
+                if !defs.iter().any(|d| format!("{d:?}") == format!("{v:?}")) {
+                    defs.push(v.clone());
+                }
+            }
+        }
+        let s = s.replace(", where X is X", "");
+        match defs.as_slice() {
+            [] => s,
+            [v] => {
+                let w = self.value(v);
+                if w == "X" || s.contains(&format!(", where X is {w}")) {
+                    return s;
+                }
+                let last_x = s
+                    .match_indices('X')
+                    .filter(|(i, _)| {
+                        let b = s.as_bytes();
+                        (*i == 0 || !b[i - 1].is_ascii_alphanumeric())
+                            && b.get(i + 1).is_none_or(|c| !c.is_ascii_alphanumeric())
+                    })
+                    .map(|(i, _)| i)
+                    .last()
+                    .unwrap_or(0);
+                let end = s[last_x..]
+                    .find(". ")
+                    .map(|j| last_x + j)
+                    .unwrap_or_else(|| s.trim_end_matches('.').len());
+                format!("{}, where X is {w}{}", &s[..end], &s[end..])
+            }
+            _ => self.gap("several remembered numbers"),
+        }
+    }
+
+    /// A number remembered by `Effect::StoreValue`, as "X" (see [`Self::body`]).
+    pub(crate) fn stored_x(&mut self, v: &Value) -> Option<String> {
+        let Value::Var(n) = v else {
+            return None;
+        };
+        let e = self.stored_values.iter_mut().find(|(x, _, _)| x == n)?;
+        e.2 = true;
+        Some("X".into())
     }
 
     fn modal(&mut self, m: &Modal) -> String {

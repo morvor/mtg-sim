@@ -84,6 +84,11 @@ fn double_pt(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         return None;
     }
+    // "its power [and toughness]": the object the ability last referred to ("Whenever ~
+    // attacks alone, double its power and toughness until end of turn.").
+    if let Some(s) = r.strip_prefix("its ") {
+        return Some(multiply_pt(b.it.clone(), k, stats(s)?, duration));
+    }
     // "[object]'s power [and toughness]"
     let (obj, s) = r.rsplit_once("'s ")?;
     let which = stats(s)?;

@@ -92,6 +92,7 @@ impl Renderer<'_> {
             Value::EventAmount => "that much".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
+            Value::Var(_) if self.stored_x(v).is_some() => "X".into(),
             Value::Var(_) => "that many".into(),
             Value::Devotion(cs) => {
                 let w: Vec<String> = cs.iter().map(|c| c.word().to_string()).collect();
@@ -158,6 +159,55 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Poss);
                 format!("the value of X for {s}")
             }
+            Value::Aggregate(op, stat, s) => {
+                let s = match s.as_ref() {
+                    Sel::All(f) => self.noun(f, Num::Many),
+                    other => self.sel(other, Case::Obj),
+                };
+                let st = match stat {
+                    Stat::Power => "power".to_string(),
+                    Stat::Toughness => "toughness".to_string(),
+                    Stat::PowerOrToughness => "power and/or toughness".to_string(),
+                    Stat::ManaValue => "mana value".to_string(),
+                    Stat::Counters(Some(k)) if *op == AggOp::Sum => {
+                        return format!("the number of {k} counters among {s}");
+                    }
+                    Stat::Counters(None) if *op == AggOp::Sum => {
+                        return format!("the number of counters among {s}");
+                    }
+                    other => return self.gap(format!("Value::Aggregate {other:?}")),
+                };
+                let o = match op {
+                    AggOp::Max => "greatest",
+                    AggOp::Min => "least",
+                    AggOp::Sum => "total",
+                };
+                format!("the {o} {st} among {s}")
+            }
+            Value::DistinctAmong(among, s) => {
+                let s = match s.as_ref() {
+                    Sel::All(f) => self.noun(f, Num::Many),
+                    other => self.sel(other, Case::Obj),
+                };
+                let what = match among {
+                    Among::CardTypes => "card types",
+                    Among::PermanentTypes => "permanent types",
+                    Among::CreatureTypes => "creature types",
+                    Among::BasicLandTypes => "basic land types",
+                    Among::Colors => "colors",
+                    Among::ManaValues => "different mana values",
+                    Among::ManaCosts => "different mana costs",
+                    Among::Powers => "different powers",
+                    Among::Names => "different names",
+                    Among::CounterKinds => "kinds of counters",
+                    Among::LargestCreatureTypeGroup => {
+                        return self.gap("Among::LargestCreatureTypeGroup");
+                    }
+                };
+                format!("the number of {what} among {s}")
+            }
+            Value::OverPlayers(..) => self.gap("Value::OverPlayers"),
+            Value::Extreme(..) => self.gap("Value::Extreme"),
             Value::GreatestPower(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("the greatest power among {n}")
@@ -286,6 +336,9 @@ impl Renderer<'_> {
         if matches!(v, Value::Prev) {
             return ("that many".into(), None);
         }
+        if let Some(x) = self.stored_x(v) {
+            return (x, None);
+        }
         // A number stored earlier: "that many", or the X the text already defined.
         if matches!(v, Value::Var(n) if *n != vars::EXCESS) {
             return ("{alt:that many|X}".into(), None);
@@ -300,6 +353,9 @@ impl Renderer<'_> {
     /// "a card" / "two cards" / "X cards, where X is ..." (the where clause is returned
     /// separately).
     pub(crate) fn counted(&mut self, v: &Value, noun: &str) -> (String, Option<String>) {
+        if let Some(x) = self.stored_x(v) {
+            return (format!("{x} {}", plural(noun)), None);
+        }
         match v {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),

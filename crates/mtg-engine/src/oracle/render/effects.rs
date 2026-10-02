@@ -292,7 +292,14 @@ impl Renderer<'_> {
             Effect::ForEachPlayer { who, effect } => {
                 let inner = self.effect(effect);
                 let w = self.player(who, Case::Subj);
-                if let Some(rest) = inner.strip_prefix("that player ") {
+                // "Each opponent loses 2 life": each player does it in turn.
+                let rest = inner.strip_prefix("that player ").or_else(|| {
+                    inner
+                        .strip_prefix("{alt:that player|")
+                        .and_then(|r| r.split_once("} "))
+                        .map(|(_, r)| r)
+                });
+                if let Some(rest) = rest {
                     format!("{w} {rest}")
                 } else {
                     format!("for {w}, {inner}")
@@ -300,8 +307,12 @@ impl Renderer<'_> {
             }
             Effect::AsPlayer { who, effect } => {
                 let w = self.player(who, Case::Subj);
+                // Performed as that player: "you" in the instruction is that player
+                // ("target player loses 4 life").
                 let inner = self.effect(effect);
-                format!("{w} {}", third_person(&inner))
+                let inner = inner.strip_prefix("you ").unwrap_or(&inner);
+                let inner = format!(" {inner} ").replace(" your ", " their ");
+                format!("{w} {}", third_person(inner.trim()))
             }
             // "... If [condition], repeat this process." (CR 608.2c)
             Effect::RepeatProcess { body } => self.effect(body),
@@ -436,7 +447,19 @@ impl Renderer<'_> {
                 | Sel::CreatorLinked => String::new(),
                 other => self.gap(format!("remembering {other:?}")),
             },
-            Effect::StoreValue { .. } => String::new(),
+            Effect::StoreValue { var, value } => {
+                // Another name for a number already remembered.
+                let value = match value {
+                    Value::Var(n) => self
+                        .stored_values
+                        .iter()
+                        .find(|(x, _, _)| x == n)
+                        .map_or_else(|| value.clone(), |(_, v, _)| v.clone()),
+                    other => other.clone(),
+                };
+                self.stored_values.push((*var, value, false));
+                String::new()
+            }
             Effect::Note { value } => {
                 let v = self.value(value);
                 format!("note {v}")
@@ -1175,7 +1198,25 @@ impl Renderer<'_> {
                 let e = self.effect(effect);
                 format!("{s}, {e}")
             }
-            Effect::KeepAndSacrificeRest { who, among, keep } => {
+            Effect::TokensEnterWithCounters { counters, effect } => {
+                let e = self.effect(effect);
+                let mut parts = Vec::new();
+                for (k, n) in counters {
+                    let (c, w) = self.counted(n, &counter_name(k));
+                    parts.push(format!("{c}{}", w.unwrap_or_default()));
+                }
+                format!(
+                    "{e}. {{alt:it|the token|they|the tokens}} enters with {} on it",
+                    join_list(&parts, "and")
+                )
+            }
+            Effect::WithPlayTerms { .. } => self.gap("permission to play with terms"),
+            Effect::KeepAndSacrificeRest { up_to: true, .. } => {
+                self.gap("keep up to some permanents, sacrifice the rest")
+            }
+            Effect::KeepAndSacrificeRest {
+                who, among, keep, ..
+            } => {
                 let w = self.player(who, Case::Subj);
                 let a = self.noun(among, Num::Many);
                 let k: Vec<String> = keep.iter().map(|f| self.noun_det(f, Det::A)).collect();

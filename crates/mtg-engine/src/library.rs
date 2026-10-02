@@ -19,6 +19,51 @@ pub fn top_cards(g: &Game, p: PlayerId, n: u32) -> Vec<ObjectId> {
         .collect()
 }
 
+/// Puts the cards named in [`crate::game::GameConfig::top_of_library`] on top of each
+/// player's library (top first), after the starting shuffle. A name not found in the
+/// library is looked for among the player's face-down cards in the command zone — their
+/// supplementary decks (planar, scheme and Attraction decks, CR 901.4, 904.4, 717.2),
+/// which run in command-zone order — and that card is put on top of its deck.
+pub fn stack_starting_libraries(g: &mut Game) {
+    for (i, names) in g.config.top_of_library.clone().iter().enumerate() {
+        let p = PlayerId(i as u8);
+        if i >= g.players.len() {
+            break;
+        }
+        let named = |g: &Game, c: ObjectId, name: &str| {
+            g.obj(c)
+                .card
+                .as_ref()
+                .is_some_and(|d| d.name.eq_ignore_ascii_case(name))
+        };
+        let mut chosen: Vec<ObjectId> = Vec::new();
+        let mut supplementary: Vec<ObjectId> = Vec::new();
+        for name in names {
+            let found = g
+                .player(p)
+                .library
+                .iter()
+                .rev()
+                .copied()
+                .find(|c| !chosen.contains(c) && named(g, *c, name));
+            if let Some(c) = found {
+                chosen.push(c);
+                continue;
+            }
+            let found = g.command.iter().copied().find(|c| {
+                let o = g.obj(*c);
+                o.face_down && o.owner == p && !supplementary.contains(c) && named(g, *c, name)
+            });
+            supplementary.extend(found);
+        }
+        set_top(g, p, &chosen);
+        g.command.retain(|c| !supplementary.contains(c));
+        for (k, c) in supplementary.into_iter().enumerate() {
+            g.command.insert(k, c);
+        }
+    }
+}
+
 /// Reorders the library so `top_first` are on top in that order.
 fn set_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
     let lib = &mut g.players[p.idx()].library;
@@ -134,11 +179,27 @@ pub fn search(
             }
             _ => None,
         };
-        match chosen {
+        // Cards found together must meet the search's group requirements ("up to four
+        // cards with different names"; see `relational.rs`).
+        let chosen = chosen.filter(|v| {
+            let ents: Vec<Entity> = v.iter().map(|o| Entity::Object(*o)).collect();
+            crate::relational::selection_ok(g, filter, &ents, ctx)
+        });
+        let found: Vec<ObjectId> = match chosen {
             Some(v) => v,
             // Default (or invalid) answers: automated agents prefer finding cards.
             None if g.search_finds_by_default => cands.iter().copied().take(n as usize).collect(),
             None => cands.iter().copied().take(min as usize).collect(),
+        };
+        if crate::relational::groups_of(filter).is_empty() {
+            found
+        } else {
+            let ents: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
+            let picked = found.into_iter().map(Entity::Object).collect();
+            crate::relational::fit_selection(g, filter, picked, &ents, min as usize, ctx)
+                .into_iter()
+                .filter_map(|e| e.object())
+                .collect()
         }
     };
     // CR 701.23h: searching a library again before it's shuffled is the same search.

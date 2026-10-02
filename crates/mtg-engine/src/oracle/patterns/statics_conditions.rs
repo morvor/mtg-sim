@@ -104,7 +104,7 @@ pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
 
 /// "attacking", "tapped", "equipped", "a creature", "white", "red or green",
 /// "legendary", "a basic Mountain", "face down".
-fn state_filter(s: &str) -> Option<Filter> {
+pub(crate) fn state_filter(s: &str) -> Option<Filter> {
     let s = end(s);
     let simple = match s {
         "attacking" => Some(Filter::Attacking),
@@ -227,7 +227,7 @@ pub(crate) fn counters_on_it(h: &str) -> Option<(Cmp, Value, Option<CounterKind>
 }
 
 /// "N or more", "N or less", "N or fewer", "N or greater", "at least N", "N".
-fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
+pub(crate) fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
     if let Some(r) = s.strip_prefix("at least ") {
         let (n, r) = parse_number(r)?;
         return Some((Cmp::Ge, n, r));
@@ -282,6 +282,18 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
             PlayerRef::EachOpponent,
             PlayerFilter::GraveyardSize(cmp, Box::new(n)),
         ));
+    }
+    // "there are ten or more cards in a single graveyard" (Swimmer in Nightmares): some
+    // player's graveyard.
+    if let Some(r) = c.strip_prefix("there are ") {
+        if let Some((cmp, n, tail)) = amount_cmp(r) {
+            if end(tail) == "cards in a single graveyard" {
+                return Some(Condition::PlayerMatches(
+                    PlayerRef::EachPlayer,
+                    PlayerFilter::GraveyardSize(cmp, Box::new(n)),
+                ));
+            }
+        }
     }
     // "there is a Lesson card in your graveyard", "there's a ...", "a Warrior card is in
     // your graveyard", "an instant card and a sorcery card are in your graveyard".
@@ -488,6 +500,29 @@ fn control_condition(c: &str) -> Option<Condition> {
         let f = phrase(&article(r)?)?;
         return Some(Condition::Not(Box::new(Condition::Exists(f.you_control()))));
     }
+    // "defending player controls the most creatures or is tied for the most" (Hooded
+    // Horror): no player controls more of them.
+    if let Some(r) = c
+        .strip_prefix("defending player controls the most ")
+        .and_then(|r| r.strip_suffix(" or is tied for the most"))
+    {
+        let f = phrase(r)?;
+        return Some(Condition::Compare(
+            Value::Count(Filter::and(vec![
+                f.clone(),
+                Filter::ControlledBy(PlayerRel::Defending),
+            ])),
+            Cmp::Ge,
+            Value::OverPlayers(
+                AggOp::Max,
+                PlayerFilter::Any,
+                Box::new(Value::Count(Filter::and(vec![
+                    f,
+                    Filter::ControlledBy(PlayerRel::Iterated),
+                ]))),
+            ),
+        ));
+    }
     for (p, rel) in [
         ("an opponent controls ", PlayerRel::Opponent),
         ("defending player controls ", PlayerRel::Defending),
@@ -495,10 +530,12 @@ fn control_condition(c: &str) -> Option<Condition> {
         if let Some(r) = c.strip_prefix(p) {
             if let Some((cmp, n, rest)) = amount_cmp(r) {
                 let f = phrase(rest)?;
-                // "an opponent controls N or more X" needs one opponent to control them
-                // all; that's only expressible for a single opponent.
+                // "an opponent controls N or more X": one opponent controls them all.
                 if rel != PlayerRel::Defending {
-                    return None;
+                    return Some(Condition::PlayerMatches(
+                        PlayerRef::EachOpponent,
+                        PlayerFilter::Controls(Box::new(f), cmp, Box::new(n)),
+                    ));
                 }
                 return Some(Condition::Compare(
                     Value::Count(Filter::and(vec![f, Filter::ControlledBy(rel)])),
@@ -683,7 +720,7 @@ pub(crate) fn attacking_player_condition(c: &str) -> Option<PlayerFilter> {
 }
 
 /// An object phrase, also allowing a leading color choice: "red or white permanent".
-fn color_or_phrase(r: &str) -> Option<Filter> {
+pub(crate) fn color_or_phrase(r: &str) -> Option<Filter> {
     let words: Vec<&str> = r.splitn(4, ' ').collect();
     if words.len() == 4 && words[1] == "or" {
         if let (Some(a), Some(b)) = (Color::from_word(words[0]), Color::from_word(words[2])) {

@@ -175,6 +175,7 @@ pub fn class_matches(class: AbilityClass, a: &Ability, act: &ActivatedAbility) -
     match class {
         AbilityClass::Any => true,
         AbilityClass::Loyalty => act.is_loyalty,
+        AbilityClass::Mana => act.is_mana_ability,
         AbilityClass::Keyword(k) => crate::keyword_impls::ability_from_keyword(a) == Some(k),
     }
 }
@@ -402,4 +403,136 @@ pub fn as_though_haste(g: &Game, p: PlayerId, src: ObjectId) -> bool {
 /// middle of casting a spell, activating an ability or paying a cost.
 pub fn as_instant_ok(g: &Game, p: PlayerId) -> bool {
     g.has_priority(p) && g.special.casting == 0 && g.mana_hint.is_none()
+}
+
+/// `ctx` with the targets chosen for the ability `stack` on the stack (CR 601.2c: they're
+/// chosen before its total cost is determined, CR 601.2f), so that a cost change can look
+/// at "the creature it targets".
+pub fn with_ability_targets(g: &Game, mut ctx: Ctx, stack: Option<ObjectId>) -> Ctx {
+    if let Some(si) = stack.and_then(|id| g.obj(id).stack.as_deref()) {
+        if let Some(cm) = si.chosen.first() {
+            ctx.targets = cm.targets.clone();
+        }
+        ctx.x = si.x.map(|x| x as i32).unwrap_or(ctx.x);
+    }
+    ctx
+}
+
+/// Whether a value or condition looks at the ability's targets.
+pub fn mentions_targets<T: serde::Serialize>(x: &T) -> bool {
+    serde_json::to_string(x).is_ok_and(|s| s.contains("\"Target\""))
+}
+
+/// Adds `change` (from `base`'s source) to the total cost of the ability `act` while
+/// `condition` holds, judged with the ability's targets (CR 601.2c, 601.2f). Before
+/// targets are chosen (`stack` is `None`, checking whether the ability could be
+/// activated), a reduction that depends on the targets is assumed to be as large as the
+/// best target available makes it, and an increase that depends on them not to apply.
+#[allow(clippy::too_many_arguments)]
+pub fn add_change_for_targets(
+    g: &Game,
+    act: &ActivatedAbility,
+    base: Ctx,
+    stack: Option<ObjectId>,
+    condition: Option<&Condition>,
+    change: &CostChange,
+    cost: &mut Cost,
+    changes: &mut CostChanges,
+) {
+    let depends = mentions_targets(change) || condition.is_some_and(mentions_targets);
+    let holds = |ctx: &Ctx| condition.is_none_or(|c| g.eval_cond(c, ctx));
+    if stack.is_some() || !depends {
+        let ctx = with_ability_targets(g, base, stack);
+        if holds(&ctx) {
+            changes.add(g, cost, change, &ctx);
+        }
+        return;
+    }
+    if !is_reduction(change) {
+        return;
+    }
+    // A condition on the targets is assumed met; any other condition must hold.
+    if condition.is_some_and(|c| !mentions_targets(c) && !g.eval_cond(c, &base)) {
+        return;
+    }
+    if !mentions_targets(change) {
+        changes.add(g, cost, change, &base);
+        return;
+    }
+    // The candidate target that leaves the least mana to pay.
+    let Some(TargetKind::Object(f)) = act.body.targets.first().map(|t| &t.what) else {
+        return;
+    };
+    let mut best: Option<(u32, Ctx)> = None;
+    for o in g.objects_matching(f, &base) {
+        let mut ctx = base.clone();
+        ctx.targets = vec![vec![Entity::Object(o)]];
+        let mut trial = cost.clone();
+        let mut ch = changes.clone();
+        ch.add(g, &mut trial, change, &ctx);
+        ch.apply(&mut trial, |_, cur, s| {
+            crate::cost_rules::default_half(cur, s)
+        });
+        let left = mana_amount(&trial);
+        if best.as_ref().is_none_or(|(b, _)| left < *b) {
+            best = Some((left, ctx));
+        }
+    }
+    if let Some((_, ctx)) = best {
+        changes.add(g, cost, change, &ctx);
+    }
+}
+
+/// Adds the ability's own cost changes ("This ability costs {1} less to activate for each
+/// ...", [`OwnCostChange`]) to its total cost (CR 601.2f); see [`add_change_for_targets`].
+pub fn add_own_cost_changes(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    act: &ActivatedAbility,
+    stack: Option<ObjectId>,
+    cost: &mut Cost,
+    changes: &mut CostChanges,
+) {
+    for oc in &act.own_cost_changes {
+        add_change_for_targets(
+            g,
+            act,
+            Ctx::new(Some(src), p),
+            stack,
+            oc.condition.as_ref(),
+            &oc.change,
+            cost,
+            changes,
+        );
+    }
+}
+
+/// The greatest value of X a player could announce for the ability `act` (CR 107.3a):
+/// the mana they could make, or, for an X among its other cost parts ("Remove X +1/+1
+/// counters from among creatures you control", "Exile X cards from your graveyard",
+/// "Sacrifice X artifacts"), how many counters and objects there are to pay it with.
+pub fn x_bound(g: &Game, p: PlayerId, act: &ActivatedAbility) -> i64 {
+    let mana = g.max_mana_available(p) as i64;
+    if !act.cost.parts.iter().any(crate::casting::cost_part_has_x) {
+        return mana;
+    }
+    let pl = g.player(p);
+    let objects = g.permanents_controlled_by(p).len() + pl.graveyard.len() + pl.hand.len();
+    let counters: u32 = g
+        .permanents()
+        .map(|o| o.counters.values().sum::<u32>())
+        .sum();
+    // "Sacrifice an artifact with mana value X" (Scrap Welder): X is a characteristic
+    // of the object paid with, which neither mana nor the number of objects limits.
+    let describes = act.cost.parts.iter().any(|c| match c {
+        CostPart::Sacrifice { filter, .. }
+        | CostPart::Discard { filter, .. }
+        | CostPart::Exile { filter, .. }
+        | CostPart::ReturnToHand { filter, .. }
+        | CostPart::TapUntapped { filter, .. } => crate::casting::filter_mentions_x(filter),
+        _ => false,
+    });
+    let described = if describes { 20 } else { 0 };
+    mana.max(objects as i64 + counters as i64).max(described)
 }

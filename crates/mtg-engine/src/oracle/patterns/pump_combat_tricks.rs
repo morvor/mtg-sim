@@ -662,12 +662,7 @@ inventory::submit! { EffectPattern { name: "pump: switch power and toughness", p
 
 /// "with a +1/+1 counter on it", "with two +1/+1 counters on it".
 fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
-    let (n, r) = parse_number(s)?;
-    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
-    let r = r
-        .strip_prefix("counters on it")
-        .or_else(|| r.strip_prefix("counter on it"))?;
-    r.is_empty().then(|| vec![(kind, n)])
+    super::levels_classes_sagas_transformed::with_counters_on_it(s)
 }
 
 /// "return it to the battlefield [tapped] under its owner's control [with a +1/+1

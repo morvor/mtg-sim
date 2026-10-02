@@ -275,6 +275,56 @@ impl Renderer<'_> {
             Filter::Copy => np.rel.push("that's a copy".into()),
             Filter::ControlledBy(r) => np.controller = Some(*r),
             Filter::OwnedBy(r) => np.owner = Some(*r),
+            Filter::ControlledByPlayer(p) => {
+                let w = self.player(p, Case::Subj);
+                let v = if matches!(w.as_str(), "you" | "they") {
+                    "control"
+                } else {
+                    "controls"
+                };
+                np.post.push(format!("{w} {v}"));
+            }
+            Filter::OwnedByPlayer(p) => {
+                let w = self.player(p, Case::Subj);
+                let v = if matches!(w.as_str(), "you" | "they") {
+                    "own"
+                } else {
+                    "owns"
+                };
+                np.post.push(format!("{w} {v}"));
+            }
+            Filter::AttachedToAnyOf(s) => {
+                let w = self.sel(s, Case::Obj);
+                np.post.push(format!("attached to {w}"));
+            }
+            // "with toughness greater than its power": a value of the object itself
+            // compared with another.
+            Filter::ValueCmp(a, c, b) => {
+                let own = |v: &Value| -> Option<&'static str> {
+                    let tested = |s: &Sel| matches!(s, Sel::Var(crate::ability::vars::TESTED));
+                    match v {
+                        Value::PowerOf(s) if tested(s) => Some("power"),
+                        Value::ToughnessOf(s) if tested(s) => Some("toughness"),
+                        Value::ManaValueOf(s) if tested(s) => Some("mana value"),
+                        _ => None,
+                    }
+                };
+                let w = match (own(a), own(b)) {
+                    (Some(x), Some(y)) => {
+                        format!("with {x} {}", cmp_phrase(*c, &format!("its {y}")))
+                    }
+                    (Some(x), None) => {
+                        let v = self.value(b);
+                        format!("with {x} {}", cmp_phrase(*c, &v))
+                    }
+                    _ => self.gap("a comparison of values of the object"),
+                };
+                np.post.push(w);
+            }
+            Filter::Together(g) => {
+                let w = self.target_group(g);
+                np.post.push(w);
+            }
             Filter::ControllerMatches(pf) => {
                 let p = self.player_filter_noun(pf, Num::One);
                 np.controller_matches = Some(format!("whose controller is {}", with_article(&p)));
@@ -455,6 +505,9 @@ impl Renderer<'_> {
             Filter::Colorless => np.colors.push("colored".into()),
             Filter::FaceDown => np.status.push("face-up".into()),
             Filter::Source => np.other = true,
+            // "each other permanent with the same name as that permanent": other than
+            // the target just named.
+            Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => np.other = true,
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
             Filter::HasAbilities => np.with.push("no abilities".into()),

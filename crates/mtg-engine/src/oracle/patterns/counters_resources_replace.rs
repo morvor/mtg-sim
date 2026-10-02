@@ -80,7 +80,8 @@ pub(super) fn life_gain_replacement(l: &str) -> Option<(ReplacementEvent, Replac
 }
 
 /// The permanents counters would be put on: "a creature you control", "~", "an artifact
-/// or creature you control", "another creature you control", "a creature".
+/// or creature you control", "another creature you control", "a creature", "a permanent
+/// you control", "an Army, Goblin, or Orc you control".
 fn counter_recipients(s: &str) -> Option<Filter> {
     if s == "~" {
         return Some(Filter::Source);
@@ -90,7 +91,11 @@ fn counter_recipients(s: &str) -> Option<Filter> {
         .or_else(|| s.strip_prefix("an "))
         .unwrap_or(s);
     let (f, plural, tail) = parse_object_phrase(s)?;
-    if plural || !tail.trim().is_empty() || f.zone().is_some() {
+    // "permanent" names the battlefield itself; any other zone isn't about permanents.
+    if plural
+        || !tail.trim().is_empty()
+        || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+    {
         return None;
     }
     Some(f)
@@ -106,7 +111,9 @@ fn counters_replacement(l: &str) -> Option<(ReplacementEvent, ReplacementAction)
         let (k, r) = counter_kind(r)?;
         (Some(k), r.strip_prefix("counters would be put on ")?)
     };
-    let (who, action) = r.split_once(", ")?;
+    // The recipient may itself be a comma list ("an Army, Goblin, or Orc you control");
+    // the change after the last comma has none.
+    let (who, action) = r.rsplit_once(", ")?;
     let on = counter_recipients(who)?;
     let action = action.strip_suffix(" instead")?;
     // The pronoun at the end refers back to the permanent.

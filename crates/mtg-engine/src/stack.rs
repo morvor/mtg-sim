@@ -283,8 +283,9 @@ impl Game {
             min == 0 || s.condition.is_some() || {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
                 cands.len() as u32 >= min
-                    && s.together.is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, min as usize).is_some()
+                    && s.together.as_ref().is_none_or(|grp| {
+                        crate::target_groups::find_group(self, grp, &cands, min as usize, ctx)
+                            .is_some()
                     })
             }
         })
@@ -644,8 +645,8 @@ impl Game {
             }
             // Targets that must have a relationship with each other: a group of the
             // required size must exist (CR 601.2c).
-            if let Some(grp) = spec.together {
-                crate::target_groups::find_group(self, grp, &cands, min as usize)?;
+            if let Some(grp) = &spec.together {
+                crate::target_groups::find_group(self, grp, &cands, min as usize, ctx)?;
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
@@ -682,8 +683,10 @@ impl Game {
                         .collect(),
                 }
             };
-            out[i] = match spec.together {
-                Some(grp) => crate::target_groups::fit(self, grp, picked, &cands, min as usize)?,
+            out[i] = match &spec.together {
+                Some(grp) => {
+                    crate::target_groups::fit(self, grp, picked, &cands, min as usize, ctx)?
+                }
                 None => picked,
             };
         }
@@ -900,8 +903,8 @@ impl Game {
                 // Targets that must have a relationship with each other no longer have
                 // it: they're all illegal (CR 608.2b). Ones that left are compared using
                 // their last known information (see `target_groups`).
-                if let Some(grp) = spec.together {
-                    if !crate::target_groups::group_ok(self, grp, slot) {
+                if let Some(grp) = &spec.together {
+                    if !crate::target_groups::group_ok(self, grp, slot, &c2) {
                         legal.clear();
                         legal_div.clear();
                     }
@@ -939,7 +942,23 @@ impl Game {
         if let StackKind::Triggered { ability, .. } = &si.kind {
             if let AbilityKind::Triggered(t) = &ability.kind {
                 if let Some(c) = &t.intervening_if {
-                    if !self.eval_cond(c, &ctx) {
+                    // The source as it last existed: an Aura whose enchanted permanent
+                    // left the battlefield first wasn't enchanting anything. (A trigger on
+                    // that permanent leaving looks back in time, CR 603.10a.)
+                    let detach = !matches!(
+                        t.trigger,
+                        TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_)
+                    ) && crate::attach::attached_to_nothing(self, src);
+                    let saved = if detach {
+                        self.objects[src.0 as usize].attached_to.take()
+                    } else {
+                        None
+                    };
+                    let holds = self.eval_cond(c, &ctx);
+                    if detach {
+                        self.objects[src.0 as usize].attached_to = saved;
+                    }
+                    if !holds {
                         self.remove_from_stack(id);
                         self.state_triggers_active.remove(&(src, uid));
                         return;
@@ -1002,6 +1021,10 @@ impl Game {
                 .entry(uid | crate::triggers::turn_keys::DONE_ONCE)
                 .or_insert(0) += 1;
         }
+        // The last instruction's events are checked for triggers before the ability
+        // leaves the stack (CR 603.2, 608.2n) — after a "do this only once each turn"
+        // action is remembered, so that action's events don't trigger it again.
+        self.action_boundary();
         // CR 608.2n: the ability ceases to exist.
         self.remove_from_stack(id);
         self.state_triggers_active.remove(&(src, uid));
@@ -1068,6 +1091,7 @@ impl Game {
                 created_step: Some(self.turn.step),
                 created_steps: self.turn.step_log.len(),
                 for_rest_of_game: false,
+                performer: None,
             });
         }
     }
@@ -1224,6 +1248,9 @@ impl Game {
             return;
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        // The last instruction's events are checked for triggers before the spell leaves
+        // the stack (CR 603.2, 608.2n).
+        self.action_boundary();
         for a in &o.chars.abilities {
             if matches!(a.kind, AbilityKind::Spell(_)) {
                 crate::structure::record(a, &o.chars.name, "resolved");

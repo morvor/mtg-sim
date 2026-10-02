@@ -132,7 +132,7 @@ impl Renderer<'_> {
                                 Filter::Type(CardType::Creature | CardType::Planeswalker | CardType::Battle)))
                             && (matches!(other, Filter::Other)
                                 || matches!(other, Filter::Not(x)
-                                    if matches!(x.as_ref(), Filter::In(_))))) =>
+                                    if matches!(x.as_ref(), Filter::In(_) | Filter::AttachedToSource)))) =>
             {
                 return "any other target".into();
             }
@@ -207,9 +207,38 @@ impl Renderer<'_> {
             Some(TargetGroup::ShareCreatureType) => s.push_str(" that share a creature type"),
             Some(TargetGroup::ShareCardType) => s.push_str(" that share a card type"),
             Some(TargetGroup::SharePermanentType) => s.push_str(" that share a permanent type"),
-            Some(TargetGroup::ShareNoCreatureType) => s.push_str(" that share no creature types"),
+            Some(g) => {
+                let w = self.target_group(g);
+                s.push_str(&format!(" {w}"));
+            }
         }
         s
+    }
+
+    /// A requirement on objects chosen together ("with different names", "with total
+    /// mana value 6 or less").
+    pub(crate) fn target_group(&mut self, g: &TargetGroup) -> String {
+        match g {
+            TargetGroup::SameOwner => "a single player owns".into(),
+            TargetGroup::SameController => {
+                "{alt:a single player controls|controlled by the same player}".into()
+            }
+            TargetGroup::ShareCreatureType => "that share a creature type".into(),
+            TargetGroup::ShareCardType => "that share a card type".into(),
+            TargetGroup::SharePermanentType => "that share a permanent type".into(),
+            TargetGroup::ShareNoCreatureType => "that share no creature types".into(),
+            TargetGroup::DifferentNames => "with different names".into(),
+            TargetGroup::TotalAtMost(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or less")
+            }
+        }
     }
 
     fn stack_object_noun(&mut self, f: &Filter, base: &str) -> String {
@@ -598,6 +627,7 @@ impl Renderer<'_> {
             PlayerFilter::Is(_) => "that is that player".into(),
             PlayerFilter::You | PlayerFilter::Controller => "who is you".into(),
             PlayerFilter::Opponent => "who is an opponent".into(),
+            PlayerFilter::FirstDrawInDrawStep => self.gap("PlayerFilter::FirstDrawInDrawStep"),
             PlayerFilter::NotYou => "other than you".into(),
             PlayerFilter::DealtDamageThisTurn => "who was dealt damage this turn".into(),
             PlayerFilter::Life(c, v) => {

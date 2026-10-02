@@ -126,9 +126,7 @@ impl KeywordRules for Assist {
             }
             Err(_) => {
                 // The helper couldn't pay after all: nothing was paid.
-                let agents = g.agents.clone();
-                *g = snapshot;
-                g.agents = agents;
+                g.roll_back(snapshot);
             }
         }
         Ok(())

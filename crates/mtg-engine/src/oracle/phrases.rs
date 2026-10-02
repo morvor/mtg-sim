@@ -45,6 +45,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
             if let Ok(n) = other.parse::<i32>() {
@@ -312,10 +313,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut group_start = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
+    // The heads are a comma list ("artifact, enchantment, or creature").
+    let mut comma_list = false;
     loop {
         let (w, rest) = split_word(s);
         let w2 = w.trim_end_matches(',');
         let Some(f) = head_noun(w2) else { break };
+        if w.ends_with(',') {
+            comma_list = true;
+        }
         if !matches!(f, Filter::Subtype(_)) {
             head_subtypes_only = false;
         }
@@ -361,6 +367,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             let nw = split_word(r).0.trim_end_matches(',');
             if matches!(heads.last(), Some(Filter::Type(_)))
                 && matches!(head_noun(nw), Some(Filter::Type(_)))
+            {
+                s = r;
+                continue;
+            }
+            // "Aura and Equipment spells", "Equipment and Vehicle spells": subtypes joined
+            // by "and" before a plural noun that narrows them name objects with either.
+            let after = split_word(split_word(r).1).0;
+            if matches!(heads.last(), Some(Filter::Subtype(_) | Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Subtype(_)))
+                && matches!(after, "spells" | "cards" | "permanents")
             {
                 s = r;
                 continue;
@@ -471,6 +487,32 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 heads.push(Filter::and(vec![last, f]));
                 s = r;
             }
+        }
+    } else if heads.len() > 1 && comma_list {
+        // "target artifact, enchantment, or creature with flying", "artifact, enchantment,
+        // or creature with power 4 or greater": an ability or a power/toughness after a
+        // comma list describes its last item only (the others don't have one). Other
+        // qualifiers ("with mana value 3 or less", "you control") describe them all.
+        let t = s.trim_start();
+        let keyword = |f: &Filter| match f {
+            Filter::HasKeyword(_) => true,
+            Filter::Not(x) => matches!(**x, Filter::HasKeyword(_)),
+            _ => false,
+        };
+        let last_only = parse_with_suffix(t)
+            .filter(|(f, _)| keyword(f))
+            .or_else(|| {
+                parse_stat_suffix(t).filter(|(f, _)| {
+                    matches!(
+                        f,
+                        Filter::Power(..) | Filter::Toughness(..) | Filter::PowerVsBase(_)
+                    )
+                })
+            });
+        if let Some((f, r)) = last_only {
+            let last = heads.pop().unwrap();
+            heads.push(Filter::and(vec![last, f]));
+            s = r;
         }
     }
     let head = if heads.len() == 1 {
@@ -588,6 +630,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             // "target creature you control other than enchanted creature" (Due Diligence).
             (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t
+            .strip_prefix("that's attached to a creature")
+            .or_else(|| t.strip_prefix("that are attached to creatures"))
+        {
+            // "each Aura you control that's attached to a creature" (Sage's Reverie).
+            (
+                Filter::Custom(crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
             // "untapped creatures that player controls that didn't attack this turn".
             (Filter::not(Filter::AttackedThisTurn), r)
@@ -671,6 +722,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("enchanted player controls") {
+            // A Curse's player (CR 303.4).
+            (
+                Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                    Sel::AttachedTo,
+                )))),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("the monarch controls") {
             // CR 725: none while there's no monarch.
             (
@@ -706,13 +765,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
                 r,
             )
+        } else if let Some((f, r)) = {
+            let so_far = Filter::and(parts.clone());
+            super::patterns::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(t, &so_far))
+        } {
+            // Qualifiers registered by pattern files (`FilterSuffixPattern`).
+            (f, r)
         } else {
             break;
         };
         parts.push(f);
         s = rest;
     }
-    Some((Filter::and(parts), plural, s))
+    // "each other creature that shares a color with it": other than "it".
+    let f = super::patterns::filters_relational::other_than_referent(Filter::and(parts));
+    Some((f, plural, s))
 }
 
 /// "target player controls" / "target opponent controls" after an object phrase. The
@@ -1206,7 +1275,21 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Ability(f), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
+        // Requirements on the targets taken together ("with different names", "with
+        // total mana value 6 or less") belong to the target slot.
+        let (f, groups) = crate::relational::split_groups(f);
+        if groups.len() > 1 || crate::relational::has_nested_group(&f) {
+            return None;
+        }
+        let lifted = groups.into_iter().next();
         let (f, r) = target_group_suffix(f, &s[..s.len() - r.len()], r, &mut together)?;
+        if lifted.is_some() {
+            // Only one requirement per slot.
+            if together.is_some() {
+                return None;
+            }
+            together = lifted;
+        }
         // "target planeswalker that was activated this turn or tapped creature": an
         // alternative description after the first one's suffixes, ending the phrase. Not
         // after a list ("target Spirit, creature with disturb, or enchantment"), whose
@@ -1289,7 +1372,7 @@ fn target_group_suffix<'a>(
     ];
     let Some((rest, grp)) = groups
         .iter()
-        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, *g)))
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
     else {
         return Some((f, r));
     };
@@ -1333,8 +1416,13 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 12] = [
+    let pairs: [(&str, PlayerRef); 13] = [
         ("you ", PlayerRef::You),
+        // A Curse's player (CR 303.4).
+        (
+            "enchanted player ",
+            PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)),
+        ),
         ("each player ", PlayerRef::EachPlayer),
         ("each opponent ", PlayerRef::EachOpponent),
         ("each other player ", PlayerRef::EachOtherPlayer),

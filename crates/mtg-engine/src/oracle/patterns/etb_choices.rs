@@ -473,6 +473,11 @@ fn on_self(s: &str) -> Option<&str> {
 
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
+    for_each_value_inner(s, ctx)
+        .or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
+}
+
+fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
     // "{G}{G} spent to cast it": each two green mana spent
     if let Some(v) = s
@@ -880,6 +885,10 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "a creature type" => ChoiceKind::CreatureType,
         "a card name" | "any card name" => ChoiceKind::CardName,
         "a nonland card name" => ChoiceKind::CardNameFiltered("nonland".into()),
+        // Any name but those of basic land cards (Desperate Research, Booby Trap).
+        "a card name other than a basic land card name" => {
+            ChoiceKind::CardNameFiltered("not:basic land".into())
+        }
         "a creature card name" => ChoiceKind::CardNameFiltered("creature".into()),
         "an opponent" | "one of your opponents" => ChoiceKind::Opponent,
         "a player" => ChoiceKind::Player,

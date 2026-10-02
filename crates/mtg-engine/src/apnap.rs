@@ -147,6 +147,7 @@ pub fn keep_and_sacrifice_rest(
     who: &crate::ability::PlayerRef,
     among: &crate::ability::Filter,
     keep: &[crate::ability::Filter],
+    up_to: bool,
     ctx: &mut crate::eval::Ctx,
 ) {
     let players = g.eval_players(who, ctx);
@@ -167,13 +168,23 @@ pub fn keep_and_sacrifice_rest(
         // CR 101.4c: the choices are made in the order specified. A permanent with more
         // than one of the listed types may be chosen for each of them.
         let mut kept: Vec<ObjectId> = Vec::new();
-        for f in keep {
+        let mut picked_for: Vec<Option<ObjectId>> = Vec::new();
+        for (i, f) in keep.iter().enumerate() {
+            // The same description again ("three lands") is another permanent.
+            let again: Vec<ObjectId> = keep[..i]
+                .iter()
+                .zip(&picked_for)
+                .filter(|(g2, _)| format!("{g2:?}") == format!("{f:?}"))
+                .filter_map(|(_, o)| *o)
+                .collect();
             let cands: Vec<ObjectId> = mine
                 .iter()
                 .copied()
-                .filter(|o| g.matches(*o, f, &pctx))
+                .filter(|o| g.matches(*o, f, &pctx) && !again.contains(o))
                 .collect();
-            let pick = g.ask_objects(p, ctx.source, "Choose a permanent to keep", cands, 1, 1);
+            let min = if up_to { 0 } else { 1 };
+            let pick = g.ask_objects(p, ctx.source, "Choose a permanent to keep", cands, min, 1);
+            picked_for.push(pick.first().copied());
             for o in pick {
                 if !kept.contains(&o) {
                     kept.push(o);

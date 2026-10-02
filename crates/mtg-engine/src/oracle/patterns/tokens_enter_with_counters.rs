@@ -1,12 +1,13 @@
 //! "Create a 0/0 green Ooze creature token with trample. The token enters with X +1/+1
 //! counters on it, where X is the number of other creatures you control." (Printlifter
-//! Ooze): the counters are put on the token as it's created, before anything else can
-//! happen (CR 122.6: a permanent entering with counters has them put on it).
+//! Ooze): the token enters with the counters (CR 122.6), so abilities that trigger on it
+//! entering see them ([`Effect::TokensEnterWithCounters`]).
 
 use super::FollowupPattern;
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
+use crate::types::CounterKind;
 
 /// Whether the effect ends by creating tokens.
 fn ends_with_token(e: &Effect) -> bool {
@@ -33,30 +34,41 @@ fn token_enters_with_counters(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     let saved = b.it.clone();
     b.it = Sel::Var(vars::CREATED);
     let text = format!("put {counters} on it{rest}");
-    let Some(mut e) = crate::oracle::effects::parse_sentence(&text, b) else {
+    let parsed = crate::oracle::effects::parse_sentence(&text, b);
+    // "where X is the number of other creatures you control": other than the token that
+    // enters with them, whether or not the source is still there.
+    let Some(Effect::AddCounters {
+        what: Sel::Var(vars::CREATED),
+        kind,
+        n,
+    }) = parsed
+    else {
         b.it = saved;
         return false;
     };
-    // "where X is the number of other creatures you control": other than the token that
-    // enters with them (which is on the battlefield as they're put on it here), whether or
-    // not the source is still there.
-    if let Effect::AddCounters {
-        what: Sel::Var(v),
-        n,
-        ..
-    } = &mut e
-    {
-        if *v == vars::CREATED {
-            let Some(other_than_token) = other_than_created(n) else {
-                b.it = saved;
-                return false;
+    let Some(n) = other_than_created(&n) else {
+        b.it = saved;
+        return false;
+    };
+    wrap_last_create(prev, vec![(kind, n)])
+}
+
+/// Makes the tokens the last instruction of `e` creates enter with `counters`.
+fn wrap_last_create(e: &mut Effect, counters: Vec<(CounterKind, Value)>) -> bool {
+    match e {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => {
+            let create = std::mem::take(e);
+            *e = Effect::TokensEnterWithCounters {
+                counters,
+                effect: Box::new(create),
             };
-            *n = other_than_token;
+            true
         }
+        Effect::Seq(v) => v
+            .last_mut()
+            .is_some_and(|last| wrap_last_create(last, counters)),
+        _ => false,
     }
-    let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![old, e]);
-    true
 }
 
 /// `n` with "other" (than the source) meaning other than the created token.

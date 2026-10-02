@@ -479,6 +479,28 @@ pub struct GameObject {
     /// (layers 7a-7b), ignoring effects and counters that modify them without setting them.
     #[serde(default)]
     pub base_pt: (Option<i32>, Option<i32>),
+    /// For a permanent that left the battlefield: its combat role and what was attached to
+    /// it as it last existed there (last known information, CR 603.10a, 608.2h), which
+    /// leaving the battlefield erases (CR 506.4).
+    #[serde(default)]
+    pub left_battlefield: Option<Box<LeftBattlefield>>,
+}
+
+/// Status a permanent had as it last existed on the battlefield ("if it was attacking",
+/// "if it wasn't blocking", "if it was enchanted or equipped").
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct LeftBattlefield {
+    pub attacking: bool,
+    pub blocking: bool,
+    pub blocked: bool,
+    pub enchanted: bool,
+    pub equipped: bool,
+    /// An Aura, Equipment or Fortification was still attached to the object or player it
+    /// was attached to (which may have left the battlefield at the same time). One whose
+    /// object left the battlefield before it did wasn't attached to anything as it last
+    /// existed there.
+    #[serde(default)]
+    pub attached: bool,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
@@ -575,6 +597,7 @@ impl GameObject {
             paired_with: None,
             prepared: None,
             base_pt: (None, None),
+            left_battlefield: None,
         }
     }
 

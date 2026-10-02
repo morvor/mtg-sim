@@ -659,6 +659,7 @@ impl Renderer<'_> {
             }
             AbilityClass::Any => "activated abilities".to_string(),
             AbilityClass::Loyalty => "loyalty abilities".to_string(),
+            AbilityClass::Mana => "mana abilities".to_string(),
             AbilityClass::Keyword(k) => format!("{} abilities", k.name().to_lowercase()),
         };
         let mut s = if scope.first_each_turn {
