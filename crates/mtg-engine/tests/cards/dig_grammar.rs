@@ -1292,6 +1292,21 @@ fn dig_grammar_cards_are_supported() {
         "Nick Fury, Agent of S.H.I.E.L.D.",
         "Flow State",
         "Mass Polymorph",
+        "Old Stickfingers",
+        "Genesis Hydra",
+        "Time Lord Regeneration",
+        "An Unearthly Child",
+        "Calibrated Blast",
+        "Sindbad",
+        "Fa'adiyah Seer",
+        "Avatar Destiny",
+        "Expand the Sphere",
+        "Stillness in Motion",
+        "Knight-Errant of Eos",
+        "Primitive Etchings",
+        "Rowen",
+        "Keranos, God of Storms",
+        "Inquisitor Eisenhorn",
     ] {
         assert_supported(name);
     }
