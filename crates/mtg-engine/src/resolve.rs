@@ -498,13 +498,24 @@ impl Game {
             Effect::AddCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
+                let mut got = Vec::new();
                 for t in self.resolve_sel(what, ctx) {
                     let t = self.found_after_move(t, ctx);
-                    placed += self.add_counters(t, kind, k, ctx.source);
+                    let n = self.add_counters(t, kind, k, ctx.source);
+                    if n > 0 {
+                        got.push(t);
+                    }
+                    placed += n;
                 }
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
                 // whether any counter was put.
                 ctx.prev_happened = placed > 0;
+                // "Put a quest counter on this enchantment. When you do, if it has four or
+                // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
+                // the counters.
+                if !got.is_empty() {
+                    ctx.set_var(vars::IT, got);
+                }
             }
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;

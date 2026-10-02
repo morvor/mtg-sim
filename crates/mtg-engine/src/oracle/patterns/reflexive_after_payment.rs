@@ -122,8 +122,18 @@ fn reflexive_target_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     if sub.targets.len() != 1 {
         return false;
     }
-    let old = std::mem::replace(&mut body.effect, Effect::Noop);
-    body.effect = Effect::seq(vec![old, e]);
+    // "When you do, if it has four or more quest counters on it, put a +1/+1 counter on
+    // target creature you control. It gains trample until end of turn." (Earthbender
+    // Ascension): the condition governs the whole reflexive ability, the later sentence
+    // included.
+    let slot = match &mut body.effect {
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => &mut **then,
+        e => e,
+    };
+    let old = std::mem::replace(slot, Effect::Noop);
+    *slot = Effect::seq(vec![old, e]);
     true
 }
 

@@ -891,3 +891,51 @@ fn eldrazi_confluence_repeated_modes_happen_in_the_chosen_order() {
         assert!(f.timestamp < s.timestamp);
     }
 }
+
+#[test]
+fn earthbender_ascensions_condition_governs_the_whole_reflexive_ability() {
+    cr!("603.12", "603.4");
+    // "When you do, if it has four or more quest counters on it, put a +1/+1 counter on
+    // target creature you control. It gains trample until end of turn.": below four quest
+    // counters, the target gets neither the counter nor trample.
+    for quest in [0u32, 3] {
+        let mut t = TestGame::new(2);
+        let asc = t.battlefield(P0, "Earthbender Ascension");
+        t.g.add_counters(obj(asc), "quest", quest, None);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.answer_targets(P0, &[obj(bears)]);
+        let forest = t.hand(P0, "Forest");
+        t.play_land(P0, forest).unwrap();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(t.counters(asc, "quest"), quest + 1);
+        let big = quest + 1 >= 4;
+        assert_eq!(t.counters(bears, counters::PLUS1), u32::from(big));
+        assert_eq!(
+            t.obj_now(bears)
+                .chars
+                .has_keyword(mtg_engine::keywords::KeywordKind::Trample),
+            big
+        );
+        assert!(!t
+            .obj_now(asc)
+            .chars
+            .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+    }
+}
+
+#[test]
+fn an_opponent_controls_more_lands_means_any_one_opponent() {
+    cr!("603.4");
+    // Knight of the White Orchid in a three-player game: one opponent with more lands than
+    // you is enough, even if another has fewer.
+    for p2_lands in [2usize, 1] {
+        let mut t = TestGame::new(3);
+        t.lands(P0, "Plains", 1);
+        t.lands(P2, "Forest", p2_lands);
+        t.library_top(P0, "Plains");
+        t.enter(P0, "Knight of the White Orchid");
+        t.settle();
+        assert_eq!(t.stack_len(), usize::from(p2_lands > 1));
+    }
+}
