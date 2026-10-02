@@ -11,7 +11,8 @@
 //!   of those kinds of tokens instead, rounded down." (Halving Season).
 //!
 //! A permanent's counters it enters with are put on it by its controller unless the
-//! effect says otherwise (CR 122.6a, `counter_rules::who_puts_counters`).
+//! effect says otherwise (CR 122.6a); every counter event records who puts the counters
+//! (`event_causes::CounterPut`).
 
 use super::StaticPattern;
 use crate::ability::*;

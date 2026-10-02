@@ -225,7 +225,11 @@ impl Game {
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
                 let objs = self.resolve_objects(what, ctx);
-                let res = self.destroy_all(objs.clone(), ctx.source, *no_regen);
+                let res = self.destroy_all_by(
+                    objs.clone(),
+                    crate::event_causes::Cause::of(ctx),
+                    *no_regen,
+                );
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -511,13 +515,24 @@ impl Game {
             Effect::AddCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
+                let mut got = Vec::new();
                 for t in self.resolve_sel(what, ctx) {
                     let t = self.found_after_move(t, ctx);
-                    placed += self.add_counters(t, kind, k, ctx.source);
+                    let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
+                    if n > 0 {
+                        got.push(t);
+                    }
+                    placed += n;
                 }
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
                 // whether any counter was put.
                 ctx.prev_happened = placed > 0;
+                // "Put a quest counter on this enchantment. When you do, if it has four or
+                // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
+                // the counters.
+                if !got.is_empty() {
+                    ctx.set_var(vars::IT, got);
+                }
             }
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
@@ -941,7 +956,7 @@ impl Game {
                 let mut any = false;
                 let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    if self.counter(o, ctx.source) {
+                    if self.counter_by(o, crate::event_causes::Cause::of(ctx)) {
                         any = true;
                         // CR 400.7j: other parts of the effect can find the countered card
                         // in the public zone it moved to ("exile it instead ... You may
@@ -1370,7 +1385,12 @@ impl Game {
             Effect::AddPlayerCounters { who, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 for p in self.eval_players(who, ctx) {
-                    self.add_counters(Entity::Player(p), kind, k, ctx.source);
+                    self.put_counters(
+                        Entity::Player(p),
+                        kind,
+                        k,
+                        crate::event_causes::CounterPut::of(ctx),
+                    );
                 }
             }
             Effect::Scry { who, n } => {

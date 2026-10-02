@@ -62,6 +62,7 @@ pub mod dungeons;
 pub mod end_turn;
 pub mod entry_costs;
 pub mod eval;
+pub mod event_causes;
 pub mod event_feed;
 pub mod events;
 pub mod excess_damage;

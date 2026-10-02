@@ -1655,6 +1655,11 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
@@ -2008,6 +2013,19 @@ pub enum ReplacementEvent {
     PutCountersBy {
         by: PlayerRel,
         kind: Option<CounterKind>,
+    },
+    /// Counters (of `kind`) would be put on an object matching `on_objects` or a player
+    /// matching `on_players`, by a player matching `by` if given (CR 122.6, 122.6a: "If you
+    /// would put one or more counters on a permanent you control"), and, if `effect_only`,
+    /// by an effect (CR 609.1: "If an effect would put one or more counters on a permanent
+    /// you control" doesn't apply to counters put as a cost, as the result of damage, or by
+    /// a turn-based action; see [`crate::events::CounterOrigin`]).
+    PutCountersMatching {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        by: Option<PlayerRel>,
+        effect_only: bool,
     },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
@@ -2793,6 +2811,37 @@ pub enum TriggerCond {
         /// put action ("one or more [kind] counters are put on …").
         #[serde(default)]
         each: bool,
+    },
+    /// "Whenever [who] put(s) one or more [kind] counters on [objects or players]" (once
+    /// for each put action on each permanent or player) / "Whenever [who] put(s) a [kind]
+    /// counter on …" (`each`: once for each counter) (CR 122.6, 122.6a): counters put by a
+    /// player matching `who`, however they were put (by an effect, as a cost, as the result
+    /// of damage, or by a turn-based action, [`crate::events::CounterOrigin`]). Event
+    /// object = the permanent (none for a player), player = the player who put them,
+    /// amount = how many.
+    CountersPutBy {
+        who: PlayerRel,
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        each: bool,
+    },
+    /// "Whenever a spell or ability [by] controls destroys [filter]" (CR 701.8): a
+    /// permanent destroyed by the effect of a spell or ability (not by a state-based
+    /// action, CR 704.5g–h, and not sacrificed or exiled). Looks back in time
+    /// (CR 603.10a). Event object = the permanent as it last existed on the battlefield,
+    /// player = the controller of the spell or ability.
+    DestroyedBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// "When/Whenever [filter spell] is countered by a spell or ability [by] controls"
+    /// (CR 701.6). Looks back in time (CR 603.10e). Event object = the spell as it last
+    /// existed on the stack, player = the controller of the spell or ability that
+    /// countered it.
+    CounteredBy {
+        filter: Filter,
+        by: PlayerRel,
     },
     CountersRemoved {
         filter: Filter,

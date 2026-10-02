@@ -17,6 +17,7 @@ pub mod effects;
 pub mod keywords;
 pub mod patterns;
 pub mod phrases;
+pub mod render;
 pub mod statics;
 pub mod triggers;
 
