@@ -709,6 +709,9 @@ pub mod vars {
     /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
     /// earlier instruction of it ("the sacrificed creature", last known information).
     pub const SACRIFICED: Var = 9;
+    /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
+    /// this way"): not those that were already tapped.
+    pub const TAPPED: Var = USER + 3066;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -859,6 +862,9 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// A player whose life total is less than half their own starting life total (CR
+    /// 119.1; "that player has less than half their starting life total").
+    LessThanHalfStartingLife,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),

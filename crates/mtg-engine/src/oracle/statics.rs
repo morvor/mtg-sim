@@ -760,6 +760,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             let milled = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]);
             return Some((Value::Count(milled), rest.to_string()));
         }
+        // "the number of creatures tapped this way" (Angel's Trumpet).
+        if let Some(rest) = rest.trim_start().strip_prefix("tapped this way") {
+            let tapped = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::TAPPED)))]);
+            return Some((Value::Count(tapped), rest.to_string()));
+        }
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {

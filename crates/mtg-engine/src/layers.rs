@@ -299,10 +299,12 @@ impl Game {
                 let ctx = Ctx::new(eff.source, eff.controller);
                 for t in targets {
                     if self.is_live(*t) {
-                        let mut c = self.objects[t.0 as usize].chars.clone();
+                        let before = self.objects[t.0 as usize].chars.clone();
+                        let mut c = before.clone();
                         for m in mods {
                             apply_mod(&mut c, m, self, &ctx, *t);
                         }
+                        drop_ungainable_subtypes(&mut c, &before);
                         self.objects[t.0 as usize].chars = c;
                     }
                 }
@@ -326,6 +328,7 @@ impl Game {
                 for m in exceptions {
                     apply_mod(&mut v, m, self, &ctx, *t);
                 }
+                drop_ungainable_subtypes(&mut v, values);
                 self.objects[t.0 as usize].chars = v;
             }
         }
@@ -1768,6 +1771,23 @@ fn copied_ability(a: &Ability, effect: u32) -> Ability {
 /// effect `effect` (see [`copied_ability`]).
 pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
     0x4000 | ((link as u32 * 131 + effect * 37) % 0x3fff) as u16
+}
+
+/// CR 205.3d: an object can't gain a subtype that doesn't correspond to one of its types.
+/// Removes the subtypes (and "every creature type") that a copy effect's exceptions added
+/// to `c` (compared to the values `orig` it applied to) but that don't correspond to any
+/// of its card types — e.g. "it's a Pirate in addition to its other types" on a copy of
+/// a noncreature. They stay gone even if it becomes a creature later (in layer 4).
+fn drop_ungainable_subtypes(c: &mut Characteristics, orig: &Characteristics) {
+    let types = c.card_types;
+    c.subtypes
+        .retain(|s| orig.subtypes.contains(s) || subtype_still_valid(s, types));
+    if c.all_creature_types
+        && !orig.all_creature_types
+        && !(types.contains(CardType::Creature) || types.contains(CardType::Kindred))
+    {
+        c.all_creature_types = false;
+    }
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {

@@ -704,14 +704,11 @@ fn comparison_condition(c: &str) -> Option<Condition> {
         "your life total is less than your starting life total" => {
             Condition::Compare(life(), Cmp::Lt, Value::StartingLife)
         }
-        // Less than half: below half, rounding the half up for odd totals.
+        // Each opponent's own starting life total (CR 119.1).
         "an opponent's life total is less than half their starting life total" => {
             Condition::PlayerMatches(
                 PlayerRef::EachOpponent,
-                PlayerFilter::Life(
-                    Cmp::Lt,
-                    Box::new(Value::Div(Box::new(Value::StartingLife), 2, true)),
-                ),
+                PlayerFilter::LessThanHalfStartingLife,
             )
         }
         // CR 122.1f: a poisoned player has one or more poison counters.
