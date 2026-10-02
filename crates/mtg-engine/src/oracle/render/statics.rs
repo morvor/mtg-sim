@@ -1439,6 +1439,18 @@ impl Renderer<'_> {
                 sources,
                 include_mana,
             } => {
+                // "Activated abilities of sources with the chosen name can't be activated"
+                // (a source of an ability can be any object, CR 113.7).
+                if matches!(who, PlayerFilter::Any) && matches!(sources, Filter::ChosenName) {
+                    let m = if *include_mana {
+                        ""
+                    } else {
+                        " unless they're mana abilities"
+                    };
+                    return format!(
+                        "activated abilities of sources with the chosen name can't be activated{m}"
+                    );
+                }
                 // "Enchanted creature's activated abilities can't be activated."
                 if matches!(who, PlayerFilter::Any) && !matches!(sources, Filter::Any) {
                     let s = match sources {
