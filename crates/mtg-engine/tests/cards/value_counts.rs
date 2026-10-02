@@ -162,7 +162,7 @@ fn stronghold_discipline_each_player_counts_their_own_creatures() {
 
 #[test]
 fn price_of_progress_twice_each_players_nonbasic_lands() {
-    cr!("120.3");
+    cr!("120.3a");
     assert_supported("Price of Progress");
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 2);
@@ -415,13 +415,20 @@ fn peer_into_the_abyss_rounds_up_each_time() {
 fn light_from_within_counts_white_symbols_in_each_creatures_cost() {
     cr!("107.4e");
     assert_supported("Light from Within");
+    ruling!(
+        "Light from Within",
+        "Light from Within affects each creature individually."
+    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Light from Within");
     let knight = t.battlefield(P0, "White Knight");
+    let finks = t.battlefield(P0, "Kitchen Finks");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.settle();
-    // {W}{W}: +2/+2; {1}{G}: nothing.
+    // {W}{W}: +2/+2; {1}{G/W}{G/W}: the hybrid symbols are white too, +2/+2; {1}{G}:
+    // nothing.
     assert_eq!(t.pt(knight), (4, 4));
+    assert_eq!(t.pt(finks), (5, 4));
     assert_eq!(t.pt(bears), (2, 2));
 }
 
@@ -482,4 +489,123 @@ fn netherborn_phalanx_each_opponent_counts_their_own_creatures() {
     t.enter(P0, "Netherborn Phalanx");
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 18, 19));
+}
+
+/// "each of up to X targets, where X is the number of times he was kicked": the defined X
+/// is the number of targets.
+#[test]
+fn batroc_the_leaper_up_to_x_targets_where_x_is_times_kicked() {
+    cr!("107.3c", "702.33d", "115.1d");
+    assert_supported("Batroc the Leaper");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 6);
+    let b = t.hand(P0, "Batroc the Leaper");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    t.answer_targets(P0, &[Entity::Object(bears), Entity::Object(giant)]);
+    t.cast(P0, b).go();
+    t.resolve_all();
+    let max = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { max, .. } => Some(max),
+            _ => None,
+        })
+        .expect("no targets asked");
+    assert_eq!(max, 2);
+    // Kicked twice: a 4/4 dealing 4 damage to each of the two targets.
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+}
+
+/// "At the beginning of your upkeep, ~ deals X damage to target opponent, where X is the
+/// number of cards in your hand minus the number of cards in that player's hand": "that
+/// player" is the target opponent, not you.
+#[test]
+fn bulwark_that_player_is_the_target_opponent() {
+    cr!("107.3c", "107.1b");
+    assert_supported("Bulwark");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bulwark");
+    hand_cards(&mut t, P0, 5);
+    hand_cards(&mut t, P1, 2);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let (mine, theirs) = (t.hand_size(P0) as i32, t.hand_size(P1) as i32);
+    assert!(mine > theirs);
+    assert_eq!(t.life(P1), 20 - (mine - theirs));
+}
+
+/// "Return up to X target cards ..., where X is the number of black permanents target
+/// opponent controls as you cast this spell": one opponent is targeted, and its black
+/// permanents set the number of targets.
+#[test]
+fn reap_targets_one_opponent_and_counts_its_black_permanents() {
+    cr!("107.3c", "601.2c");
+    assert_supported("Reap");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.battlefield(P1, "Drudge Skeletons");
+    t.battlefield(P1, "Drudge Skeletons");
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P0, "Hill Giant");
+    let reap = t.hand(P0, "Reap");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.cast(P0, reap).go();
+    let target_slots = t
+        .asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseTargets { .. }))
+        .count();
+    assert_eq!(target_slots, 2, "one opponent and the cards");
+    t.resolve();
+    assert!(t.in_hand(P0, "Grizzly Bears") && t.in_hand(P0, "Hill Giant"));
+}
+
+/// "Whenever you attack, each opponent loses life equal to the number of creatures
+/// attacking them": each opponent counts the creatures attacking that player.
+#[test]
+fn within_range_counts_creatures_attacking_each_opponent() {
+    cr!("508.1b");
+    assert_supported("Within Range");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Within Range");
+    let o1 = t.battlefield(P0, "Ornithopter");
+    let o2 = t.battlefield(P0, "Ornithopter");
+    let o3 = t.battlefield(P0, "Ornithopter");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[
+            (o1, Entity::Player(P1)),
+            (o2, Entity::Player(P1)),
+            (o3, Entity::Player(P2)),
+        ],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 18, 19));
+}
+
+/// "each opponent loses X life and you gain X life": you gain X once, however many
+/// opponents lose it.
+#[test]
+fn dai_li_agents_you_gain_x_once() {
+    cr!("107.3c", "608.2h");
+    assert_supported("Dai Li Agents");
+    let mut t = TestGame::new(3);
+    let dai = t.battlefield(P0, "Dai Li Agents");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P0, "Wall of Wood");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.g.add_counters(Entity::Object(wall), "+1/+1", 1, None);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(dai, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // X = 2: each opponent loses 2 (P1 also takes 3 combat damage), and you gain 2.
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (22, 15, 18));
 }

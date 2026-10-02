@@ -296,10 +296,17 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         };
         // "That player" is the player whose step it is: the active player, or with shared
         // team turns each player on the active team the ability triggers for (CR 805.4d).
+        // On "your [step]" that's you, whom the text calls "you": "that player" then
+        // names a player the instructions mention ("target opponent").
+        let it_player = if matches!(whose, PlayerRel::You) {
+            PlayerRef::You
+        } else {
+            PlayerRef::TriggerPlayer
+        };
         return Some((
             TriggerCond::BeginningOf { step, whose },
             Sel::This,
-            PlayerRef::TriggerPlayer,
+            it_player,
         ));
     }
     let r = l
@@ -523,7 +530,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     ];
     for (p, t) in player_pairs {
         if r == p {
-            return Some((t, obj(), PlayerRef::TriggerPlayer));
+            // "Whenever you ...": the text calls that player "you", so "they" and "that
+            // player" name someone else.
+            let it_player = if p.starts_with("you ") {
+                PlayerRef::You
+            } else {
+                PlayerRef::TriggerPlayer
+            };
+            return Some((t, obj(), it_player));
         }
     }
     if r == "you sacrifice a permanent" {

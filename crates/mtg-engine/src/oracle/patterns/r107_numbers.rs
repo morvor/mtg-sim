@@ -72,6 +72,12 @@ pub(crate) fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
     substitute_x_in(e, x)
 }
 
+/// Replaces `Value::X` in a target's number or division ("each of up to X targets, where
+/// X is ...").
+pub(crate) fn substitute_x_in_target(t: &TargetSpec, x: &Value) -> Option<TargetSpec> {
+    substitute_x_in(t, x)
+}
+
 /// The numeric variable holding a defined X used by several instructions of one sentence.
 const SENTENCE_X: Var = u16::MAX - 1074;
 
@@ -169,7 +175,14 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_suffix(" as you cast ~")
         .or_else(|| value_s.strip_suffix(" as you cast this spell"))
     {
-        let (x, tail) = value_phrase(v, b)?;
+        // Read the value only to compare it below: its targets ("target opponent
+        // controls") are added when `where_x_is_parts` reads it again.
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let read = value_phrase(v, b);
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+        let (x, tail) = read?;
         if !end(&tail).is_empty() {
             return None;
         }

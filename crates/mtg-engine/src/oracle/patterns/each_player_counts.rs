@@ -49,9 +49,16 @@ fn each_player_counts(l: &str, b: &mut Builder) -> Option<Effect> {
         let e = parse_clause(&text, b);
         b.it_player = saved;
         let e = e?;
-        // The amount must have been read for that player.
+        // The amount must have been read for that player: "that player" as the one who
+        // acts or is dealt damage doesn't count ("each opponent loses X life and you gain
+        // X life, where X is the number of creatures you control with +1/+1 counters on
+        // them": "them" are the creatures, and you gain X life once).
         let json = serde_json::to_string(&e).ok()?;
-        if !json.contains("Iterated") {
+        let amount_json = json
+            .replace("\"who\":\"Iterated\"", "")
+            .replace("\"controller\":\"Iterated\"", "")
+            .replace("{\"Players\":\"Iterated\"}", "");
+        if !amount_json.contains("Iterated") {
             return None;
         }
         return Some(Effect::ForEachPlayer {
