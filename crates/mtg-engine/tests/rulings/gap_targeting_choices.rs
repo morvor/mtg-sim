@@ -1159,3 +1159,31 @@ fn martyr_of_bones_exiles_up_to_x_cards_from_a_single_graveyard() {
     assert!(t.in_exile("Hill Giant"));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn nils_a_target_for_each_player_is_optional() {
+    cr!("115.1", "601.2c", "603.3d");
+    ruling!(
+        "Nils, Discipline Enforcer",
+        "For each player, choosing a target creature that player controls is optional."
+    );
+    // "At the beginning of your end step, for each player, put a +1/+1 counter on up to
+    // one target creature that player controls." (Nils's other ability isn't supported
+    // yet.) A target for P1 only; none for P0 or P2.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Nils, Discipline Enforcer");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let p1 = t.battlefield(P1, "Hill Giant");
+    let p2 = t.battlefield(P2, "Llanowar Elves");
+    t.answer_targets(P0, &[]);
+    t.answer_targets(P0, &[Entity::Object(p1)]);
+    t.answer_targets(P0, &[]);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(chosen_targets(&t, top), vec![Entity::Object(p1)]);
+    t.resolve_all();
+    assert_eq!(t.counters(p1, "+1/+1"), 1);
+    assert_eq!(t.counters(mine, "+1/+1"), 0);
+    assert_eq!(t.counters(p2, "+1/+1"), 0);
+}
