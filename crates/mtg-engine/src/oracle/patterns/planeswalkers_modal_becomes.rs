@@ -77,20 +77,23 @@ fn makes_creature(mods: &[Modification]) -> bool {
 fn subject(text: &str, b: &Builder) -> Subject {
     // A pronoun for a target: what the target's text says it is ("target Mountain").
     let referent = match (&b.it, text) {
-        (Sel::Target(i), "it" | "them" | "they") => b.targets.get(*i as usize).map(|t| t.text.to_lowercase()),
+        (Sel::Target(i), "it" | "them" | "they") => {
+            b.targets.get(*i as usize).map(|t| t.text.to_lowercase())
+        }
         _ => None,
     };
     let text_words = referent.as_deref().unwrap_or(text);
     let words: Vec<&str> = text_words.split([' ', ',']).collect();
-    let this = matches!(text, "~" | "it" | "him" | "her" | "he" | "she") && matches!(b.it, Sel::This);
+    let this =
+        matches!(text, "~" | "it" | "him" | "her" | "he" | "she") && matches!(b.it, Sel::This);
     let this_is = |t: CardType| this && b.ctx.type_line.card_types.contains(t);
     let lands = this_is(CardType::Land)
         || words.iter().any(|w| {
             matches!(*w, "land" | "lands")
                 || subtype_word(w).is_some_and(|s| is_basic_land_type(s.as_str()))
         });
-    let creatures = this_is(CardType::Creature)
-        || words.iter().any(|w| matches!(*w, "creature" | "creatures"));
+    let creatures =
+        this_is(CardType::Creature) || words.iter().any(|w| matches!(*w, "creature" | "creatures"));
     let hint = if lands {
         CardType::Land
     } else if this_is(CardType::Planeswalker) {
@@ -135,6 +138,13 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
     let (pred, gained) = match pred.split_once(" and gains ") {
         Some((p, k)) => (p, crate::oracle::effects::keyword_mods(k)?),
         None => (pred, vec![]),
+    };
+    // "becomes a blue Dragon Illusion with base power and toughness 4/4, loses all
+    // abilities, and gains flying": the abilities it had are removed before the keywords
+    // are gained (one effect, applied in the order written within layer 6, CR 613.1f).
+    let (pred, loses_all) = match pred.strip_suffix(", loses all abilities,") {
+        Some(p) if !gained.is_empty() => (p, true),
+        _ => (pred, false),
     };
     // "that's still a planeswalker" (CR 205.1b).
     let (pred, still) = match pred
@@ -208,6 +218,17 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
     // them isn't handled here.
     if makes_creature(&mods) && !mods.iter().any(|m| matches!(m, Modification::SetPT(..))) {
         return None;
+    }
+    if loses_all {
+        // Only a creature with a set power and toughness ("with base power and toughness
+        // 4/4") loses its abilities this way.
+        if !mods
+            .iter()
+            .any(|m| matches!(m, Modification::SetPT(Some(_), Some(_))))
+        {
+            return None;
+        }
+        mods.insert(0, Modification::RemoveAllAbilities);
     }
     mods.extend(gained);
     b.it = what.clone();
