@@ -718,3 +718,68 @@ fn synchronized_eviction_costs_less_with_two_creatures_sharing_a_type() {
         assert_eq!(r.is_ok(), castable, "{others:?}");
     }
 }
+
+#[test]
+fn galadriel_reveals_after_the_scry_is_finished() {
+    cr!("701.22d", "603.2", "701.20a");
+    ruling!("Galadriel of Lothlórien", "You finish scrying before revealing the top card of your library.");
+    supported("Galadriel of Lothlórien");
+    // "Whenever you scry, you may reveal the top card of your library. If a land card is
+    // revealed this way, put it onto the battlefield tapped." Library: Hill Giant, then
+    // Forest. Scry the Giant to the bottom: the Forest is revealed and put onto the
+    // battlefield.
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    let giant = t.library_top(P0, "Hill Giant");
+    t.battlefield(P0, "Galadriel of Lothlórien");
+    let bot = t.battlefield(P0, "Watchful Automaton");
+    t.lands(P0, "Island", 3);
+    t.answer(P0, DecisionKind::Scry, Answer::Split(vec![], vec![giant]));
+    t.answer_yes(P0, true);
+    t.activate(P0, bot, 0, &[]).unwrap();
+    t.resolve_all();
+    let f = t.g.current(forest);
+    assert!(t.on_battlefield(f));
+    assert!(t.obj_now(f).tapped);
+    assert_eq!(t.zone(giant), Zone::Library(P0));
+    // Keeping the Giant on top: it's revealed but stays there.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Forest");
+    let giant = t.library_top(P0, "Hill Giant");
+    t.battlefield(P0, "Galadriel of Lothlórien");
+    let bot = t.battlefield(P0, "Watchful Automaton");
+    t.lands(P0, "Island", 3);
+    t.answer_yes(P0, true);
+    let lands = t.g.battlefield.len();
+    t.activate(P0, bot, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.battlefield.len(), lands);
+    assert_eq!(*t.g.player(P0).library.last().unwrap(), giant);
+    // Declining to reveal a land on top: it stays.
+    let mut t = TestGame::new(2);
+    let forest = t.library_top(P0, "Forest");
+    t.battlefield(P0, "Galadriel of Lothlórien");
+    let bot = t.battlefield(P0, "Watchful Automaton");
+    t.lands(P0, "Island", 3);
+    t.answer_yes(P0, false);
+    t.activate(P0, bot, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Library(P0));
+}
+
+#[test]
+fn elven_farsight_draws_if_a_creature_card_is_revealed() {
+    cr!("608.2c", "701.20a");
+    supported("Elven Farsight");
+    for (top, draws) in [("Hill Giant", true), ("Forest", false)] {
+        let mut t = TestGame::new(2);
+        t.library_top(P0, "Forest");
+        t.library_top(P0, top);
+        let ef = in_hand_with_mana(&mut t, P0, "Elven Farsight");
+        t.answer_yes(P0, true);
+        t.cast(P0, ef).go();
+        let hand = t.hand_size(P0);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + usize::from(draws), "{top}");
+    }
+}
