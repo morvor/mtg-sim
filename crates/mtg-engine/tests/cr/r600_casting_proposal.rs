@@ -577,6 +577,8 @@ fn modes_may_depend_on_additional_costs_chosen_later_in_the_announcement() {
                     ],
                     per_mode_cost: false,
                     chooser: ModeChooser::Controller,
+                    different_players: false,
+                    optional: false,
                 }),
             })
             .build()
@@ -646,6 +648,8 @@ fn opponent_modal() -> CardDef {
                 ],
                 per_mode_cost: false,
                 chooser: ModeChooser::Opponent,
+                different_players: false,
+                optional: false,
             }),
         })
         .build()

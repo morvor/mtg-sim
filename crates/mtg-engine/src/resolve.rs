@@ -476,14 +476,27 @@ impl Game {
             }
             Effect::Fight { a, b } => {
                 // CR 701.14
-                let a = self
-                    .resolve_objects(a, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
-                let b = self
-                    .resolve_objects(b, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
+                let fighters = |g: &mut Game, s: &Sel, ctx: &mut Ctx| -> Vec<ObjectId> {
+                    let v = g.resolve_objects(s, ctx);
+                    v.into_iter()
+                        .filter(|o| g.is_live(*o) && g.obj(*o).is_creature())
+                        .collect()
+                };
+                let (a, b) = match (a, b) {
+                    // "Choose two target creatures ... Those creatures fight each other."
+                    // (one instance of the word "target"): the two fight each other; if
+                    // either is an illegal target, no damage is dealt (CR 701.14b).
+                    (Sel::Target(x), Sel::Target(y)) if x == y => {
+                        match fighters(self, a, ctx).as_slice() {
+                            [a, b] => (Some(*a), Some(*b)),
+                            _ => (None, None),
+                        }
+                    }
+                    _ => (
+                        fighters(self, a, ctx).first().copied(),
+                        fighters(self, b, ctx).first().copied(),
+                    ),
+                };
                 if let (Some(a), Some(b)) = (a, b) {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;
@@ -2034,19 +2047,28 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
-                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
-                let picked: Vec<Entity> =
-                    crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
-                        .into_iter()
-                        .map(Entity::Object)
-                        .collect();
-                // Objects chosen together must meet the group requirements ("any number
-                // of cards with different names"; see `relational.rs`).
-                let picked = if crate::relational::groups_of(filter).is_empty() {
-                    picked
-                } else {
-                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
-                };
+                let chosen = crate::zones::choose_objects(
+                    self,
+                    p,
+                    ctx.source,
+                    "Choose",
+                    cands.clone(),
+                    min,
+                    n,
+                );
+                // "Choose any number of ... tokens you control with different names": the
+                // objects chosen must have the relationship.
+                let picked: Vec<Entity> = crate::target_groups::fit_together(
+                    self,
+                    filter,
+                    chosen,
+                    &cands,
+                    min as usize,
+                    ctx,
+                )
+                .into_iter()
+                .map(Entity::Object)
+                .collect();
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
