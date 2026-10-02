@@ -669,6 +669,10 @@ impl Renderer<'_> {
                         .into(),
                 );
             }
+            // "for each Aura attached to it".
+            Filter::In(s) if matches!(s.as_ref(), Sel::AttachedToThis) => {
+                np.post.push("attached to {alt:~|~it}".into());
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));

@@ -15,6 +15,18 @@ impl Renderer<'_> {
         match v {
             Value::Const(n) => n.to_string(),
             Value::X => "X".into(),
+            // "for each card discarded this way": the objects the instruction before
+            // affected.
+            Value::Count(Filter::In(s))
+                if matches!(s.as_ref(), Sel::Var(_)) && self.it_done.is_some() =>
+            {
+                let d = self.it_done.clone().unwrap_or_default();
+                if d.contains('{') {
+                    format!("the number of {d}")
+                } else {
+                    format!("the number of {{alt:them|{d}}}")
+                }
+            }
             Value::Count(f) => {
                 let saved = (self.alt_and, self.plural_alts);
                 (self.alt_and, self.plural_alts) = (true, true);
@@ -226,6 +238,10 @@ impl Renderer<'_> {
                         );
                     }
                 };
+                // "for each of its colors".
+                if s == "it" && matches!(among, Among::Colors) {
+                    return "{alt:the number of colors among it|the number of its colors}".into();
+                }
                 format!("the number of {what} among {s}")
             }
             Value::OverPlayers(op, pf, v) => self.over_players_value(*op, pf, v),

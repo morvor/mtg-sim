@@ -28,6 +28,12 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"(^|\n|[.:] )([a-z]+s) can't be blocked by ([a-z]+s)(\.|$)",
+        replacement: "$1$3 can't block $2$4",
+        why: "\"Warriors can't be blocked by Cowards\" and \"Cowards can't block Warriors\" \
+              are the same blocking restriction (CR 509.1b).",
+    },
+    Equivalence {
         pattern: r"\b(cards? (?:you|they|that player|an opponent|your opponents))(?:'ve| have| has)? drawn this turn\b",
         replacement: "$1 drew this turn",
         why: "\"Cards you've drawn this turn\" and \"cards you drew this turn\" are the \
@@ -1086,6 +1092,9 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
+            (r"\b(creates?) a number of ([^.]+?) tokens? equal to ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is $3$4"),
+            (r"\bputs? a number of (\S+) counters equal to ([^.]+?) on ([^.]+?)(\.|$)", "put x $1 counters on $3, where x is $2$4"),
+            (r"\b(gets?) \+2/\+2 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 +x/+x $2, where x is 2 times the number of $3$4"),
         ]
         .into_iter()
         .filter_map(|(p, r)| Regex::new(p).ok().map(|re| (re, r)))

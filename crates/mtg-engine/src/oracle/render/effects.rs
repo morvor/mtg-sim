@@ -72,6 +72,8 @@ impl Renderer<'_> {
                         return Some((who.clone(), format!("discard {s}"), false));
                     }
                 }
+                // "... for each card discarded this way".
+                self.it_done = Some("cards discarded this way".into());
                 let noun = self.card_noun(filter);
                 let (c, w) = self.counted(n, &noun);
                 let r = if *random { " at random" } else { "" };
@@ -82,6 +84,7 @@ impl Renderer<'_> {
                 )
             }
             Effect::DiscardHand { who } => {
+                self.it_done = Some("cards discarded this way".into());
                 let p = self.possessive_for(who);
                 (who.clone(), format!("discard {p} hand"), false)
             }
@@ -895,6 +898,8 @@ impl Renderer<'_> {
             Effect::Exile {
                 what, face_down, ..
             } => {
+                // "... for each card exiled this way".
+                self.it_done = Some("cards exiled this way".into());
                 let w = match self.enchanted_card(false) {
                     Some(c) if matches!(what, Sel::AttachedTo) => c,
                     _ => self.sel(what, Case::Obj),
