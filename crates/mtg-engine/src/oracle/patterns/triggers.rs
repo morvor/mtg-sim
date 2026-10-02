@@ -1502,10 +1502,21 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     // "one or more cards leave your graveyard" (look back in time, CR 603.10a).
     for p in ["leaves your graveyard", "leave your graveyard"] {
         if let Some(r) = starts(p) {
-            let cond = TriggerCond::ZoneChange {
+            let mut cond = TriggerCond::ZoneChange {
                 filter: Filter::and(vec![f.clone(), Filter::OwnedBy(PlayerRel::You)]),
                 from: Some(ZoneKind::Graveyard),
                 to: None,
+            };
+            // "... leave your graveyard during your turn" (Kheru Goldkeeper).
+            let r = match r.strip_prefix(" during your turn") {
+                Some(rest) => {
+                    cond = TriggerCond::Where {
+                        trigger: Box::new(cond),
+                        cond: Condition::YourTurn,
+                    };
+                    rest
+                }
+                None => r,
             };
             if subj.one_or_more {
                 return Some((batch(cond, false, PlayerRef::You), r));

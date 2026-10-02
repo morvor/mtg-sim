@@ -2,9 +2,12 @@
 //! Master Tactician; Master Warcraft; Melee) and "[creatures] block this turn if able, and
 //! you choose how those creatures block" (Brutal Hordechief): the effect's controller
 //! declares blockers instead of the defending players (see [`crate::block_choice`]).
+//! Also "You choose which creatures attack this turn" (Master Warcraft): the effect's
+//! controller chooses the attacking creatures (see [`crate::attack_choice`]).
 
 use super::EffectPattern;
 use crate::ability::*;
+use crate::attack_choice::CHOOSES_ATTACKERS;
 use crate::block_choice::{CHOOSES_BLOCKS, CHOOSES_OPPONENTS_BLOCKS};
 use crate::oracle::effects::{parse_simple, Builder};
 use crate::oracle::phrases::end;
@@ -62,3 +65,14 @@ fn you_choose_blocks(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "block choice: you choose how creatures block", priority: 100, parse: you_choose_blocks } }
+
+fn you_choose_attackers(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let duration = match end(l) {
+        "you choose which creatures attack this turn" => Duration::EndOfTurn,
+        "you choose which creatures attack this combat" => Duration::EndOfCombat,
+        _ => return None,
+    };
+    Some(chooses_blocks(CHOOSES_ATTACKERS, duration))
+}
+
+inventory::submit! { EffectPattern { name: "attack choice: you choose which creatures attack", priority: 100, parse: you_choose_attackers } }

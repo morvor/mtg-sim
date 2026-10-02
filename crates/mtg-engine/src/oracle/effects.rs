@@ -223,6 +223,23 @@ fn parse_modal(
         Some(h) if matches!(h, "choose one" | "choose two" | "choose three") => (h, true),
         _ => (hl, false),
     };
+    // "Choose one. X is the number of spells you've cast this turn." (Gnostro, Voice of the
+    // Crags): the value of X in each mode, determined as the ability resolves.
+    let (hl, x_is) = match hl.split_once(". x is ") {
+        Some((h, v)) => (h, Some(v)),
+        None => (hl, None),
+    };
+    let x_value = match x_is {
+        Some(v) => {
+            let mut b = Builder::new(ctx);
+            let (value, rest) = super::statics::parse_value_phrase(v, &mut b)?;
+            if !b.targets.is_empty() || !rest.trim().is_empty() {
+                return None;
+            }
+            Some(value)
+        }
+        None => None,
+    };
     let fixed = match hl {
         "choose one" => Some((1, 1)),
         "choose two" => Some((2, 2)),
@@ -256,7 +273,10 @@ fn parse_modal(
             b.it = it.clone();
             b.it_player = it_player.clone();
         }
-        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        let mut effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        if let Some(v) = &x_value {
+            effect = Effect::Seq(vec![Effect::SetX { value: v.clone() }, effect]);
+        }
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,
@@ -315,7 +335,20 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        if *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ') {
+        // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
+        // creature put onto the battlefield with ~.\" Put target creature card ..."): the
+        // next sentence starts with a capital letter.
+        let quote_ends_sentence = *ch == '"'
+            && !in_quote
+            && i > 0
+            && chars[i - 1] == '.'
+            && chars.get(i + 1) == Some(&' ')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_uppercase() || *c == '~');
+        if quote_ends_sentence
+            || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
+        {
             let s = cur.trim().to_string();
             if !s.is_empty() {
                 out.push(s);
@@ -612,8 +645,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 7] = [
+    let pairs: [(&str, Sel); 11] = [
         ("~", Sel::This),
+        // An Aura enchanting a card in a graveyard ("Enchant creature card in a
+        // graveyard", CR 303.4a): that card.
+        ("enchanted creature card", Sel::AttachedTo),
+        ("enchanted instant card", Sel::AttachedTo),
+        ("enchanted card", Sel::AttachedTo),
+        ("the enchanted card", Sel::AttachedTo),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
         // Auras with "enchant permanent/land/artifact/...": the object it's attached to

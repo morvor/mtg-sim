@@ -552,6 +552,11 @@ pub struct Destination {
     /// 303.4f–i).
     #[serde(default)]
     pub attached_to: Option<Sel>,
+    /// Library: a choice between positions ("your choice of the top or bottom of its
+    /// owner's library"), made by the controller of the effect as the object moves; empty
+    /// for the single `position`.
+    #[serde(default)]
+    pub position_choice: Vec<LibraryPosition>,
 }
 
 impl Destination {
@@ -567,6 +572,7 @@ impl Destination {
             with_counters: vec![],
             with_mods: vec![],
             attached_to: None,
+            position_choice: vec![],
         }
     }
     pub fn battlefield() -> Destination {
@@ -1784,6 +1790,9 @@ pub enum Modification {
         from: Filter,
     },
     RemoveKeyword(KeywordKind),
+    /// Loses one particular keyword ability: the instances of that kind with the same
+    /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
+    LoseKeyword(Keyword),
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
     CantHaveKeyword(KeywordKind),
@@ -1840,6 +1849,7 @@ impl Modification {
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
             | RemoveKeyword(_)
+            | LoseKeyword(_)
             | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -2200,6 +2210,17 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
+    /// they may attack though their controller hasn't controlled them continuously since
+    /// their most recent turn began. With `defender`, only those players and planeswalkers
+    /// they control ("can attack your opponents and planeswalkers your opponents control
+    /// as though those creatures had haste"). See `as_though::may_attack_as_though_haste`.
+    AttackAsThoughHaste {
+        attackers: Filter,
+        defender: Option<PlayerFilter>,
+    },
+    /// "[blockers] can block as though they were untapped" (CR 509.1a with 609.4).
+    BlockAsThoughUntapped(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
