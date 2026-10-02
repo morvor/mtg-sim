@@ -177,6 +177,17 @@ pub fn unresolved(a: &AbilityDef) -> bool {
     if !s.contains("\"Together\"") {
         return false;
     }
+    fn strip_filter(m: &mut serde_json::Map<String, serde_json::Value>, key: &str) {
+        if let Some(serde_json::Value::Object(inner)) = m.get_mut(key) {
+            if let Some(f) = inner.get("filter") {
+                let ok = serde_json::from_value::<Filter>(f.clone())
+                    .is_ok_and(|f| !crate::relational::has_nested_group(&f));
+                if ok {
+                    inner.remove("filter");
+                }
+            }
+        }
+    }
     fn strip_checked(v: &mut serde_json::Value) {
         match v {
             serde_json::Value::Object(m) => {
@@ -189,13 +200,17 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                         m.remove("Count");
                     }
                 }
-                for key in ["Search", "Choose"] {
-                    if let Some(serde_json::Value::Object(inner)) = m.get_mut(key) {
-                        if let Some(f) = inner.get("filter") {
-                            let ok = serde_json::from_value::<Filter>(f.clone())
-                                .is_ok_and(|f| !crate::relational::has_nested_group(&f));
-                            if ok {
-                                inner.remove("filter");
+                // Searches, choices and the cards a dig takes are chosen together
+                // (`target_groups::fit_together`); so are the objects a sacrifice, discard
+                // or exile cost is paid with (`target_groups::can_choose_together`).
+                for key in ["Search", "Choose", "Dig"] {
+                    strip_filter(m, key);
+                }
+                if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {
+                    for part in parts {
+                        if let serde_json::Value::Object(pm) = part {
+                            for key in ["Sacrifice", "Discard", "Exile"] {
+                                strip_filter(pm, key);
                             }
                         }
                     }

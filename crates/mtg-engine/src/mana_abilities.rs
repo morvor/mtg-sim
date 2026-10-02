@@ -1061,7 +1061,11 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                             || (o.is_creature()
                                 && o.summoning_sick
                                 && !o.has_keyword(KeywordKind::Haste)
-                                && !crate::activation_costs::as_though_haste(g, p, o.id))
+                                && !crate::as_though::as_though_haste(
+                                    g,
+                                    o.id,
+                                    crate::as_though::HasteUse::Activate(p),
+                                ))
                         {
                             ok = false;
                         }
@@ -1101,6 +1105,9 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         }
                         rank = rank.max(2);
                     }
+                    // "Put a -0/-1 counter on this creature: Add {G}." (Wall of Roots): it
+                    // shrinks the permanent, so it's used after cheaper sources.
+                    CostPart::AddCounters { .. } => rank = rank.max(3),
                     _ => ok = false,
                 }
             }

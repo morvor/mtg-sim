@@ -2600,7 +2600,11 @@ impl Game {
                 !(o.is_creature()
                     && o.summoning_sick
                     && !o.has_keyword(KeywordKind::Haste)
-                    && !crate::activation_costs::as_though_haste(self, p, o.id))
+                    && !crate::as_though::as_though_haste(
+                        self,
+                        o.id,
+                        crate::as_though::HasteUse::Activate(p),
+                    ))
             }
             CostPart::PayLife(v) => self.can_pay_life(p, self.eval_value(v, ctx).max(0) as u32),
             CostPart::Loyalty(n) => {
@@ -2613,24 +2617,26 @@ impl Game {
             }),
             CostPart::Sacrifice { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
-                self.objects_matching(filter, ctx)
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
-                    .count()
-                    >= n
+                    .collect();
+                crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
             CostPart::DiscardSelf => so.is_some_and(|o| o.zone == Zone::Hand(p)),
             CostPart::Discard { filter, count, .. } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
-                self.player(p)
+                let cands: Vec<ObjectId> = self
+                    .player(p)
                     .hand
                     .iter()
+                    .copied()
                     .filter(|c| {
-                        Some(**c) != src
-                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
-                    .count()
-                    >= n
+                    .collect();
+                crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
             CostPart::DiscardHand => true,
             CostPart::ExileSelf => so.is_some(),
@@ -2640,13 +2646,14 @@ impl Game {
                 count,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
-                self.cost_zone_cards(p, *zone)
+                let cands: Vec<ObjectId> = self
+                    .cost_zone_cards(p, *zone)
                     .into_iter()
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
-                    .count()
-                    >= n
+                    .collect();
+                crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
             CostPart::ReturnToHand { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
@@ -2890,7 +2897,12 @@ impl Game {
             CostPart::Loyalty(n) => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 if *n > 0 {
-                    self.add_counters(Entity::Object(s), counters::LOYALTY, *n as u32, Some(s));
+                    self.put_counters(
+                        Entity::Object(s),
+                        counters::LOYALTY,
+                        *n as u32,
+                        crate::event_causes::CounterPut::cost(p, Some(s)),
+                    );
                 } else if *n < 0
                     && self.remove_counters_by(
                         Entity::Object(s),
@@ -2920,11 +2932,21 @@ impl Game {
                     // object that cost is for (see `Game::mana_reserve`).
                     .filter(|o| Some(*o) != self.mana_reserve)
                     .collect();
-                if (cands.len() as u32) < n {
+                if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
+                {
                     return bad("not enough to sacrifice");
                 }
-                let pick =
-                    self.ask_objects(p, src, "Choose permanents to sacrifice (cost)", cands, n, n);
+                let pick = crate::target_groups::choose_together(
+                    self,
+                    p,
+                    src,
+                    "Choose permanents to sacrifice (cost)",
+                    filter,
+                    cands,
+                    n,
+                    n,
+                    ctx,
+                );
                 for o in pick {
                     paid.objects.push(o);
                     paid.sacrificed.push(o);
@@ -2953,7 +2975,8 @@ impl Game {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
                     .collect();
-                if (cands.len() as u32) < n {
+                if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
+                {
                     return bad("not enough cards");
                 }
                 let pick = if *random {
@@ -2962,7 +2985,17 @@ impl Game {
                     c.shuffle(&mut self.rng);
                     c.into_iter().take(n as usize).collect()
                 } else {
-                    self.ask_objects(p, src, "Choose cards to discard (cost)", cands, n, n)
+                    crate::target_groups::choose_together(
+                        self,
+                        p,
+                        src,
+                        "Choose cards to discard (cost)",
+                        filter,
+                        cands,
+                        n,
+                        n,
+                        ctx,
+                    )
                 };
                 for c in pick {
                     paid.objects.push(c);
@@ -2993,10 +3026,23 @@ impl Game {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
                     .collect();
-                if (cands.len() as u32) < n {
+                // ("Exile two cards from a single graveyard": they must be chosen together,
+                // see `target_groups::choose_together`.)
+                if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
+                {
                     return bad("not enough cards to exile");
                 }
-                let pick = self.ask_objects(p, src, "Choose cards to exile (cost)", cands, n, n);
+                let pick = crate::target_groups::choose_together(
+                    self,
+                    p,
+                    src,
+                    "Choose cards to exile (cost)",
+                    filter,
+                    cands,
+                    n,
+                    n,
+                    ctx,
+                );
                 for c in pick {
                     paid.objects.push(c);
                     paid.exiled.push(c);
@@ -3086,7 +3132,12 @@ impl Game {
             CostPart::AddCounters { kind, count } => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                self.add_counters(Entity::Object(s), kind, n, src);
+                self.put_counters(
+                    Entity::Object(s),
+                    kind,
+                    n,
+                    crate::event_causes::CounterPut::cost(p, src),
+                );
             }
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
@@ -3221,6 +3272,8 @@ impl Game {
                 // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
                 c.controller = p;
+                // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
+                c.paying_cost = true;
                 self.exec(e, &mut c);
                 // CR 119.7: a cost that has a player who can't gain life gain life can't be
                 // paid — "have an opponent gain 3 life" with an opponent chosen as it's
