@@ -461,10 +461,34 @@ impl Game {
                 }
             }
         }
+        // CR 614.12: the counters a permanent enters with are modified only by replacement
+        // effects that already exist, or that come from that permanent itself and affect
+        // only it — not by the effects of the permanents entering at the same time.
+        let entering_now = |g: &Self, id: ObjectId| g.entering.iter().any(|e| g.current(*e) == id);
+        let entering_target = match ev {
+            ReplEvent::AddCounters {
+                target: Entity::Object(t),
+                ..
+            } if entering_now(self, *t) => Some(*t),
+            _ => None,
+        };
         for (src, ctl, a, d) in sources {
             let key = ReplKey::Static(src, a.uid);
             if applied.contains(&key) || !in_scope(&d) {
                 continue;
+            }
+            if let Some(t) = entering_target {
+                let only_itself = src == t
+                    && matches!(
+                        d.event,
+                        ReplacementEvent::PutCounters {
+                            on_objects: Some(Filter::Source),
+                            ..
+                        }
+                    );
+                if entering_now(self, src) && !only_itself {
+                    continue;
+                }
             }
             let mut ctx = Ctx::new(Some(src), ctl);
             ctx.link = a.link;
