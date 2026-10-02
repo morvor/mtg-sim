@@ -351,13 +351,14 @@ fn voice_of_the_blessed_dealt_lethal_damage_as_you_gain_life_dies() {
     let mut t = TestGame::new(2);
     let voice = t.battlefield(P0, "Voice of the Blessed");
     let hawk = t.battlefield(P0, "Vampire Nighthawk");
-    let giant = t.battlefield(P1, "Hill Giant");
+    // Exactly lethal for a 2/2; a 3/3 (had the counter come first) would survive.
+    let bears = t.battlefield(P1, "Grizzly Bears");
     attack_with(
         &mut t,
         &[(voice, Entity::Player(P1)), (hawk, Entity::Player(P1))],
     );
-    block_and_finish(&mut t, P1, &[(giant, voice)]);
-    // The Nighthawk's lifelink damage and the Giant's damage are dealt simultaneously.
+    block_and_finish(&mut t, P1, &[(bears, voice)]);
+    // The Nighthawk's lifelink damage and the Bears' damage are dealt simultaneously.
     assert_eq!(t.life(P0), 22);
     assert!(t.in_graveyard(P0, "Voice of the Blessed"));
 }
