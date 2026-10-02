@@ -17,10 +17,26 @@ pub fn cast_aura_leave_trigger(
     name: &str,
     target: impl Into<Entity>,
 ) -> ObjectId {
+    cast_aura_leave_trigger_with(t, p, name, target, &[])
+}
+
+/// Like [`cast_aura_leave_trigger`], with `trigger_targets` chosen (one per slot) for the
+/// Aura's enters trigger.
+pub fn cast_aura_leave_trigger_with(
+    t: &mut TestGame,
+    p: PlayerId,
+    name: &str,
+    target: impl Into<Entity>,
+    trigger_targets: &[Entity],
+) -> ObjectId {
     supported(name);
     let aura = in_hand_with_mana(t, p, name);
+    t.answer_targets(p, &[target.into()]);
+    for e in trigger_targets {
+        t.answer_targets(p, &[*e]);
+    }
     t.g.turn.priority = Some(p);
-    t.cast(p, aura).target(target.into()).go();
+    t.cast(p, aura).go();
     t.g.resolve_top();
     t.settle();
     t.g.current(aura)
