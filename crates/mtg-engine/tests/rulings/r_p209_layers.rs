@@ -601,3 +601,19 @@ fn scourge_of_the_nobilis_pump_survives_the_aura_leaving() {
     t.resolve_all();
     assert_eq!(t.pt(goblin), (2, 1));
 }
+
+#[test]
+fn creatures_enchanted_player_controls() {
+    cr!("303.4", "611.3a");
+    // "Creatures enchanted player controls get -1/-1" (Curse of Death's Hold): only the
+    // enchanted player's creatures, including ones that arrive later.
+    supported("Curse of Death's Hold");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    attach_new(&mut t, P0, "Curse of Death's Hold", P1);
+    assert_eq!(t.pt(mine), (2, 2));
+    assert_eq!(t.pt(theirs), (1, 1));
+    let later = t.battlefield(P1, "Hill Giant");
+    assert_eq!(t.pt(later), (2, 2));
+}

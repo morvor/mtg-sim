@@ -205,3 +205,45 @@ fn skin_invasion_attack_requirement_exceptions() {
     );
     attack_requirement_cases("Skin Invasion // Skin Shedder", false);
 }
+
+#[test]
+fn curse_of_the_nightly_hunt_attack_requirement_exceptions() {
+    cr!("508.1d", "302.6", "508.1h", "303.4");
+    ruling!(
+        "Curse of the Nightly Hunt",
+        "If, during the enchanted player’s declare attackers step, a creature they control is tapped, is affected by a spell or ability that says it can’t attack, or hasn’t been under that player’s control continuously since the turn began"
+    );
+    supported("Curse of the Nightly Hunt");
+    let curse = |t: &mut TestGame| {
+        attach_new(t, P1, "Curse of the Nightly Hunt", P0);
+    };
+    let skip = |sick: bool, setup: &dyn Fn(&mut TestGame, ObjectId)| {
+        let mut t = TestGame::new(2);
+        let c = if sick {
+            t.battlefield_sick(P0, "Grizzly Bears")
+        } else {
+            t.battlefield(P0, "Grizzly Bears")
+        };
+        curse(&mut t);
+        setup(&mut t, c);
+        to_combat(&mut t, P0);
+        legal_attack(&mut t, &[])
+    };
+    assert!(!skip(false, &|_, _| {}));
+    assert!(skip(false, &|t, c| {
+        t.g.tap(c);
+    }));
+    assert!(skip(false, &|t, c| {
+        attach_new(t, P1, "Pacifism", c);
+    }));
+    assert!(skip(false, &|t, _| {
+        t.battlefield(P1, "Ghostly Prison");
+    }));
+    assert!(skip(true, &|_, _| {}));
+    // Only the enchanted player's creatures.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Curse of the Nightly Hunt", P1);
+    to_combat(&mut t, P0);
+    assert!(legal_attack(&mut t, &[]));
+}
