@@ -779,3 +779,38 @@ fn an_ability_after_a_comma_list_describes_its_last_item() {
         parse_object_phrase("artifact, creature, or enchantment with mana value 3 or less").unwrap();
     assert!(matches!(&f, Filter::And(_)), "{f:?}");
 }
+
+#[test]
+fn fear_fire_foes_damages_the_other_creatures_of_the_targets_controller() {
+    cr!("120.3e", "608.2c");
+    let mut t = TestGame::new(2);
+    let target = t.battlefield(P1, "Hill Giant");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Fear, Fire, Foes!");
+    t.cast(P0, s).x(2).target(target).go();
+    t.resolve();
+    assert_eq!(t.obj_now(target).damage, 2);
+    assert!(!t.on_battlefield(theirs), "1 damage: same controller as the target");
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn crown_of_doom_cant_be_given_to_its_owner() {
+    cr!("115.1", "108.3");
+    ruling!(
+        "Crown of Doom",
+        "your opponents cannot give it back to you by activating its ability"
+    );
+    let mut t = TestGame::new(3);
+    let crown = t.battlefield(P0, "Crown of Doom");
+    t.lands(P0, "Plains", 2);
+    t.activate(P0, crown, 0, &[Entity::Player(P1)]).unwrap();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&Entity::Player(P1)));
+    assert!(cands.contains(&Entity::Player(P2)));
+    assert!(!cands.contains(&Entity::Player(P0)), "its owner");
+    t.resolve();
+    assert_eq!(t.obj_now(crown).controller, P1);
+}
