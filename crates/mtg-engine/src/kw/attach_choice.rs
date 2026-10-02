@@ -50,6 +50,11 @@ pub fn attach_chosen(choose: Sel, to: Sel) -> Effect {
     ])
 }
 
+/// `Filter::Custom`: an object with an Aura other than the source attached to it ("Enchant
+/// creature with another Aura attached to it", Daybreak Coronet; CR 303.4c makes the
+/// source go to the graveyard once it's the only Aura left).
+pub const ANOTHER_AURA_ATTACHED: &str = "attach grammar: with another Aura attached to it";
+
 pub struct AttachChoice;
 
 impl KeywordRules for AttachChoice {
@@ -58,6 +63,18 @@ impl KeywordRules for AttachChoice {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == ANOTHER_AURA_ATTACHED {
+            // Not the source (nor what it became as it resolved).
+            let is_source = |a: ObjectId| {
+                ctx.source
+                    .is_some_and(|s| s == a || g.current(s) == a || g.current(a) == s)
+            };
+            return Some(
+                g.attachments_of(Entity::Object(id))
+                    .iter()
+                    .any(|a| !is_source(*a) && g.obj(*a).chars.has_subtype("Aura")),
+            );
+        }
         if name != CAN_ATTACH_TO_RECIPIENT {
             return None;
         }

@@ -320,6 +320,23 @@ fn attached_to_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a s
 
 inventory::submit! { super::FilterSuffixPattern { name: "attach grammar: attached to [object]", priority: 100, parse: attached_to_suffix } }
 
+/// "creature with another Aura attached to it" (Daybreak Coronet's enchant ability): an
+/// Aura other than the source is attached to it.
+fn with_another_aura_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = t.strip_prefix("with another aura attached to it")?;
+    word_end(r).then(|| {
+        (
+            Filter::Custom(crate::kw::attach_choice::ANOTHER_AURA_ATTACHED.into()),
+            r,
+        )
+    })
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "attach grammar: with another Aura attached to it", priority: 100, parse: with_another_aura_suffix } }
+
 inventory::submit! { EffectPattern { name: "attach grammar: unattach [object]", priority: 101, parse: p_unattach } }
 
 /// Whether a filter says what its objects are attached to.
@@ -447,3 +464,100 @@ fn p_destroy_exile_attached(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: destroy/exile [objects attached to ...]", priority: 110, parse: p_destroy_exile_attached } }
+
+// ---------------------------------------------------------------------------
+// Conditions about what's attached to a permanent
+// ---------------------------------------------------------------------------
+
+/// The permanent a condition says things are attached to: "~", "equipped creature",
+/// "enchanted creature" (the one the source is attached to).
+fn host(s: &str) -> Option<Sel> {
+    match s {
+        "~" => Some(Sel::This),
+        "equipped creature" | "enchanted creature" | "enchanted permanent" => Some(Sel::AttachedTo),
+        _ => None,
+    }
+}
+
+/// "two or more Equipment are attached to ~", "another Aura is attached to enchanted
+/// creature", "an Aura is attached to ~": counted as the condition is checked ("another":
+/// other than the source).
+fn attached_count_condition(c: &str) -> Option<Condition> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let c = end(c);
+    let (objs, to) = c
+        .split_once(" are attached to ")
+        .or_else(|| c.split_once(" is attached to "))?;
+    let host = host(to)?;
+    let (n, objs) = if let Some(r) = objs.strip_prefix("another ") {
+        (Value::c(1), format!("other {r}"))
+    } else if let Some(r) = objs.strip_prefix("an ").or_else(|| objs.strip_prefix("a ")) {
+        (Value::c(1), r.to_string())
+    } else {
+        let (n, r) = parse_number(objs)?;
+        let r = r.trim_start().strip_prefix("or more ")?;
+        (n, r.to_string())
+    };
+    let (f, _, rest) = parse_object_phrase(&objs)?;
+    if !rest.trim().is_empty() || f.zone().is_some() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::AttachedToAnyOf(Box::new(host)),
+        ])),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "attach grammar: N or more [objects] are attached to [permanent]", priority: 100, parse: attached_count_condition } }
+
+/// "[subject] has [keywords] as long as two or more Equipment are attached to it" (Balan,
+/// Wandering Knight; Brass Knuckles), "As long as another Aura is attached to enchanted
+/// creature, it has first strike and lifelink" (Face of Divinity): "it" is the subject
+/// ("~", "equipped creature", "enchanted creature"). Read as the static ability with the
+/// subject named in place of "it".
+fn attached_it_static(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if super::zz_probe_ps::disabled() || block.contains('\n') || block.contains('"') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let subjects = ["~", "equipped creature", "enchanted creature"];
+    let text = if let Some((head, cond)) = l.split_once(" as long as ") {
+        let subject = subjects
+            .iter()
+            .find(|s| head.starts_with(&format!("{s} ")))?;
+        let cond = cond
+            .strip_suffix(" attached to it")
+            .filter(|c| c.ends_with(" are") || c.ends_with(" is"))?;
+        format!("as long as {cond} attached to {subject}, {head}")
+    } else {
+        let r = l.strip_prefix("as long as ")?;
+        let (cond, rest) = r.split_once(", ")?;
+        let subject = subjects
+            .iter()
+            .find(|s| cond.ends_with(&format!(" attached to {s}")))?;
+        let rest = rest.strip_prefix("it ")?;
+        format!("as long as {cond}, {subject} {rest}")
+    };
+    let v = crate::oracle::statics::parse_static(&text, ctx)?;
+    if v.is_empty()
+        || !v
+            .iter()
+            .all(|a| matches!(&a.kind, AbilityKind::Static(s) if s.condition.is_some()))
+    {
+        return None;
+    }
+    Some(
+        v.into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), block, a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "attach grammar: as long as [objects] are attached to it", priority: 49, parse: attached_it_static } }

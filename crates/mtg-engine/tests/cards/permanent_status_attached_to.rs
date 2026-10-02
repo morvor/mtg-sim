@@ -3,6 +3,7 @@
 //! attached to it" (patterns in `src/oracle/patterns/attach_control_grammar.rs`).
 
 use mtg_engine::decision::Decision;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -285,4 +286,79 @@ fn corrosive_ooze_destroys_the_equipment_even_after_the_creature_died() {
     t.resolve_all();
     assert!(!t.on_battlefield(blade));
     assert!(t.on_battlefield(other));
+}
+
+#[test]
+fn balan_has_double_strike_with_two_equipment_attached() {
+    cr!("611.3a", "613.1f");
+    assert_compiles(&[
+        "Balan, Wandering Knight",
+        "Face of Divinity",
+        "Daybreak Coronet",
+    ]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let balan = t.battlefield(P0, "Balan, Wandering Knight");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let a = t.battlefield(P0, "Bonesplitter");
+    let b = t.battlefield(P0, "Leonin Scimitar");
+    assert!(t.g.attach(a, Entity::Object(balan)));
+    assert!(t.g.attach(b, Entity::Object(bears)));
+    t.g.recompute();
+    assert!(!t.obj_now(balan).has_keyword(KeywordKind::DoubleStrike));
+    // "{1}{W}: Attach all Equipment you control to Balan."
+    t.activate(P0, balan, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(b).attached_to, Some(Entity::Object(balan)));
+    assert!(t.obj_now(balan).has_keyword(KeywordKind::DoubleStrike));
+    assert_eq!(t.pt(balan), (6, 4));
+}
+
+#[test]
+fn face_of_divinity_needs_another_aura_on_the_creature() {
+    cr!("611.3a");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let face = t.battlefield(P0, "Face of Divinity");
+    assert!(t.g.attach(face, Entity::Object(bears)));
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (4, 4));
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::FirstStrike));
+    let strength = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(strength, Entity::Object(bears)));
+    t.g.recompute();
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::FirstStrike));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Lifelink));
+}
+
+#[test]
+fn daybreak_coronet_enchants_only_a_creature_with_another_aura() {
+    cr!("303.4a", "303.4c", "704.5m");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let strength = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(strength, Entity::Object(bears)));
+    let coronet = t.hand(P0, "Daybreak Coronet");
+    t.cast(P0, coronet).target(bears).go();
+    // The Elves have no Aura: not a legal target.
+    let candidates = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .expect("targets");
+    assert!(candidates.contains(&Entity::Object(bears)));
+    assert!(!candidates.contains(&Entity::Object(elf)));
+    t.resolve_all();
+    let coronet = t.g.current(coronet);
+    assert_eq!(t.obj_now(coronet).attached_to, Some(Entity::Object(bears)));
+    assert_eq!(t.pt(bears), (6, 7));
+    // Once the other Aura is gone, the Coronet is put into the graveyard.
+    t.g.destroy(strength, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Daybreak Coronet"));
 }
