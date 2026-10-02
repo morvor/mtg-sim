@@ -2099,6 +2099,9 @@ impl Renderer<'_> {
                 // Left out when the ability already said where it is ("if ~ is in your
                 // graveyard, ... return it to your hand").
                 FunctionZone::Graveyard => w.push_str(" {opt:from your graveyard}"),
+                FunctionZone::Battlefield if self.attached_left => {
+                    w.push_str(" {opt:from your graveyard}")
+                }
                 FunctionZone::Hand if to.zone != ZoneKind::Hand => w.push_str(" from your hand"),
                 FunctionZone::Exile => w.push_str(" from exile"),
                 _ => {}

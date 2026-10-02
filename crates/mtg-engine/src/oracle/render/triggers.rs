@@ -70,6 +70,18 @@ impl Renderer<'_> {
         }
         let saved_zone = self.zone;
         self.zone = t.zone;
+        let saved_attached_left = std::mem::replace(
+            &mut self.attached_left,
+            matches!(
+                &t.trigger,
+                TriggerCond::Dies(Filter::AttachedToSource)
+                    | TriggerCond::LeavesBattlefield(Filter::AttachedToSource)
+                    | TriggerCond::ZoneChange {
+                        filter: Filter::AttachedToSource,
+                        ..
+                    }
+            ),
+        );
         self.self_salient = false;
         // "this creature deals 2 damage to that spell's controller".
         fn targeted(t: &TriggerCond) -> bool {
@@ -112,6 +124,7 @@ impl Renderer<'_> {
         self.self_named_in_clause = saved_named;
         self.trigger_is_self = saved_is_self;
         self.zone = saved_zone;
+        self.attached_left = saved_attached_left;
         s = format!("{s}, {}", lower_first(&body));
         if t.once_per_turn {
             s.push_str(" This ability triggers only once each turn.");

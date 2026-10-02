@@ -317,6 +317,15 @@ pub fn copied_referent(phrase: &str, it: &Sel) -> Sel {
 /// the card it became in its new zone ("you may exile it. If you do, create a token that's
 /// a copy of that creature": a dead Clone that was copying Hill Giant makes a Hill Giant).
 pub fn token_copy_sources(g: &mut Game, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
+    // CR 608.2h: an Aura that was attached to nothing as it last existed on the battlefield
+    // (its permanent left first) has no "enchanted permanent" to copy.
+    if matches!(sel, Sel::AttachedTo)
+        && ctx
+            .source
+            .is_some_and(|s| crate::attach::attached_to_nothing(g, s))
+    {
+        return vec![];
+    }
     if matches!(sel, Sel::TriggerLki | Sel::This) {
         let lki: Vec<ObjectId> = g
             .eval_sel(sel, ctx)
