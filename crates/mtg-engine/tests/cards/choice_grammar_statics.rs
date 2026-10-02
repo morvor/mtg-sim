@@ -101,3 +101,31 @@ fn painters_servant_everything_is_the_chosen_color_too() {
     }
     assert!(t.obj_now(bears).chars.colors.contains(Color::Green));
 }
+
+#[test]
+fn serras_emissary_you_and_your_creatures_have_protection_from_the_chosen_card_type() {
+    cr!("607.2d", "702.16b", "702.16k");
+    compiles("Serra's Emissary");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let i = CardType::ALL.iter().position(|c| *c == CardType::Instant).unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    t.enter(P0, "Serra's Emissary");
+    t.lands(P1, "Mountain", 2);
+    t.g.turn.priority = Some(P1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    // Neither the creature nor its controller can be targeted: the Bolt goes elsewhere
+    // (the only legal target left is P1).
+    t.cast(P1, bolt).target(bears).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears), "{}", t.dump_log());
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 17);
+    // Not protected from other card types.
+    let shock_src = t.hand(P1, "Lava Axe");
+    t.lands(P1, "Mountain", 5);
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    t.cast(P1, shock_src).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 15);
+}
