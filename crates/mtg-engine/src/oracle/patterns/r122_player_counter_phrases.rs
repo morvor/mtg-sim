@@ -1,6 +1,7 @@
 //! Counters players have (CR 122.1): "target player gets four rad counters", "target
-//! opponent gets two poison counters", and the condition "defending player has a rad
-//! counter" ("~ can't be blocked as long as defending player has a rad counter").
+//! opponent gets two poison counters", and the conditions "defending player has a rad
+//! counter" ("~ can't be blocked as long as defending player has a rad counter") and
+//! "defending player is poisoned".
 
 use super::{ConditionPattern, EffectPattern};
 use crate::ability::*;
@@ -44,8 +45,15 @@ fn target_player_gets_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "r122 target player gets N [kind] counters", priority: 60, parse: target_player_gets_counters } }
 
 /// "defending player has a rad counter", "defending player has one or more poison
-/// counters".
+/// counters", "defending player is poisoned".
 fn defending_player_has_counters(c: &str) -> Option<Condition> {
+    // CR 122.1f: a poisoned player has one or more poison counters.
+    if end(c) == "defending player is poisoned" {
+        return Some(Condition::PlayerMatches(
+            PlayerRef::DefendingPlayer,
+            PlayerFilter::Counters("poison".into(), Cmp::Ge, Box::new(Value::c(1))),
+        ));
+    }
     let r = end(c).strip_prefix("defending player has ")?;
     let r = r.strip_prefix("one or more ").map_or(r, |x| x);
     let (n, kind) = match n_player_counters(r) {

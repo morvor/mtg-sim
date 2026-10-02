@@ -3468,11 +3468,15 @@ pub enum Effect {
     /// APNAP order, chooses one permanent they control among `among` for each of `keep`
     /// in the order given (CR 101.4c; a permanent with several of those types may be
     /// chosen for each of them), then all their other permanents among `among` are
-    /// sacrificed at the same time.
+    /// sacrificed at the same time. A filter repeated in `keep` ("chooses three lands
+    /// they control") is a choice of another permanent each time; with `up_to` ("chooses
+    /// up to two creatures they control"), each choice may be declined.
     KeepAndSacrificeRest {
         who: PlayerRef,
         among: Filter,
         keep: Vec<Filter>,
+        #[serde(default)]
+        up_to: bool,
     },
     /// "Restart the game[, leaving in exile all ... exiled with ~]" (CR 104.6, 727): the
     /// game ends and a new one begins with the resolving ability's controller as the

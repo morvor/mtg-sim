@@ -53,6 +53,11 @@ pub struct Ctx {
     /// of ..., except it has this ability", CR 707.9a).
     #[serde(default)]
     pub reflexive_parent: Option<Box<crate::ability::Ability>>,
+    /// While another player performs part of the resolving spell or ability
+    /// ([`crate::ability::Effect::AsPlayer`]): that spell's or ability's controller, who
+    /// controls the delayed and reflexive triggered abilities it creates (CR 603.7d–e).
+    #[serde(default)]
+    pub resolving_controller: Option<PlayerId>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -475,6 +480,25 @@ impl Game {
             // Only permanents have status (CR 110.5d).
             Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,
             Filter::Untapped => o.zone == Zone::Battlefield && !o.tapped,
+            // A permanent that left the battlefield: as it last existed there (CR 608.2h).
+            Filter::Attacking
+            | Filter::Blocking
+            | Filter::Blocked
+            | Filter::Enchanted
+            | Filter::Equipped
+                if o.next.is_some() && o.left_battlefield.is_some() =>
+            {
+                let Some(l) = o.left_battlefield.as_deref() else {
+                    return false;
+                };
+                match f {
+                    Filter::Attacking => l.attacking,
+                    Filter::Blocking => l.blocking,
+                    Filter::Blocked => l.blocked,
+                    Filter::Enchanted => l.enchanted,
+                    _ => l.equipped,
+                }
+            }
             Filter::Attacking => self.is_attacking(id),
             Filter::Blocking => self.is_blocking(id),
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
