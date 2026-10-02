@@ -265,3 +265,53 @@ fn is_dealt_three_or_more_damage_at_once() {
     t.resolve_all();
     assert_eq!(clues(&t), 1);
 }
+
+#[test]
+fn you_put_counters_draw_that_many_only_once_each_turn() {
+    cr!("122.6", "603.2h");
+    supported("Terrasymbiosis");
+    let mut t = TestGame::new(2);
+    let terra = t.battlefield(P0, "Terrasymbiosis");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    // An opponent puts them: no.
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 2, Some(theirs));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    // Declined: it triggers again.
+    t.answer_yes(P0, false);
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 2, Some(terra));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    t.answer_yes(P0, true);
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 3, Some(terra));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 3, "that many cards");
+    t.answer_yes(P0, true);
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 1, Some(terra));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 3, "only once each turn");
+}
+
+#[test]
+fn gain_life_put_that_many_counters_only_once_each_turn() {
+    cr!("603.2h", "119.9");
+    supported("Nykthos Paragon");
+    ruling!(
+        "Nykthos Paragon",
+        "you will be able to put +1/+1 counters for only one of those instances"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nykthos Paragon");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    // Two life gains: two triggers. The last one resolves first; the other does nothing.
+    t.answer_yes(P0, true);
+    t.g.gain_life(P0, 2);
+    t.g.gain_life(P0, 3);
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 3);
+    t.g.gain_life(P0, 4);
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 3);
+}

@@ -260,6 +260,35 @@ fn a_player_mills_one_or_more_creature_cards() {
 }
 
 #[test]
+fn that_many_nonland_cards_milled_only_once_each_turn() {
+    cr!("603.2c", "603.2h", "701.17a");
+    supported("Screeching Scorchbeast");
+    ruling!(
+        "Screeching Scorchbeast",
+        "If you choose not to create tokens, the ability will trigger again the next time"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Screeching Scorchbeast");
+    let mill = |t: &mut TestGame, cards: &[&str], create: bool| {
+        for c in cards {
+            t.library_top(P1, c);
+        }
+        t.answer_yes(P0, create);
+        t.g.mill(P1, cards.len() as u32);
+        t.resolve_all();
+    };
+    // Declined: it triggers again.
+    mill(&mut t, &["Grizzly Bears"], false);
+    assert_eq!(count_subtype(&t, "Zombie"), 0);
+    // Two nonland cards and a land: two Zombie Mutants.
+    mill(&mut t, &["Grizzly Bears", "Island", "Sol Ring"], true);
+    assert_eq!(count_subtype(&t, "Zombie"), 2);
+    // Done this turn.
+    mill(&mut t, &["Grizzly Bears", "Sol Ring"], true);
+    assert_eq!(count_subtype(&t, "Zombie"), 2);
+}
+
+#[test]
 fn an_opponent_mills_a_nonland_card_from_your_graveyard() {
     cr!("701.17a", "113.6");
     supported("Infesting Radroach");
