@@ -35,6 +35,20 @@
 //! it uses it up for the turn ([`record_use`]). Each object's is its own (As Foretold
 //! ruling: "If you control multiple As Foretolds, you may cast one spell for each of them
 //! paying {0}").
+//!
+//! **Optional additional costs** ("As an additional cost to cast green permanent spells,
+//! you may pay 2 life." — the Defilers; "... creature spells, you may pay any amount of
+//! mana." — Chorus of the Conclave) are `CostChange::OptionalAdditionalCost`s for
+//! `CostTarget::Spells`. As a spell is cast, its controller announces whether they pay each
+//! one that applies to it (CR 601.2b, 118.8a; [`announce`], after the spell's own), once
+//! per offering object; it's paid with the rest of the total cost (CR 601.2f–h) and
+//! recorded in the spell's `CastInfo::paid` under a name of that object's ([`paid_name`]),
+//! once per mana for "any amount of mana" ({X} in the cost). The filter
+//! [`PAID_OFFERED_COST`] ("Those spells cost {G} less to cast if you paid life this way")
+//! and the value [`PAID_OFFERED_AMOUNT`] ("that creature enters with that many additional
+//! +1/+1 counters on it") look at what was paid for the spell relative to the object their
+//! ability belongs to. Before the spell is proposed, a reduction that depends on a payment
+//! is assumed to apply (`spell_costs.rs`), as one that depends on its targets is.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;

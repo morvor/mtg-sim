@@ -416,6 +416,45 @@ fn kentaro_makes_samurai_castable_for_generic_mana() {
     assert_eq!(t.g.mana_value_of(spell), 3);
 }
 
+#[test]
+fn dream_halls_replaces_only_the_mana_cost() {
+    cr!("118.9", "118.9d", "118.8");
+    ruling!(
+        "Dream Halls",
+        "This only replaces the mana cost (the mana in the upper right hand corner of the card). It will not pay additional costs from the card text (such as Buyback) or from other effects."
+    );
+    supported("Dream Halls");
+    supported("Whispers of the Muse");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Dream Halls");
+    // Every player's spells: P0 casts Lightning Bolt by discarding Shock (red), not by
+    // discarding Counterspell (blue).
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let counter = t.hand(P0, "Counterspell");
+    assert!(!can_cast(&mut t, P0, bolt, OFFERED));
+    let shock = t.hand(P0, "Shock");
+    assert!(can_cast(&mut t, P0, bolt, OFFERED));
+    t.answer_choose(P0, &[Entity::Object(shock)]);
+    t.cast(P0, bolt)
+        .method(OFFERED)
+        .target(Entity::Player(P1))
+        .go();
+    assert!(t.in_graveyard(P0, "Shock"));
+    assert!(t.in_hand(P0, "Counterspell"));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // Whispers of the Muse {U}, buyback {5}: for a blue card, with buyback paid in mana.
+    let whispers = t.hand(P0, "Whispers of the Muse");
+    add_mana(&mut t, P0, ManaType::C, 5);
+    t.answer_choose(P0, &[Entity::Object(counter)]);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.cast(P0, whispers).method(OFFERED).go();
+    assert_eq!(pool_total(&t, P0), 0);
+    assert!(t.in_graveyard(P0, "Counterspell"));
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Whispers of the Muse"));
+}
+
 fn energy(t: &TestGame) -> u32 {
     t.player(P0).counters.get("energy").copied().unwrap_or(0)
 }

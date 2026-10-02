@@ -231,3 +231,28 @@ fn offered_alternative_cost(l: &str, text: &str, ctx: &CompileContext) -> Option
 }
 
 inventory::submit! { StaticPattern { name: "r118.9 you may pay [cost] rather than pay the mana cost for [spells] you cast", priority: 100, parse: offered_alternative_cost } }
+
+/// "Rather than pay the mana cost for a spell, its controller may discard a card that
+/// shares a color with that spell." (Dream Halls): an alternative cost every player may pay
+/// for each spell they cast; the card discarded is judged against the spell (`Sel::This`
+/// as the cost is paid; the card being cast isn't in the hand then).
+fn discard_sharing_a_color(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if end(l)
+        != "rather than pay the mana cost for a spell, its controller may discard a card that shares a color with that spell"
+    {
+        return None;
+    }
+    let cost = Cost::free().with(CostPart::Discard {
+        filter: Filter::SharesColor(Box::new(Sel::This)),
+        count: Value::c(1),
+        random: false,
+    });
+    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::Spells(Filter::Any),
+        who: PlayerRel::Any,
+        change: CostChange::AlternativeCost(cost),
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "r118.9 rather than pay the mana cost for a spell, its controller may discard a card that shares a color with it", priority: 100, parse: discard_sharing_a_color } }
