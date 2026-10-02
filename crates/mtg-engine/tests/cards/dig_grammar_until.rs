@@ -404,3 +404,57 @@ fn fishers_talent_creates_a_fish_if_the_land_was_revealed() {
         assert!(t.in_hand(P0, top));
     }
 }
+
+#[test]
+fn knight_errant_of_eos_reveals_creatures_up_to_the_number_that_convoked_it() {
+    cr!("702.51c", "701.20a");
+    assert_supported("Knight-Errant of Eos");
+    let mut t = TestGame::new(2);
+    let m: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Memnite")).collect();
+    t.lands(P0, "Plains", 3);
+    // Top first: Serra Angel (5), Grizzly Bears (2), Hill Giant (4), Llanowar Elves (1).
+    let ids = library(
+        &mut t,
+        P0,
+        &[
+            "Forest",
+            "Forest",
+            "Llanowar Elves",
+            "Hill Giant",
+            "Grizzly Bears",
+            "Serra Angel",
+        ],
+    );
+    let knight = t.hand(P0, "Knight-Errant of Eos");
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(m.iter().map(|c| Entity::Object(*c)).collect()),
+    );
+    // Hill Giant (mana value 4) is more than X = 2: only these two can be revealed.
+    t.answer_choose(P0, &[Entity::Object(ids[4]), Entity::Object(ids[2])]);
+    t.cast(P0, knight).go();
+    t.resolve();
+    t.settle();
+    t.resolve();
+    assert!(t.in_hand(P0, "Grizzly Bears") && t.in_hand(P0, "Llanowar Elves"));
+    assert_eq!(t.library_size(P0), 4);
+
+    // Hill Giant isn't among the cards that can be revealed.
+    let mut t = TestGame::new(2);
+    let m: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Memnite")).collect();
+    t.lands(P0, "Plains", 3);
+    let ids = library(&mut t, P0, &["Hill Giant"]);
+    let knight = t.hand(P0, "Knight-Errant of Eos");
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(m.iter().map(|c| Entity::Object(*c)).collect()),
+    );
+    t.answer_choose(P0, &[Entity::Object(ids[0])]);
+    t.cast(P0, knight).go();
+    t.resolve();
+    t.settle();
+    t.resolve();
+    assert!(!t.in_hand(P0, "Hill Giant"));
+}
