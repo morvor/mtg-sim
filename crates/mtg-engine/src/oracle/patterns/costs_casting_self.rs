@@ -79,7 +79,11 @@ pub(crate) fn cost_condition(c: &str, ctx: &CompileContext) -> Option<Condition>
         }
         _ => {}
     }
-    parse_condition(c, ctx)
+    parse_condition(c, ctx).or_else(|| {
+        // The static-condition grammar ("an opponent controls four or more nonbasic
+        // lands"), without a referent for "it".
+        super::statics_conditions::parse_static_condition(c, None, ctx).map(|(c, _)| c)
+    })
 }
 
 /// "{2}{U}" at the start of `s`: the mana and the rest.

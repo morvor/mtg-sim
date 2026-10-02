@@ -385,9 +385,11 @@ pub fn strip_ability_word(text: &str) -> &str {
         let words = head.split_whitespace().count();
         // Flavor words can be longer ("Lord of the Pyrrhian Legions — Whenever ..."):
         // up to six words before a triggered ability (not a list of Saga chapters).
-        let long_flavor_word = words <= 6
-            && !head.contains(',')
-            && (rest.starts_with("When") || rest.starts_with("At "));
+        // So can one before an activated ability with a mana cost ("I've Come Up with a
+        // New Recipe! — {1}{G}{U}, {T}: ...").
+        let long_flavor_word = !head.contains(',')
+            && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))
+                || (words <= 8 && rest.starts_with('{')));
         let looks_like_word = (words <= 4 || long_flavor_word)
             // An ability word starts its line: not a mode's name on a later line
             // ("Tiered\n• Thunder — {0} — ...", CR 702.183a).

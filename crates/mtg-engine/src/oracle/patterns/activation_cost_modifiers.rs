@@ -392,8 +392,15 @@ mod probe {
             toughness: Some("2"),
         };
         for l in std::fs::read_to_string(f).unwrap().lines() {
+            if let Some(e) = l.strip_prefix("C:") {
+                let r = crate::oracle::patterns::costs_casting_self::cost_condition(e, &ctx);
+                eprintln!("{} C {e:?} => {r:?}", if r.is_some() { "OK  " } else { "FAIL" });
+                continue;
+            }
             if let Some(e) = l.strip_prefix("E:") {
-                let r = crate::oracle::effects::parse_body(e, &ctx);
+                let r = crate::oracle::patterns::cost_parts::with_amount_x(true, || {
+                    crate::oracle::effects::parse_body(e, &ctx)
+                });
                 eprintln!("{} {e:?} => {r:?}", if r.is_some() { "OK  " } else { "FAIL" });
                 continue;
             }
@@ -405,6 +412,61 @@ mod probe {
             for face in &def.faces {
                 for a in &face.chars.abilities {
                     eprintln!("  {:?}\n      <- {:?}", a.kind, a.text);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn probe_why() {
+        let Ok(f) = std::env::var("WHY_PROBE") else {
+            return;
+        };
+        for l in std::fs::read_to_string(f).unwrap().lines() {
+            let mut it = l.split('\t');
+            let (Some(full), Some(face), Some(tl)) = (it.next(), it.next(), it.next()) else {
+                continue;
+            };
+            let Some(def) = crate::card::CardDb::global().get(full) else {
+                eprintln!("?? {full}");
+                continue;
+            };
+            let tl = crate::types::TypeLine::parse(tl);
+            let ctx = crate::oracle::CompileContext {
+                card_name: face,
+                full_name: full,
+                type_line: &tl,
+                layout: def.layout,
+                face_index: 0,
+                keywords: &[],
+                power: Some("2"),
+                toughness: Some("2"),
+            };
+            for fd in &def.faces {
+                for u in &fd.unsupported {
+                    eprintln!("=== {full}: {u}");
+                    let t = crate::oracle::strip_ability_word(u);
+                    let Some((c, e)) = crate::oracle::split_cost(t) else {
+                        eprintln!("   (not activated)");
+                        continue;
+                    };
+                    let ax = crate::oracle::patterns::cost_parts::amount_as_x(c);
+                    let c2 = ax.as_ref().map_or(c, |(c, _)| c.as_str());
+                    let pc = crate::oracle::costs::parse_cost(c2);
+                    eprintln!("   cost {:?}: {}", c2, if pc.is_some() { "OK" } else { "FAIL" });
+                    let (e2, ..) = crate::oracle::costs::split_activation_restrictions(e);
+                    let (e3, own) = match crate::oracle::patterns::activation_cost_modifiers::split_own_cost_sentence(e2) {
+                        Some((h, s)) => (h, Some(s)),
+                        None => (e2, None),
+                    };
+                    if let Some(o) = own {
+                        let r = crate::oracle::patterns::activation_cost_modifiers::parse_own_cost_change_n(&o, 1, &ctx);
+                        eprintln!("   own {:?}: {}", o, if r.is_some() { "OK" } else { "FAIL" });
+                    }
+                    let e4 = ax.as_ref().and_then(|_| crate::oracle::patterns::cost_parts::effect_with_amount(e3));
+                    let e4 = e4.as_deref().unwrap_or(e3);
+                    let r = crate::oracle::effects::parse_body(e4, &ctx);
+                    eprintln!("   eff {:?}: {}", e4, if r.is_some() { "OK" } else { "FAIL" });
                 }
             }
         }

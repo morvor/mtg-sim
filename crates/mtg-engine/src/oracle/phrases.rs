@@ -351,6 +351,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 s = r;
                 continue;
             }
+            // "Aura and Equipment spells", "Equipment and Vehicle spells": subtypes joined
+            // by "and" before a plural noun that narrows them name objects with either.
+            let after = split_word(split_word(r).1).0;
+            if matches!(heads.last(), Some(Filter::Subtype(_) | Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Subtype(_)))
+                && matches!(after, "spells" | "cards" | "permanents")
+            {
+                s = r;
+                continue;
+            }
         }
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
         let (nw, nrest) = split_word(s);

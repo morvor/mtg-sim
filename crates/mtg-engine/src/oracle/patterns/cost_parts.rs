@@ -44,7 +44,7 @@ fn you_control(f: Filter) -> Filter {
 }
 
 /// A card name as printed, from the raw Oracle text (the parser sees lowercase text).
-fn printed_name(lower: &str) -> Option<SmolStr> {
+pub(crate) fn printed_name(lower: &str) -> Option<SmolStr> {
     let raw = crate::oracle::raw_text();
     let i = raw.to_lowercase().find(&format!("named {lower}"))? + "named ".len();
     let name = raw.get(i..i + lower.len())?;
@@ -601,16 +601,46 @@ pub fn paid_this_way_prefix(r: &str) -> Option<(Value, String)> {
 /// green Insect creature tokens", "Add that much {C}"). `None` if it says neither, or says
 /// one of them more than once or after the first sentence.
 pub fn effect_with_amount(eff: &str) -> Option<String> {
-    let lower = eff.to_lowercase();
-    if lower.len() != eff.len() {
+    if eff.to_lowercase().len() != eff.len() {
         return None;
     }
+    // "with power less than or equal to the number of +1/+1 counters removed this way"
+    // (Simic Manipulator): a comparison with that amount.
+    let compared = compared_with_amount(eff);
+    let eff = compared.as_deref().unwrap_or(eff);
+    let lower = eff.to_lowercase();
     let first = lower.split(". ").next().unwrap_or(&lower);
     for (pat, rep) in [("that many ", "X "), ("that much {c}", "X {C}")] {
         if lower.matches(pat).count() == 1 && first.contains(pat) {
             let i = lower.find(pat)?;
             return Some(format!("{}{rep}{}", &eff[..i], &eff[i + pat.len()..]));
         }
+    }
+    compared
+}
+
+/// "with [stat] less than or equal to the number of [things] [paid] this way" →
+/// "with [stat] X or less" (see [`effect_with_amount`]).
+fn compared_with_amount(eff: &str) -> Option<String> {
+    for stat in ["power", "toughness", "mana value"] {
+        let pat = format!("with {stat} less than or equal to the number of ");
+        let Some(i) = eff.find(&pat) else {
+            continue;
+        };
+        let rest = &eff[i + pat.len()..];
+        let j = [" removed this way", " exiled this way", " sacrificed this way"]
+            .iter()
+            .filter_map(|w| rest.find(w).map(|j| j + w.len()))
+            .min()?;
+        // The counted things are one object phrase ("+1/+1 counters", "cards").
+        if rest[..j].contains(['.', ',']) {
+            return None;
+        }
+        return Some(format!(
+            "{}with {stat} X or less{}",
+            &eff[..i],
+            &rest[j..]
+        ));
     }
     None
 }
