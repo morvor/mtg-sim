@@ -1,6 +1,8 @@
 //! Additional costs a spell's own text lets its controller choose as it's cast
 //! (CR 601.2b): "As an additional cost to cast this spell, you may [cost]" and
-//! "As an additional cost to cast this spell, [cost] or [cost]".
+//! "As an additional cost to cast this spell, [cost] or [cost]" — and those other objects
+//! offer for it ("As an additional cost to cast green permanent spells, you may pay 2
+//! life.", `kw/offered_costs.rs`).
 //!
 //! The choice is announced before targets are chosen; the cost is added to the total cost
 //! and paid with the rest of it (CR 601.2f–h). The name of what was chosen is recorded in
@@ -93,4 +95,7 @@ pub fn announce(
             _ => {}
         }
     }
+    // Then those other objects offer for spells like it ("As an additional cost to cast
+    // green permanent spells, you may pay 2 life.", see `kw/offered_costs.rs`).
+    crate::kw::offered_costs::announce(g, p, spell, chars, extra, paid);
 }

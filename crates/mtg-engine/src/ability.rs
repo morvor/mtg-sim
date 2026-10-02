@@ -2666,6 +2666,11 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// An alternative cost that also lets the spell be cast as though it had flash: "You
+    /// may cast creature spells with mana value 3 or less by paying {E} rather than paying
+    /// their mana costs. If you cast a spell this way, you may cast it as though it had
+    /// flash." (CR 118.9, 601.3c; see `kw/offered_costs.rs`).
+    AlternativeCostWithFlash(Cost),
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),
