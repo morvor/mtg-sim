@@ -898,6 +898,11 @@ pub fn bind_target_player(f: Filter, rest: &str, b: &mut Builder) -> (Filter, St
 pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     use super::patterns::oracle_hardening_referents::{is_no_player_referent, is_no_referent};
     let s = s.trim();
+    // Players the text chose earlier ("the chosen player", "the first player"; see
+    // `patterns::choice_grammar`).
+    if let Some(r) = super::patterns::choice_grammar::player_phrase(s, b) {
+        return Some(r);
+    }
     if let Some(r) = s.strip_prefix("that player") {
         if is_no_player_referent(&b.it_player) {
             return None;
