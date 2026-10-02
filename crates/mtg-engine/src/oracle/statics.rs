@@ -580,6 +580,16 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             ));
         }
     }
+    // "the amount of life you gained this turn" (CR 119.3: the total of this turn's
+    // life-gain events).
+    for p in [
+        "the amount of life you gained this turn",
+        "the amount of life you've gained this turn",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((Value::LifeGainedThisTurn(PlayerRef::You), rest.to_string()));
+        }
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((
@@ -747,6 +757,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         // "the number of different mana values among cards in your graveyard" (also
         // "for each different mana value among ...").
         if let Some((v, rest)) = super::patterns::mana_values_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
+        // "the number of card types among other nonland permanents you control".
+        if let Some((v, rest)) = super::patterns::card_types_among::value(r) {
             return Some((v, rest.to_string()));
         }
         let (f, _, rest) = parse_object_phrase(r)?;

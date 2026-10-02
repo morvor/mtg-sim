@@ -908,6 +908,10 @@ pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
     if let Some((v, "")) = super::mana_values_among::value(s) {
         return Some(v);
     }
+    // "card type among permanents you control" (CR 205.2a).
+    if let Some((v, "")) = super::card_types_among::value(s) {
+        return Some(v);
+    }
     // "color among permanents you control" (Vivid, CR 105.2).
     if let Some(r) = s.strip_prefix("color among ") {
         let (f, true) = whole_object_phrase(r)? else {
