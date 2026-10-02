@@ -947,8 +947,6 @@ pub fn usable_pool(g: &Game, p: PlayerId, spend: &SpendContext) -> Vec<bool> {
         .collect()
 }
 
-/// Whether mana `source` would produce may pay for `spend`. A rough "could this be paid"
-/// check (`check_only`) ignores restrictions.
 /// Whether the mana `source` would produce may pay generic mana ("This mana can't be spent
 /// to pay generic mana costs", [`ManaRestriction::NotGeneric`]).
 fn source_pays_generic(source: &ManaSource) -> bool {
@@ -963,6 +961,8 @@ fn source_pays_generic(source: &ManaSource) -> bool {
     )
 }
 
+/// Whether mana `source` would produce may pay for `spend`. A rough "could this be paid"
+/// check (`check_only`) ignores restrictions.
 fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &SpendContext) -> bool {
     if spend.check_only {
         return true;

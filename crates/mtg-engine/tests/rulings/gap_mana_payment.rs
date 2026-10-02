@@ -52,14 +52,16 @@ fn consume_spirit_spends_only_black_mana_on_x_and_gains_x_life() {
         "The amount of life you gain is equal to the number chosen for X, not the amount of damage Consume Spirit deals"
     );
     supported("Consume Spirit");
-    // Consume Spirit ({X}{1}{B}): with two Swamps and a Mountain, X can be 1 (black mana
-    // pays it, the Mountain pays {1}) but not 2.
+    // Consume Spirit ({X}{1}{B}) with X = 1 from a Swamp and two Mountains: three mana for
+    // a total cost of three, but the Mountains can't pay X.
     let mut t = TestGame::new(2);
-    t.lands(P0, "Swamp", 2);
-    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Mountain", 2);
     let spirit = t.hand(P0, "Consume Spirit");
-    assert!(t.cast(P0, spirit).target(P1).x(2).try_go().is_err());
+    assert!(t.cast(P0, spirit).target(P1).x(1).try_go().is_err());
     assert!(t.in_hand(P0, "Consume Spirit"));
+    // With a second Swamp, black mana pays X and {B}, a Mountain pays {1}.
+    t.lands(P0, "Swamp", 1);
     // Healing Salve has prevented the next 3 damage to P1: Consume Spirit deals none, and
     // P0 still gains X life.
     let salve = t.hand(P1, "Healing Salve");
@@ -99,15 +101,16 @@ fn consume_spirit_does_nothing_if_its_target_is_illegal() {
     assert_eq!(t.life(P0), 20);
 }
 
-/// P0 casts Consume Spirit ({X}{1}{B}) at P1 with X = 2 from two Swamps and a Mountain,
-/// with a permanent making black spells cost {1} less: the reduction reduces the X part,
-/// so one black mana pays X, the Mountain the {1} and a Swamp the {B}.
+/// P0 casts Consume Spirit ({X}{1}{B}) at P1 with X = 2 from two Swamps and two
+/// Mountains, with a permanent making black spells cost {1} less: the reduction reduces the
+/// X part, so one black mana pays X, the Mountains the {1} and a Swamp the {B}.
 fn consume_spirit_reduced_by(reducer: &str) {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 2);
-    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Mountain", 2);
     let spirit = t.hand(P0, "Consume Spirit");
-    // Without the reduction X = 2 needs three black mana.
+    // Without the reduction X = 2 needs three black mana (four lands for a total cost of
+    // four, but only two Swamps).
     assert!(t.cast(P0, spirit).target(P1).x(2).try_go().is_err());
     t.battlefield(P0, reducer);
     t.cast(P0, spirit).target(P1).x(2).go();
@@ -640,7 +643,7 @@ fn thieving_skydiver_takes_an_equipment_and_attaches_it() {
 
 #[test]
 fn thieving_skydiver_gone_leaves_the_equipment_where_it_was_but_stolen() {
-    cr!("701.3b", "611.2b");
+    cr!("701.3b", "611.2a");
     ruling!(
         "Thieving Skydiver",
         "If the Equipment can't be attached to Thieving Skydiver, most likely because Thieving Skydiver has left the battlefield before its triggered ability resolves, the Equipment remains attached to whatever it's currently attached to or remains unattached if attached to nothing."
