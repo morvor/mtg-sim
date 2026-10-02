@@ -323,6 +323,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               and the engine evaluates a moved object by its last known information.",
     },
     Equivalence {
+        pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
+        replacement: "if $1 has",
+        why: "The same for what an object had (\"When ~ dies, if it had no time counters on \
+              it\"): its last known information (CR 603.10a, 608.2h).",
+    },
+    Equivalence {
         pattern: r"\b(adds?) an additional\b",
         replacement: "$1",
         why: "A triggered mana ability's mana is added in addition to the mana the \
@@ -866,6 +872,14 @@ fn sentence_rewrites(s: &str) -> String {
     }
     s = scaled_for_each(&s);
     s = compared_to_x(&s);
+    // "Tap up to X target creatures, where X is V." / "up to V target creatures": the
+    // number of targets X stands for, named in place (CR 107.3).
+    static TARGETS_X: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = TARGETS_X.get_or_init(|| {
+        Regex::new(r"\b(up to |)x ((?:other )?target [^.]*?), where x is ([^.]+?)(\.|$)").ok()
+    }) {
+        s = re.replace_all(&s, "$1$3 $2$4").to_string();
+    }
     // "When ~ blocks, at end of combat, destroy it." / "..., destroy it at end of
     // combat.": a delayed trigger's time after a trigger condition, too.
     static DELAYED: OnceLock<Option<Regex>> = OnceLock::new();

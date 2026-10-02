@@ -2825,6 +2825,7 @@ impl Renderer<'_> {
             [init @ .., last] => format!("{} {joiner} {last}", init.join(", ")),
         };
         let mut many = false;
+        let mut where_x: Option<String> = None;
         let parts: Vec<String> = spec
             .parts
             .iter()
@@ -2837,7 +2838,15 @@ impl Renderer<'_> {
                     (Value::Const(n), true) => Det::UpTo(number_word(*n)),
                     (other, up_to) => {
                         let v = self.value(other);
-                        if up_to {
+                        // "up to X basic land cards, where X is ...".
+                        if v != "X" && !v.contains(['{', '|']) {
+                            where_x = Some(v);
+                            if up_to {
+                                Det::UpTo("X".into())
+                            } else {
+                                Det::Count("X".into())
+                            }
+                        } else if up_to {
                             Det::UpTo(v)
                         } else {
                             Det::Count(v)
@@ -2863,6 +2872,9 @@ impl Renderer<'_> {
         };
         let may = if spec.optional { "may " } else { "" };
         let mut s = format!("{may}search {whose} {zones} for {parts}");
+        if let Some(v) = where_x {
+            s.push_str(&format!(", where X is {v},"));
+        }
         if spec.distinct_names {
             s.push_str(" with different names");
         }
@@ -2949,9 +2961,16 @@ impl Renderer<'_> {
         let top = match n {
             Value::Const(1) => format!("the top card of {p} library"),
             Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+            // "the top X cards of your library, where X is your life total".
             other => {
                 let v = self.value(other);
-                format!("the top {v} cards of {p} library")
+                if v == "X" || v.contains(['{', '|']) {
+                    format!("the top {v} cards of {p} library")
+                } else {
+                    format!(
+                        "{{alt:the top {v} cards of {p} library|the top X cards of {p} library, where X is {v}}}"
+                    )
+                }
             }
         };
         let look = if reveal { "reveal" } else { "look at" };
@@ -2996,7 +3015,19 @@ impl Renderer<'_> {
             other => self.value(other),
         };
         let pron = if many { "them" } else { "it" };
-        let take_s = if matches!(filter, Filter::Any) {
+        // Every one of them that matches: "put all creature cards revealed this way into
+        // your hand"; as many as you like: "you may put any number of ... from among them".
+        let every = matches!(take, Value::Const(k) if *k >= 99);
+        let take_s = if every && !matches!(filter, Filter::Any) {
+            let what = plural(&noun);
+            if take_up_to {
+                format!("you may put any number of {what} from among them {d}")
+            } else if reveal {
+                format!("put all {what} revealed this way {d}")
+            } else {
+                format!("put all {what} from among them {d}")
+            }
+        } else if matches!(filter, Filter::Any) {
             if take_up_to {
                 format!("put up to {count} of them {d}")
             } else {
@@ -3033,7 +3064,7 @@ impl Renderer<'_> {
             (Value::Const(a), Value::Const(b)) if a - b == 1 => "the other",
             _ => "the rest",
         };
-        if matches!(filter, Filter::Any) {
+        if matches!(filter, Filter::Any) || (every && !take_up_to) {
             s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         } else {
             s.push_str(&format!(". {}. Put {left} {rest}", capitalize(&take_s)));
