@@ -12,7 +12,7 @@ use crate::oracle::phrases::{end, parse_number, parse_object_phrase, parse_targe
 
 /// "a player", "you", "~", "a single creature", "a creature you control" in "that targets
 /// [only] ...".
-fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFilter>)> {
+pub(crate) fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFilter>)> {
     let s = end(s);
     Some(match s {
         "a player" | "a single player" => (None, Some(PlayerFilter::Any)),

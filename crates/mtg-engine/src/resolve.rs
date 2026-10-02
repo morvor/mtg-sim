@@ -2346,6 +2346,13 @@ impl Game {
                 }
             }
         }
+        // "That permanent's activated abilities can't be activated this turn": the
+        // permanent named as the effect began.
+        if let Restriction::CantActivate { sources, .. } = &mut r {
+            if filter_references_specific(sources) {
+                *sources = Filter::Objects(self.named_objects(sources, ctx));
+            }
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
