@@ -973,6 +973,45 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
+/// In an instant or sorcery with a single object target, "other creatures" (Intimidation
+/// Bolt: "~ deals 3 damage to target creature. Other creatures can't attack this turn")
+/// means other than that target: the spell itself is never among the objects described.
+pub(crate) fn other_than_sole_target(mut body: Body) -> Body {
+    if body.modal.is_some()
+        || body.targets.len() != 1
+        || !matches!(body.targets[0].what, TargetKind::Object(_))
+        || !matches!(body.targets[0].max, Value::Const(1))
+    {
+        return body;
+    }
+    // `Filter::Other` inside a filter conjunction ({"And": [..., "Other", ...]}).
+    fn fix(v: serde_json::Value, in_and: bool) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::String(s) if in_and && s == "Other" => {
+                serde_json::json!({"Not": {"In": {"Target": 0}}})
+            }
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| {
+                        let and = k == "And";
+                        (k, fix(v, and))
+                    })
+                    .collect(),
+            ),
+            J::Array(a) => J::Array(a.into_iter().map(|x| fix(x, in_and)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(&body.effect) else {
+        return body;
+    };
+    if let Ok(e) = serde_json::from_value(fix(json, false)) {
+        body.effect = e;
+    }
+    body
+}
+
 /// "That creature deals damage ... to each other creature": "other" means other than the
 /// subject of the sentence, which isn't necessarily the ability's source.
 fn other_than_subject(to: Sel, subject: &Sel) -> Sel {
@@ -1612,8 +1651,10 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     // class of objects ("creatures can't be blocked this turn") also applies to objects
     // that join the class later (Veiling Oddity ruling). Specific objects (targets, "those
     // creatures") are locked in as the effect begins.
+    // "Other creatures can't attack this turn" is a class too: other than the source, or
+    // (in an instant or sorcery) other than its target, see `other_than_sole_target`.
     let f = match &what {
-        Sel::All(f) if is_class_filter(f) => f.clone(),
+        Sel::All(f) if is_class_filter(&without_other(f)) => f.clone(),
         _ => Filter::In(Box::new(what)),
     };
     let r = match rest {
@@ -1636,6 +1677,15 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         restriction: r,
         duration: dur,
     })
+}
+
+/// The filter with its top-level "other" parts removed.
+fn without_other(f: &Filter) -> Filter {
+    match f {
+        Filter::Other => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(without_other).collect()),
+        f => f.clone(),
+    }
 }
 
 /// Whether a filter describes a class of objects by their current qualities only, without
