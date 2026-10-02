@@ -380,8 +380,8 @@ fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool, bool)> {
     // graveyard from the battlefield (CR 700.4).
     if let Some(np) = c.strip_suffix(" dies").or_else(|| c.strip_suffix(" die")) {
         let as_put = format!("{np} is put into a graveyard this way");
-        let (f, verb_, _, that) = this_way_condition(&as_put)?;
-        return Some((f, verb_, "put into a graveyard", that));
+        let (f, verb_, _, that, by_you) = this_way_condition(&as_put)?;
+        return Some((f, verb_, "put into a graveyard", that, by_you));
     }
     // "you exiled a land card", "that player discards an artifact card".
     for p in ["you ", "that player ", "the player "] {
