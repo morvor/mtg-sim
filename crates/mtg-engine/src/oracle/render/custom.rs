@@ -2,6 +2,7 @@
 //! what they do. Each name the renderer can put into words is listed here; any other
 //! name is a gap, reported as a mismatch.
 
+use super::players::Case;
 use super::*;
 
 /// A color word for a mana letter ("U" → "blue").
@@ -125,6 +126,40 @@ impl Renderer<'_> {
                     _ => return self.gap(format!("Effect::Custom({n})")),
                 }
             }
+            // "Target opponent reveals a card at random from their hand."
+            n if n.starts_with("reveal a card at random from hand:target ") => {
+                match n["reveal a card at random from hand:target ".len()..].parse::<u8>() {
+                    Ok(i) => {
+                        let t = self.target_mention(i, Case::Subj);
+                        format!("{t} reveals a card at random from their hand")
+                    }
+                    Err(_) => return self.gap(format!("Effect::Custom({n})")),
+                }
+            }
+            // "You control target opponent during their next turn" (CR 723).
+            n if n.starts_with("player control:") => {
+                let parts: Vec<&str> = n["player control:".len()..].split(':').collect();
+                let (span, slot, extra) = match parts.as_slice() {
+                    [span, slot] => (*span, *slot, false),
+                    [span, slot, "extra"] => (*span, *slot, true),
+                    _ => return self.gap(format!("Effect::Custom({n})")),
+                };
+                let Ok(i) = slot.parse::<u8>() else {
+                    return self.gap(format!("Effect::Custom({n})"));
+                };
+                let t = self.target_mention(i, Case::Obj);
+                let when = match span {
+                    "turn" => "next turn",
+                    "combat" => "next combat phase",
+                    _ => return self.gap(format!("Effect::Custom({n})")),
+                };
+                let mut s =
+                    format!("{{alt:you control|you gain control of}} {t} during {{alt:their|that player's}} {when}");
+                if extra {
+                    s.push_str(". After that turn, that player takes an extra turn");
+                }
+                s
+            }
             other => return self.gap(format!("Effect::Custom({other})")),
         };
         s
@@ -156,6 +191,8 @@ impl Renderer<'_> {
             "attacking the event's player" => rel("attacking that player"),
             "toughness_gt_power" => rel("with toughness greater than its power"),
             "activated_this_turn" => rel("that was activated this turn"),
+            n if n.starts_with("base:p=") => (false, format!("with base power {}", &n[7..])),
+            n if n.starts_with("base:t=") => (false, format!("with base toughness {}", &n[7..])),
             "attached to you" => rel("attached to you"),
             "base power=1" => rel("with base power 1"),
             "has_nonmana_activated_ability" => {

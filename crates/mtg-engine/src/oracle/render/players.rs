@@ -209,6 +209,24 @@ impl Renderer<'_> {
             other => vec![other],
         };
         let mut extra = Vec::new();
+        // "target activated ability", "target triggered ability you control".
+        let mut base = base.to_string();
+        for x in flat.iter() {
+            if let Filter::Custom(n) = x {
+                match n.as_str() {
+                    "stack:activated ability" => base = "activated ability".into(),
+                    "stack:triggered ability" => base = "triggered ability".into(),
+                    _ => {}
+                }
+            }
+        }
+        let flat: Vec<&Filter> = flat
+            .into_iter()
+            .filter(|x| {
+                !matches!(x, Filter::Custom(n)
+                    if n == "stack:activated ability" || n == "stack:triggered ability")
+            })
+            .collect();
         for x in flat {
             match x {
                 Filter::Spell | Filter::SpellOnStack | Filter::Any => {}
@@ -223,7 +241,7 @@ impl Renderer<'_> {
             }
         }
         if extra.is_empty() {
-            base.to_string()
+            base
         } else {
             format!("{base} {}", extra.join(" "))
         }
