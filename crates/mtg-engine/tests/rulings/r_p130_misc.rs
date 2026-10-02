@@ -813,3 +813,81 @@ fn a_mana_ability_that_costs_putting_a_counter_pays_for_a_spell() {
     let more = t.hand(P0, "Llanowar Elves");
     assert!(t.cast(P0, more).try_go().is_err());
 }
+
+#[test]
+fn knight_of_the_white_orchid_has_an_intervening_if_clause() {
+    cr!("603.4");
+    ruling!(
+        "Knight of the White Orchid",
+        "Knight of the White Orchid's triggered ability has an “intervening ‘if' clause.”"
+    );
+    supported("Knight of the White Orchid");
+    // As many lands as the opponent: no trigger.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Forest", 1);
+    t.library_top(P0, "Plains");
+    t.enter(P0, "Knight of the White Orchid");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // It triggers, but P0 has caught up by the time it resolves: nothing happens.
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Forest", 2);
+    t.library_top(P0, "Plains");
+    t.enter(P0, "Knight of the White Orchid");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.lands(P0, "Plains", 2);
+    let library = t.library_size(P0);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), library);
+    assert_eq!(t.named_on_battlefield("Plains").len(), 2);
+}
+
+#[test]
+fn knight_of_the_white_orchid_can_find_a_nonbasic_plains() {
+    cr!("205.3i", "701.23a");
+    ruling!(
+        "Knight of the White Orchid",
+        "The Plains you search for doesn't have to be basic."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Forest", 1);
+    let foundry = t.library_top(P0, "Sacred Foundry");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(foundry)]);
+    t.enter(P0, "Knight of the White Orchid");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Sacred Foundry").len(), 1);
+}
+
+#[test]
+fn eldrazi_confluence_repeated_modes_happen_in_the_chosen_order() {
+    cr!("700.2d", "608.2c");
+    ruling!(
+        "Eldrazi Confluence",
+        "If the same mode is chosen more than once, you choose their relative order as you cast the spell."
+    );
+    for a_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let a = t.battlefield(P1, "Grizzly Bears");
+        let b = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Wastes", 4);
+        let card = t.hand(P0, "Eldrazi Confluence");
+        let (first, second) = if a_first { (a, b) } else { (b, a) };
+        t.cast(P0, card)
+            .modes(&[1, 1, 2])
+            .target(first)
+            .target(second)
+            .go();
+        t.resolve_all();
+        // Each was exiled and returned (tapped) in turn: the first one chosen came back
+        // first, with the earlier timestamp.
+        let (f, s) = (t.obj_now(first), t.obj_now(second));
+        assert!(f.tapped && s.tapped);
+        assert!(f.id != first && s.id != second);
+        assert!(f.timestamp < s.timestamp);
+    }
+}
