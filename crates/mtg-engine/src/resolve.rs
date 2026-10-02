@@ -83,7 +83,7 @@ impl Game {
                     // "If it's a permanent card, you may put it onto the battlefield. If
                     // you do, ...", "Then if there are three or more collection counters
                     // on it, sacrifice it. If you do, ...": an instruction whose condition
-                    // didn't hold wasn't done.
+                    // didn't hold wasn't done (also "... sacrifice ~. When you do, ...").
                     if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
@@ -152,27 +152,13 @@ impl Game {
             }
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
-                for it in items {
-                    let saved = ctx.vars.insert(*var, vec![it]);
-                    self.exec(effect, ctx);
-                    match saved {
-                        Some(s) => {
-                            ctx.vars.insert(*var, s);
-                        }
-                        None => {
-                            ctx.vars.remove(var);
-                        }
-                    }
-                }
+                // CR 608.2f: an action on several objects happens to all of them at once.
+                crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);
-                let saved = ctx.iter_player;
-                for p in players {
-                    ctx.iter_player = Some(p);
-                    self.exec(effect, ctx);
-                }
-                ctx.iter_player = saved;
+                // CR 101.4, 608.2e–f: what several players do at the same time.
+                crate::simultaneous::for_each_player(self, players, effect, ctx);
             }
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
@@ -243,9 +229,16 @@ impl Game {
                 let objs = self.resolve_objects(what, ctx);
                 let prev_link = self.current_link;
                 self.current_link = ctx.link;
+                // "... can't cause you to sacrifice or exile [permanents]" (CR 701.21).
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 let moves: Vec<MoveEv> = objs
                     .iter()
                     .filter(|o| self.is_live(**o))
+                    .filter(|o| {
+                        cause.as_ref().is_none_or(|c| {
+                            !crate::rule_statics::sacrifice_causes::forbidden(self, **o, c, true)
+                        })
+                    })
                     .map(|o| MoveEv {
                         obj: *o,
                         to: Zone::Exile,
@@ -285,13 +278,17 @@ impl Game {
                 let round = self.apnap_choices.len();
                 let requests = players.into_iter().map(|p| (p, ())).collect();
                 let rctx: &Ctx = ctx;
+                // What makes them sacrifice (CR 701.21; see `rule_statics::sacrifice_causes`).
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 self.apnap_round(requests, |g, p, ()| {
                     let mut pctx = rctx.clone();
                     pctx.iter_player = Some(p);
                     let cands: Vec<ObjectId> = g
                         .objects_matching(filter, &pctx)
                         .into_iter()
-                        .filter(|o| g.obj(*o).controller == p && !g.cant_be_sacrificed(*o))
+                        .filter(|o| {
+                            g.obj(*o).controller == p && !g.sacrifice_forbidden(*o, cause.as_ref())
+                        })
                         .collect();
                     let k = n.min(cands.len() as u32);
                     let pick = g.ask_objects(
@@ -331,10 +328,12 @@ impl Game {
                 // can't do if another player controls it now (CR 701.21a).
                 let own_source = matches!(what, Sel::This);
                 let objs = self.resolve_objects(what, ctx);
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
                 let what: Vec<(ObjectId, PlayerId)> = objs
                     .into_iter()
                     .filter(|o| self.is_live(*o))
+                    .filter(|o| !self.sacrifice_forbidden(*o, cause.as_ref()))
                     .filter(|o| !own_source || self.obj(*o).controller == ctx.controller)
                     .map(|o| (o, self.obj(o).controller))
                     .collect();
@@ -544,21 +543,44 @@ impl Game {
                         Some(kind) => {
                             total += self.remove_counters_by(t, kind, k, Some(ctx.controller))
                         }
+                        // N counters of the kinds the controller chooses.
                         None => {
-                            let kinds: Vec<CounterKind> = match t {
-                                Entity::Object(o) => self.obj(o).counters.keys().cloned().collect(),
-                                Entity::Player(p) => {
-                                    self.player(p).counters.keys().cloned().collect()
-                                }
-                            };
-                            for kk in kinds {
-                                total += self.remove_counters_by(t, &kk, k, Some(ctx.controller));
-                            }
+                            total += crate::counter_rules::remove_chosen_counters(
+                                self,
+                                t,
+                                None,
+                                k,
+                                ctx.controller,
+                                ctx.source,
+                            )
                         }
                     }
                 }
                 ctx.prev_value = total as i64;
                 // "Remove a counter from it. If you do, …" (CR 608.2c).
+                ctx.prev_happened = total > 0;
+            }
+            Effect::ChooseCounterKind { from, then } => {
+                if let Some(e) =
+                    crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
+                {
+                    self.exec(&e, ctx);
+                }
+            }
+            Effect::RemoveCountersUpTo { what, kind, max } => {
+                let max = max.as_ref().map(|v| self.eval_value(v, ctx).max(0) as u32);
+                let mut total = 0;
+                for t in self.resolve_sel(what, ctx) {
+                    total += crate::counter_rules::remove_up_to_counters(
+                        self,
+                        t,
+                        kind.as_ref(),
+                        max,
+                        ctx.controller,
+                        ctx.source,
+                    );
+                }
+                ctx.prev_value = total as i64;
                 ctx.prev_happened = total > 0;
             }
             Effect::MoveCounters { from, to, kind, n } => {
@@ -1405,12 +1427,17 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Scry;
                 crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // CR 701.22b, 701.22d: scrying N > 0 always happens ("When you do, ...").
+                ctx.prev_happened = k > 0 && !players.is_empty();
             }
             Effect::Surveil { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Surveil;
                 crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // CR 701.25c-d: surveilling N > 0 always happens, even with fewer cards in
+                // the library ("When you do, ...").
+                ctx.prev_happened = k > 0 && !players.is_empty();
             }
             Effect::Search {
                 who,
@@ -1494,60 +1521,18 @@ impl Game {
                 }
             }
             Effect::ShuffleInto { what } => {
+                // Into their owners' libraries (CR 701.24c).
                 let objs = self.resolve_objects(what, ctx);
-                let mut owners = Vec::new();
-                for o in objs {
-                    let owner = self.obj(o).owner;
-                    self.move_object_ev(MoveEv {
-                        obj: o,
-                        to: Zone::Library(owner),
-                        pos: LibraryPosition::Top,
-                        cause: MoveCause::Effect,
-                        by: Some(ctx.controller),
-                        etb: EtbInfo::default(),
-                        source: ctx.source,
-                    });
-                    if !owners.contains(&owner) {
-                        owners.push(owner);
-                    }
-                }
-                for o in owners {
-                    self.shuffle_library(o);
-                }
+                crate::shuffle_rules::shuffle_into(self, &objs, Vec::new(), ctx);
             }
             Effect::ShuffleIntoLibrary { what, library } => {
                 let objs = self.resolve_objects(what, ctx);
-                // CR 701.24c, 701.24d: the libraries are shuffled even if the objects
-                // aren't where they're expected to be, or there are none.
-                let mut libraries = self.eval_players(library, ctx);
-                for o in &objs {
-                    let owner = self.obj(*o).owner;
-                    if !libraries.contains(&owner) {
-                        libraries.push(owner);
-                    }
-                }
-                let moves: Vec<MoveEv> = objs
-                    .iter()
-                    .filter(|o| self.is_live(**o))
-                    .map(|o| MoveEv {
-                        obj: *o,
-                        to: Zone::Library(self.obj(*o).owner),
-                        pos: LibraryPosition::Top,
-                        cause: MoveCause::Effect,
-                        by: Some(ctx.controller),
-                        etb: EtbInfo::default(),
-                        source: ctx.source,
-                    })
-                    .collect();
-                let moved: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
-                for p in libraries {
-                    self.shuffle_library(p);
-                }
-                let moved: Vec<Entity> = moved
-                    .into_iter()
-                    .filter(|o| matches!(self.obj(*o).zone, Zone::Library(_)))
-                    .map(Entity::Object)
-                    .collect();
+                let libraries = self.eval_players(library, ctx);
+                let moved: Vec<Entity> =
+                    crate::shuffle_rules::shuffle_into(self, &objs, libraries, ctx)
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect();
                 ctx.prev_value = moved.len() as i64;
                 ctx.prev_happened = !moved.is_empty();
                 ctx.prev_affected = moved.clone();
@@ -2189,7 +2174,7 @@ impl Game {
     /// CR 400.7j: an object an earlier part of the same effect moved to a public zone can
     /// be found by later parts of it ("Exile target creature and put two time counters on
     /// it"): the object it became, when that instruction recorded it.
-    fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+    pub(crate) fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
         let Entity::Object(o) = e else {
             return e;
         };
@@ -2239,7 +2224,7 @@ impl Game {
 
     /// The source of damage for an effect: the named object, or the resolving object's
     /// source (CR 120.2, 609.7). Uses last known information if it has left.
-    fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
+    pub(crate) fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
         match sel {
             Sel::None | Sel::This => ctx
                 .stack_obj
@@ -2885,6 +2870,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeCountered(f)
         | Restriction::CantBeSacrificed(f)
         | Restriction::CantBeRegenerated(f)
+        | Restriction::CantTurnFaceUp(f)
+        | Restriction::CantBeCopied(f)
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
         | Restriction::BlockAsThoughUntapped(f)

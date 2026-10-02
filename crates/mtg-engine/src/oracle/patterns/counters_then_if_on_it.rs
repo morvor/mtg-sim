@@ -31,7 +31,7 @@ fn last_counter_change(e: &Effect) -> Option<&CounterKind> {
     }
 }
 
-fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(changed) = last_counter_change(prev).cloned() else {
         return false;
     };
@@ -54,13 +54,51 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
+    // "Then if it has an odd number of counters on it, ..." (Sab-Sunen): the total
+    // number, odd or even.
+    let parity = [("an odd number of ", 1), ("an even number of ", 0)]
+        .into_iter()
+        .find_map(|(p, r)| c.strip_prefix(p).map(|rest| (r, rest)));
+    if let Some((remainder, rest)) = parity {
+        let Some((None, tail)) = super::counters_resources_counters::kind_then_on(rest) else {
+            return false;
+        };
+        if !matches!(end(tail), "it" | "~") {
+            return false;
+        }
+        let total = Value::CountersOn(Box::new(Sel::This), None);
+        let half = Value::Mul(
+            Box::new(Value::c(2)),
+            Box::new(Value::Div(Box::new(total.clone()), 2, false)),
+        );
+        let cond = Condition::Compare(
+            Value::Diff(Box::new(total), Box::new(half)),
+            Cmp::Eq,
+            Value::c(remainder),
+        );
+        let saved_targets = b.targets.len();
+        let Some(then) = parse_clause(clause, b) else {
+            b.targets.truncate(saved_targets);
+            return false;
+        };
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![
+            old,
+            Effect::If {
+                cond,
+                then: Box::new(then),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]);
+        return true;
+    }
     let Some((cmp, n, c)) = super::counters_resources_counters::amount_cmp(c) else {
         return false;
     };
     let Some((kind, c)) = super::counters_resources_counters::kind_then_on(c) else {
         return false;
     };
-    if end(c) != "it" || kind.as_ref().is_some_and(|k| *k != changed) {
+    if !matches!(end(c), "it" | "~") || kind.as_ref().is_some_and(|k| *k != changed) {
         return false;
     }
     let kind = kind.unwrap_or(changed);
@@ -69,12 +107,13 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         cmp,
         n,
     );
+    // "Then sacrifice it if it has five or more bloodstain counters on it. When you do,
+    // ...": a later "if you do"/"when you do" is about the sacrifice, which didn't happen if
+    // the condition was false (see `Effect::If`).
     // "sacrifice it": a later "if you do" asks whether it was sacrificed (when the
     // condition doesn't hold, it wasn't).
-    if clause.starts_with("sacrifice ") {
-        if !matches!(clause, "sacrifice it" | "sacrifice ~") {
-            return false;
-        }
+    // (Other "sacrifice ..." clauses are parsed below.)
+    if matches!(clause, "sacrifice it" | "sacrifice ~") {
         let old = std::mem::take(prev);
         *prev = Effect::seq(vec![
             old,
@@ -108,6 +147,7 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let rest = match rest.strip_prefix("it ") {
         Some(r) => format!("~ {r}"),
         None if rest == "transform it" => "transform ~".to_string(),
+        None if rest == "sacrifice it" => "sacrifice ~".to_string(),
         None => rest.to_string(),
     };
     let saved_it = b.it.clone();
