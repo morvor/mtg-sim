@@ -257,8 +257,15 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             if matches!(who, PlayerRef::You) || is_no_player_referent(&who) {
                 return None;
             }
-            // "they" for objects ("they get +1/+1") isn't a player.
+            // "they" for objects ("they get +1/+1") isn't a player, unless only a player
+            // can do what they do ("They discard that card.").
+            let players_only = matches!(
+                split_word(r).0,
+                "discard" | "draw" | "mill" | "search" | "shuffle" | "sacrifice" | "pay"
+                    | "investigate" | "scry" | "surveil"
+            );
             if p == "they "
+                && !players_only
                 && (b.group.is_some()
                     || super::pronoun_groups::plural_referent(&b.it, b.ctx))
             {
@@ -280,6 +287,25 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
         let who = PlayerRef::ControllerOf(Box::new(Sel::AttachedTo));
         b.it_player = who.clone();
         return Some((Subject::One(who), r.to_string()));
+    }
+    // "That player or that planeswalker's controller discards two cards." after "~ deals 3
+    // damage to target player or planeswalker": the player dealt damage, or the
+    // controller of the permanent.
+    for p in [
+        "that player or that planeswalker's controller ",
+        "that player or that permanent's controller ",
+    ] {
+        if let Some(r) = l.strip_prefix(p) {
+            let slot = b.targets.iter().rposition(|t| {
+                matches!(
+                    t.what,
+                    TargetKind::AnyTarget | TargetKind::ObjectOrPlayer(..)
+                )
+            })?;
+            let who = PlayerRef::ControllerOf(Box::new(Sel::Target(slot as u8)));
+            b.it_player = who.clone();
+            return Some((Subject::One(who), r.to_string()));
+        }
     }
     // "that creature's controller", "that spell's controller"
     for p in ["that creature's controller ", "that spell's controller "] {
@@ -390,7 +416,14 @@ fn hoist_value(pred: &str, b: &mut Builder) -> Option<(String, Option<Value>)> {
 /// 2 life"); "exiles the top four cards of their library, then you may put ...".
 fn split_tail(pred: &str) -> (&str, Option<&str>) {
     let mut best: Option<(usize, usize)> = None;
-    for sep in [", then you ", ", and you ", " and you ", ", you ", ", then each player who does "] {
+    for sep in [
+        ", then you ",
+        ", and you ",
+        " and you ",
+        ", you ",
+        ", then each player who does ",
+        ", ~ ",
+    ] {
         if let Some(at) = pred.find(sep) {
             if best.is_none_or(|(b, _)| at < b) {
                 best = Some((at, sep.len()));
@@ -400,9 +433,11 @@ fn split_tail(pred: &str) -> (&str, Option<&str>) {
     match best {
         Some((at, len)) => {
             let sep = &pred[at..at + len];
-            // Keep the new subject: "you ..." / "each player who does ...".
+            // Keep the new subject: "you ..." / "~ ..." / "each player who does ...".
             let start = if sep.ends_with("you ") {
                 at + len - "you ".len()
+            } else if sep.ends_with("~ ") {
+                at + len - "~ ".len()
             } else {
                 at + len - "each player who does ".len()
             };
@@ -758,38 +793,17 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                 var: OUTER_X,
                 value: Value::X,
             });
-            Some(with_hoisted(
-                Effect::seq(pre.into_iter().chain(vec![
-                    // CR 101.4: they decide in APNAP order...
-                    Effect::Store {
-                        var: OPTED,
-                        sel: Sel::None,
-                    },
-                    Effect::ForEachPlayer {
-                        who,
-                        effect: Box::new(Effect::AsPlayer {
-                            who: PlayerRef::Iterated,
-                            effect: Box::new(guard(Effect::May {
-                                who: PlayerRef::Iterated,
-                                effect: Box::new(Effect::Custom(OPT_IN.into())),
-                            })),
-                        }),
-                    },
-                    Effect::Store {
-                        var: ACCEPTED,
-                        sel: Sel::Var(OPTED),
-                    },
-                    // ...then those who accepted do it.
-                    Effect::ForEachPlayer {
-                        who: PlayerRef::Var(ACCEPTED),
-                        effect: Box::new(Effect::AsPlayer {
-                            who: PlayerRef::Iterated,
-                            effect: Box::new(e),
-                        }),
-                    },
-                ]).collect()),
-                hoisted,
-            ))
+            // CR 101.4: they decide in APNAP order, then those who accepted do it.
+            let mut v: Vec<Effect> = pre.into_iter().collect();
+            v.extend(opt_in(who, &guard));
+            v.push(Effect::ForEachPlayer {
+                who: PlayerRef::Var(ACCEPTED),
+                effect: Box::new(Effect::AsPlayer {
+                    who: PlayerRef::Iterated,
+                    effect: Box::new(e),
+                }),
+            });
+            Some(with_hoisted(Effect::seq(v), hoisted))
         }
     }
 }

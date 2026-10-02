@@ -504,3 +504,50 @@ fn each_player_additional_land(l: &str, text: &str, _ctx: &CompileContext) -> Op
 }
 
 inventory::submit! { StaticPattern { name: "player actions: each player may play an additional land", priority: 100, parse: each_player_additional_land } }
+
+/// "shuffle it into your library", "shuffle that card into your library".
+fn shuffle_it_into_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let r = l.strip_prefix("shuffle ")?;
+    let what = r.strip_suffix(" into your library")?;
+    if !matches!(what, "it" | "that card" | "that creature" | "that permanent") {
+        return None;
+    }
+    let (sel, rest) = crate::oracle::effects::object_ref(what, b)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::ShuffleIntoLibrary {
+        what: sel,
+        library: PlayerRef::You,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "player actions: shuffle it into your library", priority: 400, parse: shuffle_it_into_library } }
+
+/// "exile any number of cards from your graveyard".
+fn exile_any_number_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    if l != "exile any number of cards from your graveyard" {
+        return None;
+    }
+    let cards = Filter::and(vec![
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::You),
+    ]);
+    Some(Effect::Exile {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: cards.clone(),
+            count: Value::CountSel(Box::new(Sel::All(cards))),
+            up_to: true,
+            store: None,
+        },
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "player actions: exile any number of cards from your graveyard", priority: 400, parse: exile_any_number_from_graveyard } }
