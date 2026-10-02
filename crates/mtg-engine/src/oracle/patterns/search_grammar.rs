@@ -43,9 +43,6 @@ inventory::submit! {
     ConditionPattern { name: "search grammar: an opponent controls more lands than you", priority: 100, parse: some_player_condition }
 }
 inventory::submit! {
-    ConditionPattern { name: "search grammar: x is n or more", priority: 100, parse: x_is_at_least }
-}
-inventory::submit! {
     EffectPattern { name: "search grammar: that player shuffles / if you search your library this way, shuffle", priority: 95, parse: shuffle_after_search }
 }
 
@@ -101,14 +98,6 @@ fn control_named(c: &str) -> Option<Condition> {
         Filter::Named(n.into()),
         Filter::ControlledBy(PlayerRel::You),
     ])))
-}
-
-/// "If X is 10 or more" (the spell's X, CR 107.3).
-fn x_is_at_least(c: &str) -> Option<Condition> {
-    let r = c.strip_prefix("x is ")?;
-    let (n, r) = parse_number(r)?;
-    n.as_const()?;
-    matches!(r.trim(), "or more" | "or greater").then(|| Condition::Compare(Value::X, Cmp::Ge, n))
 }
 
 /// "Then that player shuffles." (their library), and "If you search your library this way,
