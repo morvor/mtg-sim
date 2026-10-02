@@ -165,6 +165,18 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
+    /// Where a resolving permanent spell is put instead of onto the battlefield, if the
+    /// keyword changes it: e.g. a creature spell with rebound cast from its owner's hand
+    /// is exiled (CR 702.88a; Jeskai Baller). [`KeywordRules::after_spell_resolved`] is
+    /// then called as for an instant or sorcery.
+    fn permanent_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
     /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
     /// spell being put into its owner's graveyard ("instead of putting it into your
     /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
@@ -619,6 +631,33 @@ pub fn apply_spell_text_changes(
     }
 }
 
+/// The keywords of `chars` that reduce or otherwise change the cost `cost` of casting
+/// `card` (see [`KeywordRules::cost_reduction`]).
+pub fn cost_changing_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    cost: &Cost,
+    x: u32,
+) -> Vec<Keyword> {
+    let mut out = Vec::new();
+    for kw in chars.keywords() {
+        for r in impls_for(kw.kind) {
+            let mut c = cost.clone();
+            r.cost_reduction(g, p, card, kw, &mut c, x);
+            if format!("{c:?}") != format!("{cost:?}")
+                && !out
+                    .iter()
+                    .any(|k: &Keyword| format!("{k:?}") == format!("{kw:?}"))
+            {
+                out.push(kw.clone());
+            }
+        }
+    }
+    out
+}
+
 pub fn cost_reductions(
     g: &Game,
     p: PlayerId,
@@ -686,6 +725,16 @@ pub fn resolved_destinations(
         out.extend(resolved_destination_by(g, spell));
     }
     out
+}
+
+/// See [`KeywordRules::permanent_resolved_destination`].
+pub fn permanent_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind).find_map(|r| r.permanent_resolved_destination(g, spell, kw))
+    })
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
@@ -994,7 +1043,19 @@ pub fn pay_mana_otherwise(
     let kws = distinct_kinds(&g.obj(spell).chars);
     for kw in &kws {
         for r in impls_for(kw.kind) {
+            let before = crate::structure::enabled().then(|| format!("{cost:?}"));
             r.pay_mana_otherwise(g, p, spell, kw, cost)?;
+            if before.is_some_and(|b| b != format!("{cost:?}")) {
+                let c = &g.obj(spell).chars;
+                let want = format!("{kw:?}");
+                if let Some(a) = c
+                    .abilities
+                    .iter()
+                    .find(|a| a.keyword().is_some_and(|k| format!("{k:?}") == want))
+                {
+                    crate::structure::record(a, &c.name, "keyword");
+                }
+            }
         }
     }
     Ok(())

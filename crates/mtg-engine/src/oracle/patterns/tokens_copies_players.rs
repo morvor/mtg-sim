@@ -38,7 +38,7 @@ fn players_create_token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
             r,
         )
     } else {
-        return None;
+        return one_player_creates_token_copy(l, b);
     };
     let r = rest.strip_prefix("creates ")?;
     let Effect::CreateTokenCopy {
@@ -62,6 +62,53 @@ fn players_create_token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
             attacking,
             mods,
         }),
+    })
+}
+
+/// "Its controller creates a token that's a copy of that creature." (Isle of Vesuva),
+/// "Target player creates a token that's a copy of target creature you control."
+/// (Echocasting Symposium): that player creates, and so controls, the token (CR 111.2).
+fn one_player_creates_token_copy(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (subject, r) = l.split_once(" creates ")?;
+    let who = match subject {
+        "its controller" => {
+            if is_no_referent(&b.it) {
+                return None;
+            }
+            PlayerRef::ControllerOf(Box::new(b.it.clone()))
+        }
+        "target player" | "target opponent" => {
+            let filter = if subject == "target opponent" {
+                PlayerFilter::Opponent
+            } else {
+                PlayerFilter::Any
+            };
+            let it = b.it.clone();
+            let slot = b.add_target(TargetSpec::player(filter, subject), subject);
+            b.it = it;
+            b.it_player = PlayerRef::Target(slot);
+            PlayerRef::Target(slot)
+        }
+        _ => return None,
+    };
+    let Effect::CreateTokenCopy {
+        of,
+        count,
+        tapped,
+        attacking,
+        mods,
+        ..
+    } = token_copy_with_exceptions(&format!("create {r}"), b)?
+    else {
+        return None;
+    };
+    Some(Effect::CreateTokenCopy {
+        of,
+        count,
+        controller: who,
+        tapped,
+        attacking,
+        mods,
     })
 }
 

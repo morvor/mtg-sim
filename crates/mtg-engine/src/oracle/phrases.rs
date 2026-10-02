@@ -657,6 +657,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_inset_suffix(t) {
             (f, r)
+        } else if let Some(r) = [
+            "that are enchanted by auras you control",
+            "that are enchanted by Auras you control",
+            "that's enchanted by an aura you control",
+            "that's enchanted by an Aura you control",
+        ]
+        .into_iter()
+        .find_map(|p| t.strip_prefix(p))
+        {
+            // (CR 303.4b) An Aura you control attached to it.
+            (
+                Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
+                r,
+            )
         } else {
             break;
         };
@@ -821,6 +835,30 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
             {
                 let f = Filter::HasCounter(Some(kind.into()));
                 return Some((if negate { Filter::not(f) } else { f }, tail));
+            }
+        }
+    }
+    // "with corruption counters on them", "with +1/+1 counters on them" (a plural
+    // subject: each one with one or more counters of that kind).
+    if !negate {
+        // "with no counters on them" (Damning Verdict, Hazardous Conditions).
+        if let Some(tail) = rest.strip_prefix("no counters on them") {
+            return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        let (kind, r2) = split_word(rest);
+        if let Some(tail) = r2.strip_prefix("counters on them") {
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || (!kind.is_empty()
+                    && kind.chars().all(|c| c.is_alphabetic())
+                    // "with no counters on them" (Damning Verdict), "with two counters
+                    // on them": not a counter kind.
+                    && !matches!(
+                        kind,
+                        "no" | "any" | "some" | "two" | "three" | "four" | "five" | "more"
+                    ))
+            {
+                return Some((Filter::HasCounter(Some(kind.into())), tail));
             }
         }
     }

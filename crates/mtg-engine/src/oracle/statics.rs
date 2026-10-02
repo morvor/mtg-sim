@@ -377,7 +377,22 @@ fn attached_restriction(r: &str, text: &str) -> Option<Vec<Ability>> {
 /// "spells your opponents cast cost {1} more to cast", "creature spells you cast cost {1} less to cast".
 fn parse_cost_modifier(l: &str, text: &str) -> Option<Ability> {
     let (spells, rest) = l.split_once(" cost ")?;
-    let (who, spells) = if let Some(s) = spells.strip_suffix(" you cast") {
+    // "creature spells you cast with power 4 or greater" (Goreclaw): the qualifier
+    // follows the caster; read it as "creature spells with power 4 or greater".
+    let qualified = [
+        (" you cast with ", PlayerRel::You),
+        (" your opponents cast with ", PlayerRel::Opponent),
+    ]
+    .into_iter()
+    .find_map(|(sep, who)| {
+        let (a, b) = spells.split_once(sep)?;
+        Some((who, format!("{a} with {b}")))
+    });
+    let qualified_spells;
+    let (who, spells) = if let Some((who, s)) = qualified {
+        qualified_spells = s;
+        (who, qualified_spells.as_str())
+    } else if let Some(s) = spells.strip_suffix(" you cast") {
         (PlayerRel::You, s)
     } else if let Some(s) = spells.strip_suffix(" your opponents cast") {
         (PlayerRel::Opponent, s)
@@ -782,6 +797,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the total power of ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the total toughness of ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::ToughnessOf(Box::new(Sel::All(f))), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the mana value of ") {
         let (f, _, rest) = parse_object_phrase(r.strip_prefix("the ").unwrap_or(r))?;

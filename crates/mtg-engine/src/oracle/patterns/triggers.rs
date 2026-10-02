@@ -287,6 +287,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each opponent's ", Whose::Rel(PlayerRel::Opponent)),
         ("each other player's ", Whose::Rel(PlayerRel::NotYou)),
         ("each ", Whose::Rel(PlayerRel::Any)),
+        // "the chosen player's upkeep" (Black Vise; CR 607.2d)
+        ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
@@ -1495,6 +1497,8 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             let mut cond = TriggerCond::Attacks(f.clone());
             let mut r = r;
             let t = r.trim_start();
+            // "one or more creatures attack a player": once for each player attacked.
+            let mut per_defender = false;
             if let Some(x) = t.strip_prefix("alone") {
                 // CR 506.5: a creature attacks alone if it's the only creature declared as
                 // an attacker.
@@ -1537,6 +1541,7 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 (x.is_empty() || x.starts_with(' ')).then_some((x, who))
             }) {
                 // CR 508.3a: attacking that player (not a planeswalker or battle).
+                per_defender = true;
                 cond = TriggerCond::Where {
                     trigger: Box::new(cond),
                     cond: Condition::And(vec![
@@ -1582,7 +1587,7 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 r = "";
             }
             if subj.one_or_more {
-                return Some((batch(cond, false, PlayerRef::TriggerPlayer), r));
+                return Some((batch(cond, per_defender, PlayerRef::TriggerPlayer), r));
             }
             return Some((
                 (cond, this_or(Sel::TriggerObject), PlayerRef::TriggerPlayer),
