@@ -648,6 +648,14 @@ fn sentence_rewrites(s: &str) -> String {
             .ok()
     });
     let mut s = s.to_string();
+    // "You may pay {3}{B}. If you don't, return it ..." and "Return it ... unless you pay
+    // {3}{B}" are the same choice (CR 118.12).
+    static MAY_PAY: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = MAY_PAY.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )(?:then )?you may pay ([^.]+)\. if you don't, ([^.]+)\.").ok()
+    }) {
+        s = re.replace_all(&s, "${1}$3 unless you pay $2.").to_string();
+    }
     // "If C, Y. Otherwise, X." and "X. If C, Y instead." state the same choice.
     static OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();
     let [instead, otherwise] = OTHERWISE.get_or_init(|| {

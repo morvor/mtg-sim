@@ -406,16 +406,21 @@ impl Renderer<'_> {
             }
             TriggerCond::GainsLife { who } => Ev::new(self.rel_subject(*who), "gain life"),
             TriggerCond::LosesLife { who } => Ev::new(self.rel_subject(*who), "lose life"),
-            TriggerCond::CountersPut { filter, kind } => {
+            TriggerCond::CountersPut { filter, kind, each } => {
                 let k = match kind {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
                 };
                 let o = self.noun_det(filter, Det::A);
-                Ev::new(
-                    format!("one or more {}", plural(&k)),
-                    format!("are put on {o}"),
-                )
+                // "Whenever a +1/+1 counter is put on ~" triggers for each counter.
+                if *each {
+                    Ev::new(with_article(&k), format!("is put on {o}"))
+                } else {
+                    Ev::new(
+                        format!("one or more {}", plural(&k)),
+                        format!("are put on {o}"),
+                    )
+                }
             }
             TriggerCond::CountersRemoved { filter, kind } => {
                 let k = match kind {

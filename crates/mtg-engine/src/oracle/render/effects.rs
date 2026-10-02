@@ -3397,6 +3397,7 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
 fn until_event(u: &UntilEvent) -> String {
     match u {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
+        UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
     }
 }
 
