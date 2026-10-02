@@ -247,6 +247,27 @@ impl Renderer<'_> {
             match p {
                 CostPart::Tap => parts.push("tap ~".into()),
                 CostPart::Untap => parts.push("untap ~".into()),
+                // "have ~ deal 4 damage to [the player who pays]".
+                CostPart::Effect(e) => match &**e {
+                    Effect::DealDamage {
+                        source: Sel::This,
+                        amount,
+                        to: Sel::Players(PlayerRef::You),
+                    } => {
+                        let s = match amount {
+                            Value::Const(n) => format!("have ~ deal {n} damage to you"),
+                            v => {
+                                let v = self.value(v);
+                                format!("have ~ deal damage to you equal to {v}")
+                            }
+                        };
+                        parts.push(s);
+                    }
+                    _ => {
+                        let s = self.cost_part(p);
+                        parts.push(s);
+                    }
+                },
                 other => {
                     let s = self.cost_part(other);
                     parts.push(s);
@@ -254,6 +275,11 @@ impl Renderer<'_> {
             }
         }
         // "pay {2} and 2 life".
+        if parts.len() > 1 && parts.iter().all(|x| x.starts_with("pay ")) {
+            for x in parts.iter_mut().skip(1) {
+                *x = x["pay ".len()..].to_string();
+            }
+        }
         join_list(&parts, "and")
     }
 

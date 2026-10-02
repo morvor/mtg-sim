@@ -585,6 +585,16 @@ impl Renderer<'_> {
             PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),
+            // "the player with the most life" (the one an intervening "if a player has more
+            // life than each other player" makes it).
+            PlayerRef::Each(pf) if self.most_of(pf).is_some() => {
+                let (stat, _) = self.most_of(pf).unwrap_or_default();
+                match stat.as_str() {
+                    "life" => "the player with the most life".into(),
+                    "cards in hand" => "the player who has the most cards in hand".into(),
+                    noun => format!("the player who controls the most {noun}"),
+                }
+            }
             PlayerRef::Each(pf) => {
                 let n = self.player_filter_noun(pf, Num::One);
                 format!("each {n}")
@@ -595,6 +605,23 @@ impl Renderer<'_> {
             PlayerRef::LinkedNoted => "that player".into(),
         };
         decline(s, case)
+    }
+
+    /// For a filter "has the greatest [life / cards in hand / number of objects]" (the
+    /// most of it among all players): the stat ("life", "cards in hand", or the plural
+    /// noun), and whether it's the controlled-objects form.
+    pub(crate) fn most_of(&mut self, pf: &PlayerFilter) -> Option<(String, bool)> {
+        let is_max = |v: &Value| matches!(v, Value::OverPlayers(AggOp::Max, PlayerFilter::Any, _));
+        match pf {
+            PlayerFilter::Life(Cmp::Eq, v) if is_max(v) => Some(("life".into(), false)),
+            PlayerFilter::HandSize(Cmp::Eq, v) if is_max(v) => {
+                Some(("cards in hand".into(), false))
+            }
+            PlayerFilter::Controls(f, Cmp::Eq, v) if is_max(v) => {
+                Some((self.noun(f, Num::Many), true))
+            }
+            _ => None,
+        }
     }
 
     /// "player", "opponent", "player with 10 or less life".

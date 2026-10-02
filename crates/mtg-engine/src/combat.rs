@@ -841,7 +841,9 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
             cost,
         } = &r
         {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // "where X is the number of counters on that creature": the attacker.
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(creature)]);
             if !g.restriction_applies(creature, attackers, &ctx, &locked) {
                 continue;
             }
@@ -849,12 +851,19 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
                 Entity::Player(p) => g.player_filter_matches(defender, p, &ctx),
                 Entity::Object(o) => {
                     *planeswalkers
-                        && g.obj(o).is(CardType::Planeswalker)
-                        && g.player_filter_matches(defender, g.obj(o).controller, &ctx)
+                        && ((g.obj(o).is(CardType::Planeswalker)
+                            && g.player_filter_matches(defender, g.obj(o).controller, &ctx))
+                            // "can't attack unless ...": whatever it attacks, a battle too.
+                            || (g.obj(o).is(CardType::Battle)
+                                && matches!(defender, PlayerFilter::Any)))
                 }
             };
             if hit {
-                crate::casting::add_cost(&mut total, cost);
+                // "{1} for each +1/+1 counter on it", "{X}, where X is the number of
+                // enchantments you control": counted from the restriction's point of view
+                // as the cost is determined (CR 508.1h).
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
@@ -1481,8 +1490,12 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
     let mut any = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
-            if g.restriction_applies(blocker, blockers, &Ctx::new(s, c), &locked) {
-                crate::casting::add_cost(&mut total, cost);
+            let mut ctx = Ctx::new(s, c);
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(blocker)]);
+            if g.restriction_applies(blocker, blockers, &ctx, &locked) {
+                // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
