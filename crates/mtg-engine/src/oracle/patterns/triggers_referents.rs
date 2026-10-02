@@ -295,7 +295,9 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         // Only when "that many" is in the first clause: "discard up to two cards, then
         // draw that many cards" refers to the discard instead.
         let head = &el[..i];
-        if head.contains(',') || head.contains(" and ") || head.contains(" then ") {
+        // "You and that player each draw that many cards" (Xyris) is one instruction.
+        let both_draw = head == "you and that player each draw ";
+        if !both_draw && (head.contains(',') || head.contains(" and ") || head.contains(" then ")) {
             return None;
         }
         if el.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {

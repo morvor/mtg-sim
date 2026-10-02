@@ -510,6 +510,7 @@ fn abilities_granted_with_a_casting_permission_last() {
                     lands: false,
                     spells: true,
                     cost: None,
+                    flash: false,
                 })),
                 static_ab(StaticEffect::CastGrant {
                     zone: ZoneKind::Graveyard,

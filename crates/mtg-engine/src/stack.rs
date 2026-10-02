@@ -1006,6 +1006,10 @@ impl Game {
                 .entry(uid | crate::triggers::turn_keys::DONE_ONCE)
                 .or_insert(0) += 1;
         }
+        // The last instruction's events are checked for triggers before the ability
+        // leaves the stack (CR 603.2, 608.2n) — after a "do this only once each turn"
+        // action is remembered, so that action's events don't trigger it again.
+        self.action_boundary();
         // CR 608.2n: the ability ceases to exist.
         self.remove_from_stack(id);
         self.state_triggers_active.remove(&(src, uid));
@@ -1229,6 +1233,9 @@ impl Game {
             return;
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        // The last instruction's events are checked for triggers before the spell leaves
+        // the stack (CR 603.2, 608.2n).
+        self.action_boundary();
         for a in &o.chars.abilities {
             if matches!(a.kind, AbilityKind::Spell(_)) {
                 crate::structure::record(a, &o.chars.name, "resolved");

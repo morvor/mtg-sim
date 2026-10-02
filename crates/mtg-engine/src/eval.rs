@@ -310,6 +310,9 @@ impl Game {
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
+            PlayerFilter::FirstDrawInDrawStep => {
+                crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),

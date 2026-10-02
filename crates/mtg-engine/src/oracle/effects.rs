@@ -930,7 +930,15 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     let rest = rest.as_str();
     let owned_tail: String;
     let (amount, rest) = if let Some(r) = rest.strip_prefix("damage equal to ") {
-        let (v, r2) = super::statics::parse_value_phrase(r, b)?;
+        // "Each creature you control deals damage equal to its power": "its" is each of
+        // the sources in turn (the executor binds `vars::AFFECTED` to each).
+        let multi = matches!(src, Sel::All(_) | Sel::Union(_));
+        let saved_it = multi.then(|| std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)));
+        let parsed = super::statics::parse_value_phrase(r, b);
+        if let Some(it) = saved_it {
+            b.it = it;
+        }
+        let (v, r2) = parsed?;
         owned_tail = r2.trim_start().strip_prefix("to ")?.to_string();
         (v, owned_tail.as_str())
     } else {
