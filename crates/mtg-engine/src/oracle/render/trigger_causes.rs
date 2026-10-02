@@ -94,27 +94,37 @@ impl Renderer<'_> {
         else {
             return None;
         };
-        // The card is described as it was in the library.
-        let f = match filter {
-            Filter::And(v) => Filter::and(
-                v.iter()
-                    .filter(|x| !matches!(x, Filter::InZone(_) | Filter::OwnedBy(_)))
-                    .cloned()
-                    .collect(),
-            ),
-            other => other.clone(),
+        // The card is described as it was in the library. Its owner is the player who
+        // milled it (a library holds only its owner's cards, CR 400.3, 701.17a).
+        let atoms: Vec<Filter> = match filter {
+            Filter::And(v) => v.clone(),
+            other => vec![other.clone()],
         };
+        let owner = atoms.iter().find_map(|x| match x {
+            Filter::OwnedBy(r) => Some(*r),
+            _ => None,
+        });
+        if owner.is_some() && who.is_some() {
+            return None;
+        }
+        let f = Filter::and(
+            atoms
+                .into_iter()
+                .filter(|x| !matches!(x, Filter::InZone(_) | Filter::OwnedBy(_)))
+                .collect(),
+        );
         let many = matches!(det, Det::OneOrMore);
         let n = self.noun_det(&f, det.clone());
-        let player = match &who {
-            Some(pf) => {
+        let player = match (&who, owner) {
+            (Some(pf), _) => {
                 let p = self.player_filter_noun(pf, Num::One);
                 with_article(&p)
             }
-            None => "a player".to_string(),
+            (None, Some(r)) => self.rel_subject(r),
+            (None, None) => "a player".to_string(),
         };
         let _ = Case::Obj;
-        if n.contains(['{', '|', '}']) || who.is_some() {
+        if n.contains(['{', '|', '}']) || who.is_some() || owner.is_some() {
             return Some((player, format!("mills {n}")));
         }
         let be = if many { "are" } else { "is" };

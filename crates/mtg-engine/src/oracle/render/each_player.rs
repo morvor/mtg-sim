@@ -151,6 +151,11 @@ impl Renderer<'_> {
                         shuffle: *shuffle,
                     };
                     let s = self.effect(&e);
+                    // "your library" is the searching player's only when the AST says so;
+                    // any other "your" (the controller's) stays.
+                    if !mine(whose) && format!(" {s} ").contains(" your ") {
+                        return None;
+                    }
                     let s = match s.strip_suffix(", then shuffle") {
                         Some(head) => format!(
                             "{head}, {{alt:then shuffle|each player who searched their library this way shuffles}}"
@@ -170,9 +175,11 @@ impl Renderer<'_> {
                     .iter()
                     .any(|x| format!("{e:?}").contains(&format!("{:?}", PlayerRef::Var(*x)))) =>
                 {
+                    // Not performed as that player: "you" is still the controller, so the
+                    // words stay as rendered.
                     let s = self.effect(e);
                     let s = s.strip_prefix("that player ").unwrap_or(&s).to_string();
-                    vps.push(base_form(&s).replace(" your ", " their "));
+                    vps.push(base_form(&s));
                     j += 1;
                 }
                 _ => break,
@@ -204,6 +211,19 @@ impl Renderer<'_> {
                 s
             }
         };
+        // Only an instruction performed as that player says "you" for that player.
+        if !matches!(
+            e,
+            Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                ..
+            }
+        ) {
+            return format!(" {inner} ")
+                .replace(". that player ", ". ")
+                .trim()
+                .to_string();
+        }
         let inner = inner.strip_prefix("you ").unwrap_or(&inner);
         format!(" {inner} ")
             .replace(". you ", ". ")
@@ -258,6 +278,11 @@ impl Renderer<'_> {
         if matches!(&to.controller, Some(PlayerRef::OwnerOf(s)) if matches!(s.as_ref(), Sel::Var(COLLECTED)))
         {
             to.controller = None;
+        }
+        // The destination is outside the part performed as each player: "you" there is
+        // the controller, which "their" below would misstate.
+        if to.controller.is_some() {
+            return None;
         }
         let vp = self.move_effect(sel, &to);
         let vp = format!(" {vp} ")

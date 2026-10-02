@@ -89,7 +89,7 @@ impl Renderer<'_> {
             crate::search_rules::YOU_SEARCHED_THIS_WAY => "you search your library this way".into(),
             "you_were_the_starting_player" => "you were the starting player".into(),
             "restrictions:declare_blockers_step" => "it's the declare blockers step".into(),
-            "activation:draw_step" => "it's {alt:your|their} draw step".into(),
+            "activation:draw_step" => "it's the draw step".into(),
             "activation:before_end_step" => "it's before the end step".into(),
             // CR 701.42a.
             crate::merge::MELD_PAIR_CONDITION => {

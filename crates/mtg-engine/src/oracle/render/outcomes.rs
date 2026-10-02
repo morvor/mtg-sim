@@ -391,7 +391,12 @@ impl Renderer<'_> {
         let s = self.sel(&what, Case::Obj);
         let text = match (chooser, as_player) {
             (PlayerRef::Iterated, _) | (PlayerRef::You, true) => {
-                let s = format!(" {s} ").replace(" your ", " their ");
+                // Only when chosen as that player is "your" that player's.
+                let s = if as_player {
+                    format!(" {s} ").replace(" your ", " their ")
+                } else {
+                    format!(" {s} ")
+                };
                 format!(
                     "{w} {}",
                     super::effects::third_person(&format!("choose {}", s.trim()))

@@ -45,7 +45,14 @@ impl Renderer<'_> {
     pub(crate) fn custom_effect_more(&mut self, name: &str) -> Option<String> {
         Some(match name {
             // Reinterpret.
+            // "equal or lesser" than the mana value of the spell's one target.
             n if n.starts_with("cast from hand free with mana value at most that of target:") => {
+                let slot: usize = n["cast from hand free with mana value at most that of target:".len()..]
+                    .parse()
+                    .ok()?;
+                if slot != 0 || self.targets.len() != 1 {
+                    return None;
+                }
                 "cast a spell with equal or lesser mana value from your hand without paying its mana cost".into()
             }
             // Powerbalance.
