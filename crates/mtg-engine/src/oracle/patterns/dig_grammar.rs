@@ -39,6 +39,46 @@ inventory::submit! {
     FollowupPattern { name: "dig: you may put [cards] from among them ...", priority: 200, apply: may_take_followup }
 }
 
+/// Whether a dig of "that many" cards (the triggering event's amount) has a trigger with an
+/// amount: damage dealt, creatures attacking. `None` rejects the ability.
+pub fn check_that_many(e: &Effect, trigger: &TriggerCond) -> Option<()> {
+    fn uses_event_amount(e: &Effect) -> bool {
+        match e {
+            Effect::Dig {
+                n: Value::EventAmount,
+                ..
+            }
+            | Effect::Mill {
+                n: Value::EventAmount,
+                ..
+            }
+            | Effect::Exile {
+                what: Sel::TopOfLibrary(_, Value::EventAmount),
+                ..
+            } => true,
+            Effect::Seq(v) => v.iter().any(uses_event_amount),
+            Effect::May { effect, .. } => uses_event_amount(effect),
+            Effect::If {
+                then, otherwise, ..
+            } => uses_event_amount(then) || uses_event_amount(otherwise),
+            _ => false,
+        }
+    }
+    fn has_amount(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::Batched { trigger, .. } => has_amount(trigger),
+            TriggerCond::DealsDamage { .. }
+            | TriggerCond::IsDealtDamage { .. }
+            | TriggerCond::PlayerDealtDamage { .. }
+            | TriggerCond::DealtExcessDamage { .. }
+            | TriggerCond::Attacks(_)
+            | TriggerCond::PlayerAttacks(_) => true,
+            _ => false,
+        }
+    }
+    (!uses_event_amount(e) || has_amount(trigger)).then_some(())
+}
+
 /// "You may put a creature card and/or a land card from among them into your hand.", "You
 /// may put any number of them into your hand and the rest into your graveyard.": an
 /// optional selection is a choice of up to that many cards (what follows, "the rest",

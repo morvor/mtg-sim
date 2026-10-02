@@ -164,6 +164,9 @@ fn parse_triggered_at(
     }
     let trigger_it = it.clone();
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
+    // "look at that many cards from the top of your library": only a trigger with an
+    // amount (damage dealt, creatures attacking) gives "that many" a meaning.
+    super::patterns::dig_grammar::check_that_many(&body.effect, &trigger)?;
     // "Whenever a permanent other than a basic land enters, destroy all other permanents
     // with that name": with no name chosen, "that name" is the triggering object's.
     super::patterns::basic_effects_targets::that_name_of_trigger_object(
