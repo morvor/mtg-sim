@@ -68,6 +68,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         }
         crate::search_rules::HAS_MANA_ABILITY => rel("with a mana ability"),
         crate::search_rules::ENCHANT_CREATURE => rel("with enchant creature"),
+        crate::kw::dig_filters::DOCTORS_COMPANION => rel("with doctor's companion"),
         crate::stack_ability_filters::X_IN_ACTIVATION_COST => {
             rel("with {X} in its activation cost")
         }
