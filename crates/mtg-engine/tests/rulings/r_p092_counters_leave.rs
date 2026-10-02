@@ -250,6 +250,37 @@ fn the_ozolith_copies_counters_and_leave_triggers_still_see_them() {
 }
 
 #[test]
+fn two_ozoliths_each_get_the_counters_and_leave_triggers_use_the_old_count() {
+    cr!("603.10a", "122.5");
+    ruling!(
+        "The Ozolith",
+        "Notably, if you somehow control a second The Ozolith, each one will receive the same number and kinds of counters that were on the creature that left the battlefield."
+    );
+    supported("Mirror Gallery");
+    // Mirror Gallery turns off the legend rule, so P0 keeps both Ozoliths.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mirror Gallery");
+    let a = t.battlefield(P0, "The Ozolith");
+    let b = t.battlefield(P0, "The Ozolith");
+    t.settle();
+    assert!(t.on_battlefield(a) && t.on_battlefield(b));
+    let elite = t.battlefield(P0, "Broodguard Elite");
+    give_plus1(&mut t, elite, 2);
+    put_counters(&mut t, elite, "oil", 1);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(bears)]);
+    destroy(&mut t, elite);
+    t.resolve_all();
+    for oz in [a, b] {
+        assert_eq!(plus1(&t, oz), 2);
+        assert_eq!(t.counters(oz, "oil"), 1);
+    }
+    // Broodguard Elite's own trigger still sees the counters it had.
+    assert_eq!(plus1(&t, bears), 2);
+    assert_eq!(t.counters(bears, "oil"), 1);
+}
+
+#[test]
 fn broodguard_elite_puts_all_kinds_of_its_counters() {
     cr!("603.10a", "122.1");
     ruling!(
