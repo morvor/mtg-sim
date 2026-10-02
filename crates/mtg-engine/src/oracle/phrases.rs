@@ -922,6 +922,10 @@ fn type_list_suffix(t: &str) -> Option<(Filter, &str)> {
         alts.push(f);
         rest = r;
     }
+    // Comma-separated lists ("that's a Cat, Elemental, ... or Beast") are parsed elsewhere.
+    if rest.starts_with(',') {
+        return None;
+    }
     let f = if alts.len() == 1 {
         alts.pop()?
     } else {
