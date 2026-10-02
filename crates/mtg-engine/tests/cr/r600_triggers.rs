@@ -647,6 +647,8 @@ fn modal_trigger(modes: Vec<Mode>) -> CardDef {
                     modes,
                     per_mode_cost: false,
                     chooser: ModeChooser::Controller,
+                    different_players: false,
+                    optional: false,
                 }),
             },
         ))
@@ -736,7 +738,7 @@ fn a_triggered_ability_without_legal_targets_is_removed_from_the_stack() {
             TriggerCond::EntersBattlefield(Filter::Source),
             Body::simple(
                 vec![TargetSpec {
-                    min: 1,
+                    min: Value::c(1),
                     max: Value::c(2),
                     divide: Some(Value::c(3)),
                     ..TargetSpec::any_target()

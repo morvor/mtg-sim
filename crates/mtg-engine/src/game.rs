@@ -460,14 +460,25 @@ pub struct TurnHistory {
     /// the damage (e.g. for prowl, CR 702.76a). Recorded by `kw/prowl.rs`.
     #[serde(default)]
     pub combat_damage_to_players: Vec<crate::kw::prowl::CombatDamageRecord>,
+    /// (source, player) pairs: players dealt damage this turn and by what ("target creature
+    /// that dealt damage to you this turn"). Recorded by `kw/dealt_damage_to_you.rs`.
+    #[serde(default)]
+    pub damage_to_players_by_source: Vec<(ObjectId, PlayerId)>,
     /// Creatures tapped this turn to pay the cost of a Vehicle's crew ability, which
     /// "crewed" it (CR 702.122b–c). Recorded by `kw/crew.rs`.
     #[serde(default)]
     pub crewed: Vec<crate::kw::crew::CrewRecord>,
-    /// Objects whose "once during each of your turns, you may cast ..." permission was
-    /// used this turn. Recorded by `kw/once_each_turn_cast.rs`.
+    /// The "once during each of your turns, you may cast ..." permissions used this turn:
+    /// the object whose ability it is and which of its uses (Muldrotha's "a permanent spell
+    /// of each permanent type": the type). Recorded as a card is played with one (see
+    /// `permissions.rs`, `kw/once_each_turn_cast.rs`).
     #[serde(default)]
-    pub once_permissions_used: Vec<ObjectId>,
+    pub once_permissions_used: Vec<(ObjectId, SmolStr)>,
+    /// Cards players drew during their own draw steps: (player, draw step, card), the step
+    /// being its index in `TurnState::step_log`, in the order drawn ("except the first one
+    /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
+    #[serde(default)]
+    pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -532,7 +543,9 @@ pub struct ActiveStatics {
     pub restrictions: Vec<(ObjectId, PlayerId, Restriction)>,
     pub cost_modifiers: Vec<(ObjectId, PlayerId, CostModifier)>,
     pub replacements: Vec<(ObjectId, PlayerId, Timestamp, Ability, ReplacementDef)>,
-    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission)>,
+    /// (source, controller, permission, the once-each-turn use it is, if it's one: see
+    /// `kw/once_each_turn_cast.rs`)
+    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission, Option<SmolStr>)>,
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,
@@ -703,6 +716,8 @@ pub struct Game {
     /// Watches every event as it's processed, with the game as it is then (see
     /// [`EventObserver`]; [`Game::event_feed`] keeps the events for later reading).
     pub observer: Option<EventObserver>,
+    /// When queued events are checked for triggers (CR 603.2, 608.2c).
+    pub timing: crate::trigger_timing::TriggerTiming,
 }
 
 impl Game {
@@ -813,6 +828,7 @@ impl Game {
             cards: Default::default(),
             event_feed: Default::default(),
             observer: None,
+            timing: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

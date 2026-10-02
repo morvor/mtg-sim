@@ -96,10 +96,24 @@ fn entity_at(chosen: &[ChosenMode], i: Instance) -> Entity {
     chosen[i.cm].targets[i.slot][i.pos]
 }
 
+/// The context a target at `i` is evaluated in: its mode's targets, and for a target
+/// chosen for a player ("target creature that player controls"), that player.
+fn ctx_at(g: &Game, id: ObjectId, chosen: &[ChosenMode], i: Instance) -> Ctx {
+    let cm = &chosen[i.cm];
+    let mut ctx = g.stack_ctx(id);
+    ctx.targets = cm.targets.clone();
+    if let Some(p) = cm.target_players.get(i.slot).and_then(|v| v.get(i.pos)) {
+        ctx.iter_player = Some(*p);
+    }
+    ctx
+}
+
 /// Whether the target at `i` is legal given the whole set of targets `chosen`: legal for
 /// its slot (CR 115.2, 115.4, 115.5), different from the other targets chosen for the
 /// same instance of the word "target" (CR 115.3) and from the slots it must differ from
-/// ("another target").
+/// ("another target"), and with the relationships its slot requires with the other
+/// targets ("from a single graveyard", "with the same controller", "each mode must
+/// target a different player").
 fn legal_at(g: &Game, id: ObjectId, body: &Body, chosen: &[ChosenMode], i: Instance) -> bool {
     let Some(spec) = spec_of(body, chosen, i) else {
         return false;
@@ -123,14 +137,36 @@ fn legal_at(g: &Game, id: ObjectId, body: &Body, chosen: &[ChosenMode], i: Insta
     {
         return false;
     }
+    let ctx = ctx_at(g, id, chosen, i);
     // Targets that must have a relationship with each other ("from a single graveyard").
-    if let Some(grp) = spec.together {
-        if !crate::target_groups::group_ok(g, grp, &cm.targets[i.slot]) {
+    if let Some(grp) = &spec.together {
+        if !crate::target_groups::group_ok(g, grp, &cm.targets[i.slot], &ctx) {
             return false;
         }
     }
-    let mut ctx = g.stack_ctx(id);
-    ctx.targets = cm.targets.clone();
+    // Targets that must be related to another slot's ("with the same controller"), in
+    // either direction.
+    if !crate::target_groups::related_ok(g, spec, &cm.targets[i.slot], &cm.targets, &ctx) {
+        return false;
+    }
+    let specs = specs_for(body, cm);
+    let later_unrelated = specs.iter().enumerate().any(|(k, s)| {
+        s.related_to
+            .as_ref()
+            .is_some_and(|(j, _)| *j as usize == i.slot)
+            && cm.targets.get(k).is_some_and(|theirs| {
+                !crate::target_groups::related_ok(g, s, theirs, &cm.targets, &ctx)
+            })
+    });
+    if later_unrelated {
+        return false;
+    }
+    // "Each mode must target a different player".
+    if body.modal.as_ref().is_some_and(|m| m.different_players)
+        && !crate::mode_players::players_distinct(chosen)
+    {
+        return false;
+    }
     g.is_legal_target(spec, e, &ctx, id)
 }
 
@@ -178,8 +214,7 @@ pub fn change_targets(
         let Some(spec) = spec_of(&body, cur, i) else {
             return vec![];
         };
-        let mut ctx = g.stack_ctx(id);
-        ctx.targets = cur[i.cm].targets.clone();
+        let ctx = ctx_at(g, id, cur, i);
         let original = entity_at(&orig, i);
         g.legal_target_candidates(spec, &ctx, id)
             .into_iter()

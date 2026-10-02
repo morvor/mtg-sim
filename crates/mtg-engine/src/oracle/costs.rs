@@ -11,6 +11,11 @@ pub fn parse_cost(s: &str) -> Option<(Cost, bool)> {
     let s = s.trim();
     // Loyalty costs: "+1", "-2", "0", "-X", "+X".
     let sl = s.replace('−', "-");
+    // A loyalty cost in a quoted ability is written in brackets ("[+1]: ...").
+    let sl = match sl.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+        Some(inner) => inner.to_string(),
+        None => sl,
+    };
     if let Some(n) = parse_loyalty(&sl) {
         return Some((
             Cost {
@@ -75,7 +80,14 @@ pub fn parse_cost(s: &str) -> Option<(Cost, bool)> {
             }
             continue;
         }
-        cost.parts.push(parse_cost_part(&lower)?);
+        match parse_cost_part(&lower) {
+            Some(c) => cost.parts.push(c),
+            // "Sacrifice ~ and a creature you control": several parts (see
+            // `patterns::cost_parts`).
+            None => cost
+                .parts
+                .extend(super::patterns::cost_parts::parse_compound(&lower)?),
+        }
     }
     Some((cost, false))
 }
@@ -117,7 +129,12 @@ fn split_cost_parts(s: &str) -> Vec<&str> {
     let mut merged: Vec<(usize, usize)> = Vec::new();
     for (a, b) in out {
         let part = s[a..b].trim_start().to_lowercase();
-        if part.starts_with("or ") && !merged.is_empty() {
+        // A list of objects continues too: "Sacrifice a white creature, a blue creature,
+        // and a black creature", "Tap three untapped Advisors, Artificers, and/or Monks".
+        let continues = ["or ", "and ", "and/or ", "a ", "an ", "rounded "]
+            .iter()
+            .any(|w| part.starts_with(w));
+        if continues && !merged.is_empty() {
             let mut first = merged.pop().unwrap();
             while !s[first.0..first.1].trim().contains(' ') && !merged.is_empty() {
                 first = merged.pop().unwrap();
@@ -130,8 +147,27 @@ fn split_cost_parts(s: &str) -> Vec<&str> {
     merged.into_iter().map(|(a, b)| &s[a..b]).collect()
 }
 
-fn parse_cost_part(p: &str) -> Option<CostPart> {
+/// "... with different names" after the objects of a cost ("sacrifice three artifact
+/// tokens with different names", "discard three cards with different names"): they must
+/// be chosen together with that relationship (`Filter::Together`, CR 201.2b).
+fn together_suffix(r: &str) -> (&str, Option<Filter>) {
+    match end(r).strip_suffix(" with different names") {
+        Some(rest) => (rest, Some(Filter::Together(TargetGroup::DifferentNames))),
+        None => (r, None),
+    }
+}
+
+/// Parses one part of a cost (lowercase): the core forms, then the registered patterns.
+pub fn parse_cost_part(p: &str) -> Option<CostPart> {
     let p = end(p);
+    parse_cost_part_core(p).or_else(|| {
+        crate::oracle::patterns::cost_patterns()
+            .iter()
+            .find_map(|c| (c.parse)(p))
+    })
+}
+
+fn parse_cost_part_core(p: &str) -> Option<CostPart> {
     if p == "sacrifice ~" {
         return Some(CostPart::SacrificeSelf);
     }
@@ -141,11 +177,15 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     }
     if let Some(r) = strip(p, "sacrifice") {
         let (n, r2) = parse_number(r).unwrap_or((Value::Const(1), r));
+        let (r2, together) = together_suffix(r2);
         let (f, _, tail) = parse_object_phrase(r2)?;
         if !end(tail).is_empty() {
             return None;
         }
-        let f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
+        let mut f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
+        if let Some(t) = together {
+            f = Filter::and(vec![f, t]);
+        }
         return Some(CostPart::Sacrifice {
             filter: f,
             count: n,
@@ -169,7 +209,7 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
         let (n, r2) = parse_number(r)?;
         let random = r2.contains("at random");
         let r2 = r2.replace(" at random", "");
-        let r2 = r2.trim();
+        let (r2, together) = together_suffix(r2.trim());
         let filter = if r2 == "card" || r2 == "cards" {
             Filter::Any
         } else if let Some((a, b)) = r2
@@ -192,6 +232,10 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
                 return None;
             }
             f
+        };
+        let filter = match together {
+            Some(t) => Filter::and(vec![filter, t]),
+            None => filter,
         };
         return Some(CostPart::Discard {
             filter,
@@ -313,10 +357,7 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
     if p == "forage" {
         return Some(CostPart::Forage);
     }
-    // Cost parts registered in `oracle/patterns/`.
-    crate::oracle::patterns::cost_patterns()
-        .iter()
-        .find_map(|c| (c.parse)(p))
+    None
 }
 
 /// "+1/+1 counter", "loyalty counter", "charge counters".

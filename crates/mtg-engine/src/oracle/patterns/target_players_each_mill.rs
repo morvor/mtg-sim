@@ -29,7 +29,7 @@ fn target_players_each_mill(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let text = "target players";
     let mut spec = TargetSpec::player(PlayerFilter::Any, text);
-    spec.min = min;
+    spec.min = Value::c(min as i32);
     spec.max = max;
     let slot = b.add_target(spec, text);
     Some(Effect::ForEachPlayer {

@@ -75,16 +75,32 @@ fn multiple_draws(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abil
 
 /// "If you would draw a card while your library has no cards in it, you win the game
 /// instead." (CR 121.6a: the replacement applies even though no card could be drawn.)
-fn draw_from_empty_library(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if l != "if you would draw a card while your library has no cards in it, you win the game instead"
-    {
-        return None;
-    }
+/// Also "..., instead [effect]." with a one-sentence effect ("instead put five +1/+1
+/// counters on Ormos", Ormos, Archive Keeper): each draw from the empty library is
+/// replaced.
+fn draw_from_empty_library(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const IF: &str = "if you would draw a card while your library has no cards in it, ";
+    let rest = l.strip_prefix(IF)?;
+    let effect = if rest == "you win the game instead" {
+        Effect::WinGame {
+            who: PlayerRef::You,
+        }
+    } else {
+        let clause = rest.strip_prefix("instead ")?;
+        let clause = clause.strip_suffix('.').unwrap_or(clause);
+        if clause.contains('.') {
+            return None;
+        }
+        let mut b = crate::oracle::effects::Builder::new(ctx);
+        let e = crate::oracle::effects::parse_effect_text(clause, &mut b)?;
+        if !b.targets.is_empty() {
+            return None;
+        }
+        e
+    };
     let mut s = StaticAbility::new(replacement(
         ReplacementEvent::Draw(PlayerFilter::You),
-        ReplacementAction::Instead(Box::new(Effect::WinGame {
-            who: PlayerRef::You,
-        })),
+        ReplacementAction::Instead(Box::new(effect)),
     ));
     s.condition = Some(Condition::Compare(
         Value::LibrarySize(PlayerRef::You),

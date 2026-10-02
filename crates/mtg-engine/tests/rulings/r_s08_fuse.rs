@@ -255,6 +255,7 @@ fn a_fuse_card_cast_from_outside_the_hand_is_cast_as_one_half() {
         free: false,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     assert!(can_cast(&mut t, P0, card, CastMethod::Half(0)));
     assert!(can_cast(&mut t, P0, card, CastMethod::Half(1)));

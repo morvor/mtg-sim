@@ -344,6 +344,7 @@ fn top_of_library_permission(name: &str, what: Filter) -> CardDef {
             lands: false,
             spells: true,
             cost: None,
+            flash: false,
         })))
         .build()
 }
@@ -414,6 +415,7 @@ fn face_down_exiled_cards_can_be_cast_only_by_a_player_who_can_look_at_them() {
                 lands: false,
                 spells: true,
                 cost: None,
+                flash: false,
             })))
             .build(),
         Zone::Battlefield,
@@ -434,6 +436,7 @@ fn face_down_exiled_cards_can_be_cast_only_by_a_player_who_can_look_at_them() {
         free: false,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     t.cast(P0, down).go();
     t.resolve();
@@ -574,6 +577,8 @@ fn modes_may_depend_on_additional_costs_chosen_later_in_the_announcement() {
                     ],
                     per_mode_cost: false,
                     chooser: ModeChooser::Controller,
+                    different_players: false,
+                    optional: false,
                 }),
             })
             .build()
@@ -643,6 +648,8 @@ fn opponent_modal() -> CardDef {
                 ],
                 per_mode_cost: false,
                 chooser: ModeChooser::Opponent,
+                different_players: false,
+                optional: false,
             }),
         })
         .build()

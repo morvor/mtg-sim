@@ -128,6 +128,14 @@ pub struct Modal {
     pub per_mode_cost: bool,
     /// Modes chosen by an opponent (CR 700.2e) or at random.
     pub chooser: ModeChooser,
+    /// "Each mode must target a different player": no player is the target of two of
+    /// the chosen modes (see `mode_players.rs`).
+    #[serde(default)]
+    pub different_players: bool,
+    /// "You may choose two": the controller chooses that many modes or none (a triggered
+    /// ability with no mode chosen is removed from the stack, CR 700.2b).
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,6 +195,19 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "This ability costs {1} less to activate for each ...": changes to this ability's
+    /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
+    #[serde(default)]
+    pub own_cost_changes: Vec<OwnCostChange>,
+}
+
+/// A change an activated ability makes to its own total cost, applying while its condition
+/// holds ("This ability costs {2} less to activate if you control a legendary creature").
+/// Values and conditions are evaluated with the ability's targets once they're chosen.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OwnCostChange {
+    pub change: CostChange,
+    pub condition: Option<Condition>,
 }
 
 impl ActivatedAbility {
@@ -201,6 +222,7 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            own_cost_changes: Vec::new(),
         }
     }
 }
@@ -649,7 +671,11 @@ pub enum LibraryPosition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TargetSpec {
     pub what: TargetKind,
-    pub min: u32,
+    /// The fewest targets that must be chosen. Like `max`, it's evaluated as targets are
+    /// chosen, after X and the number of times the spell is kicked are announced
+    /// (CR 601.2b, 601.2c): "X target creatures" has exactly X targets (`min` and `max`
+    /// both X), never more than `max`.
+    pub min: Value,
     pub max: Value,
     /// Each target in this slot must be different from targets in these other slots
     /// ("another target creature").
@@ -669,12 +695,25 @@ pub struct TargetSpec {
     /// share a creature type"); see `target_groups.rs`.
     #[serde(default)]
     pub together: Option<TargetGroup>,
+    /// A relationship the targets of this instance of the word "target" must have with
+    /// those of an earlier one, slot `.0` ("move a counter from target creature onto
+    /// another target creature with the same controller"); see `target_groups.rs`.
+    #[serde(default)]
+    pub related_to: Option<(u8, TargetGroup)>,
+    /// "For each opponent, ... up to one target creature that player controls": this
+    /// instance of the word "target" is chosen once for each player in the game this
+    /// filter matches, `min` to `max` targets for each, where the object filter's
+    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
+    /// target; on resolution each target must still match for the player it was chosen
+    /// for. See `per_player_targets.rs`.
+    #[serde(default)]
+    pub per_player: Option<PlayerFilter>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
 /// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
 /// (CR 608.2b).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TargetGroup {
     /// All have the same owner: cards "from a single graveyard", or "two target cards
     /// from an opponent's graveyard" (one opponent's graveyard).
@@ -686,18 +725,47 @@ pub enum TargetGroup {
     ShareCreatureType,
     /// There's a card type all of them have.
     ShareCardType,
+    /// There's one of these card types all of them have ("another target permanent that
+    /// shares one of those types with it", the types the first target was described by).
+    ShareCardTypeAmong(Vec<CardType>),
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them are controlled by the same player ("with different controllers").
+    DifferentControllers,
+    /// No two of them have the same name ("with different names", CR 201.2).
+    DifferentNames,
+    /// No two of them have the same mana value ("with different mana values").
+    DifferentManaValues,
+    /// No two of them have the same power ("with different powers").
+    DifferentPowers,
+    /// All have the same toughness ("with equal toughness").
+    EqualToughness,
+    /// Each stands for a different card type it has ("for each card type, ... a card of
+    /// that type"): an object with several card types counts as any one of them.
+    OnePerCardType,
+    /// Their total of a value is at most the value ("with total mana value 6 or less",
+    /// "with total mana value X or less", "with total power 10 or less").
+    TotalAtMost(TotalStat, Box<Value>),
+}
+
+/// What [`TargetGroup::TotalAtMost`] adds up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TotalStat {
+    ManaValue,
+    Power,
+    Toughness,
+    /// Power plus toughness.
+    PowerAndToughness,
 }
 
 impl TargetSpec {
     pub fn one(what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
             what,
-            min: 1,
+            min: Value::Const(1),
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
@@ -705,11 +773,13 @@ impl TargetSpec {
             text: text.into(),
             condition: None,
             together: None,
+            related_to: None,
+            per_player: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
-            min: 0,
+            min: Value::Const(0),
             max: Value::Const(n),
             ..TargetSpec::one(what, text)
         }
@@ -722,6 +792,13 @@ impl TargetSpec {
     }
     pub fn any_target() -> TargetSpec {
         TargetSpec::one(TargetKind::AnyTarget, "any target")
+    }
+    /// `min` when it's a fixed number (most target phrases: "target", "up to two").
+    pub fn fixed_min(&self) -> Option<i32> {
+        match self.min {
+            Value::Const(n) => Some(n),
+            _ => None,
+        }
     }
 }
 
@@ -784,6 +861,10 @@ pub mod vars {
     /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
     /// this way", CR 120.10), as a number.
     pub const EXCESS: Var = 7;
+    /// The object a [`Filter::ValueCmp`] is testing, or that a [`Value::Extreme`] is
+    /// measuring, while its values are evaluated ("with toughness greater than its power",
+    /// "the greatest power among creatures you control"; see `relational.rs`).
+    pub const TESTED: Var = 6;
 }
 
 /// Selects players and/or objects.
@@ -814,6 +895,9 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents or players the selected objects are attached to ("the permanent
+    /// target Aura is attached to").
+    HostOf(Box<Sel>),
     /// Objects attached to the source ("equipment attached to it").
     AttachedToThis,
     /// All objects matching the filter.
@@ -927,6 +1011,11 @@ pub enum PlayerFilter {
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
+    /// A player the card they would draw now would be the first one they draw in this
+    /// draw step: it's one of their draw steps and they haven't drawn a card in it yet
+    /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
+    /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
+    FirstDrawInDrawStep,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
@@ -1168,6 +1257,12 @@ pub enum Filter {
     Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
+    /// Attached to one of the selected permanents or players ("Auras attached to target
+    /// permanent").
+    AttachedTo(Box<Sel>),
+    /// An object each of the selected objects could legally be attached to right now
+    /// ("another permanent it can enchant", CR 301.5c, 303.4).
+    CanBeAttachedBy(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -1237,6 +1332,18 @@ pub enum Filter {
     /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
     /// filter: "activated or triggered ability ... from an artifact source".
     AbilityFrom(Box<Filter>),
+    /// A value of the object compared with another value: the object is in
+    /// [`vars::TESTED`] while both are evaluated ("with toughness greater than its power",
+    /// "with total power and toughness 5 or less", "with the greatest mana value among
+    /// creatures you control"; see `relational.rs`).
+    ValueCmp(Box<Value>, Cmp, Box<Value>),
+    /// A requirement on the objects chosen together for one selection ("up to four cards
+    /// with different names", "any number of creature cards with total mana value 6 or
+    /// less", "sacrifice three artifact tokens with different names"). Every object
+    /// matches it on its own; whatever chooses the objects (target slots, searches,
+    /// choices, costs) checks the group (see `relational.rs`,
+    /// `target_groups::choose_together`).
+    Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1407,6 +1514,10 @@ pub enum Value {
     /// The first value if the condition holds, otherwise the second ("choose one. If you
     /// control a commander as you cast this spell, you may choose both instead").
     If(Box<Condition>, Box<Value>, Box<Value>),
+    /// The greatest (`true`) or least value among the selected objects, each measured with
+    /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
+    /// "the lowest mana value among nonland permanents"); 0 if there are none.
+    Extreme(Box<Value>, Box<Sel>, bool),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
 }
@@ -1606,6 +1717,11 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
@@ -1960,6 +2076,19 @@ pub enum ReplacementEvent {
         by: PlayerRel,
         kind: Option<CounterKind>,
     },
+    /// Counters (of `kind`) would be put on an object matching `on_objects` or a player
+    /// matching `on_players`, by a player matching `by` if given (CR 122.6, 122.6a: "If you
+    /// would put one or more counters on a permanent you control"), and, if `effect_only`,
+    /// by an effect (CR 609.1: "If an effect would put one or more counters on a permanent
+    /// you control" doesn't apply to counters put as a cost, as the result of damage, or by
+    /// a turn-based action; see [`crate::events::CounterOrigin`]).
+    PutCountersMatching {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        by: Option<PlayerRel>,
+        effect_only: bool,
+    },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
     /// One or more tokens with the characteristics described by `tokens` would be created
@@ -2133,6 +2262,17 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
+    /// they may attack though their controller hasn't controlled them continuously since
+    /// their most recent turn began. With `defender`, only those players and planeswalkers
+    /// they control ("can attack your opponents and planeswalkers your opponents control
+    /// as though those creatures had haste"). See `as_though::may_attack_as_though_haste`.
+    AttackAsThoughHaste {
+        attackers: Filter,
+        defender: Option<PlayerFilter>,
+    },
+    /// "[blockers] can block as though they were untapped" (CR 509.1a with 609.4).
+    BlockAsThoughUntapped(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
@@ -2319,6 +2459,8 @@ pub enum AbilityClass {
     Any,
     /// Loyalty abilities (CR 606).
     Loyalty,
+    /// Mana abilities (CR 605).
+    Mana,
     /// Abilities a keyword defines ("equip abilities", "cycling costs").
     Keyword(KeywordKind),
 }
@@ -2542,6 +2684,74 @@ pub struct PlayPermission {
     pub spells: bool,
     /// Alternative cost, e.g. "without paying its mana cost" or "by paying life".
     pub cost: Option<Cost>,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 702.8a):
+    /// spells cast with this permission may be cast any time their player could cast an
+    /// instant.
+    #[serde(default)]
+    pub flash: bool,
+}
+
+/// The terms an effect's permission to play particular cards comes with (CR 601.3,
+/// 305.1): what it allows, and how spells cast with it are cast. A player who has several
+/// permissions to play a card chooses which one they're using as they begin to play it,
+/// and gets that one's terms (see `permissions.rs`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayTerms {
+    /// "You may cast that card": a permission to cast it, not to play it as a land (to
+    /// play a card is to play it as a land or cast it, whichever is appropriate; a land
+    /// can't be cast, CR 305.9).
+    #[serde(default)]
+    pub spells_only: bool,
+    /// The alternative cost a spell cast with the permission must be cast for ("If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost.", CR 118.9b): no other alternative cost can be used with it (CR 118.9a).
+    /// `Value::ManaValueOf(Sel::This)` in it is the mana value of the spell the card would
+    /// become (X being 0, CR 107.3b).
+    #[serde(default)]
+    pub alt_cost: Option<Cost>,
+    /// An additional cost a spell cast with the permission must be cast with ("by paying 2
+    /// life in addition to paying its other costs", CR 601.2b, 601.2f); amounts may be
+    /// relative to the spell as for `alt_cost`.
+    #[serde(default)]
+    pub extra_cost: Option<Cost>,
+    /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
+    #[serde(default)]
+    pub flash: bool,
+    /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
+    #[serde(default)]
+    pub cost_increase: u32,
+    /// "Each land played this way enters tapped" (CR 614.1d).
+    #[serde(default)]
+    pub lands_enter_tapped: bool,
+    /// "You may spend mana as though it were mana of any color to cast that spell": for
+    /// spells cast with this permission only (CR 609.4b, 118.14).
+    #[serde(default)]
+    pub spend_as_any_color: bool,
+    /// "Mana of any type can be spent to cast it": for spells cast with this permission
+    /// only (CR 118.14).
+    #[serde(default)]
+    pub spend_any_type: bool,
+}
+
+impl PlayTerms {
+    /// Adds `other`'s terms to these.
+    pub fn merge(&mut self, other: &PlayTerms) {
+        self.spells_only |= other.spells_only;
+        if other.alt_cost.is_some() {
+            self.alt_cost = other.alt_cost.clone();
+        }
+        if let Some(e) = &other.extra_cost {
+            match self.extra_cost.as_mut() {
+                Some(c) => crate::casting::add_cost(c, e),
+                None => self.extra_cost = Some(e.clone()),
+            }
+        }
+        self.flash |= other.flash;
+        self.cost_increase += other.cost_increase;
+        self.lands_enter_tapped |= other.lands_enter_tapped;
+        self.spend_as_any_color |= other.spend_as_any_color;
+        self.spend_any_type |= other.spend_any_type;
+    }
 }
 
 /// Trigger events (CR 603). Filters are relative to the ability's source.
@@ -2674,6 +2884,37 @@ pub enum TriggerCond {
         /// put action ("one or more [kind] counters are put on …").
         #[serde(default)]
         each: bool,
+    },
+    /// "Whenever [who] put(s) one or more [kind] counters on [objects or players]" (once
+    /// for each put action on each permanent or player) / "Whenever [who] put(s) a [kind]
+    /// counter on …" (`each`: once for each counter) (CR 122.6, 122.6a): counters put by a
+    /// player matching `who`, however they were put (by an effect, as a cost, as the result
+    /// of damage, or by a turn-based action, [`crate::events::CounterOrigin`]). Event
+    /// object = the permanent (none for a player), player = the player who put them,
+    /// amount = how many.
+    CountersPutBy {
+        who: PlayerRel,
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        each: bool,
+    },
+    /// "Whenever a spell or ability [by] controls destroys [filter]" (CR 701.8): a
+    /// permanent destroyed by the effect of a spell or ability (not by a state-based
+    /// action, CR 704.5g–h, and not sacrificed or exiled). Looks back in time
+    /// (CR 603.10a). Event object = the permanent as it last existed on the battlefield,
+    /// player = the controller of the spell or ability.
+    DestroyedBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// "When/Whenever [filter spell] is countered by a spell or ability [by] controls"
+    /// (CR 701.6). Looks back in time (CR 603.10e). Event object = the spell as it last
+    /// existed on the stack, player = the controller of the spell or ability that
+    /// countered it.
+    CounteredBy {
+        filter: Filter,
+        by: PlayerRel,
     },
     CountersRemoved {
         filter: Filter,
@@ -3105,6 +3346,15 @@ pub enum Effect {
         tapped: bool,
         attacking: bool,
     },
+    /// "Create a 0/0 green Ooze creature token ... The token enters with X +1/+1 counters
+    /// on it" (Printlifter Ooze): the tokens `effect` creates enter with these counters
+    /// (CR 122.6) — abilities that trigger on them entering see them with the counters.
+    /// Each number is determined just before the tokens are created ("other creatures"
+    /// than them are the creatures already there).
+    TokensEnterWithCounters {
+        counters: Vec<(CounterKind, Value)>,
+        effect: Box<Effect>,
+    },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
     /// can't legally enchant it isn't created.
@@ -3521,6 +3771,14 @@ pub enum Effect {
         duration: Duration,
         free: bool,
     },
+    /// The permissions to play cards `effect` gives (`GrantPlayPermission`) come with
+    /// `terms`: "you may cast that card" (not play it as a land), "If you cast a spell
+    /// this way, pay life equal to its mana value rather than pay its mana cost", "you may
+    /// cast them as though they had flash" (see [`PlayTerms`], `permissions.rs`).
+    WithPlayTerms {
+        terms: PlayTerms,
+        effect: Box<Effect>,
+    },
     /// Prevent the next N damage / all damage (CR 615).
     PreventDamage {
         to: Sel,
@@ -3634,6 +3892,18 @@ pub enum UntilEvent {
 }
 
 impl Effect {
+    /// The permissions to play cards this effect gives are permissions to cast them ("you
+    /// may cast that card"): a land can't be played with them (CR 305.9).
+    pub fn cast_only(self) -> Effect {
+        Effect::WithPlayTerms {
+            terms: PlayTerms {
+                spells_only: true,
+                ..Default::default()
+            },
+            effect: Box::new(self),
+        }
+    }
+
     pub fn seq(v: Vec<Effect>) -> Effect {
         let mut out = Vec::new();
         for e in v {

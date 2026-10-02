@@ -335,6 +335,11 @@ pub struct ChosenMode {
     pub targets: Vec<Vec<Entity>>,
     /// Division of damage/counters among targets (CR 601.2d), per slot.
     pub divided: Vec<Vec<u32>>,
+    /// For a slot whose targets are chosen for each player ("for each opponent, ... up
+    /// to one target creature that player controls", `TargetSpec::per_player`): the
+    /// player each target was chosen for, parallel to `targets`. Empty otherwise.
+    #[serde(default)]
+    pub target_players: Vec<Vec<PlayerId>>,
 }
 
 /// Stack-specific data for spells and abilities on the stack.
@@ -495,6 +500,12 @@ pub struct LeftBattlefield {
     pub blocked: bool,
     pub enchanted: bool,
     pub equipped: bool,
+    /// An Aura, Equipment or Fortification was still attached to the object or player it
+    /// was attached to (which may have left the battlefield at the same time). One whose
+    /// object left the battlefield before it did wasn't attached to anything as it last
+    /// existed there.
+    #[serde(default)]
+    pub attached: bool,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability

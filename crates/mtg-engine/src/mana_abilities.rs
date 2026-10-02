@@ -29,9 +29,10 @@ pub struct ManaSource {
     pub sac_count: usize,
     /// The special action (`special_actions::SpecialOffer::id`) this is one use of.
     pub offer: Option<u32>,
-    /// The life a use of the special action costs (CR 119.4): the uses planned for one
-    /// payment can't cost more life than the player has, Phyrexian mana paid with life
-    /// included.
+    /// The life a use of the special action, or an activation of the mana ability (its
+    /// total cost: "{T}, Pay 1 life", "Mana abilities of ~ cost an additional 1 life"),
+    /// costs (CR 119.4, 118.3): the sources planned for one payment can't cost more life
+    /// than the player has, Phyrexian mana paid with life included.
     pub life: u32,
 }
 
@@ -1049,14 +1050,22 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             let mut ok = true;
             let mut sac_pool = Vec::new();
             let mut sac_count = 0;
-            for part in &act.cost.parts {
+            let mut life = 0u32;
+            // The total cost, with the changes effects make to it ("Mana abilities of ~
+            // cost an additional 1 life to activate", CR 601.2f, 602.2b).
+            let total = g.ability_total_cost(p, o.id, a, act);
+            for part in &total.parts {
                 match part {
                     CostPart::Tap => {
                         if o.tapped
                             || (o.is_creature()
                                 && o.summoning_sick
                                 && !o.has_keyword(KeywordKind::Haste)
-                                && !crate::activation_costs::as_though_haste(g, p, o.id))
+                                && !crate::as_though::as_though_haste(
+                                    g,
+                                    o.id,
+                                    crate::as_though::HasteUse::Activate(p),
+                                ))
                         {
                             ok = false;
                         }
@@ -1081,7 +1090,14 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         }
                         rank = rank.max(4);
                     }
-                    CostPart::PayLife(_) => rank = rank.max(2),
+                    CostPart::PayLife(v) => {
+                        let n = g.eval_value(v, &Ctx::new(Some(o.id), p)).max(0) as u32;
+                        if !g.can_pay_life(p, n) {
+                            ok = false;
+                        }
+                        life += n;
+                        rank = rank.max(2);
+                    }
                     CostPart::RemoveCounters { kind, count } => {
                         let n = g.eval_value(count, &Ctx::new(Some(o.id), p)).max(0) as u32;
                         if o.counter(kind) < n {
@@ -1089,10 +1105,13 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         }
                         rank = rank.max(2);
                     }
+                    // "Put a -0/-1 counter on this creature: Add {G}." (Wall of Roots): it
+                    // shrinks the permanent, so it's used after cheaper sources.
+                    CostPart::AddCounters { .. } => rank = rank.max(3),
                     _ => ok = false,
                 }
             }
-            if act.cost.mana.as_ref().is_some_and(|m| !m.is_zero()) {
+            if total.mana.as_ref().is_some_and(|m| !m.is_zero()) {
                 // Mana abilities that cost mana (filters) aren't auto-planned.
                 ok = false;
             }
@@ -1146,7 +1165,7 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         sac_pool: sac_pool.clone(),
                         sac_count,
                         offer: None,
-                        life: 0,
+                        life,
                     });
                 }
             }

@@ -375,6 +375,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
         "creature_died_under_your_control_this_turn" => {
             h.creatures_died.iter().any(|o| g.obj(*o).controller == you)
         }
+        "creature_died_under_an_opponents_control_this_turn" => h
+            .creatures_died
+            .iter()
+            .any(|o| g.are_opponents(you, g.obj(*o).controller)),
         "you_descended_this_turn" => h.descended.get(&you).is_some_and(|n| *n > 0),
         "card_left_your_graveyard_this_turn" => {
             h.cards_left_graveyard.get(&you).is_some_and(|n| *n > 0)
@@ -443,6 +447,7 @@ pub fn custom_trigger(
             target: Entity::Object(o),
             kind,
             n,
+            ..
         } = ev
         {
             if *o == src && kind.as_str() == counters::LORE {

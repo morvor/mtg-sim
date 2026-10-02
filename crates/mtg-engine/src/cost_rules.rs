@@ -499,6 +499,13 @@ pub fn spend_any_type(g: &Game, p: PlayerId, spell: ObjectId, cost: &mut Cost) {
     if !any_type && !may_spend_as_any_color(g, p, spell) {
         return;
     }
+    pay_with_any_mana(cost, any_type);
+}
+
+/// The mana `cost` asks for when mana may be spent as though it were mana of any color
+/// (and, if `any_type`, colorless too) to pay it: each such symbol can be paid with one
+/// mana of any type (CR 609.4b, 118.14).
+pub fn pay_with_any_mana(cost: &mut Cost, any_type: bool) {
     let Some(m) = cost.mana.as_mut() else {
         return;
     };

@@ -179,12 +179,15 @@ pub fn search(
             }
             _ => None,
         };
-        match chosen {
+        let found = match chosen {
             Some(v) => v,
             // Default (or invalid) answers: automated agents prefer finding cards.
             None if g.search_finds_by_default => cands.iter().copied().take(n as usize).collect(),
             None => cands.iter().copied().take(min as usize).collect(),
-        }
+        };
+        // "Up to three artifact cards with different names": the cards found must have
+        // the relationship (see `target_groups::fit_together`).
+        crate::target_groups::fit_together(g, filter, found, &cands, min as usize, ctx)
     };
     // CR 701.23h: searching a library again before it's shuffled is the same search.
     if crate::search_rules::begin(g, searcher, owner, ctx) {
@@ -224,7 +227,19 @@ pub fn dig(
         .collect();
     let k = take.min(cands.len() as u32);
     let min = if up_to { 0 } else { k };
-    let taken = g.ask_objects(p, ctx.source, "Choose cards to take", cands, min, k);
+    // ("For each card type, ... a card of that type": the cards taken must be chosen
+    // together, see `target_groups::choose_together`.)
+    let taken = crate::target_groups::choose_together(
+        g,
+        p,
+        ctx.source,
+        "Choose cards to take",
+        filter,
+        cands,
+        min,
+        k,
+        ctx,
+    );
     let rest: Vec<ObjectId> = cards
         .iter()
         .copied()

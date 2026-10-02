@@ -251,7 +251,7 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             )
         };
         let mut spec = TargetSpec::player(filter, text);
-        spec.min = 0;
+        spec.min = Value::c(0);
         spec.max = max;
         let slot = b.add_target(spec, text);
         // The predicate is in the plural ("each discard"): reword it as a singular one.

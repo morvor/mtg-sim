@@ -14,9 +14,16 @@ fn once_each_turn_cast(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<
     if ctx.is_spell() {
         return None;
     }
-    let r = end(l)
-        .strip_prefix("once during each of your turns, you may cast ")?
-        .strip_suffix(" from your graveyard")?;
+    let body = end(l).strip_prefix("once during each of your turns, you may cast ")?;
+    // "... from your graveyard with mana value less than or equal to the number of quest
+    // counters on ~" (Arcade Gannon): the qualifier after the zone.
+    let r = match body.strip_suffix(" from your graveyard") {
+        Some(x) => x.to_string(),
+        None => {
+            let (a, q) = body.split_once(" from your graveyard with ")?;
+            format!("{a} with {q}")
+        }
+    };
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     // "[quality] spell [with ...]": a card that would be cast as such a spell.
     let (before, after) = r.split_once("spell")?;
@@ -36,6 +43,7 @@ fn once_each_turn_cast(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<
         lands: false,
         spells: true,
         cost: None,
+        flash: false,
     }));
     s.condition = Some(Condition::And(vec![
         Condition::YourTurn,

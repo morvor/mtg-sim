@@ -16,9 +16,30 @@ fn cast_from_hand_free_mv(l: &str, _b: &mut Builder) -> Option<Effect> {
         .strip_prefix("cast ")?
         .strip_suffix(" without paying its mana cost")?;
     let (spell, mv) = r.split_once(" from your hand with mana value ")?;
-    let (cmp, v) = match mv {
-        "less than or equal to that damage" => (Cmp::Le, Value::EventAmount),
-        _ => return None,
+    let mv_filter = match mv {
+        "less than or equal to that damage" => {
+            Filter::ManaValue(Cmp::Le, Box::new(Value::EventAmount))
+        }
+        // "less than or equal to the number of ingenuity counters on ~" (Lady Octopus).
+        _ => {
+            let desc = format!("cards with mana value {mv}");
+            let (f, _, tail) = parse_object_phrase(&desc)?;
+            let parts = match f {
+                Filter::And(v) => v,
+                x => vec![x],
+            };
+            let parts: Vec<Filter> = parts
+                .into_iter()
+                .filter(|p| !matches!(p, Filter::Card))
+                .collect();
+            if !end(tail).trim().is_empty()
+                || parts.len() != 1
+                || !matches!(parts[0], Filter::ManaValue(..))
+            {
+                return None;
+            }
+            parts.into_iter().next()?
+        }
     };
     let spell = spell
         .strip_prefix("a ")
@@ -28,7 +49,7 @@ fn cast_from_hand_free_mv(l: &str, _b: &mut Builder) -> Option<Effect> {
         Filter::InZone(ZoneKind::Hand),
         Filter::OwnedBy(PlayerRel::You),
         Filter::Not(Box::new(Filter::Type(CardType::Land))),
-        Filter::ManaValue(cmp, Box::new(v)),
+        mv_filter,
     ];
     if !before.is_empty() {
         let desc = format!("{before}card");

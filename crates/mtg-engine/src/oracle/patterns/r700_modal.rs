@@ -76,6 +76,8 @@ fn repeatable_modes(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         modes,
         per_mode_cost: false,
         chooser: ModeChooser::Controller,
+        different_players: false,
+        optional: false,
     };
     modal_ability(modal, block, ctx)
 }
@@ -101,6 +103,8 @@ fn opponent_chooses_mode(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
         modes,
         per_mode_cost: false,
         chooser: ModeChooser::Opponent,
+        different_players: false,
+        optional: false,
     };
     modal_ability(modal, block, ctx)
 }
@@ -159,6 +163,8 @@ fn spree_modes(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         modes,
         per_mode_cost: true,
         chooser: ModeChooser::Controller,
+        different_players: false,
+        optional: false,
     };
     modal_ability(modal, block, ctx)
 }
