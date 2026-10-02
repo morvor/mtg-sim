@@ -18,6 +18,11 @@ use crate::types::*;
 /// cost (costs are paid while a spell is cast or an ability activated).
 pub const DISCARDED_BY_EFFECT: &str = "discarded by an effect";
 
+/// "The discarded card": the cards discarded to pay the cost of the resolving spell or
+/// ability, or by its latest discard instruction, as the new objects they became
+/// (CR 400.7j).
+pub const DISCARDED: Var = vars::USER + 145;
+
 pub fn custom_filter(g: &Game, name: &str, _id: ObjectId, _ctx: &Ctx) -> Option<bool> {
     match name {
         DISCARDED_BY_EFFECT => Some(g.special.casting == 0),

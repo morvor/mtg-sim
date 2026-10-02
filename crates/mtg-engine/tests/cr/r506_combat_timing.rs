@@ -198,6 +198,8 @@ fn before_a_point_of_a_skipped_combat_phase_means_before_precombat_main_ends() {
     let mut t = TestGame::new(2);
     let before = t.hand(P0, "Rapid Fire");
     t.lands(P0, "Plains", 4);
+    // A creature to target (Rapid Fire's target).
+    t.battlefield(P0, "Grizzly Bears");
     t.g.players[0].skips.push(StepKind::Combat);
     assert!(castable(&mut t, P0, before));
     go_to(&mut t, Step::PostcombatMain);
