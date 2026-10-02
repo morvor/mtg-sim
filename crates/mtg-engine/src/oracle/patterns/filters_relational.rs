@@ -536,6 +536,30 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
             rest,
         ));
     }
+    // "each artifact with mana value less than or equal to the number of rust counters on
+    // it" (Corrosion): "it" is the object described.
+    if let Some(r) = x.strip_prefix("the number of ") {
+        let own = |kind: Option<&str>, rest: &'a str| {
+            let v = Value::CountersOn(Box::new(Sel::Var(vars::TESTED)), kind.map(Into::into));
+            Some((
+                Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v)),
+                rest,
+            ))
+        };
+        if let Some(rest) = r.strip_prefix("counters on it").filter(|r| word_end(r)) {
+            return own(None, rest);
+        }
+        if let Some((kind, rest)) = r.split_once(" counters on it") {
+            if word_end(rest)
+                && !kind.is_empty()
+                && kind
+                    .chars()
+                    .all(|c| c.is_alphabetic() || matches!(c, '+' | '-' | '/'))
+            {
+                return own(Some(kind), &r[kind.len() + " counters on it".len()..]);
+            }
+        }
+    }
     let (v, rest) = value_in(x)?;
     Some((stat_filter(stat, cmp, v), rest))
 }

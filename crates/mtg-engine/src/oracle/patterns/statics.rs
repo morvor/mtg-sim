@@ -448,7 +448,7 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if let Some((g, _, r)) = parse_object_phrase(&probe) {
                 let consumed = t.len().saturating_sub(r.len());
                 if consumed > 0 && r.len() <= t.len() {
-                    parts.push(g);
+                    parts.push(crate::oracle::phrases::without_probe_card(g));
                     rest = &t[consumed..];
                     continue;
                 }

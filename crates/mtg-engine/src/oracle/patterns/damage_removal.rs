@@ -300,6 +300,27 @@ fn players_of(prev: Option<&Sel>, b: &Builder) -> Option<PlayerRel> {
     }
 }
 
+/// "Any other target" when the source of the damage is the object `src`: a creature,
+/// planeswalker, or battle (CR 115.4) other than that object. `None` when `src` isn't an
+/// object that could be a target.
+pub fn any_other_than(src: &Sel) -> Option<Filter> {
+    let other = match src {
+        Sel::This => Filter::Other,
+        Sel::AttachedTo | Sel::TriggerObject | Sel::Target(_) | Sel::Var(_) => {
+            Filter::Not(Box::new(Filter::In(Box::new(src.clone()))))
+        }
+        _ => return None,
+    };
+    Some(Filter::and(vec![
+        Filter::Or(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::Type(crate::types::CardType::Planeswalker),
+            Filter::Type(crate::types::CardType::Battle),
+        ]),
+        other,
+    ]))
+}
+
 /// "Any other target": other than the object dealing the damage too ("enchanted creature
 /// deals damage equal to its power to any other target", "~ deals 3 damage to any other
 /// target"). A targeted source is covered by `distinct_from`.
@@ -310,6 +331,14 @@ pub(crate) fn other_than_damage_source(spec: &mut TargetSpec, src: &Sel) {
     let not_source = match src {
         Sel::This => Filter::Other,
         Sel::AttachedTo => Filter::Not(Box::new(Filter::AttachedToSource)),
+        // Another object named as the source ("that creature deals damage ... to any
+        // other target"), when no earlier target already keeps it apart.
+        _ if spec.distinct_from.is_empty() => {
+            if let Some(f) = any_other_than(src) {
+                spec.what = TargetKind::ObjectOrPlayer(f, PlayerFilter::Any);
+            }
+            return;
+        }
         _ => return,
     };
     spec.what = TargetKind::ObjectOrPlayer(
@@ -461,9 +490,9 @@ fn damage_part(
     let r = strip(r, "damage")?;
     if let Some(r2) = strip(r, "divided as you choose among ") {
         // CR 601.2d: the division is chosen as the spell is cast; each target gets at
-        // least 1.
+        // least 1. "Any number of targets" may be zero targets (CR 107.1c).
         let (mut spec, any_number, tail) = counted_targets(r2)?;
-        spec.min = spec.min.max(1);
+        spec.min = if any_number { 0 } else { spec.min.max(1) };
         if any_number {
             spec.max = amount.clone();
         }
@@ -1034,7 +1063,9 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // combat." (Mirror Mockery): the tokens an optional instruction created.
     let mut optional_create = false;
     let var = match last_effect(prev) {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
         _ => {
             if super::tokens_copies_create::last_create(prev).is_none() {

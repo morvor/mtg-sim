@@ -127,7 +127,10 @@ inventory::submit! { TriggerPattern { name: "you cast [spell] or activate an abi
 /// `copy_spells`).
 fn copy_that_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     if !matches!(end(l), "copy that ability" | "copy that spell or ability")
-        || !matches!(b.it, Sel::TriggerSpell)
+        || !(matches!(b.it, Sel::TriggerSpell)
+            || b.named
+                .iter()
+                .any(|(p, s)| p == "that ability" && matches!(s, Sel::TriggerSpell)))
     {
         return None;
     }

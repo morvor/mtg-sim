@@ -164,7 +164,12 @@ pub fn empower_jace(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> Option<Obje
             .copied()
             .unwrap_or(cands[0]),
     };
-    g.add_counters(Entity::Object(jace), counters::LOYALTY, n, ctx.source);
+    g.put_counters(
+        Entity::Object(jace),
+        counters::LOYALTY,
+        n,
+        crate::event_causes::CounterPut::by_player(p, ctx),
+    );
     Some(jace)
 }
 

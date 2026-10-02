@@ -831,6 +831,10 @@ impl Game {
                 v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
             }
         }
+        // "During your next untap step": the effect's controller's untap step has passed.
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughYourNextUntapStep) || e.controller != active
+        });
         self.rule_effects.retain(|e| {
             !matches!(e.duration, Duration::ThroughNextUntapStep)
                 || match &e.objects {
@@ -873,7 +877,14 @@ impl Game {
             .map(|o| o.id)
             .collect();
         for s in sagas {
-            self.add_counters(Entity::Object(s), counters::LORE, 1, None);
+            // CR 714.3c: the active player puts them, as a turn-based action (not an
+            // effect).
+            self.put_counters(
+                Entity::Object(s),
+                counters::LORE,
+                1,
+                crate::event_causes::CounterPut::rule(active),
+            );
         }
         // CR 505.5: attractions.
         crate::variants::roll_to_visit_attractions(self, active);

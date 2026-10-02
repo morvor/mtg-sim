@@ -448,9 +448,11 @@ impl Game {
             });
         }
         for id in &to_destroy {
+            // Lethal damage destroys it: no spell or ability does (CR 701.8b, 704.5g–h).
             for e in self.replace(ReplEvent::Destroy {
                 obj: *id,
                 source: None,
+                by: None,
             }) {
                 match e {
                     ReplEvent::Destroy { obj, .. } => {
@@ -515,7 +517,11 @@ impl Game {
             }
             for id in destroyed {
                 if !self.is_live(id) {
-                    self.emit(crate::events::Event::Destroyed { obj: id });
+                    self.emit(crate::events::Event::Destroyed {
+                        obj: id,
+                        cause: None,
+                        by: None,
+                    });
                 }
             }
         }

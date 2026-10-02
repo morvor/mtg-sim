@@ -9,6 +9,21 @@ use crate::keywords::KeywordKind;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// A filter parsed from a probe phrase "card [qualifiers]" without the probe's own head
+/// noun: only the qualifiers are meant ("you control", "of the chosen type"). `Card`
+/// would exclude tokens (CR 108.2), which the qualifiers don't.
+pub fn without_probe_card(f: Filter) -> Filter {
+    match f {
+        Filter::Card => Filter::Any,
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Card))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();
@@ -30,6 +45,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
@@ -965,6 +981,10 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         // "with no counters on them" (Damning Verdict, Hazardous Conditions).
         if let Some(tail) = rest.strip_prefix("no counters on them") {
             return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        // "creatures you control with counters on them" (Synchronized Charge): any kind.
+        if let Some(tail) = rest.strip_prefix("counters on them") {
+            return Some((Filter::HasCounter(None), tail));
         }
         let (kind, r2) = split_word(rest);
         if let Some(tail) = r2.strip_prefix("counters on them") {
