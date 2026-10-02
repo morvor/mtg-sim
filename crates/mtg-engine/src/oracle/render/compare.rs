@@ -204,6 +204,18 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               there are that many there.",
     },
     Equivalence {
+        pattern: r"\b(cards?|spells?|creatures?|permanents?) that (?:have|has) ",
+        replacement: "$1 with ",
+        why: "\"A creature that has a -1/-1 counter on it\" is \"a creature with a -1/-1 \
+              counter on it\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?) with ([a-z]+) (your opponents control|you control|an opponent controls)\b",
+        replacement: "$1 $3 with $2",
+        why: "The order of a noun's qualities: \"creatures with flying your opponents \
+              control\" are \"creatures your opponents control with flying\".",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

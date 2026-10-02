@@ -276,6 +276,13 @@ impl Renderer<'_> {
             }
             return vp.to_string();
         }
+        // "You and that player each draw that many cards."
+        if let PlayerRef::Each(PlayerFilter::Or(v)) = who {
+            if let [PlayerFilter::You, PlayerFilter::Ref(r)] = v.as_slice() {
+                let p = self.player(r, Case::Subj);
+                return format!("you and {p} each {vp}");
+            }
+        }
         let s = self.player(who, Case::Subj);
         format!("{s} {}", third_person(vp))
     }
@@ -2461,8 +2468,12 @@ impl Renderer<'_> {
                 otherwise,
             }) = v.get(i)
             {
-                let after_discard = i > 0
-                    && match &v[i - 1] {
+                // (Drawing a card doesn't change what was discarded.)
+                let after_discard = v[..i]
+                    .iter()
+                    .rev()
+                    .find(|e| !matches!(e, Effect::Draw { .. }))
+                    .is_some_and(|e| match e {
                         Effect::Discard {
                             who: PlayerRef::You,
                             ..
@@ -2477,15 +2488,29 @@ impl Renderer<'_> {
                             )
                         }
                         _ => false,
-                    };
-                if after_discard
-                    && matches!(otherwise.as_ref(), Effect::Noop)
-                    && matches!(cs.as_slice(), [Condition::PrevHappened, Condition::SelNonEmpty(Sel::Var(x))] if *x == vars::IT)
-                {
+                    });
+                let what = match cs.as_slice() {
+                    [Condition::PrevHappened, Condition::SelNonEmpty(Sel::Var(x))]
+                        if *x == vars::IT =>
+                    {
+                        Some("a card".to_string())
+                    }
+                    [Condition::PrevHappened, Condition::SelNonEmpty(Sel::Var(x)), Condition::SelMatches(Sel::Var(y), f)]
+                        if *x == vars::IT && *y == vars::IT =>
+                    {
+                        Some(self.noun_det(f, Det::A))
+                    }
+                    _ => None,
+                };
+                if let (true, true, Some(what)) = (
+                    after_discard,
+                    matches!(otherwise.as_ref(), Effect::Noop),
+                    what,
+                ) {
                     if let Effect::Reflexive { body } = then.as_ref() {
                         let b = self.in_event_scope(|r| r.body(body));
                         parts.push(format!(
-                            "when you discard a card this way, {}",
+                            "when you discard {what} this way, {}",
                             lower_first(&b)
                         ));
                         i += 1;
@@ -4142,10 +4167,13 @@ impl Renderer<'_> {
     }
 
     fn emblem(&mut self, abilities: &[Ability]) -> String {
+        // The emblem's own abilities call it "this emblem".
+        let saved = std::mem::replace(&mut self.in_emblem, true);
         let parts: Vec<String> = abilities
             .iter()
             .map(|a| format!("\"{}\"", self.nested_ability(a)))
             .collect();
+        self.in_emblem = saved;
         format!("get an emblem with {}", join_list(&parts, "and"))
     }
 

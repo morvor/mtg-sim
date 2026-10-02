@@ -283,6 +283,28 @@ impl Renderer<'_> {
                 let p = self.player(p, Case::Subj);
                 format!("the number of turns {p} have taken")
             }
+            // "the total number of instant and sorcery cards you own in exile and in your
+            // graveyard": cards of one kind counted in two zones.
+            Value::Sum(v) if two_zone_count(v).is_some() => {
+                let (f, zones) = two_zone_count(v).unwrap_or((Filter::Any, vec![]));
+                let n = self.noun(&f, Num::Many);
+                let z: Vec<&str> = zones
+                    .iter()
+                    .map(|z| match z {
+                        ZoneKind::Exile => "you own in exile",
+                        ZoneKind::Graveyard => "in your graveyard",
+                        ZoneKind::Hand => "in your hand",
+                        _ => "in your library",
+                    })
+                    .collect();
+                let plain: Vec<String> = v.iter().map(|x| self.value(x)).collect();
+                format!(
+                    "{{alt:{}|the total number of {n} {} and {}}}",
+                    plain.join(" plus "),
+                    z[0],
+                    z[1]
+                )
+            }
             Value::Sum(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.value(x)).collect();
                 parts.join(" plus ")
@@ -1449,4 +1471,35 @@ fn x_arithmetic(v: &Value) -> Option<String> {
         },
         _ => None,
     }
+}
+
+/// `[Count(F in zone A, owned by you), Count(F in zone B, owned by you)]`: (F, [A, B]).
+fn two_zone_count(v: &[Value]) -> Option<(Filter, Vec<ZoneKind>)> {
+    let [Value::Count(Filter::And(a)), Value::Count(Filter::And(b))] = v else {
+        return None;
+    };
+    let split = |parts: &[Filter]| -> Option<(Vec<Filter>, ZoneKind)> {
+        let z = parts.iter().find_map(|p| match p {
+            Filter::InZone(z) => Some(*z),
+            _ => None,
+        })?;
+        if !parts
+            .iter()
+            .any(|p| matches!(p, Filter::OwnedBy(PlayerRel::You)))
+        {
+            return None;
+        }
+        let rest: Vec<Filter> = parts
+            .iter()
+            .filter(|p| !matches!(p, Filter::InZone(_) | Filter::OwnedBy(_)))
+            .cloned()
+            .collect();
+        Some((rest, z))
+    };
+    let (ra, za) = split(a)?;
+    let (rb, zb) = split(b)?;
+    if format!("{ra:?}") != format!("{rb:?}") || za == zb {
+        return None;
+    }
+    Some((Filter::and(ra), vec![za, zb]))
 }
