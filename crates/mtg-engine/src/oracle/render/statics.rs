@@ -733,6 +733,8 @@ impl Renderer<'_> {
     /// creatures").
     fn cost_target(&mut self, t: &CostTarget) -> String {
         match t {
+            // A card cast from a zone is judged while it's still there or by the zone it
+            // was cast from (CR 601.2a): "spells you cast from your graveyard".
             CostTarget::Spells(f) => self.spell_noun_plural(f),
             CostTarget::Abilities(f) => {
                 if matches!(f, Filter::Source) {
@@ -841,7 +843,12 @@ impl Renderer<'_> {
             }
             return s;
         }
-        let target = self.cost_target(&cm.applies_to);
+        // A card cast from a zone is judged while it's still there or by the zone it was
+        // cast from (CR 601.2a): "spells you cast from your graveyard".
+        let target = match &cm.applies_to {
+            CostTarget::Spells(f) => self.cost_target(&CostTarget::Spells(cast_from_zone_only(f))),
+            other => self.cost_target(other),
+        };
         let is_spell = matches!(cm.applies_to, CostTarget::Spells(_) | CostTarget::ThisSpell);
         let who = match (&cm.applies_to, cm.who) {
             (CostTarget::ThisSpell, _) => String::new(),
@@ -863,8 +870,24 @@ impl Renderer<'_> {
         };
         // "Spells your opponents cast that target ~": the caster before a relative
         // clause.
-        let (target, who) = match target.find(" that ") {
-            Some(i) if !who.is_empty() && !target.contains('{') => (
+        // "Spells you cast from your graveyard": the caster before where they're cast
+        // from.
+        let from = [
+            " from your ",
+            " from anywhere ",
+            " cast from ",
+            " {opt:cast} from ",
+        ]
+        .iter()
+        .find_map(|p| target.find(p))
+        .filter(|_| {
+            matches!(
+                cm.change,
+                CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)
+            )
+        });
+        let (target, who) = match target.find(" that ").or(from) {
+            Some(i) if !who.is_empty() && !target[..i].contains('{') => (
                 format!("{}{who}{}", &target[..i], &target[i..]),
                 String::new(),
             ),
@@ -2727,4 +2750,18 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
 fn mentions_entry_modification(e: &Effect) -> bool {
     let d = format!("{e:?}");
     d.contains("Enter") || d.contains("Choose") || d.contains("Custom")
+}
+
+/// `InZone(z) or CastFrom(z)` (a card about to be cast from a zone, or a spell cast from
+/// it) as `CastFrom(z)`.
+fn cast_from_zone_only(f: &Filter) -> Filter {
+    match f {
+        Filter::Or(v) => match v.as_slice() {
+            [Filter::InZone(a), Filter::CastFrom(b)] if a == b => Filter::CastFrom(*a),
+            _ => Filter::Or(v.iter().map(cast_from_zone_only).collect()),
+        },
+        Filter::And(v) => Filter::And(v.iter().map(cast_from_zone_only).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(cast_from_zone_only(x))),
+        other => other.clone(),
+    }
 }

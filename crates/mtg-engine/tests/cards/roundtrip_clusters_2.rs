@@ -116,3 +116,29 @@ fn during_turns_other_than_yours_includes_a_teammates_turn() {
     t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
     assert_eq!(t.pt(lynx), (2, 3));
 }
+
+#[test]
+fn patrician_geist_doesnt_reduce_spells_cast_from_another_players_graveyard() {
+    cr!("404.1", "601.2f");
+    // "Spells you cast from your graveyard cost {1} less to cast.": a spell cast from any
+    // graveyard was reduced (a card cast from another player's graveyard, as Quistis Trepe
+    // allows, isn't from yours).
+    supported("Patrician Geist");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.battlefield(P0, "Patrician Geist");
+    let in_hand = t.hand(P0, "Divination");
+    let mine = t.graveyard(P0, "Divination");
+    let theirs = t.graveyard(P1, "Divination");
+    t.lands(P0, "Island", 3);
+    t.g.turn.priority = Some(P0);
+    let opts = t.g.cast_options(P0, in_hand);
+    let cost = |t: &TestGame, card| {
+        let chars = t.obj(card).chars.clone();
+        let c = t.g.base_total_cost(P0, card, &chars, &opts[0], 0);
+        c.mana.map(|m| m.mana_value())
+    };
+    assert_eq!(cost(&t, in_hand), Some(3));
+    assert_eq!(cost(&t, mine), Some(2));
+    assert_eq!(cost(&t, theirs), Some(3));
+}
