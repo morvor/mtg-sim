@@ -141,6 +141,7 @@ fn a_foretold_card_cast_for_its_foretell_cost_takes_additional_costs_but_no_othe
         free: true,
         source: None,
         turn: t.g.turn.number,
+        terms: Default::default(),
     });
     let giant = t.battlefield(P1, "Hill Giant");
     assert!(!can_cast(&mut t, P0, bolt, FORETELL));

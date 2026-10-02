@@ -8,12 +8,13 @@
 //!   cast for an alternative cost (CR 118.9d);
 //! * a land played with that permission enters tapped (CR 614.1c).
 //!
-//! The terms are recorded (in [`crate::kw::keyword_state::KeywordState::permission_terms`])
-//! for the permissions ([`crate::casting::PlayGrant`]) that the same effect just gave for
-//! the cards a variable names, by the `Effect::Custom` instruction
-//! [`terms_effect`] (parsed in `oracle/patterns/card_flow_owner_may_play.rs`). "A spell cast
-//! by an opponent this way" applies only to permissions given to an opponent of the
-//! effect's controller.
+//! The terms are added to the terms ([`crate::ability::PlayTerms`]) of the permissions
+//! ([`crate::casting::PlayGrant`]) that the same effect just gave for the cards a variable
+//! names, by the `Effect::Custom` instruction [`terms_effect`] (parsed in
+//! `oracle/patterns/card_flow_owner_may_play.rs`). "A spell cast by an opponent this way"
+//! applies only to permissions given to an opponent of the effect's controller. A player
+//! who has several permissions to play the card chooses the one they use, and with it its
+//! terms (CR 601.2, 305.1; see `permissions.rs`).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::{Effect, Var};
@@ -21,7 +22,7 @@ use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::object::Zone;
-use crate::types::{ObjectId, PlayerId};
+use crate::types::ObjectId;
 
 const PREFIX: &str = "play permission terms:";
 
@@ -65,46 +66,16 @@ pub fn parse_terms(name: &str) -> Option<(Var, Terms)> {
     ))
 }
 
-/// The generic cost increase for `card` being cast by `p` with an effect's permission:
-/// from the permission while the card is being considered for casting, from the spell's
-/// record once it's on the stack (the permission is used up as it's cast).
-pub fn cost_increase(g: &Game, p: PlayerId, card: ObjectId) -> u32 {
-    let o = g.obj(card);
-    if o.zone == Zone::Stack {
-        return o
-            .stack
-            .as_deref()
-            .map_or(0, |si| si.cast.permission_cost_increase);
+/// The generic cost increase that came with the permission the spell `spell` was cast
+/// with (none for a card not yet cast: see the permission's terms).
+pub fn cost_increase(g: &Game, spell: ObjectId) -> u32 {
+    let o = g.obj(spell);
+    if o.zone != Zone::Stack {
+        return 0;
     }
-    grant_cost_increase(g, p, card)
-}
-
-/// The terms of the permission `p` plays `card` with, if an effect gave one. With several
-/// permissions from different effects, the player chooses which one to use (CR 601.2,
-/// 305.1): the one with the fewest terms (no cost increase is better than one, a land
-/// entering untapped better than tapped).
-fn grant_terms(g: &Game, p: PlayerId, card: ObjectId) -> Option<Terms> {
-    g.play_grants
-        .iter()
-        .filter(|gr| gr.player == p && gr.object == card)
-        .map(|gr| {
-            g.kw_state
-                .permission_terms
-                .get(&(p, card, gr.source))
-                .copied()
-                .unwrap_or_default()
-        })
-        .min_by_key(|t| (t.cost_increase, t.lands_enter_tapped))
-}
-
-/// The generic cost increase of `p`'s permission to play `card`.
-pub fn grant_cost_increase(g: &Game, p: PlayerId, card: ObjectId) -> u32 {
-    grant_terms(g, p, card).map_or(0, |t| t.cost_increase)
-}
-
-/// Whether `card` played as a land by `p` with an effect's permission enters tapped.
-pub fn lands_enter_tapped(g: &Game, p: PlayerId, card: ObjectId) -> bool {
-    grant_terms(g, p, card).is_some_and(|t| t.lands_enter_tapped)
+    o.stack
+        .as_deref()
+        .map_or(0, |si| si.cast.permission_cost_increase)
 }
 
 pub struct PlayPermissionTerms;
@@ -125,19 +96,19 @@ impl KeywordRules for PlayPermissionTerms {
             .unwrap_or_default();
         let controller = ctx.controller;
         let source = ctx.source;
-        let mut keys: Vec<(PlayerId, ObjectId, Option<ObjectId>)> = g
+        let opponents: Vec<bool> = g
             .play_grants
             .iter()
-            .filter(|gr| cards.contains(&gr.object) && gr.source == source)
-            .filter(|gr| !t.opponents_only || g.are_opponents(gr.player, controller))
-            .map(|gr| (gr.player, gr.object, gr.source))
+            .map(|gr| g.are_opponents(gr.player, controller))
             .collect();
-        keys.sort();
-        keys.dedup();
-        for k in keys {
-            let e = g.kw_state.permission_terms.entry(k).or_default();
-            e.cost_increase += t.cost_increase;
-            e.lands_enter_tapped |= t.lands_enter_tapped;
+        for (gr, opponent) in g.play_grants.iter_mut().zip(opponents) {
+            if cards.contains(&gr.object)
+                && gr.source == source
+                && (!t.opponents_only || opponent)
+            {
+                gr.terms.cost_increase += t.cost_increase;
+                gr.terms.lands_enter_tapped |= t.lands_enter_tapped;
+            }
         }
         true
     }
