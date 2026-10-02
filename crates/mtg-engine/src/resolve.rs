@@ -534,7 +534,8 @@ impl Game {
                 ctx.prev_happened = total > 0;
             }
             Effect::ChooseCounterKind { from, then } => {
-                if let Some(e) = crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
+                if let Some(e) =
+                    crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
                 {
                     self.exec(&e, ctx);
                 }

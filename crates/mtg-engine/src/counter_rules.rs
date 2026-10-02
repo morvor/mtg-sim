@@ -476,7 +476,12 @@ pub fn with_chosen_counter_kind(
         return None;
     }
     let labels = kinds.iter().map(|k| format!("{k} counter")).collect();
-    let i = g.ask_option(ctx.controller, ctx.source, "Choose a kind of counter", labels);
+    let i = g.ask_option(
+        ctx.controller,
+        ctx.source,
+        "Choose a kind of counter",
+        labels,
+    );
     let kind = kinds.get(i).unwrap_or(&kinds[0]);
     let json = serde_json::to_string(then).ok()?;
     let placeholder = serde_json::to_string(CHOSEN_COUNTER_KIND).ok()?;
