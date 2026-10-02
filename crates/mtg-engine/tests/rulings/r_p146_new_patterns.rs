@@ -492,3 +492,61 @@ fn gnostro_x_is_counted_as_the_ability_resolves() {
     activate_resolve(&mut t, P0, g, 0, &[]);
     assert_eq!(scry_sizes(&t, P0, from), vec![1]);
 }
+
+/// Leaves only `n` cards in `p`'s library.
+fn library_down_to(t: &mut TestGame, p: PlayerId, n: usize) {
+    let lib = t.g.player(p).library.clone();
+    for c in lib.into_iter().skip(n) {
+        move_to(t, c, Zone::Exile);
+    }
+    assert_eq!(t.library_size(p), n);
+}
+
+#[test]
+fn ormos_draws_what_it_can_then_replaces_the_rest() {
+    cr!("121.2", "121.6a", "614.1a");
+    ruling!(
+        "Ormos, Archive Keeper",
+        "If you're instructed to draw more than one card and you have fewer cards in your library, you draw each card in your library, then you begin replacing draws with counters for the remaining draws."
+    );
+    supported("Ormos, Archive Keeper");
+    // "If you would draw a card while your library has no cards in it, instead put five
+    // +1/+1 counters on Ormos."
+    let mut t = TestGame::new(2);
+    let o = t.battlefield(P0, "Ormos, Archive Keeper");
+    assert!(t.obj(o).has_keyword(KeywordKind::Flying));
+    library_down_to(&mut t, P0, 1);
+    let hand = t.hand_size(P0);
+    t.g.draw_cards(P0, 3);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.counters(o, "+1/+1"), 10);
+    // P0 didn't lose for drawing from an empty library.
+    t.settle();
+    assert!(!t.has_lost(P0));
+    // With cards in the library, nothing is replaced.
+    let mut t = TestGame::new(2);
+    let o = t.battlefield(P0, "Ormos, Archive Keeper");
+    t.g.draw_cards(P0, 2);
+    assert_eq!(t.counters(o, "+1/+1"), 0);
+}
+
+#[test]
+fn ormos_discards_three_cards_with_different_names() {
+    cr!("118.3", "201.2b", "602.2b");
+    // "{1}{U}{U}, Discard three cards with different names: Draw five cards."
+    let mut t = TestGame::new(2);
+    let o = t.battlefield(P0, "Ormos, Archive Keeper");
+    t.lands(P0, "Island", 3);
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Hill Giant");
+    assert!(!can_activate(&mut t, P0, o));
+    t.hand(P0, "Ornithopter");
+    assert!(can_activate(&mut t, P0, o));
+    activate_resolve(&mut t, P0, o, 0, &[]);
+    assert_eq!(t.graveyard_size(P0), 3);
+    assert!(t.in_graveyard(P0, "Hill Giant") && t.in_graveyard(P0, "Ornithopter"));
+    assert_eq!(t.hand_size(P0), 6);
+}
