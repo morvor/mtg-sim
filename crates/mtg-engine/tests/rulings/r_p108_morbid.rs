@@ -159,7 +159,7 @@ fn muster_the_departed_doesnt_trigger_without_a_death() {
 
 #[test]
 fn needletooth_pack_checks_as_the_end_step_starts() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Needletooth Pack",
         "last ability will check as the end step starts to see if a creature died this turn. If none did, the ability won't trigger at all."
@@ -365,7 +365,7 @@ fn gravelighters_otherwise_refers_to_a_creature_dying() {
 
 #[test]
 fn vengeful_devil_can_be_activated_for_a_death_before_it_entered() {
-    cr!("602.5b", "700.4");
+    cr!("602.5", "700.4");
     ruling!(
         "Vengeful Devil",
         "Vengeful Devil's ability can be activated even if a creature died only earlier in the turn before Vengeful Devil entered the battlefield."
@@ -385,7 +385,7 @@ fn vengeful_devil_can_be_activated_for_a_death_before_it_entered() {
 
 #[test]
 fn caged_zombie_drains_each_opponent() {
-    cr!("602.5b", "120.3");
+    cr!("602.5", "119.3");
     supported("Caged Zombie");
     let mut t = TestGame::new(3);
     let z = t.battlefield(P0, "Caged Zombie");
@@ -400,7 +400,7 @@ fn caged_zombie_drains_each_opponent() {
 
 #[test]
 fn caged_zombie_costs_the_opposing_two_headed_giant_team_four_life() {
-    cr!("602.5b", "810.9");
+    cr!("602.5", "810.9");
     ruling!(
         "Caged Zombie",
         "In a Two-Headed Giant game, Caged Zombie's ability causes the opposing team to lose 4 life."

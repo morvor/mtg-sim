@@ -1,7 +1,7 @@
 //! Rulings batch P108 — Triskaidekaphobia ("At the beginning of your upkeep, choose one —
 //! • Each player with exactly 13 life loses the game, then each player gains 1 life.
 //! • Each player with exactly 13 life loses the game, then each player loses 1 life."):
-//! the mode is chosen as the trigger is put on the stack (CR 700.2a); players who lose at
+//! the mode is chosen as the trigger is put on the stack (CR 700.2b); players who lose at
 //! the same time make the game a draw if no one is left (CR 104.4a); in Two-Headed Giant
 //! a team loses together and its shared life total changes for each player
 //! (CR 810.8a, 810.9).
@@ -56,7 +56,7 @@ fn the_opponent_loses_before_you_lose_life() {
 
 #[test]
 fn a_mode_is_chosen_even_if_no_one_loses() {
-    cr!("700.2a", "603.3c");
+    cr!("700.2b", "603.3c");
     ruling!(
         "Triskaidekaphobia",
         "You choose one of the modes even if no player will lose the game. Players will still gain or lose life as appropriate."

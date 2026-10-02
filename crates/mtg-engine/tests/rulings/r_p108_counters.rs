@@ -66,7 +66,7 @@ fn lethal_sting_needs_a_creature_to_put_the_counter_on() {
 
 #[test]
 fn exemplar_of_strength_gone_gains_no_life() {
-    cr!("608.2c", "122.8");
+    cr!("608.2c", "400.7");
     ruling!(
         "Exemplar of Strength",
         "If Exemplar of Strength leaves the battlefield in response to its second triggered ability, you won’t be able to remove a counter from it, and you won’t gain 1 life."
@@ -393,7 +393,7 @@ fn nesting_grounds_chooses_the_kind_as_it_resolves() {
 
 #[test]
 fn star_pupil_puts_all_its_counters_including_minus_ones() {
-    cr!("603.10a", "122.1");
+    cr!("603.10a", "122.8");
     ruling!(
         "Star Pupil",
         "Star Pupil puts all of its counters onto the target creature, not just its +1/+1 counters."
@@ -431,7 +431,7 @@ fn star_pupil_puts_all_its_counters_including_minus_ones() {
 
 #[test]
 fn spiteful_squad_puts_its_counters_including_minus_ones() {
-    cr!("603.10a", "704.5q");
+    cr!("603.10a", "122.8", "704.5q");
     ruling!(
         "Spiteful Squad",
         "Spiteful Squad's ability doesn't cause you to move counters from itself to the target creature. Rather, you put the same number of each kind of counter Spiteful Squad had when it died onto that creature."
@@ -481,7 +481,7 @@ fn with_ozolith(name: &str) {
 
 #[test]
 fn spiteful_squad_and_the_ozolith_both_get_the_counters() {
-    cr!("603.10a", "122.1");
+    cr!("603.10a", "122.8");
     ruling!(
         "Spiteful Squad",
         "if you control The Ozolith when Spiteful Squad dies, you will put the appropriate number of each kind of counter onto both The Ozolith and the target creature."
@@ -491,7 +491,7 @@ fn spiteful_squad_and_the_ozolith_both_get_the_counters() {
 
 #[test]
 fn star_pupil_and_the_ozolith_both_get_the_counters() {
-    cr!("603.10a", "122.1");
+    cr!("603.10a", "122.8");
     ruling!(
         "Star Pupil",
         "if you control The Ozolith when Star Pupil dies, you will put the appropriate number of each kind of counter onto both The Ozolith and the target creature."
@@ -501,7 +501,7 @@ fn star_pupil_and_the_ozolith_both_get_the_counters() {
 
 #[test]
 fn host_of_the_hereafter_puts_the_dead_creatures_counters() {
-    cr!("603.10a", "122.1");
+    cr!("603.10a", "122.8");
     ruling!(
         "Host of the Hereafter",
         "Host of the Hereafter’s last ability doesn’t cause you to move counters from the creature that died onto the target creature. Rather, you put the same number of each kind of counter the creature had when it died onto the target creature."
@@ -552,7 +552,7 @@ fn host_of_the_hereafter_dying_with_others_triggers_for_each() {
 
 #[test]
 fn host_of_the_hereafter_sees_counters_of_a_creature_killed_by_minus_ones() {
-    cr!("603.10a", "704.5f", "704.5q");
+    cr!("603.10a", "122.8", "704.5f", "704.5q");
     ruling!(
         "Host of the Hereafter",
         "If enough -1/-1 counters are put on a creature you control at the same time to make its toughness 0 or less, Host of the Hereafter’s last ability will see all of the +1/+1 counters it had when it died as well as the -1/-1 counters it had"
@@ -587,7 +587,7 @@ fn host_of_the_hereafter_sees_counters_of_a_creature_killed_by_minus_ones() {
 
 #[test]
 fn host_of_the_hereafter_and_the_ozolith_both_get_the_counters() {
-    cr!("603.10a", "122.1");
+    cr!("603.10a", "122.8");
     ruling!(
         "Host of the Hereafter",
         "if you control The Ozolith and Host of the Hereafter when a creature you control with counters on it dies, you’ll put the appropriate number of each kind of counter onto both The Ozolith and the target creature."
@@ -624,3 +624,4 @@ fn a_counter_is_put_on_triggers_for_each_counter() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 3);
 }
+

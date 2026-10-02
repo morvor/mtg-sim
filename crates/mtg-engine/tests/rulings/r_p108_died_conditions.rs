@@ -49,7 +49,7 @@ fn grim_wanderer_doesnt_care_who_controlled_the_creature() {
 
 #[test]
 fn titan_hunter_triggers_at_each_players_end_step() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Titan Hunter",
         "Titan Hunter’s triggered ability triggers at the beginning of each player’s end step, including yours, if no creatures died during that turn."
@@ -239,7 +239,7 @@ fn chirography_level_three_checks_for_a_modified_creature_dying() {
 
 #[test]
 fn ichor_shade_checks_as_the_end_step_begins() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Ichor Shade",
         "Ichor Shade’s ability will check as your end step begins if an artifact or creature was put into a graveyard from the battlefield this turn. If none have, the ability won’t trigger at all."

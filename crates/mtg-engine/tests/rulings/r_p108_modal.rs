@@ -51,7 +51,7 @@ fn ixion_chapter_two(targets: &[usize], respond: impl FnOnce(&mut TestGame, Obje
 
 #[test]
 fn ixion_chapter_two_with_no_targets_still_gains_life() {
-    cr!("714.2b", "115.1c", "601.2c");
+    cr!("714.2b", "603.3d", "601.2c");
     ruling!(
         "Summon: Ixion",
         "You don't have to choose any targets for Summon: Ixion's second or third chapter ability."
@@ -80,7 +80,7 @@ fn ixion_chapter_two_with_its_only_target_gone_doesnt_resolve() {
 
 #[test]
 fn artful_takedowns_modes_may_target_the_same_creature() {
-    cr!("700.2d", "115.3");
+    cr!("115.3", "700.2f");
     ruling!(
         "Artful Takedown",
         "two modes may each target the same creature, or they may target two different creatures."
@@ -116,7 +116,7 @@ fn artful_takedowns_modes_may_target_the_same_creature() {
 
 #[test]
 fn winterflames_modes_may_target_the_same_creature() {
-    cr!("700.2d", "115.3");
+    cr!("115.3", "700.2f");
     ruling!(
         "Winterflame",
         "If you choose both modes, they can each target the same creature or they can target different creatures."
@@ -137,7 +137,7 @@ fn winterflames_modes_may_target_the_same_creature() {
 
 #[test]
 fn winterflame_with_both_targets_illegal_doesnt_resolve() {
-    cr!("608.2b", "700.2d");
+    cr!("608.2b");
     ruling!(
         "Winterflame",
         "Winterflame won’t affect any target that’s illegal as it tries to resolve. If you choose to use both modes and both targets are illegal at that time, Winterflame won’t resolve."
@@ -175,7 +175,7 @@ fn winterflame_with_both_targets_illegal_doesnt_resolve() {
 
 #[test]
 fn subtle_strike_affects_the_other_target_if_one_is_illegal() {
-    cr!("608.2b", "700.2d");
+    cr!("608.2b");
     ruling!(
         "Subtle Strike",
         "If you choose both modes and one target becomes illegal before Subtle Strike resolves, the other target is affected as appropriate."
@@ -314,7 +314,7 @@ fn moment_of_reckoning_with_every_target_illegal_doesnt_resolve() {
 
 #[test]
 fn moment_of_reckoning_copy_may_change_targets_but_not_modes() {
-    cr!("707.10", "707.10c", "700.2a");
+    cr!("707.10", "707.10c", "700.2g");
     ruling!(
         "Moment of Reckoning",
         "If Moment of Reckoning is copied, the effect that creates the copy will usually allow you to choose new targets, but you can't choose new modes."
@@ -340,7 +340,7 @@ fn moment_of_reckoning_copy_may_change_targets_but_not_modes() {
 
 #[test]
 fn moment_of_reckoning_follows_the_chosen_order_of_a_repeated_mode() {
-    cr!("700.2h", "613.7d");
+    cr!("700.2d", "613.7d");
     ruling!(
         "Moment of Reckoning",
         "If the same mode is chosen more than once, you choose their relative order as you cast the spell."
@@ -399,7 +399,7 @@ fn typed(t: &mut TestGame, p: PlayerId, types: &str) -> ObjectId {
 
 #[test]
 fn skemfar_shadowsage_counts_the_largest_group_as_it_resolves() {
-    cr!("608.2h", "700.2a");
+    cr!("608.2h", "700.2b", "603.3c");
     ruling!(
         "Skemfar Shadowsage",
         "The amount of life lost or gained is calculated as the triggered ability resolves based on the creatures you control at that time, including Skemfar Shadowsage itself if it's still under your control."

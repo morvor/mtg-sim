@@ -35,7 +35,7 @@ fn trostani_leaving_can_make_damage_lethal() {
 
 #[test]
 fn trostani_returns_a_token_to_the_player_who_created_it() {
-    cr!("111.2", "108.4");
+    cr!("111.2", "613.1b");
     ruling!("Trostani Discordant", "The owner of a token is the player who created it.");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Trostani Discordant");
@@ -51,7 +51,7 @@ fn trostani_returns_a_token_to_the_player_who_created_it() {
 
 #[test]
 fn trostani_regained_creatures_end_step_abilities() {
-    cr!("603.3a", "603.2", "108.4");
+    cr!("603.3a", "603.2");
     ruling!(
         "Trostani Discordant",
         "If a creature has an ability that triggers at the beginning of each end step and Trostani's ability causes you to gain control of it, the ability of that creature is still controlled by the creature's former controller. If the creature has an ability that triggers at the beginning of your end step, that ability doesn't trigger when you gain control of it."
@@ -90,7 +90,7 @@ fn trostani_regained_creatures_end_step_abilities() {
 
 #[test]
 fn groundchuck_and_dirtbags_ability_is_a_mana_ability() {
-    cr!("605.1b", "605.3b");
+    cr!("605.1b", "605.4a");
     ruling!(
         "Groundchuck & Dirtbag",
         "last ability is a mana ability. It doesn't use the stack and can't be responded to."
@@ -108,7 +108,7 @@ fn groundchuck_and_dirtbags_ability_is_a_mana_ability() {
 
 #[test]
 fn raph_and_mikey_choose_what_the_new_attacker_attacks() {
-    cr!("508.4", "506.4a");
+    cr!("508.4");
     ruling!(
         "Raph & Mikey, Troublemakers",
         "You choose the player, planeswalker, or battle the creature you put onto the battlefield is attacking. It doesn't have to be the same player, planeswalker, or battle that Raph & Mikey or any other attacking creatures are attacking."
@@ -141,7 +141,7 @@ fn raph_and_mikey_choose_what_the_new_attacker_attacks() {
 
 #[test]
 fn genesis_wave_permanents_enter_together_and_see_each_other() {
-    cr!("603.6a", "614.12");
+    cr!("603.6a");
     ruling!(
         "Genesis Wave",
         "All of the permanents put onto the battlefield this way enter at the same time. If any have triggered abilities that trigger on something else entering, they'll see each other."
@@ -167,7 +167,7 @@ fn genesis_wave_permanents_enter_together_and_see_each_other() {
 
 #[test]
 fn genesis_wave_can_always_put_lands() {
-    cr!("202.3a", "202.3b");
+    cr!("202.3a");
     ruling!(
         "Genesis Wave",
         "If a permanent card in your library has no mana symbols in its upper right corner (because it's a land card, for example), its mana value is 0. Such cards can always be put onto the battlefield with Genesis Wave."
