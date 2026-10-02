@@ -472,6 +472,20 @@ fn permitted(
                 Duration::EndOfTurn | Duration::ThisTurn => *turn == g.turn.number,
                 other => !g.effect_expired(other, *src, p),
             }
+    }) || spend_any_type_static(g, p, spell)
+}
+
+/// A static ability lets `p` spend mana of any type to cast `spell` ("You can spend mana
+/// of any type to cast creature spells.", CR 609.4b).
+fn spend_any_type_static(g: &Game, p: PlayerId, spell: ObjectId) -> bool {
+    g.statics.cost_modifiers.iter().any(|(src, ctl, cm)| {
+        let CostTarget::Spells(f) = &cm.applies_to else {
+            return false;
+        };
+        let ctx = Ctx::new(Some(*src), *ctl);
+        matches!(cm.change, CostChange::SpendAnyType)
+            && g.player_rel_matches(cm.who, p, &ctx)
+            && crate::spell_costs::spells_change_applies(g, spell, f, &cm.change, &ctx)
     })
 }
 

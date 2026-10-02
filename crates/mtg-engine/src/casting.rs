@@ -86,6 +86,11 @@ pub fn grant_play_permission(
     }
 }
 
+/// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
+/// sets ("If you cast a spell this way, pay life equal to its mana value rather than pay
+/// its mana cost."), not for an alternative cost of its own.
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
@@ -276,6 +281,20 @@ pub fn free_cast_options(
         if face == FaceState::Front {
             opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
         }
+    }
+    // CR 702.102a: a split card with fuse cast from its caster's hand may be cast as both
+    // halves, a fused split spell with the combined mana value (CR 702.102b).
+    let o = g.obj(card);
+    if o.zone == Zone::Hand(p)
+        && o.chars.has_keyword(KeywordKind::Fuse)
+        && o.card
+            .as_ref()
+            .is_some_and(|d| d.layout == crate::card::Layout::Split)
+        && !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, FaceState::Fused))
+    {
+        let mut f = CastOption::normal(FaceState::Fused);
+        f.method = CastMethod::Keyword(KeywordKind::Fuse);
+        opts.push(f);
     }
     opts.into_iter()
         .filter_map(|mut opt| {
@@ -478,43 +497,92 @@ impl Game {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
-            if (land && !perm.lands) || (!land && !perm.spells) {
+            // A permission to cast spells only for a cost of its own ("If you cast a spell
+            // this way, pay life equal to its mana value rather than pay its mana cost")
+            // allows casting them only that way (CR 118.9; see
+            // [`Game::permission_cost_options`]).
+            if !land && perm.cost.as_ref().is_some_and(|c| !c.is_free()) {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
-            if !self.player_rel_matches(perm.who, p, &ctx) {
-                continue;
-            }
-            let in_zone = match perm.zone {
-                ZoneKind::Library => {
-                    if perm.top_only {
-                        self.library_top(p) == Some(card)
-                    } else {
-                        o.zone == Zone::Library(p)
-                    }
-                }
-                ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
-                ZoneKind::Exile => o.zone == Zone::Exile,
-                ZoneKind::Hand => o.zone == Zone::Hand(p),
-                ZoneKind::Command => o.zone == Zone::Command,
-                _ => false,
-            };
-            if !in_zone {
-                continue;
-            }
-            // CR 601.3e: the alternative characteristics the card would have as it's
-            // played are what the permission checks.
-            let f = if land {
-                perm.what.clone()
-            } else {
-                as_spell_filter(&perm.what)
-            };
-            let view = WithChars { id: card, chars };
-            if self.matches_view(&view, card, &f, &ctx) {
+            if self.static_permission_matches(*src, *ctl, perm, p, card, chars, land) {
                 return true;
             }
         }
         false
+    }
+
+    /// Whether the static play permission `perm` of `src` (controlled by `ctl`) lets `p`
+    /// play `card` with the characteristics `chars`, as a land or as a spell, ignoring any
+    /// cost of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn static_permission_matches(
+        &self,
+        src: ObjectId,
+        ctl: PlayerId,
+        perm: &PlayPermission,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+    ) -> bool {
+        let o = self.obj(card);
+        if (land && !perm.lands) || (!land && !perm.spells) {
+            return false;
+        }
+        let ctx = Ctx::new(Some(src), ctl);
+        if !self.player_rel_matches(perm.who, p, &ctx) {
+            return false;
+        }
+        let in_zone = match perm.zone {
+            ZoneKind::Library => {
+                if perm.top_only {
+                    self.library_top(p) == Some(card)
+                } else {
+                    o.zone == Zone::Library(p)
+                }
+            }
+            ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+            ZoneKind::Exile => o.zone == Zone::Exile,
+            ZoneKind::Hand => o.zone == Zone::Hand(p),
+            ZoneKind::Command => o.zone == Zone::Command,
+            _ => false,
+        };
+        if !in_zone {
+            return false;
+        }
+        // CR 601.3e: the alternative characteristics the card would have as it's
+        // played are what the permission checks.
+        let f = if land {
+            perm.what.clone()
+        } else {
+            as_spell_filter(&perm.what)
+        };
+        let view = WithChars { id: card, chars };
+        self.matches_view(&view, card, &f, &ctx)
+    }
+
+    /// Ways to cast `card` outside the hand that static permissions with a cost of their
+    /// own allow ("You may play lands and cast spells from the top of your library. If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost."): that cost is an alternative cost (CR 118.9), so the spell can't be cast
+    /// that way with another one (CR 118.9a).
+    fn permission_cost_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        let mut out = Vec::new();
+        for face in castable_faces(self, card) {
+            let chars = self.face_characteristics(card, face);
+            for (src, ctl, perm) in &self.statics.play_permissions {
+                let Some(cost) = perm.cost.as_ref().filter(|c| !c.is_free()) else {
+                    continue;
+                };
+                if self.static_permission_matches(*src, *ctl, perm, p, card, &chars, false) {
+                    let mut opt = CastOption::normal(face);
+                    opt.method = CastMethod::Alternative(PERMISSION_COST);
+                    opt.alt_cost = Some(cost.clone());
+                    out.push(opt);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a static permission lets `p` cast `card` from their hand without paying its
@@ -733,6 +801,7 @@ impl Game {
                     let free = opt.method == CastMethod::Free;
                     self.permission_allows_with(p, card, &chars, false, free)
                 });
+                out.extend(self.permission_cost_options(p, card));
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
@@ -1472,8 +1541,31 @@ impl Game {
                         .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
                 max = if mana_x { max.min(power) } else { power };
             }
-            x = match self.ask(p, Decision::ChooseX { source: id, max }) {
-                Answer::Number(n) if n >= 0 => n,
+            // An alternative cost that uses an object described with X ("exile a blue
+            // card with mana value X from your hand", CR 107.3a): X must be a value it
+            // can be paid with, at most the mana available if mana is paid for X too.
+            let x_values = opt
+                .alt_cost
+                .as_ref()
+                .and_then(|c| crate::x_cost_filters::payable_x_values(self, p, Some(id), c));
+            if let (Some(vals), Some(c)) = (&x_values, &opt.alt_cost) {
+                let bound = vals.iter().copied().max().unwrap_or(0);
+                max = if c.mana.as_ref().is_some_and(|m| m.has_x()) {
+                    max.min(bound)
+                } else {
+                    bound
+                };
+            }
+            // (A value the alternative cost can't be paid with isn't a legal choice.)
+            let answer = self.ask(p, Decision::ChooseX { source: id, max });
+            let payable = |n: i64| match (&x_values, &opt.alt_cost) {
+                (Some(_), Some(c)) => {
+                    crate::x_cost_filters::payable_with_x(self, p, Some(id), c, n)
+                }
+                _ => true,
+            };
+            x = match answer {
+                Answer::Number(n) if n >= 0 && payable(n) => n,
                 _ => max.max(0),
             };
         }
@@ -1859,9 +1951,29 @@ impl Game {
                 return false;
             }
         }
+        // A condition on X ("X can't be 0", CR 107.3a) holds if it does for some value that
+        // could be announced (CR 602.2b): the least such value, at which the cost must
+        // then be payable.
+        let mut least_x: Option<i32> = None;
         if let Some(c) = &act.condition {
-            if !self.eval_cond(c, &Ctx::new(Some(src), p)) {
-                return false;
+            let ctx = Ctx::new(Some(src), p);
+            if !self.eval_cond(c, &ctx) {
+                let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                    || act.cost.parts.iter().any(cost_part_has_x);
+                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                least_x = has_x
+                    .then(|| {
+                        (1..=max_x as i32).find(|x| {
+                            let mut ctx = ctx.clone();
+                            ctx.x = *x;
+                            ctx.x_defined = true;
+                            self.eval_cond(c, &ctx)
+                        })
+                    })
+                    .flatten();
+                if least_x.is_none() {
+                    return false;
+                }
             }
         }
         if self.activation_prohibited(p, src, act.is_mana_ability)
@@ -1892,15 +2004,22 @@ impl Game {
                 return false;
             }
         }
-        let cost = self.ability_total_cost(p, src, a, act);
+        let x = least_x.unwrap_or(0);
+        let mut pay_ctx = Ctx::new(Some(src), p);
+        if least_x.is_some() {
+            pay_ctx.x = x;
+            pay_ctx.x_defined = true;
+        }
+        let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
         let chars = o.chars.clone();
-        self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+        self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
             // CR 118.9: or an alternative cost it could be activated for.
             || crate::activation_costs::alternative_costs(self, p, src, a, act)
                 .iter()
                 .any(|(_, alt)| {
-                    let cost = self.ability_total_cost_with(p, src, a, act, None, 0, Some(alt));
-                    self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+                    let cost =
+                        self.ability_total_cost_with(p, src, a, act, None, x as u32, Some(alt));
+                    self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
                 })
     }
 
@@ -2077,6 +2196,21 @@ impl Game {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
             };
+            // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
+            // can't be 0"); otherwise the least value that does is announced.
+            if let Some(c) = &act.condition {
+                let holds = |x: i64| {
+                    let mut ctx = ctx.clone();
+                    ctx.x = x as i32;
+                    ctx.x_defined = true;
+                    self.eval_cond(c, &ctx)
+                };
+                if !holds(x) {
+                    x = (0..=max)
+                        .find(|x| holds(*x))
+                        .ok_or_else(|| Illegal("no legal value of X".into()))?;
+                }
+            }
         }
         ctx.x = x as i32;
         if act.is_mana_ability {
@@ -2329,12 +2463,32 @@ impl Game {
         p: PlayerId,
         cost: &Cost,
         src: Option<ObjectId>,
-        _chars: &Characteristics,
+        chars: &Characteristics,
     ) -> bool {
-        let ctx = Ctx::new(src, p);
-        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
+        self.can_pay_cost_optimistic_in(p, cost, src, chars, &Ctx::new(src, p))
+    }
+
+    /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
+    /// the value announced for X: "Remove X +1/+1 counters from ~").
+    pub fn can_pay_cost_optimistic_in(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        _chars: &Characteristics,
+        ctx: &Ctx,
+    ) -> bool {
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // CR 107.3a: parts that use an object described with X can be paid if they could
+        // be for some value of X.
+        if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
+        {
+            return false;
+        }
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx) {
+            if !crate::x_cost_filters::part_has_x_filter(part)
+                && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
+            {
                 return false;
             }
         }
@@ -2416,7 +2570,7 @@ impl Game {
     /// "Tap an untapped [permanent] you control" (CR 118.3). `untaps_src`: likewise, the
     /// cost also has {Q}, so the source can't be one of the tapped permanents untapped for
     /// "Untap a tapped [permanent] you control".
-    fn cost_part_payable(
+    pub(crate) fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
@@ -2603,6 +2757,7 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 crate::draw_rules::can_choose(self, e, &c)
+                    && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
@@ -3025,6 +3180,12 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 119.7: a cost that has a player who can't gain life gain life can't be
+                // paid — "have an opponent gain 3 life" with an opponent chosen as it's
+                // paid who can't.
+                if !crate::life_totals::cost_life_gain_possible(self, e, &c) {
+                    return bad("that player can't gain life");
+                }
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
@@ -3163,13 +3324,14 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
         // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
         CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
-        CostPart::Discard { count, .. }
-        | CostPart::Exile { count, .. }
-        | CostPart::ReturnToHand { count, .. }
-        | CostPart::RemoveCounters { count, .. }
+        // "Exile a blue card with mana value X from your hand" (CR 107.3a).
+        CostPart::Discard { count, filter, .. }
+        | CostPart::Exile { count, filter, .. }
+        | CostPart::ReturnToHand { count, filter }
+        | CostPart::TapUntapped { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
         | CostPart::AddCounters { count, .. }
-        | CostPart::TapUntapped { count, .. }
         | CostPart::UntapTapped { count, .. }
         | CostPart::PayPlayerCounters { count, .. }
         // "Reveal X green cards from your hand" (Martyr of Spores).
@@ -3183,7 +3345,7 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
 }
 
 /// Whether a filter compares a characteristic with X ("power X or greater").
-fn filter_mentions_x(f: &Filter) -> bool {
+pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
     match f {
         Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
             matches!(**v, Value::X)

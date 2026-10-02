@@ -12,7 +12,9 @@ use crate::mana::*;
 use crate::object::Zone;
 use crate::types::*;
 
-/// A mana ability the player could activate to help pay a cost.
+/// A mana ability the player could activate to help pay a cost, or one use of a special
+/// action that adds mana and may be taken any time the player could activate a mana
+/// ability (`offer`, CR 605.3a, 116.2c).
 #[derive(Clone, Debug)]
 pub struct ManaSource {
     pub obj: ObjectId,
@@ -25,6 +27,12 @@ pub struct ManaSource {
     /// Add one mana of any color"): the permanents it could sacrifice, and how many.
     pub sac_pool: Vec<ObjectId>,
     pub sac_count: usize,
+    /// The special action (`special_actions::SpecialOffer::id`) this is one use of.
+    pub offer: Option<u32>,
+    /// The life a use of the special action costs (CR 119.4): the uses planned for one
+    /// payment can't cost more life than the player has, Phyrexian mana paid with life
+    /// included.
+    pub life: u32,
 }
 
 const ALL_COLORS: [ManaType; 5] = [
@@ -1137,11 +1145,14 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         cost_rank: rank,
                         sac_pool: sac_pool.clone(),
                         sac_count,
+                        offer: None,
+                        life: 0,
                     });
                 }
             }
         }
     }
+    out.extend(offer_sources(g, p));
     // How many types of mana each permanent's abilities could make between them.
     let mut flex: Vec<(ObjectId, Vec<ManaType>)> = Vec::new();
     for s in &out {
@@ -1174,6 +1185,59 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             s.obj,
         )
     });
+    out
+}
+
+/// The most uses of one special action planned for a payment.
+const MAX_OFFER_USES: u32 = 99;
+
+/// Uses of special actions that add mana and may be taken any time `p` could activate a
+/// mana ability ("Until end of turn, any time you could activate a mana ability, you may
+/// pay 1 life. If you do, add {C}.", CR 605.3a, 116.2c): one source per use, as many as
+/// `p`'s life total pays for (CR 119.4). Each use is taken as the payment is made, like
+/// activating a mana ability (CR 601.2g).
+fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
+    let mut out = Vec::new();
+    let life = g.player(p).life.max(0) as u32;
+    for (id, ctx, life_each, effect) in crate::special_actions::mana_offers(g, p) {
+        let Some(obj) = ctx.source else {
+            continue;
+        };
+        // Mana restricted in how it's spent isn't planned for.
+        if effect_restriction(&effect).is_some() {
+            continue;
+        }
+        let Some(units) = production_units(g, &effect, &ctx).filter(|u| !u.is_empty()) else {
+            continue;
+        };
+        let uses = match life_each {
+            0 => MAX_OFFER_USES,
+            n => (life / n).min(MAX_OFFER_USES),
+        };
+        let ability = AbilityDef::new(
+            AbilityKind::Spell(SpellAbility {
+                body: Body {
+                    targets: Vec::new(),
+                    effect,
+                    modal: None,
+                },
+            }),
+            "",
+        );
+        for _ in 0..uses {
+            out.push(ManaSource {
+                obj,
+                ability: ability.clone(),
+                units: units.clone(),
+                // After everything that doesn't cost life.
+                cost_rank: 5,
+                sac_pool: Vec::new(),
+                sac_count: 0,
+                offer: Some(id),
+                life: life_each,
+            });
+        }
+    }
     out
 }
 
@@ -1228,7 +1292,8 @@ pub fn potential_mana_count(g: &Game, p: PlayerId, reserve: Option<ObjectId>) ->
             })
         })
         .collect();
-    Planner::new(&[], &units, &sources, 0).capacity(&|_| true) as u32
+    let life = g.player(p).life.max(0) as u32;
+    Planner::new(&[], &units, &sources, life).capacity(&|_| true) as u32
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1402,6 +1467,9 @@ struct Planner<'a> {
     assign: Vec<(usize, ManaType)>,
     /// Generic mana owed for {2/C} symbols paid with two generic mana.
     extra_generic: usize,
+    /// The life a use of each source costs ([`ManaSource::life`]).
+    source_life: Vec<u32>,
+    /// Life paid so far: for Phyrexian symbols and for uses of special actions.
     life_used: u32,
     life: u32,
 }
@@ -1448,9 +1516,15 @@ impl<'a> Planner<'a> {
             in_use: vec![0; n],
             assign: Vec::new(),
             extra_generic: 0,
+            source_life: sources.iter().map(|s| s.life).collect(),
             life_used: 0,
             life,
         }
+    }
+
+    /// Whether the life left pays for using source `s` (if it isn't in use already).
+    fn affordable(&self, s: usize) -> bool {
+        self.in_use[s] > 0 || self.life_used + self.source_life[s] <= self.life
     }
 
     /// Whether a source can't be activated because a conflicting one is in use.
@@ -1468,18 +1542,28 @@ impl<'a> Planner<'a> {
     }
 
     fn usable(&self, u: usize) -> bool {
-        self.open(u) && self.units[u].source.is_none_or(|s| !self.blocked(s))
+        self.open(u)
+            && self.units[u]
+                .source
+                .is_none_or(|s| !self.blocked(s) && self.affordable(s))
     }
 
     /// Usable units, in order of preference: mana already in the pool, then more units of
     /// abilities already being activated, then units of other abilities (the less
-    /// flexible first; [`mana_sources`] orders the abilities).
+    /// flexible first; [`mana_sources`] orders the abilities), and those that cost life
+    /// last.
     fn candidates(&self) -> Vec<usize> {
         let mut cands: Vec<usize> = (0..self.units.len()).filter(|&u| self.usable(u)).collect();
         cands.sort_by_key(|&u| {
             let unit = &self.units[u];
             let source_in_use = unit.source.is_some_and(|s| self.in_use[s] > 0);
-            (unit.pool_index.is_none(), !source_in_use, unit.types.len())
+            let costs_life = unit.source.is_some_and(|s| self.source_life[s] > 0);
+            (
+                unit.pool_index.is_none(),
+                costs_life,
+                !source_in_use,
+                unit.types.len(),
+            )
         });
         cands
     }
@@ -1487,6 +1571,9 @@ impl<'a> Planner<'a> {
     fn take(&mut self, u: usize, t: ManaType) {
         self.used[u] = true;
         if let Some(s) = self.units[u].source {
+            if self.in_use[s] == 0 {
+                self.life_used += self.source_life[s];
+            }
             self.in_use[s] += 1;
         }
         self.assign.push((u, t));
@@ -1497,6 +1584,9 @@ impl<'a> Planner<'a> {
             self.used[u] = false;
             if let Some(s) = self.units[u].source {
                 self.in_use[s] -= 1;
+                if self.in_use[s] == 0 {
+                    self.life_used -= self.source_life[s];
+                }
             }
         }
     }
@@ -1513,7 +1603,28 @@ impl<'a> Planner<'a> {
         let pool = (0..self.units.len())
             .filter(|&u| self.units[u].source.is_none() && self.open(u) && f(&self.units[u]))
             .count();
-        let lone: usize = self.lone_sources.iter().map(|&s| free(s)).sum();
+        // Sources whose use costs life: those in use, then as many others as the life
+        // left pays for, cheapest first.
+        let (costly, free_sources): (Vec<usize>, Vec<usize>) = self
+            .lone_sources
+            .iter()
+            .partition(|&&s| self.source_life[s] > 0 && self.in_use[s] == 0);
+        let mut costly: Vec<(u32, usize)> = costly
+            .into_iter()
+            .map(|s| (self.source_life[s], free(s)))
+            .filter(|(_, n)| *n > 0)
+            .collect();
+        costly.sort_by_key(|&(life, n)| (life, std::cmp::Reverse(n)));
+        let mut life_left = self.life.saturating_sub(self.life_used);
+        let mut paid_with_life = 0;
+        for (life, n) in costly {
+            if life > life_left {
+                break;
+            }
+            life_left -= life;
+            paid_with_life += n;
+        }
+        let lone: usize = free_sources.iter().map(|&s| free(s)).sum::<usize>() + paid_with_life;
         let grouped: usize = self
             .groups
             .iter()
@@ -1721,9 +1832,6 @@ pub fn pay_mana(
     spend: &SpendContext,
     reserve: Option<ObjectId>,
 ) -> Option<Vec<ManaType>> {
-    let life = g.player(p).life.max(0) as u32;
-    let cant_pay_life = g.cant_lose_life(p);
-    let max_life = if cant_pay_life { 0 } else { life };
     // Prefer paying from the pool if possible (without life for Phyrexian if mana suffices).
     let try_pool = |g: &Game, allow_life: u32| {
         find_payment_with(
@@ -1743,6 +1851,17 @@ pub fn pay_mana(
             if try_pool(g, 0).is_some() {
                 break;
             }
+            if let Some(id) = src.offer {
+                // A special action taken as the mana payment is made (CR 605.3a, 116.2c).
+                g.mana_hint = Some(types);
+                let sa = crate::decision::SpecialAction::Offer { id };
+                let r = crate::special_actions::perform(g, p, &sa);
+                g.mana_hint = None;
+                if !matches!(r, Some(Ok(()))) {
+                    return None;
+                }
+                continue;
+            }
             if !g.is_live(src.obj) || g.obj(src.obj).zone != Zone::Battlefield {
                 continue;
             }
@@ -1756,6 +1875,12 @@ pub fn pay_mana(
             }
         }
     }
+    // The life left after any life paid for mana (CR 119.4).
+    let max_life = if g.cant_lose_life(p) {
+        0
+    } else {
+        g.player(p).life.max(0) as u32
+    };
     let plan = try_pool(g, 0).or_else(|| try_pool(g, max_life))?;
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;

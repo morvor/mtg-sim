@@ -11,7 +11,7 @@ use crate::oracle::phrases::end;
 /// Whether the effect ends by creating tokens.
 fn ends_with_token(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } => true,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => true,
         Effect::Seq(v) => v.last().is_some_and(ends_with_token),
         _ => false,
     }

@@ -1,21 +1,22 @@
-//! "You may play two additional lands on each of your turns" (Azusa, Lost but Seeking;
-//! CR 305.2): like the core "an additional land" static, for any number. Effects allowing
-//! additional land plays are cumulative (CR 305.2a).
+//! Oracle patterns for additional land plays (CR 305.2): "You may play two additional
+//! lands on each of your turns." (Azusa, Lost but Seeking). The core static parser
+//! handles "an additional land".
 
 use super::StaticPattern;
 use crate::ability::*;
 use crate::oracle::phrases::end;
 use crate::oracle::CompileContext;
 
-fn additional_lands(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+inventory::submit! { StaticPattern { name: "N additional lands on each of your turns", priority: 100, parse: additional_lands_each_turn } }
+
+/// "you may play N additional lands on each of your turns" (N a number word or digits).
+fn additional_lands_each_turn(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = end(l).strip_prefix("you may play ")?;
-    let (w, r) = r.split_once(" additional lands")?;
-    if r != " on each of your turns" {
-        return None;
-    }
-    let n = match w {
+    let w = r.strip_suffix(" additional lands on each of your turns")?;
+    let n: u32 = match w {
         "two" => 2,
         "three" => 3,
+        "four" => 4,
         _ => w.parse().ok()?,
     };
     Some(vec![AbilityDef::new(
@@ -26,5 +27,3 @@ fn additional_lands(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
         text,
     )])
 }
-
-inventory::submit! { StaticPattern { name: "r305 N additional lands on each of your turns", priority: 100, parse: additional_lands } }

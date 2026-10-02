@@ -959,6 +959,12 @@ pub struct SpecialActionDef {
     /// What taking it costs.
     pub cost: Cost,
     pub action: SpecialActionEffect,
+    /// "Any time you could activate a mana ability" (CR 605.3a): besides any time the
+    /// player has priority, it can be taken while a mana payment is being made — as a
+    /// spell is cast or an ability activated, or when an effect asks for one — so mana it
+    /// adds helps pay (see `mana_abilities::mana_sources`).
+    #[serde(default)]
+    pub mana_timing: bool,
 }
 
 /// What a special action does.
@@ -2235,6 +2241,9 @@ pub enum CostChange {
     /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
     /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
     AdditionalCostChoice(Vec<(SmolStr, Cost)>),
+    /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
+    /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
+    SpendAnyType,
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -2948,6 +2957,19 @@ pub enum Effect {
     },
     CreateToken {
         spec: TokenSpec,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
+    },
+    /// "Create an X/X [token]": a token whose power and toughness are numbers the effect
+    /// defines (CR 107.3c), determined as the token is created, so they're part of its
+    /// copiable values (CR 707.2); otherwise as [`Effect::CreateToken`] (`spec`'s own power
+    /// and toughness are replaced).
+    CreateTokenWithPT {
+        spec: TokenSpec,
+        power: Value,
+        toughness: Value,
         count: Value,
         controller: PlayerRef,
         tapped: bool,
