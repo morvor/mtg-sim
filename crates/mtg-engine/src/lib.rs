@@ -57,6 +57,7 @@ pub mod designations;
 pub mod destinations;
 pub mod dfc;
 pub mod dice;
+pub mod dig_steps;
 pub mod discard_rules;
 pub mod draft;
 pub mod draw_rules;

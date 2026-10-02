@@ -13,6 +13,7 @@
 pub mod compare;
 mod costs;
 mod custom;
+mod dig;
 mod effects;
 mod keywords;
 mod nouns;

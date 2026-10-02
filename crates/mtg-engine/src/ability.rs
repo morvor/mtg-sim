@@ -773,6 +773,44 @@ pub enum TargetGroup {
     TotalAtMost(TotalStat, Box<Value>),
 }
 
+/// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
+/// ([`vars::DUG`]), then chosen among and distributed ("You may put a creature card and/or
+/// a land card from among them into your hand. Put the rest into your graveyard.").
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DigStep {
+    /// "[Chooser] [may] put/reveal [count] [filter] from among [from] [destination]":
+    /// cards of `from` still where they were are chosen and put `to` (left where they are
+    /// when `to` is the "in place" library position `FromTop(0)`). The chosen cards are
+    /// stored in [`vars::DUG_CHOSEN`]; the objects they became in `vars::IT`.
+    Take {
+        from: Sel,
+        chooser: PlayerRef,
+        filter: Filter,
+        /// An "and/or" list of descriptions ("a creature card and/or a land card"): each
+        /// card chosen stands for a different one of them (`filter` is any of them).
+        each_of: Vec<Filter>,
+        /// How many; `None`: all the matching cards, without a choice.
+        count: Option<Value>,
+        up_to: bool,
+        /// Chosen at random ("a random creature card from among them").
+        random: bool,
+        /// The chosen cards are revealed (CR 701.20a).
+        reveal: bool,
+        to: Destination,
+    },
+    /// "Put the rest [destination]": the cards of `from` still where they were.
+    Rest { from: Sel, to: Destination },
+    /// "Reveal (exile) cards from the top of [player]'s library until [they] reveal
+    /// (exile) [count] [filter] cards" (CR 701.20a): the revealed cards are stored in
+    /// [`vars::DUG`], those matching in [`vars::DUG_FOUND`] and `vars::IT`.
+    Until {
+        who: PlayerRef,
+        filter: Filter,
+        count: Value,
+        exile: bool,
+    },
+}
+
 /// What [`TargetGroup::TotalAtMost`] adds up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TotalStat {
@@ -878,6 +916,15 @@ pub mod vars {
     pub const TURNED_FACE_DOWN: Var = USER + 7088;
     /// First user-defined variable.
     pub const USER: Var = 10;
+    /// The cards the most recent dig looked at, revealed, milled or exiled from the top
+    /// of a library ("from among them", "the rest", see [`super::DigStep`]).
+    pub const DUG: Var = USER + 9201;
+    /// The cards a "reveal cards until you reveal N [kind] cards" found ("those land
+    /// cards", [`super::DigStep::Until`]).
+    pub const DUG_FOUND: Var = USER + 9202;
+    /// The cards the most recent [`super::DigStep::Take`] chose, before they moved ("the
+    /// revealed cards", "the chosen cards").
+    pub const DUG_CHOSEN: Var = USER + 9203;
     /// The object a static ability's continuous effect is being applied to, while its
     /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
     /// on it"), or a resolving effect's values are determined for (distinct from
@@ -3848,6 +3895,8 @@ pub enum Effect {
         take_to: Destination,
         rest_to: Destination,
     },
+    /// A step of a dig (see [`DigStep`] and `dig_steps.rs`).
+    DigStep(Box<DigStep>),
     RevealHand {
         who: PlayerRef,
     },

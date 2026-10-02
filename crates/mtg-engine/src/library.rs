@@ -220,6 +220,11 @@ pub fn dig(
         vars::REVEALED,
         cards.iter().map(|o| Entity::Object(*o)).collect(),
     );
+    // "From among them", "the rest" (`dig_steps.rs`).
+    ctx.set_var(
+        vars::DUG,
+        cards.iter().map(|o| Entity::Object(*o)).collect(),
+    );
     let cands: Vec<ObjectId> = cards
         .iter()
         .copied()
@@ -344,15 +349,21 @@ pub fn reveal_until(
         // No card was found: "that card" doesn't exist.
         ctx.set_var(vars::IT, vec![]);
     }
+    let mut dug: Vec<Entity> = ctx.vars.get(&vars::IT).cloned().unwrap_or_default();
+    ctx.set_var(vars::DUG_FOUND, dug.clone());
     if rest_to.zone == ZoneKind::Library {
+        dug.extend(revealed.iter().map(|o| Entity::Object(*o)));
         place_rest(g, p, revealed, rest_to, ctx);
     } else {
         // A later instruction can find the other cards ("put the rest on the bottom of
         // your library in a random order" after exiling them).
         let moved = g.move_to_destination(revealed, rest_to, ctx);
+        dug.extend(moved.iter().map(|o| Entity::Object(*o)));
         ctx.set_var(
             vars::REVEALED,
             moved.into_iter().map(Entity::Object).collect(),
         );
     }
+    // All the cards revealed, for "the rest" (`dig_steps.rs`).
+    ctx.set_var(vars::DUG, dug);
 }

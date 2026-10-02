@@ -209,7 +209,7 @@ impl Renderer<'_> {
     }
 
     /// "your"/"their" for a player's own zone.
-    fn possessive_for(&mut self, who: &PlayerRef) -> String {
+    pub(super) fn possessive_for(&mut self, who: &PlayerRef) -> String {
         match who {
             PlayerRef::You => "your".into(),
             _ => "their".into(),
@@ -217,7 +217,7 @@ impl Renderer<'_> {
     }
 
     /// "card", "creature card", "nonland card".
-    fn card_noun(&mut self, f: &Filter) -> String {
+    pub(super) fn card_noun(&mut self, f: &Filter) -> String {
         if matches!(f, Filter::Any) {
             return "card".into();
         }
@@ -227,7 +227,7 @@ impl Renderer<'_> {
     }
 
     /// "[subject] [vp]": "you" is dropped for imperative verbs.
-    fn with_subject(&mut self, who: &PlayerRef, vp: &str, keep_you: bool) -> String {
+    pub(super) fn with_subject(&mut self, who: &PlayerRef, vp: &str, keep_you: bool) -> String {
         if matches!(who, PlayerRef::You) {
             if keep_you {
                 return format!("you {vp}");
@@ -1164,6 +1164,7 @@ impl Renderer<'_> {
                 take_to,
                 rest_to,
             } => self.dig(who, n, *reveal, filter, take, *take_up_to, take_to, rest_to),
+            Effect::DigStep(step) => self.dig_step(step),
             Effect::LookAtHand { who } => {
                 let p = self.player(who, Case::Poss);
                 format!("look at {p} hand")
