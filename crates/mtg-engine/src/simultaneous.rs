@@ -598,7 +598,9 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
             if g.eval_cond(cond, ctx) {
                 plan(g, then, ctx, p)
             } else {
-                if matches!(**then, Effect::May { .. }) && matches!(**otherwise, Effect::Noop) {
+                // An instruction whose condition didn't hold wasn't done (as in
+                // `Game::exec`).
+                if matches!(**otherwise, Effect::Noop) {
                     ctx.prev_happened = false;
                 }
                 plan(g, otherwise, ctx, p)
@@ -615,7 +617,7 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                     g.record_apnap_choice(p, objs.clone());
                 }
             }
-            let moves = g.destination_moves(&objs, to, ctx);
+            let moves = g.destination_moves(objs, to, ctx);
             Plan::Move {
                 moves,
                 battlefield: to.zone == ZoneKind::Battlefield,
@@ -925,7 +927,7 @@ fn perform_plans(
                 let found = found.clone();
                 let to = to.clone();
                 let before = frames.enter(i, ctx);
-                let m = g.destination_moves(&found, &to, ctx);
+                let m = g.destination_moves(found, &to, ctx);
                 frames.leave(i, ctx, before, true);
                 m
             }

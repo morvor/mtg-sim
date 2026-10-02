@@ -30,6 +30,14 @@ pub struct Keyword {
     pub x: Option<Value>,
 }
 
+/// Whether two keyword instances are the same ability: the same kind with the same
+/// parameter text ("Enchant creature card in a graveyard"), or, without text, the same
+/// number.
+pub fn same_instance(a: &Keyword, b: &Keyword) -> bool {
+    let text = |k: &Keyword| k.text.as_ref().map(|t| t.to_lowercase());
+    a.kind == b.kind && text(a) == text(b) && (a.text.is_some() || a.n == b.n)
+}
+
 impl Keyword {
     pub fn new(kind: KeywordKind) -> Keyword {
         Keyword {

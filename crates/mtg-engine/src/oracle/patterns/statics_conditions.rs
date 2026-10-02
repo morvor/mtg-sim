@@ -67,6 +67,25 @@ fn object_state(r: &str, sel: &Sel, contracted: bool) -> Option<Condition> {
     } else {
         return object_has(r, sel);
     };
+    // "is enchanted by exactly one Aura", "is enchanted by three or more Auras" (Timber
+    // Paladin): the number of Auras attached to it.
+    if let Some(x) = state.strip_prefix("enchanted by ") {
+        let x = x.strip_prefix("exactly ").unwrap_or(x);
+        let (cmp, n, noun) =
+            super::counters_resources_counters::amount_cmp(x)?;
+        if !matches!(end(noun), "aura" | "auras") {
+            return None;
+        }
+        let c = Condition::Compare(
+            Value::Count(Filter::and(vec![
+                Filter::Subtype("Aura".into()),
+                Filter::AttachedToAnyOf(Box::new(sel.clone())),
+            ])),
+            cmp,
+            n,
+        );
+        return Some(if neg { Condition::Not(Box::new(c)) } else { c });
+    }
     let f = state_filter(state)?;
     let c = Condition::SelMatches(sel.clone(), f);
     Some(if neg { Condition::Not(Box::new(c)) } else { c })
@@ -123,6 +142,10 @@ pub(crate) fn state_filter(s: &str) -> Option<Filter> {
         // CR 506.5.
         "attacking alone" => Some(Filter::AttackingAlone),
         "blocking alone" => Some(Filter::BlockingAlone),
+        // "As long as ~ is attached to a creature" (Conqueror's Flail).
+        "attached to a creature" => Some(Filter::Custom(
+            crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into(),
+        )),
         _ => None,
     };
     if simple.is_some() {

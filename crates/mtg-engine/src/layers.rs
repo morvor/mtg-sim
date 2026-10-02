@@ -523,6 +523,23 @@ impl Game {
     }
 
     fn expire_dependent_effects(&mut self) {
+        // "For as long as it has a [kind] counter on it" (CR 611.2b): an object that no
+        // longer has one stops being affected for good.
+        for i in 0..self.effects.len() {
+            let (Duration::WhileAffectedHasCounter(kind), Affected::Objects(v)) =
+                (&self.effects[i].duration, &self.effects[i].affected)
+            else {
+                continue;
+            };
+            let keep: Vec<ObjectId> = v
+                .iter()
+                .copied()
+                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .collect();
+            if keep.len() != v.len() {
+                self.effects[i].affected = Affected::Objects(keep);
+            }
+        }
         let mut remove: Vec<u32> = Vec::new();
         for e in &self.effects {
             if self.effect_expired(&e.duration, e.source, e.controller) {
@@ -1707,6 +1724,9 @@ pub fn apply_mod(
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
+        Modification::LoseKeyword(k) => c.abilities.retain(|a| {
+            !matches!(&a.kind, AbilityKind::Keyword(kw) if crate::keywords::same_instance(kw, k))
+        }),
         Modification::RemoveAllAbilities => c.abilities.clear(),
         Modification::CantHaveKeyword(k) => c
             .abilities

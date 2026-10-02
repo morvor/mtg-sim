@@ -54,6 +54,7 @@ pub mod custom;
 pub mod decision;
 pub mod deck;
 pub mod designations;
+pub mod destinations;
 pub mod dfc;
 pub mod dice;
 pub mod discard_rules;
