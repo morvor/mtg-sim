@@ -24,7 +24,7 @@
 
 use crate::ability::*;
 use crate::oracle::effects::{player_ref, Builder};
-use crate::oracle::patterns::{EffectPattern, FollowupPattern};
+use crate::oracle::patterns::{ConditionPattern, EffectPattern, FollowupPattern};
 use crate::oracle::phrases::*;
 use crate::types::*;
 
@@ -34,6 +34,190 @@ inventory::submit! {
 }
 inventory::submit! {
     FollowupPattern { name: "search grammar: complete the search", priority: 90, apply: complete_search }
+}
+inventory::submit! {
+    EffectPattern { name: "search grammar: put the found cards somewhere [if condition]", priority: 95, parse: put_found }
+}
+
+inventory::submit! {
+    ConditionPattern { name: "search grammar: an opponent controls more lands than you", priority: 100, parse: some_player_condition }
+}
+
+/// "an opponent controls more lands than you", "a player controls more creatures than
+/// you": some such player exists.
+fn some_player_condition(c: &str) -> Option<Condition> {
+    let (base, r) = if let Some(r) = c.strip_prefix("an opponent ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        return None;
+    };
+    let pred = crate::oracle::patterns::value_grammar::player_clause(r)?;
+    Some(Condition::Compare(
+        Value::CountPlayers(PlayerFilter::And(vec![base, pred])),
+        Cmp::Ge,
+        Value::c(1),
+    ))
+}
+
+/// A condition in a sentence about the search: "target opponent controls more lands than
+/// you" (adding the target), or any other condition.
+fn condition(c: &str, b: &mut Builder) -> Option<Condition> {
+    for (p, pf, text) in [
+        ("target opponent ", PlayerFilter::Opponent, "target opponent"),
+        ("target player ", PlayerFilter::Any, "target player"),
+    ] {
+        if let Some(r) = c.strip_prefix(p) {
+            let pred = crate::oracle::patterns::value_grammar::player_clause(r)?;
+            let slot = b.add_target(TargetSpec::player(pf, text), text);
+            return Some(Condition::PlayerMatches(PlayerRef::Target(slot), pred));
+        }
+    }
+    crate::oracle::statics::parse_condition(c, b.ctx)
+}
+
+/// "If [condition], you may search your library for an additional Plains card." (Tithe):
+/// another part of the search, found only if the condition holds as it resolves.
+/// "If [condition], instead search your library for ..." (Nissa's Triumph): a different
+/// search. "If [condition], put those cards onto the battlefield instead of putting them
+/// into your hand." (The Five Doctors).
+fn search_conditional(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    let saved = b.targets.len();
+    let done = search_conditional_inner(c, x, prev, b).is_some();
+    if !done {
+        b.targets.truncate(saved);
+    }
+    done
+}
+
+fn search_conditional_inner(c: &str, x: &str, prev: &mut Effect, b: &mut Builder) -> Option<()> {
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut()?,
+        other => other,
+    };
+    let Effect::SearchCards(spec) = last else {
+        return None;
+    };
+    if !matches!(spec.who, PlayerRef::You) {
+        return None;
+    }
+    if let Some(desc) = x.strip_prefix("you may search your library for an additional ") {
+        if !spec.dests.is_empty()
+            || spec.shuffle != SearchShuffle::No
+            || spec.zones != [ZoneKind::Library]
+            || spec.optional
+        {
+            return None;
+        }
+        let cond = condition(c, b)?;
+        let (parts, distinct, rest) = specs(&format!("a {desc}"), b)?;
+        if !rest.is_empty() || distinct || parts.len() != 1 {
+            return None;
+        }
+        let mut part = parts.into_iter().next()?;
+        // "You may": a card with a stated quality needn't be found anyway (CR 701.23b).
+        part.up_to = true;
+        part.count = Value::If(Box::new(cond), Box::new(Value::c(1)), Box::new(Value::c(0)));
+        spec.parts.push(part);
+        return Some(());
+    }
+    if let Some(y) = x.strip_prefix("instead ") {
+        if !spec.dests.is_empty() || spec.shuffle != SearchShuffle::No {
+            return None;
+        }
+        let cond = condition(c, b)?;
+        let alt = search_clause(y, b)?;
+        let Effect::SearchCards(a) = &alt else {
+            return None;
+        };
+        if !a.dests.is_empty() || a.shuffle != SearchShuffle::No || !matches!(a.who, PlayerRef::You) {
+            return None;
+        }
+        let old = std::mem::take(last);
+        *last = Effect::If {
+            cond,
+            then: Box::new(alt),
+            otherwise: Box::new(old),
+        };
+        return Some(());
+    }
+    // "put those cards onto the battlefield instead of putting them into your hand".
+    let y = x.strip_prefix("put ")?;
+    let y = pronoun(y)?.trim_start();
+    let you = Searcher {
+        who: PlayerRef::You,
+        their: PlayerRef::You,
+        optional: false,
+        third: false,
+    };
+    let (to, rest) = destination(y, &you, b)?;
+    let rest = rest.trim();
+    let instead_of = rest.strip_prefix("instead of putting ")?;
+    let instead_of = pronoun(instead_of)?.trim_start();
+    let (from, tail) = destination(instead_of, &you, b)?;
+    if !tail.trim().is_empty()
+        || spec.dests.len() != 1
+        || spec.dests[0].to.zone != from.zone
+        || to.zone == from.zone
+    {
+        return None;
+    }
+    let cond = condition(c, b)?;
+    let mut alt = (**spec).clone();
+    alt.dests[0].to = to;
+    let old = std::mem::take(last);
+    *last = Effect::If {
+        cond,
+        then: Box::new(Effect::SearchCards(Box::new(alt))),
+        otherwise: Box::new(old),
+    };
+    Some(())
+}
+
+inventory::submit! {
+    // Before the general "if [condition], [effect] instead" (priority 60).
+    FollowupPattern { name: "search grammar: if [condition], search for an additional card / instead search", priority: 50, apply: search_conditional }
+}
+
+/// "Put it onto the battlefield tapped if it's a land card", "put that card into your
+/// hand", "put that card on top of your library" (the cards a search found, which "it"
+/// names; a conditional destination is a separate instruction).
+fn put_found(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::Var(vars::IT)) {
+        return None;
+    }
+    let l = end(l);
+    let r = pronoun(l.strip_prefix("put ")?)?.trim_start();
+    let you = Searcher {
+        who: PlayerRef::You,
+        their: PlayerRef::You,
+        optional: false,
+        third: false,
+    };
+    let (to, rest) = destination(r, &you, b)?;
+    let mv = Effect::Move {
+        what: Sel::Var(vars::IT),
+        to,
+    };
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Some(mv);
+    }
+    let c = rest.strip_prefix("if ")?;
+    let cond = match crate::oracle::patterns::statics_conditions::pronoun_state(c) {
+        Some(f) if c.starts_with("it") => Condition::SelMatches(Sel::Var(vars::IT), f),
+        _ => crate::oracle::statics::parse_condition(c, b.ctx)?,
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(mv),
+        otherwise: Box::new(Effect::Noop),
+    })
 }
 
 /// Who searches.
@@ -82,8 +266,9 @@ fn searcher<'a>(l: &'a str, b: &mut Builder) -> Option<(Searcher, &'a str)> {
             who,
             PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer
         );
-        // "may each search" is for several players.
-        if verb == " may each search " && !group {
+        // "may each search" is for several players; "each opponent may search" is the
+        // opponents' choice in APNAP order (`each_opponent_may`).
+        if (verb == " may each search ") != (group && optional) {
             return None;
         }
         let _ = tail;
@@ -678,10 +863,10 @@ fn destination<'a>(s: &'a str, sr: &Searcher, b: &mut Builder) -> Option<(Destin
             let x = x.trim_start();
             let x = x.strip_prefix("additional ").unwrap_or(x);
             let (kind, x) = crate::oracle::costs::counter_kind(x)?;
+            let x = x.trim_start();
             let x = x
-                .strip_prefix(" counters on it")
-                .or_else(|| x.strip_prefix(" counter on it"))
-                .or_else(|| x.strip_prefix(" counters on them"))?;
+                .strip_prefix("counters on it")
+                .or_else(|| x.strip_prefix("counter on it"))?;
             d.with_counters.push((kind, n));
             r = x;
         } else {
@@ -692,11 +877,7 @@ fn destination<'a>(s: &'a str, sr: &Searcher, b: &mut Builder) -> Option<(Destin
 }
 
 /// The instructions after the card specs: reveal, put/exile (possibly split), shuffle.
-/// Fills them into `spec`; returns false unless all of `t` is understood.
-fn tail(t: &str, spec: &mut SearchSpec, sr: &Searcher, b: &mut Builder) -> bool {
-    tail_inner(t, spec, sr, b).is_some_and(|r| r.trim().is_empty())
-}
-
+/// Fills them into `spec`; returns what's left of `t`.
 fn tail_inner<'a>(
     t: &'a str,
     spec: &mut SearchSpec,
@@ -849,7 +1030,12 @@ fn search_clause(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let out = search_clause_inner(l, b);
+    let out = search_clause_inner(l, b).or_else(|| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+        subject_then_search(l, b)
+    });
     if out.is_none() {
         b.targets.truncate(saved.0);
         b.it = saved.1;
@@ -858,9 +1044,48 @@ fn search_clause(l: &str, b: &mut Builder) -> Option<Effect> {
     out
 }
 
+/// "That player loses 3 life, searches their library ...", "Target player gains 2 life,
+/// then searches their library ...": an instruction for the same player first.
+fn subject_then_search(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (at, len) = [", then searches ", ", searches "]
+        .iter()
+        .find_map(|p| l.find(p).map(|i| (i, p.len())))?;
+    let head = &l[..at];
+    let n0 = b.targets.len();
+    let first = crate::oracle::effects::parse_clause(head, b)?;
+    let who = if head.starts_with("target ") {
+        // The target the first instruction's subject added.
+        (b.targets.len() > n0).then_some(PlayerRef::Target(n0 as u8))?
+    } else {
+        let (w, _) = player_ref(head, b)?;
+        if b.targets.len() != n0 {
+            return None;
+        }
+        w
+    };
+    if matches!(
+        who,
+        PlayerRef::You | PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer
+    ) || !matches!(b.targets.get(n0).map(|t| &t.what), None | Some(TargetKind::Player(_)))
+    {
+        return None;
+    }
+    // The search's subject is that same player.
+    let prev_player = std::mem::replace(&mut b.it_player, who);
+    let search = search_clause_inner(&format!("that player searches {}", &l[at + len..]), b);
+    if search.is_none() {
+        b.it_player = prev_player;
+    }
+    Some(Effect::seq(vec![first, search?]))
+}
+
 fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
     let (sr, r) = searcher(l, b)?;
     let (whose, zones, zones_optional, r) = zones(r, &sr, b)?;
+    // "Search its owner's graveyard, hand, and library ... That player shuffles."
+    if !matches!(whose, PlayerRef::You | PlayerRef::Iterated) {
+        b.it_player = whose.clone();
+    }
     // The card specs run to the first action.
     let cut = ACTIONS
         .iter()
@@ -881,6 +1106,18 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         owned = rest;
         t = owned.as_str();
     }
+    // "..., then the player shuffles" / "..., then that player shuffles": the library of
+    // the player whose library was searched.
+    let mut that_player_shuffles = false;
+    let owned2;
+    for p in [", then the player shuffles", ", then that player shuffles"] {
+        if let Some(x) = t.strip_suffix(p) {
+            that_player_shuffles = true;
+            owned2 = x.to_string();
+            t = owned2.as_str();
+            break;
+        }
+    }
     let mut spec = SearchSpec {
         who: sr.who.clone(),
         whose,
@@ -893,8 +1130,28 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         dests: vec![],
         shuffle: SearchShuffle::No,
     };
-    if !tail(t, &mut spec, &sr, b) {
-        return None;
+    let leftover = tail_inner(t, &mut spec, &sr, b)?.to_string();
+    // "..., put that card into your hand, discard a card at random, then shuffle": an
+    // instruction between putting the cards somewhere and shuffling.
+    let mut then = None;
+    if !leftover.trim().is_empty() {
+        if sr.third || spec.shuffle != SearchShuffle::No || spec.dests.is_empty() {
+            return None;
+        }
+        let x = leftover.strip_prefix(", ")?;
+        let x = x.strip_prefix("then ").unwrap_or(x);
+        let (x, shuffle) = match x.strip_suffix(", then shuffle") {
+            Some(x) => (x, true),
+            None => (x, false),
+        };
+        let e = crate::oracle::effects::parse_clause(x, b)?;
+        if !library_free(&e) {
+            return None;
+        }
+        if shuffle {
+            spec.shuffle = SearchShuffle::After;
+        }
+        then = Some(e);
     }
     // Third-person verbs go with a subject other than you, and only then.
     let third_verbs = [", reveals ", ", puts ", " and puts ", ", then shuffles", ", exiles "];
@@ -909,13 +1166,22 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
     if spec.shuffle != SearchShuffle::No && !own_library(&spec) {
         return None;
     }
+    if that_player_shuffles {
+        if own_library(&spec) || spec.shuffle != SearchShuffle::No {
+            return None;
+        }
+        spec.shuffle = SearchShuffle::After;
+    }
     let e = Effect::SearchCards(Box::new(spec));
     let e = match x_value {
         Some(x) => crate::oracle::patterns::r107_numbers::substitute_x(&e, &x)?,
         None => e,
     };
     b.it = Sel::Var(vars::IT);
-    Some(e)
+    Some(match then {
+        Some(t) => Effect::seq(vec![e, t]),
+        None => e,
+    })
 }
 
 /// Whether two player references are the same reference.
@@ -971,19 +1237,99 @@ fn update_searches(prev: &mut Effect, f: &mut dyn FnMut(&mut SearchSpec) -> bool
     }
 }
 
+/// Like [`update_searches`], also looking past later instructions to the most recent
+/// search, if those instructions don't involve a library.
+fn update_deep(prev: &mut Effect, f: &mut dyn FnMut(&mut SearchSpec) -> bool) -> bool {
+    let mut new = prev.clone();
+    match deep(&mut new, f) {
+        Some(n) if n > 0 => {
+            *prev = new;
+            true
+        }
+        _ => false,
+    }
+}
+
+fn deep(e: &mut Effect, f: &mut dyn FnMut(&mut SearchSpec) -> bool) -> Option<usize> {
+    match e {
+        Effect::SearchCards(s) => f(s).then_some(1),
+        Effect::May { effect, .. } => deep(effect, f),
+        Effect::If {
+            then, otherwise, ..
+        } => Some(deep(then, f)? + deep(otherwise, f)?),
+        Effect::Seq(v) => {
+            for i in (0..v.len()).rev() {
+                let n = deep(&mut v[i], f)?;
+                if n > 0 {
+                    return v[i + 1..].iter().all(library_free).then_some(n);
+                }
+            }
+            Some(0)
+        }
+        _ => Some(0),
+    }
+}
+
+/// Whether an instruction doesn't involve a library (so shuffling one before or after it
+/// makes no difference).
+fn library_free(e: &Effect) -> bool {
+    let j = serde_json::to_string(e).unwrap_or_default();
+    !["\"Library\"", "Draw", "Mill", "Scry", "Surveil", "Dig", "Search", "Shuffle", "Explore"]
+        .iter()
+        .any(|w| j.contains(w))
+}
+
+/// "Then each player who searched their library this way shuffles." after "each opponent
+/// may search their library ...": each opponent who accepted shuffles after searching.
+fn opponents_who_searched_shuffle(prev: &mut Effect) -> bool {
+    use crate::oracle::patterns::each_opponent_may::ACCEPTED;
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let Some(Effect::ForEachPlayer { who: PlayerRef::Var(var), effect }) = v.last_mut() else {
+        return false;
+    };
+    if *var != ACCEPTED {
+        return false;
+    }
+    let Effect::AsPlayer { effect: inner, .. } = &mut **effect else {
+        return false;
+    };
+    match &mut **inner {
+        Effect::Search {
+            who: PlayerRef::You,
+            whose: PlayerRef::You,
+            shuffle,
+            ..
+        } if !*shuffle => {
+            *shuffle = true;
+            true
+        }
+        Effect::SearchCards(s)
+            if matches!((&s.who, &s.whose), (PlayerRef::You, PlayerRef::You))
+                && s.shuffle == SearchShuffle::No =>
+        {
+            s.shuffle = SearchShuffle::After;
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Sentences that complete the search before them.
 fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     // "If you search your library this way, shuffle." / "If they search their library
-    // this way, they shuffle.": only a searched library is shuffled.
-    if matches!(
+    // this way, they shuffle." / "Then shuffle." after instructions that use the found
+    // cards: only a searched library is shuffled (the found cards are the same objects
+    // whether it's shuffled before or after those instructions, which don't look at the
+    // library).
+    let you = matches!(
         l,
-        "if you search your library this way, shuffle"
-            | "if they search their library this way, they shuffle"
-            | "then each player who searched their library this way shuffles"
-    ) {
-        let you = l.starts_with("if you ");
-        return update_searches(prev, &mut |s| {
+        "if you search your library this way, shuffle" | "then shuffle" | "shuffle"
+    );
+    if you || l == "if they search their library this way, they shuffle" {
+        let done = update_deep(prev, &mut |s| {
             let ok = s.shuffle == SearchShuffle::No
                 && s.zones.contains(&ZoneKind::Library)
                 && own_library(s)
@@ -993,20 +1339,50 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             }
             ok
         });
+        if done || l.starts_with("if ") {
+            return done;
+        }
+    }
+    // "Then each player who searched their library this way shuffles." after "each
+    // opponent may search their library ..." (`each_opponent_may`).
+    if l == "then each player who searched their library this way shuffles" {
+        return opponents_who_searched_shuffle(prev);
     }
     // "Then that player shuffles." after searching another player's library.
+    let that = b.it_player.clone();
+    let that_shuffles = |s: &mut SearchSpec| {
+        let ok = s.shuffle == SearchShuffle::No
+            && s.zones.contains(&ZoneKind::Library)
+            && !same(&s.whose, &s.who)
+            && same(&s.whose, &that);
+        if ok {
+            s.shuffle = SearchShuffle::After;
+        }
+        ok
+    };
     if matches!(l, "then that player shuffles" | "that player shuffles") {
-        let that = b.it_player.clone();
-        return update_searches(prev, &mut |s| {
-            let ok = s.shuffle == SearchShuffle::No
-                && s.zones.contains(&ZoneKind::Library)
-                && !same(&s.whose, &s.who)
-                && same(&s.whose, &that);
-            if ok {
-                s.shuffle = SearchShuffle::After;
-            }
+        return update_deep(prev, &mut { that_shuffles });
+    }
+    // "That player shuffles, then draws a card for each card exiled from their hand this
+    // way." (Lost Legacy).
+    if l == "that player shuffles, then draws a card for each card exiled from their hand this way" {
+        let mut whose = None;
+        let ok = update_searches(prev, &mut |s| {
+            let exiles = s.dests.len() == 1 && s.dests[0].to.zone == ZoneKind::Exile;
+            let ok = exiles && s.zones.contains(&ZoneKind::Hand) && that_shuffles(s);
+            whose = Some(s.whose.clone());
             ok
         });
+        if !ok {
+            return false;
+        }
+        let draw = Effect::Draw {
+            who: whose.expect("a search"),
+            n: Value::CountSel(Box::new(Sel::Var(crate::search_rules::FROM_HAND))),
+        };
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![old, draw]);
+        return true;
     }
     // "Reveal those cards, put them into your hand, then shuffle.", "Put that card onto
     // the battlefield, then shuffle.", "Put one into your hand and the other into your
@@ -1017,6 +1393,7 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     } else {
         format!(", {l}")
     };
+    let mut then: Option<Effect> = None;
     let ok = update_searches(prev, &mut |s| {
         if !matches!(s.who, PlayerRef::You) || s.shuffle != SearchShuffle::No {
             return false;
@@ -1036,12 +1413,33 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             third: false,
         };
         let mut new = s.clone();
-        if !tail(&t, &mut new, &sr, b) || (new.shuffle != SearchShuffle::No && !own_library(&new)) {
+        let Some(left) = tail_inner(&t, &mut new, &sr, b) else {
             return false;
+        };
+        if new.shuffle != SearchShuffle::No && !own_library(&new) {
+            return false;
+        }
+        // "Put it into your hand, then discard a card at random." (Wild Research).
+        let left = left.trim();
+        if !left.is_empty() {
+            let Some(x) = left.strip_prefix(", then ") else {
+                return false;
+            };
+            if new.dests.is_empty() || new.shuffle != SearchShuffle::No {
+                return false;
+            }
+            match crate::oracle::effects::parse_clause(x, b) {
+                Some(e) if library_free(&e) && then.is_none() => then = Some(e),
+                _ => return false,
+            }
         }
         *s = new;
         true
     });
+    if let (true, Some(e)) = (ok, then.take()) {
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![old, e]);
+    }
     if ok {
         b.it = Sel::Var(vars::IT);
     }
@@ -1085,6 +1483,8 @@ mod tests {
                 let (desc, t2) = r.split_at(cut);
                 eprintln!("  desc={desc:?} tail={t2:?}");
                 eprintln!("  specs={:?}", specs(desc, b));
+                let mut spec = SearchSpec { who: PlayerRef::You, whose: PlayerRef::You, zones: vec![ZoneKind::Library], zones_optional: false, parts: vec![], distinct_names: false, optional: false, reveal: false, dests: vec![], shuffle: SearchShuffle::No };
+                eprintln!("  tail={:?} {:?}", tail_inner(t2, &mut spec, &sr, b), spec.dests);
                 eprintln!("  clause={:?}", search_clause(l, b).is_some());
             });
         }

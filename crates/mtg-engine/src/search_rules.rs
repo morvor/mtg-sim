@@ -112,6 +112,10 @@ pub fn possible(g: &Game, spec: &SearchSpec, ctx: &Ctx) -> bool {
         .any(|p| !g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_))))
 }
 
+/// The found cards that a search put somewhere from a hand ("draws a card for each card
+/// exiled from their hand this way").
+pub const FROM_HAND: Var = vars::USER + 7023;
+
 /// What one searcher found.
 struct Found {
     searcher: PlayerId,
@@ -185,9 +189,22 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
         }
     }
     // The found cards are put where they go at the same time.
+    let mut from_hand: Vec<Entity> = Vec::new();
     if !moves.is_empty() {
-        all.extend(g.move_objects(moves).into_iter().flatten());
+        let in_hand: Vec<bool> = moves
+            .iter()
+            .map(|m| matches!(g.obj(m.obj).zone, Zone::Hand(_)))
+            .collect();
+        for (moved, hand) in g.move_objects(moves).into_iter().zip(in_hand) {
+            if let Some(o) = moved {
+                if hand {
+                    from_hand.push(Entity::Object(o));
+                }
+                all.push(o);
+            }
+        }
     }
+    ctx.set_var(FROM_HAND, from_hand);
     for o in shuffles {
         g.shuffle_library(o);
     }

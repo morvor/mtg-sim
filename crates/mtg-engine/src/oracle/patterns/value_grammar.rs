@@ -896,7 +896,7 @@ fn players(s: &str) -> Option<(PlayerFilter, &str)> {
 
 /// "control an artifact", "controls more lands than you", "have three or more poison
 /// counters", "has four or more cards in hand".
-fn player_clause(p: &str) -> Option<PlayerFilter> {
+pub(crate) fn player_clause(p: &str) -> Option<PlayerFilter> {
     let p = p.trim();
     // Verb agreement: "who control", "who have".
     let p = if let Some(r) = p.strip_prefix("control ") {
