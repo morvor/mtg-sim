@@ -443,9 +443,19 @@ pub fn split_cost(text: &str) -> Option<(&str, &str)> {
 }
 
 fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) -> Option<Ability> {
+    // An amount chosen as the cost is paid ("Remove one or more +1/+1 counters from ~") is
+    // the ability's X (see `patterns::cost_parts`).
+    let amount_x = patterns::cost_parts::amount_as_x(cost_s);
+    let cost_s = amount_x.as_ref().map_or(cost_s, |(c, _)| c.as_str());
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
+    // "This ability costs {1} less to activate for each ..." (CR 602.2b, 601.2f).
+    let (eff_text, own_cost) =
+        match patterns::activation_cost_modifiers::split_own_cost_sentence(eff_text) {
+            Some((head, sentence)) => (head, Some(sentence)),
+            None => (eff_text, None),
+        };
     // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
     let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
         || cost.parts.iter().any(crate::casting::cost_part_has_x);
@@ -456,7 +466,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     // CR 400.7j: "the exiled card" is the card the cost exiled.
     // CR 107.3a, 107.3k: an X in the activation cost defines X for the ability.
     let x = patterns::value_grammar::cost_has_x(cost_s);
-    let body =
+    let body = patterns::cost_parts::with_amount_x(amount_x.is_some(), || {
         patterns::value_grammar::with_x_defined(x, || {
             match crate::zones::cost_exiled_text(&cost, eff_text) {
                 Some(text) => {
@@ -464,20 +474,36 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
                 }
                 None => effects::parse_body(eff_text, ctx),
             }
-        })?;
+        })
+    })?;
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
     // nor its effect moves a card to or from a library.
     let is_mana = effects::is_mana_effect(&body.effect)
         && body.targets.is_empty()
         && !loyalty
         && !touches_library(&cost, &body.effect);
+    let single_target = body.targets.len() == 1 && body.targets[0].max.as_const() == Some(1);
     let mut act = ActivatedAbility::new(cost, body);
+    if let Some(sentence) = own_cost {
+        act.own_cost_changes
+            .push(patterns::activation_cost_modifiers::parse_own_cost_change(
+                &sentence,
+                single_target,
+                ctx,
+            )?);
+    }
     act.timing = timing;
     act.max_per_turn = max_per_turn;
     act.is_loyalty = loyalty;
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
     act.zone = activated_zone(cost_s, eff_text);
+    if let Some((_, Some(c))) = amount_x {
+        act.condition = Some(match act.condition.take() {
+            Some(e) => Condition::And(vec![e, c]),
+            None => c,
+        });
+    }
     if x_not_zero.is_some() {
         act.condition = Some(patterns::r107_x_cant_be_zero::condition(
             act.condition.take(),
