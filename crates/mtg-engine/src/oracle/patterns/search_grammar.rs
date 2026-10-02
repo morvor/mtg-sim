@@ -282,6 +282,63 @@ inventory::submit! {
     FollowupPattern { name: "search grammar: you may play/cast the exiled found cards", priority: 90, apply: may_play_found }
 }
 
+inventory::submit! {
+    // Before the general "if [condition], [effect]" sentence.
+    FollowupPattern { name: "search grammar: if you reveal a card named X this way, put it ...", priority: 50, apply: if_revealed_named }
+}
+
+/// "If you reveal a card named Hammer of Nazahn this way, put it onto the battlefield."
+/// after "Search your library for an Equipment card and reveal it.": the found card goes
+/// there if it has that name ("Otherwise, ..." completes it).
+fn if_revealed_named(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you reveal a card named ") else {
+        return false;
+    };
+    let Some((name, x)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    // The search before revealed what it found and left it where it was.
+    let revealed = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    let Some(Effect::SearchCards(spec)) = revealed else {
+        return false;
+    };
+    if !spec.reveal || !spec.dests.is_empty() || !matches!(spec.who, PlayerRef::You) {
+        return false;
+    }
+    // "Hammer of ~": the card's own short name is part of the name.
+    let short = b.ctx.card_name.split(", ").next().unwrap_or_default();
+    let Some(name) = (if name.contains('~') && !short.is_empty() {
+        printed_name(&name.replace('~', &short.to_lowercase()))
+    } else {
+        printed_name(name)
+    }) else {
+        return false;
+    };
+    if !matches!(b.it, Sel::Var(vars::IT)) {
+        return false;
+    }
+    let Some(mv) = put_found(x, b) else {
+        return false;
+    };
+    if !matches!(mv, Effect::Move { .. }) {
+        return false;
+    }
+    let cond = Condition::SelMatches(Sel::Var(vars::IT), Filter::Named(name.into()));
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond,
+            then: Box::new(mv),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
 /// "Until end of turn, you may play that card." / "You may cast them this turn." after a
 /// search that exiled the found cards (Thada Adel, Chandra, Heart of Fire): a permission
 /// for those objects (CR 400.7).

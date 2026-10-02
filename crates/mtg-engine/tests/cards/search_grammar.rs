@@ -892,3 +892,28 @@ fn a_search_if_you_ve_cast_spells_with_both_names_this_turn() {
         .any(|o| t.g.obj(*o).chars.name == "The Unspeakable"));
     assert!(!searched(&t, P0));
 }
+
+#[test]
+fn if_you_reveal_a_card_named_this_way_put_it_onto_the_battlefield() {
+    cr!("701.23a", "701.20a");
+    assert_supported("Nazahn, Revered Bladesmith");
+    for (equipment, on_battlefield) in [("Hammer of Nazahn", true), ("Bonesplitter", false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 3);
+        t.lands(P0, "Plains", 3);
+        let eq = t.library_top(P0, equipment);
+        t.library_top(P0, "Island");
+        let nazahn = t.hand(P0, "Nazahn, Revered Bladesmith");
+        t.answer_choose(P0, &[Entity::Object(eq)]);
+        t.cast(P0, nazahn).go();
+        t.resolve_all();
+        let in_play = t
+            .g
+            .battlefield
+            .iter()
+            .any(|o| t.g.obj(*o).chars.name == equipment);
+        assert_eq!(in_play, on_battlefield, "{equipment}");
+        assert_eq!(t.in_hand(P0, equipment), !on_battlefield, "{equipment}");
+        assert_eq!(shuffles(&t, P0), 1);
+    }
+}
