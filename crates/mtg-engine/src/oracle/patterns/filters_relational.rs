@@ -1205,8 +1205,11 @@ fn objects_for_value(t: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some((f, plural, rest)) = parse_object_phrase(t2) {
         // "cards milled this way", "cards revealed this way": a description the phrase
         // parser doesn't finish (the core value parser reads some of these).
+        // So is a relative clause ("other spells you've cast this turn").
         let next = rest.split_whitespace().next().unwrap_or("");
-        if next.ends_with("ed") && next != "and" {
+        if (next.ends_with("ed") && next != "and")
+            || matches!(next, "you" | "you've" | "they" | "they've" | "that" | "which")
+        {
             return None;
         }
         if plural {
