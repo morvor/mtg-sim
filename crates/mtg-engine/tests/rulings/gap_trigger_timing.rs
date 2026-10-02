@@ -619,3 +619,20 @@ fn kodama_soulshift_x_is_determined_as_it_dies_and_counts_itself() {
     t.resolve();
     assert!(t.in_hand(P0, "Kodama of the Center Tree"));
 }
+
+#[test]
+fn job_select_hero_enters_as_a_1_1_before_the_equipment_is_attached() {
+    cr!("702.182a", "603.2", "608.2c");
+    ruling!(
+        "Monk's Fist",
+        "Abilities that trigger when a creature enters the battlefield see that a 1/1 creature entered the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    power_two_watcher(&mut t, P0);
+    // Monk's Fist: "Job select. Equipped creature gets +1/+0 and is a Monk ..."
+    let (fist, _) = equipment_enters(&mut t, "Monk's Fist", true);
+    let hero = the_token(&t, P0);
+    assert_eq!(t.obj_now(fist).attached_to, Some(Entity::Object(hero)));
+    assert_eq!(t.pt(hero), (2, 1));
+    assert_eq!(triggered(&t, "power 2 or greater"), 0);
+}
