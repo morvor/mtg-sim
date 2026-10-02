@@ -140,6 +140,35 @@ impl Renderer<'_> {
                 format!("{t} becomes blocked")
             }
             "visit:claim the prize" => "claim the prize".into(),
+            // "Look at the top five cards of target opponent's library, then put them back
+            // in any order", "... then exile one of them".
+            n if n.starts_with("basic_effects:look at top:") => {
+                let l: crate::kw::basic_effects::LookAtTop =
+                    serde_json::from_str(&n["basic_effects:look at top:".len()..]).ok()?;
+                let lib = self.player(&l.library, Case::Poss);
+                let looker = self.player(&l.looker, Case::Subj);
+                let cards = match &l.n {
+                    Value::Const(1) => format!("the top card of {lib} library"),
+                    Value::Const(k) => format!("the top {} cards of {lib} library", number_word(*k)),
+                    other => {
+                        let v = self.value(other);
+                        format!("the top {v} cards of {lib} library")
+                    }
+                };
+                let mut s = format!("look at {cards}");
+                if l.exile > 0 {
+                    s.push_str(&format!(", then exile {} of them", number_word(l.exile as i32)));
+                }
+                if l.reorder {
+                    let pron = if l.exile > 0 { "the rest" } else { "them" };
+                    s.push_str(&format!(", then put {pron} back in any order"));
+                }
+                if looker == "you" {
+                    s
+                } else {
+                    format!("{looker} {}", super::effects::third_person(&s).replace(", then put ", ", then puts ").replace(", then exile ", ", then exiles "))
+                }
+            }
             // Scour: "Search its controller's graveyard, hand, and library for all cards
             // with the same name as that enchantment and exile them."
             n if n.starts_with("search graveyard hand library same name:") => {

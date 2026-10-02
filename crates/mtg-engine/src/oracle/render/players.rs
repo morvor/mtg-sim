@@ -158,6 +158,9 @@ impl Renderer<'_> {
                 };
                 self.stack_object_noun(f, base)
             }
+            // "target instant spell, sorcery spell, or triggered ability": the
+            // alternatives name what they are.
+            TargetKind::SpellOrAbility(f @ Filter::Or(_)) => self.noun(f, num),
             TargetKind::SpellOrAbility(f) => {
                 let base = match num {
                     Num::One => "spell or ability",

@@ -582,7 +582,12 @@ impl Renderer<'_> {
                             np.zone_said = true;
                         }
                         Q::Implied => {}
+                        Q::Kind(k) => np.kind = Some(k),
                     }
+                    return;
+                }
+                if let Some(s) = self.custom_rel_with_data(name) {
+                    np.rel.push(s);
                     return;
                 }
                 let (adj, s) = self.custom_filter_quality(name);

@@ -9,6 +9,8 @@ use crate::kw::hand_graveyard_actions as hga;
 pub(crate) enum CustomQuality {
     /// After the noun: "creature that dealt damage to you this turn".
     Rel(String),
+    /// The kind of object, as the head noun: "triggered ability".
+    Kind(&'static str),
     /// After the noun, and says where it is: "card exiled with it".
     RelInExile(String),
     /// Says nothing the noun doesn't: a rule of the instruction it's in ("attach it to a
@@ -33,6 +35,16 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kw::noncombat_damage::DEALT_NONCOMBAT_DAMAGE_THIS_TURN => {
             rel("that was dealt noncombat damage this turn")
         }
+        crate::game_terms::ACTIVATED_ABILITY => Some(Kind("activated ability")),
+        crate::game_terms::TRIGGERED_ABILITY => Some(Kind("triggered ability")),
+        crate::kw::basic_effects::SECOND_SPELL_CAST_THIS_TURN => {
+            rel("{alt:that's the second spell cast this turn|that is the second spell cast this turn}")
+        }
+        crate::kw::basic_effects::DEALT_DAMAGE_THIS_TURN => rel("that dealt damage this turn"),
+        crate::kw::basic_effects::BLOCKED_THIS_TURN => rel("that blocked this turn"),
+        crate::kw::basic_effects::BLOCKED_BY_SOURCE_THIS_TURN => rel("~it blocked this turn"),
+        // CR 608.2b: the source as it last existed ("target creature ~ is blocking").
+        crate::kw::basic_effects::BLOCKED_BY_SOURCE_LKI => rel("~ is blocking"),
         crate::kw::delve::EXILED_WITH_IT => Some(RelInExile("exiled with ~it".into())),
         crate::attach::ENCHANTED_BY_YOUR_AURA => {
             rel("{alt:that are enchanted by Auras you control|that's enchanted by an Aura you control|enchanted by an Aura you control}")
@@ -114,6 +126,30 @@ fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
 }
 
 impl Renderer<'_> {
+    /// A custom quality whose name carries data (a JSON filter or player).
+    pub(crate) fn custom_rel_with_data(&mut self, name: &str) -> Option<String> {
+        if let Some(j) = name.strip_prefix("basic_effects:blocked or was blocked by:") {
+            let f: Filter = serde_json::from_str(j).ok()?;
+            let n = match f {
+                Filter::Any => "a creature".to_string(),
+                f => self.noun_det(&f, super::nouns::Det::A),
+            };
+            return Some(format!("that blocked or was blocked by {n} this turn"));
+        }
+        if let Some(j) = name.strip_prefix("basic_effects:battle protected by:") {
+            let p: PlayerRef = serde_json::from_str(j).ok()?;
+            return Some(match p {
+                PlayerRef::EachOpponent => "{alt:they protect|your opponents protect}".into(),
+                PlayerRef::You => "you protect".into(),
+                other => {
+                    let w = self.player(&other, Case::Subj);
+                    format!("{w} protects")
+                }
+            });
+        }
+        None
+    }
+
     /// A condition that an object has a custom quality ("if you cast it from your hand"):
     /// the filter is the quality, maybe with the kind of object it implies (a permanent
     /// or a card).

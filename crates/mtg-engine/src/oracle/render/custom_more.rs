@@ -175,6 +175,19 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_modification_more(&mut self, name: &str) -> Option<String> {
+        // "loses forestwalk", "loses all \"bands with other\" abilities" (layer 6).
+        if let Some(j) = name.strip_prefix("basic_effects:remove keyword:") {
+            let r: crate::kw::basic_effects::RemoveKeyword = serde_json::from_str(j).ok()?;
+            return Some(match (r.kind, &r.filter) {
+                (crate::keywords::KeywordKind::Landwalk, Some(Filter::Subtype(t))) => {
+                    format!("loses {}walk", t.to_lowercase())
+                }
+                (crate::keywords::KeywordKind::Banding, None) => {
+                    "loses all \"bands with other\" abilities".into()
+                }
+                _ => return None,
+            });
+        }
         // "has all activated abilities of all creature cards in all graveyards".
         let rest =
             name.strip_prefix(crate::kw::hand_graveyard_actions::ACTIVATED_ABILITIES_OF_GRAVEYARD)?;
