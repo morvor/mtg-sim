@@ -107,26 +107,38 @@ fn trapped_in_the_tower_falls_off_a_creature_that_gains_flying() {
 }
 
 #[test]
-fn eaten_by_piranhas_removes_noncreature_subtypes() {
-    cr!("613.1d", "205.1b");
+fn eaten_by_piranhas_and_witness_protection_remove_noncreature_subtypes() {
+    cr!("613.1d", "205.1b", "201.2");
     ruling!(
         "Eaten by Piranhas",
         "If the enchanted creature had any subtypes other than creature types, such as Equipment, Vehicle, or Cave, it loses those as well."
     );
-    supported("Eaten by Piranhas");
+    ruling!(
+        "Witness Protection",
+        "If the enchanted creature had any subtypes other than creature types, such as Equipment, Vehicle, or Shrine, it loses those as well."
+    );
     supported("Smuggler's Copter");
-    let mut t = TestGame::new(2);
-    let copter = t.battlefield(P0, "Smuggler's Copter");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    assert!(crew(&mut t, P0, copter, &[bears]));
-    t.resolve_all();
-    assert!(is_creature(&t, copter));
-    attach_new(&mut t, P1, "Eaten by Piranhas", copter);
-    let o = t.obj_now(copter);
-    assert!(!o.chars.subtypes.iter().any(|s| s == "Vehicle"));
-    assert!(o.chars.subtypes.iter().any(|s| s == "Skeleton"));
-    assert!(!o.is(CardType::Artifact));
-    assert_eq!(t.pt(copter), (1, 1));
+    for (aura, subtype, name) in [
+        ("Eaten by Piranhas", "Skeleton", "Smuggler's Copter"),
+        ("Witness Protection", "Citizen", "Legitimate Businessperson"),
+    ] {
+        supported(aura);
+        let mut t = TestGame::new(2);
+        let copter = t.battlefield(P0, "Smuggler's Copter");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        assert!(crew(&mut t, P0, copter, &[bears]));
+        t.resolve_all();
+        assert!(is_creature(&t, copter));
+        attach_new(&mut t, P1, aura, copter);
+        let o = t.obj_now(copter);
+        assert!(!o.chars.subtypes.iter().any(|s| s == "Vehicle"), "{aura}");
+        assert_eq!(o.chars.subtypes.len(), 1, "{aura}");
+        assert!(o.chars.subtypes.iter().any(|s| s == subtype), "{aura}");
+        assert!(!o.is(CardType::Artifact), "{aura}");
+        assert_eq!(o.chars.name, name, "{aura}");
+        assert_eq!(t.pt(copter), (1, 1), "{aura}");
+        assert!(!has_kw(&t, copter, KeywordKind::Flying), "{aura}");
+    }
 }
 
 #[test]
