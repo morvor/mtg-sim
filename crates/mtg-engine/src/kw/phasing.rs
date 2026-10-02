@@ -104,6 +104,10 @@ pub fn phase_in(g: &mut Game, id: ObjectId) {
     if !g.obj(id).phased_out {
         return;
     }
+    // "can't phase in".
+    if crate::prohibitions::object_cant(g, id, crate::ability::ObjectAction::PhasedIn) {
+        return;
+    }
     crate::until::phased_in_otherwise(g, id);
     let mut todo = vec![id];
     let mut all: Vec<ObjectId> = Vec::new();

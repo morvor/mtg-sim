@@ -195,6 +195,14 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "Only your opponents may activate this ability" (CR 602.2): an opponent of the
+    /// source's controller may activate it, and its controller can't.
+    #[serde(default)]
+    pub only_opponents: bool,
+    /// "Activate only once": how many times the ability may be activated over the
+    /// object's existence (CR 400.7: a new object can activate it again).
+    #[serde(default)]
+    pub max_total: Option<u32>,
     /// "This ability costs {1} less to activate for each ...": changes to this ability's
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
@@ -226,6 +234,8 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            only_opponents: false,
+            max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
         }
@@ -744,7 +754,8 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
-    /// No two of them are controlled by the same player ("with different controllers").
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
     DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
@@ -1021,6 +1032,9 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player who attacked with creatures this turn ("target player who attacked this
+    /// turn"): only the active player declares attackers (CR 508.1).
+    AttackedThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
@@ -2464,8 +2478,75 @@ pub enum Restriction {
         chooser: PlayerFilter,
         what: Filter,
     },
+    /// "[objects] can't become untapped / phase in / be turned face up / be equipped /
+    /// be enchanted by other Auras / become suspected": an action the rules would
+    /// otherwise allow doesn't happen to them (see `prohibitions.rs`).
+    CantBe {
+        what: Filter,
+        action: ObjectAction,
+    },
+    /// "can only attack alone" (CR 506.5): it can attack only if no other creatures
+    /// attack.
+    AttackOnlyAlone(Filter),
+    /// "No more than N creatures can attack you each combat" (`player`), "... can attack
+    /// ~ each combat" (`object`): a limit on the creatures attacking that player or
+    /// planeswalker (CR 508.1c).
+    MaxAttackersAgainst {
+        player: Option<PlayerFilter>,
+        object: Option<Filter>,
+        n: u32,
+    },
+    /// "[attacker] must be blocked by [a Dalek] if able": a requirement that a creature
+    /// matching `blocker` blocks it (CR 509.1c).
+    MustBeBlockedBy {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "[attacker] must be blocked by two or more creatures if able" (`min` 2), "... by
+    /// exactly one creature if able" (`min` 1, `max` 1): a requirement on how many
+    /// creatures block it (CR 509.1c).
+    BlockerCountRequirement {
+        attacker: Filter,
+        min: u32,
+        max: Option<u32>,
+    },
+    /// "If a creature you control attacks, ~ also attacks if able", "If ~ attacks, all
+    /// creatures you control attack if able": each creature matching `attackers` attacks
+    /// if able if another creature matching `triggers` attacks (with `same_controller`,
+    /// one its controller controls) (CR 508.1d).
+    AttackTogether {
+        attackers: Filter,
+        triggers: Filter,
+        same_controller: bool,
+    },
+    /// "[creatures] attack a player other than [players] if able" (the second requirement
+    /// of goad, CR 701.15b, without goading).
+    MustAttackOtherThan {
+        attackers: Filter,
+        players: PlayerFilter,
+    },
+    /// "[players] can't block with more than one creature (this combat)" (CR 509.1b).
+    MaxBlockersOf {
+        who: PlayerFilter,
+        n: u32,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// Something that can't happen to an object ([`Restriction::CantBe`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectAction {
+    /// "can't become untapped" (CR 701.26b: it doesn't untap, by any means).
+    Untapped,
+    /// "can't phase in" (CR 702.26).
+    PhasedIn,
+    /// "can't be equipped" (CR 301.5c).
+    Equipped,
+    /// "can't be enchanted by other Auras" (CR 303.4).
+    EnchantedByOtherAuras,
+    /// "can't become suspected" (CR 701.60).
+    Suspected,
 }
 
 /// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
@@ -2486,6 +2567,10 @@ pub enum TargetRestriction {
     Any,
     /// By sources matching the filter (protection-like).
     Sources(Filter),
+    /// By spells and abilities the restriction's controller's opponents control whose
+    /// sources match the filter ("black or red spells your opponents control",
+    /// "abilities your opponents control").
+    OpponentsSources(Filter),
 }
 
 /// Cost modification static effects (CR 601.2f).
@@ -2594,6 +2679,11 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// An alternative cost that also lets the spell be cast as though it had flash: "You
+    /// may cast creature spells with mana value 3 or less by paying {E} rather than paying
+    /// their mana costs. If you cast a spell this way, you may cast it as though it had
+    /// flash." (CR 118.9, 601.3c; see `kw/offered_costs.rs`).
+    AlternativeCostWithFlash(Cost),
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),

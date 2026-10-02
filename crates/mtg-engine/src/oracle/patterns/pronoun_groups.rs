@@ -330,6 +330,13 @@ pub fn batch_referent(c: &TriggerCond) -> Sel {
         | TriggerCond::BecomesTapped(_)
         | TriggerCond::BecomesUntapped(_)
         | TriggerCond::EntersBattlefield(_) => Sel::TriggerObjects,
+        // Cards put into a graveyard from a library (milled, surveilled, ...): the cards
+        // in the graveyard, which no earlier zone's information is needed for.
+        TriggerCond::ZoneChange {
+            from: Some(ZoneKind::Library),
+            to: Some(ZoneKind::Graveyard),
+            ..
+        } => Sel::TriggerObjects,
         TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger) => {
             batch_referent(trigger)
         }

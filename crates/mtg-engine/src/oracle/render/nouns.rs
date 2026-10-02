@@ -509,6 +509,14 @@ impl Renderer<'_> {
                 np.post.push(format!("from {} source", article(&s)));
                 np.post.push(s);
             }
+            Filter::Custom(name)
+                if crate::kw::basic_effects::same_name_as_another_sel(name).is_some() =>
+            {
+                let sel =
+                    crate::kw::basic_effects::same_name_as_another_sel(name).unwrap_or(Sel::None);
+                let s = self.sel(&sel, Case::Obj);
+                np.with.push(format!("the same name as {s}"));
+            }
             Filter::Custom(name) => {
                 let (adj, s) = self.custom_filter_quality(name);
                 if adj {

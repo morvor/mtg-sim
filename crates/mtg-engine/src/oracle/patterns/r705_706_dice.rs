@@ -33,7 +33,12 @@ use smol_str::SmolStr;
 /// "1—9 | text" → (1, Some(9), text); "20 | text" → (20, Some(20), text); "15+ | text" →
 /// (15, None, text).
 fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
-    let (range, text) = line.trim().split_once(" | ")?;
+    // "1 — It has base toughness 1 until end of turn." (Six-Sided Die): a row printed with
+    // a dash after a single number.
+    let (range, text) = line.trim().split_once(" | ").or_else(|| {
+        let (n, text) = line.trim().split_once(" — ")?;
+        n.chars().all(|c| c.is_ascii_digit()).then_some((n, text))
+    })?;
     let range = range.trim();
     if let Some(n) = range.strip_suffix('+') {
         return Some((n.trim().parse().ok()?, None, text));
@@ -53,7 +58,10 @@ fn group_table_rows(blocks: Vec<String>, _ctx: &CompileContext) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for b in blocks {
         match out.last_mut() {
-            Some(last) if table_row(&b).is_some() => {
+            Some(last)
+                if table_row(&b).is_some()
+                    && (b.contains(" | ") || last.to_lowercase().contains("roll ")) =>
+            {
                 last.push(' ');
                 last.push_str(b.trim());
             }
