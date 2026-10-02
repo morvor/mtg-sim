@@ -1145,6 +1145,19 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
         if let Some(x) = r.strip_prefix("tapped") {
             d.tapped = true;
             r = x.trim_start();
+        } else if let Some(x) = r.strip_prefix("face down") {
+            // "return it to the battlefield face down" (Shorecrasher Elemental): a 2/2
+            // face-down creature that can be turned face up for its morph cost (CR 708.2).
+            d.face_down = true;
+            r = x.trim_start();
+        } else if let Some(x) = r
+            .strip_prefix("and attacking")
+            .or_else(|| r.strip_prefix("attacking"))
+        {
+            // "tapped and attacking" (The Neutrinos): attacking, never declared as an
+            // attacker (CR 506.3, 508.4).
+            d.attacking = true;
+            r = x.trim_start();
         } else if let Some(x) = r
             .strip_prefix("transformed")
             // CR 712.14a: "converted" also means with its back face up.
@@ -1193,7 +1206,9 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         None => (l, false),
     };
     let what = match (last_effect(prev), if_you_do) {
-        (Effect::Exile { what, .. }, false) => what.clone(),
+        // "Exile up to one target creature ... If you do, return it ..." (Roll-Roll-Roll-
+        // Roll): only if something was exiled.
+        (Effect::Exile { what, .. }, _) => what.clone(),
         (Effect::May { effect, .. }, true) => match &**effect {
             Effect::Exile { what, .. } => what.clone(),
             _ => return false,

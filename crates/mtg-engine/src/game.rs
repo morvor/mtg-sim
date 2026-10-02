@@ -355,6 +355,10 @@ pub struct DelayedTrigger {
     pub created_turn: u32,
     /// For "at the beginning of the next end step": don't fire in the step it was created in.
     pub created_step: Option<crate::turn::Step>,
+    /// How many steps had begun this turn when it was created: an additional step of the
+    /// same kind that begins later (CR 500.8) is "the next" one.
+    #[serde(default)]
+    pub created_steps: usize,
     /// A delayed trigger that can trigger more than once lasts "for the rest of the game"
     /// rather than for the turn (e.g. epic, CR 702.50a).
     #[serde(default)]

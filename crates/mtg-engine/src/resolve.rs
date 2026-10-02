@@ -1550,6 +1550,7 @@ impl Game {
                     ctx: crate::transform_rules::delayed_ctx(self, ctx),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
                 });
             }
@@ -1601,6 +1602,7 @@ impl Game {
                     ctx: ctx.clone(),
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
                 });
             }

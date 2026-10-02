@@ -1371,6 +1371,8 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     for p in [
         "is put into exile from the battlefield",
         "are put into exile from the battlefield",
+        "is exiled from the battlefield",
+        "are exiled from the battlefield",
     ] {
         if let Some(r) = starts(p) {
             return zone_change(
