@@ -150,6 +150,7 @@ fn a_split_card_cast_from_elsewhere_cant_be_fused() {
         free: false,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     assert!(can_cast(&mut t, P0, c, CastMethod::Half(0)));
     assert!(can_cast(&mut t, P0, c, CastMethod::Half(1)));
@@ -190,6 +191,7 @@ fn a_fused_split_spell_can_be_cast_without_paying_its_mana_costs() {
         free: true,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     assert!(can_cast(&mut t, P0, c, FUSED));
     t.cast(P0, c)

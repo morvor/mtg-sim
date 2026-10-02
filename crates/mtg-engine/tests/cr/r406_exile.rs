@@ -228,6 +228,7 @@ fn creature_caster() -> CardDef {
             lands: false,
             spells: true,
             cost: None,
+            flash: false,
         })))
         .build()
 }

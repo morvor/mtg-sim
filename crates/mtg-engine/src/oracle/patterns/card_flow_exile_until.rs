@@ -173,12 +173,16 @@ fn may_cast_that_card(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             card.clone(),
             Filter::Not(Box::new(Filter::Type(CardType::Land))),
         ),
-        then: Box::new(Effect::GrantPlayPermission {
-            who: PlayerRef::You,
-            what: card,
-            duration: Duration::EndOfTurn,
-            free,
-        }),
+        // A permission to cast it, not to play a land (CR 305.9).
+        then: Box::new(
+            Effect::GrantPlayPermission {
+                who: PlayerRef::You,
+                what: card,
+                duration: Duration::EndOfTurn,
+                free,
+            }
+            .cast_only(),
+        ),
         otherwise: Box::new(Effect::Noop),
     };
     *prev = Effect::seq(vec![std::mem::take(prev), grant]);

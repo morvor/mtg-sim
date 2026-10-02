@@ -235,6 +235,7 @@ pub fn replace_multiple_draws(g: &mut Game, p: PlayerId, n: u32) -> Option<Vec<O
 /// card is kept face down until that's done: it has no characteristics, and effects that
 /// let the player reveal it as it's drawn wait until then (CR 121.8).
 pub fn card_drawn(g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
+    record_draw_step_draw(g, p, card);
     if g.special.casting > 0 {
         g.special.drawn_while_casting.push(card);
         g.special.deferred_draws.push((p, card, nth));
@@ -293,4 +294,48 @@ pub fn usable_for_cost(g: &Game, card: ObjectId, filter: &Filter, ctx: &Ctx) -> 
         return g.matches(card, filter, ctx);
     }
     g.matches_view(&NoCharacteristics(card), card, filter, ctx)
+}
+
+/// The draw step `p` is in, if it's one of their draw steps (CR 504.1: the active player
+/// draws; with shared team turns, each player on the active team, CR 805.4b), as its index
+/// in `TurnState::step_log`.
+fn own_draw_step(g: &Game, p: PlayerId) -> Option<usize> {
+    (g.turn.step == crate::turn::Step::Draw
+        && g.turn.step_log.last() == Some(&crate::turn::Step::Draw)
+        && g.active_players().contains(&p))
+    .then(|| g.turn.step_log.len() - 1)
+}
+
+/// Records a card `p` drew, if they drew it during one of their draw steps.
+fn record_draw_step_draw(g: &mut Game, p: PlayerId, card: ObjectId) {
+    if let Some(step) = own_draw_step(g, p) {
+        g.history.draw_step_draws.push((p, step, card));
+    }
+}
+
+/// Whether the card `p` would draw now would be the first one they draw in this draw step:
+/// it's one of their draw steps and they haven't drawn a card in it yet. A draw that was
+/// replaced (CR 614.6, 614.11) drew no card, so it doesn't count.
+pub fn next_draw_is_first_in_draw_step(g: &Game, p: PlayerId) -> bool {
+    own_draw_step(g, p).is_some_and(|step| {
+        !g.history
+            .draw_step_draws
+            .iter()
+            .any(|(q, s, _)| *q == p && *s == step)
+    })
+}
+
+/// Whether `card`, a card just drawn, was the first card its drawer drew in one of their
+/// draw steps.
+pub fn was_first_draw_in_draw_step(g: &Game, card: ObjectId) -> bool {
+    let draws = &g.history.draw_step_draws;
+    draws
+        .iter()
+        .find(|(_, _, c)| *c == card)
+        .is_some_and(|(p, s, _)| {
+            draws
+                .iter()
+                .find(|(q, t, _)| q == p && t == s)
+                .is_some_and(|(_, _, first)| *first == card)
+        })
 }

@@ -916,6 +916,13 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         x
     };
     let (filter, cond) = parse_spell_phrase(x)?;
+    // Heroic: "Whenever you cast a spell that targets ~, put a +1/+1 counter on it.": "it"
+    // is ~, the object the spell targets (Fabled Hero, Favored Hoplite's "prevent all
+    // damage that would be dealt to it").
+    let targets_source = match &filter {
+        Filter::And(v) => v.iter().any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
+        _ => false,
+    };
     let base = TriggerCond::CastSpell { who, filter };
     let c = match cond {
         Some(cond) => TriggerCond::Where {
@@ -924,7 +931,7 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         },
         None => base,
     };
-    Some((c, spell(), tp()))
+    Some((c, if targets_source { Sel::This } else { spell() }, tp()))
 }
 
 /// A spell being cast is on the stack (CR 601.2a): a zone in the object phrase ("an
