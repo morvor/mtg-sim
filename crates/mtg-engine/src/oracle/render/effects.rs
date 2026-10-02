@@ -574,6 +574,9 @@ impl Renderer<'_> {
                 if d == "this turn" && r.contains(" as though ") {
                     return r.replacen(" as though ", " this turn as though ", 1);
                 }
+                if d == "this turn" && r.contains(" can't be blocked except by ") {
+                    return r.replacen(" except by ", " this turn except by ", 1);
+                }
                 // "Target creature blocks this turn if able."
                 if d == "this turn" {
                     if let Some(x) = r.strip_suffix(" each combat if able") {

@@ -861,6 +861,15 @@ impl Renderer<'_> {
                 let a = self.noun(attacker, Num::Many);
                 format!("{m} can't block {a}")
             }
+            // "~ can't be blocked except by creatures with flying."
+            Restriction::CantBeBlockedBy {
+                attacker,
+                blocker: Filter::Not(allowed),
+            } => {
+                let a = subj(self, attacker);
+                let b = self.noun(allowed, Num::Many);
+                format!("{a} can't be blocked except by {b}")
+            }
             Restriction::CantBeBlockedBy { attacker, blocker } => {
                 let a = subj(self, attacker);
                 let b = self.noun(blocker, Num::Many);
