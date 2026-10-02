@@ -656,3 +656,76 @@ fn bronze_cudgels_counts_every_resolution_of_its_ability() {
     t.resolve_all();
     assert_eq!(t.pt(bears), (6, 2));
 }
+
+// ---------------------------------------------------------------------------------------
+// "~ can be attached only to a [quality] creature"
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn gate_smashers_equip_may_target_any_creature_but_it_attaches_only_to_toughness_4() {
+    cr!("301.5b", "301.5c", "701.3b", "704.5n", "702.6a");
+    ruling!(
+        "Gate Smasher",
+        "Gate Smasher's equip ability can target any creature. However, if that creature's toughness is 3 or less as the equip ability resolves, Gate Smasher won't become attached to it."
+    );
+    supported("Gate Smasher");
+    // "This Equipment can be attached only to a creature with toughness 4 or greater."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let smasher = t.battlefield(P0, "Gate Smasher");
+    t.lands(P0, "Wastes", 6);
+    assert!(ability_targets(&mut t, smasher, 0).contains(&Entity::Object(bears)));
+    equip(&mut t, P0, smasher, bears).unwrap();
+    t.resolve_all();
+    assert_eq!(attached_to(&t, smasher), None);
+    assert_eq!(t.pt(bears), (2, 2));
+    // Craw Wurm (6/4) can be equipped; targeted while 6/4 but 6/3 as the ability
+    // resolves, it isn't.
+    equip(&mut t, P0, smasher, wurm).unwrap();
+    t.g.add_counters(Entity::Object(wurm), counters::MINUS1, 1, None);
+    t.resolve_all();
+    assert_eq!(attached_to(&t, smasher), None);
+    // With toughness 4 it is; when its toughness drops to 3, it becomes unattached.
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let smasher = t.battlefield(P0, "Gate Smasher");
+    t.lands(P0, "Wastes", 3);
+    equip(&mut t, P0, smasher, wurm).unwrap();
+    t.resolve_all();
+    assert_eq!(attached_to(&t, smasher), Some(Entity::Object(wurm)));
+    assert_eq!(t.pt(wurm), (9, 4));
+    t.g.add_counters(Entity::Object(wurm), counters::MINUS1, 1, None);
+    t.settle();
+    assert_eq!(attached_to(&t, smasher), None);
+    assert!(t.on_battlefield(smasher));
+    assert_eq!(t.pt(wurm), (5, 3));
+}
+
+#[test]
+fn kondas_banner_gives_at_most_two_plus_one_bonuses() {
+    cr!("105.4", "205.3", "613.4c", "701.3b");
+    ruling!(
+        "Konda's Banner",
+        "A creature can’t get more than +2/+2 from Konda’s Banner. Sharing more than one color or more than one creature type with the equipped creature does nothing."
+    );
+    supported("Konda's Banner");
+    // "Konda's Banner can be attached only to a legendary creature. Creatures that share a
+    // color with equipped creature get +1/+1. Creatures that share a creature type with
+    // equipped creature get +1/+1." Barktooth Warbeard: a black and red Human Warrior
+    // (6/5); the other creature is a black and red Human Warrior too.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let barktooth = t.battlefield(P0, "Barktooth Warbeard");
+    let mut def = custom_card("Twin", "Creature — Human Warrior", "{B}{R}", Some((1, 1)), "");
+    def.faces[0].chars.colors = [Color::Black, Color::Red].into_iter().collect();
+    let twin = t.custom(P0, def, Zone::Battlefield);
+    let banner = t.battlefield(P0, "Konda's Banner");
+    // Not a legendary creature: it can't be attached.
+    assert!(!t.g.attach(banner, Entity::Object(bears)));
+    assert!(t.g.attach(banner, Entity::Object(barktooth)));
+    t.g.recompute();
+    assert_eq!(t.pt(twin), (3, 3));
+    assert_eq!(t.pt(barktooth), (8, 7));
+    assert_eq!(t.pt(bears), (2, 2));
+}

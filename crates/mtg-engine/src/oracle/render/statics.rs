@@ -387,6 +387,10 @@ impl Renderer<'_> {
                 }
             }
             StaticEffect::Dice(d) => self.dice_static(d),
+            StaticEffect::AttachOnlyTo(f) => {
+                let n = self.noun_det(f, super::nouns::Det::A);
+                format!("~ can be attached only to {n}")
+            }
             StaticEffect::CastOnlyIf(c) => {
                 let c = self.cast_only_condition(c);
                 format!("cast ~ only {c}")
