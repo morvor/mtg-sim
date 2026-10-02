@@ -2480,3 +2480,62 @@ fn p_unless_you_discard(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction] unless you discard [cards]", priority: 960, parse: p_unless_you_discard } }
+
+/// "If it's a noncreature, nonland card, you may reveal it and put it into your hand.":
+/// a condition whose card description contains a comma (the condition ends at "card, ").
+fn p_if_its_a_listed_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("if it's a ").or_else(|| l.strip_prefix("if it's an "))?;
+    let (desc, rest) = r.split_once(" card, ")?;
+    if !desc.contains(", ") {
+        return None;
+    }
+    let cond = super::conditions_referents::parse_condition_with(
+        &format!("it's a {desc} card"),
+        b,
+    )?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(then) = crate::oracle::effects::parse_sentence(rest, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(then),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if it's a [A], [B] card, ...", priority: 40, parse: p_if_its_a_listed_card } }
+
+/// "Reveal cards from the top of your library until you reveal a nonland card, then put
+/// all cards revealed this way into your hand.": the found card and the rest go to the
+/// same zone.
+fn p_reveal_until_put_all(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, tail) = l.split_once(", then put all cards revealed this way ")?;
+    // Read with the rest going elsewhere, then sent where the found card goes.
+    let probe = format!("{head}, then put that card {tail} and the rest into your graveyard");
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    match parse_clause(&probe, b) {
+        Some(Effect::RevealUntil {
+            who,
+            filter,
+            found_to,
+            ..
+        }) => Some(Effect::RevealUntil {
+            who,
+            filter,
+            rest_to: found_to.clone(),
+            found_to,
+        }),
+        _ => {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            None
+        }
+    }
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal until, then put all cards revealed this way ...", priority: 960, parse: p_reveal_until_put_all } }

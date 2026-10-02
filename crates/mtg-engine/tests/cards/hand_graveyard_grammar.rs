@@ -1813,3 +1813,39 @@ fn body_snatcher_is_exiled_unless_you_discard_a_creature_card() {
     assert!(t.on_battlefield(bs));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn narset_transcendent_takes_a_noncreature_nonland_card() {
+    cr!("701.20a");
+    assert_supported(&["Narset Transcendent"]);
+    let mut t = TestGame::new(2);
+    let n = t.battlefield(P0, "Narset Transcendent");
+    t.library_top(P0, "Lightning Bolt");
+    t.answer_yes(P0, true);
+    t.activate(P0, n, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+    let mut t = TestGame::new(2);
+    let n = t.battlefield(P0, "Narset Transcendent");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.activate(P0, n, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Library(P0));
+}
+
+#[test]
+fn treasure_hunt_puts_every_revealed_card_into_hand() {
+    cr!("701.20a");
+    assert_supported(&["Treasure Hunt"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.library_top(P0, "Shock");
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Island");
+    let th = t.hand(P0, "Treasure Hunt");
+    t.cast(P0, th).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Forest") && t.in_hand(P0, "Island") && t.in_hand(P0, "Shock"));
+    assert_eq!(t.hand_size(P0), 3);
+}
