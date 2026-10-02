@@ -1247,6 +1247,10 @@ fn set_no_regen(e: &mut Effect) -> bool {
         Effect::Seq(v) => v.iter_mut().rev().any(set_no_regen),
         Effect::May { effect, .. } => set_no_regen(effect),
         Effect::If { then, .. } => set_no_regen(then),
+        // "Destroy target creature unless its controller pays ...".
+        Effect::PayOptional {
+            then, otherwise, ..
+        } => set_no_regen(otherwise) || set_no_regen(then),
         Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
             set_no_regen(effect)
         }

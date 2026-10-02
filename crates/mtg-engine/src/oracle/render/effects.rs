@@ -344,6 +344,46 @@ impl Renderer<'_> {
                 // ("target player loses 4 life").
                 let inner = self.effect(effect);
                 let inner = inner.strip_prefix("you ").unwrap_or(&inner);
+                // "loses 3 life unless they discard a card" / "... unless that player
+                // discards a card": the same player performs the alternative.
+                let inner = match inner.split_once(" unless you ") {
+                    Some((head, alt)) => {
+                        let alt = format!(" {alt} ")
+                            .replace(" your ", " their ")
+                            .replace(" to you ", " to them ");
+                        let alt = alt.trim();
+                        let third: Vec<String> = alt
+                            .split(" or ")
+                            .enumerate()
+                            .map(|(i, a)| {
+                                let verb = a.split(' ').next().unwrap_or("");
+                                let is_verb = matches!(
+                                    verb,
+                                    "sacrifice"
+                                        | "discard"
+                                        | "pay"
+                                        | "have"
+                                        | "exile"
+                                        | "return"
+                                        | "remove"
+                                        | "put"
+                                        | "tap"
+                                        | "reveal"
+                                );
+                                if i == 0 || is_verb {
+                                    third_person(a)
+                                } else {
+                                    a.to_string()
+                                }
+                            })
+                            .collect();
+                        format!(
+                            "{head} unless {{alt:they {alt}|that player {}}}",
+                            third.join(" or ")
+                        )
+                    }
+                    None => inner.to_string(),
+                };
                 let inner = format!(" {inner} ").replace(" your ", " their ");
                 format!("{w} {}", third_person(inner.trim()))
             }
@@ -2197,13 +2237,57 @@ impl Renderer<'_> {
         otherwise: &Effect,
     ) -> String {
         if matches!(then, Effect::Noop) && !matches!(otherwise, Effect::Noop) {
-            let o = self.effect(otherwise);
-            let p = self.player(who, Case::Subj);
-            let pays = self.cost_as_payment(cost);
-            if p == "you" {
-                return format!("{o} unless you {pays}");
+            // "unless that player sacrifices a nonland permanent or discards a card": the
+            // same player's alternatives, nested.
+            let mut costs = vec![cost];
+            let mut otherwise = otherwise;
+            while let Effect::PayOptional {
+                who: w,
+                cost: c,
+                then: t,
+                otherwise: o,
+            } = otherwise
+            {
+                if !same_player(w, who)
+                    || !matches!(**t, Effect::Noop)
+                    || matches!(**o, Effect::Noop)
+                {
+                    break;
+                }
+                costs.push(c);
+                otherwise = o;
             }
-            return format!("{o} unless {p} {}", third_person(&pays));
+            let o = self.effect(otherwise);
+            // Any one of several players may pay ("unless any player pays {1}").
+            let p = match who {
+                PlayerRef::EachPlayer => "{alt:any player|a player}".to_string(),
+                PlayerRef::EachOpponent => "{alt:an opponent|any opponent}".to_string(),
+                _ => self.player(who, Case::Subj),
+            };
+            let mut pays: Vec<String> = costs
+                .into_iter()
+                .map(|c| {
+                    let pays = self.cost_as_payment(c);
+                    if p == "you" {
+                        pays
+                    } else {
+                        // The payment is worded for the player who pays.
+                        let pays = format!(" {pays} ")
+                            .replace(" your ", " their ")
+                            .replace(" you control", " they control")
+                            .replace(" to you ", " to them ");
+                        third_person(pays.trim())
+                    }
+                })
+                .collect();
+            // "pays {1} or 1 life": one verb for payments of the same kind.
+            let pay = if p == "you" { "pay " } else { "pays " };
+            if pays.len() > 1 && pays.iter().all(|x| x.starts_with(pay)) {
+                for x in pays.iter_mut().skip(1) {
+                    *x = x[pay.len()..].to_string();
+                }
+            }
+            return format!("{o} unless {p} {}", pays.join(" or "));
         }
         let p = self.player(who, Case::Subj);
         let pays = self.cost_as_payment(cost);

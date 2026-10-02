@@ -137,3 +137,31 @@ fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "r118 if a player does", priority: 60, apply: if_a_player_does } }
+
+/// "If no one does, [effect]." after "any player may [cost]": the effect happens once
+/// every player has declined (Rhystic Circle).
+fn if_no_one_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if no one does, ") else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    if !matches!(
+        v.as_slice(),
+        [Effect::StoreValue { var: PAID, .. }, Effect::ForEachPlayer { .. }]
+    ) {
+        return false;
+    }
+    let Some(e) = parse_clause(r, b) else {
+        return false;
+    };
+    v.push(Effect::If {
+        cond: Condition::Compare(Value::Var(PAID), Cmp::Eq, Value::c(0)),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "r118 if no one does", priority: 60, apply: if_no_one_does } }

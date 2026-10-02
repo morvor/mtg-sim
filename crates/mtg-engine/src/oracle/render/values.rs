@@ -522,7 +522,16 @@ impl Renderer<'_> {
                 let pred = self.is_predicate(f, true);
                 format!("{subj} {pred}")
             }
-            Condition::PlayerMatches(p, pf) => {
+            // Only the predicates worded negatively; the others would lose the negation.
+            Condition::PlayerMatches(p, pf)
+                if matches!(
+                    pf,
+                    PlayerFilter::Life(..)
+                        | PlayerFilter::Opponent
+                        | PlayerFilter::You
+                        | PlayerFilter::Any
+                ) =>
+            {
                 let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, true);
                 format!("{subj} {pred}")
@@ -727,6 +736,43 @@ impl Renderer<'_> {
         } else {
             ("has", "has")
         };
+        // "has more life than you", "has at least four more cards in hand than you".
+        let than_you = |v: &Value| -> Option<(bool, Option<i32>)> {
+            match v {
+                Value::LifeTotal(PlayerRef::You) => Some((true, None)),
+                Value::HandSize(PlayerRef::You) => Some((false, None)),
+                Value::Sum(xs) => match xs.as_slice() {
+                    [Value::LifeTotal(PlayerRef::You), Value::Const(n)] => Some((true, Some(*n))),
+                    [Value::HandSize(PlayerRef::You), Value::Const(n)] => Some((false, Some(*n))),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        if !negated && !you {
+            if let PlayerFilter::Life(c, v) | PlayerFilter::HandSize(c, v) = pf {
+                if let Some((life, extra)) = than_you(v) {
+                    let what = if life { "life" } else { "cards in hand" };
+                    let is_life = matches!(pf, PlayerFilter::Life(..));
+                    if is_life == life {
+                        match (c, extra) {
+                            (Cmp::Gt, None) => return format!("{have} more {what} than you"),
+                            (Cmp::Lt, None) if life => {
+                                return format!("{have} less {what} than you")
+                            }
+                            (Cmp::Lt, None) => return format!("{have} fewer {what} than you"),
+                            (Cmp::Ge, Some(n)) => {
+                                return format!(
+                                    "{have} at least {} more {what} than you",
+                                    number_word(n)
+                                )
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
         match pf {
             PlayerFilter::Life(c, v) => {
                 let v = self.value(v);
@@ -834,6 +880,16 @@ impl Renderer<'_> {
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
         {
             return format!("you have {} or more opponents", number_word(*n));
+        }
+        // "a player has more life than each other player": exactly one player has the most.
+        if let (Value::CountPlayers(pf), Value::Const(1), Cmp::Eq) = (a, b, cmp) {
+            if let Some((stat, controls)) = self.most_of(pf) {
+                return if controls {
+                    format!("a player controls more {stat} than each other player")
+                } else {
+                    format!("a player has more {stat} than each other player")
+                };
+            }
         }
         // "creatures you control have total power 8 or greater".
         if let (Value::PowerOf(s), Value::Const(n)) = (a, b) {

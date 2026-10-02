@@ -194,6 +194,14 @@ fn parse_triggered_at(
     {
         tr.zone = FunctionZone::Graveyard;
     }
+    // "if ~ is in the command zone" / "if ~ is exiled": it functions there (CR 113.6b).
+    if let Some(z) = tr
+        .intervening_if
+        .as_ref()
+        .and_then(super::patterns::conditions_state::required_source_zone)
+    {
+        tr.zone = z;
+    }
     // CR 113.6: an instant or sorcery is never on the battlefield, so a triggered ability
     // that would only function there can't be what the text means.
     if ctx.is_spell() && tr.zone == FunctionZone::Battlefield {
