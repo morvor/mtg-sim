@@ -160,6 +160,8 @@ fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         .and_then(parse_object_phrase)
         .filter(|(_, _, tail)| end(tail).is_empty())
     {
+        // "creatures with greater power": than ~ (see `patterns::filters_relational`).
+        let f = super::patterns::filters_relational::substitute(&f, &Sel::This)?;
         return Some(vec![static_ability(
             StaticEffect::Restriction(Restriction::CantBeBlockedBy {
                 attacker: Filter::Source,

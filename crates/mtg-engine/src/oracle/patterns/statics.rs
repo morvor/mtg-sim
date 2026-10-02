@@ -1912,6 +1912,13 @@ fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
                 return None;
             }
             let (b, _) = whole_object_phrase(r)?;
+            // "~ can't be blocked by creatures with greater power": than ~ (the referent of
+            // a relational qualifier, see `filters_relational`).
+            let b = if matches!(f, Filter::Source) {
+                super::filters_relational::substitute(&b, &Sel::This)?
+            } else {
+                b
+            };
             Restriction::CantBeBlockedBy {
                 attacker: f,
                 blocker: b,

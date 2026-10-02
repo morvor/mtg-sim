@@ -908,7 +908,9 @@ pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
     // means what "it" meant as the clause began (see `patterns::filters_relational`).
     let it = super::patterns::pronoun_groups::singular_it(b);
     let e = parse_simple_clause(l, b)?;
-    Some(super::patterns::filters_relational::resolve_clause(e, &it))
+    let e = super::patterns::filters_relational::resolve_clause(e, &it);
+    super::patterns::filters_relational::note_sacrificed(&e, b);
+    Some(e)
 }
 
 fn parse_simple_clause(l: &str, b: &mut Builder) -> Option<Effect> {

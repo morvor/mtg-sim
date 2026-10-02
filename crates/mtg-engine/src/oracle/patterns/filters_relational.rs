@@ -1314,3 +1314,35 @@ pub fn resolve_clause(e: Effect, it: &Sel) -> Effect {
     }
     substitute(&e, it).unwrap_or(e)
 }
+
+/// "Target player sacrifices a creature with the greatest power among creatures they
+/// control. You gain life equal to its power.": after one player sacrifices one object
+/// with an extreme quality, "it" is the sacrificed object (as `edict_greatest_power.rs`
+/// has it).
+pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
+    if let Effect::Sacrifice { who, filter, count } = e {
+        let single = !matches!(
+            who,
+            PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+        );
+        if single
+            && matches!(count, Value::Const(1))
+            && serde_json::to_string(filter).is_ok_and(|j| j.contains("\"Extreme\""))
+        {
+            b.it = Sel::Var(vars::SACRIFICED);
+        }
+    }
+}
+
+/// "each other attacking creature that shares a creature type with it", "another target
+/// creature card with lesser mana value": in a phrase related to "it", "other" means
+/// other than it (not the source), so the phrase's top-level [`Filter::Other`] becomes
+/// "not it" (the placeholder, resolved with it).
+pub fn other_than_referent(f: Filter) -> Filter {
+    if !matches!(&f, Filter::And(v) if v.iter().any(|x| matches!(x, Filter::Other)))
+        || !mentions_referent(&f)
+    {
+        return f;
+    }
+    other_than_it(f, &referent())
+}

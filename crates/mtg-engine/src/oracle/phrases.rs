@@ -685,7 +685,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         parts.push(f);
         s = rest;
     }
-    Some((Filter::and(parts), plural, s))
+    // "each other creature that shares a color with it": other than "it".
+    let f = super::patterns::filters_relational::other_than_referent(Filter::and(parts));
+    Some((f, plural, s))
 }
 
 /// "target player controls" / "target opponent controls" after an object phrase. The
