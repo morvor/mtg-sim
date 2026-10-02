@@ -1328,6 +1328,7 @@ impl Game {
             })
         );
         crate::permissions::record_use(self, opt.permission.as_ref());
+        crate::permissions::spell_cast_with(self, opt.permission.as_ref(), id);
         // "A spell cast this way costs {2} more to cast" (CR 601.2f).
         let permission_cost_increase = opt.permission.as_ref().map_or(0, |c| c.terms.cost_increase);
         self.play_grants.retain(|g| g.object != card);

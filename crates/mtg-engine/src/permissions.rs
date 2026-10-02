@@ -609,6 +609,36 @@ pub fn record_use(g: &mut Game, perm: Option<&CastPermission>) {
     }
 }
 
+/// The spell `spell` was just put on the stack, cast with the permission `perm`: "If that
+/// spell would be put into your graveyard, exile it instead" applies to it (a replacement
+/// effect for that object only, CR 614.1a, 400.7).
+pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: ObjectId) {
+    let Some(c) = perm else {
+        return;
+    };
+    if c.terms.exile_instead {
+        let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
+        g.exec(
+            &Effect::AddReplacement {
+                def: ReplacementDef {
+                    event: ReplacementEvent::ZoneChange {
+                        filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                        from: None,
+                        to: Some(ZoneKind::Graveyard),
+                    },
+                    action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                    self_replacement: false,
+                    optional: false,
+                },
+                duration: Duration::Permanent,
+                uses: None,
+            },
+            &mut ctx,
+        );
+    }
+}
+
 /// The permissions `g.play_grants[before..]` were just given with their terms: those
 /// with a limit ("you may cast a spell from among those cards") share a group, used up
 /// together (see [`record_use`]); one given "until you exile another card with ~" ends

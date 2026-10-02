@@ -2693,6 +2693,11 @@ pub struct PlayTerms {
     /// permission was given.
     #[serde(default)]
     pub later_turn: bool,
+    /// "If that spell would be put into your graveyard, exile it instead": a replacement
+    /// effect for each spell cast with the permission (CR 614.1a), for as long as it's
+    /// that object (CR 400.7).
+    #[serde(default)]
+    pub exile_instead: bool,
 }
 
 impl PlayTerms {
@@ -2718,6 +2723,7 @@ impl PlayTerms {
             });
         }
         self.later_turn |= other.later_turn;
+        self.exile_instead |= other.exile_instead;
         self.spells_only |= other.spells_only;
         if other.alt_cost.is_some() {
             self.alt_cost = other.alt_cost.clone();

@@ -58,6 +58,8 @@ pub enum Obj {
     /// Cards with qualities ("instant and sorcery spells", "lands", "a creature spell");
     /// `single`: "a creature spell" (one card).
     Class { what: Filter, single: bool },
+    /// A target card ("target instant or sorcery card from your graveyard"): the phrase.
+    Target { phrase: String },
 }
 
 /// Where the cards are played from.
@@ -670,6 +672,16 @@ pub fn parse(l: &str) -> Option<Perm> {
     if let Some((limit, x)) = referent(r) {
         p.obj = Obj::Referent { limit };
         rest = x;
+    } else if let Some((_, x)) = r
+        .starts_with("target ")
+        .then(|| crate::oracle::phrases::parse_target(r))
+        .flatten()
+    {
+        // "cast target instant or sorcery card from your graveyard this turn".
+        p.obj = Obj::Target {
+            phrase: r[..r.len() - x.len()].trim().to_string(),
+        };
+        rest = x;
     } else if let Some(x) = r
         .strip_prefix("~")
         .filter(|x| x.is_empty() || x.starts_with(' '))
@@ -784,6 +796,13 @@ pub fn moved(e: &Effect) -> Moved {
             _ => Moved::Other,
         },
         Effect::Discard { .. } => Moved::Cards(ZoneKind::Graveyard),
+        // "Look at the top four cards of your library." (nothing taken yet): the cards
+        // looked at, still in the library.
+        Effect::Dig {
+            take: Value::Const(0),
+            rest_to,
+            ..
+        } if super::card_flow_dig::is_in_place(rest_to) => Moved::Cards(ZoneKind::Library),
         // "Choose one of them" (`card_flow_choose_one_of_them`): the chosen card is
         // stored as "it".
         Effect::ForEach {
@@ -833,6 +852,8 @@ pub fn moved(e: &Effect) -> Moved {
         | Effect::WithPlayTerms { .. }
         | Effect::StoreValue { .. }
         | Effect::Store { .. } => Moved::Unchanged,
+        // "You may look at those cards for as long as they remain exiled."
+        Effect::Custom(n) if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED => Moved::Unchanged,
         _ => Moved::Other,
     }
 }
@@ -956,7 +977,7 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
                 duration,
             })
         }
-        Obj::SelfCard => None,
+        Obj::SelfCard | Obj::Target { .. } => None,
     }
 }
 
@@ -1025,6 +1046,19 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
     })
 }
 
+/// The cards a spell is chosen among as the effect resolves ("you may cast a spell from
+/// among them"), remembered before any is cast.
+const AMONG: Var = vars::USER + 4601;
+
+/// Whether the effect remembers the cards it chooses among in [`AMONG`].
+fn stores_among(e: &Effect) -> bool {
+    match e {
+        Effect::Store { var, .. } => *var == AMONG,
+        Effect::Seq(v) => v.iter().any(stores_among),
+        _ => false,
+    }
+}
+
 /// A permission for (some of) the cards an earlier instruction moved to `zone`.
 fn referent_effect(
     p: &Perm,
@@ -1036,6 +1070,10 @@ fn referent_effect(
     mut terms: PlayTerms,
 ) -> Option<Effect> {
     let cast_only = !p.lands;
+    // Cards looked at in a library can be cast only as the effect resolves.
+    if zone == ZoneKind::Library && p.duration.is_some() {
+        return None;
+    }
     match &p.duration {
         // As the effect resolves (CR 608.2g).
         None => {
@@ -1050,7 +1088,9 @@ fn referent_effect(
                 return None;
             }
             let whole = limit.is_none() && quality.is_none();
-            let mut parts = vec![Filter::In(Box::new(it.clone())), Filter::InZone(zone)];
+            // The cards are remembered (for "put the rest ...", once some are cast).
+            let among = if whole { it.clone() } else { Sel::Var(AMONG) };
+            let mut parts = vec![Filter::In(Box::new(among)), Filter::InZone(zone)];
             if cast_only {
                 parts.push(Filter::Not(Box::new(Filter::Type(CardType::Land))));
             }
@@ -1059,7 +1099,7 @@ fn referent_effect(
             }
             // "You may cast it": each of them (a land card can't be cast, CR 305.9).
             let what = if whole {
-                it
+                it.clone()
             } else {
                 Sel::Choose {
                     chooser: PlayerRef::You,
@@ -1070,7 +1110,7 @@ fn referent_effect(
                 }
             };
             let chooses = matches!(what, Sel::Choose { .. });
-            Some(if cast_only {
+            let cast = if cast_only {
                 Effect::CastCard {
                     who,
                     what,
@@ -1084,6 +1124,17 @@ fn referent_effect(
                     free: p.free,
                     optional: !chooses,
                 }
+            };
+            Some(if whole {
+                cast
+            } else {
+                Effect::seq(vec![
+                    Effect::Store {
+                        var: AMONG,
+                        sel: it,
+                    },
+                    cast,
+                ])
             })
         }
         Some(d) => {
@@ -1242,7 +1293,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
                 FunctionZone::Battlefield,
             )
         }
-        Obj::Referent { .. } => return None,
+        Obj::Referent { .. } | Obj::Target { .. } => return None,
     };
     if mentions_x(&pp) {
         return None;
@@ -1275,6 +1326,17 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = to_effect(&p, zone, b.ctx) else {
         return false;
     };
+    // "Put the rest on the bottom of your library in a random order.": the cards chosen
+    // among that are still where they were (see `r406_exile_until`).
+    if let (Some(z), true) = (zone, stores_among(&e)) {
+        b.named.push((
+            super::r406_exile_until::THE_REST.into(),
+            Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(AMONG))),
+                Filter::InZone(z),
+            ])),
+        ));
+    }
     let e = match cond {
         Some(c) => Effect::If {
             cond: c,
@@ -1292,12 +1354,204 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 /// "it" means after an earlier instruction moved them.
 pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let p = parse(l)?;
+    if matches!(p.obj, Obj::Target { .. }) {
+        return target_effect(&p, b);
+    }
     let zone = referent_zone(None, b);
     to_effect(&p, zone, b.ctx)
 }
 
+/// "You may cast target instant or sorcery card from your graveyard this turn": a
+/// permission for that card (it stays the same object while it's there, CR 400.7), or,
+/// without a duration, a spell cast as the effect resolves (CR 608.2g).
+fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
+    let Obj::Target { phrase } = &p.obj else {
+        return None;
+    };
+    if p.who != Who::You || p.look || p.once_each_turn || p.your_turn || p.from.is_some() {
+        return None;
+    }
+    let mut terms = p.terms_with_condition(b.ctx)?;
+    let first = b.targets.len();
+    let (sel, rest) = crate::oracle::effects::object_ref(phrase, b)?;
+    // A card target in a graveyard or exile, not a permanent or a spell.
+    let card_target = matches!(sel, Sel::Target(s) if s as usize == first)
+        && b.targets.len() == first + 1
+        && matches!(&b.targets[first].what, TargetKind::Object(f)
+            if matches!(f.zone(), Some(ZoneKind::Graveyard | ZoneKind::Exile)));
+    if !rest.trim().is_empty() || !card_target {
+        return None;
+    }
+    let cast_only = !p.lands;
+    match &p.duration {
+        None => {
+            if terms.flash
+                || terms.extra_cost.is_some()
+                || terms.spend_as_any_color
+                || terms.condition.is_some()
+                || terms.exile_instead
+            {
+                return None;
+            }
+            let cast = if cast_only {
+                Effect::CastCard {
+                    who: PlayerRef::You,
+                    what: sel.clone(),
+                    free: p.free,
+                    optional: true,
+                }
+            } else {
+                Effect::PlayCard {
+                    who: PlayerRef::You,
+                    what: sel.clone(),
+                    free: p.free,
+                    optional: true,
+                }
+            };
+            // "..., and mana of any type can be spent to cast that spell" (CR 118.14).
+            Some(if terms.spend_any_type {
+                Effect::seq(vec![
+                    Effect::SpendAnyTypeMana {
+                        who: PlayerRef::You,
+                        what: sel,
+                        duration: Duration::EndOfTurn,
+                    },
+                    cast,
+                ])
+            } else {
+                cast
+            })
+        }
+        Some(d) => {
+            if !matches!(
+                d,
+                Duration::EndOfTurn
+                    | Duration::UntilEndOfYourNextTurn
+                    | Duration::UntilYourNextTurn
+            ) || terms.until_another
+                || terms.later_turn
+            {
+                return None;
+            }
+            terms.spells_only = cast_only;
+            Some(Effect::WithPlayTerms {
+                terms,
+                effect: Box::new(Effect::GrantPlayPermission {
+                    who: PlayerRef::You,
+                    what: sel,
+                    duration: d.clone(),
+                    free: p.free,
+                }),
+            })
+        }
+    }
+}
+
+/// The terms of the last permission the effect gives, if it ends by giving one.
+fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
+    match e {
+        Effect::WithPlayTerms { terms, .. } => Some(terms),
+        Effect::AddPlayerEffect {
+            effect: PlayerModification::PlayPermission(pp),
+            ..
+        } => Some(&mut pp.terms),
+        Effect::Seq(v) => v.last_mut().and_then(last_terms),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_terms(then),
+        _ => None,
+    }
+}
+
+/// Whether the effect ends by casting a card as it resolves.
+fn ends_casting(e: &Effect) -> bool {
+    match e {
+        Effect::CastCard { .. } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_casting),
+        _ => false,
+    }
+}
+
+/// "If that spell would be put into your graveyard, exile it instead." (and "If a spell
+/// cast this way would be put into a graveyard, ...") after a permission to cast cards:
+/// a replacement effect for each spell cast with it (CR 614.1a); after a spell cast as
+/// the effect resolves, for that spell (see `spell_cast_this_way_exiled`).
+fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l).trim();
+    let Some(r) = [
+        "if that spell would be put into ",
+        "if a spell cast this way would be put into ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p)) else {
+        return false;
+    };
+    if !matches!(
+        r,
+        "your graveyard, exile it instead" | "a graveyard, exile it instead"
+    ) {
+        return false;
+    }
+    // (A permission to play lands as well: only its spells are cast.)
+    if let Some(terms) = last_terms(prev) {
+        terms.exile_instead = true;
+        return true;
+    }
+    if ends_casting(prev) {
+        let replacement = Effect::AddReplacement {
+            def: ReplacementDef {
+                event: ReplacementEvent::ZoneChange {
+                    filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                    from: None,
+                    to: Some(ZoneKind::Graveyard),
+                },
+                action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                self_replacement: false,
+                optional: false,
+            },
+            duration: Duration::Permanent,
+            uses: None,
+        };
+        *prev = Effect::seq(vec![std::mem::take(prev), replacement]);
+        return true;
+    }
+    false
+}
+
+/// Second sentences that modify a static permission: "You can't cast more than one spell
+/// this way each turn.", "If a spell cast this way would be put into your graveyard,
+/// exile it instead.", "If you cast a spell this way, you may spend mana as though it
+/// were mana of any color to cast it."
+fn static_rider(s: &str, p: &mut Perm) -> bool {
+    match end(s).trim() {
+        "you can't cast more than one spell this way each turn" if p.spells && !p.lands => {
+            p.once_each_turn = true;
+        }
+        "if a spell cast this way would be put into your graveyard, exile it instead"
+        | "if a spell cast this way would be put into a graveyard, exile it instead"
+            if p.spells =>
+        {
+            p.terms.exile_instead = true;
+        }
+        "if you cast a spell this way, you may spend mana as though it were mana of any color to cast it"
+        | "if you cast a spell this way, you may spend mana as though it were mana of any color to cast that spell" => {
+            p.terms.spend_as_any_color = true;
+        }
+        _ => return false,
+    }
+    true
+}
+
 fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l).trim();
+    // "[permission]. [rider]."
+    if let Some((first, second)) = l.split_once(". ") {
+        let mut p = parse(first)?;
+        if !static_rider(second, &mut p) {
+            return None;
+        }
+        return to_statics(&p, text, ctx);
+    }
     // "If you control a creature with power 4 or greater, you may cast ~ as though it had
     // flash.": a condition on casting it.
     if let Some(r) = l.strip_prefix("if ") {
@@ -1334,6 +1588,7 @@ fn spell_self_permission(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
 inventory::submit! { FollowupPattern { name: "permission grammar: you may play the cards an earlier instruction moved", priority: 120, apply: followup } }
 inventory::submit! { EffectPattern { name: "permission grammar: a permission to play cards", priority: 450, parse: effect } }
 inventory::submit! { StaticPattern { name: "permission grammar: a static permission to play cards", priority: 120, parse: statics } }
+inventory::submit! { FollowupPattern { name: "permission grammar: if that spell would be put into your graveyard, exile it instead", priority: 95, apply: exile_instead } }
 inventory::submit! { AbilityPattern { name: "permission grammar: an instant's or sorcery's permission to cast itself", priority: 120, parse: spell_self_permission } }
 
 #[cfg(test)]
