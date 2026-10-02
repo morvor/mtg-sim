@@ -339,13 +339,25 @@ impl Game {
                     (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
                     _ => None,
                 };
-                let abilities = match (m.etb.copy_of, &face_chars) {
-                    (Some(c), _) => &self.obj(c).copiable.abilities,
-                    (None, Some(fc)) => &fc.abilities,
-                    (None, None) => &o.chars.abilities,
+                let chars = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => Some(&self.obj(c).copiable),
+                    (None, Some(fc)) => Some(fc),
+                    (None, None) => None,
                 };
+                // Copiable values and face characteristics hold keywords unexpanded: the
+                // "enters with" abilities a keyword stands for (vanishing, modular, ...)
+                // apply too (CR 702.63a, 707.2).
+                let derived: Vec<Ability> = chars
+                    .map(|c| {
+                        crate::keyword_impls::derived_by_keyword(c)
+                            .into_iter()
+                            .map(|(_, a)| a)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let abilities = chars.map_or(&o.chars.abilities, |c| &c.abilities);
                 let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
-                for a in abilities {
+                for a in abilities.iter().chain(derived.iter()) {
                     if let AbilityKind::Static(s) = &a.kind {
                         // A conditional one ("If you attacked this turn, you may have ~
                         // enter as a copy ...") applies only if its condition is true as

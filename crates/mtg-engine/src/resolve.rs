@@ -1558,13 +1558,17 @@ impl Game {
                     .stack_obj
                     .filter(|s| self.obj(*s).is_spell())
                     .or(ctx.source);
+                let mut saved = ctx.clone();
+                if saved.reflexive_parent.is_none() {
+                    saved.reflexive_parent = self.resolving_ability(ctx).map(Box::new);
+                }
                 self.pending_triggers.push(PendingTrigger {
                     source: src.unwrap_or(ObjectId(0)),
                     controller: ctx.controller,
                     ability,
                     event: ctx.event.clone().unwrap_or_default(),
                     source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
-                    saved: Some(ctx.clone()),
+                    saved: Some(saved),
                     body: Some((**body).clone()),
                     order: self.trigger_order,
                 });
@@ -2086,16 +2090,13 @@ impl Game {
                     }
                 }
                 // "except it has this ability" (CR 707.9a): the resolving ability.
+                // For a reflexive trigger, the ability that created it (CR 603.12).
                 Modification::AddThisAbility => {
-                    let ability = ctx.stack_obj.and_then(|id| {
-                        match self.obj(id).stack.as_deref().map(|si| &si.kind) {
-                            Some(
-                                StackKind::Activated { ability, .. }
-                                | StackKind::Triggered { ability, .. },
-                            ) => Some(ability.clone()),
-                            _ => None,
-                        }
-                    });
+                    let ability = ctx
+                        .reflexive_parent
+                        .as_deref()
+                        .cloned()
+                        .or_else(|| self.resolving_ability(ctx));
                     match ability {
                         Some(a) => Modification::AddAbility(a),
                         None => m.clone(),
@@ -2104,6 +2105,17 @@ impl Game {
                 other => other.clone(),
             })
             .collect()
+    }
+
+    /// The activated or triggered ability on the stack that's resolving with `ctx`.
+    fn resolving_ability(&self, ctx: &Ctx) -> Option<Ability> {
+        let id = ctx.stack_obj?;
+        match self.obj(id).stack.as_deref().map(|si| &si.kind) {
+            Some(StackKind::Activated { ability, .. } | StackKind::Triggered { ability, .. }) => {
+                Some(ability.clone())
+            }
+            _ => None,
+        }
     }
 
     /// A restriction locked onto specific objects (see [`Self::lock_restriction_objects`])
