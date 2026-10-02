@@ -29,7 +29,7 @@ use crate::ability::Effect;
 use crate::game::Game;
 
 /// Bookkeeping for when trigger events are checked.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct TriggerTiming {
     /// Actions in progress whose events must be checked together: atomic effects, zone
     /// moves, replacement effects being applied.
@@ -38,6 +38,19 @@ pub struct TriggerTiming {
     /// detected (by a triggered mana ability resolving right away, CR 605.4a) wait for
     /// the next check instead of being checked in the middle of this one.
     pub(crate) flushing: bool,
+}
+
+impl Clone for TriggerTiming {
+    /// A copy of the game made while triggers are being detected (a sandbox copy made when
+    /// a player is asked a decision then) checks its own events: it isn't in the middle of
+    /// that check. The actions in progress are kept: a copy restored as a snapshot
+    /// continues them.
+    fn clone(&self) -> Self {
+        TriggerTiming {
+            atomic: self.atomic,
+            flushing: false,
+        }
+    }
 }
 
 /// Whether an effect only sequences, chooses between, or repeats other instructions
@@ -91,9 +104,11 @@ impl Game {
     /// Runs `f` as one atomic action: no trigger check happens inside it (see the module
     /// documentation).
     pub fn atomically<R>(&mut self, f: impl FnOnce(&mut Game) -> R) -> R {
-        self.timing.atomic += 1;
+        // Restored rather than decremented: `f` may restore a snapshot of the game.
+        let depth = self.timing.atomic;
+        self.timing.atomic = depth + 1;
         let r = f(self);
-        self.timing.atomic -= 1;
+        self.timing.atomic = depth;
         r
     }
 }

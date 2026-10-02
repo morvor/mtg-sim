@@ -121,6 +121,8 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
 
 impl Game {
     /// Processes pending events: records turn history and detects triggered abilities.
+    /// Events emitted while this runs (by a triggered mana ability resolving right away,
+    /// CR 605.4a) are processed by the next call, not in the middle of this one.
     pub fn flush_events(&mut self) {
         if self.events.is_empty() || self.timing.flushing {
             return;
