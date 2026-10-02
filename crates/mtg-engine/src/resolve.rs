@@ -1318,6 +1318,14 @@ impl Game {
                 for (p, owner, found) in founds {
                     let mut c = ctx.clone();
                     c.iter_player = Some(p);
+                    // A rule that deals with the found cards instead ("they exile each
+                    // card they find"): the rest of the effect still applies.
+                    if !found.is_empty() && crate::kw::search_found(self, p, owner, &found) {
+                        if *shuffle {
+                            self.shuffle_library(owner);
+                        }
+                        continue;
+                    }
                     let res = if *shuffle
                         && to.zone == ZoneKind::Library
                         && matches!(to.position, LibraryPosition::Top)

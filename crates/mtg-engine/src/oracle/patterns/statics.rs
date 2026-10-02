@@ -1080,6 +1080,13 @@ fn starts_with_verb(s: &str) -> bool {
 /// Splits "gets +1/+1, has flying, and is a Demon" into predicates at commas and "and"
 /// that are followed by a verb (the subject may be repeated as "it": "... and it can't
 /// be blocked").
+/// "+1/+1 for each Aura you control" after "gets +1/+1 for each creature you control and"
+/// (Eidolon of Countless Battles): a second P/T change of the same "gets".
+fn continues_pt_for_each(s: &str) -> bool {
+    crate::oracle::effects::parse_pt_mod(s)
+        .is_some_and(|(_, _, tail)| tail.trim_start().starts_with("for each "))
+}
+
 fn split_predicates(s: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut start = 0;
@@ -1099,6 +1106,7 @@ fn split_predicates(s: &str) -> Vec<&str> {
         .find(|sep| {
             rest.starts_with(sep)
                 && (starts_with_verb(&rest[sep.len()..])
+                    || (*sep == " and " && continues_pt_for_each(&rest[sep.len()..]))
                     || rest[sep.len()..].starts_with("its activated abilities ")
                     || rest[sep.len()..].starts_with("their activated abilities "))
         });
@@ -1935,8 +1943,15 @@ fn parse_predicate(
     // "Creatures you control also get +1/+0 and have trample as long as ...": "also"
     // only says it's in addition to other effects.
     let p = p.strip_prefix("also ").unwrap_or(p);
+    // "gets +1/+1 for each creature you control and +1/+1 for each Aura you control"
+    // (Eidolon of Countless Battles): a second P/T change continues the "gets".
+    let continued = (p.starts_with('+') || p.starts_with('-')) && p.contains(" for each ");
     // P/T changes (layer 7c).
-    if let Some(r) = p.strip_prefix("gets ").or_else(|| p.strip_prefix("get ")) {
+    if let Some(r) = p
+        .strip_prefix("gets ")
+        .or_else(|| p.strip_prefix("get "))
+        .or_else(|| continued.then_some(p))
+    {
         let r = r.strip_prefix("an additional ").unwrap_or(r);
         let (pv, tv, tail) = crate::oracle::effects::parse_pt_mod(r)?;
         let (mut pv, mut tv) = (pv, tv);

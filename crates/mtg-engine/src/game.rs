@@ -410,6 +410,9 @@ pub struct TurnHistory {
     pub players_attacked: BTreeSet<PlayerId>,
     pub attackers: Vec<ObjectId>,
     pub objects_dealt_damage: BTreeSet<ObjectId>,
+    /// Objects dealt noncombat damage this turn. Recorded by `kw/noncombat_damage.rs`.
+    #[serde(default)]
+    pub objects_dealt_noncombat_damage: BTreeSet<ObjectId>,
     /// (source, object) pairs: objects dealt damage this turn and by what.
     pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
     /// Sources that dealt damage this turn (each object once, CR 400.7), with the player
@@ -642,6 +645,8 @@ pub struct Game {
     /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
     pub multiplayer: crate::multiplayer::MultiplayerState,
     pub planechase: crate::planechase::PlanarState,
+    /// Records kept by hand-written card abilities (see `cards/`).
+    pub cards: crate::cards::CardState,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
 }
@@ -750,6 +755,7 @@ impl Game {
             modal_history: Default::default(),
             multiplayer: Default::default(),
             planechase: Default::default(),
+            cards: Default::default(),
             event_feed: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {

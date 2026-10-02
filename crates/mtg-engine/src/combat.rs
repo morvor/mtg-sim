@@ -644,6 +644,9 @@ pub enum AttackRequirement {
     AttacksPlayerOtherThan(ObjectId, Vec<PlayerId>),
     /// "[creature] attacks [player] if able" (e.g. encore's tokens, CR 702.141a).
     AttacksPlayer(ObjectId, PlayerId),
+    /// "if one of [others] attacks, [creature] attacks if able": obeyed if it attacks or
+    /// none of the others do.
+    AttacksIfAnyAttacks(ObjectId, Vec<ObjectId>),
 }
 
 impl AttackRequirement {
@@ -651,7 +654,8 @@ impl AttackRequirement {
         match self {
             AttackRequirement::Attacks(c)
             | AttackRequirement::AttacksPlayerOtherThan(c, _)
-            | AttackRequirement::AttacksPlayer(c, _) => *c,
+            | AttackRequirement::AttacksPlayer(c, _)
+            | AttackRequirement::AttacksIfAnyAttacks(c, _) => *c,
         }
     }
     fn obeyed(&self, decl: &[(ObjectId, Entity)]) -> bool {
@@ -662,6 +666,9 @@ impl AttackRequirement {
                 .any(|(a, t)| a == c && matches!(t, Entity::Player(p) if !ps.contains(p))),
             AttackRequirement::AttacksPlayer(c, p) => {
                 decl.iter().any(|(a, t)| a == c && *t == Entity::Player(*p))
+            }
+            AttackRequirement::AttacksIfAnyAttacks(c, others) => {
+                decl.iter().any(|(a, _)| a == c) || !decl.iter().any(|(a, _)| others.contains(a))
             }
         }
     }
@@ -740,6 +747,8 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
             out.push(AttackRequirement::AttacksPlayerOtherThan(id, vec![goader]));
         }
     }
+    // Requirements that rules of keywords and hand-written abilities define.
+    out.extend(crate::kw::attack_requirements(g));
     out
 }
 
@@ -1763,7 +1772,7 @@ pub fn any_first_strike(g: &Game) -> bool {
 /// already marked, or at most 1 if the source has deathtouch.
 pub fn lethal_damage(g: &Game, source: ObjectId, creature: ObjectId) -> u32 {
     let o = g.obj(creature);
-    let lethal = (o.toughness() - o.damage as i32).max(0) as u32;
+    let lethal = (crate::kw::lethal_damage_basis(g, creature) - o.damage as i32).max(0) as u32;
     if g.obj(source).has_keyword(KeywordKind::Deathtouch) {
         // Any nonzero amount is lethal (and none is needed if it already has lethal
         // damage marked, CR 702.19b).
@@ -1863,6 +1872,17 @@ fn assign_attacker_damage(
     let power = damage_amount(g, id);
     if power == 0 {
         return vec![];
+    }
+    // Other ways to assign its damage a rule allows (not once all its blockers are gone).
+    let blockers_gone = ai.blocked
+        && !ai
+            .blockers
+            .iter()
+            .any(|b| g.is_live(*b) && g.obj(*b).zone == Zone::Battlefield && g.is_blocking(*b));
+    if !blockers_gone {
+        if let Some(v) = crate::kw::assign_combat_damage(g, id, power) {
+            return v;
+        }
     }
     let controller = g.obj(id).controller;
     let trample = g.obj(id).has_keyword(KeywordKind::Trample);

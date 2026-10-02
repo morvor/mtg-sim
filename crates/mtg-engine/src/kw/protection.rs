@@ -49,7 +49,9 @@ impl KeywordRules for Protection {
                     .find_map(|a| match &a.kind {
                         AbilityKind::Keyword(k)
                             if k.kind == KeywordKind::Protection
-                                && k.filter.as_ref().is_none_or(|f| g.matches(source, f, &ctx)) =>
+                                && k.filter.as_ref().is_none_or(|f| {
+                                    crate::kw::damage_source_matches(g, source, f, &ctx)
+                                }) =>
                         {
                             crate::structure::record(a, &ob.chars.name, "keyword");
                             Some(KeywordShield {
@@ -71,7 +73,7 @@ impl KeywordRules for Protection {
                 .enumerate()
                 .find_map(|(i, m)| match m {
                     PlayerModification::ProtectionFrom(f)
-                        if g.matches(source, f, &Ctx::new(None, p)) =>
+                        if crate::kw::damage_source_matches(g, source, f, &Ctx::new(None, p)) =>
                     {
                         Some(KeywordShield {
                             holder: target,
