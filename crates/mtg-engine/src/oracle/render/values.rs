@@ -368,6 +368,9 @@ impl Renderer<'_> {
         if Self::is_simple(v) {
             return (self.value(v), None);
         }
+        if let Some(s) = x_arithmetic(v) {
+            return (s, None);
+        }
         let s = self.value(v);
         ("X".into(), Some(format!(", where X is {s}")))
     }
@@ -385,6 +388,14 @@ impl Renderer<'_> {
             Value::EventAmount | Value::Prev | Value::Var(_) => {
                 (format!("that many {}", plural(noun)), None)
             }
+            other if x_arithmetic(other).is_some() => (
+                format!(
+                    "{} {}",
+                    x_arithmetic(other).unwrap_or_default(),
+                    plural(noun)
+                ),
+                None,
+            ),
             other => {
                 let s = self.value(other);
                 (
@@ -566,6 +577,19 @@ impl Renderer<'_> {
                 s.replace(" was ", " wasn't ")
             }
             Condition::WasCast => "you didn't cast it".into(),
+            // "you haven't cast a spell this turn"
+            Condition::Compare(Value::SpellsCastThisTurn(..), Cmp::Ge, Value::Const(1)) => {
+                let s = self.condition(c);
+                match s.strip_prefix("you've ") {
+                    Some(r) => format!("you haven't {r}"),
+                    None => format!("it's not true that {s}"),
+                }
+            }
+            Condition::Custom(n)
+                if n == crate::oracle::patterns::grant_conditions::COMMITTED_CRIME_THIS_TURN =>
+            {
+                "you haven't committed a crime this turn".into()
+            }
             Condition::Custom(n) if n == "you_were_the_starting_player" => {
                 "you weren't the starting player".into()
             }
@@ -1297,4 +1321,20 @@ fn is_player_group(p: &PlayerRef) -> bool {
         p,
         PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
     )
+}
+
+/// "twice X", "three times X", "X plus 3": arithmetic on X written in place.
+fn x_arithmetic(v: &Value) -> Option<String> {
+    match v {
+        Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
+            (Value::Const(2), Value::X) => Some("twice X".into()),
+            (Value::Const(3), Value::X) => Some("three times X".into()),
+            _ => None,
+        },
+        Value::Sum(v) => match v.as_slice() {
+            [Value::X, Value::Const(n)] => Some(format!("X plus {n}")),
+            _ => None,
+        },
+        _ => None,
+    }
 }

@@ -2362,3 +2362,16 @@ fn reviewed_wordings_are_read_faithfully_or_not_at_all() {
         .iter()
         .any(|u| u.contains("can't lose life")));
 }
+
+#[test]
+fn jace_perfected_mind_mills_three_times_x() {
+    cr!("701.17a", "107.3a");
+    let mut t = TestGame::new(2);
+    let j = t.battlefield(P0, "Jace, the Perfected Mind");
+    t.g.objects[j.0 as usize].counters.insert("loyalty".into(), 5);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.activate(P0, j, 2, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 6);
+    assert_eq!(t.obj_now(j).counters.get("loyalty").copied(), Some(3));
+}

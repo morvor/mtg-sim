@@ -44,7 +44,7 @@ fn refers_back(effect: &str) -> bool {
 /// "If [condition], [effect]." as one sentence, with an effect that refers back. An effect
 /// that replaces an earlier instruction refers back by its "instead": "If [condition],
 /// instead [effect].", "If [condition], [effect] instead.", and "[Effect] instead if
-/// [condition]."
+/// [condition]."; also "[Effect that refers back] if [condition]."
 fn is_followup(text: &str) -> bool {
     let Some(body) = text.strip_suffix('.') else {
         return false;
@@ -53,8 +53,15 @@ fn is_followup(text: &str) -> bool {
         return false;
     }
     if !body.starts_with("If ") {
+        // "That creature also gains trample until end of turn if you control a creature
+        // with power 4 or greater." (Temur Battle Rage): a trailing condition.
         return body.split_once(" instead if ").is_some_and(|(e, c)| {
             !e.is_empty() && !c.is_empty() && !e.contains(", ") && !c.contains(", ")
+        }) || body.split_once(" if ").is_some_and(|(e, c)| {
+            !c.is_empty()
+                && !e.contains(", ")
+                && !c.contains(", ")
+                && refers_back(&e.to_lowercase())
         });
     }
     let Some((_, effect)) = body.split_once(", ") else {

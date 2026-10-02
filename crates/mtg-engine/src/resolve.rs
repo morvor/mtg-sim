@@ -647,8 +647,10 @@ impl Game {
                 duration,
             } => {
                 // CR 611.2b: a "for as long as" duration that already ended means the
-                // effect does nothing.
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                // effect does nothing. (One about the affected objects, "for as long as
+                // that creature has a bounty counter on it", is checked for them below.)
+                let about_affected = matches!(duration, Duration::WhileCondition(_));
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 let objs: Vec<ObjectId> = self
@@ -659,6 +661,16 @@ impl Game {
                     .collect();
                 if objs.is_empty() {
                     return;
+                }
+                if let Duration::WhileCondition(c) = duration {
+                    let mut c2 = ctx.clone();
+                    c2.set_var(
+                        vars::AFFECTED,
+                        objs.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    if !self.eval_cond(c, &c2) {
+                        return;
+                    }
                 }
                 // CR 608.2h: P/T values are determined once, as the effect is created. One
                 // that depends on each affected object ("becomes an artifact creature with

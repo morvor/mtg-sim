@@ -71,13 +71,27 @@ fn quoted_segments(text: &str) -> Vec<&str> {
     out
 }
 
+thread_local! {
+    static QUOTES_NAME_NO_CARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with quoted abilities known not to name the card (their "~" is "this
+/// creature", the object that has the ability): a nested quote the caller checked
+/// against the raw text, such as an ability an emblem grants.
+pub(crate) fn with_quotes_naming_no_card<T>(f: impl FnOnce() -> T) -> T {
+    let prev = QUOTES_NAME_NO_CARD.with(|c| c.replace(true));
+    let r = f();
+    QUOTES_NAME_NO_CARD.with(|c| c.set(prev));
+    r
+}
+
 /// Whether a quoted ability (normalized) names the card itself rather than "this
 /// creature": normalization writes both as `~`, but in an ability granted to another
 /// object only "this creature" means that object; the card's name still means the card
 /// (CR 201.5a: "Equipped creature has '{T}, Sacrifice Blazing Torch: ...'"). Such
 /// abilities are left unsupported. Unknown provenance counts as naming the card.
 pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
-    if !normalized.contains('~') {
+    if !normalized.contains('~') || QUOTES_NAME_NO_CARD.with(|c| c.get()) {
         return false;
     }
     let raw = crate::oracle::raw_text();
@@ -112,11 +126,31 @@ pub(crate) fn granted_abilities(
     hint: CardType,
     ctx: &CompileContext,
 ) -> Option<Vec<Ability>> {
+    granted_abilities_to(quote_lower, text, hint, ctx, false)
+}
+
+/// [`granted_abilities`]; `to_source`: the ability is granted to the card itself ("~ has
+/// deathtouch and \"Whenever [card name] deals combat damage ...\""), so its name and
+/// "this creature" both mean the object that has it.
+pub(crate) fn granted_abilities_to(
+    quote_lower: &str,
+    text: &str,
+    hint: CardType,
+    ctx: &CompileContext,
+    to_source: bool,
+) -> Option<Vec<Ability>> {
     let orig = quoted_segments(text)
         .into_iter()
         .find(|q| q.trim_end_matches(',').to_lowercase() == quote_lower)?;
-    if quote_names_card(orig, ctx) {
-        return None;
+    // An ability that names the card granting it ("Equipped creature has \"{T}, Sacrifice
+    // Blazing Torch: Blazing Torch deals 2 damage to any target.\""): only when every
+    // self-reference in it is the card's name (see `granted_by`).
+    let mut names_granter = false;
+    if !to_source && quote_names_card(orig, ctx) {
+        if !quote_only_names_card(orig, ctx) {
+            return None;
+        }
+        names_granter = true;
     }
     let mut tl = TypeLine::default();
     tl.card_types.insert(hint);
@@ -141,7 +175,58 @@ pub(crate) fn granted_abilities(
     {
         return None;
     }
-    Some(v)
+    if names_granter {
+        return v.iter().map(crate::granted_by::refer_to_granter).collect();
+    }
+    Some(v.into_iter().map(not_a_cda).collect())
+}
+
+/// Whether every self-reference of a quoted ability (normalized) is the card's name:
+/// without the name, its raw text has none ("this creature" would be the object that has
+/// the ability).
+fn quote_only_names_card(normalized: &str, ctx: &CompileContext) -> bool {
+    let raw = crate::oracle::raw_text();
+    let tl = TypeLine::default();
+    let anonymous = CompileContext {
+        card_name: "\u{1}",
+        full_name: "\u{1}",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
+    quoted_segments(&raw).into_iter().any(|q| {
+        bare(&crate::oracle::normalize(q, ctx)) == bare(normalized)
+            && !crate::oracle::normalize(q, &anonymous).contains('~')
+    })
+}
+
+/// An ability an object acquires from an effect isn't characteristic-defining (CR 604.3a:
+/// only one printed on the card, given to a token by the effect that created it, or
+/// acquired through a copy or text-changing effect is): "This creature's power and
+/// toughness are each equal to ..." granted this way sets them in layer 7b, in timestamp
+/// order (CR 613.4b, 613.7a).
+fn not_a_cda(a: Ability) -> Ability {
+    let AbilityKind::Static(st) = &a.kind else {
+        return a;
+    };
+    if !st.is_cda {
+        return a;
+    }
+    let mut st = st.clone();
+    st.is_cda = false;
+    st.zone = FunctionZone::Battlefield;
+    if let StaticEffect::Continuous { mods, .. } = &mut st.effect {
+        for m in mods.iter_mut() {
+            if let Modification::CdaPT(p, t) = m {
+                *m = Modification::SetPT(p.take(), t.take());
+            }
+        }
+    }
+    AbilityDef::with_link(AbilityKind::Static(st), a.text.clone(), a.link)
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +269,22 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that are attacking", Filter::Attacking),
         ("that are modified", Filter::Modified),
         ("that's modified", Filter::Modified),
+        ("attacking you", Filter::AttackingPlayer(PlayerRel::You)),
+        (
+            "attacking your opponents",
+            Filter::AttackingPlayer(PlayerRel::Opponent),
+        ),
+        (
+            "attacking enchanted player",
+            Filter::Custom(crate::kw::grant_filters::ATTACKING_ENCHANTED_PLAYER.into()),
+        ),
+        // An Aura attached to a player (CR 303.4).
+        (
+            "enchanted player controls",
+            Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                Sel::AttachedTo,
+            )))),
+        ),
     ] {
         if let Some(r) = t.strip_prefix(p) {
             if r.is_empty() || r.starts_with([' ', ',']) {
@@ -523,10 +624,17 @@ fn group_subject(filter: Filter) -> Subject {
         CardType::Land
     } else if creatures {
         CardType::Creature
-    } else if filter_mentions(&filter, &|x| matches!(x, Filter::Type(CardType::Artifact))) {
+    } else if filter_mentions(&filter, &|x| match x {
+        Filter::Type(CardType::Artifact) => true,
+        // "Clues you control", "Treasures you control": artifact subtypes.
+        Filter::Subtype(s) => subtype_kind(s) == Some(SubtypeKind::Artifact),
+        _ => false,
+    }) {
         CardType::Artifact
-    } else if filter_mentions(&filter, &|x| {
-        matches!(x, Filter::Type(CardType::Enchantment))
+    } else if filter_mentions(&filter, &|x| match x {
+        Filter::Type(CardType::Enchantment) => true,
+        Filter::Subtype(s) => subtype_kind(s) == Some(SubtypeKind::Enchantment),
+        _ => false,
     }) {
         CardType::Enchantment
     } else {
@@ -704,7 +812,7 @@ fn parse_group(s: &str) -> Option<Subject> {
         None => {
             let u = union_nouns(s);
             let (f, plural) = whole_object_phrase(&u)?;
-            if !plural && !quantified {
+            if !plural && !quantified && !invariant_plural(&u) {
                 return None;
             }
             f
@@ -715,6 +823,18 @@ fn parse_group(s: &str) -> Option<Subject> {
         return None;
     }
     Some(group_subject(f))
+}
+
+/// A bare group of a subtype whose plural is the same word: "Eldrazi you control",
+/// "Merfolk you control" (Path of Annihilation).
+fn invariant_plural(s: &str) -> bool {
+    const INVARIANT: &[&str] = &[
+        "eldrazi", "merfolk", "kithkin", "moonfolk", "sheep", "fish", "kor", "samurai", "deer",
+        "elk", "moose", "bison", "squid", "kavu", "slith",
+    ];
+    let w = s.split(' ').next().unwrap_or("");
+    INVARIANT.contains(&w)
+        && (s.ends_with(" you control") || s.ends_with(" your opponents control"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,7 +1431,8 @@ fn grant_list(
             .and_then(|x| x.parse::<usize>().ok())
         {
             let q = quotes.get(k)?;
-            for a in granted_abilities(q, text, subj.hint, ctx)? {
+            let to_source = matches!(subj.it, Some(Sel::This)) && matches!(subj.filter, Filter::Source);
+            for a in granted_abilities_to(q, text, subj.hint, ctx, to_source)? {
                 out.push(Out::Mod(Modification::AddAbility(a)));
             }
         } else {
@@ -2148,6 +2269,18 @@ fn parse_predicate(
         if r == "all abilities" || r == "all other abilities" {
             return Some(vec![Out::Mod(Modification::RemoveAllAbilities)]);
         }
+        // "loses all land types and abilities" (Lithoform Blight): its land subtypes
+        // (layer 4) and its abilities (layer 6).
+        if subj.lands && (r == "all land types and abilities" || r == "all land types") {
+            let mut out = vec![Out::Mod(Modification::Custom {
+                name: crate::kw::grant_filters::LOSE_ALL_LAND_TYPES.into(),
+                layer: Layer::L4Type,
+            })];
+            if r.ends_with("abilities") {
+                out.push(Out::Mod(Modification::RemoveAllAbilities));
+            }
+            return Some(out);
+        }
         let mut out = Vec::new();
         for item in split_list(r) {
             match KeywordKind::from_name(item) {
@@ -2422,6 +2555,11 @@ fn turn_condition(s: &str) -> Option<Condition> {
     match s {
         "during combat" => Some(Condition::Phase(PhaseCond::Combat)),
         "during your turn" | "during each of your turns" => Some(Condition::YourTurn),
+        // Zurgo, Thunder's Decree.
+        "during your end step" => Some(Condition::And(vec![
+            Condition::YourTurn,
+            Condition::Phase(PhaseCond::EndStep),
+        ])),
         // An opponent is the active player (not a teammate, in team games).
         "during turns other than yours"
         | "during each opponent's turn"

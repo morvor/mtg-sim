@@ -44,12 +44,14 @@ fn attach_after_life_loss(e: &mut Effect, gain: Effect) -> bool {
     }
 }
 
-/// "You gain life equal to the life lost this way." following a life-loss instruction;
+/// "You gain life equal to the life lost this way." (or "You gain that much life.")
+/// following a life-loss instruction;
 /// also "If [condition], you gain life equal to the life lost this way."
 fn gain_life_lost_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     const GAIN: &str = "you gain life equal to the life lost this way";
-    let cond = if l == GAIN {
+    // "You gain that much life." (Foul-Tongue Shriek) says the same.
+    let cond = if l == GAIN || l == "you gain that much life" {
         None
     } else if let Some(c) = l
         .strip_prefix("if ")

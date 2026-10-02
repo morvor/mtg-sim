@@ -407,19 +407,23 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
 fn one_creation(r: &str, ctx: &CompileContext) -> Option<(TokenSpec, Value, bool, bool)> {
     let (count, r) = parse_number(r)?;
     let r = r.trim();
-    let (r, tapped) = match r.strip_prefix("tapped ") {
-        Some(x) => (x, true),
-        None => (r, false),
+    // "a tapped and attacking 1/1 red Devil creature token" (CR 508.4).
+    let (r, tapped, attacking) = if let Some(x) = r.strip_prefix("tapped and attacking ") {
+        (x, true, true)
+    } else if let Some(x) = r.strip_prefix("tapped ") {
+        (x, true, false)
+    } else {
+        (r, false, false)
     };
     let (w, rest) = split_word(r);
     if let Some(spec) = crate::tokens::predefined(w) {
         let rest = end(rest);
         if rest == "token" || rest == "tokens" {
-            return Some((spec, count, tapped, false));
+            return Some((spec, count, tapped, attacking));
         }
     }
     let d = token_desc(r, ctx)?;
-    Some((d.spec, count, tapped || d.tapped, d.attacking))
+    Some((d.spec, count, tapped || d.tapped, attacking || d.attacking))
 }
 
 fn create(spec: TokenSpec, count: Value, tapped: bool, attacking: bool) -> Effect {

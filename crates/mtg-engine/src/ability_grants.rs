@@ -69,11 +69,18 @@ pub fn selected(which: &AbilitySelection, a: &AbilityDef) -> bool {
 /// abilities, and the abilities of such kinds of other keywords.
 pub fn gained_from(g: &Game, which: &AbilitySelection, from: ObjectId) -> Vec<Ability> {
     let mut out = Vec::new();
-    for a in &g.obj(from).chars.abilities {
+    let abilities = &g.obj(from).chars.abilities;
+    for a in abilities {
         match &a.kind {
             AbilityKind::Keyword(k) => {
                 let derived = crate::keyword_impls::derived_abilities(k);
-                if derived.is_empty() {
+                // A keyword whose abilities the object already has expanded (Lion Sash's
+                // reconfigure): those abilities are gained as they are, once each.
+                if derived.is_empty()
+                    || derived
+                        .iter()
+                        .any(|d| abilities.iter().any(|x| x.uid == d.uid))
+                {
                     continue;
                 }
                 if derived.iter().all(|d| selected(which, d)) {
