@@ -396,3 +396,64 @@ fn teferis_ageless_insight_and_bard_the_drawing_player_orders_them() {
     assert!(replacement_choices(&t, P0) >= 1);
     assert_eq!(t.hand_size(P0), hand + 4);
 }
+
+/// Leaves `n` cards in `p`'s library.
+fn library_of(t: &mut TestGame, p: PlayerId, n: usize) {
+    t.g.players[p.idx()].library.clear();
+    for _ in 0..n {
+        t.library_top(p, "Island");
+    }
+}
+
+/// Xyris (3/5 flying) attacks P1 unblocked; runs until the end of combat or the end of
+/// the game.
+fn xyris_hits(t: &mut TestGame) {
+    use mtg_engine::turn::Stage;
+    let xyris = t.battlefield(P0, "Xyris, the Writhing Storm");
+    attack_with(t, &[(xyris, Entity::Player(P1))]);
+    let ok = t.g.run_until(10_000, |g| {
+        g.result.is_some()
+            || (g.turn.step == Step::EndOfCombat && g.turn.stage == Stage::Priority)
+    });
+    assert!(ok);
+}
+
+#[test]
+fn xyris_you_and_that_player_each_draw_and_lose_together() {
+    cr!("121.2c", "704.5b", "104.4a");
+    ruling!(
+        "Xyris, the Writhing Storm",
+        "If the amount of damage Xyris deals is greater than the number of cards in your library and the number of cards in that player's library, you both lose the game at the same time. It doesn't matter if one of you had more cards in library than the other. If there are no other players left in the game, the game is a draw."
+    );
+    supported("Xyris, the Writhing Storm");
+    let mut t = TestGame::new(2);
+    library_of(&mut t, P0, 2);
+    library_of(&mut t, P1, 1);
+    xyris_hits(&mut t);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.g.result, Some(mtg_engine::game::GameResult::Draw));
+}
+
+#[test]
+fn xyris_each_draw_that_many_cards() {
+    cr!("121.2c", "510.2");
+    let mut t = TestGame::new(2);
+    xyris_hits(&mut t);
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.hand_size(P1), 3);
+}
+
+#[test]
+fn xyris_a_player_dealt_lethal_damage_loses_before_you_draw() {
+    cr!("704.5a", "704.3", "104.2a");
+    ruling!(
+        "Xyris, the Writhing Storm",
+        "If the amount of damage Xyris deals is greater than the number of cards in your library but causes the defending player's life total to become 0 or less, that player loses the game before Xyris's ability causes you to draw cards. If there are no other players left in the game, you win the game."
+    );
+    let mut t = TestGame::new(2);
+    library_of(&mut t, P0, 1);
+    t.g.players[P1.idx()].life = 3;
+    xyris_hits(&mut t);
+    assert_eq!(t.g.result, Some(mtg_engine::game::GameResult::Win(vec![P0])));
+    assert_eq!(t.hand_size(P0), 0);
+}
