@@ -37,16 +37,16 @@ fn body_mut(a: &mut AbilityKind) -> Option<&mut Body> {
     }
 }
 
+/// Whether an ability block says "that player" with no referent of its own: it mentions
+/// no target and doesn't compile on its own.
+fn needs_linked_player(block: &str, ctx: &CompileContext) -> bool {
+    let lower = block.to_lowercase();
+    lower.contains("that player") && !lower.contains("target") && parsed(block, ctx).is_none()
+}
+
 /// The first ability, noting the player it targets, and the second, whose "that player"
-/// is that player.
+/// is that player (`second` must satisfy [`needs_linked_player`]).
 fn build(first: &str, second: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let lower = second.to_lowercase();
-    if !lower.contains("that player") || lower.contains("target") {
-        return None;
-    }
-    if parsed(second, ctx).is_some() {
-        return None;
-    }
     let v = parsed(first, ctx)?;
     let [a] = v.as_slice() else {
         return None;
@@ -95,6 +95,10 @@ fn group(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
     let mut blocks = blocks;
     let mut i = 1;
     while i < blocks.len() {
+        if !needs_linked_player(&blocks[i], ctx) {
+            i += 1;
+            continue;
+        }
         let found = (0..i)
             .rev()
             .find(|&j| !blocks[j].contains(MARK) && build(&blocks[j], &blocks[i], ctx).is_some());
@@ -110,6 +114,9 @@ fn group(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
 
 fn parse_group(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let (first, second) = block.split_once(&format!("\n{MARK}"))?;
+    if !needs_linked_player(second, ctx) {
+        return None;
+    }
     build(first, second, ctx)
 }
 
@@ -120,13 +127,15 @@ inventory::submit! { AbilityPattern { name: "r607 linked: that player the earlie
 /// last chosen card" (Koh, the Face Stealer): the chosen card is noted for it, replacing
 /// the card chosen before (CR 607.2d, 607.2e).
 fn choose_card_for_linked(l: &str, _b: &mut Builder) -> Option<Effect> {
-    let raw = crate::oracle::raw_text().to_lowercase();
-    if !raw.contains("the last chosen card") {
-        return None;
-    }
     let r = end(l).strip_prefix("choose ")?;
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let r = r.strip_suffix(" exiled with ~")?;
+    if !crate::oracle::raw_text()
+        .to_lowercase()
+        .contains("the last chosen card")
+    {
+        return None;
+    }
     let (f, plural, tail) = parse_object_phrase(r)?;
     if plural || !end(tail).is_empty() {
         return None;
