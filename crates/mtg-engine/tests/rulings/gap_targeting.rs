@@ -615,3 +615,256 @@ fn reunion_of_the_house_total_power() {
     assert!(t.in_graveyard(P0, "Tarmogoyf"));
     assert!(t.in_graveyard(P0, "Reunion of the House"));
 }
+
+/// Puts the Aura `name` onto the battlefield under `p`'s control attached to `host`.
+fn aura_on(t: &mut TestGame, p: PlayerId, name: &str, host: ObjectId) -> ObjectId {
+    let a = t.battlefield(p, name);
+    assert!(t.g.attach(a, Entity::Object(host)));
+    t.recompute();
+    a
+}
+
+#[test]
+fn simic_guildmage_moves_a_counter_between_creatures_with_the_same_controller() {
+    cr!("122.5", "608.2b", "601.2c", "602.2b");
+    ruling!(
+        "Simic Guildmage",
+        "For the first ability, if the two target creatures aren’t controlled by the same player when the ability resolves, the ability does nothing. The player who controls the two creatures doesn’t have to be the same player who controlled them when the ability was activated, and that player doesn’t have to be Simic Guildmage’s controller."
+    );
+    ruling!(
+        "Simic Guildmage",
+        "For the first ability, the first target creature doesn’t need to have a +1/+1 counter on it. If it doesn’t, the ability does nothing."
+    );
+    supported("Simic Guildmage");
+    let setup = |t: &mut TestGame| {
+        let gm = t.battlefield(P0, "Simic Guildmage");
+        add_mana(t, P0, ManaType::G, 2);
+        gm
+    };
+    // Two of P1's creatures: both change control to P2 before it resolves — still the
+    // same controller, so the counter moves.
+    let mut t = TestGame::new(3);
+    let gm = setup(&mut t);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.activate(P0, gm, 0, &[]).unwrap();
+    gain_control(&mut t, P2, a);
+    gain_control(&mut t, P2, b);
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 0);
+    assert_eq!(t.counters(b, "+1/+1"), 1);
+
+    // Only one of them changes control: nothing moves.
+    let mut t = TestGame::new(3);
+    let gm = setup(&mut t);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.activate(P0, gm, 0, &[]).unwrap();
+    gain_control(&mut t, P2, b);
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 1);
+    assert_eq!(t.counters(b, "+1/+1"), 0);
+
+    // The first target needn't have a counter: it can be activated, and does nothing.
+    let mut t = TestGame::new(2);
+    let gm = setup(&mut t);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.activate(P0, gm, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.counters(b, "+1/+1"), 0);
+}
+
+#[test]
+fn simic_guildmage_moves_an_aura_to_a_permanent_with_the_same_controller() {
+    cr!("701.3a", "303.4d", "115.10");
+    ruling!(
+        "Simic Guildmage",
+        "For the second ability, only the Aura is targeted. When the ability resolves, you choose a permanent to move the Aura onto."
+    );
+    // P1's Bears wear P0's Pacifism. Answering P0's own creature (not P1's) isn't a
+    // legal choice; the Aura moves to P1's other creature. P1's land can't be enchanted
+    // by Pacifism.
+    let mut t = TestGame::new(2);
+    let gm = t.battlefield(P0, "Simic Guildmage");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Forest");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    let pacifism = aura_on(&mut t, P0, "Pacifism", bears);
+    t.answer_targets(P0, &[Entity::Object(pacifism)]);
+    t.answer_choose(P0, &[Entity::Object(mine)]);
+    let from = t.asked().len();
+    t.activate(P0, gm, 1, &[]).unwrap();
+    t.resolve();
+    let offered: Vec<Vec<Entity>> = asked_since(&t, from)
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered, vec![vec![Entity::Object(giant)]]);
+    assert_eq!(t.obj_now(pacifism).attached_to, Some(Entity::Object(giant)));
+
+    // No other creature P1 controls: the Aura stays.
+    let mut t = TestGame::new(2);
+    let gm = t.battlefield(P0, "Simic Guildmage");
+    add_mana(&mut t, P0, ManaType::U, 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P0, "Llanowar Elves");
+    let pacifism = aura_on(&mut t, P0, "Pacifism", bears);
+    t.answer_targets(P0, &[Entity::Object(pacifism)]);
+    t.activate(P0, gm, 1, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.obj_now(pacifism).attached_to, Some(Entity::Object(bears)));
+}
+
+#[test]
+fn bioshift_any_number_between_creatures_with_the_same_controller() {
+    cr!("122.5", "608.2b", "601.2c");
+    ruling!(
+        "Bioshift",
+        "If one of the two creatures is an illegal target when Bioshift tries to resolve, or if the creatures are controlled by different players at that time, no counters will move."
+    );
+    ruling!(
+        "Bioshift",
+        "You decide how many counters to move when Bioshift resolves."
+    );
+    ruling!(
+        "Bioshift",
+        "To move a counter from one creature to another, the counter is removed from the first creature and placed on the second. Any abilities that care about a counter being removed or placed on a creature will apply."
+    );
+    supported("Bioshift");
+    // Two counters of three are moved; Hardened Scales (P0's) adds one as they're put on
+    // P0's creature.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 3, None);
+    t.battlefield(P0, "Hardened Scales");
+    add_mana(&mut t, P0, ManaType::G, 1);
+    let spell = t.hand(P0, "Bioshift");
+    t.answer(P0, DecisionKind::Number, Answer::Number(2));
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 1);
+    assert_eq!(t.counters(b, "+1/+1"), 3);
+
+    // A creature P1 controls can't be the second target with P0's as the first; a
+    // creature of P0's is chosen instead.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    add_mana(&mut t, P0, ManaType::G, 1);
+    let spell = t.hand(P0, "Bioshift");
+    t.answer(P0, DecisionKind::Number, Answer::Number(1));
+    let id = t
+        .cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(theirs)])
+        .go();
+    assert_eq!(
+        stack_targets(&t, id),
+        vec![Entity::Object(a), Entity::Object(b)]
+    );
+    // Then the second changes controller: no counters move.
+    gain_control(&mut t, P1, b);
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 1);
+    assert_eq!(t.counters(b, "+1/+1"), 0);
+
+    // With no two creatures sharing a controller, Bioshift can't be cast.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::G, 1);
+    let spell = t.hand(P0, "Bioshift");
+    assert!(t.cast(P0, spell).try_go().is_err());
+}
+
+#[test]
+fn glamer_spinners_moves_all_auras_to_a_permanent_with_the_same_controller() {
+    cr!("701.3a", "303.4d", "603.3d");
+    ruling!(
+        "Glamer Spinners",
+        "When Glamer Spinners enters, you target only one permanent: the one that will be losing its Auras."
+    );
+    ruling!(
+        "Glamer Spinners",
+        "It can't be the targeted permanent, it must have the same controller as the targeted permanent, and it must be able to be enchanted by all the Auras attached to the targeted permanent. If you can't choose a permanent that meets all those criteria, the Auras won't move."
+    );
+    ruling!(
+        "Glamer Spinners",
+        "You may target a permanent that has no Auras enchanting it."
+    );
+    supported("Glamer Spinners");
+    // P1's Bears wear Pacifism and Holy Strength; both move to P1's Giant.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P0, "Llanowar Elves");
+    let p = aura_on(&mut t, P0, "Pacifism", bears);
+    let h = aura_on(&mut t, P1, "Holy Strength", bears);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Glamer Spinners");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(p).attached_to, Some(Entity::Object(giant)));
+    assert_eq!(t.obj_now(h).attached_to, Some(Entity::Object(giant)));
+
+    // P1's only other permanent is a land, which Pacifism can't enchant: nothing moves.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Forest");
+    let p = aura_on(&mut t, P0, "Pacifism", bears);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Glamer Spinners");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(p).attached_to, Some(Entity::Object(bears)));
+
+    // A permanent without Auras can be targeted.
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P1, "Forest");
+    t.answer_targets(P0, &[Entity::Object(forest)]);
+    t.enter(P0, "Glamer Spinners");
+    t.settle();
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(stack_targets(&t, top), vec![Entity::Object(forest)]);
+    t.resolve_all();
+}
+
+#[test]
+fn crown_of_the_ages_targets_only_the_aura() {
+    cr!("701.3a", "115.10", "702.11b");
+    ruling!(
+        "Crown of the Ages",
+        "This only targets the Aura and not either creature. This means it can move Auras onto a creature which can’t normally be targeted by spells and abilities if the Aura is legal on that creature."
+    );
+    supported("Crown of the Ages");
+    // Pacifism moves onto P1's hexproof Gladecover Scout.
+    let mut t = TestGame::new(2);
+    let crown = t.battlefield(P0, "Crown of the Ages");
+    t.lands(P0, "Wastes", 4);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let scout = t.battlefield(P1, "Gladecover Scout");
+    let p = aura_on(&mut t, P0, "Pacifism", bears);
+    t.answer_targets(P0, &[Entity::Object(p)]);
+    t.answer_choose(P0, &[Entity::Object(scout)]);
+    t.activate(P0, crown, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.obj_now(p).attached_to, Some(Entity::Object(scout)));
+}

@@ -363,3 +363,36 @@ fn changing_a_target_keeps_the_player_it_was_chosen_for() {
     assert_eq!(t.obj_now(giant).controller, P2);
     assert_eq!(t.zone(bears), Zone::Battlefield);
 }
+
+#[test]
+fn a_target_related_to_an_earlier_target() {
+    cr!("601.2c", "115.1");
+    // Bioshift: "Move any number of +1/+1 counters from target creature onto another
+    // target creature with the same controller." P0's lone Bears has no partner, so it
+    // isn't offered as the first target: the first is one of P1's creatures, and the
+    // second must be P1's other one.
+    let mut t = TestGame::new(2);
+    mana(&mut t, P0, ManaType::G, 1);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let spell = t.hand(P0, "Bioshift");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
+    let id = t.cast(P0, spell).go();
+    let choices = target_choices(&t, from);
+    assert_eq!(
+        choices[0].0,
+        vec![Entity::Object(giant), Entity::Object(elves)]
+    );
+    let chosen = targets_of(&t, id);
+    let first = chosen[0];
+    let other = if first == Entity::Object(giant) {
+        Entity::Object(elves)
+    } else {
+        Entity::Object(giant)
+    };
+    assert_eq!(choices[1].0, vec![other]);
+    assert_eq!(chosen, vec![first, other]);
+}

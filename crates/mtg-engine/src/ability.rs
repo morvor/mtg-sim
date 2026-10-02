@@ -798,6 +798,9 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents or players the selected objects are attached to ("the permanent
+    /// target Aura is attached to").
+    HostOf(Box<Sel>),
     /// Objects attached to the source ("equipment attached to it").
     AttachedToThis,
     /// All objects matching the filter.
@@ -1152,6 +1155,12 @@ pub enum Filter {
     Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
+    /// Attached to one of the selected permanents or players ("Auras attached to target
+    /// permanent").
+    AttachedTo(Box<Sel>),
+    /// An object each of the selected objects could legally be attached to right now
+    /// ("another permanent it can enchant", CR 301.5c, 303.4).
+    CanBeAttachedBy(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").

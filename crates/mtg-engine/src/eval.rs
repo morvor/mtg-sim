@@ -620,6 +620,14 @@ impl Game {
                 ctx.source.and_then(|s| self.obj(s).attached_to) == Some(Entity::Object(id))
             }
             Filter::Attached => o.attached_to.is_some(),
+            Filter::AttachedTo(sel) => o
+                .attached_to
+                .is_some_and(|h| self.eval_sel(sel, ctx).contains(&h)),
+            Filter::CanBeAttachedBy(sel) => self
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .all(|a| crate::attach::can_attach(self, a, Entity::Object(id))),
             Filter::Enchanted => self
                 .attachments_of(Entity::Object(id))
                 .iter()
@@ -913,6 +921,16 @@ impl Game {
                 .and_then(|s| self.obj(s).attached_to)
                 .into_iter()
                 .collect(),
+            Sel::HostOf(s) => {
+                let mut out: Vec<Entity> = Vec::new();
+                for e in self.eval_sel(s, ctx) {
+                    let host = e.object().and_then(|o| self.obj(o).attached_to);
+                    if let Some(h) = host.filter(|h| !out.contains(h)) {
+                        out.push(h);
+                    }
+                }
+                out
+            }
             Sel::AttachedToThis => ctx
                 .source
                 .map(|s| {
