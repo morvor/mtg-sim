@@ -5,6 +5,7 @@
 //! from combat, and combat timing windows (CR 506.8).
 
 use crate::ability::*;
+use crate::as_though::{as_though_haste, HasteUse};
 use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
 use crate::events::Event;
@@ -207,7 +208,7 @@ impl Game {
     /// Whether a restriction's object filter applies to `id`. Effects that named specific
     /// objects ("target creature can't block this turn") are locked onto those objects; the
     /// filter's references to targets/the source were resolved then.
-    fn restriction_applies(
+    pub(crate) fn restriction_applies(
         &self,
         id: ObjectId,
         f: &Filter,
@@ -264,7 +265,11 @@ impl Game {
         {
             return false;
         }
-        if o.summoning_sick && !o.has_keyword(KeywordKind::Haste) {
+        // CR 302.6, 508.1a, unless an effect lets it attack as though it had haste.
+        if o.summoning_sick
+            && !o.has_keyword(KeywordKind::Haste)
+            && !as_though_haste(self, id, HasteUse::Attack(None))
+        {
             return false;
         }
         // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
@@ -284,6 +289,15 @@ impl Game {
 
     /// Whether a creature can attack a specific player/planeswalker/battle.
     pub fn can_attack_target(&self, id: ObjectId, target: Entity) -> bool {
+        // An effect that lets it attack as though it had haste may cover only some
+        // players and planeswalkers (Frenzied Saddlebrute).
+        let o = self.obj(id);
+        if o.summoning_sick
+            && !o.has_keyword(KeywordKind::Haste)
+            && !as_though_haste(self, id, HasteUse::Attack(Some(target)))
+        {
+            return false;
+        }
         // "can't attack you (or planeswalkers you control)": the player, a planeswalker
         // they control, or a battle they protect: (player, planeswalker?, battle?).
         let defender = match target {
@@ -337,11 +351,17 @@ impl Game {
     /// Whether a creature can block at all (CR 509.1a).
     pub fn can_block_at_all(&self, id: ObjectId) -> bool {
         let o = self.obj(id);
-        if o.zone != Zone::Battlefield
-            || o.phased_out
-            || !o.is_creature()
-            || o.is(CardType::Battle)
-            || o.tapped
+        if o.zone != Zone::Battlefield || o.phased_out || !o.is_creature() || o.is(CardType::Battle)
+        {
+            return false;
+        }
+        // "Tapped creatures you control can block as though they were untapped" waives
+        // only the requirement that blockers be untapped (Masako the Humorless ruling).
+        if o.tapped
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::BlockAsThoughUntapped(f) => Some(f),
+                _ => None,
+            })
         {
             return false;
         }
@@ -957,7 +977,7 @@ pub fn attack_declaration_legal(
     attack_declaration_legal_with(g, options, decl, &reqs, max)
 }
 
-fn attack_declaration_legal_with(
+pub(crate) fn attack_declaration_legal_with(
     g: &Game,
     options: &[(ObjectId, Vec<Entity>)],
     decl: &[(ObjectId, Entity)],
@@ -979,8 +999,12 @@ pub fn declare_attackers_step(g: &mut Game) {
     let options = attack_options(g);
     let reqs = attack_requirements(g);
     let (max, best) = best_attack(g, &options, &reqs);
+    // "You choose which creatures attack this turn" (Master Warcraft).
+    let chooser = crate::attack_choice::attack_decider(g).filter(|p| *p != ap);
     let declared: Vec<(ObjectId, Entity)> = if options.is_empty() {
         vec![]
+    } else if let Some(chooser) = chooser {
+        crate::attack_choice::declaration_chosen_by(g, chooser, ap, &options, &reqs, max, &best)
     } else {
         match g.ask(
             ap,

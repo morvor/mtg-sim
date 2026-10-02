@@ -2848,11 +2848,13 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeRegenerated(f)
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
+        | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
         | Restriction::AssignsNoCombatDamage(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
-        Restriction::MustAttackPlayer { attackers, .. } => Some(attackers),
+        Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,
     }
 }
@@ -2871,7 +2873,11 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
-        Restriction::MustAttackPlayer { defender, .. } => Some(defender),
+        Restriction::MustAttackPlayer { defender, .. }
+        | Restriction::AttackAsThoughHaste {
+            defender: Some(defender),
+            ..
+        } => Some(defender),
         _ => None,
     }
 }

@@ -29,6 +29,7 @@ pub mod ante;
 pub mod apnap;
 pub mod as_though;
 pub mod attach;
+pub mod attack_choice;
 pub mod attraction_cards;
 pub mod battle;
 pub mod behold;
