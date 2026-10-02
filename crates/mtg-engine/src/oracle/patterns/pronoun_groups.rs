@@ -81,7 +81,14 @@ pub fn affected_group(e: &Effect) -> Option<&Sel> {
         Effect::ForEach { sel, var, effect } if acts_on_var(effect, *var) => sel,
         _ => return None,
     };
-    matches!(what, Sel::All(_)).then_some(what)
+    // Also "target creature and each other creature that shares a color with it" (a
+    // target and a group related to it; see `filters_relational::target_and_others`).
+    let group = match what {
+        Sel::All(_) => true,
+        Sel::Union(v) => v.iter().any(|s| matches!(s, Sel::All(_))),
+        _ => false,
+    };
+    group.then_some(what)
 }
 
 /// Whether a "for each" body just changes the object it's about (without moving it).

@@ -35,14 +35,14 @@ inventory::submit! {
 /// creatures don't untap during their controllers' next untap steps" (CR 502.3).
 fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let subject = [
-        " doesn't untap during its controller's next untap step",
-        " don't untap during their controllers' next untap steps",
-        " doesn't untap during your next untap step",
-        " don't untap during your next untap step",
+    let (subject, yours) = [
+        (" doesn't untap during its controller's next untap step", false),
+        (" don't untap during their controllers' next untap steps", false),
+        (" doesn't untap during your next untap step", true),
+        (" don't untap during your next untap step", true),
     ]
     .iter()
-    .find_map(|s| l.strip_suffix(s))?;
+    .find_map(|(s, yours)| l.strip_suffix(s).map(|r| (r, *yours)))?;
     let what = match subject {
         "~" => Sel::This,
         "enchanted creature" | "equipped creature" | "enchanted permanent" | "enchanted land" => {
@@ -67,7 +67,11 @@ fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     Some(Effect::AddRestriction {
         restriction: Restriction::DoesntUntap(Filter::In(Box::new(what))),
-        duration: Duration::ThroughNextUntapStep,
+        duration: if yours {
+            Duration::ThroughYourNextUntapStep
+        } else {
+            Duration::ThroughNextUntapStep
+        },
     })
 }
 
@@ -257,6 +261,18 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     let what = match r {
         "~" => Sel::This,
         "it" if matches!(b.it, Sel::This | Sel::TriggerObject) => b.it.clone(),
+        // "remove a +1/+1 counter from target creature an opponent controls" (Bloodcrazed
+        // Hoplite): one target object, nothing after it.
+        _ if r.starts_with("target ") || r.starts_with("another target ") => {
+            let saved = b.targets.len();
+            match crate::oracle::effects::object_ref(r, b) {
+                Some((sel @ Sel::Target(_), tail)) if end(&tail).is_empty() => sel,
+                _ => {
+                    b.targets.truncate(saved);
+                    return None;
+                }
+            }
+        }
         _ => return None,
     };
     Some(Effect::RemoveCounters {

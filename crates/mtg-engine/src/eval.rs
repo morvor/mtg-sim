@@ -58,6 +58,16 @@ pub struct Ctx {
     /// controls the delayed and reflexive triggered abilities it creates (CR 603.7d–e).
     #[serde(default)]
     pub resolving_controller: Option<PlayerId>,
+    /// The spell or ability the effects performed with this context are attributed to,
+    /// when it isn't the context's own: a replacement effect's modified event is caused by
+    /// what caused the event it replaced (CR 614.6; umbra armor, CR 702.89a). See
+    /// [`crate::event_causes::Cause::of`].
+    #[serde(default)]
+    pub cause: Option<crate::event_causes::Cause>,
+    /// The effects performed with this context are paying a cost (CR 118, 602.2b): counters
+    /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
+    #[serde(default)]
+    pub paying_cost: bool,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -66,6 +76,10 @@ pub struct Ctx {
 pub struct EntryMods {
     pub tapped: bool,
     pub counters: Vec<(CounterKind, u32)>,
+    /// Counters it enters with that a player other than its controller puts on it
+    /// (CR 122.6a: tribute's chosen opponent, CR 702.104a).
+    #[serde(default)]
+    pub counters_by: Vec<(CounterKind, u32, PlayerId)>,
     /// Enters prepared (CR 722.3a).
     pub prepared: bool,
     /// Exceptions to a copy effect it enters with (CR 707.9b).
@@ -617,7 +631,9 @@ impl Game {
             }
             Filter::HasAbilities => !c.has_no_abilities(),
             Filter::Source => ctx.source == Some(id),
-            Filter::Other => ctx.source != Some(id),
+            // "Another": not the source, nor the card it became after it left
+            // ("When ~ dies, return another target artifact card from your graveyard").
+            Filter::Other => ctx.source.is_none_or(|s| s != id && self.current(s) != id),
             Filter::In(sel) => self.eval_sel(sel, ctx).contains(&Entity::Object(id)),
             // CR 609.7a: a chosen permanent spell is also the permanent it becomes.
             Filter::Objects(v) => v.iter().any(|x| {
@@ -756,6 +772,11 @@ impl Game {
                 }
                 _ => false,
             },
+            Filter::ValueCmp(lhs, cmp, rhs) => {
+                crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
+            }
+            // Checked by whatever chooses the objects together (`relational.rs`).
+            Filter::Together(_) => true,
             Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
         }
     }
@@ -1025,7 +1046,8 @@ impl Game {
         match v {
             Value::Const(n) => *n as i64,
             Value::X => ctx.x as i64,
-            Value::Count(f) => self.objects_matching(f, ctx).len() as i64,
+            Value::Count(f) => crate::relational::count(self, f, ctx)
+                .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
             Value::CountPlayers(f) => self
                 .players_in_game()
@@ -1230,6 +1252,9 @@ impl Game {
                 }
                 set.count() as i64
             }
+            Value::Extreme(of, sel, greatest) => {
+                crate::relational::extreme(self, of, sel, *greatest, ctx)
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()
@@ -1389,10 +1414,11 @@ impl Game {
                 .and_then(|c| c.text.as_deref())
                 .is_some_and(|t| t == w.as_str()),
             Condition::AllTriggerConditionsThisTurn(conds) => conds.iter().all(|c| {
-                self.turn_events
-                    .iter()
-                    .chain(self.events.iter())
-                    .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+                self.turn_events.iter().chain(self.events.iter()).any(|ev| {
+                    // Counters put on a permanent: as it was then.
+                    crate::event_causes::happened_this_turn(self, c, ctx, ev)
+                        .unwrap_or_else(|| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+                })
             }),
             // CR 702.131: including a blessing a permanent's ascend ability gives now.
             Condition::CitysBlessing => crate::kw::ascend::has_citys_blessing(self, ctx.controller),

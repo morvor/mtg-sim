@@ -17,7 +17,13 @@ const CHOSEN: Var = vars::USER + 2231;
 
 fn players_choose_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (who, r) = if let Some(r) = l.strip_prefix("each opponent chooses ") {
+    // "For each opponent, choose a creature with the greatest power among creatures that
+    // player controls." (Highcliff Felidar): you choose, for each of them.
+    let mut you_choose = false;
+    let (who, r) = if let Some(r) = l.strip_prefix("for each opponent, choose ") {
+        you_choose = true;
+        (PlayerRef::EachOpponent, r)
+    } else if let Some(r) = l.strip_prefix("each opponent chooses ") {
         (PlayerRef::EachOpponent, r)
     } else if let Some(r) = l.strip_prefix("each player chooses ") {
         (PlayerRef::EachPlayer, r)
@@ -33,15 +39,26 @@ fn players_choose_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
-    let noun = r.strip_suffix(" they control")?;
-    // A single word naming the kind of permanent ("creature", "artifact", "permanent").
-    if noun.contains(' ') {
+    let (noun, f) = match r.strip_suffix(" they control").filter(|n| !n.contains(' ')) {
+        // A single word naming the kind of permanent ("creature", "artifact", "permanent").
+        Some(noun) => {
+            let (f, false, tail) = parse_object_phrase(noun)? else {
+                return None;
+            };
+            if !end(tail).is_empty() {
+                return None;
+            }
+            (noun, f)
+        }
+        // "a creature with the greatest mana value among creatures they control", "a
+        // permanent they control that shares a card type with the sacrificed permanent"
+        // (`filters_relational`).
+        None => super::filters_relational::their_object(r, b)?,
+    };
+    if you_choose && !matches!(noun, "creature" | "permanent") {
         return None;
     }
-    let (f, false, tail) = parse_object_phrase(noun)? else {
-        return None;
-    };
-    if !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+    if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
         return None;
     }
     let choose = Effect::Store {
@@ -49,7 +66,11 @@ fn players_choose_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
         sel: Sel::Union(vec![
             Sel::Var(CHOSEN),
             Sel::Choose {
-                chooser: PlayerRef::Iterated,
+                chooser: if you_choose {
+                    PlayerRef::You
+                } else {
+                    PlayerRef::Iterated
+                },
                 filter: Filter::and(vec![
                     f,
                     Filter::InZone(ZoneKind::Battlefield),

@@ -91,6 +91,19 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             on_players: on_players.clone(),
             kind: kind.clone(),
         },
+        ReplacementEvent::PutCountersMatching {
+            on_objects,
+            on_players,
+            kind,
+            by,
+            effect_only,
+        } => ReplacementEvent::PutCountersMatching {
+            on_objects: on_objects.as_ref().map(lf),
+            on_players: on_players.clone(),
+            kind: kind.clone(),
+            by: *by,
+            effect_only: *effect_only,
+        },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
         // "If target player would draw a card": the player is locked in too.
         ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
