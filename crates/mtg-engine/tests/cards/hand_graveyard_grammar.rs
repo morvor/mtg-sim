@@ -821,3 +821,372 @@ fn yixlid_jailer_removes_abilities_of_graveyard_cards() {
     t.g.recompute();
     assert!(t.obj_now(g).chars.abilities.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Second batch: scaled instructions, targets in a target player's graveyard,
+// distributing looked-at cards
+// ---------------------------------------------------------------------------
+
+#[test]
+fn second_batch_compiles() {
+    assert_supported(&[
+        "Suffer the Past",
+        "Drafna's Restoration",
+        "Metalworker",
+        "Scent of Brine",
+        "Brine Seer",
+        "Rofellos's Gift",
+        "Borrowed Knowledge",
+        "Forget",
+        "Neheb, Dreadhorde Champion",
+        "Apocalypse",
+        "Mind Maggots",
+        "Graveyard Trespasser // Graveyard Glutton",
+        "The Binding of the Titans",
+        "Expressive Iteration",
+        "Moment of Truth",
+        "Telling Time",
+        "Waste Management",
+        "Grub's Command",
+        "Endurance",
+        "Arjun, the Shifting Flame",
+    ]);
+    assert_compiles(&[(
+        "Sanctifier en-Vec",
+        "exile all cards that are black or red from all graveyards",
+    )]);
+}
+
+#[test]
+fn suffer_the_past_targets_cards_in_the_target_players_graveyard() {
+    cr!("115.1", "601.2c");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P1, "Shock");
+    let mine = t.graveyard(P0, "Forest");
+    let s = t.hand(P0, "Suffer the Past");
+    t.cast(P0, s)
+        .x(2)
+        .target(P1)
+        .targets(&objs(&[a, b]))
+        .go();
+    // Only cards in the chosen player's graveyard could be chosen.
+    let asked = t.asked();
+    let cands = asked
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. }
+                if candidates.contains(&Entity::Object(a)) =>
+            {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(!cands.contains(&Entity::Object(mine)));
+    t.resolve();
+    assert_eq!(t.zone(a), Zone::Exile);
+    assert_eq!(t.zone(b), Zone::Exile);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn drafnas_restoration_puts_artifact_cards_on_top() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let a = t.graveyard(P1, "Ornithopter");
+    let b = t.graveyard(P1, "Grizzly Bears");
+    let s = t.hand(P0, "Drafna's Restoration");
+    t.cast(P0, s).target(P1).targets(&objs(&[a])).go();
+    t.resolve();
+    assert_eq!(t.zone(a), Zone::Library(P1));
+    assert_eq!(*t.g.player(P1).library.last().unwrap(), t.g.current(a));
+    assert_eq!(t.zone(b), Zone::Graveyard(P1));
+}
+
+#[test]
+fn metalworker_adds_two_colorless_per_revealed_artifact() {
+    cr!("701.20a", "605.1a");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Metalworker");
+    let a = t.hand(P0, "Ornithopter");
+    let b = t.hand(P0, "Sol Ring");
+    t.hand(P0, "Grizzly Bears");
+    t.answer_choose(P0, &objs(&[a, b]));
+    t.activate(P0, m, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(
+        t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::C),
+        4
+    );
+}
+
+#[test]
+fn scent_of_brine_scales_the_tax() {
+    cr!("701.20a", "118.12");
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 3);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(P0).go();
+    let spell = t.g.stack[0];
+    t.lands(P0, "Island", 2);
+    let a = t.hand(P0, "Counterspell");
+    let b = t.hand(P0, "Opt");
+    let c = t.hand(P0, "Brainstorm");
+    let s = t.hand(P0, "Scent of Brine");
+    t.answer_choose(P0, &objs(&[a, b, c]));
+    t.cast(P0, s).target(spell).go();
+    // P1 has two untapped lands: can't pay {3}.
+    t.answer_yes(P1, true);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+}
+
+#[test]
+fn rofellos_gift_returns_one_enchantment_per_revealed_card() {
+    cr!("701.20a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    let a = t.hand(P0, "Llanowar Elves");
+    let b = t.hand(P0, "Giant Growth");
+    let e1 = t.graveyard(P0, "Pacifism");
+    let e2 = t.graveyard(P0, "Rancor");
+    let e3 = t.graveyard(P0, "Wild Growth");
+    let s = t.hand(P0, "Rofellos's Gift");
+    t.answer_choose(P0, &objs(&[a, b]));
+    t.answer_choose(P0, &objs(&[e1, e3]));
+    t.cast(P0, s).go();
+    t.resolve();
+    assert_eq!(t.zone(e1), Zone::Hand(P0));
+    assert_eq!(t.zone(e3), Zone::Hand(P0));
+    assert_eq!(t.zone(e2), Zone::Graveyard(P0));
+}
+
+#[test]
+fn borrowed_knowledge_draws_as_many_as_discarded() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Plains", 2);
+    for _ in 0..3 {
+        t.hand(P0, "Shock");
+    }
+    for _ in 0..5 {
+        t.hand(P1, "Shock");
+    }
+    let s = t.hand(P0, "Borrowed Knowledge");
+    t.cast(P0, s).modes(&[1]).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 3);
+    assert!(!t.in_hand(P0, "Shock"));
+}
+
+#[test]
+fn forget_draws_as_many_as_they_discarded() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.hand(P1, "Shock");
+    let f = t.hand(P0, "Forget");
+    t.cast(P0, f).target(P1).go();
+    t.resolve();
+    // Only one card could be discarded: one is drawn.
+    assert_eq!(t.graveyard_size(P1), 1);
+    assert_eq!(t.hand_size(P1), 1);
+    assert!(!t.in_hand(P1, "Shock"));
+}
+
+#[test]
+fn neheb_draws_and_adds_red_for_each_discarded_card() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    let n = t.battlefield(P0, "Neheb, Dreadhorde Champion");
+    let a = t.hand(P0, "Shock");
+    let b = t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[a, b]));
+    t.attack(&[(n, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.hand_size(P0), 3);
+    assert!(t.in_graveyard(P0, "Shock"));
+    assert_eq!(
+        t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::R),
+        2
+    );
+}
+
+#[test]
+fn apocalypse_discards_your_hand() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    t.hand(P0, "Shock");
+    t.hand(P1, "Shock");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let a = t.hand(P0, "Apocalypse");
+    t.cast(P0, a).go();
+    t.resolve();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(t.hand_size(P0), 0);
+    assert_eq!(t.hand_size(P1), 1);
+}
+
+#[test]
+fn mind_maggots_counters_per_creature_card_discarded() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    let a = t.hand(P0, "Grizzly Bears");
+    let b = t.hand(P0, "Hill Giant");
+    let shock = t.hand(P0, "Shock");
+    t.answer_choose(P0, &objs(&[a, b]));
+    let mm = t.enter(P0, "Mind Maggots");
+    t.resolve_all();
+    assert!(!last_choice_of(&t, P0).contains(&Entity::Object(shock)));
+    assert_eq!(t.counters(mm, "+1/+1"), 4);
+}
+
+#[test]
+fn expressive_iteration_distributes_three_cards() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    let c = t.library_top(P0, "Shock");
+    let b = t.library_top(P0, "Grizzly Bears");
+    let a = t.library_top(P0, "Forest");
+    let ei = t.hand(P0, "Expressive Iteration");
+    t.answer_choose(P0, &objs(&[b]));
+    t.answer_choose(P0, &objs(&[c]));
+    t.answer_choose(P0, &objs(&[a]));
+    t.cast(P0, ei).go();
+    t.resolve();
+    assert_eq!(t.zone(b), Zone::Hand(P0));
+    assert_eq!(t.zone(c), Zone::Library(P0));
+    assert_eq!(t.g.player(P0).library[0], t.g.current(c));
+    assert_eq!(t.zone(a), Zone::Exile);
+    // The exiled land may be played this turn.
+    let forest = t.g.current(a);
+    t.play_land(P0, forest).unwrap();
+    assert!(t.on_battlefield(forest) || t.named_on_battlefield("Forest").len() == 1);
+}
+
+#[test]
+fn telling_time_one_to_hand_one_on_top_one_on_bottom() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let c = t.library_top(P0, "Shock");
+    let b = t.library_top(P0, "Grizzly Bears");
+    let a = t.library_top(P0, "Forest");
+    let tt = t.hand(P0, "Telling Time");
+    t.answer_choose(P0, &objs(&[a]));
+    t.answer_choose(P0, &objs(&[c]));
+    t.answer_choose(P0, &objs(&[b]));
+    t.cast(P0, tt).go();
+    t.resolve();
+    assert_eq!(t.zone(a), Zone::Hand(P0));
+    let lib = &t.g.player(P0).library;
+    assert_eq!(*lib.last().unwrap(), t.g.current(c));
+    assert_eq!(lib[0], t.g.current(b));
+}
+
+#[test]
+fn waste_management_kicked_exiles_a_whole_graveyard_and_counts_creatures() {
+    cr!("702.33d");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 7);
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Hill Giant");
+    t.graveyard(P1, "Shock");
+    let wm = t.hand(P0, "Waste Management");
+    t.cast(P0, wm).kicked(true).target(P1).go();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.named_on_battlefield("Rogue Token").len(), 2);
+    // Unkicked: up to two cards.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P1, "Shock");
+    t.graveyard(P1, "Hill Giant");
+    let wm = t.hand(P0, "Waste Management");
+    t.cast(P0, wm).kicked(false).targets(&objs(&[a, b])).go();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 1);
+    assert_eq!(t.named_on_battlefield("Rogue Token").len(), 1);
+}
+
+#[test]
+fn grubs_command_returns_milled_goblins() {
+    cr!("701.17a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 3);
+    t.library_top(P1, "Goblin Guide");
+    t.library_top(P1, "Grizzly Bears");
+    t.library_top(P1, "Goblin Bushwhacker");
+    let creature = t.battlefield(P1, "Hill Giant");
+    let gc = t.hand(P0, "Grub's Command");
+    t.cast(P0, gc).modes(&[2, 3]).target(creature).target(P1).go();
+    t.resolve();
+    assert!(t.in_hand(P1, "Goblin Guide"));
+    assert!(t.in_hand(P1, "Goblin Bushwhacker"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.graveyard_size(P1), 4); // Bears, Hill Giant, two fillers
+}
+
+#[test]
+fn endurance_may_target_no_one() {
+    cr!("115.1");
+    let mut t = TestGame::new(2);
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Shock");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Endurance");
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.library_size(P1), 32);
+    // No target: nothing happens.
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Shock");
+    t.answer_targets(P0, &[]);
+    t.enter(P0, "Endurance");
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 1);
+}
+
+#[test]
+fn arjun_cycles_the_whole_hand() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Arjun, the Shifting Flame");
+    t.lands(P0, "Mountain", 1);
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Forest");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    // The two other cards went to the bottom; two were drawn.
+    assert_eq!(t.hand_size(P0), 2);
+    assert!(!t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t.library_size(P0), 30);
+}
+
+#[test]
+fn sanctifier_en_vec_exiles_black_and_red_cards_from_graveyards() {
+    cr!("406.1");
+    let mut t = TestGame::new(2);
+    t.graveyard(P1, "Lightning Bolt");
+    t.graveyard(P0, "Doom Blade");
+    t.graveyard(P1, "Grizzly Bears");
+    t.enter(P0, "Sanctifier en-Vec");
+    t.resolve_all();
+    assert!(t.in_exile("Lightning Bolt") && t.in_exile("Doom Blade"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}

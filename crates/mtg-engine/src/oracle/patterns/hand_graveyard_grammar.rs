@@ -75,6 +75,15 @@ fn quantity(s: &str) -> Option<(Qty, &str)> {
     if let Some(r) = s.strip_prefix("any number of ") {
         return Some((Qty::AnyNumber, r));
     }
+    // "the cards in your hand", "each Goblin card milled this way": all of them.
+    if let Some(r) = s.strip_prefix("the ") {
+        if r.starts_with("cards in ") || r.starts_with("cards from ") {
+            return Some((Qty::All, r));
+        }
+    }
+    if let Some(r) = s.strip_prefix("each ") {
+        return Some((Qty::All, r));
+    }
     if let Some(r) = s.strip_prefix("one or more ") {
         return Some((Qty::OneOrMore, r));
     }
@@ -295,6 +304,7 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
     if !has_card_head(&f) {
         return None;
     }
+    let (f, rest) = card_qualifiers(f, rest)?;
     let (mut filter, mut zone, mut owner_f) = split_zone(f);
     let mut owner = owner_f.as_ref().map(|o| match o {
         Filter::OwnedBy(PlayerRel::You) => Some(PlayerRef::You),
@@ -362,6 +372,33 @@ fn subject_verb<'a>(
     }
     if l.starts_with("you ") {
         return None;
+    }
+    // "target creature's controller reveals ...": that creature is a target.
+    for (p, pf) in [
+        ("up to one target player ", PlayerFilter::Any),
+        ("up to one target opponent ", PlayerFilter::Opponent),
+    ] {
+        if let Some(r) = l.strip_prefix(p) {
+            let mut spec = TargetSpec::player(pf, p.trim_end());
+            spec.min = 0;
+            let it = b.it.clone();
+            let slot = b.add_target(spec, p.trim_end());
+            b.it = it;
+            b.it_player = PlayerRef::Target(slot);
+            let r = r.strip_prefix(&format!("{verb}s "))?;
+            return Some((PlayerRef::Target(slot), true, r.to_string()));
+        }
+    }
+    if let Some(r) = l.strip_prefix("target creature's controller ") {
+        let r = r.strip_prefix(&format!("{verb}s "))?;
+        let (spec, tail) = parse_target("target creature")?;
+        if !tail.is_empty() {
+            return None;
+        }
+        let slot = b.add_target(spec, "target creature");
+        let who = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        b.it_player = who.clone();
+        return Some((who, true, r.to_string()));
     }
     let (who, rest) = player_ref(l, b)?;
     let r = rest.trim_start().strip_prefix(&format!("{verb}s "))?;
@@ -912,11 +949,44 @@ fn scale(e: Effect, count: Value) -> Option<Effect> {
             },
             to,
         }),
+        Effect::AsPlayer { who, effect } => Some(Effect::AsPlayer {
+            who,
+            effect: Box::new(scale(*effect, count)?),
+        }),
+        // "that player loses 1 life and you gain 1 life": each part.
+        Effect::Seq(v) => Some(Effect::Seq(
+            v.into_iter()
+                .map(|e| scale(e, count.clone()))
+                .collect::<Option<_>>()?,
+        )),
         e => super::damage_removal_foreach::multiply(e, count),
     }
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: for each card [verb] this way", priority: 960, parse: p_for_each_this_way } }
+
+/// "For each card exiled this way, that player loses 1 life and you gain 1 life.": the
+/// whole instruction after the comma is scaled (read as one sentence, before it would be
+/// split into separate instructions).
+fn f_for_each_this_way_first(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((thing, clause)) = r.split_once(", ") else {
+        return false;
+    };
+    if !thing.ends_with(" this way") || !clause.contains(" and ") || !acted(b) {
+        return false;
+    }
+    let Some(e) = p_for_each_this_way(l, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: for each card [verb] this way, A and B", priority: 40, apply: f_for_each_this_way_first } }
 
 // ---------------------------------------------------------------------------
 // "A or B"
@@ -967,6 +1037,11 @@ fn ends_with_exile(e: &Effect) -> bool {
         Effect::Exile { .. } => true,
         Effect::Seq(v) => v.last().is_some_and(ends_with_exile),
         Effect::May { effect, .. } => ends_with_exile(effect),
+        // "Exile up to two target cards from a single graveyard. If this spell was kicked,
+        // instead exile target player's graveyard.": either way.
+        Effect::If {
+            then, otherwise, ..
+        } => ends_with_exile(then) && ends_with_exile(otherwise),
         _ => false,
     }
 }
@@ -1633,3 +1708,184 @@ fn p_exile_targets_from_target_player(l: &str, b: &mut Builder) -> Option<Effect
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile target cards from target player's graveyard", priority: 960, parse: p_exile_targets_from_target_player } }
+
+/// Qualifiers after a card noun that the shared object phrase doesn't read: "that are
+/// black or red" (adjectives), "milled this way" / "discarded this way" (the cards the
+/// earlier instruction put into a graveyard, CR 400.7).
+fn card_qualifiers(f: Filter, rest: &str) -> Option<(Filter, &str)> {
+    let t = rest.trim_start();
+    if let Some(r) = t.strip_prefix("that are ") {
+        // "black or red": the adjectives before a stand-in noun.
+        let (adj, tail) = match r.find(|c: char| c == ',' || c == '.') {
+            Some(i) => (&r[..i], &r[i..]),
+            None => {
+                // "from all graveyards" may follow.
+                match r.find(" from ").or_else(|| r.find(" in ")) {
+                    Some(i) => (&r[..i], &r[i..]),
+                    None => (r, ""),
+                }
+            }
+        };
+        let probe = format!("{adj} cards");
+        let (g, _, t2) = parse_object_phrase(&probe)?;
+        if !t2.trim().is_empty() {
+            return None;
+        }
+        let g = match g {
+            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !matches!(x, Filter::Card)).collect()),
+            g => g,
+        };
+        return Some((Filter::and(vec![f, g]), tail));
+    }
+    for (p, var) in [
+        ("milled this way", vars::IT),
+        ("discarded this way", crate::discard_rules::DISCARDED),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if !word_end(r) {
+                return None;
+            }
+            return Some((
+                Filter::and(vec![
+                    f,
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::In(Box::new(Sel::Var(var))),
+                ]),
+                r,
+            ));
+        }
+    }
+    Some((f, rest))
+}
+
+/// The cards one of the distribution's steps picked, and all the steps so far.
+const PICK: Var = vars::USER + 6103;
+const DISTRIBUTED: Var = vars::USER + 6104;
+const GROUP: Var = vars::USER + 6105;
+
+/// "Put one of them into your hand, put one of them on the bottom of your library, and
+/// exile one of them.", "Put one of those cards into your hand, one into your graveyard,
+/// and one on the bottom of your library.": the looked-at cards are distributed, one per
+/// destination, each chosen among those not yet distributed.
+fn p_distribute(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("put one of ") {
+        return None;
+    }
+    let items: Vec<&str> = l
+        .split(", and ")
+        .flat_map(|x| x.split(", "))
+        .collect();
+    if items.len() < 2 {
+        return None;
+    }
+    let mut group: Option<Sel> = None;
+    let mut steps = vec![Effect::Store {
+        var: DISTRIBUTED,
+        sel: Sel::None,
+    }];
+    let mut exiled = None;
+    for (i, item) in items.iter().enumerate() {
+        let item = item.trim();
+        let (exile, r) = match item.strip_prefix("exile ") {
+            Some(r) => (true, r),
+            None => (false, item.strip_prefix("put ").unwrap_or(item)),
+        };
+        // "one of them", "one of those cards", or (after the first) "one".
+        let r = r.strip_prefix("one")?;
+        let r = match ["of them", "of those cards"]
+            .iter()
+            .find_map(|p| r.trim_start().strip_prefix(p).filter(|x| word_end(x)))
+        {
+            Some(r2) => {
+                if group.is_none() {
+                    let pron = &r.trim_start()[3..r.trim_start().len() - r2.len()];
+                    group = Some(super::pronoun_groups::plural_object_ref(pron, b)??.0);
+                }
+                r2
+            }
+            None if i > 0 => r,
+            None => return None,
+        };
+        if i == 0 {
+            // The group as it is now ("them" may be re-bound by the moves).
+            steps.push(Effect::Store {
+                var: GROUP,
+                sel: group.clone()?,
+            });
+        }
+        let pick = Effect::Store {
+            var: PICK,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(vec![
+                    Filter::In(Box::new(Sel::Var(GROUP))),
+                    Filter::not(Filter::In(Box::new(Sel::Var(DISTRIBUTED)))),
+                ]),
+                count: Value::Const(1),
+                up_to: false,
+                store: None,
+            },
+        };
+        let act = if exile {
+            if !end(r).is_empty() {
+                return None;
+            }
+            exiled = Some(());
+            Effect::Exile {
+                what: Sel::Var(PICK),
+                face_down: false,
+                link: false,
+            }
+        } else {
+            let (to, tail) = destination(r, b, &PlayerRef::You)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            Effect::Move {
+                what: Sel::Var(PICK),
+                to,
+            }
+        };
+        steps.push(pick);
+        steps.push(Effect::Store {
+            var: DISTRIBUTED,
+            sel: Sel::Union(vec![Sel::Var(DISTRIBUTED), Sel::Var(PICK)]),
+        });
+        steps.push(act);
+    }
+    let _ = exiled;
+    Some(Effect::seq(steps))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put one of them ..., one ..., and one ...", priority: 960, parse: p_distribute } }
+
+/// "You may play the exiled card this turn." after distributing looked-at cards with an
+/// exile step (Expressive Iteration): a permission for the card exiled that way.
+fn f_play_distributed_exile(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "you may play the exiled card this turn" {
+        return false;
+    }
+    let Effect::Seq(v) = &*prev else {
+        return false;
+    };
+    let Some(i) = v.iter().position(|e| {
+        matches!(e, Effect::Exile { what: Sel::Var(PICK), .. })
+    }) else {
+        return false;
+    };
+    let mut v = v.clone();
+    v.insert(
+        i + 1,
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: false,
+        },
+    );
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: you may play the exiled card this turn", priority: 960, apply: f_play_distributed_exile } }
