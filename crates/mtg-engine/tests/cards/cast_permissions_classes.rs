@@ -298,3 +298,83 @@ fn daxos_casts_the_exiled_card_spending_mana_as_though_any_color() {
     assert!(can_cast(&mut t, P0, opt));
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+#[test]
+fn sproutback_trudge_casts_itself_from_your_graveyard_after_you_gained_life() {
+    cr!("608.2g", "603.4");
+    ruling!(
+        "Sproutback Trudge",
+        "You still need to pay the cost to cast Sproutback Trudge from your graveyard."
+    );
+    assert_supported("Sproutback Trudge");
+    // No life gained: the ability doesn't trigger.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 6);
+    let trudge = t.graveyard(P0, "Sproutback Trudge");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(trudge)), Zone::Graveyard(P0));
+    // 3 life gained: {7}{G}{G} costs {4}{G}{G}, paid with six Forests.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 6);
+    let trudge = t.graveyard(P0, "Sproutback Trudge");
+    t.g.gain_life(P0, 3);
+    t.advance_to(P0, Step::End);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(trudge)), "{}", t.dump_log());
+}
+
+#[test]
+fn swift_reckoning_flash_timing_with_spell_mastery() {
+    cr!("601.3b");
+    ruling!(
+        "Swift Reckoning",
+        "The number of instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift Reckoning."
+    );
+    assert_supported("Swift Reckoning");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let reckoning = t.hand(P0, "Swift Reckoning");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.graveyard(P0, "Lightning Bolt");
+    t.advance_to(P1, Step::Upkeep);
+    t.g.tap(bears);
+    // One instant in the graveyard: no flash.
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    assert!(!can_cast(&mut t, P0, reckoning));
+    t.clear_answers();
+    t.graveyard(P0, "Lava Spike");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    assert!(can_cast(&mut t, P0, reckoning));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+}
+
+#[test]
+fn null_summoner_casts_the_exiled_card_with_threshold_and_any_mana() {
+    cr!("607.2a", "118.14");
+    assert_supported("Null Summoner");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Swamp", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Forest");
+    let summoner = t.hand(P0, "Null Summoner");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.cast(P0, summoner).go();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Exile);
+    for _ in 0..6 {
+        t.graveyard(P0, "Forest");
+    }
+    // Six cards in the graveyard: no threshold.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!can_cast(&mut t, P0, bolt));
+    t.clear_answers();
+    t.graveyard(P0, "Forest");
+    // Seven: cast it, paying {R} with an Island.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(can_cast(&mut t, P0, bolt));
+    assert_eq!(t.life(P1), 17);
+}

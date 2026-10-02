@@ -105,6 +105,9 @@ pub struct Perm {
     pub also_from: Option<From>,
     /// "You may cast any number of spells from among them".
     pub any_number: bool,
+    /// The cards are named "the exiled card(s)" (in a static ability, the cards exiled
+    /// with the source, CR 607.2a).
+    pub exiled_named: bool,
 }
 
 impl Perm {
@@ -448,9 +451,10 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     if let Some((d, rest)) = s
         .strip_prefix(" from among cards ")
         .and_then(|r| r.split_once(" on them"))
-        .filter(|(d, _)| d.contains(" in exile "))
+        .filter(|(d, _)| d.contains(" in exile ") || d.starts_with("in exile "))
     {
-        let desc = format!("cards {} on them", d.replacen(" in exile", "", 1));
+        let d = d.replacen("in exile ", "", 1);
+        let desc = format!("cards {} on them", d.trim());
         let f = object_filter(&desc)?;
         p.zone_filter = Some(f);
         return Some((From::Exile, rest));
@@ -739,6 +743,7 @@ pub fn parse(l: &str) -> Option<Perm> {
             rest = &r[head.len()..];
         }
     } else if let Some((limit, x)) = referent(r) {
+        p.exiled_named = r.starts_with("the exiled card");
         p.obj = Obj::Referent { limit };
         rest = x;
     } else if let Some((_, x)) = r
@@ -1426,6 +1431,22 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
                 FunctionZone::Battlefield,
             )
         }
+        // "As long as there are seven or more cards in your graveyard, you may cast the
+        // exiled card" (Null Summoner): the card exiled with ~ (CR 607.2a).
+        Obj::Referent { limit: None } if p.exiled_named && p.from.is_none() => {
+            let what = if p.lands {
+                Filter::Card
+            } else {
+                Filter::and(vec![
+                    Filter::Not(Box::new(Filter::Type(CardType::Land))),
+                    Filter::Card,
+                ])
+            };
+            (
+                class_permission_from(p, From::Linked { owned: false }, what, terms.clone())?,
+                FunctionZone::Battlefield,
+            )
+        }
         Obj::Referent { .. } | Obj::Target { .. } => return None,
     };
     if mentions_x(&pp) {
@@ -1521,6 +1542,33 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let p = parse(l)?;
     if matches!(p.obj, Obj::Target { .. }) {
         return target_effect(&p, b);
+    }
+    // "At the beginning of your end step, if you gained life this turn, you may cast ~
+    // from your graveyard.": a triggered ability that functions in the graveyard (see
+    // `triggers::trigger_zone`) casts the card as it resolves (CR 608.2g).
+    if matches!(p.obj, Obj::SelfCard) {
+        let plain = format!("{:?}", PlayTerms::default()) == format!("{:?}", p.terms);
+        if !b.in_trigger
+            || b.ctx.is_spell()
+            || p.from != Some(From::Graveyard)
+            || p.also_from.is_some()
+            || p.duration.is_some()
+            || p.who != Who::You
+            || p.lands
+            || p.look
+            || p.cond_text.is_some()
+            || p.your_turn
+            || p.once_each_turn
+            || !plain
+        {
+            return None;
+        }
+        return Some(Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::This,
+            free: p.free,
+            optional: true,
+        });
     }
     let zone = referent_zone(None, b);
     to_effect(&p, zone, b.ctx)
@@ -1796,9 +1844,21 @@ fn spell_self_permission(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     if l.contains(". ") {
         return None;
     }
-    let p = parse(l)?;
+    // "If there are two or more instant and/or sorcery cards in your graveyard, you may
+    // cast ~ as though it had flash." (a condition on casting it).
+    let (cond, l) = match l.strip_prefix("if ").and_then(|r| r.split_once(", ")) {
+        Some((c, rest)) => (Some(c), rest),
+        None => (None, l),
+    };
+    let mut p = parse(l)?;
     if !matches!(p.obj, Obj::SelfCard) {
         return None;
+    }
+    if let Some(c) = cond {
+        if p.cond_text.is_some() {
+            return None;
+        }
+        p.cond_text = Some(c.to_string());
     }
     to_statics(&p, block.trim(), ctx)
 }
