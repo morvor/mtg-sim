@@ -336,3 +336,34 @@ fn any_other_target_excludes_the_object_dealing_the_damage() {
     assert!(offered[1].contains(&Entity::Player(P1)));
     assert!(!t.on_battlefield(theirs), "dealt 2 damage");
 }
+
+/// "Change the target of target spell with a single target unless that spell's
+/// controller pays {2}." The "unless" clause used to be dropped (the target qualifier
+/// swallowed the rest of the sentence), so the target always changed.
+#[test]
+fn divert_changes_the_target_unless_its_controller_pays() {
+    cr!("118.12a", "115.7a");
+    assert_round_trips("Divert");
+    for pays in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.set_step(P1, Step::PrecombatMain);
+        t.lands(P1, "Mountain", if pays { 3 } else { 1 });
+        let bolt = t.hand(P1, "Lightning Bolt");
+        let s = t.cast(P1, bolt).target(bears).go();
+        t.lands(P0, "Island", 1);
+        let divert = t.hand(P0, "Divert");
+        t.cast(P0, divert).target(s).go();
+        t.answer_yes(P1, pays);
+        t.answer_targets(P0, &[Entity::Object(giant)]);
+        t.resolve_all();
+        if pays {
+            assert!(!t.on_battlefield(bears), "paid: the Bolt still hits the Bears");
+            assert!(t.on_battlefield(giant));
+        } else {
+            assert!(t.on_battlefield(bears), "not paid: the target changed");
+            assert!(!t.on_battlefield(giant));
+        }
+    }
+}
