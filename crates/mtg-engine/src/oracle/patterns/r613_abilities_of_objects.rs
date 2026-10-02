@@ -85,6 +85,8 @@ fn from_objects(s: &str, top_card: bool) -> Option<Sel> {
         // The card the linked ability chose most recently (Koh, the Face Stealer; see
         // `r607_linked_targets`).
         "the last chosen card" => return Some(Sel::LinkedNoted),
+        // "Each other planeswalker you control has the loyalty abilities of ~" (Kasmina).
+        "~" => return Some(Sel::This),
         _ => {}
     }
     let s = s
@@ -99,6 +101,18 @@ fn from_objects(s: &str, top_card: bool) -> Option<Sel> {
             }
             return Some(Sel::All(Filter::and(vec![f, exiled_with_source()])));
         }
+    }
+    // "creatures you control that don't have the same name as ~" (Marvin, Murderous
+    // Mimic).
+    if let Some(r) = s.strip_suffix(" that don't have the same name as ~") {
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Sel::All(Filter::and(vec![
+            f,
+            Filter::not(Filter::SameNameAs(Box::new(Sel::This))),
+        ])));
     }
     if let Some(r) = s.strip_suffix(" in all graveyards") {
         let (f, _, tail) = parse_object_phrase(r)?;

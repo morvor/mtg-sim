@@ -530,3 +530,153 @@ fn conspicuous_snoop_has_the_top_goblins_abilities() {
     t.g.recompute();
     assert!(t.g.obj(snoop).chars.has_keyword(KeywordKind::Flying));
 }
+
+// ---------------------------------------------------------------------------
+// Marvin, Murderous Mimic
+// ---------------------------------------------------------------------------
+
+#[test]
+fn marvin_has_other_named_creatures_abilities() {
+    ruling!(
+        "Marvin, Murderous Mimic",
+        "treat Marvin's version of that ability as though it referenced Marvin instead"
+    );
+    ruling!(
+        "Marvin, Murderous Mimic",
+        "Marvin gains only activated abilities. It doesn't gain triggered abilities or static abilities."
+    );
+    ruling!(
+        "Marvin, Murderous Mimic",
+        "it doesn't matter if the other creature you control with that ability leaves the battlefield; the ability still resolves"
+    );
+    supported("Marvin, Murderous Mimic");
+    let mut t = TestGame::new(2);
+    let marvin = t.battlefield(P0, "Marvin, Murderous Mimic");
+    let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
+    t.battlefield(P0, "Flametongue Kavu");
+    t.battlefield(P1, "Cudgel Troll");
+    // Its own creatures only, and not a triggered ability.
+    assert!(!has(&mut t, marvin, "Regenerate"));
+    assert_eq!(triggered(&mut t, marvin), 0);
+    let i = index_of(&mut t, marvin, "deals 1 damage");
+    t.activate(P0, marvin, i, &[Entity::Player(P1)]).unwrap();
+    // The Sorcerer leaves before the ability resolves.
+    t.g.destroy(sorcerer, None);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert!(!has(&mut t, marvin, "deals 1 damage"));
+    assert!(t.obj_now(marvin).tapped, "Marvin tapped for the cost");
+    // A creature with the same name doesn't give its abilities; another of its
+    // controller's creatures does.
+    t.battlefield(P0, "Marvin, Murderous Mimic");
+    assert_eq!(activated(&mut t, marvin).len(), 0);
+    t.battlefield(P0, "Cudgel Troll");
+    assert!(has(&mut t, marvin, "Regenerate"));
+    t.lands(P0, "Forest", 1);
+    assert!(regenerates(&mut t, marvin));
+}
+
+// ---------------------------------------------------------------------------
+// Loyalty abilities of other planeswalkers: Kasmina, Nicol Bolas, Dragon-God
+// ---------------------------------------------------------------------------
+
+#[test]
+fn kasminas_abilities_count_toward_each_planeswalkers_one_activation() {
+    ruling!(
+        "Kasmina, Enigma Sage",
+        "For each planeswalker you control, you may still activate only one of that planeswalker's loyalty abilities per turn."
+    );
+    supported("Kasmina, Enigma Sage");
+    let mut t = TestGame::new(2);
+    let kasmina = t.battlefield(P0, "Kasmina, Enigma Sage");
+    let jace = t.battlefield(P0, "Jace Beleren");
+    // Jace has Kasmina's loyalty abilities in addition to its own; Kasmina doesn't get
+    // Jace's.
+    assert!(has(&mut t, jace, "Scry 1"));
+    assert!(has(&mut t, jace, "Each player draws a card"));
+    assert!(!has(&mut t, kasmina, "Each player draws a card"));
+    let loyalty = t.counters(jace, "loyalty");
+    let i = index_of(&mut t, jace, "Scry 1");
+    t.activate(P0, jace, i, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(jace, "loyalty"), loyalty + 2, "Jace's loyalty pays");
+    let i = index_of(&mut t, jace, "Each player draws a card");
+    assert!(t.activate(P0, jace, i, &[]).is_err());
+    // Kasmina may still activate one of her own.
+    let i = index_of(&mut t, kasmina, "Scry 1");
+    t.activate(P0, kasmina, i, &[]).unwrap();
+}
+
+#[test]
+fn kasminas_last_ability_on_another_planeswalker_uses_its_colors() {
+    ruling!(
+        "Kasmina, Enigma Sage",
+        "you search your library for a card that shares a color with that planeswalker, not with Kasmina"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kasmina, Enigma Sage");
+    // Jace Beleren is blue only; Kasmina is green and blue.
+    let jace = t.battlefield(P0, "Jace Beleren");
+    t.g.add_counters(Entity::Object(jace), "loyalty", 10, None);
+    let lib = stack_library(&mut t, P0, &["Giant Growth", "Opt", "Island"]);
+    let growth = lib[0];
+    t.answer_choose(P0, &[Entity::Object(growth)]);
+    t.answer_yes(P0, true);
+    let i = index_of(&mut t, jace, "Search your library");
+    t.activate(P0, jace, i, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(
+        t.zone(t.g.current(growth)),
+        Zone::Library(P0),
+        "the green card can't be found"
+    );
+    assert_ne!(t.zone(t.g.current(lib[1])), Zone::Library(P0), "Opt was");
+}
+
+#[test]
+fn nicol_bolas_dragon_god_has_other_planeswalkers_loyalty_abilities() {
+    ruling!(
+        "Nicol Bolas, Dragon-God",
+        "treat Nicol Bolas's instance of that ability as though it referenced Nicol Bolas, Dragon-God by name instead"
+    );
+    ruling!(
+        "Nicol Bolas, Dragon-God",
+        "Nicol Bolas doesn't gain any static or triggered abilities of other planeswalkers"
+    );
+    ruling!(
+        "Nicol Bolas, Dragon-God",
+        "Nicol Bolas doesn't remove loyalty abilities from the other planeswalkers."
+    );
+    ruling!(
+        "Nicol Bolas, Dragon-God",
+        "you can still activate only one loyalty ability of Nicol Bolas, Dragon-God during each of your turns"
+    );
+    let mut t = TestGame::new(2);
+    let bolas = t.battlefield(P0, "Nicol Bolas, Dragon-God");
+    let ral = t.battlefield(P0, "Ral Zarek");
+    // Teferi, Time Raveler's static ability isn't gained.
+    t.battlefield(P0, "Teferi, Time Raveler");
+    assert!(has(&mut t, bolas, "deals 3 damage"));
+    assert!(has(&mut t, ral, "deals 3 damage"));
+    let loyalty = (t.counters(bolas, "loyalty"), t.counters(ral, "loyalty"));
+    let i = index_of(&mut t, bolas, "deals 3 damage");
+    t.activate(P0, bolas, i, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.counters(bolas, "loyalty"), loyalty.0 - 2);
+    assert_eq!(t.counters(ral, "loyalty"), loyalty.1);
+    let i = index_of(&mut t, bolas, "Return up to one target");
+    assert!(t.activate(P0, bolas, i, &[]).is_err());
+    // Teferi's static ability: an opponent can still cast instants at instant speed
+    // because of Teferi itself, not because of Bolas: Bolas has no static abilities from it.
+    t.g.recompute();
+    let statics = t
+        .g
+        .obj(bolas)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Static(_)))
+        .count();
+    assert_eq!(statics, 1, "only its own");
+}
