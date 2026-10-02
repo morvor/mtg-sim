@@ -11,7 +11,7 @@ use crate::r_s02_common::{create_token, destroy};
 use crate::r_s06_common::activate_containing;
 use crate::r_s10_common::attacking;
 use mtg_engine::ability::*;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::{Action, Answer, Decision, SpecialAction};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::{Stage, Step};
@@ -150,25 +150,23 @@ fn yshtola_illegal_target_no_additional_end_step() {
         "Y'shtola Rhul",
         "If the target creature is an illegal target as Y'shtola Rhul's ability tries to resolve, it won't resolve and none of its effects will happen. There won't be an additional end step."
     );
-    let (mut t, bears) = yshtola();
-    t.answer_targets(P0, &[Entity::Object(bears)]);
-    t.advance_to(P0, Step::End);
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
-    destroy(&mut t, bears);
-    t.resolve_all();
-    t.advance_to(P1, Step::Upkeep);
-    assert!(t.g.turn.number > 1);
-    // The previous turn had a single end step: no second end step was reached.
-    let mut t2 = yshtola().0;
-    let b2 = t2.named_on_battlefield("Grizzly Bears")[0];
-    t2.answer_targets(P0, &[Entity::Object(b2)]);
-    t2.advance_to(P0, Step::End);
-    t2.settle();
-    destroy(&mut t2, b2);
-    t2.resolve_all();
-    assert!(!t2.g.turn.schedule.contains(&Step::End));
-    assert_eq!(end_steps(&t2), 1);
+    for illegal in [false, true] {
+        let (mut t, bears) = yshtola();
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.advance_to(P0, Step::End);
+        t.settle();
+        assert_eq!(t.stack_len(), 1);
+        if illegal {
+            destroy(&mut t, bears);
+        }
+        t.resolve_all();
+        assert_eq!(
+            t.g.turn.schedule.contains(&Step::End),
+            !illegal,
+            "an additional end step only if the ability resolved"
+        );
+        assert_eq!(end_steps(&t), 1);
+    }
 }
 
 #[test]
@@ -310,7 +308,7 @@ fn roll_roll_roll_roll_flickers_until_the_end_step() {
 
 #[test]
 fn shorecrasher_elemental_flickers_face_down() {
-    cr!("400.7", "708.2", "506.4");
+    cr!("400.7", "708.2", "506.4", "702.37e");
     ruling!(
         "Shorecrasher Elemental",
         "After Shorecrasher Elemental's first ability returns it to the battlefield, it will be a new object with no connection to the Shorecrasher Elemental that left the battlefield. It won't be in combat or have any additional abilities it may have had when it left the battlefield. Any +1/+1 counters on it or Auras attached to it are removed."
@@ -327,6 +325,17 @@ fn shorecrasher_elemental_flickers_face_down() {
     assert!(t.obj_now(sc).face_down);
     assert_eq!(t.pt(sc), (2, 2));
     assert!(!attacking(&t, sc));
+    // A face-down permanent with megamorph can be turned face up for its megamorph cost
+    // (CR 702.37b, 702.37e), with a +1/+1 counter.
+    let now = t.g.current(sc);
+    t.g.turn.priority = Some(P0);
+    let up = Action::Special(SpecialAction::TurnFaceUp { obj: now });
+    assert!(t.g.legal_actions(P0).contains(&up));
+    t.g.take_action(P0, up);
+    t.g.recompute();
+    assert!(!t.obj_now(sc).face_down);
+    assert_eq!(t.counters(sc, "+1/+1"), 1);
+    assert_eq!(t.pt(sc), (4, 4));
 
     ruling!(
         "Shorecrasher Elemental",
@@ -348,23 +357,81 @@ fn shorecrasher_elemental_flickers_face_down() {
 
 #[test]
 fn ceaseless_searblades_counts_elemental_permanents_only() {
-    cr!("602.1", "602.2");
+    cr!("602.1", "602.2", "605.1a");
     ruling!(
         "Ceaseless Searblades",
         "This triggers whenever you activate an activated ability of an Elemental permanent, but not when you activate an activated ability of an Elemental source that’s not on the battlefield."
     );
     supported("Ceaseless Searblades");
     let mut t = TestGame::new(2);
-    mana(&mut t, P0, 2);
+    mana(&mut t, P0, 3);
     let blades = t.battlefield(P0, "Ceaseless Searblades");
     // Char-Rumbler is an Elemental: "{R}: This creature gets +1/+0 until end of turn."
     let rumbler = t.battlefield(P0, "Char-Rumbler");
     activate_containing(&mut t, P0, rumbler, "+1/+0").unwrap();
     t.resolve_all();
     assert_eq!(t.pt(blades), (3, 4));
+    // Mana abilities are activated abilities too (CR 605.1a), and an Elemental
+    // sacrificed to pay the cost was a permanent as it was activated.
+    let def = custom_card(
+        "Ember Thing",
+        "Creature — Elemental",
+        "{R}",
+        Some((1, 1)),
+        "{T}: Add {R}.\nSacrifice this creature: You gain 1 life.",
+    );
+    let ember = t.custom(P0, def, Zone::Battlefield);
+    activate_containing(&mut t, P0, ember, "Add {R}").unwrap();
+    t.resolve_all();
+    assert_eq!(t.pt(blades), (4, 4), "mana ability");
+    activate_containing(&mut t, P0, ember, "Sacrifice").unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.pt(blades), (5, 4), "sacrificed as a cost");
+    // Activating a non-Elemental's ability: no trigger.
+    let mage = t.battlefield(P0, "Sunhome Guildmage");
+    activate_containing(&mut t, P0, mage, "+1/+0").unwrap();
+    t.resolve_all();
+    assert_eq!(t.pt(blades), (6, 4), "only Sunhome's own pump");
     // Lava Serpent (an Elemental card) cycled from the hand: no trigger.
     let serpent = t.hand(P0, "Lava Serpent");
     crate::r_s04_common::cycle(&mut t, P0, serpent, 0).unwrap();
     t.resolve_all();
-    assert_eq!(t.pt(blades), (3, 4));
+    assert_eq!(t.pt(blades), (6, 4));
+}
+
+#[test]
+fn elrond_triggers_on_a_creatures_mana_ability() {
+    cr!("605.1a", "603.2");
+    ruling!(
+        "Elrond, Moon-Reader",
+        "An activated ability of a creature that's also a mana ability (such as \"{T}: Add {G}\") can cause Elrond's first ability to trigger."
+    );
+    supported("Elrond, Moon-Reader");
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.battlefield(P0, "Elrond, Moon-Reader");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let caryatid = t.battlefield(P0, "Sylvan Caryatid");
+    let hand = t.hand_size(P0);
+    activate_containing(&mut t, P0, elves, "Add {G}").unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1, "a creature's mana ability");
+    // "This ability triggers only once each turn."
+    activate_containing(&mut t, P0, caryatid, "Add one mana").unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // A land's mana ability next turn: not a creature.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    let land = t.battlefield(P0, "Forest");
+    let hand = t.hand_size(P0);
+    activate_containing(&mut t, P0, land, "Add {G}").unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    activate_containing(&mut t, P0, caryatid, "Add one mana").unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
 }
