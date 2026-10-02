@@ -887,6 +887,9 @@ struct Counted {
     up_to: bool,
     random: bool,
     single: bool,
+    /// A number without "of them" ("Put one into your hand and exile the rest"): only
+    /// with "the rest" in the same sentence.
+    implicit: bool,
 }
 
 /// A card description, also an "or" list of kinds the shared object grammar doesn't read
@@ -990,6 +993,7 @@ fn counted(s: &str, may: bool, b: &mut Builder) -> Option<Counted> {
                 up_to: may,
                 random: false,
                 single: false,
+                implicit: false,
             });
         }
     }
@@ -1021,6 +1025,7 @@ fn counted(s: &str, may: bool, b: &mut Builder) -> Option<Counted> {
         up_to,
         random,
         single,
+        implicit: false,
     })
 }
 
@@ -1036,6 +1041,7 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
         (n, may, r)
     };
     let r = r.trim_start();
+    let mut implicit = false;
     let r = match r
         .strip_prefix("of them")
         .or_else(|| r.strip_prefix("of those cards"))
@@ -1044,6 +1050,7 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
         Some(x) => x,
         // "Put one into your hand and exile the rest", "Put one back": a number word.
         None if !s.starts_with("a ") && !s.starts_with("an ") && !s.starts_with("any ") => {
+            implicit = true;
             let r = format!(" {r}");
             let off = s.len() - r.len();
             &s[off..]
@@ -1064,6 +1071,7 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
             up_to: up_to && !random,
             random,
             single,
+            implicit,
         },
         r,
     ))
@@ -1252,6 +1260,7 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
                 up_to: true,
                 random: false,
                 single: false,
+                implicit: false,
             },
             after,
         )
@@ -1334,6 +1343,12 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
     }))];
     let rest = rest_sel(b);
     out.extend(rest_tail(tail, &rest, Some(b))?);
+    let has_rest = out
+        .iter()
+        .any(|e| matches!(e, Effect::DigStep(s) if matches!(**s, DigStep::Rest { .. })));
+    if c.implicit && !has_rest {
+        return None;
+    }
     if chosen_in_place && !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
         b.named.push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
     }
