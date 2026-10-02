@@ -1877,6 +1877,11 @@ pub enum Modification {
         kinds: Vec<KeywordKind>,
         from: Filter,
     },
+    /// "has all activated abilities of all creatures your opponents control" (Drana and
+    /// Linvala), "gains all activated abilities of target creature" (Quicksilver
+    /// Elemental): each activated ability of each other object matching the filter, as
+    /// acquired from that object (CR 113.6, 602.5c, 607.5).
+    AddActivatedAbilitiesOf(Filter),
     RemoveKeyword(KeywordKind),
     /// Loses one particular keyword ability: the instances of that kind with the same
     /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
@@ -1936,6 +1941,7 @@ impl Modification {
             | AddKeyword(_)
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
+            | AddActivatedAbilitiesOf(_)
             | RemoveKeyword(_)
             | LoseKeyword(_)
             | RemoveAllAbilities

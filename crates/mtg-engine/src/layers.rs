@@ -1127,6 +1127,7 @@ impl Game {
                     | Modification::AddKeyword(_)
                     | Modification::AddKeywordX(..)
                     | Modification::AddKeywordsOf { .. }
+                    | Modification::AddActivatedAbilitiesOf(_)
             );
             if !trial && grants {
                 let after = self.obj(t).chars.abilities.len();
@@ -1560,6 +1561,44 @@ pub fn keywords_of(g: &Game, kinds: &[KeywordKind], from: &Filter, ctx: &Ctx) ->
     out
 }
 
+/// The activated abilities of the objects other than `target` matching `from`, each as
+/// acquired from its object (`Modification::AddActivatedAbilitiesOf`). Only activated
+/// abilities (including the activated abilities of keywords), not triggered or static
+/// ones.
+pub fn activated_abilities_of(
+    g: &Game,
+    from: &Filter,
+    ctx: &Ctx,
+    target: ObjectId,
+) -> Vec<Ability> {
+    let mut out = Vec::new();
+    for o in g.objects_matching(from, ctx) {
+        if o == target {
+            continue;
+        }
+        let abilities = &g.obj(o).chars.abilities;
+        for a in abilities.iter() {
+            match &a.kind {
+                AbilityKind::Activated(_) => out.push(acquired_ability(a, Some(o), target)),
+                // A keyword that is an activated ability (equip, outlast, ...): its
+                // activated ability.
+                AbilityKind::Keyword(k) => {
+                    for d in crate::keyword_impls::derived_abilities(k) {
+                        // (Unless the keyword's abilities were already expanded.)
+                        if matches!(d.kind, AbilityKind::Activated(_))
+                            && !abilities.iter().any(|x| x.uid == d.uid)
+                        {
+                            out.push(acquired_ability(&d, Some(o), target));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 /// Applies a single layer modification to a set of characteristics.
 pub fn apply_mod(
     c: &mut Characteristics,
@@ -1779,6 +1818,11 @@ pub fn apply_mod(
         Modification::AddKeywordsOf { kinds, from } => {
             for k in keywords_of(g, kinds, from, ctx) {
                 apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
+            }
+        }
+        Modification::AddActivatedAbilitiesOf(from) => {
+            for a in activated_abilities_of(g, from, ctx, _target) {
+                c.abilities.push(a);
             }
         }
         Modification::RemoveKeyword(k) => c

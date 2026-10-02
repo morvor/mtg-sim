@@ -2881,6 +2881,10 @@ impl Renderer<'_> {
                         join_list(&k, "and")
                     ));
                 }
+                Modification::AddActivatedAbilitiesOf(from) => {
+                    let f = self.noun_det(from, Det::Plural);
+                    parts.push(format!("has all activated abilities of all {f}"));
+                }
                 Modification::RemoveKeyword(k) => {
                     parts.push(format!("loses {}", self.keyword_kind_word(*k)))
                 }

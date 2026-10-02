@@ -2262,6 +2262,14 @@ impl Game {
                         .map(Modification::AddKeyword)
                         .collect()
                 }
+                // "gains all activated abilities of target creature until end of turn":
+                // which abilities is determined as the effect is created (CR 611.2c).
+                Modification::AddActivatedAbilitiesOf(from) => {
+                    crate::layers::activated_abilities_of(self, from, ctx, ObjectId(u32::MAX))
+                        .into_iter()
+                        .map(Modification::AddAbility)
+                        .collect()
+                }
                 other => vec![other.clone()],
             })
             .collect();
