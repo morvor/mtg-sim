@@ -269,7 +269,17 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        if *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ') {
+        // A quoted ability that ends its sentence ("... with \"~ can't block.\" Creatures
+        // you control ...") ends it inside the quote.
+        let quote_ends_sentence = *ch == '"'
+            && !in_quote
+            && i > 0
+            && chars[i - 1] == '.'
+            && i + 1 < chars.len()
+            && chars[i + 1] == ' ';
+        if quote_ends_sentence
+            || (*ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' '))
+        {
             let s = cur.trim().to_string();
             if !s.is_empty() {
                 out.push(s);
@@ -560,6 +570,26 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 b.it = Sel::AttachedTo;
             }
             return Some((sel, rest.to_string()));
+        }
+    }
+    // An Aura's "enchanted Swamp", "enchanted Plains" ("Enchant Swamp"): the object it's
+    // attached to (CR 303.4), not every enchanted object of that kind.
+    if b.ctx.type_line.subtypes.iter().any(|t| t == "Aura") {
+        if let Some(r) = s.strip_prefix("enchanted ") {
+            let (w, rest) = split_word(r);
+            if (w == "plains" || !w.ends_with('s')) && subtype_word(w).is_some() {
+                if matches!(b.it, Sel::This)
+                    || super::patterns::oracle_hardening_referents::is_no_referent(&b.it)
+                {
+                    b.it = Sel::AttachedTo;
+                }
+                let rest = if rest.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {rest}")
+                };
+                return Some((Sel::AttachedTo, rest));
+            }
         }
     }
     // The longest phrase that names the object ("the creature an opponent controls"

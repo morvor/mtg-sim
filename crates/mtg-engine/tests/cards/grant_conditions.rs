@@ -63,7 +63,7 @@ fn tek_each_predicate_has_its_own_condition() {
 
 #[test]
 fn tribal_golem_grants_quoted_ability_while_you_control_a_zombie() {
-    cr!("611.3a", "113.6");
+    cr!("611.3a", "113.7");
     assert_supported(&["Tribal Golem"]);
     let mut t = TestGame::new(2);
     let golem = t.battlefield(P0, "Tribal Golem");
@@ -246,7 +246,7 @@ fn rampaging_cyclops_weaker_while_two_creatures_block_it() {
 
 #[test]
 fn darkblade_agent_after_you_surveil() {
-    cr!("611.3a", "701.25a", "113.6");
+    cr!("611.3a", "701.25a", "113.7");
     assert_supported(&["Darkblade Agent", "Notion Rain"]);
     let mut t = TestGame::new(2);
     let agent = t.battlefield(P0, "Darkblade Agent");

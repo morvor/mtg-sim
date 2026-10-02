@@ -154,7 +154,32 @@ pub(crate) fn granted_abilities_to(
     {
         return None;
     }
-    Some(v)
+    Some(v.into_iter().map(not_a_cda).collect())
+}
+
+/// An ability an object acquires from an effect isn't characteristic-defining (CR 604.3a:
+/// only one printed on the card, given to a token by the effect that created it, or
+/// acquired through a copy or text-changing effect is): "This creature's power and
+/// toughness are each equal to ..." granted this way sets them in layer 7b, in timestamp
+/// order (CR 613.4b, 613.7a).
+fn not_a_cda(a: Ability) -> Ability {
+    let AbilityKind::Static(st) = &a.kind else {
+        return a;
+    };
+    if !st.is_cda {
+        return a;
+    }
+    let mut st = st.clone();
+    st.is_cda = false;
+    st.zone = FunctionZone::Battlefield;
+    if let StaticEffect::Continuous { mods, .. } = &mut st.effect {
+        for m in mods.iter_mut() {
+            if let Modification::CdaPT(p, t) = m {
+                *m = Modification::SetPT(p.take(), t.take());
+            }
+        }
+    }
+    AbilityDef::with_link(AbilityKind::Static(st), a.text.clone(), a.link)
 }
 
 // ---------------------------------------------------------------------------

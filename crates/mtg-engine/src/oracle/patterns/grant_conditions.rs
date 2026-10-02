@@ -48,7 +48,18 @@ fn cast_this_turn(c: &str) -> Option<Condition> {
         return None;
     };
     let desc = r.strip_suffix(" this turn")?;
-    let f = one_spell(desc)?;
+    // "a spell from your hand": where it was cast from (CR 601.2a).
+    let (desc, from) = match desc.strip_suffix(" from your hand") {
+        Some(d) => (d, Some(ZoneKind::Hand)),
+        None => match desc.strip_suffix(" from exile") {
+            Some(d) => (d, Some(ZoneKind::Exile)),
+            None => (desc, None),
+        },
+    };
+    let mut f = one_spell(desc)?;
+    if let Some(z) = from {
+        f = Filter::and(vec![f, Filter::CastFrom(z)]);
+    }
     let cast = Condition::Compare(
         Value::SpellsCastThisTurn(PlayerRef::You, f),
         Cmp::Ge,
@@ -165,6 +176,7 @@ mod tests {
         for c in [
             "you've cast an instant or sorcery spell this turn",
             "you haven't cast a spell this turn",
+            "you haven't cast a spell from your hand this turn",
             "you've committed a crime this turn",
             "you've surveilled this turn",
             "you sacrificed a permanent this turn",
