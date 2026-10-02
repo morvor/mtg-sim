@@ -193,7 +193,21 @@ impl Renderer<'_> {
         match f {
             Filter::Any => {}
             Filter::And(v) => {
+                // The same quality twice says it once.
+                let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    let k = format!("{x:?}");
+                    if seen.contains(&k) {
+                        continue;
+                    }
+                    seen.push(k);
+                    // "with the greatest power among creatures they control".
+                    if let Filter::ValueCmp(a, c, b) = x {
+                        if let Some(q) = self.extreme_quality(a, *c, b, v) {
+                            np.post.push(q);
+                            continue;
+                        }
+                    }
                     self.collect(x, np);
                 }
             }
@@ -440,6 +454,13 @@ impl Renderer<'_> {
             // "a creature dealt damage this way".
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
+            }
+            // "for each card revealed this way".
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(crate::kw::reveal_from_hand::REVEALED)) =>
+            {
+                np.post.push("revealed this way".into());
+                np.kind.get_or_insert("card");
             }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -902,6 +923,8 @@ impl Renderer<'_> {
                 let p = self.target_player_mention(i);
                 format!("{p} or that planeswalker's controller controls")
             }
+            // "among creatures they control": the player each player is.
+            PlayerRel::Iterated => "{alt:that player controls|they control}".into(),
             other => {
                 let p = self.rel_object(other);
                 format!("{p} controls")
@@ -930,7 +953,12 @@ impl Renderer<'_> {
         }
         // "If that creature would die this turn": the selection itself.
         if let Filter::In(sel) = f {
-            return self.sel(sel, Case::Obj);
+            if !matches!(
+                sel.as_ref(),
+                Sel::Var(crate::kw::reveal_from_hand::REVEALED)
+            ) {
+                return self.sel(sel, Case::Obj);
+            }
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".

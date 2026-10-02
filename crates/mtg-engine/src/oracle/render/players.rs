@@ -437,6 +437,18 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Subj);
                 decline(format!("the permanent {s} is attached to"), case)
             }
+            // "Reveal it and put it into your hand": the card, unless it has since become a
+            // permanent (a new object, CR 400.7), which the instruction can't find.
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(_), Filter::Not(z)]
+                    if matches!(z.as_ref(), Filter::InZone(ZoneKind::Battlefield))) =>
+            {
+                let Filter::In(x) = &v[0] else {
+                    return self.gap("Sel::All");
+                };
+                let x = (**x).clone();
+                self.sel(&x, case)
+            }
             Sel::All(f) => {
                 if let Some(z) = whole_zone(f) {
                     let s = self.whole_zone_phrase(z.0, z.1);
@@ -459,6 +471,40 @@ impl Renderer<'_> {
                 decline(s, case)
             }
             Sel::Players(p) => self.player(p, case),
+            // "You choose one of them": one of the cards revealed.
+            Sel::Choose {
+                chooser,
+                filter: Filter::In(from),
+                count,
+                ..
+            } if matches!(
+                from.as_ref(),
+                Sel::Var(crate::kw::reveal_from_hand::REVEALED)
+            ) =>
+            {
+                let n = match count {
+                    Value::Const(n) => number_word(*n),
+                    other => self.value(other),
+                };
+                let mut s = format!("{n} of them");
+                if !matches!(chooser, PlayerRef::You) {
+                    let c = self.player(chooser, Case::Poss);
+                    s = format!("{s} of {c} choice");
+                }
+                decline(s, case)
+            }
+            // "Reveal any number of green cards in your hand": up to all of them.
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::CountSel(all),
+                up_to: true,
+                ..
+            } if matches!(all.as_ref(), Sel::All(f) if format!("{f:?}") == format!("{filter:?}")) =>
+            {
+                let n = self.noun_det(filter, Det::Plural);
+                decline(format!("any number of {n}"), case)
+            }
             Sel::Choose {
                 chooser,
                 filter,

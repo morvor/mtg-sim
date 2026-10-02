@@ -994,7 +994,18 @@ impl Renderer<'_> {
             Effect::EnterWithCounters { kind, n } => {
                 let (c, w) = self.counted(n, &counter_name(kind));
                 let m = self.me();
-                format!("{m} enters with {c} on it{}", w.unwrap_or_default())
+                let x_form = format!("{m} enters with {c} on it{}", w.clone().unwrap_or_default());
+                // "enters with a number of +1/+1 counters on it equal to ...".
+                match w.as_deref().and_then(|w| w.strip_prefix(", where X is ")) {
+                    Some(v) if !v.starts_with("the number of ") => {
+                        let cs = plural(&counter_name(kind));
+                        either_form(
+                            x_form.clone(),
+                            format!("{m} enters with a number of {cs} on it equal to {v}"),
+                        )
+                    }
+                    _ => x_form,
+                }
             }
             Effect::EnterPrepared => {
                 let m = self.me();
@@ -1062,6 +1073,15 @@ impl Renderer<'_> {
             | Effect::Search { .. }
             | Effect::SearchCards(_)
             | Effect::CreateEmblem { .. } => unreachable_text(),
+            // "Each player's life total becomes the lowest life total among all players."
+            Effect::SetLife {
+                who,
+                n: n @ Value::OverPlayers(..),
+            } => {
+                let p = self.player(who, Case::Poss);
+                let v = self.value(n);
+                format!("{p} life total becomes {v}")
+            }
             Effect::SetLife { who, n } => {
                 let p = self.player(who, Case::Poss);
                 let (a, w) = self.amount(n);
@@ -1622,8 +1642,18 @@ impl Renderer<'_> {
     /// A sequence of effects, merging clauses with the same subject.
     fn seq(&mut self, v: &[Effect]) -> String {
         let mut parts: Vec<String> = Vec::new();
+        let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Reveal a card from your hand", "If a land card was milled this way, ..."
+            // (`outcomes.rs`).
+            if let Some((n, s)) = self.outcome_seq_part(v, i, &mut outcomes) {
+                if !s.is_empty() {
+                    parts.push(s);
+                }
+                i += n;
+                continue;
+            }
             // "Put a +1/+1 counter on each other creature you control. You gain 1 life for
             // each of those creatures.": the group is remembered silently, so the next
             // instruction must name it, either as the same group or as the remembered one
@@ -2118,7 +2148,7 @@ impl Renderer<'_> {
     }
 
     /// Moving objects between zones.
-    fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
+    pub(crate) fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
         let mut w = self.sel(what, Case::Obj);
         // An Aura enchanting a card in a graveyard: "return enchanted creature card to the
         // battlefield" (Animate Dead).
@@ -2587,12 +2617,21 @@ impl Renderer<'_> {
         let noun_one = join_words(&[status.clone(), head.clone(), "token".into()]);
         let noun_many = join_words(&[status, head, "tokens".into()]);
         let (c, w) = match count {
-            Value::Const(1) => (with_article(&noun_one), None),
+            Value::Const(1) => (with_article(&noun_one), None::<String>),
             Value::Const(n) => (format!("{} {noun_many}", number_word(*n)), None),
             Value::X => (format!("X {noun_many}"), None),
+            // "create that many 1/1 black Insect creature tokens".
+            Value::EventAmount | Value::Prev => (format!("that many {noun_many}"), None),
             other => {
                 let v = self.value(other);
-                (format!("X {noun_many}"), Some(format!(", where X is {v}")))
+                if v.starts_with("the number of ") {
+                    return format!("create X {noun_many}{tail}, where X is {v}");
+                }
+                // "create a number of ... tokens equal to ...".
+                return either_form(
+                    format!("create X {noun_many}{tail}, where X is {v}"),
+                    format!("create a number of {noun_many}{tail} equal to {v}"),
+                );
             }
         };
         format!("create {c}{tail}{}", w.unwrap_or_default())
@@ -3798,6 +3837,16 @@ pub(crate) fn lower_first(s: &str) -> String {
 }
 
 /// Third-person singular of a verb phrase in base form ("draw a card" → "draws a card").
+/// Two wordings of the same instruction ("X tokens, where X is ..." / "a number of tokens
+/// equal to ..."), as alternatives when they can be written as such.
+pub(crate) fn either_form(a: String, b: String) -> String {
+    if a.contains(['{', '|', '}']) || b.contains(['{', '|', '}']) {
+        a
+    } else {
+        format!("{{alt:{a}|{b}}}")
+    }
+}
+
 pub(crate) fn third_person(vp: &str) -> String {
     let (verb, rest) = match vp.split_once(' ') {
         Some((v, r)) => (v, format!(" {r}")),

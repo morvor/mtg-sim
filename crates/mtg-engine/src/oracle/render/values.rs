@@ -206,8 +206,8 @@ impl Renderer<'_> {
                 };
                 format!("the number of {what} among {s}")
             }
-            Value::OverPlayers(..) => self.gap("Value::OverPlayers"),
-            Value::Extreme(..) => self.gap("Value::Extreme"),
+            Value::OverPlayers(op, pf, v) => self.over_players_value(*op, pf, v),
+            Value::Extreme(v, s, greatest) => self.extreme_value(v, s, *greatest),
             Value::GreatestPower(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("the greatest power among {n}")
@@ -327,6 +327,7 @@ impl Renderer<'_> {
             && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
             && !n.contains(" you ")
             && !n.contains("among")
+            && !n.contains(" this way")
             && !n.contains("attacking")
             && !n.contains("blocking")
             && !n.contains("{opt:")
@@ -440,8 +441,9 @@ impl Renderer<'_> {
             Condition::PrevHappened => "you do".into(),
             Condition::PrevAffectedAny => "a card was affected this way".into(),
             Condition::CastFrom(z) => format!("you cast it from your {}", zone_word(*z)),
-            Condition::AllTriggerConditionsThisTurn(_) => {
-                self.gap("Condition::AllTriggerConditionsThisTurn")
+            Condition::AllTriggerConditionsThisTurn(v) => {
+                let parts: Vec<String> = v.iter().map(|t| self.happened_this_turn(t)).collect();
+                join_list(&parts, "and")
             }
             Condition::ChosenWord(w) => format!("{w} was chosen"),
             Condition::Phase(p) => match p {
@@ -570,6 +572,37 @@ impl Renderer<'_> {
                 atoms.retain(|a| !matches!(a, Filter::InZone(_) | Filter::OwnedBy(PlayerRel::You)));
                 parts.push(format!("in your {}", zone_word(z)));
             }
+        }
+        // "is a creature card", "is a noncreature, nonland card": a card's types and
+        // qualities make one noun phrase.
+        let card_noun = |a: &&Filter| {
+            matches!(
+                a,
+                Filter::Card
+                    | Filter::Type(_)
+                    | Filter::Subtype(_)
+                    | Filter::Supertype(_)
+                    | Filter::Color(_)
+                    | Filter::Colorless
+                    | Filter::Multicolored
+                    | Filter::Monocolored
+                    | Filter::Historic
+                    | Filter::Or(_)
+                    | Filter::Not(_)
+            )
+        };
+        if parts.is_empty()
+            && atoms.len() > 1
+            && atoms.iter().any(|a| matches!(a, Filter::Card))
+            && atoms.iter().all(card_noun)
+        {
+            let f = Filter::And(atoms.into_iter().cloned().collect());
+            let n = self.noun_det(&f, Det::A);
+            return if negated {
+                format!("isn't {n}")
+            } else {
+                format!("is {n}")
+            };
         }
         for a in atoms {
             let p = match a {
@@ -748,6 +781,24 @@ impl Renderer<'_> {
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
+        }
+        // "if you have more life than an opponent": more than the lowest life total among
+        // your opponents.
+        if let (
+            Value::LifeTotal(PlayerRef::You),
+            Cmp::Gt,
+            Value::OverPlayers(AggOp::Min, PlayerFilter::Opponent, v),
+        ) = (a, cmp, b)
+        {
+            if matches!(v.as_ref(), Value::LifeTotal(PlayerRef::Iterated)) {
+                return "you have more life than an opponent".into();
+            }
+        }
+        // "if a graveyard has twenty or more cards in it".
+        if let (Value::OverPlayers(AggOp::Max, pf, v), Cmp::Ge) = (a, cmp) {
+            if let Some(s) = self.over_players_at_least(pf, v, b) {
+                return s;
+            }
         }
         // "you have two or more opponents".
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)

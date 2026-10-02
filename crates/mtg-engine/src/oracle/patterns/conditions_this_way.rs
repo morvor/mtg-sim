@@ -372,8 +372,9 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
 /// "[objects] is/was/are/were [verb] this way", "you [verb] [objects] this way", "that
 /// player discards [objects] this way", "that [noun] is put into a graveyard this way".
 /// Returns (filter on the affected objects, verb, whether it's about "that [noun]", the
-/// object the previous instruction acted on).
-fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool)> {
+/// object the previous instruction acted on, whether the condition names "you" as the
+/// player who did it).
+fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool, bool)> {
     let c = c.strip_suffix(" this way")?;
     // "you exiled a land card", "that player discards an artifact card".
     for p in ["you ", "that player ", "the player "] {
@@ -385,20 +386,29 @@ fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool)> {
             if !matches!(rest, "" | "to your hand" | "to the battlefield") {
                 return None;
             }
-            return Some((f, verb_, v, false));
+            return Some((f, verb_, v, false, p == "you "));
         }
     }
     // "that artifact is put into a graveyard"
     if let Some(r) = c.strip_prefix("that ") {
         let (_noun, r) = split_word(r);
         let v = ["is ", "was "].iter().find_map(|x| r.strip_prefix(x))?;
-        return Some((Filter::Any, verb(v)?, v, true));
+        return Some((Filter::Any, verb(v)?, v, true, false));
     }
     let (f, rest) = quantified(c)?;
     let v = ["is ", "was ", "are ", "were "]
         .iter()
         .find_map(|x| rest.strip_prefix(x))?;
-    Some((f, verb(v)?, v, false))
+    Some((f, verb(v)?, v, false, false))
+}
+
+/// The player an instruction that discards or mills cards is about: those cards are in
+/// that player's hand or library, so the player owns them (CR 400.3).
+fn card_actor(e: &Effect) -> Option<&PlayerRef> {
+    match e {
+        Effect::Discard { who, .. } | Effect::Mill { who, .. } => Some(who),
+        _ => None,
+    }
 }
 
 /// "If [objects] [verb] this way, [effect]." (also "[effect] if [objects] [verb] this
@@ -427,7 +437,7 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if x.ends_with(" instead") || x.starts_with("instead ") {
         return false;
     }
-    let Some((f, verb, word, that)) = this_way_condition(c) else {
+    let Some((f, verb, word, that, by_you)) = this_way_condition(c) else {
         return false;
     };
     // The instruction: the last one (or, for a variable only its kind sets, the last of
@@ -459,6 +469,14 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let (optional, instr) = match &parts[i] {
         Effect::May { effect, .. } => (true, (**effect).clone()),
         other => (false, other.clone()),
+    };
+    // "Each player discards a card. If you discarded a card this way, ...": only the cards
+    // you discarded, the ones you own (they came from your hand), count.
+    let f = match card_actor(&instr) {
+        Some(who) if by_you && !matches!(who, PlayerRef::You) => {
+            Filter::and(vec![f, Filter::OwnedBy(PlayerRel::You)])
+        }
+        _ => f,
     };
     let in_var = Filter::In(Box::new(Sel::Var(SNAPSHOT)));
     let graveyard = word == "put into a graveyard";

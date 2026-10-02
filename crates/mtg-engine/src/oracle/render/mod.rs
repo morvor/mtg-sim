@@ -13,11 +13,15 @@
 pub mod compare;
 mod costs;
 mod custom;
+mod each_player;
 mod effects;
+mod extremes;
 mod keywords;
 mod nouns;
+mod outcomes;
 mod players;
 mod statics;
+mod this_turn;
 mod triggers;
 mod values;
 

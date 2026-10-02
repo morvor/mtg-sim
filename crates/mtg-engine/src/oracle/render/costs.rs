@@ -249,7 +249,12 @@ impl Renderer<'_> {
                 CostPart::Untap => parts.push("untap ~".into()),
                 other => {
                     let s = self.cost_part(other);
-                    parts.push(s);
+                    // "pay {1} for each card revealed this way".
+                    if matches!(other, CostPart::Repeated { .. }) && s.starts_with('{') {
+                        parts.push(format!("pay {s}"));
+                    } else {
+                        parts.push(s);
+                    }
                 }
             }
         }

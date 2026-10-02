@@ -169,6 +169,12 @@ impl Renderer<'_> {
         }
     }
 
+    /// A trigger event as (subject, verb phrase in the present tense).
+    pub(crate) fn trigger_event_parts(&mut self, t: &TriggerCond) -> (String, String) {
+        let e = self.trigger_event(t, Det::A);
+        (e.subj, e.vp)
+    }
+
     /// Event with a determiner for its object ("a creature" / "one or more creatures").
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
         let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
@@ -202,9 +208,51 @@ impl Renderer<'_> {
                 let s = self.spell_or_ability_of(*by);
                 Ev::new(obj(self, filter), format!("is countered by {s}"))
             }
-            TriggerCond::CountersPutBy { .. } => {
-                let g = self.gap("counters put by a player");
-                Ev::new(g, "")
+            // "Whenever you get one or more {E}" (energy counters, CR 107.14), from anyone.
+            TriggerCond::CountersPutBy {
+                who: PlayerRel::Any,
+                on_objects: None,
+                on_players: Some(PlayerFilter::You),
+                kind: Some(k),
+                each: false,
+            } if k == "energy" => Ev::new("you", "get one or more {E}"),
+            // "Whenever you put one or more +1/+1 counters on a creature you control".
+            TriggerCond::CountersPutBy {
+                who,
+                on_objects,
+                on_players,
+                kind,
+                each,
+            } => {
+                let w = self.rel_subject(*who);
+                let c = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let counters = if *each {
+                    with_article(&c)
+                } else {
+                    format!("one or more {}", plural(&c))
+                };
+                let on = match (on_objects, on_players) {
+                    (Some(f), None) => self.noun_det(f, Det::A),
+                    (None, Some(pf)) => {
+                        let p = self.player_filter_noun(pf, Num::One);
+                        if p.contains("player") || p.contains("opponent") {
+                            with_article(&p)
+                        } else {
+                            p
+                        }
+                    }
+                    (Some(f), Some(pf)) => {
+                        let o = self.noun_det(f, Det::A);
+                        let p = self.player_filter_noun(pf, Num::One);
+                        format!("{o} or {p}")
+                    }
+                    (None, None) => self.gap("counters put on nothing"),
+                };
+                let verb = if w == "you" { "put" } else { "puts" };
+                Ev::new(w, format!("{verb} {counters} on {on}"))
             }
             TriggerCond::ZoneChange { filter, from, to } => {
                 // "one or more cards leave your graveyard": the owner is in the zone.
