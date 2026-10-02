@@ -71,6 +71,18 @@ pub trait KeywordRules: Sync + Send {
     ) -> bool {
         false
     }
+    /// Cards `searcher` found searching `owner`'s library, before the searching effect
+    /// puts them anywhere: returns true if this implementation's rule dealt with them
+    /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
+    fn search_found(
+        &self,
+        g: &mut Game,
+        searcher: PlayerId,
+        owner: PlayerId,
+        found: &[ObjectId],
+    ) -> bool {
+        false
+    }
     /// Whether a rule this implementation defines prohibits `p` from playing the land
     /// card `card` (CR 305.2). Called for every registered implementation.
     fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
@@ -959,6 +971,13 @@ pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) 
             crate::casting::matches_with_chars(g, source, &chars, f, ctx)
         }
     }
+}
+
+/// See [`KeywordRules::search_found`].
+pub fn search_found(g: &mut Game, searcher: PlayerId, owner: PlayerId, found: &[ObjectId]) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.search_found(g, searcher, owner, found))
 }
 
 /// See [`KeywordRules::land_play_prohibited`].
