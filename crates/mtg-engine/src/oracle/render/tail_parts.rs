@@ -2,6 +2,8 @@
 //! "The next time a red source of your choice would deal damage to you this turn, prevent
 //! that damage." (a chosen source, then a prevention shield for it, CR 615.7).
 
+use super::effects::join_words;
+use super::players::Case;
 use super::*;
 
 impl Renderer<'_> {
@@ -408,5 +410,111 @@ impl Renderer<'_> {
         }
         let texts: Vec<String> = abilities.iter().map(|a| self.nested_ability(a)).collect();
         Some(format!("{n}+ | {}", texts.join("\n")))
+    }
+}
+
+impl Renderer<'_> {
+    /// The instructions after one that sets X ("roll a d20", then "create X Treasure
+    /// tokens"), with ", where X is [value]" after the first sentence that uses X.
+    pub(crate) fn x_defined_later(&mut self, value: &Value, rest: &[Effect]) -> Option<String> {
+        let x = self.value(value);
+        if x == "X" || rest.is_empty() {
+            return None;
+        }
+        let text = self.seq(rest);
+        let uses_x = |s: &str| {
+            s.split(|c: char| !c.is_alphanumeric() && c != '{' && c != '}')
+                .any(|w| w == "X" || w == "{X}")
+        };
+        let sentences: Vec<&str> = text.split(". ").collect();
+        let at = sentences.iter().position(|s| uses_x(s))?;
+        if sentences[at].contains("where X is") {
+            return Some(text);
+        }
+        let out: Vec<String> = sentences
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                if i == at {
+                    format!("{}, where X is {x}", s.trim_end_matches('.'))
+                } else {
+                    s.to_string()
+                }
+            })
+            .collect();
+        Some(out.join(". "))
+    }
+}
+
+impl Renderer<'_> {
+    /// "Double the power [and toughness] of [objects] until end of turn": each gets
+    /// +X/+0 (+X/+Y), where X is its power (Y its toughness) (CR 701.10b); "triple" for
+    /// twice that.
+    pub(crate) fn double_pt(&mut self, sel: &Sel, var: Var, effect: &Effect) -> Option<String> {
+        let (verb, what, duration) = double_pt_parts(var, effect)?;
+        let s = self.sel(sel, Case::Obj);
+        let d = self.duration(duration);
+        let poss = super::nouns::possessive(&s);
+        let obj = if s.contains(['{', '|']) {
+            format!("{what} of {s}")
+        } else {
+            format!(
+                "{{alt:{what} of {s}|{poss} {}}}",
+                what.trim_start_matches("the ")
+            )
+        };
+        Some(join_words(&[format!("{verb} {obj}"), d]))
+    }
+}
+
+/// The parts of a "double the power of ..." instruction: the verb, what's doubled and for
+/// how long.
+pub(crate) fn double_pt_parts(
+    var: Var,
+    effect: &Effect,
+) -> Option<(&'static str, &'static str, &Duration)> {
+    {
+        let Effect::Modify {
+            what: Sel::Var(w),
+            mods,
+            duration,
+        } = effect
+        else {
+            return None;
+        };
+        let [Modification::ModifyPT(p, t)] = mods.as_slice() else {
+            return None;
+        };
+        if *w != var {
+            return None;
+        }
+        // The factor of its own power (toughness) it gets: 1 doubles, 2 triples.
+        let factor = |v: &Value, power: bool| -> Option<i64> {
+            let Value::Mul(a, b) = v else { return None };
+            let own = match (a.as_ref(), power) {
+                (Value::PowerOf(s), true) | (Value::ToughnessOf(s), false) => {
+                    matches!(s.as_ref(), Sel::Var(x) if *x == var)
+                }
+                _ => false,
+            };
+            match b.as_ref() {
+                Value::Const(k) if own => Some(*k as i64),
+                _ => None,
+            }
+        };
+        let fp = factor(p, true);
+        let ft = factor(t, false);
+        let (k, what) = match (fp, ft, t) {
+            (Some(a), Some(b), _) if a == b => (a, "the power and toughness"),
+            (Some(a), None, Value::Const(0)) => (a, "the power"),
+            (None, Some(b), _) if matches!(p, Value::Const(0)) => (b, "the toughness"),
+            _ => return None,
+        };
+        let verb = match k {
+            1 => "double",
+            2 => "triple",
+            _ => return None,
+        };
+        Some((verb, what, duration))
     }
 }

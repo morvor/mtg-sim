@@ -312,6 +312,13 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Obj);
                 format!("double the number of {k} on {s}")
             }
+            // "Double the power of each creature you control until end of turn" (CR
+            // 701.10b).
+            Effect::ForEach { sel, var, effect }
+                if tail_parts::double_pt_parts(*var, effect).is_some() =>
+            {
+                self.double_pt(sel, *var, effect).unwrap_or_default()
+            }
             // "If it doesn't have suspend, it gains suspend."
             Effect::ForEach { sel, .. }
                 if crate::oracle::patterns::r702_062_gains_suspend::is_gains_suspend(e) =>
@@ -891,7 +898,12 @@ impl Renderer<'_> {
                 duration,
             } => {
                 let s = self.player_modification(who, effect);
-                let d = self.duration(duration);
+                // A resolving effect with no duration lasts for the rest of the game (CR
+                // 611.2a); cards say so or not.
+                let d = match duration {
+                    Duration::Permanent => "{opt:for the rest of the game}".to_string(),
+                    d => self.duration(d),
+                };
                 join_words(&[s, d])
             }
             Effect::AddReplacement {
@@ -1870,11 +1882,19 @@ impl Renderer<'_> {
     }
 
     /// A sequence of effects, merging clauses with the same subject.
-    fn seq(&mut self, v: &[Effect]) -> String {
+    pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
+            // X stands for is said where X is first used (CR 107.3).
+            if let Effect::SetX { value } = &v[i] {
+                if let Some(s) = self.x_defined_later(value, &v[i + 1..]) {
+                    parts.push(s);
+                    break;
+                }
+            }
             // "Reveal a card from your hand", "If a land card was milled this way, ..."
             // (`outcomes.rs`).
             if let Some((n, s)) = self.outcome_seq_part(v, i, &mut outcomes) {

@@ -871,9 +871,47 @@ impl Renderer<'_> {
                 format!("{target}{who} {costs} {s} less {act}")
             }
             CostChange::ReduceMana { mana, colored_only } => {
-                let mut s = format!("{target}{who} {costs} {mana} less {act}");
+                // "As an additional cost to cast green permanent spells, you may pay 2 life.
+                // Those spells cost {G} less to cast if you paid life this way." (see
+                // `kw/offered_costs.rs`).
+                let paid_life = match &cm.applies_to {
+                    CostTarget::Spells(Filter::And(v)) => v.iter().any(|f| {
+                        matches!(f, Filter::Custom(n)
+                            if n.strip_prefix(crate::kw::offered_costs::PAID_OFFERED_COST)
+                                .is_some_and(|c| c.starts_with("pay ") && c.ends_with(" life")))
+                    }),
+                    _ => false,
+                };
+                let mut s = if paid_life && cm.who == PlayerRel::You {
+                    format!("those spells cost {mana} less {act} if you paid life this way")
+                } else {
+                    format!("{target}{who} {costs} {mana} less {act}")
+                };
                 if *colored_only {
-                    s.push_str(". This effect reduces only the amount of colored mana you pay");
+                    // A reduction of mana of one color reduces only that color's mana.
+                    let syms = mana.to_string();
+                    let colors: Vec<&str> = syms
+                        .split('}')
+                        .filter_map(|x| x.strip_prefix('{'))
+                        .collect();
+                    let one = match colors.first() {
+                        Some(c) if colors.iter().all(|x| x == c) => match *c {
+                            "W" => Some("white"),
+                            "U" => Some("blue"),
+                            "B" => Some("black"),
+                            "R" => Some("red"),
+                            "G" => Some("green"),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let which = match one {
+                        Some(c) => format!("{{alt:colored|{c}}}"),
+                        None => "colored".into(),
+                    };
+                    s.push_str(&format!(
+                        ". This effect reduces only the amount of {which} mana you pay"
+                    ));
                 }
                 s
             }
@@ -1370,6 +1408,11 @@ impl Renderer<'_> {
                         && !poss.contains('{')
                     {
                         format!("{{alt:{poss}|its}}")
+                    } else if !poss.contains(['{', '|']) && !s.contains(['{', '|']) {
+                        // "Activated abilities of artifacts can't be activated."
+                        return format!(
+                            "{{alt:{poss} activated abilities|activated abilities of {s}}} can't be activated{m}"
+                        );
                     } else {
                         poss
                     };
