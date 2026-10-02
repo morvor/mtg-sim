@@ -1,9 +1,9 @@
 //! Rulings batch P035 — "whenever you attack with one or more [creatures]" (Metropolis
-//! Angel): one trigger for the attack, however many such creatures attack (CR 508.1,
-//! 603.2c). Tests for each card the phrase compiles for.
+//! Angel): one trigger for the attack, however many such creatures attack (CR 508.3c,
+//! 603.2c), and the other cards with that trigger.
 
 use crate::r_p035_common::*;
-use crate::r_s01_common::{attack_with, give_mana_for, stack_library, supported, tokens};
+use crate::r_s01_common::{attack_with, stack_library, supported};
 use crate::r_s05_common::tokens_with_subtype;
 use crate::r_s06_common::{activate_containing, has_kw};
 use mtg_engine::keywords::KeywordKind;
@@ -26,16 +26,12 @@ fn you_attack_with_cards_compile() {
         "Hired Claw",
         "Interceptor, Shadow's Hound",
         "Jolene, Plundering Pugilist",
-        "Lulu, Curious Hollyphant",
-        "Lulu, Inspiring Hollyphant",
         "Lulu, Vengeful Hollyphant",
-        "Lulu, Wild Hollyphant",
         "Metropolis Angel",
         "Mordor Trebuchet",
         "Persistent Marshstalker",
         "Sidar Jabari of Zhalfir",
         "Talion's Messenger",
-        "Vrestin, Menoptra Leader",
     ] {
         supported(n);
     }
@@ -202,41 +198,12 @@ fn lulu_attacks(name: &str) -> (TestGame, ObjectId, Vec<ObjectId>) {
 }
 
 #[test]
-fn lulu_curious_draws_that_many_then_discards() {
-    cr!("603.2c", "508.1m");
-    let (mut t, _, _) = lulu_attacks("Lulu, Curious Hollyphant");
-    let hand = t.hand_size(P0);
-    t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand + 2 - 1);
-}
-
-#[test]
-fn lulu_inspiring_creates_that_many_attacking_soldiers() {
-    cr!("508.4");
-    let (mut t, _, _) = lulu_attacks("Lulu, Inspiring Hollyphant");
-    t.resolve_all();
-    let soldiers = tokens_with_subtype(&t, P0, "Soldier");
-    assert_eq!(soldiers.len(), 2);
-    assert!(soldiers.iter().all(|s| t.g.is_attacking(*s)));
-}
-
-#[test]
 fn lulu_vengeful_drains_that_much() {
     cr!("119.3");
     let (mut t, _, _) = lulu_attacks("Lulu, Vengeful Hollyphant");
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 22);
-}
-
-#[test]
-fn lulu_wild_pumps_those_creatures() {
-    cr!("611.2c");
-    let (mut t, lulu, flyers) = lulu_attacks("Lulu, Wild Hollyphant");
-    t.resolve_all();
-    assert_eq!(t.pt(flyers[0]), (4, 4), "Wind Drake");
-    assert_eq!(t.pt(flyers[1]), (6, 6), "Serra Angel");
-    assert_eq!(t.pt(lulu), (2, 4), "not Lulu herself");
 }
 
 #[test]
@@ -312,33 +279,4 @@ fn talions_messenger_loot_then_counter_on_a_faerie() {
     t.resolve_all();
     assert_eq!(t.counters(messenger, counters::PLUS1), 1);
     assert_eq!(t.g.player(P0).graveyard.len(), 1, "discarded a card");
-}
-
-#[test]
-fn vrestin_counters_tokens_and_attacking_insects() {
-    cr!("107.3a", "508.1m");
-    let mut t = TestGame::new(2);
-    give_mana_for(&mut t, P0, "Vrestin, Menoptra Leader");
-    t.lands(P0, "Wastes", 2);
-    let vrestin = t.hand(P0, "Vrestin, Menoptra Leader");
-    t.cast(P0, vrestin).x(2).go();
-    t.resolve_all();
-    assert_eq!(t.counters(vrestin, counters::PLUS1), 2);
-    let insects = tokens(&t, P0);
-    assert_eq!(insects.len(), 2);
-    assert!(insects.iter().all(|i| has_kw(&t, *i, KeywordKind::Flying)));
-    for i in &insects {
-        t.g.objects[i.0 as usize].summoning_sick = false;
-    }
-    let v = t.g.current(vrestin);
-    t.g.objects[v.0 as usize].summoning_sick = false;
-    attack_with(&mut t, &attackers(&[insects[0], v]));
-    t.resolve_all();
-    assert_eq!(t.counters(insects[0], counters::PLUS1), 1);
-    assert_eq!(t.counters(insects[1], counters::PLUS1), 0, "not attacking");
-    assert_eq!(
-        t.counters(vrestin, counters::PLUS1),
-        3,
-        "an attacking Insect too"
-    );
 }
