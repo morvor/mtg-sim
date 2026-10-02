@@ -3469,6 +3469,9 @@ pub enum Effect {
 pub enum UntilEvent {
     /// "until [this object] leaves the battlefield".
     SourceLeavesBattlefield,
+    /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
+    /// CR 725): it ends when one does, not merely because an opponent is the monarch.
+    OpponentBecomesMonarch,
 }
 
 impl Effect {

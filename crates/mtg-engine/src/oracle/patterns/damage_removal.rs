@@ -734,11 +734,16 @@ fn p_pair(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "damage_removal: destroy/exile pair", priority: 50, parse: p_pair } }
 
-/// "exile target nonland permanent an opponent controls until ~ leaves the battlefield"
-/// (CR 610.3).
+/// "exile target nonland permanent an opponent controls until ~ leaves the battlefield",
+/// "... until an opponent becomes the monarch" (CR 610.3).
 fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
-    let r = r.strip_suffix(" until ~ leaves the battlefield")?;
+    let (r, until) = if let Some(r) = r.strip_suffix(" until ~ leaves the battlefield") {
+        (r, UntilEvent::SourceLeavesBattlefield)
+    } else {
+        let r = r.strip_suffix(" until an opponent becomes the monarch")?;
+        (r, UntilEvent::OpponentBecomesMonarch)
+    };
     let (what, tail) = object_ref(r, b)?;
     if !end(&tail).is_empty() {
         return None;
@@ -755,10 +760,7 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     if !on_battlefield {
         return None;
     }
-    Some(Effect::ExileUntil {
-        what,
-        until: UntilEvent::SourceLeavesBattlefield,
-    })
+    Some(Effect::ExileUntil { what, until })
 }
 
 inventory::submit! { EffectPattern { name: "damage_removal: exile until", priority: 50, parse: p_exile_until } }
