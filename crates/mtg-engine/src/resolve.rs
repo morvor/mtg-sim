@@ -369,6 +369,8 @@ impl Game {
                         tapped.push(Entity::Object(o));
                     }
                 }
+                // "Tap any number of ... When you do, ...": whether anything was tapped.
+                ctx.prev_happened = !tapped.is_empty();
                 ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {

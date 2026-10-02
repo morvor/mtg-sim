@@ -1176,7 +1176,7 @@ fn last_effect(e: &Effect) -> &Effect {
 
 /// "to the battlefield [tapped] [transformed] under its owner's control" etc. `owned`
 /// is the selection whose owners control the returned objects.
-fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
+pub(crate) fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
     let mut r = s.strip_prefix("to the battlefield")?.trim_start();
     let mut d = Destination::battlefield();
     let mut owner = false;
