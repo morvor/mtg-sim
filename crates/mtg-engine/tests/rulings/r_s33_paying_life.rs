@@ -189,4 +189,12 @@ fn channel_once_your_life_total_is_0_you_cant_pay_any_more_life() {
     t.resolve_all();
     assert!(t.on_battlefield(stone));
     assert!(t.g.player(P0).mana_pool.mana.is_empty());
+    // Nor while casting a spell: with no other mana (the first Mind Stone tapped),
+    // another Mind Stone can't be cast at 0 life; at 2 life, it could be.
+    let another = t.hand(P0, "Mind Stone");
+    let first = t.g.current(stone);
+    t.g.tap(first);
+    assert!(!can_cast(&mut t, P0, another, CastMethod::Normal));
+    set_life(&mut t, P0, 2);
+    assert!(can_cast(&mut t, P0, another, CastMethod::Normal));
 }

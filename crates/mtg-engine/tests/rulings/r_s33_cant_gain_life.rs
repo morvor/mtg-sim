@@ -185,6 +185,25 @@ fn everlasting_torment_a_cost_that_includes_life_gain_cant_be_paid() {
     assert_eq!(t.life(P1), 23);
     t.resolve_all();
     assert_eq!(t.pt(bears), (6, 6));
+    // With three players and P2's Erebos (P0 and P1 can't gain life), P0 may cast it only
+    // by choosing P2, who can gain the life.
+    for (chosen, ok) in [(P1, false), (P2, true)] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P2, "Erebos, God of the Dead");
+        let (invigorate, bears) = setup(&mut t);
+        assert!(alt_castable(&mut t, P0, invigorate));
+        let alts = alternatives(&t, P0, invigorate);
+        t.answer_choose(P0, &[Entity::Player(chosen)]);
+        let cast = t
+            .cast(P0, invigorate)
+            .method(alts[0].clone())
+            .target(bears)
+            .try_go();
+        assert_eq!(cast.is_ok(), ok, "choosing {chosen}");
+        assert_eq!(t.life(P2), if ok { 23 } else { 20 });
+        assert_eq!(t.life(P1), 20);
+        assert_eq!(t.in_hand(P0, "Invigorate"), !ok);
+    }
 }
 
 #[test]
@@ -209,4 +228,11 @@ fn leyline_of_punishment_a_cost_that_includes_life_gain_cant_be_paid() {
     let alts = alternatives(&t, P0, silence);
     t.cast(P0, silence).method(alts[0].clone()).go();
     assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 26, 26));
+    // One of them unable to gain life is enough: P2's Erebos, God of the Dead ("Your
+    // opponents can't gain life.") stops P1, though P2 could gain the life.
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Forest", 1);
+    let silence = t.hand(P0, "Reverent Silence");
+    t.battlefield(P2, "Erebos, God of the Dead");
+    assert!(!alt_castable(&mut t, P0, silence));
 }

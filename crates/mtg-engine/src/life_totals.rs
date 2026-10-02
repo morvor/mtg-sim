@@ -181,7 +181,7 @@ pub fn team_ignores_zero_life(g: &Game, members: &[PlayerId]) -> bool {
 /// gain goes: a cost that involves having a player gain life can't be paid if that
 /// player can't gain life (CR 119.7) — "have each other player gain 6 life" needs each of
 /// them able to, "have an opponent gain 3 life" (an opponent chosen as it's paid) one of
-/// them.
+/// them — and, once paid, the chosen one (see `Game::pay_total_cost`).
 pub fn cost_life_gain_possible(
     g: &Game,
     e: &crate::ability::Effect,

@@ -959,6 +959,12 @@ pub struct SpecialActionDef {
     /// What taking it costs.
     pub cost: Cost,
     pub action: SpecialActionEffect,
+    /// "Any time you could activate a mana ability" (CR 605.3a): besides any time the
+    /// player has priority, it can be taken while a mana payment is being made — as a
+    /// spell is cast or an ability activated, or when an effect asks for one — so mana it
+    /// adds helps pay (see `mana_abilities::mana_sources`).
+    #[serde(default)]
+    pub mana_timing: bool,
 }
 
 /// What a special action does.

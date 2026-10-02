@@ -1,10 +1,12 @@
 //! "Until end of turn, any time you could activate a mana ability, you may pay N life. If
-//! you do, add {C}." (Channel): until end of turn, the spell's controller may repeatedly
-//! pay life for mana, an action an effect allows later (CR 116.2c) that doesn't use the
-//! stack. The engine offers it whenever that player has priority, one of the times a
-//! player could activate a mana ability (CR 605.3a), so its mana is added to the pool
-//! before a spell is cast or an ability activated. Paying the life follows CR 119.4: no
-//! more than the player's life total, so none at all once it's 0.
+//! you do, add [mana]." (Channel): until end of turn, the spell's controller may
+//! repeatedly pay life for mana, an action an effect allows later (CR 116.2c) that
+//! doesn't use the stack, any time they could activate a mana ability (CR 605.3a): with
+//! priority, and while a mana payment is being made — as a spell is cast or an ability
+//! activated, for an attack cost, or when an effect asks for one
+//! (`SpecialActionDef::mana_timing`; `mana_abilities::mana_sources` plans with it). Paying
+//! the life follows CR 119.4: no more than the player's life total, so none at all once
+//! it's 0.
 
 use super::AbilityPattern;
 use crate::ability::*;
@@ -37,6 +39,7 @@ fn pay_life_for_mana(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
             who: PlayerFilter::You,
             cost,
             action: SpecialActionEffect::Effect(then),
+            mana_timing: true,
         }),
         duration: Duration::EndOfTurn,
         repeatable: true,

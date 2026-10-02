@@ -3077,6 +3077,12 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 119.7: a cost that has a player who can't gain life gain life can't be
+                // paid — "have an opponent gain 3 life" with an opponent chosen as it's
+                // paid who can't.
+                if !crate::life_totals::cost_life_gain_possible(self, e, &c) {
+                    return bad("that player can't gain life");
+                }
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {

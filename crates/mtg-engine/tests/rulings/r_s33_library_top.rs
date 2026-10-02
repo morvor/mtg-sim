@@ -53,7 +53,7 @@ fn opponent_mind_rots_p0(t: &mut TestGame, top: ObjectId) {
 
 #[test]
 fn korlessa_the_top_card_can_be_looked_at_any_time_without_priority() {
-    cr!("401.5", "116.1");
+    cr!("401.5");
     ruling!(
         "Korlessa, Scale Singer",
         "You can look at the top card of your library whenever you want (with one restriction; see below), even if you don't have priority. This action doesn't use the stack. Knowing what that card is becomes part of the information you have access to, just like you can look at the cards in your hand."
