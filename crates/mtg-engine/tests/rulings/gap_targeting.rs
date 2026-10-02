@@ -1161,3 +1161,134 @@ fn diluvian_primordial_casts_one_card_from_each_opponents_graveyard() {
     assert!(!t.in_graveyard(P1, "Divination"));
     assert!(t.in_graveyard(P2, "Shock"));
 }
+
+#[test]
+fn rod_of_absorption_casts_exiled_spells_with_total_mana_value_x() {
+    cr!("607.2a", "608.2n", "614.1a", "608.2g");
+    ruling!(
+        "Rod of Absorption",
+        "If a spell is countered or it never resolves, Rod of Absorption will not exile it."
+    );
+    ruling!(
+        "Rod of Absorption",
+        "When Rod of Absorption's last ability resolves, you cast as many spells with total mana value X or less from among the exiled cards as you would like in any order you choose. Cards not cast this way will remain in exile indefinitely."
+    );
+    supported("Rod of Absorption");
+    let mut t = TestGame::new(2);
+    let rod = t.battlefield(P0, "Rod of Absorption");
+    // P1's Shock (mana value 1) and P0's Divination (3) are exiled as they resolve.
+    let shock = t.hand(P1, "Shock");
+    add_mana(&mut t, P1, ManaType::R, 1);
+    t.cast(P1, shock).target(Entity::Player(P0)).go();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    let div = t.hand(P0, "Divination");
+    add_mana(&mut t, P0, ManaType::U, 3);
+    t.cast(P0, div).go();
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_exile("Shock"));
+    assert!(t.in_exile("Divination"));
+    // A countered spell isn't exiled: it goes to the graveyard.
+    let opt = t.hand(P1, "Opt");
+    add_mana(&mut t, P1, ManaType::U, 1);
+    let spell = t.cast(P1, opt).go();
+    t.settle();
+    t.resolve(); // Rod's trigger
+    assert!(t.g.counter(spell, None));
+    t.g.flush_events();
+    assert!(t.in_graveyard(P1, "Opt"));
+
+    // X = 3: Divination is cast; then Shock (1 more) would exceed the total, so it stays
+    // in exile.
+    t.lands(P0, "Wastes", 3);
+    let exiled_div = t
+        .g
+        .exile
+        .iter()
+        .copied()
+        .find(|o| t.obj(*o).name() == "Divination")
+        .unwrap();
+    let exiled_shock = t
+        .g
+        .exile
+        .iter()
+        .copied()
+        .find(|o| t.obj(*o).name() == "Shock")
+        .unwrap();
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.answer_choose(P0, &[Entity::Object(exiled_div)]);
+    t.answer_choose(P0, &[Entity::Object(exiled_shock)]);
+    let hand = t.hand_size(P0);
+    t.activate(P0, rod, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert!(t.in_exile("Shock"));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn rods_of_absorption_track_their_own_cards() {
+    cr!("607.2a", "400.7");
+    ruling!(
+        "Rod of Absorption",
+        "If multiple Rods of Absorption are on the battlefield at the same time, any player casting an instant or sorcery spell will cause all of them to trigger. As the spell resolves, its controller will choose which of the Rods gets to exile it."
+    );
+    ruling!(
+        "Rod of Absorption",
+        "Each Rod of Absorption tracks the cards it has exiled separately. If Rod of Absorption is destroyed and then later brought back to the battlefield, it will not be able to access any of the cards that it had exiled before."
+    );
+    // Two Rods: the caster chooses which one exiles Divination (answering the first or
+    // the second option gives it to different Rods); the other has nothing to cast.
+    let linked = |t: &TestGame, rod: ObjectId| -> usize {
+        t.obj(rod).linked.values().map(|v| v.len()).sum()
+    };
+    let setup = |pick: usize| {
+        let mut t = TestGame::new(2);
+        let rod1 = t.battlefield(P0, "Rod of Absorption");
+        let rod2 = t.battlefield(P0, "Rod of Absorption");
+        let div = t.hand(P0, "Divination");
+        add_mana(&mut t, P0, ManaType::U, 3);
+        t.cast(P0, div).go();
+        t.settle();
+        t.answer(P0, DecisionKind::Option, Answer::Index(pick));
+        t.resolve_all();
+        assert!(t.in_exile("Divination"));
+        (t, rod1, rod2)
+    };
+    let (t0, r1, r2) = setup(0);
+    let (t1, _, _) = setup(1);
+    let first = linked(&t0, r1) == 1;
+    assert_eq!(linked(&t0, r1) + linked(&t0, r2), 1);
+    assert_eq!(linked(&t1, r1) + linked(&t1, r2), 1);
+    assert_ne!(first, linked(&t1, r1) == 1);
+    let (mut t, with, without) = if first { (t0, r1, r2) } else { (t0, r2, r1) };
+    t.lands(P0, "Wastes", 3);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    let hand = t.hand_size(P0);
+    t.activate(P0, without, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    assert!(t.in_exile("Divination"));
+
+    // A Rod that left the battlefield and came back is a new object: it can't cast the
+    // card the old one exiled.
+    let new_rod = t.g.move_object(
+        with,
+        mtg_engine::object::Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    let new_rod = t.g.move_object(
+        new_rod.unwrap(),
+        mtg_engine::object::Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.recompute();
+    let new_rod = new_rod.unwrap();
+    assert_eq!(linked(&t, new_rod), 0);
+}
