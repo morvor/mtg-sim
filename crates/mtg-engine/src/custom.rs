@@ -182,6 +182,26 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
             .max()
             .unwrap_or(0)
         }),
+        // "the greatest number of creatures you control that have a creature type in
+        // common" (Skemfar Shadowsage): a changeling has every creature type (CR 702.73a).
+        "greatest_creatures_you_control_sharing_a_type" => {
+            let mine: Vec<&crate::object::GameObject> = g
+                .permanents()
+                .filter(|o| o.controller == ctx.controller && o.is_creature())
+                .collect();
+            let all = mine.iter().filter(|o| o.chars.all_creature_types).count() as i64;
+            let types: std::collections::BTreeSet<&str> = mine
+                .iter()
+                .flat_map(|o| o.chars.subtypes.iter().map(|s| s.as_str()))
+                .filter(|s| crate::types::is_creature_type(s))
+                .collect();
+            types
+                .into_iter()
+                .map(|ty| mine.iter().filter(|o| o.chars.has_subtype(ty)).count() as i64)
+                .max()
+                .unwrap_or(0)
+                .max(all)
+        }
         // Creatures that died under the controller's control this turn.
         "creatures_you_controlled_died_this_turn" => g
             .history

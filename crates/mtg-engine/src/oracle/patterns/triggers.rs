@@ -109,7 +109,8 @@ fn noncombat(c: TriggerCond) -> Option<TriggerCond> {
 }
 
 /// "one or more +1/+1 counters are put on [object]", "a +1/+1 counter is put on [object]".
-/// Each such event is one put action on one object.
+/// Each such event is one put action on one object; the singular form triggers once for
+/// each counter put.
 fn parse_counters_put(r: &str) -> Option<Parsed> {
     let (x, plural) = if let Some(x) = r.strip_prefix("one or more ") {
         (x, true)
@@ -156,6 +157,7 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
         TriggerCond::CountersPut {
             filter: subj.filter,
             kind: Some(kind),
+            each: !plural,
         },
         it,
         PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
