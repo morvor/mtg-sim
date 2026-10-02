@@ -346,3 +346,66 @@ fn intellectual_offering_untaps_your_and_that_players_nonland_permanents() {
     assert!(!t.obj_now(mine).tapped && !t.obj_now(theirs).tapped);
     assert!(t.obj_now(land).tapped);
 }
+
+#[test]
+fn eye_of_singularity_enters_destroying_only_duplicated_names() {
+    cr!("201.2");
+    assert_supported("Eye of Singularity");
+    let mut t = TestGame::new(2);
+    let lone = t.battlefield(P1, "Hill Giant");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let f1 = t.battlefield(P1, "Forest");
+    let f2 = t.battlefield(P1, "Forest");
+    let eye = t.enter(P0, "Eye of Singularity");
+    t.resolve_all();
+    assert!(t.on_battlefield(lone), "a permanent with a unique name stays");
+    assert!(t.on_battlefield(eye));
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    assert!(t.on_battlefield(f1) && t.on_battlefield(f2), "basic lands are excepted");
+}
+
+#[test]
+fn hint_of_insanity_discards_only_cards_sharing_a_name_with_another() {
+    cr!("201.2");
+    assert_supported("Hint of Insanity");
+    let mut t = TestGame::new(2);
+    let s1 = t.hand(P1, "Shock");
+    let s2 = t.hand(P1, "Shock");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let f1 = t.hand(P1, "Forest");
+    let f2 = t.hand(P1, "Forest");
+    t.lands(P0, "Swamp", 3);
+    let hint = t.hand(P0, "Hint of Insanity");
+    t.cast(P0, hint).target(P1).go();
+    t.resolve();
+    let hand = t.g.player(P1).hand.clone();
+    assert!(!hand.contains(&s1) && !hand.contains(&s2));
+    assert!(hand.contains(&bolt), "a card with a unique name stays");
+    assert!(hand.contains(&f1) && hand.contains(&f2), "lands stay");
+}
+
+#[test]
+fn pattern_matcher_another_creature_is_other_than_itself() {
+    cr!("201.2");
+    ruling!(
+        "Pattern Matcher",
+        "you can have it look at the first Pattern Matcher"
+    );
+    assert_supported("Pattern Matcher");
+    // Alone, it can't find a copy of itself.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Pattern Matcher");
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Pattern Matcher");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    // With another Pattern Matcher, it finds the third.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pattern Matcher");
+    t.library_top(P0, "Pattern Matcher");
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Pattern Matcher");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}

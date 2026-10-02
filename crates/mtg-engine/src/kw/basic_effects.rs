@@ -157,6 +157,41 @@ pub fn protected_by(who: &crate::ability::PlayerRef) -> String {
     )
 }
 
+const SAME_NAME_AS_ANOTHER: &str = "basic_effects:same name as another:";
+
+/// The filter "with the same name as another [objects]" (CR 201.2). `sel` is "another
+/// [objects]" read as an object phrase (other than the source). When the object
+/// compared is itself one of those objects, "another" is relative to it ("destroy each
+/// permanent with the same name as another permanent", "discards all nonland cards with
+/// the same name as another card in their hand"); otherwise it's relative to the source
+/// ("search your library for a card with the same name as another creature you
+/// control"). `None` unless `sel` is such a set.
+pub fn same_name_as_another(sel: &crate::ability::Sel) -> Option<crate::ability::Filter> {
+    use crate::ability::{Filter, Sel};
+    let Sel::All(f) = sel else {
+        return None;
+    };
+    let Filter::And(v) = f else {
+        return None;
+    };
+    if !v.iter().any(|x| matches!(x, Filter::Other)) {
+        return None;
+    }
+    let all = Sel::All(Filter::And(
+        v.iter()
+            .filter(|x| !matches!(x, Filter::Other))
+            .cloned()
+            .collect(),
+    ));
+    Some(Filter::Custom(
+        format!(
+            "{SAME_NAME_AS_ANOTHER}{}",
+            serde_json::to_string(&(all, sel)).ok()?
+        )
+        .into(),
+    ))
+}
+
 const SOURCE_OF_SLOT: &str = "basic_effects:source of the ability in target slot ";
 
 /// `Filter::Custom` name: the source of the ability chosen in target slot `slot`.
@@ -327,6 +362,22 @@ impl KeywordRules for BasicEffects {
             return Some(blocks_this_turn(g).iter().any(|(b, a)| {
                 (*b == id && other_ok(*a)) || (*a == id && other_ok(*b))
             }));
+        }
+        if let Some(json) = name.strip_prefix(SAME_NAME_AS_ANOTHER) {
+            let (all, sel): (crate::ability::Sel, crate::ability::Sel) =
+                serde_json::from_str(json).ok()?;
+            let me = &g.obj(id).chars;
+            let all = g.eval_sel_objects(&all, ctx);
+            let others = if all.contains(&id) {
+                all
+            } else {
+                g.eval_sel_objects(&sel, ctx)
+            };
+            return Some(
+                others
+                    .iter()
+                    .any(|x| *x != id && me.shares_name_with(&g.obj(*x).chars)),
+            );
         }
         if let Some(json) = name.strip_prefix(PROTECTED_BY) {
             let who: crate::ability::PlayerRef = serde_json::from_str(json).ok()?;
