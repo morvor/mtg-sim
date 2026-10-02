@@ -82,12 +82,16 @@ fn until_end_of_turn_cast_it_free(l: &str, b: &mut Builder) -> Option<Effect> {
     if !matches!(b.it, Sel::Var(vars::IT)) {
         return None;
     }
-    Some(Effect::GrantPlayPermission {
-        who: PlayerRef::You,
-        what: Sel::Var(vars::IT),
-        duration: Duration::EndOfTurn,
-        free: true,
-    })
+    // A permission to cast it, not to play a land (CR 305.9).
+    Some(
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: true,
+        }
+        .cast_only(),
+    )
 }
 
 inventory::submit! { EffectPattern { name: "r406 until end of turn, you may cast that card for free", priority: 80, parse: until_end_of_turn_cast_it_free } }
@@ -145,7 +149,8 @@ fn until_end_of_turn_cast_those_free(l: &str, prev: &mut Effect, b: &mut Builder
             what: Sel::All(what),
             duration: Duration::EndOfTurn,
             free: true,
-        },
+        }
+        .cast_only(),
     ]);
     true
 }

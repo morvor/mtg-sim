@@ -193,7 +193,9 @@ impl Game {
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0, false, None)
+        // What replacement effects do is part of the event they modify: no trigger check
+        // happens in the middle (see `trigger_timing`).
+        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None))
     }
 
     /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).

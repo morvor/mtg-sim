@@ -978,6 +978,12 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
+    if let Sel::Target(n) = to {
+        let spec = &mut b.targets[n as usize];
+        if spec.text == "any other target" {
+            super::patterns::damage_removal::other_than_damage_source(spec, &src);
+        }
+    }
     let to = other_than_subject(to, &src);
     Some(Effect::DealDamage {
         source: src,

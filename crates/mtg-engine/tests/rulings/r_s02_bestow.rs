@@ -227,6 +227,7 @@ fn bestow_cant_be_combined_with_casting_without_paying_the_mana_cost() {
         free: true,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     assert!(can_cast(&mut t, P0, c, CastMethod::Free));
     assert!(!can_cast(&mut t, P0, c, BESTOW));

@@ -84,11 +84,12 @@ fn exile_top(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-/// Whether the effect ends by exiling the top cards of your own library.
+/// Whether the effect ends by exiling the top cards of a library (yours, or the player's
+/// the text is about: "exile the top card of that player's library").
 fn exiles_your_top_cards(e: &Effect) -> bool {
     match e {
         Effect::Exile {
-            what: Sel::TopOfLibrary(PlayerRef::You, _),
+            what: Sel::TopOfLibrary(..),
             face_down: false,
             ..
         } => true,
@@ -104,7 +105,9 @@ fn exiles_your_top_cards(e: &Effect) -> bool {
 
 /// "you may play that card this turn", "until end of turn, you may play those cards",
 /// "until the end of your next turn, you may play that card", "you may play it until your
-/// next end step" after exiling the top cards of your library.
+/// next end step" after exiling the top cards of a library. "You may cast that card"
+/// (Ragavan, Nimble Pilferer) is a permission to cast it, not to play it as a land
+/// (CR 305.9; `PlayTerms::spells_only`).
 fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let (duration, r) = if let Some(r) = l.strip_prefix("until the end of your next turn, ") {
         (Some(Duration::UntilEndOfYourNextTurn), r)
@@ -116,8 +119,10 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     } else {
         (None, l)
     };
-    let Some(r) = r.strip_prefix("you may play ") else {
-        return false;
+    let (spells_only, r) = match (r.strip_prefix("you may play "), r.strip_prefix("you may cast ")) {
+        (Some(r), _) => (false, r),
+        (None, Some(r)) => (true, r),
+        (None, None) => return false,
     };
     let Some(r) = ["that card", "those cards", "them", "it", "the exiled card", "the exiled cards"]
         .iter()
@@ -145,15 +150,14 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         return false;
     }
     let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![
-        old,
-        Effect::GrantPlayPermission {
-            who: PlayerRef::You,
-            what: Sel::Var(vars::IT),
-            duration,
-            free: false,
-        },
-    ]);
+    let grant = Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: Sel::Var(vars::IT),
+        duration,
+        free: false,
+    };
+    let grant = if spells_only { grant.cast_only() } else { grant };
+    *prev = Effect::seq(vec![old, grant]);
     true
 }
 
@@ -175,12 +179,16 @@ fn may_cast_if_nonland(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             card.clone(),
             Filter::Not(Box::new(Filter::Type(crate::types::CardType::Land))),
         ),
-        then: Box::new(Effect::GrantPlayPermission {
-            who: PlayerRef::You,
-            what: card,
-            duration,
-            free: false,
-        }),
+        // A permission to cast it: not to play its land face (CR 305.9).
+        then: Box::new(
+            Effect::GrantPlayPermission {
+                who: PlayerRef::You,
+                what: card,
+                duration,
+                free: false,
+            }
+            .cast_only(),
+        ),
         otherwise: Box::new(Effect::Noop),
     };
     *prev = Effect::seq(vec![std::mem::take(prev), grant]);

@@ -831,7 +831,9 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// What's counted by "for each [...]" or "the number of [...]" (singular or plural
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
-    parse_for_each_inner(s, it).or_else(|| super::value_grammar::whole_count(s, it))
+    parse_for_each_inner(s, it)
+        .or_else(|| super::value_grammar::whole_count(s, it))
+        .or_else(|| super::cost_parts::paid_this_way(s))
 }
 
 fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
@@ -2089,6 +2091,13 @@ fn parse_predicate(
         } else {
             r
         };
+        // "is a colorless land with "{T}: Add {C}"": the types, and the quoted ability
+        // is granted (Imprisoned in the Moon, Minimus Containment).
+        if let Some((types, q)) = r.split_once(" with \"#") {
+            let mut out = type_predicate(types, subj)?;
+            out.extend(grant_list(&format!("\"#{q}"), subj, quotes, text, ctx)?);
+            return Some(out);
+        }
         return type_predicate(&r, subj);
     }
     Some(
@@ -2212,16 +2221,33 @@ fn parse_body(
         let used_x = std::cell::Cell::new(false);
         // "is an enchantment and loses all other card types": setting an object's card
         // types replaces the old ones anyway (CR 205.1a); the clause only says so.
-        let (rest, loses_other_types) = match [
-            " and loses all other card types",
-            " and it loses all other card types",
+        // "... and loses all other card types and abilities" (Imprisoned in the Moon),
+        // "..., and it loses all other abilities, card types, and creature types"
+        // (Darksteel Mutation), "... and it loses all other abilities" (Minimus
+        // Containment): the abilities this effect grants are kept (the removal is ordered
+        // first, see [`build`]).
+        let (rest, loses_other_types, loses_other_abilities) = match [
+            (" and loses all other card types", true, false),
+            (" and it loses all other card types", true, false),
+            (" and loses all other card types and abilities", true, true),
+            (" and it loses all other card types and abilities", true, true),
+            (
+                ", and it loses all other abilities, card types, and creature types",
+                true,
+                true,
+            ),
+            (", and it loses all other abilities", false, true),
+            (" and it loses all other abilities", false, true),
         ]
         .into_iter()
-        .find_map(|tail| rest.strip_suffix(tail))
+        .find_map(|(tail, ty, ab)| rest.strip_suffix(tail).map(|r| (r, ty, ab)))
         {
-            Some(r) => (r, true),
-            None => (rest, false),
+            Some(r) => r,
+            None => (rest, false, false),
         };
+        if loses_other_abilities {
+            outs.push(Out::Mod(Modification::RemoveAllAbilities));
+        }
         for p in split_predicates(rest) {
             match parse_predicate(p, &subject, x.as_ref(), &used_x, quotes, text, ctx) {
                 Some(v) => outs.extend(v),
@@ -2234,6 +2260,9 @@ fn parse_body(
         // A "where X is ..." that nothing used means X appeared somewhere we don't bind.
         if x.is_some() && !used_x.get() {
             ok = false;
+        }
+        if loses_other_types {
+            set_other_types_lost(&mut outs);
         }
         if loses_other_types
             && !outs
@@ -2251,6 +2280,42 @@ fn parse_body(
         }
     }
     None
+}
+
+/// "is an Insect artifact creature ... and it loses all other card types and creature
+/// types": the card types and creature types added replace the object's (CR 205.1a).
+fn set_other_types_lost(outs: &mut Vec<Out>) {
+    if outs
+        .iter()
+        .any(|o| matches!(o, Out::Mod(Modification::SetTypes { .. })))
+    {
+        return;
+    }
+    let Some(i) = outs
+        .iter()
+        .position(|o| matches!(o, Out::Mod(Modification::AddTypes(_))))
+    else {
+        return;
+    };
+    let Out::Mod(Modification::AddTypes(types)) = &outs[i] else {
+        return;
+    };
+    let types = types.clone();
+    let mut subtypes = Vec::new();
+    outs.retain(|o| match o {
+        Out::Mod(Modification::AddSubtypes(s)) => {
+            subtypes.extend(s.iter().cloned());
+            false
+        }
+        Out::Mod(Modification::RemoveAllCreatureTypes) => false,
+        _ => true,
+    });
+    if let Some(j) = outs
+        .iter()
+        .position(|o| matches!(o, Out::Mod(Modification::AddTypes(_))))
+    {
+        outs[j] = Out::Mod(Modification::SetTypes { types, subtypes });
+    }
 }
 
 /// "during your turn" / "during turns other than yours".
@@ -2523,6 +2588,19 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
             masked = format!("{b}{repl}");
         }
     }
+    // "Enchanted creature gets +1/+1 .... It's a Dragon in addition to its other types."
+    // (Draconic Destiny): "it" is the enchanted creature, a creature.
+    // (A quoted ability ends its sentence with the period inside the quotes.)
+    for it in ["\" it's ", "\" it is "] {
+        masked = masked.replace(it, &format!("\". {}", &it[2..]));
+    }
+    for subject in ["enchanted creature ", "equipped creature "] {
+        if masked.starts_with(subject) {
+            for it in [". it's ", ". it is "] {
+                masked = masked.replace(it, &format!(". {subject}is "));
+            }
+        }
+    }
     let mut sentences = masked.split(". ");
     let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
     let same_subject =
@@ -2787,6 +2865,11 @@ fn parse_player_body(s: &str) -> Option<Body> {
     let (who, rest) = [
         (
             "enchanted creature's controller ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
+        ),
+        // A Curse's player (CR 303.4: the Aura is attached to that player).
+        (
+            "enchanted player ",
             PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
         ),
         ("you ", PlayerFilter::You),

@@ -495,9 +495,16 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
                 PlayerRef::TriggerPlayer,
             ));
         }
-        let rest2 = rest
-            .strip_prefix("a ")
-            .or_else(|| rest.strip_prefix("an "))?;
+        // "another [quality] spell": a spell other than this object (e.g. a commander's
+        // eminence ability, which can trigger while it's in the command zone).
+        let (another, rest2) = match rest.strip_prefix("another ") {
+            Some(x) => (true, x),
+            None => (
+                false,
+                rest.strip_prefix("a ")
+                    .or_else(|| rest.strip_prefix("an "))?,
+            ),
+        };
         let rest2 = rest2
             .strip_suffix(" spell")
             .or_else(|| rest2.strip_suffix(" spells"))?;
@@ -506,6 +513,11 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             return None;
         }
         let f = permanent_spell(f);
+        let f = if another {
+            Filter::And(vec![Filter::Other, f])
+        } else {
+            f
+        };
         return Some((
             TriggerCond::CastSpell { who, filter: f },
             Sel::TriggerSpell,
