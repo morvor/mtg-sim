@@ -50,7 +50,14 @@ impl Renderer<'_> {
             "foretell:it becomes foretold" => "it becomes foretold".into(),
             "chaos ensues (effect)" => "chaos ensues".into(),
             "ascend:spell" => "ascend".into(),
-            "saddle:becomes saddled" => format!("{} becomes saddled", me(self)),
+            // A saddled permanent stays saddled until end of turn (CR 702.171b).
+            "saddle:becomes saddled" => {
+                let w = match self.each_target {
+                    Some(i) => self.target_mention(i, Case::Subj),
+                    None => me(self),
+                };
+                format!("{w} becomes saddled {{opt:until end of turn}}")
+            }
             "plot:becomes plotted" => "it becomes plotted".into(),
             "friend or foe:choose" => "for each player, choose friend or foe".into(),
             n if n.starts_with("cast from hand free with mana value at most:") => {
@@ -577,7 +584,10 @@ impl Renderer<'_> {
                         me(self),
                         number_word(d.parse().unwrap_or(0))
                     ),
-                    None => self.gap(format!("StaticEffect::Custom({n})")),
+                    None => match self.custom_static_more(n) {
+                        Some(s) => s,
+                        None => self.gap(format!("StaticEffect::Custom({n})")),
+                    },
                 }
             }
             n if n.starts_with("entering doesn't cause abilities to trigger:") => {

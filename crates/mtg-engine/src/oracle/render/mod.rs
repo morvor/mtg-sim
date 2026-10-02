@@ -12,6 +12,7 @@
 
 pub mod compare;
 mod costs;
+mod counter_replacements;
 mod custom;
 mod custom_effects;
 mod custom_filters;
@@ -21,11 +22,13 @@ mod effects;
 mod extremes;
 mod keywords;
 mod nouns;
+mod once_each_turn;
 mod outcomes;
 mod play_terms;
 mod players;
 mod statics;
 mod this_turn;
+mod trigger_causes;
 mod triggers;
 mod values;
 
@@ -557,6 +560,9 @@ pub struct Renderer<'a> {
     pub(crate) after_exile: bool,
     /// The target an effect done "for each" target is about (a single target).
     pub(crate) each_target: Option<u8>,
+    /// Targets remembered in variables, first mentioned through them: (variable, target
+    /// phrase, mentioned yet).
+    pub(crate) target_vars: Vec<(Var, String, bool)>,
 }
 
 impl<'a> Renderer<'a> {
@@ -592,6 +598,7 @@ impl<'a> Renderer<'a> {
             play_terms: None,
             after_exile: false,
             each_target: None,
+            target_vars: Vec::new(),
         }
     }
 
@@ -684,6 +691,7 @@ impl<'a> Renderer<'a> {
         self.self_salient = false;
         self.var_defs.clear();
         self.plural_vars.clear();
+        self.target_vars.clear();
         self.stored_values.clear();
         self.trigger_player = None;
         self.revealed_hand = false;

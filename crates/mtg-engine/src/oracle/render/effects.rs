@@ -438,6 +438,17 @@ impl Renderer<'_> {
                 self.var_defs.push((*var, sel.clone(), false));
                 String::new()
             }
+            // A target remembered for a delayed trigger ("Destroy target blocking creature
+            // at end of combat"): its first mention there is the target.
+            Effect::Store {
+                sel: Sel::Target(i),
+                var,
+            } if self.introduced.get(*i as usize) == Some(&false) => {
+                let t = self.target_phrase(*i);
+                self.introduced[*i as usize] = true;
+                self.target_vars.push((*var, t, false));
+                String::new()
+            }
             Effect::Store { sel, .. } => match sel {
                 Sel::Choose { chooser, .. } => {
                     let c = self.player(chooser, Case::Subj);
@@ -1369,6 +1380,30 @@ impl Renderer<'_> {
                 )
             }
             Effect::WithPlayTerms { terms, effect } => self.with_play_terms(terms, effect),
+            // "Each player chooses up to two creatures they control, then sacrifices the
+            // rest."
+            Effect::KeepAndSacrificeRest {
+                who,
+                among,
+                keep,
+                up_to: true,
+            } if keep
+                .iter()
+                .all(|k| format!("{k:?}") == format!("{among:?}")) =>
+            {
+                let w = self.player(who, Case::Subj);
+                let n = self.noun(among, Num::Many);
+                let k = number_word(keep.len() as i32);
+                let vp = format!("choose up to {k} {n} they control, then sacrifice the rest");
+                if w == "you" {
+                    vp.replace(" they control", " you control")
+                } else {
+                    format!(
+                        "{w} {}",
+                        third_person(&vp).replacen(", then sacrifice ", ", then sacrifices ", 1)
+                    )
+                }
+            }
             Effect::KeepAndSacrificeRest { up_to: true, .. } => {
                 self.gap("keep up to some permanents, sacrifice the rest")
             }
@@ -1491,7 +1526,15 @@ impl Renderer<'_> {
                     sub.as_deref(),
                     &spec.options,
                 );
-                if spec.undo {
+                // "Each suspected creature is no longer suspected" (CR 701.60a).
+                if spec.undo && spec.action == KeywordAction::Suspect {
+                    let w = self.sel(&spec.what, Case::Subj);
+                    s = if w.contains(['{', '|', '}']) {
+                        format!("{w} is no longer suspected")
+                    } else {
+                        format!("{{alt:{w} is no longer suspected|{w} becomes no longer suspected|have {w} become no longer suspected}}")
+                    };
+                } else if spec.undo {
                     s = format!("{s} (undo)");
                     s = self.gap(format!("keyword action undo: {s}"));
                 }

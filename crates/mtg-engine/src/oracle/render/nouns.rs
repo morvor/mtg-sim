@@ -332,6 +332,38 @@ impl Renderer<'_> {
                         _ => None,
                     }
                 };
+                // "total power and toughness": the sum of an object's power and toughness.
+                let total = |v: &Value| -> Option<Option<Sel>> {
+                    let Value::Sum(parts) = v else {
+                        return None;
+                    };
+                    match parts.as_slice() {
+                        [Value::PowerOf(p), Value::ToughnessOf(t)]
+                            if format!("{p:?}") == format!("{t:?}") =>
+                        {
+                            let tested =
+                                matches!(p.as_ref(), Sel::Var(crate::ability::vars::TESTED));
+                            Some((!tested).then(|| (**p).clone()))
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(None) = total(a) {
+                    let w = match (total(b), c) {
+                        // "with the same total power and toughness" (as the object named).
+                        (Some(Some(other)), Cmp::Eq) => {
+                            let o = self.sel(&other, Case::Obj);
+                            format!("with the same total power and toughness {{opt:as {o}}}")
+                        }
+                        (None, _) => {
+                            let v = self.value(b);
+                            format!("with total power and toughness {}", cmp_phrase(*c, &v))
+                        }
+                        _ => self.gap("a comparison of values of the object"),
+                    };
+                    np.post.push(w);
+                    return;
+                }
                 let w = match (own(a), own(b)) {
                     (Some(x), Some(y)) => {
                         format!("with {x} {}", cmp_phrase(*c, &format!("its {y}")))

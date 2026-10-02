@@ -392,6 +392,15 @@ impl Renderer<'_> {
                 let s = self.var_defs[i].1.clone();
                 self.sel(&s, case)
             }
+            Sel::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                decline(self.target_vars[i].1.clone(), case)
+            }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED => {
@@ -626,6 +635,15 @@ impl Renderer<'_> {
                     Case::Obj => "{alt:that player|them}".into(),
                     Case::Poss => "{alt:that player's|their}".into(),
                 }
+            }
+            PlayerRef::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                self.target_vars[i].1.clone()
             }
             PlayerRef::Var(_) => "that player".into(),
             PlayerRef::ActivePlayer => "that player".into(),

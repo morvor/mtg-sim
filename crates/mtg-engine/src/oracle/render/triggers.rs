@@ -805,6 +805,12 @@ impl Renderer<'_> {
             }
             // "Whenever ~ attacks while you control two or more artifacts".
             TriggerCond::Where { trigger, cond } => {
+                // "Whenever an opponent mills a nonland card", "whenever an opponent draws a
+                // card except the first one they draw in each of their draw steps"
+                // (`trigger_causes.rs`).
+                if let Some((s, vp)) = self.trigger_with_cause(trigger, cond, &det) {
+                    return Ev::new(s, vp);
+                }
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);
                 Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
