@@ -1009,6 +1009,20 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             return None;
         }
     }
+    // "the number of cards looked at while scrying this way" in a "whenever you scry"
+    // trigger: how many cards the player looked at (CR 701.22a, 701.22d).
+    if b.in_trigger {
+        for p in [
+            "cards looked at while scrying this way",
+            "card looked at while scrying this way",
+        ] {
+            if let Some(rest) = r.strip_prefix(p) {
+                if word_end(rest) {
+                    return Some((Value::EventAmount, rest.to_string()));
+                }
+            }
+        }
+    }
     // "for each 1 life you lost" in a "whenever you lose life" trigger: the amount of
     // that life loss (or gain), counted in groups of N.
     if b.in_trigger {

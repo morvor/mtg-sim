@@ -318,3 +318,162 @@ fn removal_that_scries_does_nothing_if_its_target_is_illegal() {
         }
     }
 }
+
+/// The `max` of the target choices asked of `p` since decision `from`.
+fn target_maxes(t: &TestGame, p: PlayerId, from: usize) -> Vec<u32> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseTargets { max, .. } if *q == p => Some(*max),
+            _ => None,
+        })
+        .collect()
+}
+
+/// P0's library becomes exactly `n` Hill Giants.
+fn short_library(t: &mut TestGame, n: usize) {
+    t.g.player_mut(P0).library.clear();
+    giants(t, P0, n);
+}
+
+#[test]
+fn celeborn_scries_once_per_attack_and_grows_by_the_cards_looked_at() {
+    cr!("508.1", "603.2c", "701.22a", "701.22d");
+    ruling!("Celeborn the Wise", "Celeborn the Wise's first ability has you scry 1 just once whenever you attack with one or more Elves, no matter how many Elves you attack with and no matter how many players you attack.");
+    supported("Celeborn the Wise");
+    // Celeborn and two Llanowar Elves attack two players.
+    let mut t = TestGame::new(3);
+    giants(&mut t, P0, 3);
+    let celeborn = t.battlefield(P0, "Celeborn the Wise");
+    let a = t.battlefield(P0, "Llanowar Elves");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    let from = t.asked().len();
+    attack_with(
+        &mut t,
+        &[
+            (celeborn, Entity::Player(P1)),
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P2)),
+        ],
+    );
+    t.resolve_all();
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+    // Its last ability: +1/+1 for the one card looked at.
+    assert_eq!(t.pt(celeborn), (4, 4));
+    // Attacking with no Elf doesn't trigger it.
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 3);
+    t.battlefield(P0, "Celeborn the Wise");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let from = t.asked().len();
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(scry_sizes(&t, P0, from).is_empty());
+}
+
+#[test]
+fn scry_triggers_count_the_cards_actually_looked_at() {
+    cr!("701.22a", "701.22d", "609.3");
+    ruling!("Celeborn the Wise", "Celeborn the Wise's last ability cares about the number of cards you actually looked at. For example, if you were supposed to scry 3 but only had two cards in your library, Celeborn would get +2/+2.");
+    ruling!("Elvish Mariner", "Elvish Mariner's last ability cares about the number of cards you actually looked at. For example, if you were supposed to scry 3 but only had two cards in your library, X would be 2.");
+    supported("Celeborn the Wise");
+    supported("Elvish Mariner");
+    supported("Augury Owl");
+    for lib in [2usize, 5] {
+        let looked = lib.min(3);
+        // Celeborn: Augury Owl's "When this creature enters, scry 3."
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        short_library(&mut t, lib);
+        let celeborn = t.battlefield(P0, "Celeborn the Wise");
+        cast(&mut t, P0, "Augury Owl", &[]);
+        let from = t.asked().len();
+        t.resolve_all();
+        assert_eq!(scry_sizes(&t, P0, from), vec![looked]);
+        let n = looked as i32;
+        assert_eq!(t.pt(celeborn), (3 + n, 3 + n), "library {lib}");
+        // Elvish Mariner: tap up to X target nonland permanents.
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        short_library(&mut t, lib);
+        t.battlefield(P0, "Elvish Mariner");
+        let foes: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P1, "Grizzly Bears")).collect();
+        t.battlefield(P1, "Forest");
+        let chosen: Vec<Entity> = foes[..looked].iter().map(|o| Entity::Object(*o)).collect();
+        t.answer_targets(P0, &chosen);
+        cast(&mut t, P0, "Augury Owl", &[]);
+        let from = t.asked().len();
+        t.resolve_all();
+        assert_eq!(target_maxes(&t, P0, from), vec![looked as u32], "library {lib}");
+        let tapped = foes.iter().filter(|o| t.obj(**o).tapped).count();
+        assert_eq!(tapped, looked);
+    }
+}
+
+#[test]
+fn elvish_mariner_attack_scry_taps_one() {
+    cr!("508.1m", "701.22d");
+    supported("Elvish Mariner");
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 3);
+    let mariner = t.battlefield(P0, "Elvish Mariner");
+    let foe = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[foe.into()]);
+    attack_with(&mut t, &[(mariner, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(t.obj(foe).tapped);
+}
+
+#[test]
+fn elrond_puts_counters_on_up_to_x_targets_and_draws_when_they_are_targeted() {
+    cr!("701.22d", "603.2", "115.1");
+    supported("Elrond, Master of Healing");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    giants(&mut t, P0, 5);
+    t.battlefield(P0, "Elrond, Master of Healing");
+    let mine: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let chosen: Vec<Entity> = mine[..3].iter().map(|o| Entity::Object(*o)).collect();
+    t.answer_targets(P0, &chosen);
+    cast(&mut t, P0, "Augury Owl", &[]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(target_maxes(&t, P0, from), vec![3]);
+    let with: Vec<u32> = mine
+        .iter()
+        .map(|o| t.counters(*o, mtg_engine::types::counters::PLUS1))
+        .collect();
+    assert_eq!(with, vec![1, 1, 1, 0]);
+    // An opponent targets a creature with a counter: P0 may draw. Not one without.
+    for (target, draws) in [(mine[0], true), (mine[3], false)] {
+        let hand = t.hand_size(P0);
+        t.answer_yes(P0, true);
+        t.set_step(P1, Step::PrecombatMain);
+        cast(&mut t, P1, "Shock", &[target.into()]);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + draws as usize);
+    }
+}
+
+#[test]
+fn arboreal_alliance_populates_when_you_attack_with_elves() {
+    cr!("701.36a", "508.1");
+    // Its first ability ("create an X/X green Treefolk creature token") isn't compiled;
+    // the attack trigger is.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Arboreal Alliance");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let token = crate::r_s02_common::create_token(&mut t, P0, "Soldier");
+    for (attacker, populates) in [(bears, false), (elf, true)] {
+        let before = tokens(&t, P0).len();
+        attack_with(&mut t, &[(attacker, Entity::Player(P1))]);
+        t.resolve_all();
+        assert_eq!(tokens(&t, P0).len(), before + populates as usize);
+        t.advance_to(P0, Step::Upkeep);
+        t.advance_to(P0, Step::PrecombatMain);
+    }
+    let copies: Vec<ObjectId> = tokens(&t, P0).into_iter().filter(|o| *o != token).collect();
+    assert_eq!(copies.len(), 1);
+    assert_eq!(t.obj(copies[0]).chars.name, t.obj(token).chars.name);
+}
