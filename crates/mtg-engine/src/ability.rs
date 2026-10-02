@@ -1097,6 +1097,9 @@ pub enum Filter {
     SharesColor(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
+    /// The number of counters of a kind (of all kinds: None) on it compared with a value
+    /// ("with three or more +1/+1 counters on it", "with exactly one tide counter on it").
+    CounterCount(Option<CounterKind>, Cmp, Box<Value>),
     /// Has at least one ability (for "creature with no abilities" use Not).
     HasAbilities,
     /// The source object itself.

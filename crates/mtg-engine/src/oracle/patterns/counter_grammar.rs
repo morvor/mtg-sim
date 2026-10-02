@@ -649,3 +649,53 @@ fn remove_and_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counter grammar: remove counters and [that much]", priority: 60, parse: remove_and_that_much } }
+
+/// "three or more", "two or fewer", "exactly one", "one or more", "a", "an", "no": how
+/// many counters an object has, as a comparison.
+fn counter_amount(s: &str) -> Option<(Cmp, Value, &str)> {
+    if let Some(r) = s.strip_prefix("no ") {
+        return Some((Cmp::Eq, Value::c(0), r));
+    }
+    if let Some(r) = s.strip_prefix("exactly ") {
+        let (n, r) = parse_number(r)?;
+        return Some((Cmp::Eq, n, r));
+    }
+    let (n, r) = parse_number(s)?;
+    if let Some(r) = r.strip_prefix("or more ") {
+        return Some((Cmp::Ge, n, r));
+    }
+    if let Some(r) = r
+        .strip_prefix("or fewer ")
+        .or_else(|| r.strip_prefix("or less "))
+    {
+        return Some((Cmp::Le, n, r));
+    }
+    // "a +1/+1 counter on it": one or more.
+    if matches!(s.split(' ').next(), Some("a" | "an")) {
+        return Some((Cmp::Ge, Value::c(1), r));
+    }
+    None
+}
+
+/// After "with" / "without": "[amount] [kind] counter(s) on it/them" (CR 122). Returns
+/// the filter and the rest.
+pub fn counters_on(rest: &str, negate: bool) -> Option<(Filter, &str)> {
+    let (cmp, n, r) = match counter_amount(rest) {
+        Some(x) => x,
+        // "with counters on them", "with +1/+1 counters on them": one or more.
+        None => (Cmp::Ge, Value::c(1), rest),
+    };
+    let (kind, r) = counter_noun(r)?;
+    let tail = ["on it", "on them", "on him", "on her"]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))?;
+    if !(tail.is_empty() || tail.starts_with(' ') || tail.starts_with(',')) {
+        return None;
+    }
+    let f = match (cmp, &n) {
+        (Cmp::Ge, Value::Const(1)) => Filter::HasCounter(kind),
+        (Cmp::Eq, Value::Const(0)) => Filter::not(Filter::HasCounter(kind)),
+        _ => Filter::CounterCount(kind, cmp, Box::new(n)),
+    };
+    Some((if negate { Filter::not(f) } else { f }, tail))
+}
