@@ -10,7 +10,6 @@ use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
-use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -351,5 +350,4 @@ fn esperzoa_returns_itself_if_its_the_only_artifact() {
     t.resolve_all();
     assert!(t.on_battlefield(e));
     assert_eq!(t.zone(o), Zone::Hand(P0));
-    let _ = Step::Upkeep;
 }
