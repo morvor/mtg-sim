@@ -526,3 +526,23 @@ fn uncage_the_menagerie_finds_creatures_with_mana_value_x_and_different_names() 
     assert!(t.in_hand(P0, "Grizzly Bears"));
     let _ = (ogre, elf);
 }
+
+#[test]
+fn booby_trap_names_a_card_other_than_a_basic_land() {
+    cr!("201.4", "607.5a");
+    let mut t = TestGame::new(2);
+    // A basic land card's name isn't a legal choice: nothing is named.
+    t.answer(P0, DecisionKind::Name, Answer::Text("Forest".into()));
+    let a = t.enter(P0, "Booby Trap");
+    assert_eq!(t.obj_now(a).choices.card_name.as_deref(), Some(""));
+    // A nonbasic land's name is.
+    t.answer(P0, DecisionKind::Name, Answer::Text("Wasteland".into()));
+    let b = t.enter(P0, "Booby Trap");
+    assert_eq!(t.obj_now(b).choices.card_name.as_deref(), Some("Wasteland"));
+    t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
+    let c = t.enter(P0, "Booby Trap");
+    assert_eq!(
+        t.obj_now(c).choices.card_name.as_deref(),
+        Some("Grizzly Bears")
+    );
+}
