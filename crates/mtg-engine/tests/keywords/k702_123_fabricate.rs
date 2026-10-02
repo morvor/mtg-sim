@@ -85,11 +85,11 @@ fn each_instance_of_fabricate_triggers_separately() {
         Some((1, 1)),
         "Fabricate 1\nFabricate 2",
     );
-    let id = t.g.create_card_object(std::sync::Arc::new(def), P0, Zone::Nowhere);
-    let id = t
-        .g
-        .move_object(id, Zone::Battlefield, events::MoveCause::Effect, Some(P0))
-        .unwrap();
+    let id =
+        t.g.create_card_object(std::sync::Arc::new(def), P0, Zone::Nowhere);
+    let id =
+        t.g.move_object(id, Zone::Battlefield, events::MoveCause::Effect, Some(P0))
+            .unwrap();
     t.settle();
     assert_eq!(on_stack(&t, "Fabricate 1"), 1);
     assert_eq!(on_stack(&t, "Fabricate 2"), 1);
@@ -107,7 +107,7 @@ fn each_instance_of_fabricate_triggers_separately() {
 
 #[test]
 fn if_counters_cant_be_put_on_it_you_create_servos_without_being_asked() {
-    cr!("702.123a", "614.1");
+    cr!("702.123a");
     ruling!(
         "Angel of Invention",
         "If you can't put +1/+1 counters on the creature for any reason as fabricate resolves"

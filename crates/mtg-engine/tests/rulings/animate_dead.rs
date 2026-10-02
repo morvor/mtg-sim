@@ -58,7 +58,10 @@ fn animate_dead_enters_attached_to_the_card_then_returns_it_and_attaches_again()
     assert!(t.on_battlefield(ad));
     assert_eq!(t.obj_now(ad).attached_to, Some(Entity::Object(bears)));
     assert_eq!(t.zone(bears), Zone::Graveyard(P1));
-    assert_eq!(enchant_text(&t, ad), vec!["enchant creature card in a graveyard"]);
+    assert_eq!(
+        enchant_text(&t, ad),
+        vec!["enchant creature card in a graveyard"]
+    );
     // Its enters ability returns the card under P0's control and attaches the Aura to the
     // new object.
     t.resolve_all();
@@ -174,10 +177,9 @@ fn if_the_enchanted_card_leaves_the_graveyard_the_aura_is_put_into_the_graveyard
     let bears = t.graveyard(P1, "Grizzly Bears");
     let ad = cast_aura_on(&mut t, "Animate Dead", 2, bears);
     // The card is exiled in response to the enters ability.
-    let exiled = t
-        .g
-        .move_object(bears, Zone::Exile, events::MoveCause::Effect, Some(P1))
-        .unwrap();
+    let exiled =
+        t.g.move_object(bears, Zone::Exile, events::MoveCause::Effect, Some(P1))
+            .unwrap();
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Animate Dead"));
     assert_eq!(t.zone(exiled), Zone::Exile);
@@ -273,13 +275,12 @@ fn necromancy_cast_at_instant_speed_is_sacrificed_at_cleanup() {
     let n = t.hand(P0, "Necromancy");
     t.g.turn.priority = Some(P0);
     // "You may cast this spell as though it had flash."
-    let m = t
-        .g
-        .cast_options(P0, n)
-        .into_iter()
-        .find(|o| o.flash)
-        .expect("flash option")
-        .method;
+    let m =
+        t.g.cast_options(P0, n)
+            .into_iter()
+            .find(|o| o.flash)
+            .expect("flash option")
+            .method;
     t.cast(P0, n).method(m).go();
     t.resolve();
     t.answer_targets(P0, &[Entity::Object(bears)]);
@@ -294,7 +295,7 @@ fn necromancy_cast_at_instant_speed_is_sacrificed_at_cleanup() {
 
 #[test]
 fn necromancy_makes_the_choices_a_card_needs_as_it_enters() {
-    cr!("614.12", "707.9", "607.2c");
+    cr!("614.12", "607.2c");
     ruling!(
         "Necromancy",
         "When putting a card onto the battlefield that requires a definition for its value or some other choice, you do what is needed to define the value or make the choice."
@@ -340,4 +341,48 @@ fn dance_of_the_dead_untaps_the_creature_if_its_controller_pays() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert!(!t.obj_now(now).tapped, "{}", t.dump_log());
+}
+
+#[test]
+fn enchanted_creature_gets_minus_one_only_once_its_a_creature_on_the_battlefield() {
+    // "Enchanted creature" means a creature permanent (CR 109.2): the static ability
+    // doesn't change the creature card the Aura enchants in the graveyard.
+    cr!("109.2", "613.4c");
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    let ad = cast_aura_on(&mut t, "Animate Dead", 2, bears);
+    t.settle();
+    assert_eq!(t.obj_now(ad).attached_to, Some(Entity::Object(bears)));
+    assert_eq!(t.pt(bears), (2, 2));
+    t.resolve_all();
+    assert_eq!(t.pt(t.g.current(bears)), (1, 2));
+}
+
+#[test]
+fn animate_dead_put_onto_the_battlefield_by_another_effect_enchants_a_card_its_controller_chooses()
+{
+    // Replenish returns Animate Dead without saying what it enchants: its controller
+    // chooses a creature card in a graveyard as it enters (CR 303.4f), and its enters
+    // ability returns that card.
+    cr!("303.4f", "303.4a", "702.5a");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Animate Dead");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    let serra = t.graveyard(P1, "Serra Angel");
+    t.lands(P0, "Plains", 4);
+    let r = t.hand(P0, "Replenish");
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, r).go();
+    t.answer_choose(P0, &[Entity::Object(serra)]);
+    t.resolve();
+    t.settle();
+    let ad = t.named_on_battlefield("Animate Dead");
+    assert_eq!(ad.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.obj_now(ad[0]).attached_to, Some(Entity::Object(serra)));
+    t.resolve_all();
+    let now = t.g.current(serra);
+    assert!(t.on_battlefield(now));
+    assert_eq!(t.obj_now(now).controller, P0);
+    assert_eq!(t.obj_now(ad[0]).attached_to, Some(Entity::Object(now)));
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
 }

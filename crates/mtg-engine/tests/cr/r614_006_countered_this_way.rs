@@ -152,6 +152,21 @@ fn delay_exiles_a_face_down_spell_face_up() {
     assert!(!t.obj_now(exiled).face_down);
     assert_eq!(t.counters(exiled, counters::TIME), 3);
     assert!(has_suspend(&t, exiled));
+    // "It can't be cast face down when casting it without paying its mana cost": with the
+    // last counter it's cast face up, and resolves as a face-up Exalted Angel.
+    for _ in 0..3 {
+        t.advance_to(P1, Step::Upkeep);
+        t.resolve_all();
+        t.advance_to(P0, Step::Upkeep);
+    }
+    t.advance_to(P1, Step::Upkeep);
+    t.answer_yes(P1, true);
+    t.resolve_all();
+    let now = t.g.current(angel);
+    assert!(t.on_battlefield(now), "{}", t.dump_log());
+    assert!(!t.obj_now(now).face_down);
+    assert_eq!(t.obj_now(now).chars.name.as_str(), "Exalted Angel");
+    assert_eq!(t.pt(now), (4, 5));
 }
 
 #[test]
