@@ -98,7 +98,12 @@ fn parse_counted(c: &str) -> Option<Condition> {
         }
         return Some(Condition::Not(Box::new(Condition::Exists(f.you_control()))));
     }
-    let r = c.strip_prefix("there are ")?;
+    // "there are N or more creature cards in your graveyard", or the inverted "N or more
+    // creature cards are in your graveyard" (Mortal Combat).
+    let (r, inverted) = match c.strip_prefix("there are ") {
+        Some(r) => (r, false),
+        None => (c, true),
+    };
     let (n, r) = parse_number(r)?;
     let r = r.trim_start().strip_prefix("or more ")?;
     let in_gy = || {
@@ -107,7 +112,7 @@ fn parse_counted(c: &str) -> Option<Condition> {
             Filter::OwnedBy(PlayerRel::You),
         ])
     };
-    if r == "card types among cards in your graveyard" {
+    if !inverted && r == "card types among cards in your graveyard" {
         // CR 205.2a card types; delirium-style counts.
         return Some(Condition::Compare(
             Value::CardTypesAmong(in_gy()),
@@ -115,7 +120,11 @@ fn parse_counted(c: &str) -> Option<Condition> {
             n,
         ));
     }
-    let phrase = r.strip_suffix(" in your graveyard")?;
+    let phrase = if inverted {
+        r.strip_suffix(" are in your graveyard")?
+    } else {
+        r.strip_suffix(" in your graveyard")?
+    };
     let filter = if phrase == "cards" {
         Filter::Any
     } else {
@@ -148,6 +157,7 @@ mod tests {
             "you gained 3 or more life this turn",
             "there are four or more card types among cards in your graveyard",
             "there are three or more creature cards in your graveyard",
+            "twenty or more creature cards are in your graveyard",
             "you control no untapped lands",
         ] {
             assert!(parse_condition(c).is_some(), "{c}");

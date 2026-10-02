@@ -262,12 +262,17 @@ pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
     // (super)type the card must have, or with "non", must not have.
     let type_line = type_line.to_lowercase();
     let has = |w: &str| type_line.split_whitespace().any(|t| t == w);
-    filter.is_none_or(|f| {
+    let matches = |f: &str| {
         f.split([',', ' '])
             .filter(|w| !w.is_empty())
             .all(|w| match w.strip_prefix("non") {
                 Some(t) => !has(t),
                 None => has(w),
             })
+    };
+    // "not:basic land": a name other than a basic land card name.
+    filter.is_none_or(|f| match f.strip_prefix("not:") {
+        Some(inner) => !matches(inner),
+        None => matches(f),
     })
 }

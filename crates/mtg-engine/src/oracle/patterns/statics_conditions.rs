@@ -283,6 +283,18 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
             PlayerFilter::GraveyardSize(cmp, Box::new(n)),
         ));
     }
+    // "there are ten or more cards in a single graveyard" (Swimmer in Nightmares): some
+    // player's graveyard.
+    if let Some(r) = c.strip_prefix("there are ") {
+        if let Some((cmp, n, tail)) = amount_cmp(r) {
+            if end(tail) == "cards in a single graveyard" {
+                return Some(Condition::PlayerMatches(
+                    PlayerRef::EachPlayer,
+                    PlayerFilter::GraveyardSize(cmp, Box::new(n)),
+                ));
+            }
+        }
+    }
     // "there is a Lesson card in your graveyard", "there's a ...", "a Warrior card is in
     // your graveyard", "an instant card and a sorcery card are in your graveyard".
     if let Some(r) = c
@@ -488,6 +500,29 @@ fn control_condition(c: &str) -> Option<Condition> {
         let f = phrase(&article(r)?)?;
         return Some(Condition::Not(Box::new(Condition::Exists(f.you_control()))));
     }
+    // "defending player controls the most creatures or is tied for the most" (Hooded
+    // Horror): no player controls more of them.
+    if let Some(r) = c
+        .strip_prefix("defending player controls the most ")
+        .and_then(|r| r.strip_suffix(" or is tied for the most"))
+    {
+        let f = phrase(r)?;
+        return Some(Condition::Compare(
+            Value::Count(Filter::and(vec![
+                f.clone(),
+                Filter::ControlledBy(PlayerRel::Defending),
+            ])),
+            Cmp::Ge,
+            Value::OverPlayers(
+                AggOp::Max,
+                PlayerFilter::Any,
+                Box::new(Value::Count(Filter::and(vec![
+                    f,
+                    Filter::ControlledBy(PlayerRel::Iterated),
+                ]))),
+            ),
+        ));
+    }
     for (p, rel) in [
         ("an opponent controls ", PlayerRel::Opponent),
         ("defending player controls ", PlayerRel::Defending),
@@ -495,10 +530,12 @@ fn control_condition(c: &str) -> Option<Condition> {
         if let Some(r) = c.strip_prefix(p) {
             if let Some((cmp, n, rest)) = amount_cmp(r) {
                 let f = phrase(rest)?;
-                // "an opponent controls N or more X" needs one opponent to control them
-                // all; that's only expressible for a single opponent.
+                // "an opponent controls N or more X": one opponent controls them all.
                 if rel != PlayerRel::Defending {
-                    return None;
+                    return Some(Condition::PlayerMatches(
+                        PlayerRef::EachOpponent,
+                        PlayerFilter::Controls(Box::new(f), cmp, Box::new(n)),
+                    ));
                 }
                 return Some(Condition::Compare(
                     Value::Count(Filter::and(vec![f, Filter::ControlledBy(rel)])),
