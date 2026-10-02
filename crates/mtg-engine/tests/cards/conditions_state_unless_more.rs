@@ -377,3 +377,165 @@ fn barbarian_bully_any_player_may_take_the_damage() {
     assert_eq!(t.life(P1), 16);
     assert_eq!(t.pt(bully), (2, 2));
 }
+
+#[test]
+fn nils_taxes_each_creature_by_its_own_counters() {
+    cr!("508.1d", "508.1h");
+    ruling!(
+        "Nils, Discipline Enforcer",
+        "All counters on a creature are considered when determining the value of X, not only +1/+1 counters."
+    );
+    assert_supported(&["Nils, Discipline Enforcer"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Nils, Discipline Enforcer");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Gray Ogre");
+    let c = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.g.add_counters(Entity::Object(b), "-1/-1", 1, None);
+    t.g.add_counters(Entity::Object(b), "stun", 2, None);
+    let mv = |t: &TestGame, o| {
+        mtg_engine::combat::required_attack_cost(&t.g, o, Entity::Player(P1))
+            .and_then(|c| c.mana)
+            .map(|m| m.mana_value())
+    };
+    assert_eq!(mv(&t, a), Some(1));
+    assert_eq!(mv(&t, b), Some(3));
+    assert_eq!(mv(&t, c), None, "no counters: no tax");
+}
+
+#[test]
+fn mishras_war_machine_taps_only_if_it_dealt_damage() {
+    cr!("118.12a", "120.4b");
+    ruling!(
+        "Mishra's War Machine",
+        "You can't avoid taking damage if you have no cards to discard."
+    );
+    assert_supported(&["Mishra's War Machine"]);
+    // No cards to discard: 3 damage, and it taps.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Mishra's War Machine");
+    t.g.player_mut(P0).hand.clear();
+    t.set_step(P1, Step::End);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert!(t.obj_now(m).tapped);
+    // Discards: no damage, stays untapped.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Mishra's War Machine");
+    let card = t.hand(P0, "Grizzly Bears");
+    t.set_step(P1, Step::End);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(!t.obj_now(m).tapped);
+}
+
+#[test]
+fn whipgrass_entangler_cost_is_per_cleric_and_cumulative() {
+    cr!("508.1d", "509.1c");
+    ruling!(
+        "Whipgrass Entangler",
+        "If you use this ability on the same creature more than once, the cost is cumulative."
+    );
+    assert_supported(&["Whipgrass Entangler"]);
+    let mut t = TestGame::new(2);
+    let w = t.battlefield(P0, "Whipgrass Entangler");
+    t.lands(P0, "Plains", 4);
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    t.activate(P0, w, 0, &[Entity::Object(ogre)]).unwrap();
+    t.resolve_all();
+    // One Cleric on the battlefield (the Entangler): {1}.
+    let mv = |t: &TestGame| {
+        mtg_engine::combat::required_attack_cost(&t.g, ogre, Entity::Player(P0))
+            .and_then(|c| c.mana)
+            .map(|m| m.mana_value())
+    };
+    assert_eq!(mv(&t), Some(1));
+    t.activate(P0, w, 0, &[Entity::Object(ogre)]).unwrap();
+    t.resolve_all();
+    assert_eq!(mv(&t), Some(2));
+    let block = mtg_engine::combat::required_block_cost(&t.g, ogre);
+    assert_eq!(block.and_then(|c| c.mana).map(|m| m.mana_value()), Some(2));
+}
+
+#[test]
+fn reaper_of_night_flies_against_a_small_hand() {
+    cr!("603.4", "508.5");
+    ruling!(
+        "Reaper of Night // Harvest Fear",
+        "If the defending player has three or more cards in hand as Reaper of Night attacks, its ability won't trigger at all."
+    );
+    for (cards, flies) in [(2, true), (3, false)] {
+        let mut t = TestGame::new(2);
+        let r = t.battlefield(P0, "Reaper of Night // Harvest Fear");
+        t.g.player_mut(P1).hand.clear();
+        for _ in 0..cards {
+            t.hand(P1, "Grizzly Bears");
+        }
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(r, Entity::Player(P1))]),
+        );
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.advance_to_step(Step::DeclareBlockers);
+        t.resolve_all();
+        t.g.recompute();
+        assert_eq!(t.obj_now(r).has_keyword(KeywordKind::Flying), flies, "{cards} cards");
+    }
+}
+
+#[test]
+fn aerial_surveyor_searches_when_the_defender_has_more_lands() {
+    cr!("603.4", "508.5");
+    ruling!(
+        "Aerial Surveyor",
+        "the ability won't trigger at all unless the defending player controls more lands than you"
+    );
+    assert_supported(&["Aerial Surveyor"]);
+    // A Vehicle: crewed by the Bears before combat.
+    let crewed = |t: &mut TestGame| {
+        let s = t.battlefield(P0, "Aerial Surveyor");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.activate(P0, s, 0, &[]).unwrap();
+        t.resolve_all();
+        s
+    };
+    let mut t = TestGame::new(2);
+    let s = crewed(&mut t);
+    let plains = t.library_top(P0, "Plains");
+    t.lands(P1, "Forest", 1);
+    t.answer_choose(P0, &[Entity::Object(plains)]);
+    t.attack(&[(s, Entity::Player(P1))], &[]);
+    assert_eq!(t.named_on_battlefield("Plains").len(), 1);
+    // Equal lands: nothing.
+    let mut t = TestGame::new(2);
+    let s = crewed(&mut t);
+    t.library_top(P0, "Plains");
+    t.attack(&[(s, Entity::Player(P1))], &[]);
+    assert!(t.named_on_battlefield("Plains").is_empty());
+}
+
+#[test]
+fn beza_compares_with_each_opponent_separately() {
+    cr!("608.2h");
+    ruling!(
+        "Beza, the Bounding Spring",
+        "If you have fewer lands than one opponent and less life than another, for example, you'll get both of those bonuses."
+    );
+    assert_supported(&["Beza, the Bounding Spring"]);
+    let mut t = TestGame::new(3);
+    t.lands(P1, "Forest", 1);
+    t.g.player_mut(P2).life = 25;
+    t.enter(P0, "Beza, the Bounding Spring");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Treasure Token").len(), 1);
+    assert_eq!(t.life(P0), 24);
+    assert!(t.named_on_battlefield("Fish Token").is_empty());
+}

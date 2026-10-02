@@ -543,6 +543,55 @@ fn if_they_do_target(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { super::FollowupPattern { name: "unless grammar: if they do, [effect on the permanent or player]", priority: 140, apply: if_they_do_target } }
 
+/// "~ deals 3 damage to you unless you discard a card. If it deals damage to you this
+/// way, tap it.": the damage happened (the player didn't perform the alternative) and
+/// some of it was dealt (not all prevented, CR 120.4b).
+fn if_it_deals_damage_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if it deals damage to you this way, ") else {
+        return false;
+    };
+    let Effect::PayOptional {
+        who: PlayerRef::You,
+        then,
+        otherwise,
+        ..
+    } = &*prev
+    else {
+        return false;
+    };
+    if !matches!(**then, Effect::Noop)
+        || !matches!(
+            &**otherwise,
+            Effect::DealDamage {
+                source: Sel::This,
+                to: Sel::Players(PlayerRef::You),
+                ..
+            }
+        )
+    {
+        return false;
+    }
+    let Some(e) = parse_clause(r, b) else {
+        return false;
+    };
+    let cond = Condition::And(vec![
+        Condition::Not(Box::new(Condition::PrevHappened)),
+        Condition::Compare(Value::Prev, Cmp::Gt, Value::c(0)),
+    ]);
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "unless grammar: if it deals damage to you this way, [effect]", priority: 140, apply: if_it_deals_damage_this_way } }
+
 /// A condition after "unless" with "they" as its subject, worded with "that player" for
 /// the referent condition grammar: "they control two or more basic lands" → "that player
 /// controls two or more basic lands".
@@ -776,6 +825,15 @@ fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) ->
         "enchanted creature" | "equipped creature" => {
             (Filter::AttachedToSource, Sel::AttachedTo, false)
         }
+        // "each creature with one or more counters on it": "that creature" in the cost is
+        // the creature that would attack (the restriction's affected object).
+        s if s.starts_with("each ") => {
+            let (f, plural, t) = parse_object_phrase(&s["each ".len()..])?;
+            if plural || !end(t).is_empty() {
+                return None;
+            }
+            (f, Sel::Var(vars::AFFECTED), false)
+        }
         s => {
             let (f, plural, t) = parse_object_phrase(s)?;
             if !plural || !end(t).is_empty() {
@@ -827,6 +885,10 @@ fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) ->
         }
     }
     let mut b = Builder::new(ctx);
+    if matches!(it, Sel::Var(_)) {
+        b.it = it.clone();
+        b.named.push(("that creature".into(), it.clone()));
+    }
     let cost = tax_cost(&action, where_x, &it, &mut b)?;
     if !b.targets.is_empty() {
         return None;
