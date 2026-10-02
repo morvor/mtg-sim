@@ -468,6 +468,9 @@ pub struct Renderer<'a> {
     /// Rendering a target's description right after the object itself was named (see
     /// [`Renderer::target_mention`]).
     pub(crate) self_before_target: bool,
+    /// The last instruction rendered was performed by a player other than you ("If they
+    /// do, ...").
+    pub(crate) last_actor_other: bool,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
     /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
@@ -536,6 +539,7 @@ impl<'a> Renderer<'a> {
             quote_depth: 0,
             granted_keyword: false,
             self_before_target: false,
+            last_actor_other: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
             other_salient: false,

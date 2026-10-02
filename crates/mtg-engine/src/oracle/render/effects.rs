@@ -240,6 +240,22 @@ impl Renderer<'_> {
 
     /// An effect as text (sentences separated by ". ").
     pub(crate) fn effect(&mut self, e: &Effect) -> String {
+        // Who performed the instruction an "if they do" after it refers to.
+        let actor_other = match e {
+            Effect::May { who, .. }
+            | Effect::PayOptional { who, .. }
+            | Effect::AsPlayer { who, .. } => Some(!matches!(who, PlayerRef::You)),
+            Effect::Seq(_) | Effect::If { .. } | Effect::Noop => None,
+            _ => Some(false),
+        };
+        let s = self.effect_inner(e);
+        if let Some(x) = actor_other {
+            self.last_actor_other = x;
+        }
+        s
+    }
+
+    fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
@@ -319,7 +335,12 @@ impl Renderer<'_> {
                 // ("target player loses 4 life").
                 let inner = self.effect(effect);
                 let inner = inner.strip_prefix("you ").unwrap_or(&inner);
-                let inner = format!(" {inner} ").replace(" your ", " their ");
+                let inner = format!(" {inner} ")
+                    .replace(" your ", " their ")
+                    .replace(" you control", " they control")
+                    .replace(" you own", " they own")
+                    .replace(" you do", " they do")
+                    .replace(" you don't", " they don't");
                 format!("{w} {}", third_person(inner.trim()))
             }
             // "... If [condition], repeat this process." (CR 608.2c)
@@ -1982,14 +2003,16 @@ impl Renderer<'_> {
                 format!("if you win, {t}")
             }
             Condition::PrevHappened => {
+                // "Counter target spell unless its controller pays {2}. If they do, ..."
+                let who = if self.last_actor_other { "they" } else { "you" };
                 let mut s = String::new();
                 if !then_empty {
                     let t = self.effect(then);
-                    s = format!("if you do, {t}");
+                    s = format!("if {who} do, {t}");
                 }
                 if !else_empty {
                     let o = self.effect(otherwise);
-                    let o = format!("if you don't, {o}");
+                    let o = format!("if {who} don't, {o}");
                     s = if s.is_empty() { o } else { format!("{s}. {o}") };
                 }
                 s
