@@ -129,6 +129,11 @@ pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     {
         return o.controller == p;
     }
+    // "Look at target face-down creature": once allowed, while it remains on the
+    // battlefield.
+    if o.zone == Zone::Battlefield && crate::zones::may_look(g, p, id) {
+        return true;
+    }
     matches!(o.zone, Zone::Stack | Zone::Battlefield) && o.controller == p
 }
 

@@ -644,3 +644,151 @@ fn p_face_up_or_down(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: [enter the battlefield] face up or face down", priority: 110, parse: p_face_up_or_down } }
+
+// ---------------------------------------------------------------------------
+// Manifesting and cloaking particular cards (CR 701.40, 701.58): "you manifest the top
+// card of that player's library", "cloak a card from your hand", "manifest a number of
+// cards from the top of your library equal to ..."
+// ---------------------------------------------------------------------------
+
+/// "[you] manifest|cloak [cards]" for cards the core keyword-action grammar doesn't name:
+/// the top card of another player's library (the manifested permanent is yours, CR
+/// 701.40a), a card from your hand (chosen as the instruction is performed), or a number
+/// of cards from the top of your library given by a value.
+fn p_manifest_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let (action, r) = if let Some(r) = l
+        .strip_prefix("manifest ")
+        .or_else(|| l.strip_prefix("manifests "))
+    {
+        (KeywordAction::Manifest, r)
+    } else {
+        let r = l.strip_prefix("cloak ").or_else(|| l.strip_prefix("cloaks "))?;
+        (KeywordAction::Cloak, r)
+    };
+    let (what, n) = if let Some(whose) = r.strip_prefix("the top card of ") {
+        let who = match whose {
+            "that player's library" | "their library" => b.it_player.clone(),
+            "target player's library" | "target opponent's library" => {
+                let (who, rest) = crate::oracle::effects::player_ref(
+                    whose.strip_suffix("'s library")?,
+                    b,
+                )?;
+                if !end(&rest).is_empty() {
+                    return None;
+                }
+                who
+            }
+            _ => return None,
+        };
+        if super::oracle_hardening_referents::is_no_player_referent(&who)
+            || matches!(who, PlayerRef::You)
+        {
+            return None;
+        }
+        (Sel::TopOfLibrary(who, Value::c(1)), Value::c(1))
+    } else if r == "a card from your hand" {
+        (
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Hand),
+                    Filter::OwnedBy(PlayerRel::You),
+                ]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+            Value::c(1),
+        )
+    } else if let Some(x) = r.strip_prefix("a number of cards from the top of your library equal to ")
+    {
+        let (n, rest) = super::value_grammar::parse_value(x, b)?;
+        if !end(&rest).is_empty() {
+            return None;
+        }
+        (Sel::None, n)
+    } else {
+        return None;
+    };
+    b.it = Sel::Var(crate::kwa::kvars::MANIFESTED);
+    Some(Effect::KeywordAction {
+        action,
+        who: PlayerRef::You,
+        what,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: manifest / cloak [particular cards]", priority: 110, parse: p_manifest_cards } }
+
+// ---------------------------------------------------------------------------
+// Looking at face-down permanents: "look at target face-down creature", "you may look at
+// each face-down creature that's attacking or blocking" (CR 708.5: otherwise only their
+// controllers may).
+// ---------------------------------------------------------------------------
+
+fn p_look_at_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    let l = l.strip_prefix("you may ").unwrap_or(l);
+    let r = l.strip_prefix("look at ")?;
+    let what = if r.starts_with("target ") {
+        let (spec, tail) = parse_target(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        match &spec.what {
+            TargetKind::Object(f) if names_face_down(f) => {}
+            _ => return None,
+        }
+        let text = r[..r.len() - tail.len()].trim().to_string();
+        Sel::Target(b.add_target(spec, &text))
+    } else {
+        let x = r.strip_prefix("each ").or_else(|| r.strip_prefix("all "))?;
+        // "... that's attacking or blocking": in combat.
+        let (x, in_combat) = match x
+            .strip_suffix(" that's attacking or blocking")
+            .or_else(|| x.strip_suffix(" that are attacking or blocking"))
+        {
+            Some(h) => (h, true),
+            None => (x, false),
+        };
+        let (mut f, _, tail) = parse_object_phrase(x)?;
+        if !end(tail).is_empty() || !names_face_down(&f) || f.zone().is_some() {
+            return None;
+        }
+        if in_combat {
+            f = Filter::and(vec![
+                f,
+                Filter::Or(vec![Filter::Attacking, Filter::Blocking]),
+            ]);
+        }
+        Sel::All(Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]))
+    };
+    Some(Effect::Seq(vec![
+        Effect::Store {
+            var: vars::IT,
+            sel: what,
+        },
+        Effect::Custom(crate::zones::MAY_LOOK_AT_EXILED.into()),
+    ]))
+}
+
+/// Whether the filter says its objects are face down.
+fn names_face_down(f: &Filter) -> bool {
+    match f {
+        Filter::FaceDown => true,
+        Filter::And(v) => v.iter().any(names_face_down),
+        _ => false,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: look at face-down permanents", priority: 110, parse: p_look_at_face_down } }

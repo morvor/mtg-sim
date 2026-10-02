@@ -609,25 +609,28 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
 // Face-down cards in exile (CR 406.3)
 // ---------------------------------------------------------------------------
 
-/// Whether `p` may look at the face-down card `id` in exile (CR 406.3).
+/// Whether `p` may look at the face-down card `id` in exile (CR 406.3), or at the
+/// face-down permanent `id` they don't control, having been allowed to look at it ("look
+/// at target face-down creature").
 pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     g.is_live(id)
-        && g.obj(id).zone == Zone::Exile
+        && matches!(g.obj(id).zone, Zone::Exile | Zone::Battlefield)
         && g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
 }
 
-/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3).
+/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), or at a
+/// face-down permanent while it remains on the battlefield.
 pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
     if !g.zones.may_look.contains(&(id, p)) {
         g.zones.may_look.push((id, p));
     }
-    // Permissions for cards that have left exile are gone for good.
+    // Permissions for objects that have left the zone are gone for good.
     let live: Vec<(ObjectId, PlayerId)> = g
         .zones
         .may_look
         .iter()
         .copied()
-        .filter(|(o, _)| g.is_live(*o) && g.obj(*o).zone == Zone::Exile)
+        .filter(|(o, _)| g.is_live(*o) && matches!(g.obj(*o).zone, Zone::Exile | Zone::Battlefield))
         .collect();
     g.zones.may_look = live;
 }
@@ -821,7 +824,9 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
         .map(|v| v.iter().filter_map(|e| e.object()).collect())
         .unwrap_or_default();
     for o in objs {
-        if g.obj(o).zone == Zone::Exile && g.obj(o).face_down {
+        // Face-down cards in exile; face-down permanents ("look at target face-down
+        // creature").
+        if matches!(g.obj(o).zone, Zone::Exile | Zone::Battlefield) && g.obj(o).face_down {
             allow_look(g, ctx.controller, o);
         }
     }

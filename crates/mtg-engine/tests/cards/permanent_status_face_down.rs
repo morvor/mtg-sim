@@ -536,3 +536,93 @@ fn deathmist_raptor_may_return_face_down() {
     assert!(t.on_battlefield(now));
     assert!(t.g.obj(now).face_down);
 }
+
+// ---------------------------------------------------------------------------
+// Manifesting and cloaking particular cards; looking at face-down permanents
+// ---------------------------------------------------------------------------
+
+#[test]
+fn manifest_and_look_cards_compile() {
+    assert_compiles(&[
+        "Thieving Amalgam",
+        "Orochi Soul-Reaver",
+        "Scroll of Fate",
+        "Omarthis, Ghostfire Initiate",
+        "Vannifar, Evolved Enigma",
+        "Smoke Teller",
+        "Aven Soulgazer",
+        "Revealing Wind",
+    ]);
+}
+
+#[test]
+fn thieving_amalgam_manifests_the_top_card_of_the_opponents_library() {
+    cr!("701.40a", "708.5");
+    ruling!(
+        "Thieving Amalgam",
+        "Your opponents can't look at the card they own that you manifested."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thieving Amalgam");
+    let top = t.library_top(P1, "Serra Angel");
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    let now = t.g.current(top);
+    assert!(t.on_battlefield(now));
+    let o = t.g.obj(now);
+    assert!(o.face_down);
+    assert_eq!(o.controller, P0);
+    assert_eq!(o.owner, P1);
+    assert_eq!(t.pt(now), (2, 2));
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, now));
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P1, now));
+}
+
+#[test]
+fn scroll_of_fate_manifests_a_card_from_your_hand() {
+    cr!("701.40a");
+    let mut t = TestGame::new(2);
+    let scroll = t.battlefield(P0, "Scroll of Fate");
+    let angel = t.hand(P0, "Serra Angel");
+    t.hand(P0, "Lightning Bolt");
+    t.answer_choose(P0, &[Entity::Object(angel)]);
+    t.activate(P0, scroll, 0, &[]).unwrap();
+    t.resolve_all();
+    let now = t.g.current(angel);
+    assert!(t.on_battlefield(now));
+    assert!(t.g.obj(now).face_down);
+    assert_eq!(t.pt(now), (2, 2));
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+}
+
+#[test]
+fn omarthis_manifests_as_many_cards_as_it_had_counters() {
+    cr!("701.40e", "603.10a");
+    let mut t = TestGame::new(2);
+    let omarthis = t.battlefield(P0, "Omarthis, Ghostfire Initiate");
+    t.g.add_counters(Entity::Object(omarthis), "+1/+1", 3, None);
+    t.g.flush_events();
+    let before = t.g.permanents().filter(|o| o.face_down).count();
+    destroy(&mut t, omarthis);
+    t.resolve_all();
+    let face_down = t.g.permanents().filter(|o| o.face_down).count();
+    assert_eq!(face_down - before, 3);
+}
+
+#[test]
+fn smoke_teller_looks_at_target_face_down_creature() {
+    cr!("708.5");
+    let mut t = TestGame::new(2);
+    let teller = t.battlefield(P0, "Smoke Teller");
+    let theirs = t.battlefield(P1, "Serra Angel");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, theirs));
+    t.g.recompute();
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P0, theirs));
+    t.lands(P0, "Island", 2);
+    t.activate(P0, teller, 0, &[Entity::Object(theirs)]).unwrap();
+    t.resolve_all();
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, theirs));
+    // Nothing else changes: it's still a face-down 2/2.
+    assert!(t.g.obj(theirs).face_down);
+    assert_eq!(t.pt(theirs), (2, 2));
+}
