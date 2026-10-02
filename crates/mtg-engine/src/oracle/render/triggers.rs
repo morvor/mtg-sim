@@ -743,6 +743,47 @@ impl Renderer<'_> {
                     "to trigger",
                 )
             }
+            // "Whenever another creature you control leaves the battlefield without dying":
+            // to any zone but a graveyard (CR 700.4).
+            TriggerCond::AnyOf(v)
+                if v.len() == 4
+                    && v.iter().all(|x| {
+                        matches!(
+                            x,
+                            TriggerCond::ZoneChange {
+                                from: Some(ZoneKind::Battlefield),
+                                to: Some(_),
+                                ..
+                            }
+                        )
+                    })
+                    && {
+                        let mut zones: Vec<String> = v
+                            .iter()
+                            .filter_map(|x| match x {
+                                TriggerCond::ZoneChange { to: Some(z), .. } => {
+                                    Some(format!("{z:?}"))
+                                }
+                                _ => None,
+                            })
+                            .collect();
+                        zones.sort();
+                        zones == ["Command", "Exile", "Hand", "Library"]
+                    }
+                    && v.windows(2).all(|w| match (&w[0], &w[1]) {
+                        (
+                            TriggerCond::ZoneChange { filter: a, .. },
+                            TriggerCond::ZoneChange { filter: b, .. },
+                        ) => format!("{a:?}") == format!("{b:?}"),
+                        _ => false,
+                    }) =>
+            {
+                let TriggerCond::ZoneChange { filter, .. } = &v[0] else {
+                    return Ev::new("", self.gap("leaves without dying"));
+                };
+                let o = self.noun_det(filter, det.clone());
+                Ev::new(o, "leaves the battlefield without dying")
+            }
             TriggerCond::AnyOf(v) => {
                 let salient = self.self_salient;
                 let evs: Vec<Ev> = v

@@ -810,7 +810,11 @@ impl Renderer<'_> {
                     }) =>
             {
                 let s = self.sel(sel, Case::Poss);
-                format!("{{alt:{s} owner|that player}}")
+                // "The owner of target nonland permanent puts it ...".
+                match s.strip_suffix("'s").filter(|o| o.starts_with("target ")) {
+                    Some(o) => format!("{{alt:{s} owner|the owner of {o}}}"),
+                    None => format!("{{alt:{s} owner|that player}}"),
+                }
             }
             PlayerRef::OwnerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
