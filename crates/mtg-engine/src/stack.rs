@@ -358,11 +358,17 @@ impl Game {
             return true;
         }
         let slots = self.required_slots(specs, slots, ctx);
+        // The later slots' choices may depend on the targets already chosen ("another
+        // target creature that player controls").
+        let mut c2 = ctx.clone();
+        if !chosen.is_empty() {
+            c2.targets = chosen.to_vec();
+        }
         let mut cands = vec![vec![]; specs.len()];
         let mut mins = vec![0; specs.len()];
         for i in &slots {
-            cands[*i] = self.legal_target_candidates(&specs[*i], ctx, stack_obj);
-            mins[*i] = self.target_min(&specs[*i], ctx);
+            cands[*i] = self.legal_target_candidates(&specs[*i], &c2, stack_obj);
+            mins[*i] = self.target_min(&specs[*i], &c2);
         }
         crate::target_groups::distinct_targets_possible(specs, &slots, &cands, &mins, chosen)
     }
