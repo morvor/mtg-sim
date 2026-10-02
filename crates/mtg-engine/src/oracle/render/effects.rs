@@ -3522,7 +3522,11 @@ impl Renderer<'_> {
             s.push_str(&format!(", {}", dests.join(" and ")));
         }
         if spec.shuffle == SearchShuffle::After {
-            if own || matches!(spec.whose, PlayerRef::Iterated) {
+            // "Search your library and/or graveyard ... If you search your library this
+            // way, shuffle." (only a searched library is shuffled, CR 701.24a).
+            if own && spec.zones.len() > 1 && spec.zones.contains(&ZoneKind::Library) {
+                s.push_str(". {alt:Then shuffle|If you search your library this way, shuffle}");
+            } else if own || matches!(spec.whose, PlayerRef::Iterated) {
                 s.push_str(", then shuffle");
             } else {
                 // "Search target player's library ... Then that player shuffles."

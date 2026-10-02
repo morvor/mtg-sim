@@ -180,6 +180,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               damage.",
     },
     Equivalence {
+        pattern: r"\b(enters?|entered|entering) the battlefield\b",
+        replacement: "$1",
+        why: "\"Enters the battlefield\" has been shortened to \"enters\" in rules text \
+              (CR glossary, \"Enters the Battlefield\"; CR 603.6a).",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

@@ -259,6 +259,10 @@ impl Renderer<'_> {
                     // "{X}, where X is ~'s power": X generic mana is {1} X times.
                     other if c == "{1}" => {
                         let v = self.value(other);
+                        // "{1} for each card in your graveyard".
+                        if let Some(each) = v.strip_prefix("the number of ") {
+                            return format!("{c} for each {each}");
+                        }
                         return format!("{{X}}, where X is {v}");
                     }
                     other => {

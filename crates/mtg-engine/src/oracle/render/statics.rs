@@ -2380,6 +2380,9 @@ impl Renderer<'_> {
                 if d.zone == ZoneKind::Exile {
                     return format!("exile {it} instead");
                 }
+                if d.zone == ZoneKind::Library && d.position == LibraryPosition::Shuffled {
+                    return format!("shuffle {it} into its owner's library instead");
+                }
                 let dest = self.destination_phrase(d, false, false);
                 let verb = if d.zone == ZoneKind::Hand {
                     "return"
