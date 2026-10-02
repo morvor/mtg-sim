@@ -199,6 +199,10 @@ pub struct ActivatedAbility {
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
     pub own_cost_changes: Vec<OwnCostChange>,
+    /// "This ability can't be copied." (Gogo, Master of Mimicry): an instruction that
+    /// functions while the ability is on the stack (CR 113.6g, 707.10).
+    #[serde(default)]
+    pub cant_be_copied: bool,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -223,6 +227,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             own_cost_changes: Vec::new(),
+            cant_be_copied: false,
         }
     }
 }
@@ -2265,6 +2270,9 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[spells] can't be copied" (CR 113.6g, 707.10): "This spell can't be copied." on an
+    /// instant or sorcery, functioning on the stack. See `rule_statics::cant_be_copied`.
+    CantBeCopied(Filter),
     /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
     /// [`Restriction::CantEnter`] (CR 614.17d).
     CantEnterBattlefield(Filter),

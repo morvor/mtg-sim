@@ -1134,6 +1134,7 @@ impl Renderer<'_> {
                 format!("{w} can't activate {s}{m}")
             }
             Restriction::CantBeCountered(f) => format!("{} can't be countered", subj(self, f)),
+            Restriction::CantBeCopied(f) => format!("{} can't be copied", subj(self, f)),
             Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
                 format!("{} can't enter the battlefield", subj(self, f))
             }

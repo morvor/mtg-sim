@@ -7,7 +7,7 @@
 //! - The condition "[N] or more creatures are damaged" (Case of the Market Melee's "To
 //!   solve"): creatures with damage marked on them (CR 120.3e).
 
-use super::{ConditionPattern, StaticPattern};
+use super::{AbilityPattern, ConditionPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 use smol_str::SmolStr;
@@ -147,3 +147,46 @@ fn cant_be_turned_face_up(l: &str, text: &str, ctx: &CompileContext) -> Option<V
 }
 
 inventory::submit! { StaticPattern { name: "can't be turned face up", priority: 100, parse: cant_be_turned_face_up } }
+
+/// "This spell can't be copied." on an instant or sorcery (CR 113.6g): it functions on
+/// the stack.
+fn spell_cant_be_copied(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() {
+        return None;
+    }
+    let text = block.trim();
+    if text.to_lowercase() != "~ can't be copied." {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCopied(
+        Filter::Source,
+    )));
+    s.zone = FunctionZone::Stack;
+    Some(static_ability(s, text))
+}
+
+inventory::submit! { AbilityPattern { name: "~ can't be copied", priority: 50, parse: spell_cant_be_copied } }
+
+/// An activated ability's effect text without its "This ability can't be copied."
+/// sentence (CR 113.6g), if it has one: on its own, or joined to "X can't be 0." ("This
+/// ability can't be copied and X can't be 0.").
+pub(crate) fn strip_cant_be_copied(eff: &str) -> Option<String> {
+    const S: &str = "this ability can't be copied";
+    let lower = eff.to_lowercase();
+    let i = lower.find(S)?;
+    // Only a sentence of its own.
+    let head = eff[..i].trim_end();
+    if !(head.is_empty() || head.ends_with('.') || head.ends_with(".)")) {
+        return None;
+    }
+    let tail = &eff[i + S.len()..];
+    let rest = if let Some(r) = tail.strip_prefix(" and X can't be 0.") {
+        format!("{head} X can't be 0.{r}")
+    } else if let Some(r) = tail.strip_prefix('.') {
+        format!("{head}{r}")
+    } else {
+        return None;
+    };
+    let rest = rest.trim().to_string();
+    (!rest.is_empty() && !rest.to_lowercase().contains(S)).then_some(rest)
+}
