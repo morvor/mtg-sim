@@ -135,6 +135,7 @@ fn abilities_on_both_faces_of_a_transforming_card_are_linked() {
     def.faces.push(FaceDef {
         chars: back.faces[0].chars.clone(),
         unsupported: vec![],
+        manual: vec![],
         star_power: false,
         star_toughness: false,
     });

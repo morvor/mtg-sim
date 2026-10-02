@@ -51,9 +51,12 @@ impl CompileContext<'_> {
 pub struct Compiled {
     pub abilities: Vec<Ability>,
     pub unsupported: Vec<String>,
+    /// Blocks replaced by hand-written definitions ([`crate::cards`]).
+    pub manual: Vec<String>,
 }
 
 thread_local! {
+    static NO_MANUAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
@@ -65,12 +68,31 @@ pub fn raw_text() -> String {
     RAW_TEXT.with(|r| r.borrow().clone())
 }
 
+/// Runs `f` with hand-written definitions ([`crate::cards`]) disabled on this thread, so
+/// that what the compiler parses on its own can be checked (`manual-check`).
+pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
+    let prev = NO_MANUAL.with(|c| c.replace(true));
+    let r = f();
+    NO_MANUAL.with(|c| c.set(prev));
+    r
+}
+
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
+    let manual_ok = !NO_MANUAL.with(|c| c.get());
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
+        // A genuinely unique ability written by hand (compile-first policy, see `cards`).
+        if let Some(m) = manual_ok
+            .then(|| crate::cards::lookup(ctx.full_name, ctx.face_index, &block))
+            .flatten()
+        {
+            out.abilities.append(&mut (m.build)(ctx));
+            out.manual.push(block);
+            continue;
+        }
         // A pronoun left without an antecedent means the text wasn't understood.
         let parsed = parse_ability(&block, ctx).filter(|v| {
             !v.iter()

@@ -32,6 +32,7 @@ pub mod battle;
 pub mod behold;
 pub mod block_choice;
 pub mod card;
+pub mod cards;
 pub mod cases;
 pub mod casting;
 pub mod casual;
