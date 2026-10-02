@@ -463,9 +463,11 @@ fn damage_part(
     let r = strip(r, "damage")?;
     if let Some(r2) = strip(r, "divided as you choose among ") {
         // CR 601.2d: the division is chosen as the spell is cast; each target gets at
-        // least 1.
+        // least 1. "Any number of targets" may be zero targets (CR 107.1c).
         let (mut spec, any_number, tail) = counted_targets(r2)?;
-        if spec.fixed_min().is_some_and(|m| m < 1) {
+        if any_number {
+            spec.min = Value::c(0);
+        } else if spec.fixed_min().is_some_and(|m| m < 1) {
             spec.min = Value::c(1);
         }
         if any_number {
@@ -1038,7 +1040,9 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // combat." (Mirror Mockery): the tokens an optional instruction created.
     let mut optional_create = false;
     let var = match last_effect(prev) {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
         _ => {
             if super::tokens_copies_create::last_create(prev).is_none() {

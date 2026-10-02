@@ -30,6 +30,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
@@ -982,6 +983,10 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         // "with no counters on them" (Damning Verdict, Hazardous Conditions).
         if let Some(tail) = rest.strip_prefix("no counters on them") {
             return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        // "creatures you control with counters on them" (Synchronized Charge): any kind.
+        if let Some(tail) = rest.strip_prefix("counters on them") {
+            return Some((Filter::HasCounter(None), tail));
         }
         let (kind, r2) = split_word(rest);
         if let Some(tail) = r2.strip_prefix("counters on them") {

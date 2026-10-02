@@ -34,7 +34,8 @@ fn prevent_divided(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(tail).is_empty() {
         return None;
     }
-    spec.min = Value::c(1);
+    // "Any number of targets" may be zero targets (CR 107.1c).
+    spec.min = Value::c(if any_number { 0 } else { 1 });
     if any_number {
         spec.max = n.clone();
     }
