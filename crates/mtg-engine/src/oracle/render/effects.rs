@@ -337,10 +337,10 @@ impl Renderer<'_> {
                 let inner = inner.strip_prefix("you ").unwrap_or(&inner);
                 let inner = format!(" {inner} ")
                     .replace(" your ", " their ")
-                    .replace(" you control", " they control")
-                    .replace(" you own", " they own")
-                    .replace(" you do", " they do")
-                    .replace(" you don't", " they don't");
+                    .replace(" you ", " they ")
+                    .replace(" you.", " them.")
+                    // "Target players each mill a card and lose 1 life."
+                    .replace(". they ", " and ");
                 format!("{w} {}", third_person(inner.trim()))
             }
             // "... If [condition], repeat this process." (CR 608.2c)
