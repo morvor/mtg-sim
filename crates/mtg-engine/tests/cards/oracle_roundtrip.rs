@@ -367,3 +367,23 @@ fn divert_changes_the_target_unless_its_controller_pays() {
         }
     }
 }
+
+/// "Equip—Pay 3 life. Activate only once each turn." The restriction printed with the
+/// keyword applied to crew but was ignored for equip.
+#[test]
+fn equip_activate_only_once_each_turn() {
+    cr!("602.5b", "702.6a");
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Dark Knight's Greatsword");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(t.activate(P0, sword, 0, &[Entity::Object(a)]).is_ok());
+    t.resolve_all();
+    assert_eq!(t.g.obj(sword).attached_to, Some(Entity::Object(a)));
+    assert!(
+        t.activate(P0, sword, 0, &[Entity::Object(b)]).is_err(),
+        "only once each turn"
+    );
+    assert_eq!(t.life(P0), 17);
+}

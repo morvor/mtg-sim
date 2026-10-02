@@ -67,6 +67,15 @@ impl KeywordRules for Equip {
             ),
         );
         act.timing = ActivationTiming::Sorcery;
+        // "Equip {0}. Activate only once each turn." (CR 602.5b) is printed with the
+        // keyword and kept in its text.
+        if kw
+            .text
+            .as_ref()
+            .is_some_and(|t| t.to_lowercase().contains("activate only once each turn"))
+        {
+            act.max_per_turn = Some(1);
+        }
         Some(vec![AbilityDef::new(AbilityKind::Activated(act), "Equip")])
     }
 }

@@ -7,7 +7,15 @@ use crate::keywords::{Keyword, KeywordKind};
 impl Renderer<'_> {
     /// A keyword line item, capitalized ("Flying", "Equip {2}", "Protection from red").
     pub(crate) fn keyword(&mut self, k: &Keyword) -> String {
-        let s = self.keyword_lower(k);
+        let mut s = self.keyword_lower(k);
+        // "Equip {0}. Activate only once each turn." (kept with the keyword, CR 602.5b).
+        if matches!(k.kind, KeywordKind::Equip | KeywordKind::Crew)
+            && k.text
+                .as_deref()
+                .is_some_and(|t| t.to_lowercase().contains("activate only once each turn"))
+        {
+            s.push_str(". Activate only once each turn");
+        }
         capitalize(&s)
     }
 
