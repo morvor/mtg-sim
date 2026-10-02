@@ -738,3 +738,57 @@ fn swift_warkite_returns_the_creature_at_the_next_end_step() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn muse_vessel_lets_you_play_a_card_exiled_with_it() {
+    cr!("607.2a");
+    assert_supported("Muse Vessel");
+    let mut t = TestGame::new(2);
+    let vessel = t.battlefield(P0, "Muse Vessel");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.lands(P0, "Wastes", 3);
+    t.activate(P0, vessel, 0, &[Entity::Player(P1)]).expect("exile");
+    t.resolve_all();
+    assert!(t.in_exile("Lightning Bolt"));
+    let exiled = t.g.current(bolt);
+    t.lands(P0, "Wastes", 1);
+    t.answer_choose(P0, &[o(exiled)]);
+    t.activate(P0, vessel, 1, &[]).expect("choose");
+    t.resolve_all();
+    // P0 may now cast P1's Lightning Bolt from exile.
+    t.lands(P0, "Mountain", 1);
+    t.cast(P0, exiled).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn sink_into_stupor_returns_only_an_opponents_spell_or_nonland_permanent() {
+    cr!("400.3", "115.1");
+    assert_compiles(
+        "Sink into Stupor // Soporific Springs",
+        "return target spell or nonland permanent an opponent controls",
+    );
+    let mut t = TestGame::new(2);
+    // Your own spell and permanent aren't legal targets.
+    t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 1);
+    let own_bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, own_bolt).target(Entity::Player(P1)).go();
+    t.lands(P0, "Island", 3);
+    let sink = t.hand(P0, "Sink into Stupor // Soporific Springs");
+    let spell = t.g.stack.last().copied().expect("bolt on the stack");
+    assert!(t.cast(P0, sink).target(spell).try_go().is_err());
+    t.clear_answers();
+    t.resolve_all();
+    // An opponent's spell.
+    t.lands(P1, "Mountain", 1);
+    let their_bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, their_bolt).target(Entity::Player(P0)).go();
+    let spell = t.g.stack.last().copied().expect("bolt on the stack");
+    let sink = t.g.player(P0).hand[0];
+    t.cast(P0, sink).target(spell).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    assert_eq!(t.life(P0), 20);
+}

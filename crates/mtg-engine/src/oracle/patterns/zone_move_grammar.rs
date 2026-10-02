@@ -25,9 +25,9 @@
 //! Every card goes to its owner's hand, library or graveyard whatever the text calls the
 //! zone (CR 400.3). The player who puts a permanent onto the battlefield controls it
 //! unless the effect says otherwise (CR 110.2a). Cards the instruction chooses (not
-//! targets) are chosen as it's performed (CR 608.2c) by the player performing it; "at
-//! random" picks them at random (CR 701.9b-like random selection). Objects that move with
-//! one instruction move at the same time (CR 608.2e).
+//! targets) are chosen as it's performed (CR 608.2c) by the player performing it, or
+//! picked at random ("at random"). Objects that move with one instruction move at the same
+//! time.
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -36,14 +36,6 @@ use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 use smol_str::SmolStr;
 
-macro_rules! dbg_zm {
-    ($($t:tt)*) => {
-        #[cfg(test)]
-        if std::env::var("ZM_DEBUG").is_ok() {
-            eprintln!($($t)*);
-        }
-    };
-}
 
 /// The candidates a random choice is made among, how many are picked, and the pick.
 pub const RANDOM_POOL: Var = vars::USER + 7400;
@@ -283,12 +275,6 @@ fn from_zone<'a>(s: &'a str, b: &mut Builder, subject: &Subject) -> Option<(Filt
     } else if let Some(r) = r.strip_prefix("their ") {
         let who = their(b, subject)?;
         (Some(owned_by(&who)), !matches!(who, PlayerRef::You), r)
-    } else if let Some(r) = r
-        .strip_prefix("an opponent's ")
-        .or_else(|| r.strip_prefix("your opponents' "))
-        .or_else(|| r.strip_prefix("opponents' "))
-    {
-        (Some(Filter::OwnedBy(PlayerRel::Opponent)), true, r)
     } else if let Some(r) = r
         .strip_prefix("all ")
         .or_else(|| r.strip_prefix("a "))
@@ -574,10 +560,6 @@ fn zone_adjectives(s: &str) -> (Vec<Filter>, &str) {
     (vec![], s)
 }
 
-/// A noun phrase and its qualifiers: "creature card with mana value 2 or less", "card
-/// at random from your graveyard", "creature cards in your graveyard that were put there
-/// from the battlefield this turn", "land card from your hand or graveyard". Returns the
-/// filter, whether the zone is another player's, whether it's "at random", and the rest.
 /// A described set of objects (see [`described`]).
 #[derive(Clone, Debug)]
 struct Described {
@@ -591,6 +573,9 @@ struct Described {
     rest: String,
 }
 
+/// A noun phrase and its qualifiers: "creature card with mana value 2 or less", "card
+/// at random from your graveyard", "creature cards in your graveyard that were put there
+/// from the battlefield this turn", "land card from your hand or graveyard".
 fn described(s: &str, b: &mut Builder, subject: &Subject) -> Option<Described> {
     let (adj, s) = zone_adjectives(s.trim_start());
     // The next item of a list ("artifact card, up to one target land card, and ...")
@@ -628,7 +613,6 @@ fn described(s: &str, b: &mut Builder, subject: &Subject) -> Option<Described> {
         (a, c) => a.or(c),
     };
     b.it_player = outer_player;
-    dbg_zm!("ZM described head {head:?} parsed {parsed:?}");
     let (filter, rest) = parsed?;
     // "outlaw creature cards": the shared parser leaves "cards" after a batch noun.
     let (filter, rest) = match strip_word(rest.trim_start(), "cards").or_else(|| strip_word(rest.trim_start(), "card")) {
@@ -686,8 +670,36 @@ fn described_alternatives(s: &str, b: &mut Builder, subject: &Subject) -> Option
         });
         match (l, r) {
             (Some(l), Some(r)) if l.filter.zone() != r.filter.zone() => {
+                // "spell or nonland permanent an opponent controls": a controller or owner
+                // after the second description describes both, unless the first names
+                // where it is itself ("instant card from your graveyard or exiled card
+                // you own").
+                let own_place = [" from ", " in ", "exiled", "suspended"]
+                    .iter()
+                    .any(|p| left.contains(p));
+                let shared: Vec<Filter> = match &r.filter {
+                    Filter::And(v) => v
+                        .iter()
+                        .filter(|f| {
+                            matches!(
+                                f,
+                                Filter::ControlledBy(_)
+                                    | Filter::ControlledByPlayer(_)
+                                    | Filter::OwnedBy(_)
+                                    | Filter::OwnedByPlayer(_)
+                            )
+                        })
+                        .cloned()
+                        .collect(),
+                    _ => vec![],
+                };
+                let lf = if own_place || shared.is_empty() {
+                    l.filter
+                } else {
+                    Filter::and(std::iter::once(l.filter).chain(shared).collect())
+                };
                 return Some(Described {
-                    filter: Filter::Or(vec![l.filter, r.filter]),
+                    filter: Filter::Or(vec![lf, r.filter]),
                     others: l.others || r.others,
                     random: false,
                     opponents_choice: l.opponents_choice || r.opponents_choice,
@@ -887,7 +899,6 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
     let d = described(r, b, subject)
         .filter(|d| continues(&d.rest))
         .or_else(|| described_alternatives(r, b, subject));
-    dbg_zm!("ZM target described {r:?} -> {d:?}");
     let Described {
         filter,
         others,
@@ -899,12 +910,18 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         return None;
     }
     let text = t[..t.len() - rest.trim_start().len()].trim().to_string();
+    // "another target creature card": other than the source, or than earlier targets
+    // (see `Builder::add_target`).
+    let filter = if another {
+        Filter::and(vec![Filter::Other, filter])
+    } else {
+        filter
+    };
     let mut spec = TargetSpec::object(filter, text.clone());
     spec.min = min;
     spec.max = max;
     // CR 601.7: an opponent chooses the target.
     spec.chosen_by_opponent = opponents_choice;
-    let _ = another;
     let slot = b.add_target(spec, &text);
     Some((
         Item {
@@ -1599,10 +1616,8 @@ fn p_move(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
-    dbg_zm!("ZM clause {l:?}");
     let (subject, _verb, r) = subject_verb(l, b)?;
     let r = r.as_str();
-    dbg_zm!("ZM subject {subject:?} rest {r:?} it {:?} group {:?}", b.it, b.group);
     // Inverted order: "return to your hand all ...", "put onto the battlefield under your
     // control all ...".
     let (items, mut to, tail) = if r.starts_with("to ") || r.starts_with("onto ") {
@@ -1612,7 +1627,6 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
         (items, to, tail)
     } else {
         let (mut items, rest) = items(r, b, &subject)?;
-        dbg_zm!("ZM items {items:?} rest {rest:?}");
         // "Return that card under your control": to the battlefield.
         let (to, after) = match dest_zone(&rest) {
             Some(x) => x,
@@ -1677,7 +1691,6 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     // "[... from their hand] onto the battlefield from their hand" (the zone after the
     // destination) is read with the objects; anything else left over isn't understood.
-    dbg_zm!("ZM tail {tail:?}");
     // "Return all cards exiled with ~ to their owner's hand and you lose that much life":
     // as much life as the number of cards moved.
     let (tail, after) = match tail.trim() {
@@ -2330,33 +2343,6 @@ mod tests {
             ("Sorcery", "Return target creature card from your graveyard to the battlefield sideways."),
         ] {
             assert!(compiled(ty, text).is_none(), "{text}");
-        }
-    }
-
-    /// `ZM_TYPE="Sorcery" ZM_TEXT="..." cargo test -p mtg-engine --lib zone_move_grammar::tests::debug -- --nocapture`
-    #[test]
-    fn debug() {
-        if let Ok(file) = std::env::var("ZM_FILE") {
-            for line in std::fs::read_to_string(file).unwrap_or_default().lines() {
-                let Some((ty, text)) = line.split_once('|') else { continue };
-                let ok = compiled(ty, text).is_some();
-                println!("{} {text}", if ok { "OK  " } else { "FAIL" });
-            }
-        }
-        if let Ok(file) = std::env::var("ZM_CARDS") {
-            for name in std::fs::read_to_string(file).unwrap_or_default().lines() {
-                let Some(c) = crate::card::CardDb::global().get(name) else {
-                    println!("?? {name}");
-                    continue;
-                };
-                for u in c.unsupported_text() {
-                    println!("{name} || {}", u.replace('\n', " / "));
-                }
-            }
-        }
-        if let Ok(text) = std::env::var("ZM_TEXT") {
-            let ty = std::env::var("ZM_TYPE").unwrap_or_else(|_| "Sorcery".into());
-            println!("{}", compiled(&ty, &text).unwrap_or_else(|| "UNSUPPORTED".into()));
         }
     }
 }
