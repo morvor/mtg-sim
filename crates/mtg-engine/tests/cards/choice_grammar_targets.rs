@@ -142,3 +142,30 @@ fn swallowed_by_leviathan_counters_the_chosen_spell_unless_paid() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"), "{}", t.dump_log());
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn teferi_who_slows_the_sunset_untaps_yours_and_taps_theirs() {
+    cr!("115.1", "601.2c", "606.3");
+    let t0 = card("Teferi, Who Slows the Sunset");
+    assert!(
+        t0.unsupported_text().iter().all(|u| !u.contains("+1")),
+        "{:?}",
+        t0.unsupported_text()
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let teferi = t.battlefield(P0, "Teferi, Who Slows the Sunset");
+    let mine = t.battlefield(P0, "Ornithopter");
+    t.g.obj_mut(mine).tapped = true;
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let land = t.battlefield(P1, "Forest");
+    t.answer_targets(P0, &[e(mine)]);
+    t.answer_targets(P0, &[e(theirs)]);
+    t.answer_targets(P0, &[e(land)]);
+    t.activate(P0, teferi, 0, &[]).expect("activates");
+    t.resolve_all();
+    assert!(!t.obj_now(mine).tapped, "{}", t.dump_log());
+    assert!(t.obj_now(theirs).tapped);
+    assert!(t.obj_now(land).tapped);
+    assert_eq!(t.life(P0), 22);
+}

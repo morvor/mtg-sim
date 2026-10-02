@@ -57,6 +57,31 @@ fn noun(spec: &TargetSpec, text: &str) -> &'static str {
     }
 }
 
+/// The items of a list of target phrases: "up to one target artifact, up to one target
+/// creature, and up to one target land" (each item starts a new instance of "target").
+fn target_items(s: &str) -> Vec<&str> {
+    let starts = ["target ", "up to ", "another target ", "two target ", "three target "];
+    let mut out = Vec::new();
+    let mut rest = s;
+    loop {
+        // The earliest separator followed by a new target phrase (", and " before ", ").
+        let next = [", and ", ", ", " and "]
+            .iter()
+            .flat_map(|sep| rest.match_indices(sep).map(move |(i, _)| (i, sep.len())))
+            .filter(|(i, len)| starts.iter().any(|p| rest[i + len..].starts_with(p)))
+            .min_by_key(|(i, len)| (*i, usize::MAX - len));
+        match next {
+            Some((i, len)) => {
+                out.push(&rest[..i]);
+                rest = &rest[i + len..];
+            }
+            None => break,
+        }
+    }
+    out.push(rest);
+    out
+}
+
 fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("choose ")?;
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
@@ -65,10 +90,9 @@ fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
         b.named.truncate(saved.3);
     };
-    let mut rest = r;
     let mut slots: Vec<(u8, &'static str)> = Vec::new();
-    loop {
-        let Some((mut spec, tail)) = parse_target(rest) else {
+    for item in target_items(end(r)) {
+        let Some((mut spec, tail)) = parse_target(item) else {
             restore(b);
             return None;
         };
@@ -86,14 +110,16 @@ fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         // Players are other patterns' ("choose target player"); so are qualifiers this
         // pattern doesn't read.
-        if !matches!(
-            spec.what,
-            TargetKind::Object(_) | TargetKind::Spell(_) | TargetKind::SpellOrAbility(_)
-        ) {
+        if !end(tail).is_empty()
+            || !matches!(
+                spec.what,
+                TargetKind::Object(_) | TargetKind::Spell(_) | TargetKind::SpellOrAbility(_)
+            )
+        {
             restore(b);
             return None;
         }
-        let text = rest[..rest.len() - tail.len()].trim().to_string();
+        let text = item.trim().to_string();
         let n = noun(&spec, &text);
         let same_controller = matches!(spec.together, Some(TargetGroup::SameController));
         let slot = b.add_target(spec, &text);
@@ -103,22 +129,10 @@ fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
             b.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
         }
         slots.push((slot, n));
-        let t = end(tail);
-        if t.is_empty() {
-            break;
-        }
-        rest = match t
-            .strip_prefix(", and ")
-            .or_else(|| t.strip_prefix(", "))
-            .or_else(|| t.strip_prefix("and "))
-            .or_else(|| tail.trim_start().strip_prefix("and "))
-        {
-            Some(x) if x.starts_with("target ") || x.starts_with("up to ") => x,
-            _ => {
-                restore(b);
-                return None;
-            }
-        };
+    }
+    if slots.is_empty() {
+        restore(b);
+        return None;
     }
     // The narrower patterns read one target of one instance of "target" (and two of
     // them joined by "and"): only what they don't.

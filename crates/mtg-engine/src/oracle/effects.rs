@@ -759,6 +759,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         })
         .max_by_key(|(len, _, _)| *len);
     if let Some((_, sel, rest)) = named {
+        // "the chosen permanents you control" / "... you don't control": those of them.
+        for (q, mine) in [(" you control", true), (" you don't control", false)] {
+            if let Some(r) = rest.strip_prefix(q) {
+                if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
+                    let control = Filter::ControlledBy(PlayerRel::You);
+                    let control = if mine { control } else { Filter::not(control) };
+                    let f = Filter::and(vec![Filter::In(Box::new(sel)), control]);
+                    return Some((Sel::All(f), r.to_string()));
+                }
+            }
+        }
         if matches!(sel, Sel::Target(_)) {
             b.it = sel.clone();
         }
