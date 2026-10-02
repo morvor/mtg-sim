@@ -1016,6 +1016,14 @@ pub enum Filter {
     /// Controlled by a player matching the filter, relative to the source ("attacking
     /// creatures whose controller controls fewer creatures than you").
     ControllerMatches(Box<PlayerFilter>),
+    /// Controlled by one of the players a reference resolves to ("creatures that player
+    /// controls", "lands they control"); outside the battlefield and stack, owned.
+    ControlledByPlayer(Box<PlayerRef>),
+    /// Owned by one of the players a reference resolves to ("cards in their graveyard").
+    OwnedByPlayer(Box<PlayerRef>),
+    /// Attached to one of the selected objects or players ("Equipment attached to it",
+    /// "Curses attached to them").
+    AttachedToAnyOf(Box<Sel>),
     /// In the given zone. Filters without a zone apply to the battlefield (for permanents)
     /// or the stack (for spells).
     InZone(ZoneKind),
@@ -1296,6 +1304,18 @@ pub enum Value {
     TimesKicked,
     /// Speed (CR 702.179).
     Speed(PlayerRef),
+    /// "the greatest power among creatures you control", "the total mana value of
+    /// artifacts you control", "the number of +1/+1 counters among creatures you control":
+    /// a characteristic of each selected object, combined (0 when nothing is selected).
+    Aggregate(AggOp, Stat, Box<Sel>),
+    /// "the number of card types among cards in your graveyard", "the number of different
+    /// mana values among ...", "the number of colors that spell is": how many different
+    /// values of something the selected objects have between them.
+    DistinctAmong(Among, Box<Sel>),
+    /// "the highest life total among all players", "the greatest number of creatures a
+    /// player controls", "the total number of rad counters among players": the value
+    /// evaluated for each matching player (as `PlayerRef::Iterated`), combined.
+    OverPlayers(AggOp, PlayerFilter, Box<Value>),
     Sum(Vec<Value>),
     Diff(Box<Value>, Box<Value>),
     Mul(Box<Value>, Box<Value>),
@@ -1308,6 +1328,51 @@ pub enum Value {
     If(Box<Condition>, Box<Value>, Box<Value>),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
+}
+
+/// How [`Value::Aggregate`] and [`Value::OverPlayers`] combine their values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AggOp {
+    /// "the greatest", "the highest".
+    Max,
+    /// "the least", "the lowest".
+    Min,
+    /// "the total" (CR 607.3: several answers are summed).
+    Sum,
+}
+
+/// A number each object has, for [`Value::Aggregate`].
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Stat {
+    Power,
+    Toughness,
+    /// "power and/or toughness": the greater of the two.
+    PowerOrToughness,
+    ManaValue,
+    /// Counters of a kind (all kinds when `None`).
+    Counters(Option<CounterKind>),
+}
+
+/// What [`Value::DistinctAmong`] counts the different values of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Among {
+    CardTypes,
+    /// Card types that are permanent types (CR 110.4a).
+    PermanentTypes,
+    CreatureTypes,
+    /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
+    BasicLandTypes,
+    Colors,
+    ManaValues,
+    /// Mana costs as printed symbol sequences (CR 202.1); no mana cost doesn't count.
+    ManaCosts,
+    Powers,
+    Names,
+    /// Kinds of counters (CR 122.1).
+    CounterKinds,
+    /// "the greatest number of [objects] that have a creature type in common": the size
+    /// of the largest group sharing one creature type.
+    LargestCreatureTypeGroup,
 }
 
 impl Value {

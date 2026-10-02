@@ -23,6 +23,7 @@ pub mod ability;
 pub mod actions;
 pub mod adventure;
 pub mod agents;
+pub mod aggregates;
 pub mod ante;
 pub mod apnap;
 pub mod as_though;

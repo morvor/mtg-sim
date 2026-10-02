@@ -12,27 +12,6 @@ use crate::oracle::CompileContext;
 /// or a value phrase understood by the core compiler. Returns the value and the rest.
 pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
-    if let Some(r) = s.strip_prefix("half ") {
-        let (inner, rest) = if let Some(x) = r.strip_prefix("the number of ") {
-            let (f, _, tail) = parse_object_phrase(x)?;
-            (Value::Count(f), tail.to_string())
-        } else if let Some(x) = r.strip_prefix("your life total") {
-            (Value::LifeTotal(PlayerRef::You), x.to_string())
-        } else {
-            let (v, tail) = crate::oracle::statics::parse_value_phrase(r, b)?;
-            (v, tail)
-        };
-        let rest = rest.trim_start();
-        let (up, rest) = if let Some(x) = rest.strip_prefix(", rounded up") {
-            (true, x)
-        } else if let Some(x) = rest.strip_prefix(", rounded down") {
-            (false, x)
-        } else {
-            // CR 107.1a: the text says how to round.
-            return None;
-        };
-        return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
-    }
     // "the revealed card's mana value", after an instruction revealing a card (which "it"
     // then names, e.g. "Target opponent reveals a card at random from their hand.").
     if let Some(r) = s.strip_prefix("the revealed card's mana value") {
@@ -40,7 +19,7 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::ManaValueOf(Box::new(b.it.clone())), r.to_string()));
         }
     }
-    crate::oracle::statics::parse_value_phrase(s, b)
+    super::value_grammar::parse_value(s, b)
 }
 
 /// CR 107.1b: a calculation that determines the result of an effect uses 0 instead of a
