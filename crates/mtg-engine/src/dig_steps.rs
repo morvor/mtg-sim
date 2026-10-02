@@ -43,11 +43,10 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             ctx,
         ),
         DigStep::Rest { from, to } => {
+            // What the text says next is about the cards chosen ("If you didn't put a card
+            // into your hand this way"), not the rest.
             let cards = remaining(g, from, ctx);
-            let placed = place(g, cards, to, ctx);
-            ctx.prev_value = placed.len() as i64;
-            ctx.prev_happened = !placed.is_empty();
-            ctx.set_var(vars::IT, entities(&placed));
+            place(g, cards, to, ctx);
         }
         DigStep::Until {
             who,
@@ -67,6 +66,8 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             ctx.set_var(vars::DUG, entities(&all));
             ctx.set_var(vars::REVEALED, entities(&all));
             ctx.set_var(vars::DUG_FOUND, entities(&found));
+            // "Put those land cards onto the battlefield."
+            ctx.set_var(vars::DUG_CHOSEN, entities(&found));
             ctx.set_var(vars::IT, entities(&found));
         }
     }
@@ -258,9 +259,13 @@ fn take(
             }
         }
     };
-    if reveal && !chosen.is_empty() {
-        let owner = g.obj(chosen[0]).owner;
-        crate::reveal::reveal_in(g, owner, &chosen, Some(ctx));
+    if reveal {
+        if let Some(c) = chosen.first() {
+            let owner = g.obj(*c).owner;
+            crate::reveal::reveal_in(g, owner, &chosen, Some(ctx));
+        }
+        // "If an instant or sorcery card is revealed this way" (CR 701.20a).
+        ctx.set_var(vars::REVEALED, entities(&chosen));
     }
     ctx.set_var(vars::DUG_CHOSEN, entities(&chosen));
     let n = chosen.len();

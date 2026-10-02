@@ -119,6 +119,22 @@ fn pile_destination(s: &str) -> Option<ZoneKind> {
     })
 }
 
+/// A pile put into a zone, or into a library position ("on the bottom of your library in
+/// any order": the cards stay in the library and are rearranged, see `dig_steps.rs`).
+fn pile_to(var: crate::ability::Var, s: &str) -> Option<Effect> {
+    if let Some(zone) = pile_destination(s) {
+        return Some(to_zone(var, zone));
+    }
+    let (to, tail) = super::dig_grammar::destination(end(s))?;
+    if !tail.is_empty() || to.zone != ZoneKind::Library {
+        return None;
+    }
+    Some(Effect::DigStep(Box::new(DigStep::Rest {
+        from: Sel::Var(var),
+        to,
+    })))
+}
+
 /// "put one pile into your hand and the other into your graveyard" (you choose), "put
 /// that pile into your hand and the other into your graveyard" (already chosen).
 fn put_piles(l: &str, _b: &mut Builder) -> Option<Effect> {
@@ -131,14 +147,12 @@ fn put_piles(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let (first, second) = r.split_once(" and the other ")?;
-    let first = pile_destination(first)?;
-    let second = pile_destination(second)?;
     let mut out = Vec::new();
     if pick {
         out.push(choose(PlayerRef::You));
     }
-    out.push(to_zone(CHOSEN, first));
-    out.push(to_zone(OTHER, second));
+    out.push(pile_to(CHOSEN, first)?);
+    out.push(pile_to(OTHER, second)?);
     Some(Effect::seq(out))
 }
 
