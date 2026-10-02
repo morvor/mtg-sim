@@ -350,8 +350,14 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
         let Some(color) = c.chars().next().and_then(Color::from_letter) else {
             return false;
         };
+        // Not the source itself: its spell is a former object of a permanent's trigger
+        // source ("When ~ enters, draw a card if you've cast another blue spell this
+        // turn", CR 400.7).
         return g.history.spells_cast.iter().any(|(p, o)| {
-            *p == ctx.controller && Some(*o) != ctx.source && g.obj(*o).chars.colors.contains(color)
+            *p == ctx.controller
+                && Some(*o) != ctx.source
+                && Some(g.current(*o)) != ctx.source
+                && g.obj(*o).chars.colors.contains(color)
         });
     }
     // "[color] is the most common color among all permanents or is tied for most

@@ -44,6 +44,7 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     Some(g.history.spells_cast.iter().any(|(p, s)| {
         *p == ctx.controller
             && Some(*s) != ctx.source
+            && Some(g.current(*s)) != ctx.source
             && (!instant_or_sorcery || {
                 let t = &g.obj(*s).chars.card_types;
                 t.contains(CardType::Instant) || t.contains(CardType::Sorcery)
