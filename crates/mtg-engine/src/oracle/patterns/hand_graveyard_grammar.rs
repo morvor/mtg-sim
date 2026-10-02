@@ -2539,3 +2539,43 @@ fn p_reveal_until_put_all(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal until, then put all cards revealed this way ...", priority: 960, parse: p_reveal_until_put_all } }
+
+/// "If you do, you may put that card on the bottom of that player's library.": an
+/// optional instruction where a clause is expected (as a sentence reads it).
+fn p_you_may_clause(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you may ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = parse_clause(r, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::May {
+        who: PlayerRef::You,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: you may [instruction] (in a clause)", priority: 990, parse: p_you_may_clause } }
+
+/// "If you do or if you control another Dinosaur, you gain 3 life.": either the optional
+/// instruction was followed or the other condition holds.
+fn p_if_you_do_or_if(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if you do or if ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let cond = super::conditions_referents::parse_condition_with(c, b)
+        .or_else(|| crate::oracle::statics::parse_condition(c, b.ctx))?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(then) = parse_clause(rest, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::If {
+        cond: Condition::Or(vec![Condition::PrevHappened, cond]),
+        then: Box::new(then),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if you do or if [condition], ...", priority: 960, parse: p_if_you_do_or_if } }

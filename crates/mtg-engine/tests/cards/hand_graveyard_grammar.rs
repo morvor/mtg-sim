@@ -1849,3 +1849,50 @@ fn treasure_hunt_puts_every_revealed_card_into_hand() {
     assert!(t.in_hand(P0, "Forest") && t.in_hand(P0, "Island") && t.in_hand(P0, "Shock"));
     assert_eq!(t.hand_size(P0), 3);
 }
+
+#[test]
+fn precognition_may_bottom_the_looked_at_card() {
+    cr!("603.5");
+    assert_supported(&["Precognition"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Precognition");
+    let top = t.library_top(P1, "Grizzly Bears");
+    // P1 draws the Shock on their turn; the Bears are on top at P0's upkeep.
+    t.library_top(P1, "Shock");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Shock"));
+    assert_eq!(t.g.player(P1).library[0], t.g.current(top));
+}
+
+#[test]
+fn armored_kincaller_reveal_or_another_dinosaur() {
+    cr!("608.2c");
+    assert_supported(&["Armored Kincaller"]);
+    // Neither: no life.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.enter(P0, "Armored Kincaller");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // Revealing a Dinosaur.
+    let mut t = TestGame::new(2);
+    let d = t.hand(P0, "Carnage Tyrant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[d]));
+    t.enter(P0, "Armored Kincaller");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    // Controlling another Dinosaur, declining to reveal.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Carnage Tyrant");
+    t.answer_yes(P0, false);
+    t.enter(P0, "Armored Kincaller");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+}
