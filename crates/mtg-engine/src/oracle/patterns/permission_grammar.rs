@@ -145,12 +145,17 @@ fn strip_lead(s: &str, p: &mut Perm) -> Option<String> {
         let before = s.len();
         // "During any turn you attacked with ~, you may play that card": a condition on
         // playing it ("you attacked with ~ this turn").
+        // The permission lasts while the card is exiled (CR 400.7).
         if let Some(r) = s.strip_prefix("during any turn ") {
             let (c, rest) = r.split_once(", ")?;
-            if p.cond_text.is_some() {
+            if p.cond_text.is_some() || !set_duration(p, Duration::Permanent) {
                 return None;
             }
-            p.cond_text = Some(format!("{c} this turn"));
+            p.cond_text = Some(match c {
+                // Its source attacked, even if it has left combat or the battlefield since.
+                "you attacked with ~" => "~ attacked this turn".to_string(),
+                _ => format!("{c} this turn"),
+            });
             s = rest.to_string();
             continue;
         }
