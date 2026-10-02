@@ -8,9 +8,7 @@ use crate::r_p057_common::*;
 use crate::r_s01_common::{supported, triggers_on_stack};
 use crate::r_s02_common::destroy;
 use crate::r_s05_common::enter;
-use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
-use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 const BIG: &str = "Rumbling Baloth"; // vanilla 4/4
@@ -18,7 +16,7 @@ const SMALL: &str = "Grizzly Bears"; // vanilla 2/2
 
 #[test]
 fn boundary_lands_ranger_checks_on_trigger_and_on_resolution() {
-    cr!("603.4", "507.1");
+    cr!("603.4");
     ruling!(
         "Boundary Lands Ranger",
         "At the beginning of combat on your turn, Boundary Lands Ranger's ability will check to see if you control a creature with power 4 or greater."
@@ -63,16 +61,13 @@ fn boundary_lands_ranger_checks_on_trigger_and_on_resolution() {
 fn beginning_of_combat_counter(name: &str, other_only: bool) {
     // No such creature: no trigger.
     let mut t = TestGame::new(2);
-    let me = t.battlefield(P0, name);
+    t.battlefield(P0, name);
     t.battlefield(P0, SMALL);
     into_beginning_of_combat(&mut t, P0);
     assert_eq!(t.stack_len(), 0, "{name}: no trigger");
     // It triggers; the creature is gone as it resolves: no counter.
     let mut t = TestGame::new(2);
-    let me = {
-        let _ = me;
-        t.battlefield(P0, name)
-    };
+    let me = t.battlefield(P0, name);
     let a = t.battlefield(P0, BIG);
     into_beginning_of_combat(&mut t, P0);
     assert_eq!(t.stack_len(), 1, "{name}: triggered");
@@ -118,7 +113,7 @@ fn beginning_of_combat_counter(name: &str, other_only: bool) {
 
 #[test]
 fn nasty_little_rabbit_checks_at_beginning_of_combat_and_on_resolution() {
-    cr!("603.4", "507.1");
+    cr!("603.4");
     ruling!(
         "Nasty Little Rabbit",
         "Nasty Little Rabbit's ability will check at the start of your beginning of combat step to see if you control a creature with power 4 or greater."
@@ -129,7 +124,7 @@ fn nasty_little_rabbit_checks_at_beginning_of_combat_and_on_resolution() {
 
 #[test]
 fn nessian_hornbeetle_checks_twice_and_gets_one_counter() {
-    cr!("603.4", "507.1");
+    cr!("603.4");
     ruling!(
         "Nessian Hornbeetle",
         "If you don't control a creature with power 4 or greater as your combat phase begins, Nessian Hornbeetle's ability doesn't trigger."
@@ -161,7 +156,7 @@ fn stampede_rider_checks_twice_gets_one_bonus_and_keeps_it() {
     // "At the beginning of each combat, if you control a creature with power 4 or greater,
     // this creature gets +1/+1 until end of turn." (2/3)
     let mut t = TestGame::new(2);
-    let rider = t.battlefield(P0, "Stampede Rider");
+    t.battlefield(P0, "Stampede Rider");
     into_beginning_of_combat(&mut t, P0);
     assert_eq!(t.stack_len(), 0);
     // Triggered, then the creature leaves before resolution: no bonus.
@@ -173,7 +168,6 @@ fn stampede_rider_checks_twice_gets_one_bonus_and_keeps_it() {
     destroy(&mut t, a);
     t.resolve_all();
     assert_eq!(t.pt(rider2), (2, 3));
-    let _ = rider;
     // Two such creatures: just +1/+1; it keeps it after they're gone.
     let mut t = TestGame::new(2);
     let rider = t.battlefield(P0, "Stampede Rider");
@@ -513,8 +507,6 @@ fn while_conditions_are_checked_only_as_the_creature_attacks() {
     let g = t.battlefield(P0, "Courageous Goblin");
     attack_p1(&mut t, g);
     assert_eq!(t.stack_len(), 0);
-    let _ = Step::Upkeep;
-    let _ = Answer::Default;
 }
 
 #[test]

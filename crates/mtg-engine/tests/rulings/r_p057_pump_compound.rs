@@ -1,10 +1,10 @@
 //! Rulings batch P057 — pumps joined to another instruction. Firedrinker Satyr: "Whenever
 //! this creature is dealt damage, it deals that much damage to you." triggers even on
-//! lethal damage (CR 603.10a, 704.5g) and deals noncombat damage (CR 510.2, 120.2); "{1}{R}:
+//! lethal damage (CR 603.2, 113.7a, 704.5g) and deals noncombat damage (CR 510.2, 120.2); "{1}{R}:
 //! This creature gets +1/+0 until end of turn and deals 1 damage to you." Thran Forge:
 //! "{2}: Until end of turn, target nonartifact creature gets +1/+0 and becomes an artifact
 //! in addition to its other types." (CR 205.1b, 608.2b). Bronze Cudgels: "+X/+0, where X
-//! is the number of times this ability has resolved this turn" (CR 603.7h), and
+//! is the number of times this ability has resolved this turn" (CR 107.3c, counting this resolution), and
 //! Inner-Flame Igniter's "If this is the third time this ability has resolved this turn".
 
 use crate::r_p057_common::pump;
@@ -20,7 +20,7 @@ use mtg_engine::*;
 
 #[test]
 fn firedrinker_satyr_blocking_a_7_7_deals_7_noncombat_damage_to_you() {
-    cr!("603.10a", "510.2", "120.2");
+    cr!("603.2", "113.7a", "510.2", "120.2");
     ruling!(
         "Firedrinker Satyr",
         "Firedrinker Satyr's first ability will trigger even if it's dealt lethal damage. For example, if it blocks a 7/7 creature, its ability will trigger and Firedrinker Satyr will deal 7 damage to you."
@@ -99,7 +99,7 @@ fn thran_forge_adds_the_artifact_type_and_a_second_activation_makes_the_first_fi
 
 #[test]
 fn bronze_cudgels_counts_its_resolutions_this_turn_including_this_one() {
-    cr!("603.7h", "107.3c");
+    cr!("107.3c", "608.2h");
     ruling!(
         "Bronze Cudgels",
         "As the first activated ability resolves, it counts the number of times that same ability from that same Bronze Cudgels has resolved that turn, including that activation."
@@ -128,7 +128,7 @@ fn bronze_cudgels_counts_its_resolutions_this_turn_including_this_one() {
 
 #[test]
 fn inner_flame_igniter_counts_resolutions_not_activations() {
-    cr!("603.7h", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Inner-Flame Igniter",
         "Counts resolutions, not activations. Any such abilities that are still on the stack won’t count toward the total."

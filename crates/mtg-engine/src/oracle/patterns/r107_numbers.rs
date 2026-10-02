@@ -43,8 +43,8 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             }
         }
     }
-    // CR 603.7h: "the number of times this ability has resolved this turn" (this
-    // resolution included).
+    // "the number of times this ability has resolved this turn" (this resolution
+    // included; Bronze Cudgels' ruling).
     if let Some(r) = s.strip_prefix("the number of times this ability has resolved this turn") {
         return Some((Value::TimesResolvedThisTurn, r.to_string()));
     }
@@ -54,6 +54,10 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         "the number of cards in that player's hand",
     ] {
         if let Some(r) = s.strip_prefix(p) {
+            // With no player mentioned before, "their" has no antecedent here.
+            if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                return None;
+            }
             return Some((Value::HandSize(b.it_player.clone()), r.to_string()));
         }
     }

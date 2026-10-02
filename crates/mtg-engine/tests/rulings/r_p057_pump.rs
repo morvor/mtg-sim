@@ -174,7 +174,7 @@ fn gaining_menace_after_being_blocked_by_one_creature_doesnt_unblock() {
 
 #[test]
 fn greater_stone_spirits_granted_ability_belongs_to_the_creatures_controller() {
-    cr!("602.2", "113.6");
+    cr!("602.2");
     ruling!(
         "Greater Stone Spirit",
         "After Greater Stone Spirit’s activated ability is activated, the affected creature gains an activated ability that only that creature’s controller can activate."
@@ -315,7 +315,7 @@ fn demonspine_whip_uses_last_known_attachment_and_its_bonus_stays() {
     // "{X}: Equipped creature gets +X/+0 until end of turn."
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, SMALL);
-    let other = t.battlefield(P0, SMALL);
+    t.battlefield(P0, SMALL);
     let whip = attach_new(&mut t, P0, "Demonspine Whip", bears);
     t.lands(P0, "Wastes", 3);
     t.answer(P0, DecisionKind::X, Answer::Number(3));
@@ -350,7 +350,6 @@ fn demonspine_whip_uses_last_known_attachment_and_its_bonus_stays() {
     assert_eq!(t.pt(other2), (2, 2));
     destroy(&mut t, whip);
     assert_eq!(t.pt(bears), (4, 2));
-    let _ = other;
 }
 
 #[test]
@@ -374,7 +373,7 @@ fn goblin_fire_fiend_must_be_blocked_if_able() {
 
 #[test]
 fn lathliss_triggers_for_each_dragon_entering_with_it() {
-    cr!("603.6a", "603.10a");
+    cr!("603.6a");
     ruling!(
         "Lathliss, Dragon Queen",
         "If Lathliss enters at the same time as one or more other nontoken Dragons you control, its second ability will trigger once for each of those other Dragons."

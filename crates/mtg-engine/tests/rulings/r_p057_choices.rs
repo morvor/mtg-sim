@@ -1,5 +1,5 @@
 //! Rulings batch P057 — choices made as a permanent enters (CR 614.12, 607.2d): naming a
-//! card (CR 201.3) for Voidstone Gargoyle, Pithing Needle and Sorcerous Spyglass, and
+//! card (CR 201.4) for Voidstone Gargoyle, Pithing Needle and Sorcerous Spyglass, and
 //! choosing an opponent for Canker Abomination and Skyshroud War Beast.
 
 use crate::r_s01_common::supported;
@@ -8,7 +8,6 @@ use crate::r_s20_common::tap_for_mana;
 use mtg_engine::decision::Answer;
 use mtg_engine::object::{CastMethod, FaceState};
 use mtg_engine::testing::*;
-use mtg_engine::types::*;
 use mtg_engine::*;
 
 fn name_card(t: &mut TestGame, p: PlayerId, name: &str) {
@@ -38,7 +37,7 @@ fn cast_ways(t: &mut TestGame, p: PlayerId, card: ObjectId) -> Vec<(CastMethod, 
 
 #[test]
 fn voidstone_gargoyle_doesnt_stop_casting_the_named_card_face_down() {
-    cr!("708.4", "201.3");
+    cr!("708.4", "201.4");
     ruling!("Voidstone Gargoyle", "The named card can be cast face down.");
     supported("Voidstone Gargoyle");
     // "As this creature enters, choose a nonland card name. / Spells with the chosen name
@@ -80,7 +79,7 @@ fn voidstone_gargoyle_stops_mana_abilities() {
 
 #[test]
 fn voidstone_gargoyle_naming_one_half_of_a_split_card() {
-    cr!("709.3", "702.102d", "201.3");
+    cr!("709.3", "702.102d", "201.4b");
     ruling!(
         "Voidstone Gargoyle",
         "You can name either half of a split card, but not both."
@@ -116,7 +115,7 @@ fn voidstone_gargoyle_naming_one_half_of_a_split_card() {
 
 #[test]
 fn any_card_name_can_be_chosen_but_not_a_token_only_name() {
-    cr!("201.3", "111.4");
+    cr!("201.4");
     ruling!(
         "Sorcerous Spyglass",
         "You can choose any card name, even if that card doesn't normally have an activated ability. You're not limited to the names of cards you saw in the opponent's hand."
@@ -203,5 +202,4 @@ fn skyshroud_war_beast_is_continuously_recalculated() {
     assert_eq!(t.pt(beast), (2, 2));
     crate::r_s02_common::destroy(&mut t, more);
     assert_eq!(t.pt(beast), (1, 1));
-    let _ = CardType::Land;
 }

@@ -98,7 +98,7 @@ fn give_cards(t: &mut TestGame, p: PlayerId, n: usize) {
 /// player, through a control change, and nobody once that player has left the game.
 #[test]
 fn black_vise_and_the_rack_keep_their_chosen_player() {
-    cr!("607.2d", "800.4a", "107.1b");
+    cr!("607.2d", "800.4a");
     ruling!(
         "Black Vise",
         "You choose one opposing player as it enters and it only affects that one player. This choice is not changed even if Black Vise changes controllers. It becomes useless but stays on the battlefield if that player leaves the game."
@@ -142,6 +142,25 @@ fn black_vise_and_the_rack_keep_their_chosen_player() {
         assert!(dmg(hand) > 0 && lost == 0, "{name}");
         assert_eq!(upkeep_of(&mut t, P0, 20).1, 0, "{name}");
         assert_eq!((t.life(P0), t.life(P2)), (20, 20), "{name}");
+    }
+}
+
+/// A negative X (Black Vise with fewer than four cards in hand, The Rack with more than
+/// three) is 0: no damage, and no life gained.
+#[test]
+fn black_vise_and_the_rack_with_a_negative_x_deal_no_damage() {
+    cr!("107.1b");
+    supported("Black Vise");
+    supported("The Rack");
+    for (name, cards) in [("Black Vise", 1), ("The Rack", 6)] {
+        let mut t = TestGame::new(2);
+        t.answer_choose(P0, &[Entity::Player(P1)]);
+        t.enter(P0, name);
+        give_cards(&mut t, P1, cards);
+        let (hand, lost) = upkeep_of(&mut t, P1, 20);
+        assert_eq!(hand, cards, "{name}");
+        assert_eq!(lost, 0, "{name}");
+        assert_eq!(t.life(P1), 20, "{name}");
     }
 }
 

@@ -88,7 +88,7 @@ fn entering_triggers(name: &str) {
 
 #[test]
 fn kronch_wrangler_checks_the_power_as_the_creature_enters() {
-    cr!("603.6a", "603.10a", "613.4c");
+    cr!("603.6a", "603.6b", "613.4c");
     ruling!(
         "Kronch Wrangler",
         "The entering creature must have power 4 or greater as it enters the battlefield, or Kronch Wrangler’s ability won’t trigger."
@@ -103,7 +103,7 @@ fn kronch_wrangler_checks_the_power_as_the_creature_enters() {
 
 #[test]
 fn territorial_boar_checks_the_power_as_the_creature_enters() {
-    cr!("603.6a", "603.10a", "613.4c");
+    cr!("603.6a", "603.6b", "613.4c");
     ruling!(
         "Territorial Boar",
         "The entering creature must have power 4 or greater as it enters the battlefield, or Territorial Boar’s ability won’t trigger."
@@ -118,7 +118,7 @@ fn territorial_boar_checks_the_power_as_the_creature_enters() {
 
 #[test]
 fn temur_ascendancy_considers_static_abilities_only_and_draws_after_lowering() {
-    cr!("603.6a", "603.10a", "613.4c");
+    cr!("603.6a", "603.6b", "613.4c");
     ruling!(
         "Temur Ascendancy",
         "If a creature is entering the battlefield under your control, consider static abilities to determine whether its power is 4 or greater."
@@ -151,7 +151,7 @@ fn temur_ascendancy_considers_static_abilities_only_and_draws_after_lowering() {
 
 #[test]
 fn garruks_uprising_considers_statics_counters_and_copies_and_draws_regardless() {
-    cr!("603.6a", "614.1c", "614.1d", "706.2");
+    cr!("603.6a", "614.1c", "614.1d", "707.2");
     ruling!(
         "Garruk's Uprising",
         "If one or more static abilities that apply to a creature entering change its power, those abilities are considered"
