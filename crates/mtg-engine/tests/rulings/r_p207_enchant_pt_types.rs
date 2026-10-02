@@ -580,3 +580,27 @@ fn sages_reverie_counts_any_aura_attached_to_a_creature() {
     assert_eq!(t.hand_size(P0), hand + 2);
     assert_eq!(t.pt(bears), (4, 4));
 }
+
+#[test]
+fn draconic_destiny_makes_the_creature_a_dragon_without_activating_anything() {
+    cr!("205.1b", "613.1c", "113.6");
+    ruling!(
+        "Draconic Destiny",
+        "Being a Dragon isn't part of the activated ability the enchanted creature has. It's a Dragon in addition to its other types whether or not that ability has been activated."
+    );
+    supported("Draconic Destiny");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Draconic Destiny", bears);
+    let c = &t.obj_now(bears).chars;
+    assert!(c.has_subtype("Dragon") && c.has_subtype("Bear"));
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(has_kw(&t, bears, KeywordKind::Flying));
+    assert!(has_kw(&t, bears, KeywordKind::Haste));
+    // The granted ability pumps it; it's still a Dragon, and nothing else changed.
+    t.lands(P0, "Wastes", 1);
+    activate_containing(&mut t, P0, bears, "+1/+0").unwrap();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (4, 3));
+    assert!(t.obj_now(bears).chars.has_subtype("Dragon"));
+}

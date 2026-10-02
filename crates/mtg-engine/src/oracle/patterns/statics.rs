@@ -2558,6 +2558,19 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
             masked = format!("{b}{repl}");
         }
     }
+    // "Enchanted creature gets +1/+1 .... It's a Dragon in addition to its other types."
+    // (Draconic Destiny): "it" is the enchanted creature, a creature.
+    // (A quoted ability ends its sentence with the period inside the quotes.)
+    for it in ["\" it's ", "\" it is "] {
+        masked = masked.replace(it, &format!("\". {}", &it[2..]));
+    }
+    for subject in ["enchanted creature ", "equipped creature "] {
+        if masked.starts_with(subject) {
+            for it in [". it's ", ". it is "] {
+                masked = masked.replace(it, &format!(". {subject}is "));
+            }
+        }
+    }
     let mut sentences = masked.split(". ");
     let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
     let same_subject =
