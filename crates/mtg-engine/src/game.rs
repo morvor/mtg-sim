@@ -1082,6 +1082,7 @@ impl Game {
             self.recompute();
         }
         self.actions_taken += 1;
+        self.note_forced_decision(&decision);
         // CR 800.4g, 800.4h: another player makes a choice a player who left would make.
         let player = crate::multiplayer::substitute_chooser(self, player, &decision);
         // CR 723.5: the decisions of a player controlled by another player are made by

@@ -580,6 +580,16 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             ));
         }
     }
+    // "the amount of life you gained this turn" (CR 119.3: the total of this turn's
+    // life-gain events).
+    for p in [
+        "the amount of life you gained this turn",
+        "the amount of life you've gained this turn",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((Value::LifeGainedThisTurn(PlayerRef::You), rest.to_string()));
+        }
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((

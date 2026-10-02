@@ -37,6 +37,15 @@ inventory::submit! {
 /// (see `Builder::chosen_creature`).
 fn p_choose_target(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("choose ")?;
+    // "Choose any target. ... deals damage ... to that permanent or player." (Riddle of
+    // Lightning).
+    if end(r) == "any target" {
+        let (spec, _) = crate::oracle::phrases::parse_any_target(r)?;
+        let slot = b.add_target(spec, r);
+        b.named
+            .push(("that permanent or player".into(), Sel::Target(slot)));
+        return Some(Effect::Noop);
+    }
     let (spec, tail) = parse_target(r)?;
     let TargetKind::Object(f) = &spec.what else {
         return None;

@@ -254,8 +254,17 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::facedown::custom_condition(g, name, ctx) {
         return b;
     }
+    // "if you control three or more creatures that share a creature type".
+    if let Some(b) = crate::oracle::patterns::creatures_share_a_type::custom_condition(g, name, ctx)
+    {
+        return b;
+    }
     // A spell's own cost: "if you've cast another spell this turn" (CR 601.2f).
     if let Some(b) = crate::spell_costs::custom_condition(g, name, ctx) {
+        return b;
+    }
+    // "Each player may search their library": whether that player can search.
+    if let Some(b) = crate::search_rules::custom_condition(g, name, ctx) {
         return b;
     }
     // CR 307.5a: cast as though it had flash with its own ability, any time a sorcery

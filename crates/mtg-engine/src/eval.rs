@@ -217,6 +217,14 @@ impl Game {
     /// Defending player relative to the source (CR 508.5).
     pub fn defending_player_for(&self, ctx: &Ctx) -> Option<PlayerId> {
         let combat = self.combat.as_ref()?;
+        // An ability that refers to both an attacking creature (the one whose attack
+        // triggered it, "whenever a creature you control attacks") and a defending player
+        // means the player that creature is attacking (CR 802.2a, 805.10e).
+        if let Some(obj) = ctx.event.as_ref().and_then(|e| e.object) {
+            if let Some(p) = combat.defending_player_of(self, obj) {
+                return Some(p);
+            }
+        }
         if let Some(src) = ctx.source {
             if let Some(p) = combat.defending_player_of(self, src) {
                 return Some(p);
