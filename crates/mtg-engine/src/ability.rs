@@ -1078,6 +1078,10 @@ pub enum PlayerFilter {
     FirstDrawInDrawStep,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
+    /// A requirement on a target player checked only as the target is chosen ("target
+    /// opponent who has more life than you do as you activate this ability"): it isn't
+    /// checked again as the ability resolves (see `target_rules::relaxed_on_resolution`).
+    AsChosen(Box<PlayerFilter>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),

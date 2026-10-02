@@ -338,3 +338,36 @@ pub fn change_targets(
     }
     true
 }
+
+/// The target requirements checked again as a spell or ability resolves (CR 608.2b):
+/// requirements on a target player that apply only as the target is chosen
+/// ([`PlayerFilter::AsChosen`], "as you activate this ability") are dropped. `None` when
+/// the spec has none.
+pub fn relaxed_on_resolution(spec: &TargetSpec) -> Option<TargetSpec> {
+    fn relax(f: &PlayerFilter) -> Option<PlayerFilter> {
+        match f {
+            PlayerFilter::AsChosen(_) => Some(PlayerFilter::Any),
+            PlayerFilter::And(v) => {
+                let r: Vec<Option<PlayerFilter>> = v.iter().map(relax).collect();
+                r.iter().any(|x| x.is_some()).then(|| {
+                    PlayerFilter::And(
+                        r.into_iter()
+                            .zip(v)
+                            .map(|(x, o)| x.unwrap_or_else(|| o.clone()))
+                            .collect(),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+    let what = match &spec.what {
+        TargetKind::Player(f) => TargetKind::Player(relax(f)?),
+        TargetKind::ObjectOrPlayer(o, f) => TargetKind::ObjectOrPlayer(o.clone(), relax(f)?),
+        _ => return None,
+    };
+    Some(TargetSpec {
+        what,
+        ..spec.clone()
+    })
+}

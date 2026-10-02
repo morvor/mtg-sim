@@ -855,6 +855,10 @@ impl Renderer<'_> {
                 let q = self.player_quality(x);
                 format!("not {q}")
             }
+            PlayerFilter::AsChosen(x) => {
+                let q = self.player_quality(x);
+                format!("{q} as you activate this ability")
+            }
         }
     }
 

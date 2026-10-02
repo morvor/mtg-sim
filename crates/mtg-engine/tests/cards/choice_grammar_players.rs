@@ -105,3 +105,74 @@ fn courageous_resolve_above_six_life_does_nothing_more() {
     t.resolve_all();
     assert_eq!(t.life(P0), 3);
 }
+
+#[test]
+fn keeper_of_the_flame_condition_only_as_you_activate() {
+    cr!("115.1a", "602.2b", "608.2b");
+    ruling!(
+        "Keeper of the Flame",
+        "It is only necessary that the condition be true as you activate the ability."
+    );
+    ruling!(
+        "Keeper of the Flame",
+        "A different opposing player may be targeted each time the ability is activated."
+    );
+    compiles("Keeper of the Flame");
+    let mut t = TestGame::new(3);
+    let keeper = t.battlefield(P0, "Keeper of the Flame");
+    t.lands(P0, "Mountain", 1);
+    t.g.player_mut(P0).life = 15;
+    t.g.player_mut(P2).life = 10;
+    // P2 has less life than P0: not a legal target; P1 is.
+    t.activate(P0, keeper, 0, &[Entity::Player(P2)]).expect("activates");
+    // The life totals change before it resolves: it still resolves.
+    t.g.player_mut(P0).life = 30;
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "{}", t.dump_log());
+    assert_eq!(t.life(P2), 10);
+}
+
+#[test]
+fn keeper_of_the_flame_cant_be_activated_without_an_opponent_with_more_life() {
+    cr!("115.1a", "602.2b");
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Flame");
+    t.lands(P0, "Mountain", 1);
+    t.g.player_mut(P1).life = 20;
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+}
+
+#[test]
+fn keepers_of_the_beasts_and_mind_compare_with_you() {
+    cr!("115.1a");
+    compiles("Keeper of the Beasts");
+    compiles("Keeper of the Mind");
+    compiles("Keeper of the Light");
+    // Keeper of the Beasts: an opponent who controls more creatures than you.
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Beasts");
+    t.lands(P0, "Forest", 1);
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, keeper, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve_all();
+    let beasts = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|s| s == "Beast"))
+        .count();
+    assert_eq!(beasts, 1, "{}", t.dump_log());
+    // Keeper of the Mind: at least two more cards in hand than you.
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Mind");
+    t.lands(P0, "Island", 1);
+    t.hand(P1, "Forest");
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+    t.hand(P1, "Forest");
+    let before = t.hand_size(P0);
+    t.activate(P0, keeper, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+}

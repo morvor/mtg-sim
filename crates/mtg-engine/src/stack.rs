@@ -1141,6 +1141,9 @@ impl Game {
                     new_targets.push(slot.clone());
                     continue;
                 };
+                // Requirements that apply only as the target is chosen aren't rechecked.
+                let relaxed = crate::target_rules::relaxed_on_resolution(spec);
+                let spec = relaxed.as_ref().unwrap_or(spec);
                 let mut legal = Vec::new();
                 let mut legal_div = Vec::new();
                 for (j, t) in slot.iter().enumerate() {

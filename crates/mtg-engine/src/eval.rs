@@ -318,6 +318,7 @@ impl Game {
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
+            PlayerFilter::AsChosen(f) => self.player_filter_matches(f, p, ctx),
             PlayerFilter::FirstDrawInDrawStep => {
                 crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
             }
