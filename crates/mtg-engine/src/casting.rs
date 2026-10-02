@@ -1154,6 +1154,18 @@ impl Game {
                 None => ways.push(vec![o]),
             }
         }
+        // A way the timing rules don't allow now (with a permission that doesn't give flash,
+        // during combat) isn't offered when another way is allowed (CR 601.3, 702.8a).
+        let timely = |w: &Vec<CastOption>| {
+            let o = &w[0];
+            o.any_time || {
+                let chars = self.option_characteristics(card, o);
+                self.timing_allows_cast(p, card, &chars, o)
+            }
+        };
+        if ways.len() > 1 && ways.iter().any(timely) {
+            ways.retain(timely);
+        }
         let opts: Vec<CastOption> = ways.iter().map(|w| w[0].clone()).collect();
         if opts.is_empty() {
             return Err(Illegal(format!("no such casting method {method:?}")));
@@ -1216,10 +1228,10 @@ impl Game {
             match self.ask(p, Decision::ChooseCastingMethod { card, options }) {
                 Answer::Index(i) if i < opts.len() => i,
                 // By default, the first way that could be begun (whose cost could be
-                // paid).
-                _ => opts
+                // paid) with one of the permissions it could be cast with.
+                _ => ways
                     .iter()
-                    .position(|o| self.can_begin_cast(p, card, o))
+                    .position(|w| w.iter().any(|o| self.can_begin_cast(p, card, o)))
                     .unwrap_or(0),
             }
         } else {

@@ -9,11 +9,11 @@
 use crate::r_s01_common::*;
 use crate::r_s04_common::add_mana;
 use crate::r_s08_common::legal_cast_methods;
+use mtg_engine::casting::PERMISSION_COST;
 use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::*;
-use mtg_engine::casting::PERMISSION_COST;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -26,8 +26,7 @@ fn can_play_land(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     let card = t.g.current(card);
     t.g.turn.priority = Some(p);
     t.g.recompute();
-    t.g.legal_actions(p)
-        .contains(&Action::PlayLand { card })
+    t.g.legal_actions(p).contains(&Action::PlayLand { card })
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +234,10 @@ fn ragavan_the_exiled_card_is_cast_normally_and_a_land_cant_be_played() {
     t.advance_to_step(Step::PostcombatMain);
     assert!(!can_play_land(&mut t, P0, mammoth));
     assert!(t.play_land(P0, mammoth).is_err());
-    assert_eq!(legal_cast_methods(&mut t, P0, mammoth), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, mammoth),
+        vec![CastMethod::Normal]
+    );
     let spell = t.cast(P0, mammoth).go();
     assert_eq!(t.obj(spell).chars.name, "Kazandu Mammoth");
     assert_eq!(tapped_lands(&t, P0), 3);
@@ -275,8 +277,8 @@ fn inside_information(t: &mut TestGame, top_first: &[&str]) -> Vec<ObjectId> {
 }
 
 #[test]
-fn inside_information_spells_are_cast_for_life_with_additional_costs_but_no_other_alternative_cost(
-) {
+fn inside_information_spells_are_cast_for_life_with_additional_costs_but_no_other_alternative_cost()
+{
     cr!("118.9a", "118.9b", "601.2b", "601.2f");
     ruling!(
         "Inside Information",
@@ -301,7 +303,10 @@ fn inside_information_spells_are_cast_for_life_with_additional_costs_but_no_othe
     assert_eq!(t.named_on_battlefield("Mulldrifter").len(), 1);
     // Burst Lightning ({R}, kicker {4}): 1 life, and the kicker may be paid too.
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
-    t.cast(P0, burst).method(PAY_LIFE).target(Entity::Player(P1)).go();
+    t.cast(P0, burst)
+        .method(PAY_LIFE)
+        .target(Entity::Player(P1))
+        .go();
     assert_eq!(t.life(P0), 14);
     assert_eq!(tapped_lands(&t, P0), 4, "the kicker cost {{4}}");
     t.resolve_all();
@@ -354,7 +359,10 @@ fn inside_information_lands_follow_the_land_rules() {
     t.advance_to_step(Step::BeginningOfCombat);
     t.g.turn.priority = Some(P0);
     assert_eq!(legal_cast_methods(&mut t, P0, bolt), vec![PAY_LIFE]);
-    t.cast(P0, bolt).method(PAY_LIFE).target(Entity::Player(P1)).go();
+    t.cast(P0, bolt)
+        .method(PAY_LIFE)
+        .target(Entity::Player(P1))
+        .go();
     assert_eq!(t.life(P0), 19);
 }
 
@@ -376,8 +384,16 @@ fn xanders_pact_spells_cast_for_life_no_blitz_but_casualty() {
     t.cast(P0, pact).go();
     t.resolve_all();
     // Each opponent exiled their top card.
-    let req = t.g.exile.iter().copied().find(|c| t.obj(*c).chars.name == "Riveteers Requisitioner");
-    let join = t.g.exile.iter().copied().find(|c| t.obj(*c).chars.name == "Join the Maestros");
+    let req =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|c| t.obj(*c).chars.name == "Riveteers Requisitioner");
+    let join =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|c| t.obj(*c).chars.name == "Join the Maestros");
     let (req, join) = (req.expect("exiled"), join.expect("exiled"));
     t.lands(P0, "Mountain", 3);
     // Riveteers Requisitioner ({1}{R}, blitz {2}{R}): only for 2 life, not blitzed.
@@ -395,7 +411,11 @@ fn xanders_pact_spells_cast_for_life_no_blitz_but_casualty() {
     assert_eq!(t.life(P0), 13);
     assert!(t.in_graveyard(P0, "Hill Giant"), "sacrificed for casualty");
     t.resolve_all();
-    assert_eq!(creatures(&t, P0).len(), 3, "the Requisitioner and two Rogue tokens");
+    assert_eq!(
+        creatures(&t, P0).len(),
+        3,
+        "the Requisitioner and two Rogue tokens"
+    );
 }
 
 /// Bolas's Citadel on P0's battlefield and `top` on top of their library.
@@ -440,7 +460,10 @@ fn elsha_of_the_infinite_casts_noncreature_spells_from_the_top_with_flash_and_th
     t.lands(P0, "Island", 3);
     t.advance_to_step(Step::BeginningOfCombat);
     t.g.turn.priority = Some(P0);
-    assert_eq!(legal_cast_methods(&mut t, P0, div), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, div),
+        vec![CastMethod::Normal]
+    );
     t.cast(P0, div).go();
     assert_eq!(tapped_lands(&t, P0), 3);
     // A creature card isn't allowed.
@@ -462,7 +485,10 @@ fn elsha_of_the_infinite_casts_noncreature_spells_from_the_top_with_flash_and_th
     let methods = legal_cast_methods(&mut t, P0, force);
     assert_eq!(methods.len(), 1, "{methods:?}");
     assert!(matches!(methods[0], CastMethod::Alternative(_)));
-    t.cast(P0, force).method(methods[0].clone()).target(spell).go();
+    t.cast(P0, force)
+        .method(methods[0].clone())
+        .target(spell)
+        .go();
     assert_eq!(t.life(P0), 19);
 }
 
@@ -549,7 +575,10 @@ fn muldrotha_the_type_as_its_cast_counts() {
     t.lands(P0, "Forest", 5);
     t.cast(P0, anthem).go();
     t.resolve_all();
-    assert_eq!(legal_cast_methods(&mut t, P0, satyr), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, satyr),
+        vec![CastMethod::Normal]
+    );
 }
 
 #[test]
@@ -572,11 +601,32 @@ fn muldrotha_a_new_muldrotha_gives_new_permissions() {
     assert!(legal_cast_methods(&mut t, P0, elves).is_empty());
     t.battlefield(P0, "Muldrotha, the Gravetide");
     assert!(!legal_cast_methods(&mut t, P0, elves).is_empty());
+    // The same Muldrotha leaving and returning is a new object (CR 400.7), with
+    // permissions of its own.
+    supported("Cloudshift");
+    let mut t = TestGame::new(2);
+    let muldrotha = t.battlefield(P0, "Muldrotha, the Gravetide");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let elves = t.graveyard(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 3);
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(legal_cast_methods(&mut t, P0, elves).is_empty());
+    let cloudshift = t.hand(P0, "Cloudshift");
+    add_mana(&mut t, P0, ManaType::W, 1);
+    t.cast(P0, cloudshift).target(muldrotha).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Muldrotha, the Gravetide").len(), 1);
+    assert!(!t.is_live(muldrotha), "a new object");
+    assert!(!legal_cast_methods(&mut t, P0, elves).is_empty());
+    t.cast(P0, elves).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
 }
 
 #[test]
 fn muldrotha_normal_timing_land_plays_and_costs() {
-    cr!("305.2b", "307.1", "601.3", "118.9");
+    cr!("305.2b", "307.1", "601.3", "118.9", "601.2h");
     ruling!(
         "Muldrotha, the Gravetide",
         "You must follow the normal timing permissions and restrictions of the cards you play from your graveyard. For example, you can't use Muldrotha to play a land if you don't have an available land play or to cast a planeswalker spell during your end step."
@@ -604,23 +654,47 @@ fn muldrotha_normal_timing_land_plays_and_costs() {
     t.advance_to_step(Step::End);
     t.g.turn.priority = Some(P0);
     assert!(legal_cast_methods(&mut t, P0, liliana).is_empty());
-    // On the next turn: Mulldrifter for its evoke cost; Muldrotha leaving after it's cast
-    // doesn't affect the spell.
+    // On the next turn: Mulldrifter for its evoke cost ({2}{U}, not {4}{U}).
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::PrecombatMain);
     t.lands(P0, "Island", 1);
     let methods = legal_cast_methods(&mut t, P0, md);
-    assert!(methods.contains(&CastMethod::Keyword(KeywordKind::Evoke)), "{methods:?}");
+    assert!(
+        methods.contains(&CastMethod::Keyword(KeywordKind::Evoke)),
+        "{methods:?}"
+    );
     let hand = t.hand_size(P0);
-    let spell = t
-        .cast(P0, md)
+    t.cast(P0, md)
         .method(CastMethod::Keyword(KeywordKind::Evoke))
         .go();
-    t.g.destroy(muldrotha, None);
-    t.g.flush_events();
-    assert!(t.is_live(spell));
+    assert_eq!(tapped_lands(&t, P0), 3);
     t.resolve_all();
-    assert!(t.hand_size(P0) >= hand + 2, "Mulldrifter resolved and drew two");
+    assert!(
+        t.hand_size(P0) >= hand + 2,
+        "Mulldrifter resolved and drew two"
+    );
+    assert!(t.in_graveyard(P0, "Mulldrifter"), "evoked");
+    let _ = muldrotha;
+    // Losing Muldrotha while casting: Wretched Gryff ({7}, emerge {5}{U}) cast from the
+    // graveyard by sacrificing Muldrotha (mana value 6) as its emerge cost, for {U}.
+    // Muldrotha leaves as the costs are paid (CR 601.2h); the spell is still cast.
+    supported("Wretched Gryff");
+    let mut t = TestGame::new(2);
+    let muldrotha = t.battlefield(P0, "Muldrotha, the Gravetide");
+    let gryff = t.graveyard(P0, "Wretched Gryff");
+    t.lands(P0, "Island", 1);
+    t.answer_choose(P0, &[Entity::Object(muldrotha)]);
+    let spell = t
+        .cast(P0, gryff)
+        .method(CastMethod::Keyword(KeywordKind::Emerge))
+        .go();
+    assert!(
+        t.in_graveyard(P0, "Muldrotha, the Gravetide"),
+        "sacrificed to emerge"
+    );
+    assert_eq!(tapped_lands(&t, P0), 1, "{{U}}");
+    t.resolve_all();
+    assert!(t.on_battlefield(spell));
 }
 
 #[test]
@@ -661,7 +735,7 @@ fn lurrus_another_permission_leaves_lurrus_unused() {
 
 #[test]
 fn lurrus_no_lands_costs_or_alternative_costs_and_losing_lurrus() {
-    cr!("601.3", "118.9", "305.1");
+    cr!("601.3", "118.9", "305.1", "601.2h");
     ruling!(
         "Lurrus of the Dream-Den",
         "Lurrus doesn't let you play lands from your graveyard."
@@ -693,27 +767,52 @@ fn lurrus_no_lands_costs_or_alternative_costs_and_losing_lurrus() {
         .method(CastMethod::Keyword(KeywordKind::Dash))
         .go();
     assert_eq!(tapped_lands(&t, P0), 2);
-    t.g.destroy(lurrus, None);
-    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.on_battlefield(spell));
+    let _ = lurrus;
+    // Losing Lurrus while casting: Dusk Rose Reliquary ({W}; as an additional cost,
+    // sacrifice an artifact or creature) cast from the graveyard with Lurrus's permission,
+    // sacrificing Lurrus as the costs are paid (CR 601.2h).
+    supported("Dusk Rose Reliquary");
+    let mut t = TestGame::new(2);
+    let lurrus = t.battlefield(P0, "Lurrus of the Dream-Den");
+    let reliquary = t.graveyard(P0, "Dusk Rose Reliquary");
+    t.lands(P0, "Plains", 1);
+    t.answer_choose(P0, &[Entity::Object(lurrus)]);
+    let spell = t.cast(P0, reliquary).go();
+    assert!(
+        t.in_graveyard(P0, "Lurrus of the Dream-Den"),
+        "sacrificed as a cost"
+    );
     t.resolve_all();
     assert!(t.on_battlefield(spell));
 }
 
 #[test]
 fn karador_losing_karador_doesnt_affect_the_spell() {
-    cr!("601.3", "608.2");
+    cr!("601.3", "601.2h", "702.119a");
     ruling!(
         "Karador, Ghost Chieftain",
         "Once you begin to cast the spell, losing control of Karador won't affect the spell. You can finish casting it as normal."
     );
     supported("Karador, Ghost Chieftain");
+    supported("Wretched Gryff");
+    // Wretched Gryff cast from the graveyard with Karador's permission, sacrificing Karador
+    // (mana value 8) as its emerge cost: Karador leaves as the costs are paid (CR 601.2h),
+    // and the spell is cast and resolves.
     let mut t = TestGame::new(2);
     let karador = t.battlefield(P0, "Karador, Ghost Chieftain");
-    let bears = t.graveyard(P0, "Grizzly Bears");
-    t.lands(P0, "Forest", 2);
-    let spell = t.cast(P0, bears).go();
-    t.g.destroy(karador, None);
-    t.g.flush_events();
+    let gryff = t.graveyard(P0, "Wretched Gryff");
+    t.lands(P0, "Island", 1);
+    t.answer_choose(P0, &[Entity::Object(karador)]);
+    let spell = t
+        .cast(P0, gryff)
+        .method(CastMethod::Keyword(KeywordKind::Emerge))
+        .go();
+    assert!(
+        t.in_graveyard(P0, "Karador, Ghost Chieftain"),
+        "sacrificed to emerge"
+    );
     t.resolve_all();
     assert!(t.on_battlefield(spell));
 }
@@ -732,7 +831,10 @@ fn lurrus_the_mana_value_counts_the_value_chosen_for_x() {
     t.battlefield(P0, "Lurrus of the Dream-Den");
     let walker = t.graveyard(P0, "Hangarback Walker");
     t.lands(P0, "Wastes", 4);
-    assert_eq!(legal_cast_methods(&mut t, P0, walker), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, walker),
+        vec![CastMethod::Normal]
+    );
     // X = 2: the proposed spell isn't one Lurrus allows; the casting is undone (CR 733).
     assert!(t.cast(P0, walker).x(2).try_go().is_err());
     assert_eq!(t.obj(walker).zone, Zone::Graveyard(P0));
@@ -772,7 +874,8 @@ fn hurl_through_hell_an_animated_land_cant_be_played() {
     t.lands(P1, "Wastes", 1);
     // P1 animates Mutavault ("{1}: ... becomes a 2/2 creature ... It's still a land.").
     t.g.turn.priority = Some(P1);
-    t.activate(P1, mutavault, 1, &[]).expect("animate Mutavault");
+    t.activate(P1, mutavault, 1, &[])
+        .expect("animate Mutavault");
     t.resolve_all();
     assert!(t
         .obj_now(mutavault)
@@ -806,7 +909,10 @@ fn hurl_through_hell_the_card_is_cast_with_normal_timing_and_mana_of_any_color()
     // Until the end of P0's next turn: in their next main phase.
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::PrecombatMain);
-    assert_eq!(legal_cast_methods(&mut t, P0, card), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, card),
+        vec![CastMethod::Normal]
+    );
     t.cast(P0, card).go();
     assert_eq!(tapped_lands(&t, P0), 2);
     t.resolve_all();
@@ -817,7 +923,11 @@ fn hurl_through_hell_the_card_is_cast_with_normal_timing_and_mana_of_any_color()
     let seer = t.battlefield(P1, "Thought-Knot Seer");
     let card = hurl(&mut t, seer);
     t.lands(P0, "Mountain", 4);
-    assert!(t.cast(P0, card).target(Entity::Player(P1)).try_go().is_err());
+    assert!(t
+        .cast(P0, card)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_err());
     t.lands(P0, "Wastes", 1);
     t.cast(P0, card).target(Entity::Player(P1)).go();
 }
@@ -845,13 +955,22 @@ fn gaeas_will_lands_and_spells_from_the_graveyard_follow_the_usual_rules() {
     t.play_land(P0, forest).expect("play the Forest");
     assert!(!can_play_land(&mut t, P0, island), "no land play left");
     // Grizzly Bears: its mana cost is paid, at sorcery speed only.
-    assert!(legal_cast_methods(&mut t, P0, bears).is_empty(), "one land: {{1}}{{G}} unpaid");
+    assert!(
+        legal_cast_methods(&mut t, P0, bears).is_empty(),
+        "one land: {{1}}{{G}} unpaid"
+    );
     t.lands(P0, "Forest", 1);
     t.advance_to_step(Step::BeginningOfCombat);
     t.g.turn.priority = Some(P0);
-    assert!(legal_cast_methods(&mut t, P0, bears).is_empty(), "not during combat");
+    assert!(
+        legal_cast_methods(&mut t, P0, bears).is_empty(),
+        "not during combat"
+    );
     t.advance_to_step(Step::PostcombatMain);
-    assert_eq!(legal_cast_methods(&mut t, P0, bears), vec![CastMethod::Normal]);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, bears),
+        vec![CastMethod::Normal]
+    );
     t.cast(P0, bears).go();
     assert_eq!(tapped_lands(&t, P0), 2);
 }
@@ -889,12 +1008,135 @@ fn karador_with_yawgmoths_will_uses_the_permission_chosen() {
             Some(2),
             "Karador's or Yawgmoth's Will's ({will_spell:?})"
         );
-        let used = t
-            .g
-            .history
-            .once_permissions_used
-            .iter()
-            .any(|(o, _)| *o == karador);
+        let used =
+            t.g.history
+                .once_permissions_used
+                .iter()
+                .any(|(o, _)| *o == karador);
         assert_eq!(used, use_karador);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Other cards whose permissions now compile
+// ---------------------------------------------------------------------------
+
+#[test]
+fn korvold_and_the_noble_thief_plays_an_opponents_exiled_cards_this_turn() {
+    cr!("714.2b", "305.1", "601.3", "601.2f");
+    ruling!(
+        "Korvold and the Noble Thief",
+        "You pay all costs and follow all normal timing rules for a card played this way. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
+    );
+    supported("Korvold and the Noble Thief");
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Korvold and the Noble Thief");
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert("lore".into(), 2);
+    let cards = stack_library(
+        &mut t,
+        P1,
+        &["Forest", "Grizzly Bears", "Hill Giant", "Shock"],
+    );
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    crate::r_s29_common::put_counters(&mut t, saga, "lore", 1);
+    t.resolve_all();
+    // Chapter III: the top three cards of P1's library are exiled.
+    let [forest, bears, giant, shock] = [0, 1, 2, 3].map(|i| t.g.current(cards[i]));
+    for c in [forest, bears, giant] {
+        assert_eq!(t.obj(c).zone, Zone::Exile);
+    }
+    assert_eq!(t.obj(shock).zone, Zone::Library(P1));
+    // P0 may play the land with their land play, and cast the spells paying their costs.
+    assert!(can_play_land(&mut t, P0, forest));
+    t.play_land(P0, forest).expect("play P1's Forest");
+    t.lands(P0, "Forest", 1);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, bears),
+        vec![CastMethod::Normal]
+    );
+    assert!(
+        legal_cast_methods(&mut t, P0, giant).is_empty(),
+        "{{3}}{{R}} unpaid"
+    );
+    t.cast(P0, bears).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
+    t.resolve_all();
+    assert_eq!(creatures(&t, P0).len(), 1);
+    // Only this turn.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 4);
+    assert!(legal_cast_methods(&mut t, P0, giant).is_empty());
+}
+
+#[test]
+fn rundvelt_hordemaster_triggers_for_each_goblin_dying_at_once() {
+    cr!("603.2c", "603.10a", "601.3");
+    ruling!(
+        "Rundvelt Hordemaster",
+        "If Rundvelt Hordemaster and one or more other Goblins you control die at the same time, its ability will trigger once for each of them."
+    );
+    supported("Rundvelt Hordemaster");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rundvelt Hordemaster");
+    t.battlefield(P0, "Raging Goblin");
+    let cards = stack_library(&mut t, P0, &["Goblin Guide", "Grizzly Bears"]);
+    let doj = t.hand(P0, "Day of Judgment");
+    add_mana(&mut t, P0, ManaType::W, 2);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    t.cast(P0, doj).go();
+    t.resolve_all();
+    // Two triggers: each exiles the top card of P0's library.
+    let (guide, bears) = (t.g.current(cards[0]), t.g.current(cards[1]));
+    assert_eq!(t.obj(guide).zone, Zone::Exile);
+    assert_eq!(t.obj(bears).zone, Zone::Exile);
+    // A Goblin creature card may be cast (until the end of P0's next turn); another card
+    // may not.
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 2);
+    assert!(legal_cast_methods(&mut t, P0, bears).is_empty());
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(
+        legal_cast_methods(&mut t, P0, guide),
+        vec![CastMethod::Normal]
+    );
+    let spell = t.cast(P0, guide).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(spell));
+}
+
+#[test]
+fn yawgmoths_will_exiles_itself_and_cards_put_into_the_graveyard_as_costs() {
+    cr!("614.1a", "601.3", "608.2n");
+    ruling!(
+        "Yawgmoth's Will",
+        "It will exile itself since it goes to the graveyard after its effect starts."
+    );
+    ruling!(
+        "Yawgmoth's Will",
+        "The second ability creates a replacement effect. It applies to both costs and effects."
+    );
+    supported("Yawgmoth's Will");
+    supported("Tormenting Voice");
+    let mut t = TestGame::new(2);
+    let will = t.hand(P0, "Yawgmoth's Will");
+    let voice = t.graveyard(P0, "Tormenting Voice");
+    let giant = t.hand(P0, "Hill Giant");
+    add_mana(&mut t, P0, ManaType::B, 3);
+    t.cast(P0, will).go();
+    t.resolve_all();
+    assert!(t.in_exile("Yawgmoth's Will"));
+    assert!(!t.in_graveyard(P0, "Yawgmoth's Will"));
+    // Tormenting Voice from the graveyard, discarding Hill Giant as its additional cost:
+    // both are exiled instead of put into the graveyard.
+    t.lands(P0, "Mountain", 2);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, voice).go();
+    assert!(t.in_exile("Hill Giant"), "discarded as a cost: exiled");
+    t.resolve_all();
+    assert!(t.in_exile("Tormenting Voice"));
+    assert_eq!(t.graveyard_size(P0), 0);
 }

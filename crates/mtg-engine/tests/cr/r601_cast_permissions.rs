@@ -7,10 +7,10 @@
 
 use super::r600_common::*;
 use mtg_engine::ability::*;
-use mtg_engine::decision::Action;
+use mtg_engine::casting::PERMISSION_COST;
+use mtg_engine::decision::{Action, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::*;
-use mtg_engine::casting::PERMISSION_COST;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -99,9 +99,9 @@ fn a_permission_to_cast_a_card_doesnt_let_it_be_played_as_a_land() {
 fn a_permission_may_require_an_alternative_cost() {
     cr!("118.9a", "118.9b", "118.9d", "107.3b", "601.2f");
     let life = PlayTerms {
-        alt_cost: Some(Cost::free().with(CostPart::PayLife(Value::ManaValueOf(Box::new(
-            Sel::This,
-        ))))),
+        alt_cost: Some(
+            Cost::free().with(CostPart::PayLife(Value::ManaValueOf(Box::new(Sel::This)))),
+        ),
         ..Default::default()
     };
     let mut t = TestGame::new(2);
@@ -182,11 +182,7 @@ fn a_permission_may_let_mana_be_spent_as_though_it_were_mana_of_any_type_or_colo
         let ok = t.cast(P0, elves).try_go().is_ok();
         assert_eq!(ok, any_type || any_color, "{any_type} {any_color}");
         t.resolve_all();
-        let ok = t
-            .cast(P0, seer)
-            .target(Entity::Player(P1))
-            .try_go()
-            .is_ok();
+        let ok = t.cast(P0, seer).target(Entity::Player(P1)).try_go().is_ok();
         assert_eq!(ok, any_type, "{any_type} {any_color}");
     }
     // The flexibility is for spells cast with that permission only: Grizzly Bears from the
@@ -207,7 +203,7 @@ fn a_permission_may_let_mana_be_spent_as_though_it_were_mana_of_any_type_or_colo
 
 #[test]
 fn a_permission_may_let_spells_be_cast_as_though_they_had_flash() {
-    cr!("702.8a", "601.3", "307.1");
+    cr!("702.8a", "601.3", "307.1", "601.2");
     let flash = PlayTerms {
         flash: true,
         ..Default::default()
@@ -221,13 +217,36 @@ fn a_permission_may_let_spells_be_cast_as_though_they_had_flash() {
     assert!(cast_methods(&mut t, P0, div).is_empty());
     let mut t = TestGame::new(2);
     let div = t.exile(P0, "Divination");
-    grant(&mut t, "Flash Permission", flash);
+    grant(&mut t, "Flash Permission", flash.clone());
     t.lands(P0, "Island", 3);
     t.advance_to_step(Step::BeginningOfCombat);
     assert_eq!(cast_methods(&mut t, P0, div), vec![CastMethod::Normal]);
     t.cast(P0, div).go();
     t.resolve();
     assert!(t.in_graveyard(P0, "Divination"));
+    // With both: during combat only the way with flash is offered (the other isn't allowed
+    // then); in a main phase, P0 chooses between them.
+    for (step, offered) in [(Step::BeginningOfCombat, 1), (Step::PostcombatMain, 2)] {
+        let mut t = TestGame::new(2);
+        let div = t.exile(P0, "Divination");
+        grant(&mut t, "Plain Permission", PlayTerms::default());
+        grant(&mut t, "Flash Permission", flash.clone());
+        t.lands(P0, "Island", 3);
+        t.advance_to_step(step);
+        t.g.turn.priority = Some(P0);
+        let from = t.asked().len();
+        t.cast(P0, div).go();
+        let options = t.asked()[from..]
+            .iter()
+            .find_map(|(_, d)| match d {
+                Decision::ChooseCastingMethod { options, .. } => Some(options.len()),
+                _ => None,
+            })
+            .unwrap_or(1);
+        assert_eq!(options, offered, "{step:?}");
+        t.resolve();
+        assert!(t.in_graveyard(P0, "Divination"));
+    }
 }
 
 #[test]
@@ -248,12 +267,11 @@ fn the_player_chooses_which_permission_they_use_and_gets_its_terms() {
             t.answer_choose(P0, &[Entity::Object(costly)]);
         }
         t.cast(P0, bears).go();
-        let tapped = t
-            .g
-            .battlefield
-            .iter()
-            .filter(|l| t.g.obj(**l).tapped)
-            .count();
+        let tapped =
+            t.g.battlefield
+                .iter()
+                .filter(|l| t.g.obj(**l).tapped)
+                .count();
         assert_eq!(tapped, if choose_costlier { 4 } else { 2 });
     }
 }
