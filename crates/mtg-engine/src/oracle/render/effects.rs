@@ -1378,6 +1378,28 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Create a Treasure token and a 2/2 blue Bird creature token with flying."
+            if let (
+                Some(Effect::CreateToken { controller: c1, .. }),
+                Some(Effect::CreateToken { controller: c2, .. }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if format!("{c1:?}") == format!("{c2:?}") {
+                    let a = self.effect(&v[i]);
+                    let b = self.effect(&v[i + 1]);
+                    match b.strip_prefix("create ") {
+                        Some(rest) if a.starts_with("create ") => {
+                            parts.push(format!("{a} and {{opt:create}} {rest}"))
+                        }
+                        _ => {
+                            parts.push(a);
+                            parts.push(b);
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
             // "Target creature gains protection from the color of your choice": a color
             // chosen for the next instruction only.
             if let (
@@ -2554,6 +2576,13 @@ impl Renderer<'_> {
         match v {
             Value::Const(n) => (n.to_string(), None),
             Value::X => ("X".into(), None),
+            // "+1/+0 for each ...": no change to the other number.
+            Value::Mul(a, b)
+                if matches!(a.as_ref(), Value::Const(0))
+                    || matches!(b.as_ref(), Value::Const(0)) =>
+            {
+                ("0".into(), None)
+            }
             Value::Mul(a, b) if matches!(a.as_ref(), Value::Const(-1)) => {
                 let (s, w) = self.pt_amount(b);
                 (format!("-{s}"), w)

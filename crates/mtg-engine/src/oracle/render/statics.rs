@@ -187,6 +187,15 @@ impl Renderer<'_> {
         }
     }
 
+    /// The subject of a restriction: spells are the ones on the stack ("spells you control
+    /// can't be countered").
+    fn restricted_subject(&mut self, f: &Filter) -> String {
+        if filter_has(f, &|x| matches!(x, Filter::Spell)) && Self::first_each_turn(f).is_none() {
+            return self.noun_det(f, Det::Plural);
+        }
+        self.affected_subject(f)
+    }
+
     fn affected_subject(&mut self, f: &Filter) -> String {
         if let Some(base) = Self::first_each_turn(f) {
             // "The first historic spell you cast each turn has convoke."
@@ -204,6 +213,7 @@ impl Renderer<'_> {
                 if filter_has(other, &|x| matches!(x, Filter::Spell)) {
                     s.replace("spells you control", "spells you cast")
                         .replace("spell you control", "spell you cast")
+                        .replace("spells} you control", "spells} you cast")
                 } else {
                     s
                 }
@@ -763,7 +773,7 @@ impl Renderer<'_> {
 
     /// The text of a restriction (a rule-modifying effect, CR 613.11).
     pub(crate) fn restriction(&mut self, r: &Restriction) -> String {
-        let subj = |me: &mut Self, f: &Filter| me.affected_subject(f);
+        let subj = |me: &mut Self, f: &Filter| me.restricted_subject(f);
         match r {
             Restriction::CantAttack(f) => format!("{} can't attack", subj(self, f)),
             Restriction::CantBlock(f) => format!("{} can't block", subj(self, f)),

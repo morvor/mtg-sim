@@ -277,6 +277,7 @@ impl Renderer<'_> {
             }
             Filter::InZone(z) => np.zone = Some(*z),
             Filter::Tapped => np.status.push("tapped".into()),
+            Filter::Untapped if np.status.iter().any(|x| x == "untapped") => {}
             Filter::Untapped => np.status.push("untapped".into()),
             Filter::Attacking => np.status.push("attacking".into()),
             Filter::Blocking => np.status.push("blocking".into()),
@@ -543,6 +544,15 @@ impl Renderer<'_> {
             let list = join_list(&alts, "and");
             if suffix.is_empty() {
                 return list;
+            }
+            // "Elemental spells and Warrior spells" / "instant and sorcery spells".
+            if suffix == " spell" && alts.len() == 2 {
+                let each: Vec<String> = alts.iter().map(|a| format!("{a} spells")).collect();
+                return format!(
+                    "{{alt:{}|{}}}",
+                    plural(&format!("{list}{suffix}")),
+                    join_list(&each, "and")
+                );
             }
             return plural(&format!("{list}{suffix}"));
         }
