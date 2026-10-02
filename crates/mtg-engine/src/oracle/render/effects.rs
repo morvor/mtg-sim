@@ -2433,6 +2433,26 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "You and target opponent each draw a card."
+            if let (Some(first), Some(Effect::AsPlayer { who: other, effect })) =
+                (v.get(i), v.get(i + 1))
+            {
+                if format!("{first:?}") == format!("{:?}", effect.as_ref())
+                    && matches!(other, PlayerRef::Target(_))
+                    && !format!("{first:?}").contains("Target")
+                {
+                    let vp = self.effect(first);
+                    if !vp.contains(['.', '{']) && !vp.starts_with("you ") {
+                        let p = self.player(other, Case::Subj);
+                        parts.push(format!("you and {p} each {vp}"));
+                        i += 2;
+                        continue;
+                    }
+                    parts.push(vp);
+                    i += 1;
+                    continue;
+                }
+            }
             // "Discard a card. When you discard a card this way, ..." (a reflexive trigger,
             // CR 603.12).
             if let Some(Effect::If {
