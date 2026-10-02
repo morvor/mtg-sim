@@ -1628,6 +1628,9 @@ impl Renderer<'_> {
                 free,
             } => {
                 let w = self.sel(what, Case::Obj);
+                // "You may cast an instant or sorcery spell from among them", "you may
+                // play one of those cards": what may be played, and how many.
+                let w = self.permission_object(&w);
                 let d = self.duration(duration);
                 let f = if *free {
                     " without paying its mana cost"

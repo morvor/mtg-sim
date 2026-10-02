@@ -346,7 +346,16 @@ impl Renderer<'_> {
         }
         let saved = self.zone;
         self.zone = a.zone;
-        let cost = self.cost(&a.cost);
+        // "−X: ..." (CR 606.4: a loyalty cost of −X removes X loyalty counters).
+        let minus_x = a.is_loyalty
+            && a.cost.mana.is_none()
+            && matches!(a.cost.parts.as_slice(), [CostPart::RemoveCounters { kind, count: Value::X }]
+                if kind.as_str() == "loyalty");
+        let cost = if minus_x {
+            "−X".to_string()
+        } else {
+            self.cost(&a.cost)
+        };
         let saved_salient = self.self_salient;
         // "Sacrifice ~: It deals 2 damage to any target."
         self.self_salient = cost.contains('~');

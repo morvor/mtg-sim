@@ -13,6 +13,31 @@ impl Renderer<'_> {
             .map(|s| (2, s))
             .or_else(|| self.does_the_same(v, i).map(|s| (2, s)))
             .or_else(|| self.any_player_may(v, i).map(|s| (2, s)))
+            .or_else(|| self.unpreventable_damage(v, i).map(|s| (2, s)))
+    }
+
+    /// "~ deals 5 damage to target creature. The damage can't be prevented.": a rule that
+    /// damage this spell deals this turn can't be prevented (CR 615.12), then the damage.
+    fn unpreventable_damage(&mut self, v: &[Effect], i: usize) -> Option<String> {
+        let (
+            Effect::AddRestriction {
+                restriction: Restriction::SourceDamageCantBePrevented(f),
+                duration: Duration::EndOfTurn,
+            },
+            Some(
+                dd @ Effect::DealDamage {
+                    source: Sel::This, ..
+                },
+            ),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        if !matches!(f, Filter::In(s) if matches!(s.as_ref(), Sel::This)) {
+            return None;
+        }
+        let d = self.effect(dd);
+        Some(format!("{d}. The damage can't be prevented"))
     }
 
     /// "Any player may pay 5 life. If a player does, counter ~.": each player in turn may
