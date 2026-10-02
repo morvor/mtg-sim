@@ -339,11 +339,7 @@ fn domri_rade_plus_one_puts_back_an_unwanted_card_unrevealed() {
         let domri = t.battlefield(P0, "Domri Rade");
         loyalty(&mut t, domri, 3);
         let card = t.library_top(P0, top);
-        if take {
-            t.answer_choose(P0, &[obj(card)]);
-        } else {
-            t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
-        }
+        t.answer_yes(P0, take);
         t.activate(P0, domri, 0, &[]).expect("+1");
         t.resolve_all();
         let to_hand = take && top == "Grizzly Bears";

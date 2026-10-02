@@ -2506,21 +2506,6 @@ impl Renderer<'_> {
             return s;
         }
         let noun = self.card_noun(filter);
-        // "Look at the top card of your library. If it's a creature card, you may reveal
-        // it and put it into your hand." (the card stays on top otherwise).
-        if matches!((n, take), (Value::Const(1), Value::Const(1)))
-            && !reveal
-            && take_up_to
-            && take_to.zone == ZoneKind::Hand
-            && rest_to.zone == ZoneKind::Library
-            && rest_to.position == LibraryPosition::FromTop(0)
-        {
-            let a = with_article(&noun);
-            s.push_str(&format!(
-                ". If it's {a}, you may reveal it and put it into {p} hand"
-            ));
-            return s;
-        }
         let many = !matches!(take, Value::Const(1));
         let mut d = self.destination_phrase(take_to, many, true);
         if take_to.zone == ZoneKind::Hand {

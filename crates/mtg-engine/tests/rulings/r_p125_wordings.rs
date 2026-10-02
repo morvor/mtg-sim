@@ -6,7 +6,6 @@
 
 use crate::r_p125_common::*;
 use crate::r_p130_common::loyalty;
-use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -19,16 +18,10 @@ fn revealed(t: &TestGame) -> bool {
     })
 }
 
-/// Queues P0's choice of the looked-at card (`Some`) or of nothing.
+/// Queues P0's answer to "you may reveal it and put it into your hand" (asked only if the
+/// card qualifies).
 fn take(t: &mut TestGame, card: Option<ObjectId>) {
-    match card {
-        Some(c) => {
-            t.answer_choose(P0, &[obj(c)]);
-        }
-        None => {
-            t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
-        }
-    }
+    t.answer_yes(P0, card.is_some());
 }
 
 /// Checks the outcome of a "look at the top card; if it's a ..., you may put it into your
