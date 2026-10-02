@@ -34,6 +34,22 @@ pub fn referent() -> Sel {
     Sel::Var(REFERENT)
 }
 
+/// Like [`REFERENT`], for "that creature", "that card" and the like, which never mean the
+/// source (oracle text calls it "~"; see `effects::object_ref`).
+pub const REFERENT_THAT: Var = 0x7ffc;
+
+fn that_needle() -> String {
+    format!("{{\"Var\":{REFERENT_THAT}}}")
+}
+
+/// `x` with [`REFERENT`] in place of [`REFERENT_THAT`].
+fn as_that<T: serde::Serialize + serde::de::DeserializeOwned>(x: T) -> T {
+    let Ok(s) = serde_json::to_string(&x) else {
+        return x;
+    };
+    serde_json::from_str(&s.replace(&referent_needle(), &that_needle())).unwrap_or(x)
+}
+
 /// "They" in "among creatures they control": the player the instruction is performed
 /// for, until the effect parser resolves it ([`resolve_they`]).
 pub const THEY: PlayerRel = PlayerRel::Target(0xfe);
@@ -84,7 +100,8 @@ fn referent_needle() -> String {
 
 /// Whether the filter mentions the placeholder.
 pub fn mentions_referent<T: serde::Serialize>(x: &T) -> bool {
-    serde_json::to_string(x).is_ok_and(|s| s.contains(&referent_needle()))
+    serde_json::to_string(x)
+        .is_ok_and(|s| s.contains(&referent_needle()) || s.contains(&that_needle()))
 }
 
 /// `x` with the placeholder replaced by `it`. None if `it` has no antecedent (or the
@@ -93,14 +110,19 @@ pub fn substitute<T: serde::Serialize + serde::de::DeserializeOwned>(x: &T, it: 
     use crate::oracle::patterns::oracle_hardening_referents::is_no_referent;
     let s = serde_json::to_string(x).ok()?;
     let needle = referent_needle();
-    if !s.contains(&needle) {
+    let that = that_needle();
+    if !s.contains(&needle) && !s.contains(&that) {
         return serde_json::from_str(&s).ok();
     }
     if is_no_referent(it) {
         return None;
     }
+    // "that creature" isn't the source.
+    if s.contains(&that) && matches!(it, Sel::This) {
+        return None;
+    }
     let with = serde_json::to_string(it).ok()?;
-    serde_json::from_str(&s.replace(&needle, &with)).ok()
+    serde_json::from_str(&s.replace(&needle, &with).replace(&that, &with)).ok()
 }
 
 /// Replaces the placeholder in a filter the effect parser is about to use with what "it"
@@ -148,7 +170,8 @@ pub fn unresolved(a: &AbilityDef) -> bool {
         return false;
     };
     let s = v.to_string();
-    if s.contains(&referent_needle()) || s.contains(&they_needle()) {
+    if s.contains(&referent_needle()) || s.contains(&that_needle()) || s.contains(&they_needle())
+    {
         return true;
     }
     if !s.contains("\"Together\"") {
@@ -237,6 +260,8 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
     if let Some((v, rest)) = with_builder(|b| super::r107_numbers::value_phrase(t, b)) {
         // A value naming an object ("the number of counters on it") ends at the object.
         let rest = tail_of(t, &rest)?;
+        // "that creature's power": not the source's.
+        let v = if t.starts_with("that ") { as_that(v) } else { v };
         return Some((v, rest));
     }
     // "that creature's power", "the chosen creature's toughness".
@@ -297,6 +322,8 @@ pub fn object_in(t: &str) -> Option<(Sel, &str)> {
     if matches!(sel, Sel::Choose { .. }) {
         return None;
     }
+    // "that creature", "the chosen card": not the source.
+    let sel = if t.starts_with("it") { sel } else { as_that(sel) };
     Some((sel, tail_of(t, &rest)?))
 }
 
