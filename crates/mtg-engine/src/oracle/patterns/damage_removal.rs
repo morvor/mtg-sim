@@ -231,6 +231,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
         ("each other player", PlayerRef::EachOtherPlayer),
         ("you", PlayerRef::You),
         ("that player", b.it_player.clone()),
+        // "At the beginning of each player's end step, ... deals damage to the player"
+        // (Angel's Trumpet): the trigger's player.
+        ("the player", b.it_player.clone()),
         ("defending player", PlayerRef::DefendingPlayer),
         ("its controller", PlayerRef::ControllerOf(it())),
         ("their controller", PlayerRef::ControllerOf(it())),
@@ -258,6 +261,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
             }
             // Pronouns whose antecedent wasn't tracked still point at the defaults.
             if p == "that player" && matches!(r, PlayerRef::You) {
+                return None;
+            }
+            if p == "the player" && !matches!(r, PlayerRef::TriggerPlayer) {
                 return None;
             }
             if p.starts_with("that ") && p != "that player" && !it_is_object(b) {

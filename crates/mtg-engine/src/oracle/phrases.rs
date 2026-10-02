@@ -570,6 +570,11 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             // "target creature you control other than enchanted creature" (Due Diligence).
             (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
+            // "untapped creatures that player controls that didn't attack this turn".
+            (Filter::not(Filter::AttackedThisTurn), r)
+        } else if let Some(r) = t.strip_prefix("that attacked this turn") {
+            (Filter::AttackedThisTurn, r)
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {

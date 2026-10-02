@@ -323,9 +323,13 @@ impl Game {
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Tap { what } => {
+                let mut tapped = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    self.tap(o);
+                    if self.tap(o) {
+                        tapped.push(Entity::Object(o));
+                    }
                 }
+                ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {
                 for o in self.resolve_objects(what, ctx) {
@@ -1610,7 +1614,14 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let mut cast: Vec<Entity> = Vec::new();
-                for o in self.resolve_objects(what, ctx) {
+                // CR 601.3e: a choice of "a spell with [characteristics]" considers the
+                // spell each card could become, and it's cast as such.
+                let chosen = crate::spell_choice::choose_cards_to_cast(self, what, ctx);
+                let objs = match &chosen {
+                    Some(v) => v.iter().map(|(o, _)| *o).collect(),
+                    None => self.resolve_objects(what, ctx),
+                };
+                for o in objs {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
                     }
@@ -1624,7 +1635,17 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    if let Ok(spell) = crate::casting::cast_during_resolution(self, p, o, method) {
+                    let only = chosen
+                        .as_ref()
+                        .and_then(|v| v.iter().find(|(x, _)| *x == o))
+                        .map(|(_, f)| f.clone());
+                    if let Ok(spell) = crate::casting::cast_during_resolution_as(
+                        self,
+                        p,
+                        o,
+                        method,
+                        only.as_deref(),
+                    ) {
                         cast.push(Entity::Object(spell));
                     }
                 }

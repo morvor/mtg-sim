@@ -95,7 +95,8 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
     let faces = match o.card.as_ref().map(|d| (d.layout, d.faces.len())) {
-        Some((Layout::Split, 2)) => vec![FaceState::Half(0), FaceState::Half(1)],
+        // A split card with three halves too (There // They're // Their).
+        Some((Layout::Split, n)) if n >= 2 => (0..n as u8).map(FaceState::Half).collect(),
         Some((Layout::Adventure, 2)) => vec![FaceState::Front, FaceState::Half(1)],
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
@@ -121,8 +122,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 }
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
-fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
+fn choose_face_to_cast(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    only: Option<&[FaceState]>,
+) -> FaceState {
     let mut faces = castable_faces(g, card);
+    // Only the faces an effect lets the player cast (CR 601.3e).
+    if let Some(only) = only {
+        faces.retain(|f| only.contains(f));
+    }
     // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
     // CR 702.127a).
     let allowed: Vec<FaceState> = faces
@@ -155,12 +165,24 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    cast_during_resolution_as(g, p, card, method, None)
+}
+
+/// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
+/// the characteristics the effect allows, CR 601.3e), if given.
+pub fn cast_during_resolution_as(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    method: CastMethod,
+    only: Option<&[FaceState]>,
+) -> Result<ObjectId, Illegal> {
     // CR 702.61a: while a spell with split second is on the stack, no other spell can be
     // cast, even as part of a resolving ability's effect.
     if g.split_second_on_stack() {
         return Err(Illegal("a spell with split second is on the stack".into()));
     }
-    let face = choose_face_to_cast(g, p, card);
+    let face = choose_face_to_cast(g, p, card, only);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
     // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which

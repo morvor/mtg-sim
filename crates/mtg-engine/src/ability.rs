@@ -677,6 +677,9 @@ pub mod vars {
     /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
     /// earlier instruction of it ("the sacrificed creature", last known information).
     pub const SACRIFICED: Var = 9;
+    /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
+    /// this way"): not those that were already tapped.
+    pub const TAPPED: Var = USER + 3066;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
