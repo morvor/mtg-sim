@@ -448,6 +448,10 @@ pub struct Renderer<'a> {
     /// The object itself was named in the clause being rendered while another object
     /// was "it" (see [`Renderer::me`]).
     pub(crate) self_named_in_clause: bool,
+    /// The triggered ability being rendered triggers on the object this permanent is
+    /// attached to leaving the battlefield ("When enchanted creature dies, return ~ from
+    /// your graveyard ..."): by resolution the Aura is in the graveyard (CR 704.5m).
+    pub(crate) attached_left: bool,
     /// Rendering a triggered ability, a replacement effect, or a delayed or reflexive
     /// trigger: an event is in scope, so "it" can be the object the event names. Outside
     /// one, a selection of the triggering object finds nothing (`Ctx::event` is unset),
@@ -502,6 +506,7 @@ impl<'a> Renderer<'a> {
             self_salient: false,
             other_salient: false,
             self_named_in_clause: false,
+            attached_left: false,
             event_scope: false,
             trigger_is_self: false,
             stored_values: Vec::new(),
