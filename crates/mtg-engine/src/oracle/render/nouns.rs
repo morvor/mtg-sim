@@ -224,6 +224,17 @@ impl Renderer<'_> {
             }
             // "outlaw": an Assassin, Mercenary, Pirate, Rogue, or Warlock (CR 700.12).
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
+            // "a card named Festering Newt or Bubbling Cauldron".
+            Filter::Or(v) if v.len() > 1 && v.iter().all(|x| matches!(x, Filter::Named(_))) => {
+                let names: Vec<String> = v
+                    .iter()
+                    .filter_map(|x| match x {
+                        Filter::Named(n) => Some(n.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                np.post.push(format!("named {}", join_list(&names, "or")));
+            }
             // "artifact, enchantment, or legendary card": a supertype among card types,
             // the alternatives sharing the noun.
             Filter::Or(v)
@@ -1299,6 +1310,7 @@ fn distribute_or(f: &Filter) -> Filter {
     let complex = |x: &Filter| {
         matches!(x, Filter::Or(alts) if !alts.iter().all(Renderer::is_type_like)
             && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
+            && !alts.iter().all(|a| matches!(a, Filter::Named(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))
     };
     let Some(pos) = v.iter().position(complex) else {

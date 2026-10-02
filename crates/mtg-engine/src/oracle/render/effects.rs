@@ -348,8 +348,22 @@ impl Renderer<'_> {
                 format!("if {s} doesn't have suspend, it gains suspend")
             }
             // "Return the exiled card to the battlefield": each card linked to this object.
+            // "Put each card exiled with ~ into its owner's hand" (an object that exiles
+            // one card says "the exiled card").
             Effect::ForEach {
-                sel: Sel::Linked | Sel::CreatorLinked,
+                sel: Sel::Linked,
+                var,
+                effect,
+            } => {
+                let all = Sel::All(Filter::And(vec![
+                    Filter::In(Box::new(Sel::Linked)),
+                    Filter::InZone(ZoneKind::Exile),
+                ]));
+                self.var_defs.push((*var, all, false));
+                self.effect(effect)
+            }
+            Effect::ForEach {
+                sel: Sel::CreatorLinked,
                 var,
                 effect,
             } => {

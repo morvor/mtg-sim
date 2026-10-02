@@ -52,7 +52,31 @@ impl Renderer<'_> {
         if parts.is_empty() {
             return "{0}".into();
         }
-        parts.join(", ")
+        // "Sacrifice a black creature, a red creature, and a green creature": consecutive
+        // sacrifices are one instruction.
+        let mut merged: Vec<String> = Vec::new();
+        let mut run: Vec<String> = Vec::new();
+        let flush = |run: &mut Vec<String>, merged: &mut Vec<String>| {
+            match run.len() {
+                0 => {}
+                1 => merged.push(format!("Sacrifice {}", run[0])),
+                _ => merged.push(format!("Sacrifice {}", join_list(run, "and"))),
+            }
+            run.clear();
+        };
+        for p in parts {
+            match p.strip_prefix("Sacrifice ") {
+                Some(what) if !what.starts_with('~') && !what.contains(['{', '|']) => {
+                    run.push(what.to_string())
+                }
+                _ => {
+                    flush(&mut run, &mut merged);
+                    merged.push(p);
+                }
+            }
+        }
+        flush(&mut run, &mut merged);
+        merged.join(", ")
     }
 
     /// One non-mana cost, as an imperative ("sacrifice a creature").
