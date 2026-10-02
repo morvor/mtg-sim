@@ -920,7 +920,7 @@ fn if_you_reveal_a_card_named_this_way_put_it_onto_the_battlefield() {
 
 #[test]
 fn if_it_has_six_quest_counters_sacrifice_it_and_if_you_do_search() {
-    cr!("701.23a", "603.4", "608.2c");
+    cr!("701.23a", "608.2c");
     assert_supported("Last Light of Durin's Day");
     for (before, sacrificed) in [(5, true), (1, false)] {
         let mut t = TestGame::new(2);

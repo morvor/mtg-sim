@@ -1172,6 +1172,7 @@ fn tail_inner<'a>(
         spec.dests = vec![SearchDest {
             count: None,
             to: Destination::zone(ZoneKind::Exile),
+            or: vec![],
         }];
     }
     // Shuffle.
@@ -1210,7 +1211,11 @@ fn tail_inner<'a>(
             }
             let mut d = Destination::zone(ZoneKind::Library);
             d.position = pos;
-            spec.dests = vec![SearchDest { count: None, to: d }];
+            spec.dests = vec![SearchDest {
+                count: None,
+                to: d,
+                or: vec![],
+            }];
             spec.shuffle = SearchShuffle::Before;
             return Some(y);
         }
@@ -1218,6 +1223,41 @@ fn tail_inner<'a>(
         return Some(x);
     }
     Some(t)
+}
+
+/// "into your hand or graveyard", "onto the battlefield or into your hand": the other
+/// places the searcher may put the found cards instead. "Or graveyard" after "into your
+/// hand" is the same player's graveyard.
+fn alternative_destinations<'a>(
+    first: &Destination,
+    s: &'a str,
+    sr: &Searcher,
+    b: &mut Builder,
+) -> (Vec<Destination>, &'a str) {
+    let mut out = Vec::new();
+    let mut s = s;
+    while let Some(r) = s.strip_prefix(" or ") {
+        let elliptic = [("hand", ZoneKind::Hand), ("graveyard", ZoneKind::Graveyard)]
+            .into_iter()
+            .find_map(|(p, z)| r.strip_prefix(p).map(|rest| (z, rest)));
+        let next = match elliptic {
+            // Only after "into [your/their] hand/graveyard": the possessive carries over.
+            Some((z, rest))
+                if matches!(first.zone, ZoneKind::Hand | ZoneKind::Graveyard)
+                    && first.zone != z =>
+            {
+                Some((Destination::zone(z), rest))
+            }
+            Some(_) => None,
+            None => destination(r, sr, b),
+        };
+        let Some((d, rest)) = next else {
+            break;
+        };
+        out.push(d);
+        s = rest;
+    }
+    (out, s)
 }
 
 /// "it into your hand", "them onto the battlefield tapped", "one onto the battlefield
@@ -1231,7 +1271,8 @@ fn put_dests<'a>(
 ) -> Option<&'a str> {
     if let Some(r) = pronoun(x) {
         let (to, r) = destination(r.trim_start(), sr, b)?;
-        spec.dests = vec![SearchDest { count: None, to }];
+        let (or, r) = alternative_destinations(&to, r, sr, b);
+        spec.dests = vec![SearchDest { count: None, to, or }];
         return Some(r);
     }
     // Split: "[N] [of them] DEST and the other/the rest DEST".
@@ -1249,10 +1290,12 @@ fn put_dests<'a>(
         SearchDest {
             count: Some(n),
             to: first,
+            or: vec![],
         },
         SearchDest {
             count: None,
             to: second,
+            or: vec![],
         },
     ];
     Some(r)

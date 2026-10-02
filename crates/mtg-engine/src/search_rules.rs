@@ -437,9 +437,29 @@ fn split(
             _ => rest.clone(),
         };
         rest.retain(|o| !take.contains(o));
-        out.push((take, d.to.clone()));
+        // "Into your hand or graveyard": the searcher chooses where these go.
+        let to = if d.or.is_empty() || take.is_empty() {
+            d.to.clone()
+        } else {
+            let all: Vec<&Destination> = std::iter::once(&d.to).chain(d.or.iter()).collect();
+            let labels = all.iter().map(|d| destination_label(d)).collect();
+            let i = g.ask_option(p, ctx.source, "Choose where to put the found cards", labels);
+            all.get(i).copied().unwrap_or(&d.to).clone()
+        };
+        out.push((take, to));
     }
     out
+}
+
+fn destination_label(d: &Destination) -> String {
+    match d.zone {
+        ZoneKind::Battlefield => "Put onto the battlefield".into(),
+        ZoneKind::Hand => "Put into hand".into(),
+        ZoneKind::Graveyard => "Put into graveyard".into(),
+        ZoneKind::Exile => "Exile".into(),
+        ZoneKind::Library => "Put into library".into(),
+        z => format!("Put into {z:?}"),
+    }
 }
 
 /// "Then shuffle and put those cards on top in any order", "... third from the top": the

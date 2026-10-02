@@ -546,6 +546,10 @@ pub struct SearchDest {
     /// How many of the found cards go here (`None`: the rest).
     pub count: Option<Value>,
     pub to: Destination,
+    /// "put it into your hand or graveyard", "onto the battlefield or into your hand":
+    /// other places the searcher may put these cards instead, chosen as they're put.
+    #[serde(default)]
+    pub or: Vec<Destination>,
 }
 
 /// When a searched library is shuffled.
