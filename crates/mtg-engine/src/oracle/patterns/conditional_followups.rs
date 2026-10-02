@@ -368,7 +368,11 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if let Some(sel) = &subject {
         b.it = sel.clone();
     }
-    let parsed = crate::oracle::effects::parse_clause(&text, b);
+    // "Otherwise, you may put it into your graveyard.": an optional instruction.
+    let parsed = match text.strip_prefix("you may ") {
+        Some(_) => crate::oracle::effects::parse_sentence(&text, b),
+        None => crate::oracle::effects::parse_clause(&text, b),
+    };
     b.it = saved_it;
     let Some(mut e) = parsed else {
         b.targets.truncate(first_new);

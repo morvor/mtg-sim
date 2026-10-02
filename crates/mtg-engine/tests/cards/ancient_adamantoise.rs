@@ -1,5 +1,5 @@
-//! Ancient Adamantoise (hand-written, `src/cards/ancient_adamantoise.rs`): damage isn't
-//! removed from it during cleanup steps (an exception to CR 514.2).
+//! Ancient Adamantoise: "Damage isn't removed from this creature during cleanup steps." (an
+//! exception to CR 514.2; see `rule_statics::cleanup_damage`).
 
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;

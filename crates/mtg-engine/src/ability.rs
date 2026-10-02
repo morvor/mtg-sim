@@ -199,6 +199,10 @@ pub struct ActivatedAbility {
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
     pub own_cost_changes: Vec<OwnCostChange>,
+    /// "This ability can't be copied." (Gogo, Master of Mimicry): an instruction that
+    /// functions while the ability is on the stack (CR 113.6g, 707.10).
+    #[serde(default)]
+    pub cant_be_copied: bool,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -223,6 +227,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             own_cost_changes: Vec::new(),
+            cant_be_copied: false,
         }
     }
 }
@@ -857,6 +862,9 @@ pub mod vars {
     /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
     /// this way"): not those that were already tapped.
     pub const TAPPED: Var = USER + 3066;
+    /// Permanents the most recent "turn ... face down" instruction turned face down: not
+    /// those that already were face down or couldn't be (CR 708.2b, 712.16).
+    pub const TURNED_FACE_DOWN: Var = USER + 7088;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -1504,6 +1512,10 @@ pub enum Value {
     TimesKicked,
     /// Speed (CR 702.179).
     Speed(PlayerRef),
+    /// The number of turns the player has taken this game, including the current turn if
+    /// it's theirs ("your first, second, or third turn of the game"; not the number of
+    /// turns the game has had, as players may take extra turns).
+    TurnsTaken(PlayerRef),
     /// "the greatest power among creatures you control", "the total mana value of
     /// artifacts you control", "the number of +1/+1 counters among creatures you control":
     /// a characteristic of each selected object, combined (0 when nothing is selected).
@@ -1724,6 +1736,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// For as long as the affected objects are face down: characteristics an effect lists
+    /// for a permanent it turns face down ("Turn target creature face down. It becomes a
+    /// 2/2 Cyberman artifact creature.", CR 708.2a) stop applying once it's turned face up.
+    WhileFaceDown,
     /// "for as long as it has a [kind] counter on it": for each affected object, until it
     /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
     /// later, and does nothing to an object that has none as the effect begins).
@@ -2343,6 +2359,9 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[spells] can't be copied" (CR 113.6g, 707.10): "This spell can't be copied." on an
+    /// instant or sorcery, functioning on the stack. See `rule_statics::cant_be_copied`.
+    CantBeCopied(Filter),
     /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
     /// [`Restriction::CantEnter`] (CR 614.17d).
     CantEnterBattlefield(Filter),
@@ -2380,12 +2399,42 @@ pub enum Restriction {
     },
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "Players can't pay life [or sacrifice (permanents)] to cast spells or activate
+    /// abilities [that aren't mana abilities]" (Karn's Sylex, Yasharn, Angel of
+    /// Jubilation; CR 118.3, 119.4): the players `who` describes can't pay life (with
+    /// `life`) nor sacrifice permanents matching `sacrifice` to pay the costs of casting
+    /// spells or activating abilities (with `mana_abilities`, mana abilities too). Costs
+    /// paid as a spell or ability resolves aren't affected. See `rule_statics::payment`.
+    CantPayToCastOrActivate {
+        who: PlayerFilter,
+        life: bool,
+        sacrifice: Option<Filter>,
+        mana_abilities: bool,
+    },
+    /// "Spells and abilities your opponents control can't cause you to sacrifice
+    /// permanents" (Sigarda, Host of Herons), "Triggered abilities you control can't cause
+    /// you to sacrifice or exile creature tokens you control" (The Master, Multiplied):
+    /// the spells and abilities `by` describes can't make their controller's opponent (or
+    /// controller) sacrifice permanents matching `what` (CR 701.21), nor, with `exile`,
+    /// exile them. See `rule_statics::sacrifice_causes`.
+    CantCauseSacrifice {
+        what: Filter,
+        by: SacrificeCauses,
+        exile: bool,
+    },
     /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
     /// don't apply when they're destroyed (CR 701.19c).
     CantBeRegenerated(Filter),
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
+    /// "[cards] in [zones] can't enter the battlefield" (Kunoros, Hound of Athreos;
+    /// Grafdigger's Cage): checked against the card as it exists in that zone, before it
+    /// would move (so a noncreature card entering as a copy of a creature isn't stopped).
+    CantEnterFrom {
+        what: Filter,
+        zones: Vec<ZoneKind>,
+    },
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
@@ -2393,6 +2442,10 @@ pub enum Restriction {
     SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
+    /// "[permanents] can't be turned face up" (CR 708.7): not by a special action
+    /// (morph, disguise, a manifested or cloaked creature's mana cost, CR 702.37e,
+    /// 702.168d, 701.40b, 701.58b) nor by an effect. See `rule_statics::face_up`.
+    CantTurnFaceUp(Filter),
     /// "can't search libraries".
     CantSearch(PlayerFilter),
     /// Cast spells only at sorcery speed etc.
@@ -2413,6 +2466,16 @@ pub enum Restriction {
     },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
+/// the controller of its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SacrificeCauses {
+    /// "Spells and abilities your opponents control".
+    OpponentsSpellsAndAbilities,
+    /// "Triggered abilities you control".
+    YourTriggeredAbilities,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2636,6 +2699,9 @@ pub enum StaticEffect {
     /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
     /// declared" (CR 506.8). Checked from the card itself while it's being cast.
     CastOnlyIf(Condition),
+    /// "~ can be attached only to a [filter]" (Gate Smasher, Konda's Banner): an Equipment
+    /// that can't legally be attached to other objects (CR 301.5, 701.3b, 704.5n).
+    AttachOnlyTo(Filter),
     /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
     /// "You may exert this creature as it attacks. When you do, [then]."
     OptionalAttackCost {
@@ -2660,6 +2726,12 @@ pub enum StaticEffect {
     /// permanents matching the filter (relative to the source) are left out of the legend
     /// rule (see `legend_rule.rs`).
     LegendRuleExempt(Filter),
+    /// "Damage isn't removed from [permanents matching the filter] during cleanup steps"
+    /// (an exception to CR 514.2; see `rule_statics::cleanup_damage`).
+    DamageNotRemoved(Filter),
+    /// "Counters remain on ~ as it moves to any zone other than a player's hand or library"
+    /// (an exception to CR 122.2 and 400.7; see `rule_statics::counters_remain`).
+    CountersRemain,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

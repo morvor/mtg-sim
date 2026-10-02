@@ -12,16 +12,24 @@
 //! turns proceed together. With a single marker (games of four to seven players) the
 //! marker simply travels around the table.
 //!
-//! Known simplifications of playing the turns side by side: "until end of turn" effects
-//! end in the cleanup step of whichever turn reaches it first, and mana pools empty as
-//! any turn's steps end.
+//! Each turn has its own cleanup step (CR 514.2) and its own "this turn": an "until end of
+//! turn", "this turn" or "until end of combat" effect belongs to the turn being played
+//! when it was created (or made to last until end of turn), and ends with that turn's
+//! cleanup step (or end of combat step); mana belongs to the turn it was added during,
+//! and empties as that turn's steps end. Extra turns keep what happens as they begin
+//! ("At the beginning of that turn's end step, ...") wherever they're queued, and can be
+//! skipped (CR 614.10). A player who has priority for several stacks chooses the stack
+//! for a spell they cast or an ability they activate (CR 807.5b).
 
+use crate::ability::{Duration, Effect};
 use crate::combat::CombatState;
+use crate::eval::Ctx;
 use crate::events::Event;
 use crate::game::{Game, TurnHistory, Variant};
 use crate::turn::TurnState;
 use crate::types::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// What a marker's turn has going on while another marker's turn is being played.
 #[derive(Clone, Debug)]
@@ -55,6 +63,10 @@ pub struct TurnMarker {
     /// The marker's turn, while it isn't the one being played.
     #[serde(skip)]
     pub ctx: Option<Box<MarkerContext>>,
+    /// What happens as the extra turn the holder keeps the marker for begins (see
+    /// `skip::queue_extra_turn`).
+    #[serde(default)]
+    pub extra_actions: Vec<(Ctx, Effect)>,
 }
 
 /// Grand Melee bookkeeping.
@@ -68,8 +80,15 @@ pub struct GrandMelee {
     /// Players who take an extra turn immediately before their next turn (CR 807.4i,
     /// 807.4j).
     pub extra_before_next: Vec<PlayerId>,
+    /// What happens as each of those extra turns begins, in the same order.
+    #[serde(default)]
+    extra_before_actions: Vec<Vec<(Ctx, Effect)>>,
     /// Last marker played by [`advance`], for rotating between them.
     rotation: usize,
+    /// The turn (its number) each "until end of turn", "this turn" and "until end of
+    /// combat" effect belongs to, by effect id.
+    #[serde(default)]
+    effect_turns: BTreeMap<u32, u32>,
 }
 
 /// Whether this is a Grand Melee game.
@@ -88,7 +107,9 @@ static NO_MARKERS: GrandMelee = GrandMelee {
     current: 0,
     turns: 0,
     extra_before_next: Vec::new(),
+    extra_before_actions: Vec::new(),
     rotation: 0,
+    effect_turns: BTreeMap::new(),
 };
 
 fn gm(g: &Game) -> &GrandMelee {
@@ -158,6 +179,7 @@ pub fn ensure(g: &mut Game) {
             keep_for_extra: false,
             then_normal_turn: false,
             ctx: None,
+            extra_actions: vec![],
         });
     }
     let turns = g.turn.number;
@@ -166,7 +188,9 @@ pub fn ensure(g: &mut Game) {
         current: 0,
         turns,
         extra_before_next: vec![],
+        extra_before_actions: vec![],
         rotation: 0,
+        effect_turns: BTreeMap::new(),
     });
     // The other markers' turns begin at the same time.
     for i in 1..n {
@@ -211,6 +235,8 @@ pub fn switch_to(g: &mut Game, i: usize) {
     if cur == i {
         return;
     }
+    // What was created during the outgoing turn belongs to it.
+    tag_turn(g);
     let out = MarkerContext {
         turn: std::mem::replace(&mut g.turn, TurnState::new(PlayerId(0))),
         stack: std::mem::take(&mut g.stack),
@@ -238,16 +264,69 @@ pub fn switch_to(g: &mut Game, i: usize) {
     g.dirty = true;
 }
 
+/// Whether `p` has an extra turn waiting to be taken immediately before their next turn.
+fn has_extra_before_next(g: &Game, p: PlayerId) -> bool {
+    gm(g).extra_before_next.contains(&p)
+}
+
+/// Queues an extra turn for `p` immediately before their next turn, with what happens as
+/// it begins (CR 807.4i, 807.4j).
+fn push_extra_before_next(g: &mut Game, p: PlayerId, actions: Vec<(Ctx, Effect)>) {
+    let gm = gm_mut(g);
+    // Entries from before the actions were kept have none.
+    gm.extra_before_actions
+        .resize(gm.extra_before_next.len(), Vec::new());
+    gm.extra_before_next.push(p);
+    gm.extra_before_actions.push(actions);
+}
+
+/// Whether the extra turn `p` would begin is skipped instead (CR 614.10: a "skip your
+/// next turn" effect, or one that skips extra turns).
+fn extra_turn_skipped(g: &mut Game, p: PlayerId) -> bool {
+    crate::skip::consume_turn_skip(g, p) || crate::skip::extra_turn_skipped(g, p)
+}
+
 /// Begins the turn of marker `i`'s holder in that marker's context (which must be the
-/// current one). An extra turn waiting for them comes first (CR 807.4i, 807.4j).
+/// current one). An extra turn waiting for them comes first (CR 807.4i, 807.4j). An extra
+/// turn may be skipped (CR 614.10); then the marker passes on, or the holder's normal
+/// turn begins.
 fn begin_marker_turn(g: &mut Game, i: usize, extra: bool) {
     let holder = gm(g).markers[i].holder;
     let mut extra = extra;
-    if !extra {
-        if let Some(k) = gm(g).extra_before_next.iter().position(|p| *p == holder) {
-            gm_mut(g).extra_before_next.remove(k);
+    let mut actions = Vec::new();
+    if extra {
+        actions = std::mem::take(&mut gm_mut(g).markers[i].extra_actions);
+        if extra_turn_skipped(g, holder) {
+            gm_mut(g).markers[i].keep_for_extra = false;
+            pass_marker(g, i);
+            return;
+        }
+    } else {
+        let mut had_extra = false;
+        while let Some(k) = gm(g).extra_before_next.iter().position(|p| *p == holder) {
+            had_extra = true;
+            let acts = {
+                let gm = gm_mut(g);
+                gm.extra_before_next.remove(k);
+                if k < gm.extra_before_actions.len() {
+                    gm.extra_before_actions.remove(k)
+                } else {
+                    Vec::new()
+                }
+            };
+            if extra_turn_skipped(g, holder) {
+                continue;
+            }
             gm_mut(g).markers[i].then_normal_turn = true;
             extra = true;
+            actions = acts;
+            break;
+        }
+        // Every extra turn waiting was skipped: their normal turn may be skipped too
+        // (`pass_marker` leaves that check to here when an extra turn was waiting).
+        if had_extra && !extra && crate::skip::consume_turn_skip(g, holder) {
+            pass_marker(g, i);
+            return;
         }
     }
     {
@@ -262,6 +341,11 @@ fn begin_marker_turn(g: &mut Game, i: usize, extra: bool) {
         gm.turns
     };
     g.turn.number = n;
+    // What happens as the extra turn begins ("At the beginning of that turn's end step,
+    // ..."), now that it has its number.
+    for (mut ctx, e) in actions {
+        g.exec(&e, &mut ctx);
+    }
 }
 
 /// Whether marker `i`'s holder may begin their turn: no player in the three seats to
@@ -361,7 +445,8 @@ pub fn turn_ended(g: &mut Game) -> bool {
     // (CR 807.4i, 807.4j).
     if gm(g).markers[i].then_normal_turn && g.turn.extra && g.player(holder).in_game() {
         gm_mut(g).markers[i].then_normal_turn = false;
-        if crate::skip::consume_turn_skip(g, holder) {
+        // Another extra turn waiting comes first, and may be the one skipped.
+        if !has_extra_before_next(g, holder) && crate::skip::consume_turn_skip(g, holder) {
             pass_marker(g, i);
         } else {
             begin_marker_turn(g, i, false);
@@ -381,30 +466,36 @@ pub fn turn_ended(g: &mut Game) -> bool {
         .collect();
     let queued = std::mem::take(&mut g.extra_turns);
     // What happens as a queued extra turn begins is keyed by its place in the queue
-    // (`skip::queue_extra_turn`): it follows the turns kept in the queue, and is dropped
-    // for the others rather than left to be given to a later turn at that place.
+    // (`skip::queue_extra_turn`): it follows its turn wherever the turn goes.
     let mut actions = std::mem::take(&mut g.extra_turn_actions);
-    let mut own_extra = false;
+    let mut take_actions = |k: usize, p: PlayerId| match actions.remove(&k) {
+        Some((q, a)) if q == p => a,
+        _ => Vec::new(),
+    };
+    let mut own_extra = None;
     for (k, p) in queued.into_iter().enumerate() {
         if !g.player(p).in_game() {
             continue;
         }
-        if p == holder && !own_extra {
-            own_extra = true;
+        let acts = take_actions(k, p);
+        if p == holder && own_extra.is_none() {
+            own_extra = Some(acts);
         } else if others_taking.contains(&p) {
             g.extra_turns.push(p);
-            if let Some(a) = actions.remove(&k) {
-                g.extra_turn_actions.insert(g.extra_turns.len() - 1, a);
+            if !acts.is_empty() {
+                g.extra_turn_actions
+                    .insert(g.extra_turns.len() - 1, (p, acts));
             }
         } else {
-            gm_mut(g).extra_before_next.push(p);
+            push_extra_before_next(g, p, acts);
         }
     }
-    if own_extra && g.player(holder).in_game() {
+    if let Some(acts) = own_extra.filter(|_| g.player(holder).in_game()) {
         if marker_on_right(g, i, holder) {
             // Pass the marker on; the extra turn comes immediately before their next.
-            gm_mut(g).extra_before_next.push(holder);
+            push_extra_before_next(g, holder, acts);
         } else {
+            gm_mut(g).markers[i].extra_actions = acts;
             gm_mut(g).markers[i].taking_turn = false;
             gm_mut(g).markers[i].keep_for_extra = true;
             if can_begin(g, i) {
@@ -433,7 +524,9 @@ fn pass_marker(g: &mut Game, i: usize) {
         if !can_begin(g, i) {
             return;
         }
-        if crate::skip::consume_turn_skip(g, next) {
+        // An extra turn waiting comes first, and may be the one skipped
+        // (`begin_marker_turn`).
+        if !has_extra_before_next(g, next) && crate::skip::consume_turn_skip(g, next) {
             holder = next;
             continue;
         }
@@ -691,4 +784,222 @@ pub fn resets_with_turn(g: &Game, p: PlayerId, active: PlayerId) -> bool {
     !markers(g)
         .iter()
         .any(|m| m.holder == p && m.taking_turn && m.ctx.is_some())
+}
+
+// ---------------------------------------------------------------------------
+// Several turns at once: what belongs to which turn (CR 807.4, 514.2, 500.5)
+// ---------------------------------------------------------------------------
+
+/// Whether several turns are being taken at the same time (more than one turn marker).
+fn several_turns(g: &Game) -> bool {
+    is_grand_melee(g) && gm(g).markers.len() > 1
+}
+
+/// Whether a duration ends with a turn's cleanup step or its combat.
+fn ends_with_turn(d: &Duration) -> bool {
+    matches!(
+        d,
+        Duration::EndOfTurn | Duration::ThisTurn | Duration::EndOfCombat
+    )
+}
+
+/// Records that the effects lasting "until end of turn", "this turn" or "until end of
+/// combat" and the mana not yet attributed to a turn belong to the turn being played:
+/// they were created (or made to last until end of turn) during it.
+fn tag_turn(g: &mut Game) {
+    if !several_turns(g) {
+        return;
+    }
+    let turn = g.turn.number;
+    let mut ids: Vec<u32> = Vec::new();
+    ids.extend(
+        g.effects
+            .iter()
+            .filter(|e| ends_with_turn(&e.duration))
+            .map(|e| e.id),
+    );
+    ids.extend(
+        g.rule_effects
+            .iter()
+            .filter(|e| ends_with_turn(&e.duration))
+            .map(|e| e.id),
+    );
+    ids.extend(
+        g.player_effects
+            .iter()
+            .filter(|e| ends_with_turn(&e.duration))
+            .map(|e| e.id),
+    );
+    ids.extend(
+        g.replacements
+            .iter()
+            .filter(|e| ends_with_turn(&e.duration))
+            .map(|e| e.id),
+    );
+    let gm = gm_mut(g);
+    for id in ids {
+        gm.effect_turns.entry(id).or_insert(turn);
+    }
+    for p in g.players.iter_mut() {
+        for m in p.mana_pool.mana.iter_mut() {
+            if m.turn == 0 {
+                m.turn = turn;
+            }
+        }
+    }
+}
+
+/// With several turns being taken at the same time, the number of the turn being played,
+/// after attributing what was created during it to it ([`tag_turn`]); `None` otherwise.
+/// Its steps empty only its mana, and its cleanup step ends only its effects.
+pub fn current_turn_key(g: &mut Game) -> Option<u32> {
+    if !several_turns(g) {
+        return None;
+    }
+    tag_turn(g);
+    Some(g.turn.number)
+}
+
+/// Whether turn number `n` is one of the turns being taken right now.
+pub fn turn_in_progress(g: &Game, n: u32) -> bool {
+    several_turns(g)
+        && (g.turn.number == n
+            || gm(g)
+                .markers
+                .iter()
+                .any(|m| m.ctx.as_ref().is_some_and(|c| c.turn.number == n)))
+}
+
+/// With several turns at once, ends the effects with a duration matching `pred` that
+/// belong to the turn being played (CR 514.2, 511.3) and returns true; returns false
+/// otherwise (they all end, as usual).
+pub fn expire_this_turns(g: &mut Game, pred: impl Fn(&Duration) -> bool) -> bool {
+    let Some(turn) = current_turn_key(g) else {
+        return false;
+    };
+    let tags = std::mem::take(&mut gm_mut(g).effect_turns);
+    let ends = |id: u32, d: &Duration| pred(d) && tags.get(&id).is_none_or(|t| *t == turn);
+    g.effects.retain(|e| !ends(e.id, &e.duration));
+    g.rule_effects.retain(|e| !ends(e.id, &e.duration));
+    g.player_effects.retain(|e| !ends(e.id, &e.duration));
+    g.replacements.retain(|e| !ends(e.id, &e.duration));
+    // "You may play that card this turn": the turn it was granted during.
+    g.play_grants
+        .retain(|p| !(pred(&p.duration) && p.turn == turn));
+    // Forget the effects that ended.
+    let live: std::collections::BTreeSet<u32> = g
+        .effects
+        .iter()
+        .map(|e| e.id)
+        .chain(g.rule_effects.iter().map(|e| e.id))
+        .chain(g.player_effects.iter().map(|e| e.id))
+        .chain(g.replacements.iter().map(|e| e.id))
+        .collect();
+    gm_mut(g).effect_turns = tags
+        .into_iter()
+        .filter(|(id, _)| live.contains(id))
+        .collect();
+    g.dirty = true;
+    true
+}
+
+/// Where a spell or ability a player announces with priority for several stacks goes
+/// (see [`announce_stack`]).
+pub struct ChosenStack {
+    /// The marker whose turn was being played, to switch back to.
+    back: usize,
+    /// Who had priority for the chosen stack before.
+    priority: Option<PlayerId>,
+}
+
+/// CR 807.5b: a player who has priority for several stacks and casts a spell or activates
+/// an ability specifies the stack it's put on, as it's announced (CR 601.2a, 602.2a). The
+/// options are the stacks of the markers whose turns are at a point where players have
+/// priority, for which the player has priority (CR 807.5a), and on which the action is
+/// possible (a sorcery-speed spell only on the stack of its controller's own turn). With
+/// another stack chosen, its marker's turn becomes the one being played while the spell
+/// or ability is cast or activated: its targets can then be only objects on that stack
+/// (or not on a stack), as the stack of the turn being played is the only one whose
+/// objects are offered and accepted as targets. Call [`finish_announced`] afterwards.
+pub fn announce_stack(
+    g: &mut Game,
+    p: PlayerId,
+    action: &crate::decision::Action,
+) -> Option<ChosenStack> {
+    use crate::decision::Action;
+    if !several_turns(g) || !matches!(action, Action::Cast { .. } | Action::Activate { .. }) {
+        return None;
+    }
+    let cur = gm(g).current;
+    let n = gm(g).markers.len();
+    let candidates: Vec<usize> = (0..n)
+        .filter(|j| {
+            *j != cur
+                && gm(g).markers[*j].ctx.as_ref().is_some_and(|c| {
+                    c.turn.stage == crate::turn::Stage::Priority && c.turn.priority.is_some()
+                })
+                && gets_priority_for(g, p, *j)
+        })
+        .collect();
+    let mut options = vec![cur];
+    for j in candidates {
+        switch_to(g, j);
+        let before = g.turn.priority.replace(p);
+        let legal = g.legal_actions(p).contains(action);
+        g.turn.priority = before;
+        switch_to(g, cur);
+        if legal {
+            options.push(j);
+        }
+    }
+    if options.len() < 2 {
+        return None;
+    }
+    let labels: Vec<String> = options
+        .iter()
+        .map(|j| {
+            let m = &gm(g).markers[*j];
+            format!("the stack of turn marker {} ({})", m.number, m.holder)
+        })
+        .collect();
+    let what = match action {
+        Action::Cast { card, .. } => g.describe(*card),
+        Action::Activate { source, .. } => format!("an ability of {}", g.describe(*source)),
+        _ => String::new(),
+    };
+    let pick = match g.ask(
+        p,
+        crate::decision::Decision::ChooseOption {
+            source: None,
+            prompt: format!("Choose the stack to put {what} on"),
+            options: labels,
+        },
+    ) {
+        crate::decision::Answer::Index(i) if i < options.len() => options[i],
+        _ => cur,
+    };
+    if pick == cur {
+        return None;
+    }
+    switch_to(g, pick);
+    let priority = g.turn.priority.replace(p);
+    Some(ChosenStack {
+        back: cur,
+        priority,
+    })
+}
+
+/// After a spell or ability was announced on another stack ([`announce_stack`]): if it
+/// was put on that stack, the player receives priority for it and the other players must
+/// pass in succession again (CR 117.3c); otherwise whoever had priority for it keeps it.
+/// The turn that was being played becomes current again.
+pub fn finish_announced(g: &mut Game, p: PlayerId, chosen: ChosenStack, done: bool) {
+    if done {
+        g.turn.priority = Some(p);
+        g.turn.passes = 0;
+        g.log(|_| format!("{p} acts on the stack of another turn"));
+    } else {
+        g.turn.priority = chosen.priority;
+    }
+    switch_to(g, chosen.back);
 }

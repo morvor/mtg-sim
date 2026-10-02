@@ -443,6 +443,10 @@ pub struct SpendContext {
     /// The ability being activated is a class level bar's: activating it is gaining a
     /// Class level (CR 716.2c).
     pub class_level: bool,
+    /// What the costs being paid are for: casting a spell or activating an ability, or
+    /// `None` for a cost a resolving spell or ability asks for (CR 118.3; see
+    /// `rule_statics::payment`).
+    pub cost_of: Option<crate::rule_statics::payment::CostOf>,
 }
 
 impl ManaRestriction {
@@ -549,6 +553,10 @@ pub struct Mana {
     /// "When that mana is spent to cast ..." (CR 106.6).
     #[serde(default)]
     pub rider: Option<Box<ManaRider>>,
+    /// In Grand Melee, with several turns at once: the number of the turn it was added
+    /// during (0 until known), whose steps empty it (see `multiplayer::grand_melee`).
+    #[serde(default)]
+    pub turn: u32,
 }
 
 impl Mana {
@@ -561,6 +569,7 @@ impl Mana {
             persistent: false,
             until_end_of_combat: false,
             rider: None,
+            turn: 0,
         }
     }
     pub fn can_spend(&self, ctx: &SpendContext) -> bool {

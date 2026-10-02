@@ -737,15 +737,24 @@ fn meld_pair(
     if !owned_and_controlled(src) || g.obj(src).zone != Zone::Battlefield {
         return None;
     }
+    // The ability names its own source (CR 201.5); the other name is the partner's.
+    let own = g.obj(src).chars.name.clone();
+    let meld_result = |c: &CardDef| {
+        c.related
+            .iter()
+            .find(|(k, _)| k == "meld_result")
+            .and_then(|(_, n)| CardDb::global().get(n))
+    };
+    // A copy of a meld card (a Clone, a token) has the ability but not the card: its
+    // result is the one of the meld card it's named after. It can't be melded (CR
+    // 701.42b), but the instruction still exiles both (CR 701.42c).
     let result = g
         .obj(src)
         .card
-        .as_ref()
-        .and_then(|c| c.related.iter().find(|(k, _)| k == "meld_result"))
-        .and_then(|(_, n)| CardDb::global().get(n))
-        .or_else(|| CardDb::global().get(result_name))?;
-    // The ability names its own source (CR 201.5); the other name is the partner's.
-    let own = g.obj(src).chars.name.clone();
+        .as_deref()
+        .and_then(meld_result)
+        .or_else(|| CardDb::global().get(result_name))
+        .or_else(|| CardDb::global().get(&own).and_then(|c| meld_result(&c)))?;
     if !is_meld_part(&result, &own) {
         return None;
     }

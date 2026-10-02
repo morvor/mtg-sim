@@ -1076,6 +1076,7 @@ impl Game {
         // A resolving spell or ability performs its own effects (CR 609.1), whatever
         // context created it.
         ctx.paying_cost = false;
+        ctx.cost_of = None;
         ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);
@@ -1285,7 +1286,16 @@ impl Game {
                 ctx.source = Some(now);
             }
         }
-        self.exec_chosen(&body, &chosen, &mut ctx);
+        // CR 603.2h: once the action has been taken this turn, other instances of the
+        // ability already on the stack do nothing as they resolve.
+        let done_once = trig.as_ref().is_some_and(|t| t.do_once_per_turn)
+            && self.objects[src.0 as usize]
+                .triggers_this_turn
+                .get(&(uid | crate::triggers::turn_keys::DONE_ONCE))
+                .is_some_and(|n| *n > 0);
+        if !done_once {
+            self.exec_chosen(&body, &chosen, &mut ctx);
+        }
         if let StackKind::Triggered { ability, .. } | StackKind::Activated { ability, .. } =
             &si.kind
         {

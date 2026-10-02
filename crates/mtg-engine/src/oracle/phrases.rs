@@ -48,6 +48,17 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
+        // "mills twice X cards", "exile up to twice X target cards".
+        "twice" => {
+            let (w2, rest2) = split_word(rest);
+            if w2 != "x" {
+                return None;
+            }
+            return Some((
+                Value::Mul(Box::new(Value::Const(2)), Box::new(Value::X)),
+                rest2,
+            ));
+        }
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
@@ -244,6 +255,15 @@ pub fn adjective(w: &str) -> Option<Filter> {
 
 /// Parses an object description like "nontoken creature you control with flying".
 /// Returns (filter, plural?, rest).
+/// Whether a filter is about cards (has a `Filter::Card` part).
+fn names_cards(f: &Filter) -> bool {
+    match f {
+        Filter::Card => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(names_cards),
+        _ => false,
+    }
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
@@ -538,6 +558,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+        } else if let Some(r) = t
+            .strip_prefix("named ~")
+            .filter(|_| !parts.iter().any(names_cards))
+        {
+            // "each creature you control named ~" (Gary Clone). ("card named ~" is the
+            // card's printed name, see `card_flow_search`.)
+            (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
             // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)
@@ -567,6 +594,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
+        } else if let Some(r) = t.strip_prefix("an opponent owns") {
+            (Filter::OwnedBy(PlayerRel::Opponent), r)
         } else if let Some(r) = t
             .strip_prefix("in your graveyard")
             .or_else(|| t.strip_prefix("from your graveyard"))
@@ -581,8 +610,21 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("in a graveyard")
             .or_else(|| t.strip_prefix("from a graveyard"))
+            .or_else(|| t.strip_prefix("from graveyards"))
+            .or_else(|| t.strip_prefix("in graveyards"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t
+            .strip_prefix("in defending player's graveyard")
+            .or_else(|| t.strip_prefix("from defending player's graveyard"))
+        {
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Defending),
+                ]),
+                r,
+            )
         } else if let Some(r) = t
             .strip_prefix("from the iterated player's graveyard")
             .or_else(|| t.strip_prefix("in the iterated player's graveyard"))
@@ -704,6 +746,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Blocking, r)
         } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(color_list_suffix) {
             // "target creature or planeswalker that's black or red" (Devout Decree).
+            (f, r)
+        } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(type_list_suffix) {
+            // "each creature you control that's an artifact or Human" (Paladin Danse).
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that was dealt damage this turn")
@@ -878,6 +923,43 @@ fn color_list_suffix(t: &str) -> Option<(Filter, &str)> {
     Some((f, rest))
 }
 
+/// "a Human", "an artifact or Human", "an artifact or an enchantment" after "that's": card
+/// types and subtypes, each with an optional article, joined by "or".
+fn type_list_suffix(t: &str) -> Option<(Filter, &str)> {
+    fn one(s: &str) -> Option<(Filter, &str)> {
+        let s = s
+            .strip_prefix("an ")
+            .or_else(|| s.strip_prefix("a "))
+            .unwrap_or(s);
+        let n = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
+        let w = &s[..n];
+        // A singular word only ("Humans" would be a different phrase).
+        if w.is_empty() || singular(w) != w {
+            return None;
+        }
+        match head_noun(w)? {
+            f @ (Filter::Type(_) | Filter::Subtype(_)) => Some((f, &s[n..])),
+            _ => None,
+        }
+    }
+    let (first, mut rest) = one(t)?;
+    let mut alts = vec![first];
+    while let Some((f, r)) = rest.strip_prefix(" or ").and_then(one) {
+        alts.push(f);
+        rest = r;
+    }
+    // Comma-separated lists ("that's a Cat, Elemental, ... or Beast") are parsed elsewhere.
+    if rest.starts_with(',') {
+        return None;
+    }
+    let f = if alts.len() == 1 {
+        alts.pop()?
+    } else {
+        Filter::Or(alts)
+    };
+    Some((f, rest))
+}
+
 /// References to a choice made for the source (CR 607.2d): "of the chosen type",
 /// "of the chosen color", "with the chosen name", "of the chosen card type".
 fn parse_chosen_suffix(t: &str) -> Option<(Filter, &str)> {
@@ -1043,6 +1125,19 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let consumed: usize = words[..n].iter().map(|w| w.len()).sum::<usize>() + (n - 1);
         let tail = &rest[consumed.min(rest.len())..];
         let f = Filter::HasKeyword(k);
+        // "with flash or haste": either keyword. (A landwalk keyword names one kind of
+        // landwalk, which `HasKeyword` doesn't.)
+        if !negate && k != KeywordKind::Landwalk {
+            if let Some((g, t)) = tail
+                .strip_prefix(" or ")
+                .and_then(|t| parse_with_suffix(&format!("with {t}")).map(|(g, r)| (g, r.len())))
+                .filter(
+                    |(g, _)| matches!(g, Filter::HasKeyword(k2) if *k2 != KeywordKind::Landwalk),
+                )
+            {
+                return Some((Filter::Or(vec![f, g]), &tail[tail.len() - t..]));
+            }
+        }
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
     None
