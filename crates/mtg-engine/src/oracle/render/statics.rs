@@ -2608,7 +2608,9 @@ impl Renderer<'_> {
                 let s = src.unwrap_or_else(|| "a source".into());
                 // "it deals double that damage to that player or permanent instead".
                 let both = to_players.is_some() && to_objects.is_some();
-                let to_that = if both {
+                let to_that = if anything {
+                    " {opt:to that permanent or player}"
+                } else if both {
                     " {opt:to that player or permanent}"
                 } else if to_players.is_some() {
                     " {opt:to that player}"

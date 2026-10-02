@@ -425,6 +425,36 @@ impl Renderer<'_> {
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
             }
+            // "Each player who controls a multicolored creature draws a card."
+            Effect::ForEachPlayer { who, effect }
+                if matches!(effect.as_ref(), Effect::AsPlayer { who: PlayerRef::Iterated, effect: inner }
+                    if matches!(inner.as_ref(), Effect::If { otherwise, cond: Condition::Exists(_), .. }
+                        if matches!(otherwise.as_ref(), Effect::Noop))) =>
+            {
+                let Effect::AsPlayer { effect: inner, .. } = effect.as_ref() else {
+                    return self.gap("each player who");
+                };
+                let Effect::If { cond, then, .. } = inner.as_ref() else {
+                    return self.gap("each player who");
+                };
+                let w = self.player(who, Case::Subj);
+                let saved = std::mem::replace(&mut self.in_as_player, true);
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                self.in_as_player = saved;
+                match (c.strip_prefix("you "), t.strip_prefix("you ").or(Some(t.as_str()))) {
+                    (Some(c), Some(t)) if !c.contains('{') && !t.contains('.') => {
+                        let c = format!(" {} ", third_person(c))
+                            .replace(" your ", " their ")
+                            .replace(" you ", " they ");
+                        let t = format!(" {} ", third_person(t))
+                            .replace(" your ", " their ")
+                            .replace(" you ", " they ");
+                        format!("{w} who {} {}", c.trim(), t.trim())
+                    }
+                    _ => self.gap("each player who"),
+                }
+            }
             // "Shuffle your graveyard into your library."
             Effect::ForEachPlayer {
                 who: PlayerRef::You,
@@ -3457,7 +3487,13 @@ impl Renderer<'_> {
             s.push_str(&format!(", put {pron} {dest}"));
         }
         if *shuffle {
-            s.push_str(", then shuffle");
+            if same_player(who, whose) {
+                s.push_str(", then shuffle");
+            } else {
+                // "Search target player's library ... Then that player shuffles." (the
+                // library's owner shuffles it, CR 701.24a).
+                s.push_str(". Then {alt:that player|they} shuffles");
+            }
         }
         s
     }

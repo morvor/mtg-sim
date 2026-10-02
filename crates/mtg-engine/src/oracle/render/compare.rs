@@ -186,6 +186,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR glossary, \"Enters the Battlefield\"; CR 603.6a).",
     },
     Equivalence {
+        pattern: r"\bthis turn (as though (?:it|they) (?:had|were|weren't|wasn't) [^.,;{}|]+?)(\.|$)",
+        replacement: "$1 this turn$2",
+        why: "Word order of the duration: \"you may cast spells this turn as though they had \
+              flash\" is \"... as though they had flash this turn\".",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
