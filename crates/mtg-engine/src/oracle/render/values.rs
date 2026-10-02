@@ -410,6 +410,14 @@ impl Renderer<'_> {
                 let l = crate::rule_statics::turns_taken::ordinal_list(n);
                 format!("it's your {l} turn of the game")
             }
+            // CR 730.1: "it's neither day nor night" (the game has neither designation).
+            Condition::And(v)
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Condition::Not(c) if matches!(c.as_ref(), Condition::IsDay)))
+                    && v.iter().any(|x| matches!(x, Condition::Not(c) if matches!(c.as_ref(), Condition::IsNight))) =>
+            {
+                "it's neither day nor night".into()
+            }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")
@@ -525,6 +533,14 @@ impl Renderer<'_> {
         let (ctrl, rest) = split_controller(f);
         let zone = f.zone();
         match (ctrl, zone) {
+            // "your opponents control no creatures": no opponent controls one.
+            (Some(PlayerRel::Opponent), None)
+            | (Some(PlayerRel::Opponent), Some(ZoneKind::Battlefield))
+                if negated =>
+            {
+                let n = self.noun(&rest, Num::Many);
+                format!("your opponents control no {n}")
+            }
             (Some(r), None) | (Some(r), Some(ZoneKind::Battlefield)) => {
                 let subj = self.rel_subject(r);
                 let verb = if subj == "you" { "control" } else { "controls" };

@@ -1804,6 +1804,19 @@ impl Renderer<'_> {
                 cond,
                 then,
                 otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop)
+                && !matches!(cond, Condition::Not(_))
+                && !mentions_entry_modification(then) =>
+            {
+                // "If it's neither day nor night, it becomes day as ~ enters."
+                let c = self.condition(cond);
+                let s = self.effect(then);
+                format!("if {c}, {s} as {subj} enters")
+            }
+            Effect::If {
+                cond,
+                then,
+                otherwise,
             } if matches!(otherwise.as_ref(), Effect::Noop) => {
                 let t = self.as_enters_vp(then);
                 match cond {
@@ -2154,4 +2167,11 @@ impl Renderer<'_> {
         let _ = join_words;
         let _ = third_person;
     }
+}
+
+/// Whether `e` modifies how the object enters anywhere ("enters tapped", "enters with ...
+/// counters"), or is a choice of how it enters.
+fn mentions_entry_modification(e: &Effect) -> bool {
+    let d = format!("{e:?}");
+    d.contains("Enter") || d.contains("Choose") || d.contains("Custom")
 }

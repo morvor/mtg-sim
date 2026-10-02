@@ -10,6 +10,11 @@ fn same_player(a: &PlayerRef, b: &PlayerRef) -> bool {
 }
 
 fn same_sel(a: &Sel, b: &Sel) -> bool {
+    // Two instructions that each choose an object choose separately ("Put a deathtouch
+    // counter on either of them. Then put a menace counter on either of them.").
+    if matches!(a, Sel::Choose { .. }) || matches!(b, Sel::Choose { .. }) {
+        return false;
+    }
     format!("{a:?}") == format!("{b:?}")
 }
 
@@ -2555,7 +2560,20 @@ impl Renderer<'_> {
         take_to: &Destination,
         rest_to: &Destination,
     ) -> String {
-        let p = self.possessive_for(who);
+        // Only looking at another player's cards: nobody chooses anything, so it's what
+        // the ability's controller does ("Look at the top card of target player's
+        // library.").
+        let only_look = matches!(take, Value::Const(0))
+            && !reveal
+            && !matches!(who, PlayerRef::You)
+            && !(rest_to.zone == ZoneKind::Library
+                && rest_to.position == LibraryPosition::Top
+                && !matches!(n, Value::Const(1)));
+        let p = if only_look {
+            self.player(who, Case::Poss)
+        } else {
+            self.possessive_for(who)
+        };
         let top = match n {
             Value::Const(1) => format!("the top card of {p} library"),
             Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
@@ -2565,6 +2583,9 @@ impl Renderer<'_> {
             }
         };
         let look = if reveal { "reveal" } else { "look at" };
+        if only_look {
+            return format!("look at {top}");
+        }
         let mut s = self.with_subject(who, &format!("{look} {top}"), false);
         // Only looking ("Look at the top card of your library."), or looking and
         // putting them back ("then put them back in any order").

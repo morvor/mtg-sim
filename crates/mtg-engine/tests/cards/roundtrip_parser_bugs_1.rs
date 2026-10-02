@@ -131,3 +131,24 @@ fn ricochet_trap_needs_only_one_opponent_to_have_cast_a_blue_spell() {
     t.resolve_all();
     assert!(alt_castable(&mut t));
 }
+
+#[test]
+fn enters_from_your_graveyard_is_only_your_own_graveyard() {
+    cr!("400.3", "603.2");
+    // Dredging Claw: "Whenever a creature enters from your graveyard, you may attach this
+    // Equipment to it." A creature an opponent returns from their own graveyard doesn't
+    // trigger it (it was read as "from a graveyard").
+    use mtg_engine::events::MoveCause;
+    use mtg_engine::object::Zone;
+    supported("Dredging Claw");
+    for (owner, triggers) in [(P1, false), (P0, true)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+        t.battlefield(P0, "Dredging Claw");
+        let bears = t.graveyard(owner, "Grizzly Bears");
+        t.g.move_object(bears, Zone::Battlefield, MoveCause::Effect, Some(owner));
+        t.g.flush_events();
+        t.settle();
+        assert_eq!(t.stack_len(), usize::from(triggers), "owner {owner:?}");
+    }
+}

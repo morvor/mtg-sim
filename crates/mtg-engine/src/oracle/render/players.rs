@@ -495,6 +495,14 @@ impl Renderer<'_> {
                 up_to,
                 ..
             } => {
+                // "Put one of them into their graveyard": one of the cards just named.
+                if let (Filter::In(g), Value::Const(n), false, PlayerRef::You) =
+                    (filter, count, *up_to, chooser)
+                {
+                    if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
+                        return decline(format!("{} of them", number_word(*n)), case);
+                    }
+                }
                 let det = if *up_to && unbounded_choice(filter, count) {
                     Det::Count("any number of".into())
                 } else if *up_to {

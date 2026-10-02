@@ -933,8 +933,10 @@ impl Renderer<'_> {
         let num = if self.each_mode { Num::Many } else { num };
         match r {
             PlayerRel::You => "you control".into(),
+            // "a creature an opponent controls" / "each creature your opponents control":
+            // the same objects, those any opponent controls.
             PlayerRel::Opponent => match num {
-                Num::One => "an opponent controls".into(),
+                Num::One => "{alt:an opponent controls|your opponents control}".into(),
                 Num::Many => "your opponents control".into(),
             },
             PlayerRel::NotYou => "you don't control".into(),
@@ -954,7 +956,8 @@ impl Renderer<'_> {
         match r {
             PlayerRel::You => "you own".into(),
             PlayerRel::NotYou => "you don't own".into(),
-            PlayerRel::Opponent => "an opponent owns".into(),
+            // The same cards: those any opponent owns.
+            PlayerRel::Opponent => "{alt:an opponent owns|your opponents own}".into(),
             other => {
                 let p = self.rel_object(other);
                 format!("{p} owns")
