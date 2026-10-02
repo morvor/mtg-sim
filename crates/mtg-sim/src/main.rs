@@ -2,7 +2,8 @@
 //!
 //! Usage: mtg-sim [--games N] [--seed S] [--deck FILE]... [--players N] [--random-decks]
 //!                [--only G] [--max-turns N] [--max-actions N] [--slow SECS]
-//!                [--timeout SECS] [--check N] [--log]
+//!                [--timeout SECS] [--check N] [--log] [--agent SEAT=KIND]...
+//!                [--transcript FILE] [--auto-pass]
 //!
 //! A deck file lists "4 Lightning Bolt" lines; the cards after a "Sideboard" line are the
 //! player's sideboard, from which a companion may be revealed as the game starts.
@@ -18,13 +19,22 @@
 //! `--check N` checks every Nth priority decision that no state-based action was pending
 //! when the player got priority (CR 117.5); a violation is reported like a panic. Fuzzing
 //! checks every 4th decision unless told otherwise (`--check 0` turns it off).
+//!
+//! `--agent SEAT=KIND` chooses who plays a seat (0-based): `random` (the default),
+//! `passive` (always lets the engine choose), or `cmd:COMMAND`, an external program
+//! speaking the JSON protocol of `docs/AGENT_PROTOCOL.md` on its stdin and stdout, e.g.
+//! `--agent 1=cmd:'python3 examples/random_client.py'`. `--transcript FILE` appends every
+//! protocol line to FILE; `--auto-pass` passes priority for external agents that can only
+//! pass. With an external agent the `--slow` and `--timeout` limits default to a day.
 
 mod checks;
 mod decks;
 
 use checks::{CheckingAgent, Violation};
 use decks::{default_deck, load_deck, random_deck, DeckList};
+use mtg_api::{spawn_external, ChildTransport, ProtocolOptions};
 use mtg_engine::agents::RandomAgent;
+use mtg_engine::decision::PassiveAgent;
 use mtg_engine::turn::Stage;
 use mtg_engine::*;
 use rand::rngs::StdRng;
@@ -35,6 +45,35 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// Who plays a seat.
+#[derive(Clone, Debug)]
+enum AgentSpec {
+    Random,
+    Passive,
+    /// An external program speaking the JSON protocol.
+    Command(String),
+}
+
+impl AgentSpec {
+    fn parse(s: &str) -> AgentSpec {
+        match s {
+            "random" => AgentSpec::Random,
+            "passive" => AgentSpec::Passive,
+            _ => match s.strip_prefix("cmd:") {
+                Some(c) if !c.trim().is_empty() => AgentSpec::Command(c.to_string()),
+                _ => panic!("unknown agent {s:?} (random, passive or cmd:COMMAND)"),
+            },
+        }
+    }
+}
+
+/// How the external agents are run.
+#[derive(Clone, Default)]
+struct ExternalSettings {
+    transcript: Option<String>,
+    auto_pass: bool,
+}
 
 /// The message and location of the latest panic, recorded by the panic hook.
 static LAST_PANIC: Mutex<Option<String>> = Mutex::new(None);
@@ -56,9 +95,12 @@ enum Outcome {
 
 /// Plays one game on its own thread (with a large stack), catching a panic. Returns
 /// `None` if no decision was made for `timeout` (the game thread is left running).
+#[allow(clippy::too_many_arguments)]
 fn play(
     config: GameConfig,
     decks: Vec<DeckList>,
+    specs: Vec<AgentSpec>,
+    external: ExternalSettings,
     agent_seed: u64,
     logging: bool,
     check: u32,
@@ -75,16 +117,42 @@ fn play(
         .stack_size(256 << 20)
         .spawn(move || {
             let mut game: Option<Game> = None;
+            let mut connections: Vec<(PlayerId, ChildTransport)> = Vec::new();
             let r = panic::catch_unwind(AssertUnwindSafe(|| {
                 let agents: Vec<Box<dyn Agent>> = (0..decks.len())
                     .map(|p| {
-                        let a = RandomAgent::new(agent_seed.wrapping_add(p as u64));
-                        if check > 0 {
-                            Box::new(CheckingAgent::new(a, check, violations2.clone()))
-                                as Box<dyn Agent>
-                        } else {
-                            Box::new(a) as Box<dyn Agent>
-                        }
+                        let seat = PlayerId(p as u8);
+                        let spec = specs.get(p).cloned().unwrap_or(AgentSpec::Random);
+                        let a: Box<dyn Agent> = match spec {
+                            AgentSpec::Random => {
+                                let a = RandomAgent::new(agent_seed.wrapping_add(p as u64));
+                                if check > 0 {
+                                    Box::new(CheckingAgent::new(a, check, violations2.clone()))
+                                } else {
+                                    Box::new(a)
+                                }
+                            }
+                            AgentSpec::Passive => Box::new(PassiveAgent),
+                            AgentSpec::Command(cmd) => {
+                                let options = ProtocolOptions {
+                                    auto_pass: external.auto_pass,
+                                    ..Default::default()
+                                };
+                                let (agent, conn) = spawn_external(&cmd, seat, options)
+                                    .unwrap_or_else(|e| panic!("can't start {cmd:?}: {e}"));
+                                if let Some(path) = &external.transcript {
+                                    let file = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .append(true)
+                                        .open(path)
+                                        .unwrap_or_else(|e| panic!("can't open {path}: {e}"));
+                                    conn.transcript(file);
+                                }
+                                connections.push((seat, conn));
+                                Box::new(agent)
+                            }
+                        };
+                        a
                     })
                     .collect();
                 let g = game.insert(Game::new(
@@ -92,6 +160,9 @@ fn play(
                     decks.iter().map(|d| d.main.clone()).collect(),
                     agents,
                 ));
+                if !connections.is_empty() {
+                    mtg_api::prepare_game(g);
+                }
                 // Sideboards stay outside the game (a companion may be revealed from them).
                 for (i, d) in decks.iter().enumerate() {
                     if !d.sideboard.is_empty() {
@@ -117,6 +188,13 @@ fn play(
                 }
                 g.result.clone()
             }));
+            // Tell the external agents how the game ended, and let them exit.
+            for (seat, mut conn) in connections {
+                if let Some(g) = game.as_ref() {
+                    mtg_api::Transport::game_over(&mut conn, &mtg_api::GameOver::new(g, seat));
+                }
+                conn.shut_down();
+            }
             let turn = game.as_ref().map_or(0, |g| g.turn.number);
             let log: Vec<String> = game.as_ref().map_or(Vec::new(), |g| {
                 g.log
@@ -193,6 +271,10 @@ fn main() {
     let mut timeout = 60u64;
     let mut check: Option<u32> = None;
     let mut log = false;
+    let mut specs: Vec<AgentSpec> = Vec::new();
+    let mut external = ExternalSettings::default();
+    let mut slow_set = false;
+    let mut timeout_set = false;
     let mut i = 1;
     let value = |i: usize, what: &str| -> String {
         args.get(i + 1)
@@ -211,8 +293,28 @@ fn main() {
                 max_actions = value(i, "--max-actions").parse().expect("--max-actions N")
             }
             "--check" => check = Some(value(i, "--check").parse().expect("--check N")),
-            "--slow" => slow = value(i, "--slow").parse().expect("--slow SECS"),
-            "--timeout" => timeout = value(i, "--timeout").parse().expect("--timeout SECS"),
+            "--slow" => {
+                slow = value(i, "--slow").parse().expect("--slow SECS");
+                slow_set = true;
+            }
+            "--timeout" => {
+                timeout = value(i, "--timeout").parse().expect("--timeout SECS");
+                timeout_set = true;
+            }
+            "--agent" => {
+                let v = value(i, "--agent");
+                let (seat, kind) = v.split_once('=').expect("--agent SEAT=KIND");
+                let seat: usize = seat.trim().parse().expect("--agent SEAT=KIND");
+                if specs.len() <= seat {
+                    specs.resize(seat + 1, AgentSpec::Random);
+                }
+                specs[seat] = AgentSpec::parse(kind.trim());
+            }
+            "--transcript" => external.transcript = Some(value(i, "--transcript")),
+            "--auto-pass" => {
+                external.auto_pass = true;
+                i -= 1;
+            }
             "--random-decks" => {
                 random = true;
                 i -= 1;
@@ -225,7 +327,16 @@ fn main() {
         }
         i += 2;
     }
-    let players = players.max(deck_files.len()).max(2);
+    let players = players.max(deck_files.len()).max(specs.len()).max(2);
+    if specs.iter().any(|s| matches!(s, AgentSpec::Command(_))) {
+        // External agents (a language model, a person) may take their time.
+        if !slow_set {
+            slow = 86_400;
+        }
+        if !timeout_set {
+            timeout = 86_400;
+        }
+    }
     let check = check.unwrap_or(if random { 4 } else { 0 });
     let fixed: Vec<DeckList> = deck_files.iter().map(|f| load_deck(f)).collect();
     panic::set_hook(Box::new(|info| {
@@ -259,11 +370,20 @@ fn main() {
             ..Default::default()
         };
         let repro = format!(
-            "mtg-sim --seed {seed} --only {gi} --players {players}{}{} --max-turns {max_turns} --log",
+            "mtg-sim --seed {seed} --only {gi} --players {players}{}{}{} --max-turns {max_turns} --log",
             if random { " --random-decks" } else { "" },
             deck_files
                 .iter()
                 .map(|f| format!(" --deck {f}"))
+                .collect::<String>(),
+            specs
+                .iter()
+                .enumerate()
+                .map(|(p, s)| match s {
+                    AgentSpec::Random => String::new(),
+                    AgentSpec::Passive => format!(" --agent {p}=passive"),
+                    AgentSpec::Command(c) => format!(" --agent {p}=cmd:'{c}'"),
+                })
                 .collect::<String>()
         );
         // A panic mid-game needs the log to be useful, so fuzzing always records it.
@@ -271,6 +391,8 @@ fn main() {
         let Some(outcome) = play(
             config,
             decks.clone(),
+            specs.clone(),
+            external.clone(),
             s.wrapping_mul(7),
             logging,
             check,

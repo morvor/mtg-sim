@@ -103,7 +103,12 @@ pub fn become_copy(
 ) {
     use crate::game::{Affected, ContinuousEffect, Layer1};
     let targets = g.resolve_objects(what, ctx);
-    let Some(src) = g.resolve_objects(of, ctx).into_iter().next() else {
+    // A creature that left the battlefield ("becomes a copy of that creature" after it
+    // died) is copied as it last existed there (CR 608.2h), like a token copy of it.
+    let Some(src) = crate::copy_rules::token_copy_sources(g, of, ctx)
+        .into_iter()
+        .next()
+    else {
         return;
     };
     let values = Box::new(g.obj(src).copiable.clone());

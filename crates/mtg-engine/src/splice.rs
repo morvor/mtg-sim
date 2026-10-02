@@ -63,6 +63,8 @@ pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -
         );
         if yes {
             committed = with;
+            // The splice ability is used (see `structure`).
+            let _ = chars.keywords_of(KeywordKind::Splice).count();
             chosen.push((card, cost));
         }
     }

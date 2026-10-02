@@ -332,7 +332,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
     let mut any = false;
     loop {
         let lower = text.to_lowercase();
-        let pats: [(&str, u8); 17] = [
+        let pats: [(&str, u8); 18] = [
             ("activate only as a sorcery.", 1),
             ("activate only once each turn.", 2),
             ("activate only during your turn.", 3),
@@ -342,6 +342,8 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
             ("any player may activate this ability.", 7),
             ("activate only as a sorcery and only once each turn.", 8),
             ("activate only during an opponent's turn.", 9),
+            // CR 602.5e.
+            ("activate only as an instant.", 18),
             // Combat timing windows (CR 506.8g).
             ("activate only before attackers are declared.", 10),
             ("activate only after attackers are declared.", 11),
@@ -382,6 +384,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
                         timing = ActivationTiming::YourTurn;
                         max = Some(1);
                     }
+                    18 => timing = ActivationTiming::AsInstant,
                     10..=15 | 17 => {
                         let (point, after, during_combat) = match k {
                             10 => (CombatPoint::AttackersDeclared, false, false),

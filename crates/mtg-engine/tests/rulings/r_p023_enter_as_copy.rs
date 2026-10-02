@@ -476,6 +476,7 @@ fn jwari_shapeshifter_copying_an_ally_token() {
             toughness: Some(1),
             abilities: vec![],
             scryfall_name: None,
+            pt_values: None,
         },
     );
     crate::r_s26_common::dress_up(&mut t, ally);

@@ -521,6 +521,7 @@ fn counter_and_token_replacements_apply_to_replacement_effects() {
         toughness: Some(1),
         abilities: vec![],
         scryfall_name: None,
+        pt_values: None,
     };
     t.custom(
         P0,

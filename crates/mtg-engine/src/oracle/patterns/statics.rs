@@ -1438,6 +1438,22 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
         }
         return m(vec![Modification::AllCreatureTypes]);
     }
+    if r == "every nonbasic land type" {
+        // "~ is every nonbasic land type." (Planar Nexus): the land types of CR 205.3i
+        // other than the basic ones; a land gets them, a nonland object can't (205.3d).
+        if !subj.lands {
+            return None;
+        }
+        let lists = crate::types::subtype_lists();
+        let mut types: Vec<Subtype> = lists
+            .land
+            .iter()
+            .filter(|t| !lists.basic_land.contains(&t.as_str()))
+            .map(|t| Subtype::from(t.as_str()))
+            .collect();
+        types.sort();
+        return m(vec![Modification::AddSubtypes(types)]);
+    }
     if r == "isn't a creature" || r == "aren't creatures" || r == "not a creature" {
         return m(vec![Modification::RemoveTypes(vec![CardType::Creature])]);
     }
@@ -2674,6 +2690,12 @@ fn parse_player_body(s: &str) -> Option<Body> {
         (
             "each opponent's maximum hand size is ",
             PlayerFilter::Opponent,
+        ),
+        // "As ~ enters, choose an opponent. / The chosen player's maximum hand size is
+        // four." (Cursed Rack, CR 607.2d)
+        (
+            "the chosen player's maximum hand size is ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ChosenOpponent)),
         ),
     ] {
         if let Some(r) = s.strip_prefix(p) {

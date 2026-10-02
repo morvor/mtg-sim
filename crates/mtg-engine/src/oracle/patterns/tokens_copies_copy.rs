@@ -23,14 +23,16 @@ use crate::types::*;
 use smol_str::SmolStr;
 
 /// The subjects an exception clause can start with ("it", "the token", "they").
-const SUBJECTS: [&str; 14] = [
-    "she has ",
-    "he has ",
+const SUBJECTS: [&str; 16] = [
     "it's ",
     "it isn't ",
     "it is ",
     "it has ",
     "its ",
+    "she has ",
+    "her ",
+    "he has ",
+    "his ",
     "they're ",
     "they aren't ",
     "they have ",
@@ -217,12 +219,12 @@ pub(crate) fn copy_exceptions(
             out.push(Modification::RemoveSupertypes(vec![Supertype::Legendary]));
         } else if let Some(r) = [
             "it has ",
-            "she has ",
-            "he has ",
             "they have ",
             "the token has ",
             "the tokens have ",
             "each of them has ",
+            "she has ",
+            "he has ",
         ]
             .iter()
             .find_map(|p| c.strip_prefix(p))
@@ -232,7 +234,11 @@ pub(crate) fn copy_exceptions(
             let r = if r == "this ability" {
                 out.push(Modification::AddThisAbility);
                 ""
-            } else if let Some(x) = r.strip_suffix(" and this ability") {
+            } else if let Some(x) = r
+                .strip_suffix(" and this ability")
+                .or_else(|| r.strip_prefix("this ability and "))
+            {
+                // "it has this ability and \"[ability]\"" (Aurora Shifter).
                 out.push(Modification::AddThisAbility);
                 x
             } else {
@@ -257,10 +263,24 @@ pub(crate) fn copy_exceptions(
             if let Some(types) = r
                 .strip_suffix(" in addition to its other types")
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
-                .or_else(|| r.strip_suffix(" in addition to its other creature types"))
-                .or_else(|| r.strip_suffix(" in addition to their other creature types"))
             {
                 out.extend(added_types(types)?);
+            } else if let Some(types) = r
+                .strip_suffix(" in addition to its other creature types")
+                .or_else(|| r.strip_suffix(" in addition to their other creature types"))
+            {
+                // "it's a Ninja in addition to its other creature types": creature
+                // types only (CR 205.3d).
+                let mods = added_types(types)?;
+                if !mods.iter().all(|m| match m {
+                    Modification::AddSubtypes(s) => s
+                        .iter()
+                        .all(|x| subtype_kind(x.as_str()) == Some(SubtypeKind::Creature)),
+                    _ => false,
+                }) {
+                    return None;
+                }
+                out.extend(mods);
             } else if let Some(x) = r
                 .strip_suffix(" in addition to its other colors and types")
                 .or_else(|| r.strip_suffix(" in addition to their other colors and types"))
