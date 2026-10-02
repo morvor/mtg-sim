@@ -141,6 +141,7 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
         merge_chapters(m);
     }
     merge_chapters(&mut out.lines);
+    merge_shared_as_though(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
 }
@@ -364,6 +365,31 @@ fn is_changeling_cda(a: &Ability) -> bool {
         StaticEffect::Continuous { mods, .. } if mods.len() == 1 && matches!(mods[0], Modification::AllCreatureTypes)))
 }
 
+/// "~ saddles Mounts and crews Vehicles as though its power were two greater.": one
+/// sentence for two static abilities of the object that differ only in what it does
+/// ("~ saddles Mounts as though ..." and "~ crews Vehicles as though ...").
+pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
+    let mut out: Vec<String> = Vec::new();
+    for l in lines.drain(..) {
+        if let Some(prev) = out.last_mut() {
+            if let Some(m) = join_as_though(prev, &l) {
+                *prev = m;
+                continue;
+            }
+        }
+        out.push(l);
+    }
+    *lines = out;
+}
+
+fn join_as_though(a: &str, b: &str) -> Option<String> {
+    let (pa, ta) = a.split_once(" as though ")?;
+    let (pb, tb) = b.split_once(" as though ")?;
+    let (sa, va) = pa.split_once(' ')?;
+    let (sb, vb) = pb.split_once(' ')?;
+    (ta == tb && sa == sb && sa == "~").then(|| format!("{sa} {va} and {vb} as though {ta}"))
+}
+
 /// Saga chapters with the same effect are printed on one line ("II, III — ...",
 /// CR 714.2b).
 fn merge_chapters(lines: &mut Vec<String>) {
@@ -436,6 +462,15 @@ pub struct Renderer<'a> {
     /// Nesting depth of quoted abilities (granted abilities refer to their own object as
     /// "this creature").
     pub(crate) quote_depth: u32,
+    /// Rendering the parameter of a keyword granted without quotes ("Equipped creature has
+    /// mobilize X, where X is its power"): the object that has the keyword is "it".
+    pub(crate) granted_keyword: bool,
+    /// Rendering a target's description right after the object itself was named (see
+    /// [`Renderer::target_mention`]).
+    pub(crate) self_before_target: bool,
+    /// The last instruction rendered was performed by a player other than you ("If they
+    /// do, ...").
+    pub(crate) last_actor_other: bool,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
     /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
@@ -469,6 +504,9 @@ pub struct Renderer<'a> {
     pub(crate) each_mode: bool,
     /// Alternatives in a head noun join with "and" ("for each instant and sorcery card").
     pub(crate) alt_and: bool,
+    /// Rendering a plural noun phrase whose alternatives are each named in full ("red
+    /// spells and white spells").
+    pub(crate) plural_alts: bool,
     /// The noun for a filter that names no type: "source" for damage sources.
     pub(crate) default_head: Option<&'static str>,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
@@ -502,6 +540,9 @@ impl<'a> Renderer<'a> {
             targets: Vec::new(),
             introduced: Vec::new(),
             quote_depth: 0,
+            granted_keyword: false,
+            self_before_target: false,
+            last_actor_other: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
             other_salient: false,
@@ -513,6 +554,7 @@ impl<'a> Renderer<'a> {
             subject_types: Vec::new(),
             each_mode: false,
             alt_and: false,
+            plural_alts: false,
             default_head: None,
             after_clash: false,
             sacrificed: None,
@@ -665,10 +707,22 @@ impl<'a> Renderer<'a> {
             }
             return format!("{head} {modes}");
         }
-        self.with_targets(&b.targets, |r| {
+        // "For each opponent, destroy up to one target artifact that player controls"
+        // (targets chosen once for each such player).
+        let per_player = b.targets.iter().find_map(|t| t.per_player.clone());
+        let self_named = self.self_salient;
+        let s = self.with_targets(&b.targets, |r| {
             let s = r.effect_sentences(&b.effect);
             r.define_stored_x(s)
-        })
+        });
+        let s = where_x_self_pronoun(&s, self_named);
+        match per_player {
+            Some(pf) => {
+                let n = self.player_filter_noun(&pf, Num::One);
+                format!("For each {n}, {s}")
+            }
+            None => s,
+        }
     }
 
     /// "You draw X cards and you lose X life, where X is ...": the number the
@@ -1037,4 +1091,47 @@ impl Renderer<'_> {
         self.event_scope = saved;
         r
     }
+}
+
+/// "Put X +1/+1 counters on ~, where X is its power": a "where X is" clause about the
+/// object itself, after a text that named it (or a trigger condition that did, `named`)
+/// and no target object since, may call it "it" (the value is rendered before the rest
+/// of its sentence, so the pronoun can't be chosen as it's rendered).
+fn where_x_self_pronoun(s: &str, named: bool) -> String {
+    const W: &str = ", where X is ";
+    let Some(i) = s.find(W) else {
+        return s.to_string();
+    };
+    let before = s[..i].to_lowercase();
+    let words: Vec<&str> = before
+        .split(|c: char| !(c.is_alphanumeric() || c == '~' || c == '\''))
+        .filter(|w| !w.is_empty())
+        .collect();
+    // Another object the text names ("target creature", "any target", "put counters on
+    // it") could be what "it" means.
+    let other_object = words.iter().enumerate().any(|(j, w)| {
+        (*w == "target"
+            && !matches!(
+                words.get(j + 1).copied(),
+                Some("player" | "players" | "opponent" | "opponents")
+            ))
+            || matches!(*w, "it" | "its" | "it's" | "they" | "them" | "their")
+    });
+    if other_object || !(named || before.contains('~')) {
+        return s.to_string();
+    }
+    let start = i + W.len();
+    let end = s[start..].find(". ").map_or(s.len(), |e| start + e);
+    let clause = s[start..end]
+        .replace("~'s", "~it's")
+        .replace(" ~ ", " ~it ");
+    let clause = match clause.strip_suffix(" ~") {
+        Some(c) => format!("{c} ~it"),
+        None => clause,
+    };
+    let clause = match clause.strip_suffix(" ~.") {
+        Some(c) => format!("{c} ~it."),
+        None => clause,
+    };
+    format!("{}{clause}{}", &s[..start], &s[end..])
 }

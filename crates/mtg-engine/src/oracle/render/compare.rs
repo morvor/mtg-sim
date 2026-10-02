@@ -86,10 +86,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "CR 700.4 (plural).",
     },
     Equivalence {
-        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's) (hand|library|graveyard)",
+        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's|their) (hand|library|graveyard)",
         replacement: "$1 owner's $3",
         why: "A card always goes to its owner's hand, library, or graveyard (CR 400.3); \
-              \"your hand\" on a card you own is its owner's hand.",
+              \"your hand\" on a card you own is its owner's hand, and \"their hand\" or \"their \
+              library\" for the cards a player moves from their own zones is too.",
     },
     Equivalence {
         pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
@@ -150,6 +151,34 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
         replacement: "them",
         why: "Anaphora (plural).",
+    },
+    Equivalence {
+        pattern: r"(\bon |\bto |^|[.,:—] |\{alt:|\|)each of them\b",
+        replacement: "${1}them",
+        why: "An instruction about a group of objects is about each of them: \"put a +1/+1 \
+              counter on each of them\" and \"put a +1/+1 counter on them\" put one counter on \
+              every object of the group (a counter is put on an object, CR 122.1), and \"each \
+              of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
+    },
+    Equivalence {
+        pattern: r"\bat the beginning of each of your postcombat main phases\b",
+        replacement: "at the beginning of your postcombat main phase",
+        why: "CR 505.1a: every main phase of a turn after the first is a postcombat main \
+              phase, so an ability that triggers at the beginning of your postcombat main \
+              phase triggers at each of them.",
+    },
+    Equivalence {
+        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        replacement: "in addition to its other types $1",
+        why: "CR 205.1b: an effect that says the object is \"still a [type]\" and one that \
+              gives types \"in addition to its other types\" both keep all its prior card \
+              types, supertypes and subtypes. (The sentence after a duration applies for \
+              that duration.)",
+    },
+    Equivalence {
+        pattern: r"(?:\. (?:it's|it is)| (?:that's|that is)) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        replacement: " in addition to its other types",
+        why: "CR 205.1b, as above.",
     },
     Equivalence {
         pattern: r"\buntil end of turn\b",
@@ -226,6 +255,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               the same thing.",
     },
     Equivalence {
+        pattern: r"\b(?:has|have) cast ([^.,;]*?) this turn\b",
+        replacement: "cast $1 this turn",
+        why: "\"If an opponent cast a blue spell this turn\" and \"if an opponent has cast a \
+              blue spell this turn\" ask the same thing (as \"you've\" above).",
+    },
+    Equivalence {
         pattern: r"\b(draws?) an additional card\b",
         replacement: "$1 a card",
         why: "A triggered draw is in addition to the normal draw anyway (CR 504.1).",
@@ -263,6 +298,15 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"(^|[^~\w])(it|that|there|what|he|she)'s\b",
         replacement: "$1$2 is",
         why: "Contraction.",
+    },
+    Equivalence {
+        pattern: r"\bif (it|its|thatit|thatit's|that-object|~it|~it's|~|~'s|the sacrificed (?:creature|permanent|artifact)(?:'s)?)((?: power| toughness)?) was\b",
+        replacement: "if $1$2 is",
+        why: "A condition about an object checked after it left its zone (\"Destroy target \
+              creature. If it was attacking, ...\", \"When ~ dies, if it was a Human\") is \
+              judged by the object's last known information (CR 608.2h, 400.7), which is \
+              what the past tense describes; the ability language has one condition for both \
+              and the engine evaluates a moved object by its last known information.",
     },
     Equivalence {
         pattern: r"\b(adds?) an additional\b",
@@ -586,13 +630,20 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
     // Tokenize: keep {..} symbols, +1/+1, ~, words with apostrophes and hyphens.
     let mut tokens = Vec::new();
     let mut cur = String::new();
-    let mut in_brace = false;
+    // Braces nest: "{alt:they pay {2}|that player pays {2}}" is one token.
+    let mut depth = 0usize;
     for ch in s.chars() {
-        if in_brace {
+        if depth > 0 {
             cur.push(ch);
-            if ch == '}' {
-                in_brace = false;
-                tokens.push(std::mem::take(&mut cur));
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        tokens.push(std::mem::take(&mut cur));
+                    }
+                }
+                _ => {}
             }
             continue;
         }
@@ -602,7 +653,7 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
                     tokens.push(std::mem::take(&mut cur));
                 }
                 cur.push(ch);
-                in_brace = true;
+                depth = 1;
             }
             c if c.is_alphanumeric() || matches!(c, '\'' | '+' | '-' | '/' | '~' | '*') => {
                 cur.push(c)
@@ -1223,9 +1274,28 @@ fn special_token(t: &str) -> Option<(bool, Vec<Vec<String>>)> {
         return Some((true, vec![normalize_unit(inner)]));
     }
     if let Some(inner) = t.strip_prefix("{alt:").and_then(|x| x.strip_suffix('}')) {
-        return Some((false, inner.split('|').map(normalize_unit).collect()));
+        return Some((false, split_top_level(inner).map(normalize_unit).collect()));
     }
     None
+}
+
+/// The alternatives of an `{alt:...}` token: split at each `|` outside nested braces.
+fn split_top_level(s: &str) -> impl Iterator<Item = &str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0usize, 0);
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            '|' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts.into_iter()
 }
 
 /// Matches `r` (which may contain special tokens) against `o`.
