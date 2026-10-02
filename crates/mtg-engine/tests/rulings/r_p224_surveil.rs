@@ -121,7 +121,7 @@ fn destroy_and_surveil_spells_can_target_an_indestructible_creature() {
 
 #[test]
 fn dream_eaters_reflexive_trigger_targets_after_surveilling_even_with_a_short_library() {
-    cr!("603.12", "701.25a", "701.25c");
+    cr!("603.12", "701.25a", "701.25d");
     ruling!(
         "Dream Eater",
         "Dream Eater's reflexive triggered ability triggers even if you have fewer than four cards in your library to surveil."

@@ -108,14 +108,10 @@ fn a_suspected_rune_brand_juggler_can_be_sacrificed_for_its_own_ability() {
     // until end of turn." It suspects itself.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
-    let juggler = t.hand(P0, "Rune-Brand Juggler");
-    t.lands(P0, "Swamp", 1);
-    t.lands(P0, "Mountain", 1);
-    let spell = t.cast(P0, juggler).go();
-    // The permanent it becomes (the next object) is the trigger's target.
-    t.answer_targets(P0, &[Entity::Object(ObjectId(spell.0 + 1))]);
+    let juggler = t.enter(P0, "Rune-Brand Juggler");
+    // Its enters trigger targets the Juggler itself.
+    t.answer_targets(P0, &[Entity::Object(juggler)]);
     t.resolve_all();
-    let juggler = t.g.current(juggler);
     assert!(suspected(&t, juggler));
     t.lands(P0, "Swamp", 3);
     t.lands(P0, "Mountain", 2);

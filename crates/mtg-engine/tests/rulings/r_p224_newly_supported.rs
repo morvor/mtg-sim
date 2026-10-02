@@ -133,6 +133,11 @@ fn mordor_on_the_march_storm_counts_spells_from_other_zones_and_countered_ones()
         .chars
         .has_keyword(mtg_engine::keywords::KeywordKind::Haste)));
     assert_eq!(t.g.find_in_zone(Zone::Exile, "Grizzly Bears").len(), 5);
+    // "Exile it at the beginning of the next end step": the tokens, not the exiled cards.
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert_eq!(t.g.find_in_zone(Zone::Exile, "Grizzly Bears").len(), 5);
 }
 
 #[test]

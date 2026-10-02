@@ -4,7 +4,7 @@
 use crate::r_p224_common::*;
 use crate::r_s01_common::*;
 use crate::r_s11_common::{spells_copied, triggered_from};
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::ObjKind;
 use mtg_engine::testing::*;
 use mtg_engine::types::counters;
@@ -83,7 +83,7 @@ fn all_of_history_copies_are_countered_individually() {
 
 #[test]
 fn chatterstorm_storm_counts_spells_from_other_zones_and_ones_that_failed_to_resolve() {
-    cr!("702.40a", "707.10c");
+    cr!("702.40a");
     ruling!(
         "Chatterstorm",
         " Spells cast from zones other than a player's hand and spells that were countered or otherwise failed to resolve are counted by the storm ability."
@@ -100,15 +100,32 @@ fn chatterstorm_storm_counts_spells_from_other_zones_and_ones_that_failed_to_res
 }
 
 #[test]
-fn chatterstorm_storm_copies_of_a_targeted_spell_may_get_new_targets() {
+fn storm_copies_may_get_new_targets_only_if_the_spell_has_targets() {
     cr!("702.40a", "707.10c");
     ruling!(
         "Chatterstorm",
         " If a spell with storm has targets, you may choose new targets for any of the copies. You can make different choices for each copy."
     );
+    // Chatterstorm has no target: its copies are created with no choice to make.
+    let mut t = TestGame::new(2);
+    bolt(&mut t, P0, Entity::Player(P1));
+    bolt(&mut t, P0, Entity::Player(P1));
+    t.resolve_all();
+    t.lands(P0, "Forest", 2);
+    let cs = t.hand(P0, "Chatterstorm");
+    t.cast(P0, cs).go();
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(copies_of(&t, "Chatterstorm").len(), 2);
+    assert!(!t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        Decision::YesNo { .. } | Decision::ChooseTargets { .. }
+    )));
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Squirrel").len(), 3);
     supported("Grapeshot");
-    // Chatterstorm has no target; Grapeshot ("Grapeshot deals 1 damage to any target.
-    // Storm") does. Two copies: one gets a new target, the other keeps the original's.
+    // Grapeshot ("Grapeshot deals 1 damage to any target. Storm"): two copies, one gets a
+    // new target, the other keeps the original's.
     let mut t = TestGame::new(2);
     bolt(&mut t, P0, Entity::Player(P1));
     bolt(&mut t, P0, Entity::Player(P1));
