@@ -477,7 +477,7 @@ fn searcher<'a>(l: &'a str, b: &mut Builder) -> Option<(Searcher, &'a str)> {
         // searches their own.
         if subject == "any number of target players" && verb == " may each search " {
             let mut spec = TargetSpec::player(PlayerFilter::Any, subject);
-            spec.min = 0;
+            spec.min = Value::c(0);
             spec.max = Value::c(99);
             let slot = b.add_target(spec, subject);
             let s = Searcher {

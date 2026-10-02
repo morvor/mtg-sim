@@ -69,8 +69,8 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         cmp,
         n,
     );
-    // "sacrifice it": a later "if you do" asks whether it was sacrificed, so when the
-    // condition doesn't hold, nothing was (sacrificing no object sets that).
+    // "sacrifice it": a later "if you do" asks whether it was sacrificed (when the
+    // condition doesn't hold, it wasn't).
     if clause.starts_with("sacrifice ") {
         if !matches!(clause, "sacrifice it" | "sacrifice ~") {
             return false;
@@ -81,7 +81,7 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             Effect::If {
                 cond,
                 then: Box::new(Effect::SacrificeObjects { what: Sel::This }),
-                otherwise: Box::new(Effect::SacrificeObjects { what: Sel::None }),
+                otherwise: Box::new(Effect::Noop),
             },
         ]);
         b.it = Sel::This;
