@@ -502,6 +502,11 @@ pub struct GameObject {
     /// leaving the battlefield erases (CR 506.4).
     #[serde(default)]
     pub left_battlefield: Option<Box<LeftBattlefield>>,
+    /// The object has dealt damage (`.0`) / combat damage (`.1`) since it became this
+    /// object (CR 400.7): "as long as it hasn't dealt damage yet". Recorded by
+    /// `kw/grant_conditions.rs`.
+    #[serde(default)]
+    pub dealt_damage: (bool, bool),
 }
 
 /// Status a permanent had as it last existed on the battlefield ("if it was attacking",
@@ -617,6 +622,7 @@ impl GameObject {
             prepared: None,
             base_pt: (None, None),
             left_battlefield: None,
+            dealt_damage: (false, false),
         }
     }
 

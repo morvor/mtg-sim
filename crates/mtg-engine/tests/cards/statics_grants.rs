@@ -132,15 +132,16 @@ fn equipment_grant_where_this_creature_is_the_equipped_creature() {
 }
 
 #[test]
-fn granted_ability_naming_the_card_itself_is_left_unsupported() {
+fn granted_ability_naming_the_card_itself_names_the_granting_object() {
     cr!("201.5a");
     // "{T}, Sacrifice Blazing Torch: Blazing Torch deals 2 damage to any target." names
-    // the Equipment, not the equipped creature; it isn't compiled as if it did.
+    // the Equipment, not the equipped creature; it isn't compiled as if it did (the
+    // granted ability refers to the object granting it: see `grant_granter.rs`).
     let def = card("Blazing Torch");
-    assert!(def
-        .unsupported_text()
-        .iter()
-        .any(|u| u.starts_with("Equipped creature has")));
+    assert!(def.unsupported_text().is_empty());
+    let dump = format!("{:?}", def.faces[0].chars.abilities);
+    assert!(dump.contains(mtg_engine::granted_by::GRANTER));
+    assert!(!dump.contains("SacrificeSelf"), "{dump}");
 }
 
 #[test]

@@ -249,9 +249,21 @@ fn with_parts(s: &str, ctx: &CompileContext) -> Option<Effect> {
 /// "flying", "haste", "first strike": abilities a permanent enters with, which it has
 /// for as long as it remains on the battlefield (CR 614.1c).
 fn entry_abilities(s: &str, ctx: &CompileContext) -> Option<Effect> {
+    // A quoted ability ("and with \"Pay 3 life: Regenerate this creature.\""): the
+    // permanent's own, so its name and "this creature" both mean it.
+    let mods = match s.strip_prefix('"').and_then(|q| q.strip_suffix('"')) {
+        Some(q) if !q.contains('"') => {
+            let text = crate::oracle::normalize(&crate::oracle::raw_text(), ctx);
+            super::statics::granted_abilities_to(q, &text, CardType::Creature, ctx, true)?
+                .into_iter()
+                .map(Modification::AddAbility)
+                .collect()
+        }
+        _ => keyword_list(s, ctx)?,
+    };
     Some(Effect::OnEntry(Box::new(Effect::Modify {
         what: Sel::This,
-        mods: keyword_list(s, ctx)?,
+        mods,
         duration: Duration::Permanent,
     })))
 }

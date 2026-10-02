@@ -541,15 +541,15 @@ impl Game {
             | Filter::BlockingAlone
             | Filter::AttackingPlayerAlone
             | Filter::HadToAttack => crate::combat::combat_filter(self, f, id),
+            // The player only: a creature attacking a planeswalker that player controls
+            // or a battle they protect isn't attacking them (CR 506.2, 508.1b).
             Filter::AttackingPlayer(rel) => self
                 .combat
                 .as_ref()
                 .and_then(|cb| cb.attack_target(id))
                 .is_some_and(|t| match t {
                     Entity::Player(p) => self.player_rel_matches(*rel, p, ctx),
-                    Entity::Object(pw) => {
-                        self.player_rel_matches(*rel, self.obj(pw).controller, ctx)
-                    }
+                    Entity::Object(_) => false,
                 }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
                 self.combat
