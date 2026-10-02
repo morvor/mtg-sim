@@ -1972,7 +1972,8 @@ impl Game {
             if !self.eval_cond(c, &ctx) {
                 let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                     || act.cost.parts.iter().any(cost_part_has_x);
-                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                    + o.counter(counters::LOYALTY);
                 least_x = has_x
                     .then(|| {
                         (1..=max_x as i32).find(|x| {
@@ -2004,7 +2005,8 @@ impl Game {
             // possible if they are for some value the player could choose.
             let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                 || act.cost.parts.iter().any(cost_part_has_x);
-            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                + o.counter(counters::LOYALTY);
             let for_some_x = has_x
                 && (1..=max_x as i32).any(|x| {
                     let mut c = ctx.clone();
@@ -2221,7 +2223,7 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = self.max_mana_available(p) as i64;
+            let max = crate::activation_costs::x_bound(self, p, act);
             x = match self.ask(p, Decision::ChooseX { source: src, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,

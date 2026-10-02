@@ -31,16 +31,32 @@ fn either_last_part(cost: &str) -> Option<(String, String)> {
     if !COST_VERBS.iter().any(|v| lower.starts_with(v)) {
         return None;
     }
+    let join = |a: &str, b: &str| match head {
+        Some(h) => (format!("{h}, {a}"), format!("{h}, {b}")),
+        None => (a.to_string(), b.to_string()),
+    };
+    // "Remove a +1/+1 counter or a charge counter from a permanent you control" (Ion
+    // Storm): either kind of counter.
+    if let Some((k1, r)) = last
+        .strip_prefix("Remove a ")
+        .and_then(|r| r.split_once(" counter or a "))
+    {
+        let (k2, from) = r.split_once(" counter from ")?;
+        if k1.contains(' ') || k2.contains(' ') {
+            return None;
+        }
+        return Some(join(
+            &format!("Remove a {k1} counter from {from}"),
+            &format!("Remove a {k2} counter from {from}"),
+        ));
+    }
     let i = lower
         .match_indices(" or ")
         .map(|(i, _)| i)
         .find(|i| COST_VERBS.iter().any(|v| lower[i + 4..].starts_with(v)))?;
     let (a, b) = (&last[..i], &last[i + 4..]);
     let b = format!("{}{}", b[..1].to_uppercase(), &b[1..]);
-    Some(match head {
-        Some(h) => (format!("{h}, {a}"), format!("{h}, {b}")),
-        None => (a.to_string(), b),
-    })
+    Some(join(a, &b))
 }
 
 fn either_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {

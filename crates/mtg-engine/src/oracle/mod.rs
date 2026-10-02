@@ -148,6 +148,12 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
                 names.push(short.to_string());
             }
         }
+        // A regnal number ("King Darien XLVIII" is "King Darien").
+        if let Some((short, num)) = ctx.card_name.rsplit_once(' ') {
+            if short.contains(' ') && num.len() > 1 && num.chars().all(|c| "IVXLCDM".contains(c)) {
+                names.push(short.to_string());
+            }
+        }
     }
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
     for n in &names {
@@ -501,12 +507,13 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     };
     let mut act = ActivatedAbility::new(cost, body);
     if let Some(sentence) = own_cost {
-        act.own_cost_changes
-            .push(patterns::activation_cost_modifiers::parse_own_cost_change_n(
+        act.own_cost_changes.push(
+            patterns::activation_cost_modifiers::parse_own_cost_change_n(
                 &sentence,
                 target_slots,
                 ctx,
-            )?);
+            )?,
+        );
     }
     act.timing = timing;
     act.max_per_turn = max_per_turn;

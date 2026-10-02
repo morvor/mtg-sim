@@ -507,3 +507,21 @@ pub fn add_own_cost_changes(
         );
     }
 }
+
+/// The greatest value of X a player could announce for the ability `act` (CR 107.3a):
+/// the mana they could make, or, for an X among its other cost parts ("Remove X +1/+1
+/// counters from among creatures you control", "Exile X cards from your graveyard",
+/// "Sacrifice X artifacts"), how many counters and objects there are to pay it with.
+pub fn x_bound(g: &Game, p: PlayerId, act: &ActivatedAbility) -> i64 {
+    let mana = g.max_mana_available(p) as i64;
+    if !act.cost.parts.iter().any(crate::casting::cost_part_has_x) {
+        return mana;
+    }
+    let pl = g.player(p);
+    let objects = g.permanents_controlled_by(p).len() + pl.graveyard.len() + pl.hand.len();
+    let counters: u32 = g
+        .permanents()
+        .map(|o| o.counters.values().sum::<u32>())
+        .sum();
+    mana.max(objects as i64 + counters as i64)
+}

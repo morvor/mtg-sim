@@ -610,7 +610,11 @@ pub fn effect_with_amount(eff: &str) -> Option<String> {
     let eff = compared.as_deref().unwrap_or(eff);
     let lower = eff.to_lowercase();
     let first = lower.split(". ").next().unwrap_or(&lower);
-    for (pat, rep) in [("that many ", "X "), ("that much {c}", "X {C}")] {
+    for (pat, rep) in [
+        ("that many ", "X "),
+        ("that much {c}", "X {C}"),
+        ("that much damage", "X damage"),
+    ] {
         if lower.matches(pat).count() == 1 && first.contains(pat) {
             let i = lower.find(pat)?;
             return Some(format!("{}{rep}{}", &eff[..i], &eff[i + pat.len()..]));
