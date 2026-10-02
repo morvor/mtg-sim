@@ -38,6 +38,11 @@ pub struct CastOption {
     /// flashback's) or the card is cast while an effect resolves (CR 608.2g). See
     /// `permissions.rs`.
     pub permission: Option<crate::permissions::CastPermission>,
+    /// The object whose static ability offers `alt_cost` ("You may pay {W}{U}{B}{R}{G}
+    /// rather than pay the mana cost for spells you cast"), with the once-each-turn use it
+    /// is; `None` for the card's own alternative costs and a permission's. See
+    /// `kw/offered_costs.rs`.
+    pub alt_source: Option<crate::kw::offered_costs::AltCostSource>,
 }
 
 impl CastOption {
@@ -51,6 +56,7 @@ impl CastOption {
             any_time: false,
             tag: None,
             permission: None,
+            alt_source: None,
         }
     }
 }
@@ -599,11 +605,19 @@ impl Game {
     /// `permissions.rs`).
     pub fn cast_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let all = self.permitted_cast_options(p, card);
-        if crate::permissions::own_only() || !crate::permissions::may_be_permitted(self, p, card) {
-            return all;
-        }
-        let own = crate::permissions::own_permissions_only(|| self.permitted_cast_options(p, card));
-        crate::permissions::attach(self, p, card, own, all)
+        let mut out = if crate::permissions::own_only()
+            || !crate::permissions::may_be_permitted(self, p, card)
+        {
+            all
+        } else {
+            let own =
+                crate::permissions::own_permissions_only(|| self.permitted_cast_options(p, card));
+            crate::permissions::attach(self, p, card, own, all)
+        };
+        // Each of those ways for an alternative cost another object offers, if it has none
+        // yet (CR 118.9, 118.9a, 601.2b).
+        crate::kw::offered_costs::extend_cast_options(self, p, card, &mut out);
+        out
     }
 
     /// The ways of casting `card` that the rules and the permissions that count now allow,
@@ -1179,10 +1193,19 @@ impl Game {
             let mut options: Vec<String> = opts
                 .iter()
                 .map(|o| {
-                    let way = match (&o.tag, &o.alt_cost) {
-                        (Some(t), _) => t.to_string(),
-                        (None, Some(c)) => format!("{c:?}"),
-                        (None, None) => format!("{:?}", o.method),
+                    let way = match (&o.tag, &o.alt_cost, &o.alt_source) {
+                        // An alternative cost another object offers, named with it (and
+                        // with the way it's combined with, e.g. "prototype").
+                        (t, Some(c), Some(s)) => {
+                            let l = crate::kw::offered_costs::label(self, &o.method, c, s);
+                            match t {
+                                Some(t) => format!("{t}, {l}"),
+                                None => l,
+                            }
+                        }
+                        (Some(t), _, _) => t.to_string(),
+                        (None, Some(c), None) => format!("{c:?}"),
+                        (None, None, _) => format!("{:?}", o.method),
                     };
                     if faces_differ {
                         format!("{way}: {}", self.face_characteristics(card, o.face).name)
@@ -1328,6 +1351,8 @@ impl Game {
             })
         );
         crate::permissions::record_use(self, opt.permission.as_ref());
+        // So is a once-each-turn alternative cost another object offers.
+        crate::kw::offered_costs::record_use(self, opt.alt_source.as_ref());
         // "A spell cast this way costs {2} more to cast" (CR 601.2f).
         let permission_cost_increase = opt.permission.as_ref().map_or(0, |c| c.terms.cost_increase);
         self.play_grants.retain(|g| g.object != card);
@@ -1867,7 +1892,11 @@ impl Game {
             Zone::Battlefield | Zone::Stack => o.controller,
             _ => o.owner,
         };
-        if who != p && !act.any_player {
+        if who != p && !act.any_player && !act.only_opponents {
+            return false;
+        }
+        // "Only your opponents may activate this ability" (CR 602.2).
+        if act.only_opponents && !self.are_opponents(who, p) {
             return false;
         }
         // CR 801.6: not the abilities of an object outside the player's range of influence.
@@ -1938,6 +1967,12 @@ impl Game {
         }
         if let Some(max) = act.max_per_turn {
             if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
+                return false;
+            }
+        }
+        // "Activate only once": over the object's existence (CR 400.7).
+        if let Some(max) = act.max_total {
+            if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
                 return false;
             }
         }
@@ -2037,7 +2072,11 @@ impl Game {
     }
 
     pub(crate) fn activation_prohibited(&self, p: PlayerId, src: ObjectId, is_mana: bool) -> bool {
-        let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
+        let check = |r: &Restriction,
+                     s: Option<ObjectId>,
+                     c: PlayerId,
+                     locked: &Option<Vec<ObjectId>>|
+         -> bool {
             if let Restriction::CantActivate {
                 who,
                 sources,
@@ -2047,7 +2086,7 @@ impl Game {
                 let ctx = Ctx::new(s, c);
                 (!is_mana || *include_mana)
                     && self.player_filter_matches(who, p, &ctx)
-                    && self.matches(src, sources, &ctx)
+                    && self.restriction_applies(src, sources, &ctx, locked)
             } else {
                 false
             }
@@ -2055,11 +2094,11 @@ impl Game {
         self.statics
             .restrictions
             .iter()
-            .any(|(s, c, r)| check(r, Some(*s), *c))
+            .any(|(s, c, r)| check(r, Some(*s), *c, &None))
             || self
                 .rule_effects
                 .iter()
-                .any(|e| check(&e.restriction, e.source, e.controller))
+                .any(|e| check(&e.restriction, e.source, e.controller, &e.objects))
     }
 
     /// Total cost of an activated ability including modifiers (CR 602.2b, 601.2f).
@@ -2681,7 +2720,7 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 let cands: Vec<ObjectId> = self
-                    .cost_zone_cards(p, *zone)
+                    .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
@@ -2769,10 +2808,13 @@ impl Game {
             }
             CostPart::ExertSelf => so.is_some(),
             CostPart::CollectEvidence(n) => {
+                // Not the card being cast: it's on the stack by the time costs are paid
+                // (CR 601.2a; Conspiracy Unraveler ruling).
                 let total: u32 = self
                     .player(p)
                     .graveyard
                     .iter()
+                    .filter(|c| Some(**c) != src)
                     .map(|c| self.mana_value_of(*c))
                     .sum();
                 total >= *n
@@ -2819,6 +2861,39 @@ impl Game {
                 c.cost_of = ctx.cost_of;
                 self.can_pay_cost_optimistic_in(p, &flat, src, &chars, &c)
             }
+        }
+    }
+
+    /// The cards an exile cost of `p`'s with the filter `filter` may exile from `zone`: from
+    /// `p`'s own, unless the filter says whose they are ("Exile a Fungus card from a
+    /// graveyard": owned by any player, `Filter::OwnedBy` among its parts), then from that
+    /// zone of each such player (CR 118.3, 404.1).
+    fn exile_cost_cards(
+        &self,
+        p: PlayerId,
+        zone: ZoneKind,
+        filter: &Filter,
+        ctx: &Ctx,
+    ) -> Vec<ObjectId> {
+        let owner = match filter {
+            Filter::And(v) => v.iter().find_map(|f| match f {
+                Filter::OwnedBy(r) => Some(*r),
+                _ => None,
+            }),
+            Filter::OwnedBy(r) => Some(*r),
+            _ => None,
+        };
+        match (zone, owner) {
+            (ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library, Some(rel))
+                if rel != PlayerRel::You =>
+            {
+                self.players_in_game()
+                    .into_iter()
+                    .filter(|q| self.player_rel_matches(rel, *q, ctx))
+                    .flat_map(|q| self.cost_zone_cards(q, zone))
+                    .collect()
+            }
+            _ => self.cost_zone_cards(p, zone),
         }
     }
 
@@ -3103,7 +3178,7 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let cands: Vec<ObjectId> = self
-                    .cost_zone_cards(p, *zone)
+                    .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
@@ -3358,6 +3433,15 @@ impl Game {
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
                 self.exec(e, &mut c);
+                // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
+                // exiled to pay the cost.
+                if let Some(v) = c.vars.get(&vars::IT) {
+                    for o in v.iter().filter_map(|x| x.object()) {
+                        if self.obj(o).zone == Zone::Exile && !paid.objects.contains(&o) {
+                            paid.objects.push(o);
+                        }
+                    }
+                }
                 // CR 119.7: a cost that has a player who can't gain life gain life can't be
                 // paid — "have an opponent gain 3 life" with an opponent chosen as it's
                 // paid who can't.
@@ -3452,7 +3536,7 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
 }
 
 /// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.
-fn cost_label(c: &Cost) -> String {
+pub(crate) fn cost_label(c: &Cost) -> String {
     match (&c.mana, c.parts.is_empty()) {
         (Some(m), true) => format!("{m}"),
         (Some(m), false) => format!("{m} + {:?}", c.parts),

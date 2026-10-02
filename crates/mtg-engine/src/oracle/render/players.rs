@@ -694,6 +694,7 @@ impl Renderer<'_> {
             }
             PlayerFilter::Defending => "who is the defending player".into(),
             PlayerFilter::Active => "whose turn it is".into(),
+            PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::MaxSpeed => "with max speed".into(),
             PlayerFilter::LessThanHalfStartingLife => {

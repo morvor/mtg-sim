@@ -2078,6 +2078,13 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
             Sel::TriggerObject,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
         ),
+        // "Whenever enchanted creature deals damage to a creature, destroy the other
+        // creature": one source, so "it" is the damaged creature, as for `~`.
+        (DamageRecipient::Object(_), false) if matches!(subj.filter, Filter::AttachedToSource) => (
+            cond,
+            Sel::TriggerObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        ),
         (DamageRecipient::Object(_), false) => (cond, Sel::None, PlayerRef::Iterated),
         (_, true) => (cond, Sel::This, PlayerRef::TriggerPlayer),
         (_, false) => (cond, Sel::TriggerOtherObject, PlayerRef::TriggerPlayer),

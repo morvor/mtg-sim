@@ -54,17 +54,20 @@ fn slot_of(name: &str) -> Option<SmolStr> {
 /// If the static ability is a once-each-turn permission, the slot it uses ("" for an
 /// object's only one).
 pub fn once_slot(s: &StaticAbility) -> Option<SmolStr> {
-    fn find(c: &Condition) -> Option<SmolStr> {
-        match c {
-            Condition::Custom(n) => slot_of(n),
-            Condition::And(v) => v.iter().find_map(find),
-            _ => None,
-        }
-    }
     if !matches!(s.effect, StaticEffect::PlayPermission(_)) {
         return None;
     }
-    s.condition.as_ref().and_then(find)
+    s.condition.as_ref().and_then(condition_slot)
+}
+
+/// The slot a condition (a static ability's) makes it a once-each-turn use of, if it's
+/// [`once_unused`] or a conjunction with it.
+pub fn condition_slot(c: &Condition) -> Option<SmolStr> {
+    match c {
+        Condition::Custom(n) => slot_of(n),
+        Condition::And(v) => v.iter().find_map(condition_slot),
+        _ => None,
+    }
 }
 
 pub struct OnceEachTurnCast;

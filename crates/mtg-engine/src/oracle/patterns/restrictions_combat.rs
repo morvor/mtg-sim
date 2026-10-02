@@ -62,6 +62,12 @@ fn lockable(r: &Restriction) -> bool {
             | Restriction::BlockAsThoughUntapped(_)
             | Restriction::DamageByToughness(_)
             | Restriction::AssignsNoCombatDamage(_)
+            | Restriction::ExtraBlocks { .. }
+            | Restriction::CantAttackAlone(_)
+            | Restriction::CantBlockAlone(_)
+            | Restriction::MinBlockers { .. }
+            | Restriction::CantBeTargeted { .. }
+            | Restriction::CantBe { .. }
     )
 }
 

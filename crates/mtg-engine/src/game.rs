@@ -484,6 +484,14 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Cards milled this turn (CR 701.17), as the objects they became, and cards
+    /// discarded this turn with the player who discarded each ("a card in a graveyard
+    /// that was milled this turn", "cards you cycled or discarded this turn"). Recorded
+    /// by `kw/zone_moves.rs`.
+    #[serde(default)]
+    pub milled: Vec<ObjectId>,
+    #[serde(default)]
+    pub discarded: Vec<(PlayerId, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -554,6 +562,10 @@ pub struct ActiveStatics {
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,
+    /// Alternative costs other objects offer for the spells players cast ("You may pay
+    /// {W}{U}{B}{R}{G} rather than pay the mana cost for spells you cast"), with the
+    /// once-each-turn use each is: see `kw/offered_costs.rs`.
+    pub offered_alt_costs: Vec<crate::kw::offered_costs::OfferedAltCost>,
 }
 
 #[derive(Clone, Debug)]

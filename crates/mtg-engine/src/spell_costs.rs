@@ -44,6 +44,7 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     Some(g.history.spells_cast.iter().any(|(p, s)| {
         *p == ctx.controller
             && Some(*s) != ctx.source
+            && Some(g.current(*s)) != ctx.source
             && (!instant_or_sorcery || {
                 let t = &g.obj(*s).chars.card_types;
                 t.contains(CardType::Instant) || t.contains(CardType::Sorcery)
@@ -92,10 +93,13 @@ pub fn own_change_applies(
     g.eval_cond(cond, ctx)
 }
 
-/// Whether a filter looks at a spell's targets ("spells that target a creature").
+/// Whether a filter looks at a spell's targets ("spells that target a creature") or at
+/// the optional costs paid for it ("if you paid life this way", see `kw/offered_costs.rs`):
+/// choices made as it's proposed (CR 601.2b–c).
 fn filter_has_targets(f: &Filter) -> bool {
     match f {
         Filter::Targets(_) => true,
+        Filter::Custom(n) => n.starts_with(crate::kw::offered_costs::PAID_OFFERED_COST),
         Filter::And(v) | Filter::Or(v) => v.iter().any(filter_has_targets),
         Filter::Not(x) => filter_has_targets(x),
         _ => false,
@@ -107,6 +111,8 @@ fn assume_targets(f: &Filter, met: bool) -> Filter {
     match f {
         Filter::Targets(_) if met => Filter::Any,
         Filter::Targets(_) => Filter::Not(Box::new(Filter::Any)),
+        Filter::Custom(_) if filter_has_targets(f) && met => Filter::Any,
+        Filter::Custom(_) if filter_has_targets(f) => Filter::Not(Box::new(Filter::Any)),
         Filter::And(v) => Filter::And(v.iter().map(|x| assume_targets(x, met)).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(|x| assume_targets(x, met)).collect()),
         Filter::Not(x) => Filter::Not(Box::new(assume_targets(x, !met))),

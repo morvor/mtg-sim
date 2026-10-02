@@ -208,6 +208,10 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 if !g.matches(t, &f, &Ctx::new(Some(obj), o.controller)) {
                     return false;
                 }
+                // "can't be enchanted by other Auras".
+                if crate::prohibitions::aura_prohibited(g, obj, t) {
+                    return false;
+                }
                 // CR 702.16c: can't be enchanted by Auras with the protected quality —
                 // protection functions only on the battlefield (Animate Dead's rulings).
                 !(on_battlefield && aura_protection_applies(g, t, obj))
@@ -221,6 +225,7 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                     && (!o.is_creature() || o.has_keyword(KeywordKind::Reconfigure))
                     && !crate::kw::protection::prevents_attachment(g, t, obj)
                     && crate::keyword_impls::equip_restriction_ok(g, obj, t)
+                    && !crate::prohibitions::object_cant(g, t, ObjectAction::Equipped)
             } else if chars.has_subtype("Fortification") {
                 // CR 301.6: Fortifications attach to lands; one that's also a creature can't
                 // fortify a land.

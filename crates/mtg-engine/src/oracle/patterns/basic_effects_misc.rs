@@ -1,0 +1,694 @@
+//! Smaller basic-effect constructs:
+//!
+//! - "shuffle target nontoken permanent you control into its owner's library" (CR 701.24):
+//!   the object is shuffled into its owner's library.
+
+use super::EffectPattern;
+use crate::ability::*;
+use crate::oracle::effects::{object_ref, Builder};
+use crate::oracle::phrases::*;
+
+/// "shuffle [object] into its owner's library", "shuffle [objects] into their owners'
+/// libraries".
+fn shuffle_into_owners_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("shuffle ")?;
+    let (what, tail) = object_ref(r, b)?;
+    match tail.trim() {
+        "into its owner's library" | "into their owners' libraries" => {
+            Some(Effect::ShuffleInto { what })
+        }
+        _ => None,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: shuffle [object] into its owner's library", priority: 980, parse: shuffle_into_owners_library } }
+
+/// "It gets an additional -1/-1 until end of turn for each Desert you control.", "Zombie
+/// creatures you control get an additional +2/+2 until end of turn": "additional" only
+/// says the change adds to an earlier one; it's the same change.
+fn gets_additional(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" an additional ")?;
+    let head = &l[..i];
+    if !(head.ends_with(" gets") || head.ends_with(" get")) {
+        return None;
+    }
+    let text = format!("{head} {}", &l[i + " an additional ".len()..]);
+    crate::oracle::effects::parse_clause(&text, b)
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: gets an additional +N/+N", priority: 60, parse: gets_additional } }
+
+/// "Each creature gets twice -X/-X until end of turn." (Nuclear Fallout): twice the amount.
+fn gets_twice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" twice ")?;
+    let head = &l[..i];
+    if !(head.ends_with(" gets") || head.ends_with(" get")) {
+        return None;
+    }
+    let text = format!("{head} {}", &l[i + " twice ".len()..]);
+    let e = crate::oracle::effects::parse_clause(&text, b)?;
+    let Effect::Modify {
+        what,
+        mods,
+        duration,
+    } = e
+    else {
+        return None;
+    };
+    let twice = |v: Value| Value::Mul(Box::new(Value::Const(2)), Box::new(v));
+    let mods = mods
+        .into_iter()
+        .map(|m| match m {
+            Modification::ModifyPT(p, t) => Some(Modification::ModifyPT(twice(p), twice(t))),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(Effect::Modify {
+        what,
+        mods,
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: gets twice -X/-X", priority: 60, parse: gets_twice } }
+
+/// "Until end of turn, double target creature's power X times." (Exponential Growth): the
+/// power is doubled, then doubled again, X times in all (each doubling gives it +N/+0
+/// where N is its power then, CR 701.10d).
+fn double_n_times(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // "Until end of turn, double ...": the duration belongs to the doubling.
+    let moved;
+    let l = match l.strip_prefix("until end of turn, ") {
+        Some(r) => {
+            let i = r.rfind(" times")?;
+            let j = r[..i].rfind(' ')?;
+            moved = format!("{} until end of turn{}", &r[..j], &r[j..]);
+            moved.as_str()
+        }
+        None => l,
+    };
+    let i = l.rfind(" times")?;
+    if !l[i..].trim_end().eq(" times") {
+        return None;
+    }
+    let head = &l[..i];
+    let j = head.rfind(' ')?;
+    let (n, rest) = parse_number(&head[j + 1..])?;
+    if !rest.is_empty() {
+        return None;
+    }
+    let inner = &head[..j];
+    if !(inner.contains("double ")) {
+        return None;
+    }
+    let e = crate::oracle::effects::parse_clause(inner, b)?;
+    Some(Effect::Repeat {
+        times: n,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: double ... N times", priority: 60, parse: double_n_times } }
+
+/// "That creature can block up to two additional creatures this turn", "target creature
+/// can block an additional creature this turn", "... can block any number of creatures
+/// this turn" (CR 509.1b).
+fn can_block_additional(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (dur, l) = crate::oracle::effects::duration_suffix(end(l));
+    if !matches!(dur, Duration::EndOfTurn) {
+        return None;
+    }
+    let i = l.find(" can block ")?;
+    let (what, tail) = object_ref(&l[..i], b)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let r = &l[i + " can block ".len()..];
+    let n = match r {
+        "an additional creature" => Some(1),
+        "any number of creatures" => None,
+        _ => {
+            let r = r.strip_prefix("up to ")?.strip_suffix(" additional creatures")?;
+            let (n, rest) = parse_number(r)?;
+            if !rest.is_empty() {
+                return None;
+            }
+            Some(n.as_const()? as u32)
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::ExtraBlocks {
+            blocker: Filter::In(Box::new(what)),
+            n,
+        },
+        duration: dur,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: can block additional creatures this turn", priority: 60, parse: can_block_additional } }
+
+/// "That creature gets an additional +4/+4 until end of turn unless any player pays {2}."
+/// (Wild Might): any player may pay to stop it (CR 118.12a).
+fn unless_any_player_pays(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (head, cost) = end(l).split_once(" unless any player pays ")?;
+    let cost = crate::oracle::keywords::parse_keyword_cost(cost)?;
+    let e = crate::oracle::effects::parse_clause(head, b)?;
+    Some(Effect::PayOptional {
+        who: PlayerRef::EachPlayer,
+        cost,
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: unless any player pays", priority: 60, parse: unless_any_player_pays } }
+
+/// "look at the top three cards of target player's library, then put them back in any
+/// order", "look at the top two cards of target opponent's library, then exile one of
+/// them", "that player looks at the top three cards of your library, then puts them back
+/// in any order": the player looking makes the choices, whoever owns the library.
+fn look_at_top_of_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    use crate::kw::basic_effects::{look_at_top, LookAtTop};
+    let l = end(l);
+    let (looker, r, third) = if let Some(r) = l.strip_prefix("look at the top ") {
+        (PlayerRef::You, r, false)
+    } else if let Some(r) = l.strip_prefix("that player looks at the top ") {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+            return None;
+        }
+        (b.it_player.clone(), r, true)
+    } else {
+        return None;
+    };
+    let (n, r) = parse_number(r)?;
+    n.as_const()?;
+    let r = r.trim_start().strip_prefix("cards of ")?;
+    let (lib, r) = r.split_once(" library, then ")?;
+    let (exile, reorder) = match (r, third) {
+        ("put them back in any order", false) | ("puts them back in any order", true) => {
+            (0, true)
+        }
+        ("exile one of them", false) => (1, false),
+        _ => return None,
+    };
+    let library = match lib {
+        "your" if third => PlayerRef::You,
+        "target player's" | "target opponent's" if !third => {
+            let (pf, text) = if lib.starts_with("target player") {
+                (PlayerFilter::Any, "target player")
+            } else {
+                (PlayerFilter::Opponent, "target opponent")
+            };
+            let slot = b.add_target(TargetSpec::player(pf, text), text);
+            b.it_player = PlayerRef::Target(slot);
+            PlayerRef::Target(slot)
+        }
+        _ => return None,
+    };
+    Some(look_at_top(&LookAtTop {
+        library,
+        looker,
+        n,
+        exile,
+        reorder,
+    }))
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: look at the top of another player's library", priority: 80, parse: look_at_top_of_library } }
+
+/// Keywords an object loses: plain keywords ("flying, first strike"), a landwalk
+/// ("forestwalk": only that one), "all \"bands with other\" abilities".
+fn lost_mods(s: &str) -> Option<Vec<Modification>> {
+    use crate::kw::basic_effects::{remove_keyword, RemoveKeyword};
+    if s == "all \"bands with other\" abilities" {
+        return Some(vec![remove_keyword(&RemoveKeyword {
+            kind: crate::keywords::KeywordKind::Banding,
+            filter: None,
+        })]);
+    }
+    let mut out = Vec::new();
+    for m in crate::oracle::effects::keyword_mods(s)? {
+        let Modification::AddKeyword(k) = m else {
+            return None;
+        };
+        if k.cost.is_some() || k.n.is_some() {
+            return None;
+        }
+        out.push(match (&k.kind, &k.filter) {
+            (crate::keywords::KeywordKind::Landwalk, Some(f)) => remove_keyword(&RemoveKeyword {
+                kind: k.kind,
+                filter: Some(f.clone()),
+            }),
+            (_, None) => Modification::RemoveKeyword(k.kind),
+            _ => return None,
+        });
+    }
+    Some(out)
+}
+
+/// "target creature loses forestwalk until end of turn", "~ gains flying and loses trample
+/// until end of turn", "until end of turn, ~ becomes a 3/3 Construct artifact creature and
+/// loses flying", "target creature loses all \"bands with other\" abilities until end of
+/// turn", "target creature loses your choice of flying, first strike, or trample until end
+/// of turn".
+fn and_loses(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let moved;
+    let l = match l.strip_prefix("until end of turn, ") {
+        Some(r) => {
+            moved = format!("{r} until end of turn");
+            moved.as_str()
+        }
+        None => l,
+    };
+    let (dur, main) = crate::oracle::effects::duration_suffix(l);
+    let dur_s = match dur {
+        Duration::EndOfTurn => " until end of turn",
+        Duration::Permanent => "",
+        _ => return None,
+    };
+    // "[subject] loses your choice of A, B, or C": one of them, chosen as it resolves.
+    if let Some((subject, list)) = main.split_once(" loses your choice of ") {
+        let (what, tail) = object_ref(subject, b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let items: Vec<String> = list
+            .replace(", or ", ", ")
+            .replace(" or ", ", ")
+            .split(", ")
+            .map(str::to_string)
+            .collect();
+        let mut options = Vec::new();
+        for i in items {
+            let mods = lost_mods(&i)?;
+            options.push((
+                i.clone(),
+                Effect::Modify {
+                    what: what.clone(),
+                    mods,
+                    duration: dur.clone(),
+                },
+            ));
+        }
+        return Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        });
+    }
+    let (head, lost) = match main.rsplit_once(" and loses ") {
+        Some((h, k)) => (Some(h), k),
+        None => (None, main.split_once(" loses ")?.1),
+    };
+    let lost = lost_mods(lost)?;
+    let base = match head {
+        Some(h) => crate::oracle::effects::parse_clause(&format!("{h}{dur_s}"), b)?,
+        None => {
+            let subject = main.split_once(" loses ")?.0;
+            let (what, tail) = object_ref(subject, b)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            Effect::Modify {
+                what,
+                mods: vec![],
+                duration: dur.clone(),
+            }
+        }
+    };
+    let Effect::Modify {
+        what,
+        mut mods,
+        duration,
+    } = base
+    else {
+        return None;
+    };
+    mods.extend(lost);
+    Some(Effect::Modify {
+        what,
+        mods,
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: loses keywords", priority: 120, parse: and_loses } }
+
+/// "behold a Goblin and exile it" (Champion of the Weird and the other Lorwyn champions):
+/// behold (CR 701.4a), then exile what was beheld; the exiled card is exiled to pay the
+/// cost (CR 607.2q).
+fn behold_and_exile(p: &str) -> Option<CostPart> {
+    let r = end(p).strip_prefix("behold ")?.strip_suffix(" and exile it")?;
+    let (n, r) = parse_number(r)?;
+    if n.as_const() != Some(1) {
+        return None;
+    }
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(CostPart::Effect(Box::new(Effect::seq(vec![
+        Effect::KeywordAction {
+            action: KeywordAction::Behold,
+            who: PlayerRef::You,
+            what: Sel::All(f),
+            n,
+        },
+        Effect::Exile {
+            what: Sel::Var(vars::IT),
+            face_down: false,
+            link: false,
+        },
+    ]))))
+}
+
+inventory::submit! { super::CostPattern { name: "basic effects: behold and exile it", priority: 100, parse: behold_and_exile } }
+
+/// "sacrifice a legendary artifact or legendary creature" (a cost, e.g. for ward): one
+/// permanent you control described by alternatives.
+fn sacrifice_alternatives(p: &str) -> Option<CostPart> {
+    let r = end(p).strip_prefix("sacrifice ")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, plural, rest) = super::basic_effects_targets::object_alternatives(r)?;
+    if plural || !end(rest).is_empty() {
+        return None;
+    }
+    Some(CostPart::Sacrifice {
+        filter: Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+        count: Value::Const(1),
+    })
+}
+
+inventory::submit! { super::CostPattern { name: "basic effects: sacrifice one of alternatives", priority: 100, parse: sacrifice_alternatives } }
+
+/// "~ deals 2 damage to each attacking creature or ~ deals 2 damage to each blocking
+/// creature" (Lava Storm): the controller chooses one as it resolves.
+fn one_or_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (a, c) = l.split_once(" or ~ ")?;
+    if !a.starts_with("~ ") {
+        return None;
+    }
+    let c = format!("~ {c}");
+    let saved = b.targets.len();
+    let ea = crate::oracle::effects::parse_clause(a, b)?;
+    let ec = crate::oracle::effects::parse_clause(&c, b)?;
+    // Targets would be chosen for both.
+    if b.targets.len() != saved {
+        return None;
+    }
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![(a.to_string(), ea), (c, ec)],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: [effect] or [effect]", priority: 120, parse: one_or_the_other } }
+
+/// "clash with defending player" (Marvo, Deep Operative): with that player, not an
+/// opponent of your choice (CR 701.30a).
+fn clash_with_defending_player(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "clash with defending player").then(|| {
+        Effect::Custom(crate::kw::basic_effects::CLASH_WITH_DEFENDING_PLAYER.into())
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: clash with defending player", priority: 80, parse: clash_with_defending_player } }
+
+/// "investigate once for each nontoken attacking creature": that many times (CR 701.16a).
+fn investigate_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("investigate once for each ")?;
+    let (n, tail) = crate::oracle::statics::parse_value_phrase(&format!("the number of {r}"), b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    Some(Effect::KeywordAction {
+        action: KeywordAction::Investigate,
+        who: PlayerRef::You,
+        what: Sel::None,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: investigate once for each", priority: 80, parse: investigate_for_each } }
+
+/// "Those creatures can't be regenerated." after destroying a group (Mageta the Lion).
+fn those_cant_be_regenerated(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(
+        end(s),
+        "those creatures can't be regenerated" | "those permanents can't be regenerated"
+    ) {
+        return false;
+    }
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        e => Some(e),
+    };
+    match last {
+        Some(Effect::Destroy {
+            what: Sel::All(_),
+            no_regen,
+        }) => {
+            *no_regen = true;
+            true
+        }
+        _ => false,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: those creatures can't be regenerated", priority: 80, apply: those_cant_be_regenerated } }
+
+/// "Return each card put into a graveyard this way to the battlefield under your control."
+/// after a destroy effect (Sorin, Lord of Innistrad): the destroyed permanents' cards that
+/// went to graveyards.
+fn return_cards_put_into_graveyard(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(dest) = end(s)
+        .strip_prefix("return each card put into a graveyard this way ")
+        .or_else(|| end(s).strip_prefix("return the cards put into graveyards this way "))
+    else {
+        return false;
+    };
+    let last_is_destroy = match &*prev {
+        Effect::Seq(v) => matches!(v.last(), Some(Effect::Destroy { .. })),
+        e => matches!(e, Effect::Destroy { .. }),
+    };
+    if !last_is_destroy {
+        return false;
+    }
+    let cards = Sel::All(Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+    ]));
+    let Some(to) = super::damage_removal::battlefield_destination(dest, cards.clone()) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, Effect::Move { what: cards, to }]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: return each card put into a graveyard this way", priority: 80, apply: return_cards_put_into_graveyard } }
+
+/// "Whenever enchanted creature deals damage to a creature, destroy the other creature"
+/// (Venomous Fangs): in a trigger about two creatures, "the other creature" is the one the
+/// trigger's "it" refers to (the damaged creature, the blocking or blocked creature).
+fn the_other_creature(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !b.in_trigger || !matches!(b.it, Sel::TriggerObject) || !l.contains("the other creature") {
+        return None;
+    }
+    if l.matches("the other creature").count() != 1 || l.contains("that creature") {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replace("the other creature", "that creature"), b)
+}
+
+inventory::submit! { EffectPattern { name: "the other creature (trigger referent)", priority: 150, parse: the_other_creature } }
+
+/// "Up to three target creatures can't block this turn. Destroy any of them that are
+/// Walls." (Blow Your House Down): the objects the previous instruction named that match.
+fn destroy_any_of_them_that_are(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("destroy any of them that are ")?;
+    if matches!(b.it, Sel::None) {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::Destroy {
+        what: Sel::All(Filter::and(vec![Filter::In(Box::new(b.it.clone())), f])),
+        no_regen: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "destroy any of them that are [objects]", priority: 150, parse: destroy_any_of_them_that_are } }
+
+/// The number counted by "count the number of [objects]".
+const COUNTED: Var = vars::USER + 3340;
+
+/// "At the beginning of your upkeep, count the number of permanents you control. Your life
+/// total becomes that number." (Touch of the Eternal): the number is counted once, as the
+/// instruction is carried out; "that number" in the next sentence is it.
+fn count_the_number_of(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("count the number of ")?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    let f = match f.zone() {
+        Some(_) => f,
+        None => Filter::and(vec![Filter::Permanent, f]),
+    };
+    Some(Effect::StoreValue {
+        var: COUNTED,
+        value: Value::Count(f),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "count the number of [objects]", priority: 150, parse: count_the_number_of } }
+
+/// "... that number ..." after "count the number of [objects]".
+fn that_number(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    if !matches!(last, Some(Effect::StoreValue { var, .. }) if *var == COUNTED) {
+        return false;
+    }
+    let l = end(l);
+    if l.matches("that number").count() != 1
+        || l.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x")
+    {
+        return false;
+    }
+    let text = l.replace("that number", "x");
+    let first_new = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_sentence(&text, b) else {
+        b.targets.truncate(first_new);
+        return false;
+    };
+    if b.targets.len() != first_new {
+        b.targets.truncate(first_new);
+        return false;
+    }
+    let Some(e) = super::r107_numbers::substitute_x(&e, &Value::Var(COUNTED)) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        o => Effect::Seq(vec![o, e]),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: ... that number (counted)", priority: 80, apply: that_number } }
+
+/// "~ deals 1 damage to that player or a planeswalker that player controls" (Curse of the
+/// Pierced Heart): you choose, as the ability resolves, the player or one of their
+/// planeswalkers (not a target).
+fn damage_player_or_their_planeswalker(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let head = l.strip_suffix(" or a planeswalker that player controls")?;
+    if !head.ends_with(" to that player") {
+        return None;
+    }
+    let saved = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(head, b)?;
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let Effect::DealDamage { source, amount, to } = &e else {
+        return None;
+    };
+    let Sel::Players(p) = to else {
+        return None;
+    };
+    let pw = Effect::DealDamage {
+        source: source.clone(),
+        amount: amount.clone(),
+        to: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::ControlledByPlayer(Box::new(p.clone())),
+            ]),
+            count: Value::Const(1),
+            up_to: false,
+            store: None,
+        },
+    };
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            (head.to_string(), e),
+            ("a planeswalker that player controls".to_string(), pw),
+        ],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: damage to that player or a planeswalker that player controls", priority: 120, parse: damage_player_or_their_planeswalker } }
+
+/// "Regenerate target creature." on a card named Regenerate: normalizing the card's name to
+/// "~" also caught the verb, so a sentence that reads "~ [object]" is the verb.
+fn verb_named_like_the_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("~ ")?;
+    let name = b.ctx.card_name.to_lowercase();
+    if name.contains(' ') || !name.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !(r.starts_with("target ") || r.starts_with("up to ") || r.starts_with("all ")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&format!("{name} {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: verb named like the card", priority: 150, parse: verb_named_like_the_card } }
+
+/// "If you controlled a modified creature as you cast ~, ..." (Flame Discharge), "... if you
+/// controlled a Faerie as you cast ~" (Faerie Fencing): recorded as the spell becomes cast
+/// (see `kw/basic_effects.rs`).
+fn controlled_as_you_cast(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c
+        .strip_suffix(" as you cast ~")
+        .or_else(|| c.strip_suffix(" as you cast this spell"))?;
+    let r = r
+        .strip_prefix("you controlled a ")
+        .or_else(|| r.strip_prefix("you controlled an "))?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural || !end(tail).is_empty() || matches!(f, Filter::Any) {
+        return None;
+    }
+    Some(crate::kw::basic_effects::controlled_as_cast(&f))
+}
+
+inventory::submit! { super::ConditionPattern { name: "basic effects: you controlled a [permanent] as you cast ~", priority: 100, parse: controlled_as_you_cast } }
+
+/// "if it isn't your main phase" (Dose of Dawnglow): "it" is the current phase — neither
+/// your precombat nor your postcombat main phase (CR 505.1).
+fn your_main_phase(c: &str) -> Option<Condition> {
+    let mine = Condition::And(vec![
+        Condition::YourTurn,
+        Condition::Phase(PhaseCond::MainPhase),
+    ]);
+    match end(c) {
+        "it's your main phase" => Some(mine),
+        "it isn't your main phase" | "it's not your main phase" => {
+            Some(Condition::Not(Box::new(mine)))
+        }
+        _ => None,
+    }
+}
+
+inventory::submit! { super::ConditionPattern { name: "basic effects: it is (not) your main phase", priority: 100, parse: your_main_phase } }

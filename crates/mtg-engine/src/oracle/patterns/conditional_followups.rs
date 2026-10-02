@@ -83,10 +83,16 @@ fn pronoun_free(c: &str) -> bool {
 /// Marks targets from `first_new` on as chosen only if the optional cost `cond` names was
 /// (or wasn't) paid (CR 601.2c).
 fn targets_only_if_paid(cond: &Condition, b: &mut Builder, first_new: usize) {
-    let cast_time = match cond {
+    // "If this spell's additional cost was paid, destroy target ...": also announced
+    // before targets (CR 601.2b).
+    let paid = |c: &Condition| match c {
         Condition::CostPaid(_) => true,
-        Condition::Not(inner) => matches!(**inner, Condition::CostPaid(_)),
+        Condition::Custom(n) => n == crate::player_control::ADDITIONAL_COST_PAID,
         _ => false,
+    };
+    let cast_time = match cond {
+        Condition::Not(inner) => paid(inner),
+        c => paid(c),
     };
     if cast_time {
         for spec in &mut b.targets[first_new..] {
