@@ -200,23 +200,27 @@ fn feral_contest_second_target_illegal() {
         "Feral Contest",
         "If just the second targeted creature is an illegal target by the time Feral Contest resolves, the first targeted creature will get a +1/+1 counter, but the second targeted creature won’t have to block it that turn."
     );
-    supported("Gods Willing");
-    // P1 controls the Elves and gives them protection from green in response.
-    let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let elves = t.battlefield(P1, "Llanowar Elves");
-    feral_contest(&mut t, bears, elves);
-    t.lands(P1, "Plains", 1);
-    let gods = t.hand(P1, "Gods Willing");
-    choose_color(&mut t, P1, Color::Green);
-    t.cast(P1, gods).target(elves).go();
-    t.resolve_all();
-    assert_eq!(t.counters(bears, "+1/+1"), 1);
-    to_beginning_of_combat(&mut t, P0);
-    attack_with(&mut t, &at_p1(&[bears]));
-    // The Elves have protection from green, so they can't block the green Bears anyway;
-    // with an Ogre P1 may also choose not to block.
-    assert!(legal_blocks(&mut t, P1, &[]));
+    supported("Ranger's Guile");
+    // P1 gives the Elves hexproof in response: an illegal target that could still block.
+    for respond in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let giant = t.battlefield(P0, "Hill Giant");
+        let elves = t.battlefield(P1, "Llanowar Elves");
+        feral_contest(&mut t, bears, elves);
+        if respond {
+            cast_new(&mut t, P1, "Ranger's Guile", &[obj(elves)]);
+            t.resolve();
+        }
+        t.resolve_all();
+        assert_eq!(t.counters(bears, "+1/+1"), 1);
+        to_beginning_of_combat(&mut t, P0);
+        attack_with(&mut t, &at_p1(&[bears, giant]));
+        assert!(legal_blocks(&mut t, P1, &[(elves, bears)]));
+        // Without the response the Elves must block the Bears; with it they're free.
+        assert_eq!(legal_blocks(&mut t, P1, &[]), respond);
+        assert_eq!(legal_blocks(&mut t, P1, &[(elves, giant)]), respond);
+    }
 }
 
 #[test]

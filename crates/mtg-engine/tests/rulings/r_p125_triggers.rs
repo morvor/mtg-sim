@@ -253,7 +253,7 @@ fn domri_rade_second_target_can_be_yours_but_not_the_same_creature() {
     let giant = t.battlefield(P0, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let from = t.asked().len();
-    // (Its +1 isn't compiled yet: find the -2 by its text.)
+    // The -2, found by its text.
     let minus_two = t
         .obj_now(domri)
         .chars

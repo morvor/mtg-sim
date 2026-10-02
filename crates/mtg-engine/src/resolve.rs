@@ -2507,7 +2507,6 @@ impl Game {
         }
     }
 
-    /// The objects a filter naming specific objects matches as an effect begins.
     /// `ctx` with each target slot left empty by illegal targets (CR 608.2b) refilled with
     /// the targets chosen for it, for wording that only names an illegal target.
     fn with_original_targets(&self, ctx: &Ctx) -> Ctx {
@@ -2529,6 +2528,7 @@ impl Game {
         c
     }
 
+    /// The objects a filter naming specific objects matches as an effect begins.
     fn named_objects(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
         let mut v = self.objects_matching(f, ctx);
         // Targets outside the battlefield ("target spell can't be countered"), and the
