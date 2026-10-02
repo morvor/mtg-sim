@@ -250,6 +250,44 @@ pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
     out
 }
 
+/// The special actions effects allow `p` to take "any time you could activate a mana
+/// ability" (CR 605.3a, 116.2c) whose cost is only life and that add mana ("you may pay 1
+/// life. If you do, add {C}."), with `p` able to pay that life now: (offer id, context,
+/// life each use costs, the mana effect). `mana_abilities::mana_sources` plans with
+/// them, so they can be taken while a mana payment is being made.
+pub fn mana_offers(g: &Game, p: PlayerId) -> Vec<(u32, Ctx, u32, Effect)> {
+    let mut out = Vec::new();
+    for o in &g.special.offers {
+        if !o.def.mana_timing || !offer_active(g, o) {
+            continue;
+        }
+        let SpecialActionEffect::Effect(e @ Effect::AddMana { .. }) = &o.def.action else {
+            continue;
+        };
+        let cost = &o.def.cost;
+        if cost.mana.is_some() || !cost.parts.iter().all(|c| matches!(c, CostPart::PayLife(_))) {
+            continue;
+        }
+        if !g.player_filter_matches(&o.def.who, p, &o.ctx)
+            || !g.can_pay_cost(p, cost, o.ctx.source, &o.ctx)
+        {
+            continue;
+        }
+        let mut ctx = o.ctx.clone();
+        ctx.controller = p;
+        let life: i64 = cost
+            .parts
+            .iter()
+            .map(|c| match c {
+                CostPart::PayLife(v) => g.eval_value(v, &ctx).max(0),
+                _ => 0,
+            })
+            .sum();
+        out.push((o.id, ctx, life as u32, e.clone()));
+    }
+    out
+}
+
 /// Pays the cost of a special action (CR 116.1). The choice of how to pay symbols that
 /// can be paid in more than one way is made immediately before paying (CR 118.13c).
 /// Nothing is paid if the whole cost can't be.
