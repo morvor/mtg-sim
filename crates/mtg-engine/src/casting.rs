@@ -2890,7 +2890,12 @@ impl Game {
             CostPart::Loyalty(n) => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 if *n > 0 {
-                    self.add_counters(Entity::Object(s), counters::LOYALTY, *n as u32, Some(s));
+                    self.put_counters(
+                        Entity::Object(s),
+                        counters::LOYALTY,
+                        *n as u32,
+                        crate::event_causes::CounterPut::cost(p, Some(s)),
+                    );
                 } else if *n < 0
                     && self.remove_counters_by(
                         Entity::Object(s),
@@ -3086,7 +3091,12 @@ impl Game {
             CostPart::AddCounters { kind, count } => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                self.add_counters(Entity::Object(s), kind, n, src);
+                self.put_counters(
+                    Entity::Object(s),
+                    kind,
+                    n,
+                    crate::event_causes::CounterPut::cost(p, src),
+                );
             }
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
@@ -3221,6 +3231,8 @@ impl Game {
                 // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
                 c.controller = p;
+                // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
+                c.paying_cost = true;
                 self.exec(e, &mut c);
                 // CR 119.7: a cost that has a player who can't gain life gain life can't be
                 // paid — "have an opponent gain 3 life" with an opponent chosen as it's

@@ -91,7 +91,9 @@ impl Ledger {
                     *l -= sign * *amount as i64;
                 }
             }
-            Event::CountersAdded { target, kind, n } => {
+            Event::CountersAdded {
+                target, kind, n, ..
+            } => {
                 *self
                     .counters
                     .entry(*target)

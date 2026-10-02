@@ -67,6 +67,7 @@ pub fn counter_replacements(g: &Game, ev: &ReplEvent) -> Vec<CounterReplacement>
         ReplEvent::Destroy {
             obj,
             source: Some(_),
+            ..
         } if on_bf(*obj) && g.obj(*obj).counter(counters::SHIELD) > 0 => {
             out.push((
                 ReplKey::Static(*obj, SHIELD_DESTROY_UID),
@@ -308,17 +309,6 @@ pub fn put_counters_of(
     total
 }
 
-/// The player who puts counters on a permanent (CR 122.6a): the controller of the spell
-/// or ability putting them; for counters a permanent enters with, the effect may specify
-/// a player, and otherwise it's the permanent's controller.
-pub fn who_puts_counters(g: &Game, target: ObjectId, source: Option<ObjectId>) -> Option<PlayerId> {
-    match source {
-        Some(s) => Some(g.obj(s).controller),
-        None if g.obj(target).zone == Zone::Battlefield => Some(g.obj(target).controller),
-        None => None,
-    }
-}
-
 /// Custom effect name prefix for "distribute N [kind] counters among [targets]":
 /// `divided-counters:<target slot>:<kind>`.
 pub const DIVIDED_COUNTERS: &str = "divided-counters:";
@@ -347,7 +337,7 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
     for (i, t) in targets.into_iter().enumerate() {
         let n = div.get(i).copied().unwrap_or(0);
         if n > 0 {
-            g.add_counters(t, kind, n, ctx.source);
+            g.put_counters(t, kind, n, crate::event_causes::CounterPut::of(ctx));
         }
     }
     true
