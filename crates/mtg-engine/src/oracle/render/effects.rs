@@ -1208,6 +1208,16 @@ impl Renderer<'_> {
                 if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
                     return s.replacen(" would die,", " would die this turn,", 1);
                 }
+                // "The next time you would draw a card this turn, ... instead": one use.
+                if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
+                    if let Some(rest) = s.strip_prefix("if ") {
+                        if let Some((ev, then)) = rest.split_once(", ") {
+                            if !ev.contains('{') {
+                                return format!("the next time {ev} this turn, {then}");
+                            }
+                        }
+                    }
+                }
                 join_words(&[s, d])
             }
             Effect::GainControl {
@@ -2064,9 +2074,15 @@ impl Renderer<'_> {
                     crate::text_change::TextWords::CreatureType => "creature type",
                 };
                 let d = self.duration(duration);
+                // "one color word with another or one basic land type with another".
+                let what = if matches!(words, crate::text_change::TextWords::ColorOrBasicLandType) {
+                    "{alt:one color word or basic land type with another|one color word with another or one basic land type with another}".to_string()
+                } else {
+                    format!("one {kind} with another")
+                };
                 let mut s = join_words(&[
                     format!(
-                        "change the text of {} by replacing all instances of one {kind} with another",
+                        "change the text of {} by replacing all instances of {what}",
                         w.trim_end_matches("'s").trim_end_matches('\'')
                     ),
                     d,
@@ -3428,6 +3444,11 @@ impl Renderer<'_> {
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
                 Some(PlayerRef::You) if yours => {}
+                // Its owner is you: a card from your graveyard enters under your control
+                // (CR 110.2a), said or not.
+                Some(PlayerRef::OwnerOf(_)) if yours => {
+                    s.push_str(&format!(" {{opt:under {owner} control}}"));
+                }
                 // "Return all artifact cards from all graveyards to the battlefield under
                 // their owners' control": each card's owner.
                 Some(PlayerRef::OwnerOf(o)) if matches!(o.as_ref(), Sel::All(_)) => {

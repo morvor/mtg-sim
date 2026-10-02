@@ -210,7 +210,13 @@ impl Renderer<'_> {
             _ => (core, other),
         };
         let mut s = match count {
-            None if other => format!("another target {core}"),
+            // "target creature other than ~" (other than the object itself).
+            None if other && !other_than_object && !core.contains('{') => {
+                let m = self.me();
+                format!("{{alt:another target {core}|target {core} other than {m}}}")
+            }
+            // "to a second target creature": other than the target named before.
+            None if other => format!("{{alt:another|a second}} target {core}"),
             None => format!("target {core}"),
             Some(c) if other => format!("{c} other target {core}"),
             Some(c) => format!("{c} target {core}"),
