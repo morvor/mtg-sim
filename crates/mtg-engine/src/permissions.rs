@@ -185,7 +185,7 @@ pub fn allowing(
         } else {
             crate::casting::as_spell_filter(&perm.what)
         };
-        if !matches_with_chars(g, card, chars, &f, &ctx) {
+        if !matches_for_some_x(g, card, chars, &f, &ctx, land) {
             continue;
         }
         let (free, terms) = static_terms(perm);
@@ -495,6 +495,35 @@ fn choose(
 /// proposal, such as its mana value with that X (CR 601.2e, 601.3e; Lurrus of the
 /// Dream-Den ruling), and otherwise as the card was where it was cast from. A permission
 /// for that card allows it however it's proposed.
+/// Whether `card` as the proposed spell `chars` has the qualities `f` a permission asks
+/// for — for a spell with {X} in its mana cost, with some value of X: the player chooses X
+/// as the spell is proposed (CR 601.2b) and its mana value includes that value on the
+/// stack (CR 202.3e), so "cast spells with mana value 4 or greater" lets them begin to cast
+/// it; the spell as proposed is checked again once X is chosen (see [`still_allows`]).
+fn matches_for_some_x(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    f: &Filter,
+    ctx: &Ctx,
+    land: bool,
+) -> bool {
+    if matches_with_chars(g, card, chars, f, ctx) {
+        return true;
+    }
+    let Some(cost) = chars.mana_cost.as_ref().filter(|m| m.has_x() && !land) else {
+        return false;
+    };
+    (1..=MAX_X_CONSIDERED).any(|x| {
+        let mut c = chars.clone();
+        c.mana_cost = Some(cost.with_x(x));
+        matches_with_chars(g, card, &c, f, ctx)
+    })
+}
+
+/// The largest value of X [`matches_for_some_x`] tries.
+const MAX_X_CONSIDERED: u32 = 30;
+
 pub fn still_allows(
     g: &Game,
     perm: &CastPermission,
