@@ -754,7 +754,8 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
-    /// No two of them are controlled by the same player ("with different controllers").
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
     DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
@@ -1031,6 +1032,9 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player who attacked with creatures this turn ("target player who attacked this
+    /// turn"): only the active player declares attackers (CR 508.1).
+    AttackedThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).

@@ -374,6 +374,8 @@ impl Game {
                         tapped.push(Entity::Object(o));
                     }
                 }
+                // "Tap any number of ... When you do, ...": whether anything was tapped.
+                ctx.prev_happened = !tapped.is_empty();
                 ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {
@@ -2413,6 +2415,16 @@ impl Game {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
                 }
+            }
+        }
+        // "That permanent's activated abilities can't be activated this turn": the
+        // permanent named as the effect began.
+        // "That creature can block up to two additional creatures this turn."
+        if let Restriction::CantActivate { sources: f, .. }
+        | Restriction::ExtraBlocks { blocker: f, .. } = &mut r
+        {
+            if filter_references_specific(f) {
+                *f = Filter::Objects(self.named_objects(f, ctx));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this
