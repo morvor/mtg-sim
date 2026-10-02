@@ -280,8 +280,9 @@ pub fn same_way(a: &CastOption, b: &CastOption) -> bool {
 /// permissions allow, and the others among `all` (the ways any permission allows), once
 /// for each permission that allows the spell it would become, with that permission's
 /// terms. A way the card's own permission allows is offered with another permission too if
-/// that one gives it flash or an alternative cost, unless it's already cast for an
-/// alternative cost of its own (flashback's cost comes with flashback's permission).
+/// that one changes how it's cast (flash, an alternative cost, mana flexibility), unless
+/// it's already cast for an alternative cost of its own (flashback's cost comes with
+/// flashback's permission).
 pub fn attach(
     g: &Game,
     p: PlayerId,
@@ -297,7 +298,11 @@ pub fn attach(
         }
         let chars = g.option_characteristics(card, &opt);
         for perm in allowing(g, p, card, &chars, false) {
-            if is_own && !(perm.terms.flash || perm.requires_cost()) {
+            let changes_the_way = perm.terms.flash
+                || perm.requires_cost()
+                || perm.terms.spend_any_type
+                || perm.terms.spend_as_any_color;
+            if is_own && !changes_the_way {
                 continue;
             }
             if let Some(o) = with_permission(&chars, &opt, perm) {
