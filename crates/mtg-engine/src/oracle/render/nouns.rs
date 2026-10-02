@@ -539,14 +539,7 @@ impl Renderer<'_> {
             Filter::Source => np.other = true,
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
-            // "creatures other than target creature": a target not named before.
-            Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => match s.as_ref() {
-                Sel::Target(i) if !self.introduced.get(*i as usize).copied().unwrap_or(true) => {
-                    let m = self.target_mention(*i, Case::Obj);
-                    np.rel.push(format!("other than {m}"));
-                }
-                _ => np.other = true,
-            },
+            Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => np.other = true,
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
             Filter::HasAbilities => np.with.push("no abilities".into()),
