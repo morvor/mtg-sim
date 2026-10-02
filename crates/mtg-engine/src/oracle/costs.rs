@@ -131,7 +131,7 @@ fn split_cost_parts(s: &str) -> Vec<&str> {
         let part = s[a..b].trim_start().to_lowercase();
         // A list of objects continues too: "Sacrifice a white creature, a blue creature,
         // and a black creature", "Tap three untapped Advisors, Artificers, and/or Monks".
-        let continues = ["or ", "and ", "and/or ", "a ", "an "]
+        let continues = ["or ", "and ", "and/or ", "a ", "an ", "rounded "]
             .iter()
             .any(|w| part.starts_with(w));
         if continues && !merged.is_empty() {

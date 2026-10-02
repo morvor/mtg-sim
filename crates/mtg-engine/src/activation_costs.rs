@@ -175,6 +175,7 @@ pub fn class_matches(class: AbilityClass, a: &Ability, act: &ActivatedAbility) -
     match class {
         AbilityClass::Any => true,
         AbilityClass::Loyalty => act.is_loyalty,
+        AbilityClass::Mana => act.is_mana_ability,
         AbilityClass::Keyword(k) => crate::keyword_impls::ability_from_keyword(a) == Some(k),
     }
 }
@@ -450,6 +451,14 @@ pub fn add_change_for_targets(
     if !is_reduction(change) {
         return;
     }
+    // A condition on the targets is assumed met; any other condition must hold.
+    if condition.is_some_and(|c| !mentions_targets(c) && !g.eval_cond(c, &base)) {
+        return;
+    }
+    if !mentions_targets(change) {
+        changes.add(g, cost, change, &base);
+        return;
+    }
     // The candidate target that leaves the least mana to pay.
     let Some(TargetKind::Object(f)) = act.body.targets.first().map(|t| &t.what) else {
         return;
@@ -458,9 +467,6 @@ pub fn add_change_for_targets(
     for o in g.objects_matching(f, &base) {
         let mut ctx = base.clone();
         ctx.targets = vec![vec![Entity::Object(o)]];
-        if !holds(&ctx) {
-            continue;
-        }
         let mut trial = cost.clone();
         let mut ch = changes.clone();
         ch.add(g, &mut trial, change, &ctx);

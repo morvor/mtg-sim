@@ -463,6 +463,11 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         .then(|| patterns::r107_x_cant_be_zero::strip(eff_text))
         .flatten();
     let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
+    // "Remove any number of +1/+1 counters from ~: Create that many ... tokens."
+    let amount_eff = amount_x
+        .as_ref()
+        .and_then(|_| patterns::cost_parts::effect_with_amount(eff_text));
+    let eff_text = amount_eff.as_deref().unwrap_or(eff_text);
     // CR 400.7j: "the exiled card" is the card the cost exiled.
     // CR 107.3a, 107.3k: an X in the activation cost defines X for the ability.
     let x = patterns::value_grammar::cost_has_x(cost_s);
@@ -482,13 +487,22 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         && body.targets.is_empty()
         && !loyalty
         && !touches_library(&cost, &body.effect);
-    let single_target = body.targets.len() == 1 && body.targets[0].max.as_const() == Some(1);
+    // Target slots of one target each, for "if it targets ..." (0 if there are others).
+    let target_slots = if body
+        .targets
+        .iter()
+        .all(|t| t.max.as_const() == Some(1) && t.min == 1)
+    {
+        body.targets.len()
+    } else {
+        0
+    };
     let mut act = ActivatedAbility::new(cost, body);
     if let Some(sentence) = own_cost {
         act.own_cost_changes
-            .push(patterns::activation_cost_modifiers::parse_own_cost_change(
+            .push(patterns::activation_cost_modifiers::parse_own_cost_change_n(
                 &sentence,
-                single_target,
+                target_slots,
                 ctx,
             )?);
     }

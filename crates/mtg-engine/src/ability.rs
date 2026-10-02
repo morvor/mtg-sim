@@ -2271,6 +2271,8 @@ pub enum AbilityClass {
     Any,
     /// Loyalty abilities (CR 606).
     Loyalty,
+    /// Mana abilities (CR 605).
+    Mana,
     /// Abilities a keyword defines ("equip abilities", "cycling costs").
     Keyword(KeywordKind),
 }

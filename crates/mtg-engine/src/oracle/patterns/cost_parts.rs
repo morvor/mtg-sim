@@ -233,6 +233,10 @@ fn exile(p: &str) -> Option<CostPart> {
         ("from your hand", _) | ("", Some(ZoneKind::Hand)) => ZoneKind::Hand,
         // "a creature you control".
         ("", None) if format!("{f:?}").contains("ControlledBy(You)") => ZoneKind::Battlefield,
+        // "an instant or sorcery spell you control".
+        ("", Some(ZoneKind::Stack)) if format!("{f:?}").contains("ControlledBy(You)") => {
+            ZoneKind::Stack
+        }
         _ => return None,
     };
     Some(CostPart::Exile {
@@ -270,7 +274,7 @@ fn put(p: &str) -> Option<CostPart> {
     if plural != (n.as_const() != Some(1)) {
         return None;
     }
-    let tail = end(tail);
+    let tail = format!(" {}", end(tail));
     let (from, to) = [
         (" on top of your library", Destination::library_top()),
         (" on the bottom of your library", Destination::library_bottom()),
@@ -288,7 +292,7 @@ fn put(p: &str) -> Option<CostPart> {
         ),
     ]
     .into_iter()
-    .find_map(|(s, d)| Some((tail.strip_suffix(s)?, d)))?;
+    .find_map(|(s, d)| Some((tail.strip_suffix(s)?.trim(), d)))?;
     // The phrase parser may have read "from your hand" into the filter already.
     let owned = |z: ZoneKind| format!("{f:?}").contains(&format!("InZone({z:?}), OwnedBy(You)"));
     let from = match (from, f.zone()) {
@@ -396,8 +400,24 @@ fn pay(p: &str) -> Option<CostPart> {
     (r.trim() == "{e}").then_some(CostPart::PayEnergy(n))
 }
 
+/// "Tap five untapped attacking creatures you control named ~".
+fn tap(p: &str) -> Option<CostPart> {
+    let r = strip(p, "tap")?;
+    let (n, r) = parse_number(r)?;
+    let r = strip(r, "untapped")?;
+    let (f, plural) = object(r)?;
+    if plural != (n.as_const() != Some(1)) {
+        return None;
+    }
+    Some(CostPart::TapUntapped {
+        filter: you_control(f),
+        count: n,
+    })
+}
+
 fn cost_part(p: &str) -> Option<CostPart> {
     sacrifice(p)
+        .or_else(|| tap(p))
         .or_else(|| unattach(p))
         .or_else(|| pay(p))
         .or_else(|| remove_counters(p))
@@ -491,6 +511,8 @@ pub fn amount_as_x(cost: &str) -> Option<(String, Option<Condition>)> {
         ("remove", "all "),
         ("exile", "one or more "),
         ("exile", "any number of "),
+        ("sacrifice", "one or more "),
+        ("sacrifice", "any number of "),
     ] {
         let pat = format!("{verb} {phrase}");
         let Some(i) = lower.find(&pat) else {
@@ -551,7 +573,44 @@ pub fn paid_this_way(s: &str) -> Option<Value> {
         }
         return Some(Value::X);
     }
-    let r = s.strip_suffix(" exiled this way")?;
+    let r = s
+        .strip_suffix(" exiled this way")
+        .or_else(|| s.strip_suffix(" sacrificed this way"))?;
     let (_f, _, tail) = parse_object_phrase(r)?;
     end(tail).is_empty().then_some(Value::X)
+}
+
+/// [`paid_this_way`] at the start of `r` ("+1/+1 counters removed this way plus one"):
+/// the value and the rest.
+pub fn paid_this_way_prefix(r: &str) -> Option<(Value, String)> {
+    if !AMOUNT_X.with(|c| c.get()) {
+        return None;
+    }
+    for w in [" removed this way", " exiled this way", " sacrificed this way"] {
+        if let Some(i) = r.find(w) {
+            let (head, rest) = r.split_at(i + w.len());
+            let v = paid_this_way(head)?;
+            return Some((v, rest.to_string()));
+        }
+    }
+    None
+}
+
+/// The effect text of an ability whose cost amount is its X ([`amount_as_x`]), with "that
+/// many" / "that much" in its first sentence meaning that amount ("Create that many 1/1
+/// green Insect creature tokens", "Add that much {C}"). `None` if it says neither, or says
+/// one of them more than once or after the first sentence.
+pub fn effect_with_amount(eff: &str) -> Option<String> {
+    let lower = eff.to_lowercase();
+    if lower.len() != eff.len() {
+        return None;
+    }
+    let first = lower.split(". ").next().unwrap_or(&lower);
+    for (pat, rep) in [("that many ", "X "), ("that much {c}", "X {C}")] {
+        if lower.matches(pat).count() == 1 && first.contains(pat) {
+            let i = lower.find(pat)?;
+            return Some(format!("{}{rep}{}", &eff[..i], &eff[i + pat.len()..]));
+        }
+    }
+    None
 }

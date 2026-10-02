@@ -39,6 +39,10 @@ pub(crate) fn sources(s: &str) -> Option<Filter> {
     if s == "~" {
         return Some(Filter::Source);
     }
+    // "sources with the chosen name": objects in any zone (Pithing Needle-style).
+    if s == "sources with the chosen name" {
+        return Some(Filter::ChosenName);
+    }
     // "that target a Merfolk you control".
     let s = s
         .strip_prefix("a ")
@@ -56,13 +60,31 @@ pub(crate) fn sources(s: &str) -> Option<Filter> {
 }
 
 /// "{N} less to activate" / "{N} more to activate" (with the floor sentence, if any).
-fn change(r: &str, floor: bool) -> Option<CostChange> {
+fn change(r: &str, floor: bool, ctx: &CompileContext) -> Option<CostChange> {
+    // "{X} less to activate, where X is ~'s power".
+    let (r, x) = match r.split_once(", where x is ") {
+        Some((head, v)) => {
+            let (v, rest) = crate::oracle::statics::parse_value_phrase(
+                v,
+                &mut crate::oracle::effects::Builder::new(ctx),
+            )?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            (head, Some(v))
+        }
+        None => (r, None),
+    };
     let (amount, less) = if let Some(m) = r.strip_suffix(" less to activate") {
         (m, true)
     } else {
         (r.strip_suffix(" more to activate")?, false)
     };
-    let n = Value::c(generic_amount(amount)? as i32);
+    let n = match x {
+        Some(v) if amount == "{x}" => v,
+        Some(_) => return None,
+        None => Value::c(generic_amount(amount)? as i32),
+    };
     Some(match (less, floor) {
         (true, true) => CostChange::ReduceGenericMinOne(n),
         (true, false) => CostChange::ReduceGeneric(n),
@@ -80,7 +102,7 @@ fn split_targeting(s: &str) -> Option<(&str, Option<Filter>)> {
     }
 }
 
-fn cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l);
     let (l, floor) = match l.strip_suffix(FLOOR) {
         Some(r) => (r, true),
@@ -90,11 +112,40 @@ fn cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abili
         Some(r) => (r, true),
         None => (l, false),
     };
-    let (subject, rest) = l.split_once(" cost ")?;
-    let change = change(rest, floor)?;
+    let (subject, rest) = l
+        .split_once(" cost ")
+        .or_else(|| l.split_once(" costs "))?;
+    // "... if it targets a colorless creature".
+    let (rest, if_targets) = match rest.split_once(" if it targets ") {
+        Some((head, t)) => (head, Some(sources(t)?)),
+        None => (rest, None),
+    };
+    let change = change(rest, floor, ctx)?;
     let mut who = PlayerRel::Any;
     let mut scope;
-    if let Some(r) = subject.strip_prefix("activated abilities of ") {
+    if let Some((group, kind)) = subject.split_once("'s ").filter(|(_, k)| {
+        k.ends_with(" ability") || k.ends_with(" abilities")
+    }) {
+        // "~'s equip abilities", "~'s equip ability".
+        let kind = kind
+            .strip_suffix(" abilities")
+            .or_else(|| kind.strip_suffix(" ability"))?;
+        if kind == "activated" {
+            return None;
+        }
+        scope = AbilityScope::new(
+            sources(group)?,
+            AbilityClass::Keyword(KeywordKind::from_name(kind)?),
+        );
+    } else if let Some(r) = subject
+        .strip_prefix("the first activated ability of ")
+        .and_then(|r| r.strip_suffix(" you activate each turn"))
+    {
+        // "The first activated ability of an artifact you activate each turn".
+        who = PlayerRel::You;
+        scope = AbilityScope::new(sources(r)?, AbilityClass::Any);
+        scope.first_each_turn = true;
+    } else if let Some(r) = subject.strip_prefix("activated abilities of ") {
         // "Activated abilities of Equipment you control that target ~".
         let (group, targeting) = split_targeting(r)?;
         scope = AbilityScope::new(sources(group)?, AbilityClass::Any);
@@ -130,9 +181,18 @@ fn cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abili
         };
         if let Some(t) = r.strip_prefix(" that target ") {
             scope.targeting = Some(sources(t)?);
+        } else if let Some(g) = r.strip_prefix(" of ") {
+            // "Equip abilities you activate of other Equipment".
+            scope.sources = sources(g)?;
         } else if !r.is_empty() {
             return None;
         }
+    }
+    if let Some(t) = if_targets {
+        if scope.targeting.is_some() {
+            return None;
+        }
+        scope.targeting = Some(t);
     }
     scope.nonmana |= nonmana_suffix;
     let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {

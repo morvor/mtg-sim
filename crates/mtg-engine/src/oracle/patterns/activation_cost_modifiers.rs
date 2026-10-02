@@ -15,7 +15,7 @@
 //! ([`CostTarget::ActivatedAbilities`] with the keyword's class).
 
 use super::costs_casting_self::{cost_change, cost_condition, for_each_value, leading_mana};
-use super::AbilityPattern;
+use super::{AbilityPattern, StaticPattern};
 use crate::ability::*;
 use crate::mana::ManaSymbol;
 use crate::oracle::effects::Builder;
@@ -57,15 +57,25 @@ fn targeted_value(s: &str, parse: impl Fn(&str) -> Option<Value>) -> Option<Valu
     self_to_target(parse(&s.replace(THE_TARGET, "~"))?)
 }
 
-/// "it targets a creature with power 2 or less": the ability's target matches.
-fn targets_condition(c: &str) -> Option<Condition> {
+/// "it targets a creature with power 2 or less": the ability's target matches; "it
+/// targets two creatures you control": each of its `targets` targets does.
+fn targets_condition(c: &str, targets: usize) -> Option<Condition> {
     let r = c.strip_prefix("it targets ")?;
-    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
-    let (f, _, tail) = parse_object_phrase(r)?;
-    if !end(tail).is_empty() {
+    let (n, r) = parse_number(r)?;
+    if n.as_const() != Some(targets as i32) {
         return None;
     }
-    Some(Condition::SelMatches(Sel::Target(0), f))
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() || plural != (targets > 1) {
+        return None;
+    }
+    let each: Vec<Condition> = (0..targets)
+        .map(|i| Condition::SelMatches(Sel::Target(i as u8), f.clone()))
+        .collect();
+    Some(match each.len() {
+        1 => each.into_iter().next()?,
+        _ => Condition::And(each),
+    })
 }
 
 /// Parses "this ability costs {N} less/more to activate [for each ... | if ... | during
@@ -77,6 +87,17 @@ pub fn parse_own_cost_change(
     single_target: bool,
     ctx: &CompileContext,
 ) -> Option<OwnCostChange> {
+    parse_own_cost_change_n(l, single_target as usize, ctx)
+}
+
+/// [`parse_own_cost_change`] for an ability with `targets` target slots of one target
+/// each (0 if it has others).
+pub fn parse_own_cost_change_n(
+    l: &str,
+    targets: usize,
+    ctx: &CompileContext,
+) -> Option<OwnCostChange> {
+    let single_target = targets == 1;
     let r = end(l).strip_prefix("this ability costs ")?;
     let (mana, r) = leading_mana(r)?;
     let r = r.trim_start();
@@ -88,7 +109,10 @@ pub fn parse_own_cost_change(
         return None;
     };
     let tail = tail.trim();
-    if !single_target && tail.contains("target") {
+    if targets == 0 && tail.contains("target") {
+        return None;
+    }
+    if !single_target && tail.contains(THE_TARGET) {
         return None;
     }
     let is_x = mana.symbols.as_slice() == [ManaSymbol::X];
@@ -109,7 +133,10 @@ pub fn parse_own_cost_change(
         (change, None)
     } else if let Some(fe) = tail.strip_prefix("for each ") {
         let fe = end(fe);
-        let v = if fe.contains(THE_TARGET) {
+        let v = if fe == "color of the creature it targets" {
+            // CR 105.2: how many colors it has.
+            Value::DistinctAmong(Among::Colors, Box::new(Sel::Target(0)))
+        } else if fe.contains(THE_TARGET) {
             targeted_value(fe, |s| super::statics::parse_for_each(s, Some(&Sel::This)))?
         } else {
             for_each_value(fe)?
@@ -119,7 +146,10 @@ pub fn parse_own_cost_change(
         return None;
     } else {
         let c = end(tail);
-        let cond = match c.strip_prefix("if ").and_then(targets_condition) {
+        let cond = match c
+            .strip_prefix("if ")
+            .and_then(|c| targets_condition(c, targets))
+        {
             Some(t) => t,
             None => {
                 let cond = cost_condition(c, ctx)?;
@@ -203,6 +233,74 @@ fn keyword_with_own_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability
 
 inventory::submit! { AbilityPattern { name: "keyword line. this ability costs less/more", priority: 80, parse: keyword_with_own_cost } }
 
+/// "During your turn, [static] and [static]" where one of them changes costs ("During
+/// your turn, spells your opponents cast cost {1} more to cast and abilities your
+/// opponents activate cost {1} more to activate unless they're mana abilities.", "During
+/// your turn, creatures you control have first strike and equip abilities you activate
+/// cost {1} less to activate."): each half is a static ability that applies during your
+/// turn.
+fn during_your_turn_pair(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let body = l.strip_prefix("during your turn, ")?;
+    // A cost change on one side.
+    if !(body.contains(" to activate") || body.contains(" to cast")) {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    if lower.len() != text.len() {
+        return None;
+    }
+    let start = lower.find("during your turn, ")? + "during your turn, ".len();
+    let orig = &text[start..];
+    for (i, _) in body.match_indices(" and ") {
+        let (a, b) = (&orig[..i], &orig[i + " and ".len()..]);
+        let parse = |s: &str| {
+            let v = crate::oracle::statics::parse_static(s, ctx)?;
+            v.iter()
+                .all(|a| matches!(&a.kind, AbilityKind::Static(st) if st.condition.is_none()))
+                .then_some(v)
+        };
+        let (Some(mut x), Some(y)) = (parse(a), parse(b)) else {
+            continue;
+        };
+        x.extend(y);
+        for a in x.iter_mut() {
+            if let AbilityKind::Static(st) = &a.kind {
+                let mut st = st.clone();
+                st.condition = Some(Condition::YourTurn);
+                *a = AbilityDef::new(AbilityKind::Static(st), text);
+            }
+        }
+        return Some(x);
+    }
+    None
+}
+
+inventory::submit! { StaticPattern { name: "during your turn, [cost change] and [static]", priority: 90, parse: during_your_turn_pair } }
+
+/// "Mana abilities of ~ cost an additional 1 life to activate." (CR 602.2b, 601.2f: an
+/// additional cost added to the total cost of those abilities).
+fn additional_life_cost(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("mana abilities of ")?;
+    let (group, r) = r.split_once(" cost an additional ")?;
+    let amount = r.strip_suffix(" to activate")?;
+    let (n, rest) = parse_number(amount)?;
+    if matches!(n, Value::X) || end(rest) != "life" {
+        return None;
+    }
+    let scope = AbilityScope::new(
+        super::activated_ability_costs::sources(group)?,
+        AbilityClass::Mana,
+    );
+    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ActivatedAbilities(Box::new(scope)),
+        who: PlayerRel::Any,
+        change: CostChange::AdditionalCost(Cost::free().with(CostPart::PayLife(n))),
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "mana abilities cost an additional life", priority: 90, parse: additional_life_cost } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,8 +366,47 @@ mod probe {
             return;
         };
         for l in std::fs::read_to_string(f).unwrap().lines() {
+            if let Some(ph) = l.strip_prefix("P:") {
+                eprintln!("OK   P {ph:?} => {:?}", crate::oracle::phrases::parse_object_phrase(ph));
+                continue;
+            }
             let r = crate::oracle::costs::parse_cost(l);
             eprintln!("{} {l:?} => {r:?}", if r.is_some() { "OK  " } else { "FAIL" });
+        }
+    }
+
+    #[test]
+    fn probe_cards() {
+        let Ok(f) = std::env::var("CARD_PROBE") else {
+            return;
+        };
+        let tl = crate::types::TypeLine::parse("Artifact Creature — Golem");
+        let ctx = crate::oracle::CompileContext {
+            card_name: "Probe",
+            full_name: "Probe",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: Some("2"),
+            toughness: Some("2"),
+        };
+        for l in std::fs::read_to_string(f).unwrap().lines() {
+            if let Some(e) = l.strip_prefix("E:") {
+                let r = crate::oracle::effects::parse_body(e, &ctx);
+                eprintln!("{} {e:?} => {r:?}", if r.is_some() { "OK  " } else { "FAIL" });
+                continue;
+            }
+            let Some(def) = crate::card::CardDb::global().get(l) else {
+                eprintln!("?? {l}");
+                continue;
+            };
+            eprintln!("=== {l}");
+            for face in &def.faces {
+                for a in &face.chars.abilities {
+                    eprintln!("  {:?}\n      <- {:?}", a.kind, a.text);
+                }
+            }
         }
     }
 }
