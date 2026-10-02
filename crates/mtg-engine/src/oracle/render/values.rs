@@ -502,7 +502,16 @@ impl Renderer<'_> {
                 let pred = self.is_predicate(f, true);
                 format!("{subj} {pred}")
             }
-            Condition::PlayerMatches(p, pf) => {
+            // Only the predicates worded negatively; the others would lose the negation.
+            Condition::PlayerMatches(p, pf)
+                if matches!(
+                    pf,
+                    PlayerFilter::Life(..)
+                        | PlayerFilter::Opponent
+                        | PlayerFilter::You
+                        | PlayerFilter::Any
+                ) =>
+            {
                 let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, true);
                 format!("{subj} {pred}")

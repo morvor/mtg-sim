@@ -2058,13 +2058,40 @@ impl Renderer<'_> {
         otherwise: &Effect,
     ) -> String {
         if matches!(then, Effect::Noop) && !matches!(otherwise, Effect::Noop) {
+            // "unless that player sacrifices a nonland permanent or discards a card": the
+            // same player's alternatives, nested.
+            let mut costs = vec![cost];
+            let mut otherwise = otherwise;
+            while let Effect::PayOptional {
+                who: w,
+                cost: c,
+                then: t,
+                otherwise: o,
+            } = otherwise
+            {
+                if !same_player(w, who)
+                    || !matches!(**t, Effect::Noop)
+                    || matches!(**o, Effect::Noop)
+                {
+                    break;
+                }
+                costs.push(c);
+                otherwise = o;
+            }
             let o = self.effect(otherwise);
             let p = self.player(who, Case::Subj);
-            let pays = self.cost_as_payment(cost);
-            if p == "you" {
-                return format!("{o} unless you {pays}");
-            }
-            return format!("{o} unless {p} {}", third_person(&pays));
+            let pays: Vec<String> = costs
+                .into_iter()
+                .map(|c| {
+                    let pays = self.cost_as_payment(c);
+                    if p == "you" {
+                        pays
+                    } else {
+                        third_person(&pays)
+                    }
+                })
+                .collect();
+            return format!("{o} unless {p} {}", pays.join(" or "));
         }
         let p = self.player(who, Case::Subj);
         let pays = self.cost_as_payment(cost);
