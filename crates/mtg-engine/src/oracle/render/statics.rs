@@ -7,6 +7,14 @@ use super::players::Case;
 use super::values::split_controller;
 use super::*;
 
+fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
+    p(f) || match f {
+        Filter::And(v) | Filter::Or(v) => v.iter().any(|x| filter_has(x, p)),
+        Filter::Not(x) => filter_has(x, p),
+        _ => false,
+    }
+}
+
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
         // "Solved — [ability]" (CR 719.3b), compiled as the ability granted while solved.
@@ -28,7 +36,11 @@ impl Renderer<'_> {
         }
         let saved = self.self_salient;
         self.self_salient = false;
-        if let StaticEffect::Continuous { affected: Filter::Source, .. } = &s.effect {
+        if let StaticEffect::Continuous {
+            affected: Filter::Source,
+            ..
+        } = &s.effect
+        {
             self.subject_types = self.info.card_types.iter().collect();
         }
         let e = match &s.condition {
@@ -46,6 +58,13 @@ impl Renderer<'_> {
             Some(Condition::NotYourTurn) => {
                 let e = self.static_effect(&s.effect);
                 format!("during turns other than yours, {}", lower_first(&e))
+            }
+            // "~ can't attack or block unless an opponent has eight or more cards in their
+            // graveyard."
+            Some(Condition::Not(c)) if matches!(s.effect, StaticEffect::Restriction(_)) => {
+                let e = self.static_effect(&s.effect);
+                let c = self.condition(c);
+                format!("{} unless {c}", e.trim_end_matches('.'))
             }
             Some(c) => {
                 // "As long as ~ is enchanted, it has ...".
@@ -76,7 +95,17 @@ impl Renderer<'_> {
             Filter::Source => self.me(),
             Filter::AttachedToSource => self.attached_noun(),
             Filter::In(sel) => self.sel(sel, Case::Subj),
-            other => self.noun_det(other, Det::Plural),
+            other => {
+                let s = self.noun_det(other, Det::Plural);
+                // Abilities granted to spells are gained as they're cast (CR 610.5, see
+                // `next_spell::is_cast_grant`): "spells you cast have convoke".
+                if filter_has(other, &|x| matches!(x, Filter::Spell)) {
+                    s.replace("spells you control", "spells you cast")
+                        .replace("spell you control", "spell you cast")
+                } else {
+                    s
+                }
+            }
         }
     }
 
@@ -625,6 +654,15 @@ impl Renderer<'_> {
                 format!("{} must be blocked if able", subj(self, f))
             }
             Restriction::CantBeBlocked(f) => format!("{} can't be blocked", subj(self, f)),
+            // "~ can't block creatures with power greater than ~'s power."
+            Restriction::CantBeBlockedBy {
+                attacker,
+                blocker: Filter::Source,
+            } => {
+                let m = self.me();
+                let a = self.noun(attacker, Num::Many);
+                format!("{m} can't block {a}")
+            }
             Restriction::CantBeBlockedBy { attacker, blocker } => {
                 let a = subj(self, attacker);
                 let b = self.noun(blocker, Num::Many);
@@ -740,7 +778,10 @@ impl Renderer<'_> {
                     } else {
                         " unless they're mana abilities"
                     };
-                    return format!("{} activated abilities can't be activated{m}", nouns::possessive(&s));
+                    return format!(
+                        "{} activated abilities can't be activated{m}",
+                        nouns::possessive(&s)
+                    );
                 }
                 let w = self.player_filter_subject(who);
                 let s = if matches!(sources, Filter::Any) {
@@ -1235,7 +1276,9 @@ impl Renderer<'_> {
                 cond,
                 then,
                 otherwise,
-            } if matches!(then.as_ref(), Effect::Noop) && !matches!(otherwise.as_ref(), Effect::Noop) => {
+            } if matches!(then.as_ref(), Effect::Noop)
+                && !matches!(otherwise.as_ref(), Effect::Noop) =>
+            {
                 let t = self.as_enters_vp(otherwise);
                 let c = self.condition(cond);
                 format!("{subj} {t} unless {c}")
@@ -1259,7 +1302,11 @@ impl Renderer<'_> {
                             self.self_salient = false;
                         }
                         let c = self.condition(other);
-                        let subj = if was_self { self.me() } else { subj.to_string() };
+                        let subj = if was_self {
+                            self.me()
+                        } else {
+                            subj.to_string()
+                        };
                         format!("if {c}, {subj} {t}")
                     }
                 }
@@ -1386,7 +1433,10 @@ impl Renderer<'_> {
                 other => self.noun_det(other, Det::A),
             });
         }
-        if let Some(p) = to_players.as_ref().filter(|p| !matches!(p, PlayerFilter::You)) {
+        if let Some(p) = to_players
+            .as_ref()
+            .filter(|p| !matches!(p, PlayerFilter::You))
+        {
             to.push(self.player_filter_object(p));
         }
         let src = match source {

@@ -233,8 +233,7 @@ impl Renderer<'_> {
             } => self.pay_optional(who, cost, then, otherwise),
             // "Double the number of +1/+1 counters on each of those creatures" (CR 701.10e):
             // put on each the counters it has.
-            Effect::ForEach { sel, var, effect }
-                if matches!(effect.as_ref(), Effect::PutCountersOf { from: Sel::Var(a), to: Sel::Var(b), .. } if a == var && b == var) =>
+            Effect::ForEach { sel, var, effect } if matches!(effect.as_ref(), Effect::PutCountersOf { from: Sel::Var(a), to: Sel::Var(b), .. } if a == var && b == var) =>
             {
                 let Effect::PutCountersOf { kind, .. } = effect.as_ref() else {
                     return String::new();
@@ -274,13 +273,25 @@ impl Renderer<'_> {
                 format!("{inner} {t}")
             }
             // "Put your choice of a flying counter or a first strike counter on it."
-            Effect::ChooseOne { who: PlayerRef::You, options }
-                if options.len() > 1
-                    && options.iter().all(|(_, e)| matches!(e, Effect::AddCounters { n: Value::Const(1), .. }))
-                    && options.windows(2).all(|w| match (&w[0].1, &w[1].1) {
-                        (Effect::AddCounters { what: a, .. }, Effect::AddCounters { what: b, .. }) => same_sel(a, b),
-                        _ => false,
-                    }) =>
+            Effect::ChooseOne {
+                who: PlayerRef::You,
+                options,
+            } if options.len() > 1
+                && options.iter().all(|(_, e)| {
+                    matches!(
+                        e,
+                        Effect::AddCounters {
+                            n: Value::Const(1),
+                            ..
+                        }
+                    )
+                })
+                && options.windows(2).all(|w| match (&w[0].1, &w[1].1) {
+                    (Effect::AddCounters { what: a, .. }, Effect::AddCounters { what: b, .. }) => {
+                        same_sel(a, b)
+                    }
+                    _ => false,
+                }) =>
             {
                 let kinds: Vec<String> = options
                     .iter()
@@ -996,7 +1007,11 @@ impl Renderer<'_> {
                 let vp = format!("skip {p} next {s}");
                 self.with_subject(who, &vp, false)
             }
-            Effect::DelayedTrigger { trigger, body, once } => {
+            Effect::DelayedTrigger {
+                trigger,
+                body,
+                once,
+            } => {
                 // A one-shot delayed trigger at a step: "at the beginning of the next end
                 // step" (CR 603.7).
                 let t = match trigger {
@@ -1410,7 +1425,11 @@ impl Renderer<'_> {
                                 None => vp,
                             })
                             .collect();
-                        parts.push(format!("{subj} {}{}", join_list(&vps, "and"), wheres.concat()));
+                        parts.push(format!(
+                            "{subj} {}{}",
+                            join_list(&vps, "and"),
+                            wheres.concat()
+                        ));
                         i = j;
                         let _ = keep;
                         continue;
@@ -1440,9 +1459,7 @@ impl Renderer<'_> {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
         match cond {
-            Condition::PrevHappened
-                if else_empty && matches!(then, Effect::Reflexive { .. }) =>
-            {
+            Condition::PrevHappened if else_empty && matches!(then, Effect::Reflexive { .. }) => {
                 // "When you do, ..." already means "if you do" (CR 603.12).
                 self.effect(then)
             }
@@ -1600,7 +1617,10 @@ impl Renderer<'_> {
         let d = self.destination_phrase(to, plural, yours);
         // Cards "return" what comes back from a graveyard, exile, or the battlefield,
         // and "put" what comes from a hand or library.
-        let from_hidden = matches!(self.sel_zone(what), Some(ZoneKind::Hand | ZoneKind::Library));
+        let from_hidden = matches!(
+            self.sel_zone(what),
+            Some(ZoneKind::Hand | ZoneKind::Library)
+        );
         let verb = match to.zone {
             ZoneKind::Hand | ZoneKind::Battlefield if !from_hidden => "return",
             ZoneKind::Exile => "exile",
@@ -2339,7 +2359,11 @@ impl Renderer<'_> {
     pub(crate) fn exceptions(&mut self, mods: &[Modification]) -> String {
         let vp = self.mods_vp(mods, false);
         // "except it isn't legendary, it's a 4/4 Hero": each exception has its subject.
-        format!("it {}", vp.replace(" and is ", " and it is ").replace(" and has ", " and it has "))
+        format!(
+            "it {}",
+            vp.replace(" and is ", " and it is ")
+                .replace(" and has ", " and it has ")
+        )
     }
 
     /// A choice ("a color", "a creature type", "an opponent").
@@ -2426,10 +2450,7 @@ impl Renderer<'_> {
                     Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
                     Value::Count(f) => {
                         let n = self.for_each_noun(f);
-                        format!(
-                            "{sym} for each {}",
-                            n
-                        )
+                        format!("{sym} for each {}", n)
                     }
                     other => {
                         let s = self.value(other);
@@ -2815,8 +2836,11 @@ impl Becomes {
         };
         if only_pt {
             let has = if gains { "has" } else { "has" };
-            let pt = pt.unwrap_or_default();
-            let mut s = format!("{has} base power and toughness {pt}");
+            let mut s = match self.pt.as_ref() {
+                Some((None, Some(t))) => format!("{has} base toughness {}", r.value(t)),
+                Some((Some(p), None)) => format!("{has} base power {}", r.value(p)),
+                _ => format!("{has} base power and toughness {}", pt.unwrap_or_default()),
+            };
             if !grants.is_empty() {
                 let g = if gains { "gains" } else { "has" };
                 s.push_str(&format!(" and {g} {}", join_list(&grants, "and")));
@@ -2871,7 +2895,7 @@ impl Becomes {
                 .copied()
                 .filter(|t| !self.add_types.contains(t))
                 .collect();
-            if r.subject_types.is_empty() {
+            if r.subject_types.is_empty() || self.add_types.is_empty() {
                 s.push_str(" in addition to its other types");
             } else if !known.is_empty() {
                 let w: Vec<String> = known.iter().map(|t| t.word().to_string()).collect();

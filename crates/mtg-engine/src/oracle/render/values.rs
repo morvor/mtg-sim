@@ -358,8 +358,8 @@ impl Renderer<'_> {
             }
             "sneak" | "surge" | "prowl" | "spectacle" | "mayhem" | "freerunning" | "madness"
             | "dash" | "blitz" | "evoke" | "escape" | "emerge" | "plot" | "disturb"
-            | "overload" | "harmonize" | "impending" | "flashback" | "awaken"
-            | "jump-start" | "prototype" | "squad" | "offspring" | "bestow" => {
+            | "overload" | "harmonize" | "impending" | "flashback" | "awaken" | "jump-start"
+            | "prototype" | "squad" | "offspring" | "bestow" => {
                 let m = self.me();
                 format!("{} {name} cost was paid", nouns::possessive(&m))
             }
@@ -616,7 +616,10 @@ impl Renderer<'_> {
                 (Cmp::Ge, n) => format!("{} or more creatures died this turn", number_word(*n)),
                 _ => {
                     let v = number_word(*n);
-                    format!("the number of creatures that died this turn is {}", cmp_phrase(cmp, &v))
+                    format!(
+                        "the number of creatures that died this turn is {}",
+                        cmp_phrase(cmp, &v)
+                    )
                 }
             };
         }
@@ -711,8 +714,16 @@ impl Renderer<'_> {
         Some(match a {
             Value::LifeGainedThisTurn(p) => {
                 let w = you(self, p);
-                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
-                let did = if w == "you" { "you".to_string() } else { w.clone() };
+                let have = if w == "you" {
+                    "you've".to_string()
+                } else {
+                    format!("{w} has")
+                };
+                let did = if w == "you" {
+                    "you".to_string()
+                } else {
+                    w.clone()
+                };
                 if min <= 1 {
                     format!("{did} gained life this turn")
                 } else {
@@ -724,13 +735,21 @@ impl Renderer<'_> {
                 if min <= 1 {
                     format!("{w} lost life this turn")
                 } else {
-                    let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                    let have = if w == "you" {
+                        "you've".to_string()
+                    } else {
+                        format!("{w} has")
+                    };
                     format!("{have} lost {min} or more life this turn")
                 }
             }
             Value::CardsDrawnThisTurn(p) => {
                 let w = you(self, p);
-                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                let have = if w == "you" {
+                    "you've".to_string()
+                } else {
+                    format!("{w} has")
+                };
                 let c = if min <= 1 {
                     "a card".to_string()
                 } else {
@@ -740,7 +759,11 @@ impl Renderer<'_> {
             }
             Value::SpellsCastThisTurn(p, f) => {
                 let w = you(self, p);
-                let have = if w == "you" { "you've".to_string() } else { format!("{w} has") };
+                let have = if w == "you" {
+                    "you've".to_string()
+                } else {
+                    format!("{w} has")
+                };
                 let noun = self.noun(f, if min <= 1 { Num::One } else { Num::Many });
                 let noun = if noun.contains("spell") {
                     noun
@@ -845,7 +868,10 @@ impl Renderer<'_> {
 fn merge_subject(parts: &[String], conj: &str) -> String {
     for prefix in ["you control ", "you have ", "there are ", "there is "] {
         if parts.len() > 1 && parts.iter().all(|p| p.starts_with(prefix)) {
-            let rest: Vec<String> = parts.iter().map(|p| p[prefix.len()..].to_string()).collect();
+            let rest: Vec<String> = parts
+                .iter()
+                .map(|p| p[prefix.len()..].to_string())
+                .collect();
             return format!("{prefix}{}", join_list(&rest, conj));
         }
     }

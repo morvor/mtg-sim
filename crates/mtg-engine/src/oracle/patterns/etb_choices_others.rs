@@ -52,12 +52,15 @@ fn subject_list(subj: &str) -> Option<Filter> {
     if suffix.is_empty() {
         return Some(head);
     }
-    // Parse the controller suffix on a neutral head noun ("card" = any object).
+    // Parse the controller suffix on a neutral head noun. The probe's own noun isn't part
+    // of the subject: "creatures your opponents control" includes creature tokens, so
+    // a `Card` from the probe ("not a token", CR 108.2) must not remain.
     let probe = format!("card{suffix}");
     let (sf, _, tail) = parse_object_phrase(&probe)?;
     if !end(tail).is_empty() {
         return None;
     }
+    let sf = without_probe_card(sf);
     Some(Filter::and(vec![head, sf]))
 }
 

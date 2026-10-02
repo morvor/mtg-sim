@@ -161,6 +161,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Contraction.",
     },
     Equivalence {
+        pattern: r"\ba player taps (an? [^.,]+?) for mana\b",
+        replacement: "$1 is tapped for mana",
+        why: "Only a player can tap a permanent for mana (CR 106.12): \"a player taps a \
+              land for mana\" and \"a land is tapped for mana\" are the same event.",
+    },
+    Equivalence {
         pattern: r"\band/or\b",
         replacement: "and",
         why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
@@ -470,7 +476,9 @@ fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     while i < tokens.len() {
         let t = &tokens[i];
         let is_attached = (t == "enchanted" || t == "equipped" || t == "fortified")
-            && tokens.get(i + 1).is_some_and(|n| heads.contains(&n.as_str()));
+            && tokens
+                .get(i + 1)
+                .is_some_and(|n| heads.contains(&n.as_str()));
         if is_attached {
             if seen {
                 out.push("it".into());
@@ -504,7 +512,7 @@ fn equivalence_regex(p: &'static str) -> &'static Regex {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Regex> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n)(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.")
+        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\."#)
             .unwrap()
     });
     let mut s = s.to_string();
@@ -516,14 +524,17 @@ fn sentence_rewrites(s: &str) -> String {
             Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), ([^.]+)\. otherwise, ([^.]+)\.").unwrap(),
         ]
     });
-    s = instead.replace_all(&s, "${1}if $2, $3 instead.").to_string();
-    s = otherwise.replace_all(&s, "$1$4. if $2, $3 instead.").to_string();
+    s = instead
+        .replace_all(&s, "${1}if $2, $3 instead.")
+        .to_string();
+    s = otherwise
+        .replace_all(&s, "$1$4. if $2, $3 instead.")
+        .to_string();
     // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
     // if" is something else).
     static TRAILING_IF: OnceLock<Regex> = OnceLock::new();
-    let trailing = TRAILING_IF.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").unwrap()
-    });
+    let trailing = TRAILING_IF
+        .get_or_init(|| Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").unwrap());
     s = trailing
         .replace_all(&s, |c: &regex::Captures| {
             let (lead, body, cond) = (&c[1], &c[2], &c[3]);
@@ -584,21 +595,85 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
 
 /// Ability words (CR 207.2c): they have no rules meaning.
 const ABILITY_WORDS: &[&str] = &[
-    "adamant", "addendum", "alliance", "battalion", "bloodrush", "celebration", "channel",
-    "chroma", "cohort", "constellation", "converge", "council's dilemma", "coven", "delirium",
-    "descend 4", "descend 8", "disappear", "domain", "eerie", "eminence", "enrage",
-    "fateful hour", "fathomless descent", "ferocious", "flurry", "formidable", "grandeur",
-    "hellbent", "heroic", "imprint", "infusion", "inspired", "join forces", "kinship",
-    "landfall", "lieutenant", "magecraft", "metalcraft", "morbid", "opus", "pack tactics",
-    "paradox", "parley", "radiance", "raid", "rally", "renew", "repartee", "revolt",
-    "secret council", "spell mastery", "strive", "survival", "sweep", "tempting offer",
-    "threshold", "undergrowth", "valiant", "vivid", "void", "will of the council",
+    "adamant",
+    "addendum",
+    "alliance",
+    "battalion",
+    "bloodrush",
+    "celebration",
+    "channel",
+    "chroma",
+    "cohort",
+    "constellation",
+    "converge",
+    "council's dilemma",
+    "coven",
+    "delirium",
+    "descend 4",
+    "descend 8",
+    "disappear",
+    "domain",
+    "eerie",
+    "eminence",
+    "enrage",
+    "fateful hour",
+    "fathomless descent",
+    "ferocious",
+    "flurry",
+    "formidable",
+    "grandeur",
+    "hellbent",
+    "heroic",
+    "imprint",
+    "infusion",
+    "inspired",
+    "join forces",
+    "kinship",
+    "landfall",
+    "lieutenant",
+    "magecraft",
+    "metalcraft",
+    "morbid",
+    "opus",
+    "pack tactics",
+    "paradox",
+    "parley",
+    "radiance",
+    "raid",
+    "rally",
+    "renew",
+    "repartee",
+    "revolt",
+    "secret council",
+    "spell mastery",
+    "strive",
+    "survival",
+    "sweep",
+    "tempting offer",
+    "threshold",
+    "undergrowth",
+    "valiant",
+    "vivid",
+    "void",
+    "will of the council",
 ];
 
 /// Labels before an em dash that aren't ability or flavor words.
 const NOT_FLAVOR: &[&str] = &[
-    "companion", "boast", "exhaust", "forecast", "max speed", "power-up", "to solve",
-    "solved", "choose", "level up", "ward", "equip", "cumulative upkeep", "echo",
+    "companion",
+    "boast",
+    "exhaust",
+    "forecast",
+    "max speed",
+    "power-up",
+    "to solve",
+    "solved",
+    "choose",
+    "level up",
+    "ward",
+    "equip",
+    "cumulative upkeep",
+    "echo",
 ];
 
 /// Strips a leading ability word (CR 207.2c) or flavor word (CR 207.2d): "Landfall — ".
@@ -607,7 +682,10 @@ fn strip_ability_word(line: &str) -> String {
         return line.to_string();
     };
     // Saga chapters with a flavor word: "I — Aerial Blast — effect" (CR 714.2b, 207.2d).
-    if head.split(", ").all(|n| !n.is_empty() && n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))) {
+    if head
+        .split(", ")
+        .all(|n| !n.is_empty() && n.chars().all(|c| matches!(c, 'I' | 'V' | 'X')))
+    {
         let inner = strip_ability_word(rest);
         return format!("{head} — {inner}");
     }
@@ -625,9 +703,9 @@ fn strip_ability_word(line: &str) -> String {
         && !KeywordKind::ALL
             .iter()
             .any(|k| h.starts_with(&k.name().to_lowercase()))
-        && !head.split(", ").all(|n| {
-            n.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))
-        });
+        && !head
+            .split(", ")
+            .all(|n| n.chars().all(|c| matches!(c, 'I' | 'V' | 'X')));
     if flavor {
         rest.to_string()
     } else {

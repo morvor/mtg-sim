@@ -403,6 +403,9 @@ impl<'a> Renderer<'a> {
                     };
                     let yes_s = match yes.as_ref() {
                         Value::Const(2) if m.modes.len() == 2 => "both".to_string(),
+                        Value::Const(n) if *n as usize >= m.modes.len() && a == 1 => {
+                            "one or more".to_string()
+                        }
                         Value::Const(n) => self.count_word(*n),
                         other => self.value(other),
                     };

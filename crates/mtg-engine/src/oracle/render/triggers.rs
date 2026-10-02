@@ -136,12 +136,17 @@ impl Renderer<'_> {
             TriggerCond::ZoneChange { filter, from, to } => {
                 // "one or more cards leave your graveyard": the owner is in the zone.
                 let shown = match filter {
-                    Filter::And(v) if from.is_some_and(|z| z != ZoneKind::Battlefield) || to.is_some_and(|z| z != ZoneKind::Battlefield) => Filter::and(
-                        v.iter()
-                            .filter(|x| !matches!(x, Filter::OwnedBy(_)))
-                            .cloned()
-                            .collect(),
-                    ),
+                    Filter::And(v)
+                        if from.is_some_and(|z| z != ZoneKind::Battlefield)
+                            || to.is_some_and(|z| z != ZoneKind::Battlefield) =>
+                    {
+                        Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::OwnedBy(_)))
+                                .cloned()
+                                .collect(),
+                        )
+                    }
                     other => other.clone(),
                 };
                 let o = obj(self, &shown);
@@ -349,7 +354,9 @@ impl Renderer<'_> {
                         &filter.clone().in_zone(ZoneKind::Hand),
                         if many { Num::Many } else { Num::One },
                     );
-                    let n = n.trim_end_matches(" in a hand").trim_end_matches(" in hands");
+                    let n = n
+                        .trim_end_matches(" in a hand")
+                        .trim_end_matches(" in hands");
                     if many {
                         format!("one or more {n}")
                     } else {
@@ -494,6 +501,23 @@ impl Renderer<'_> {
                     .collect();
                 if evs.iter().all(|e| e.subj == evs[0].subj) && !evs[0].subj.is_empty() {
                     let vps: Vec<String> = evs.iter().map(|e| e.vp.clone()).collect();
+                    // "cast or copy an instant or sorcery spell": one object for both verbs.
+                    let split: Vec<Option<(&str, &str)>> =
+                        vps.iter().map(|v| v.split_once(' ')).collect();
+                    if split.iter().all(|x| x.is_some()) {
+                        let objs: Vec<&str> =
+                            split.iter().map(|x| x.unwrap_or(("", "")).1).collect();
+                        if objs.iter().all(|o| *o == objs[0]) {
+                            let verbs: Vec<String> = split
+                                .iter()
+                                .map(|x| x.unwrap_or(("", "")).0.to_string())
+                                .collect();
+                            return Ev::new(
+                                evs[0].subj.clone(),
+                                format!("{} {}", join_list(&verbs, "or"), objs[0]),
+                            );
+                        }
+                    }
                     Ev::new(evs[0].subj.clone(), join_list(&vps, "or"))
                 } else {
                     // "Whenever A and whenever B" (each condition keeps its trigger word).
@@ -502,7 +526,9 @@ impl Renderer<'_> {
                         .enumerate()
                         .map(|(i, e)| {
                             let t = e.text();
-                            let begins = v.get(i).is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
+                            let begins = v
+                                .get(i)
+                                .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
                             if i == 0 {
                                 t
                             } else if begins {
@@ -518,7 +544,10 @@ impl Renderer<'_> {
             // "Whenever you draw your second card each turn".
             TriggerCond::Where { trigger, cond }
                 if matches!(trigger.as_ref(), TriggerCond::Draws { .. })
-                    && matches!(cond, Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(_))) =>
+                    && matches!(
+                        cond,
+                        Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(_))
+                    ) =>
             {
                 let (TriggerCond::Draws { who }, Condition::Compare(_, _, Value::Const(n))) =
                     (trigger.as_ref(), cond)
@@ -527,11 +556,13 @@ impl Renderer<'_> {
                 };
                 let w = self.rel_subject(*who);
                 let p = if w == "you" { "your" } else { "their" };
-                Ev::new(w, format!("draw {p} {} card each turn", ordinal_word(*n as u32)))
+                Ev::new(
+                    w,
+                    format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
+                )
             }
             // "At the beginning of your second main phase".
-            TriggerCond::Where { trigger, cond }
-                if matches!(cond, Condition::Custom(n) if n.starts_with("main_phase:")) =>
+            TriggerCond::Where { trigger, cond } if matches!(cond, Condition::Custom(n) if n.starts_with("main_phase:")) =>
             {
                 let (TriggerCond::BeginningOf { whose, .. }, Condition::Custom(n)) =
                     (trigger.as_ref(), cond)
@@ -540,12 +571,18 @@ impl Renderer<'_> {
                 };
                 let k: u32 = n["main_phase:".len()..].parse().unwrap_or(1);
                 let p = self.rel_possessive(*whose, Num::One);
-                Ev::new("", format!("the beginning of {p} {} main phase", ordinal_word(k)))
+                Ev::new(
+                    "",
+                    format!("the beginning of {p} {} main phase", ordinal_word(k)),
+                )
             }
             // "Whenever ~ and at least two other creatures attack".
             TriggerCond::Where { trigger, cond }
                 if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
-                    && matches!(cond, Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(_))) =>
+                    && matches!(
+                        cond,
+                        Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(_))
+                    ) =>
             {
                 let (TriggerCond::Attacks(f), Condition::Compare(_, _, Value::Const(n))) =
                     (trigger.as_ref(), cond)
@@ -561,8 +598,19 @@ impl Renderer<'_> {
                 };
                 Ev::new(format!("{o} and {c}"), "attack")
             }
+            // "Whenever ~ becomes the target of a spell an opponent controls".
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(_, Filter::Spell | Filter::SpellOnStack),
+            } if matches!(trigger.as_ref(), TriggerCond::BecomesTarget { .. }) => {
+                let e = self.trigger_event(trigger, det);
+                Ev::new(e.subj, e.vp.replacen("a spell or ability", "a spell", 1))
+            }
             // "Whenever ~ attacks while saddled".
-            TriggerCond::Where { trigger, cond: Condition::SelMatches(Sel::This, f) } => {
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::This, f),
+            } => {
                 let e = self.trigger_event(trigger, det);
                 let p = self.is_predicate(f, false);
                 let p = p.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(p);

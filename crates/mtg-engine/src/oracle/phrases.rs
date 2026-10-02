@@ -9,6 +9,21 @@ use crate::keywords::KeywordKind;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// A filter parsed from a probe phrase "card [qualifiers]" without the probe's own head
+/// noun: only the qualifiers are meant ("you control", "of the chosen type"). `Card`
+/// would exclude tokens (CR 108.2), which the qualifiers don't.
+pub fn without_probe_card(f: Filter) -> Filter {
+    match f {
+        Filter::Card => Filter::Any,
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Card))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();

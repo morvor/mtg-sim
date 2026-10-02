@@ -132,7 +132,9 @@ impl Renderer<'_> {
                 "the number of creatures that died under your control this turn".into()
             }
             "turn:creatures attacked" => "the number of creatures that attacked this turn".into(),
-            "snow mana spent to cast it" => format!("the amount of {{S}} spent to cast {}", self.me()),
+            "snow mana spent to cast it" => {
+                format!("the amount of {{S}} spent to cast {}", self.me())
+            }
             "web-slinging:mana value of the returned creature" => {
                 "the mana value of the returned creature".into()
             }
@@ -187,10 +189,9 @@ impl Renderer<'_> {
                 "{} or more mana was spent to cast that spell",
                 number_word(min)
             ),
-            "spells_you_cast_this_turn" => format!(
-                "you've cast {} this turn",
-                at_least(min, "spell")
-            ),
+            "spells_you_cast_this_turn" => {
+                format!("you've cast {} this turn", at_least(min, "spell"))
+            }
             "dungeons completed" if min <= 1 => "you've completed a dungeon".into(),
             "devour:number devoured" if min <= 1 => "it devoured a creature".into(),
             "max_opponent_counters:poison" => format!(
@@ -230,7 +231,9 @@ impl Renderer<'_> {
                 "a permanent you controlled left the battlefield this turn".into()
             }
             "opponent_lost_life_this_turn" => "an opponent lost life this turn".into(),
-            "cast during your main phase" => format!("you cast {} during your main phase", me(self)),
+            "cast during your main phase" => {
+                format!("you cast {} during your main phase", me(self))
+            }
             "warp:a spell was warped this turn" => "a spell was warped this turn".into(),
             "warp:a nonland permanent left the battlefield this turn" => {
                 "a nonland permanent left the battlefield this turn".into()
@@ -284,7 +287,9 @@ impl Renderer<'_> {
                 )
             }
             n if n.starts_with("an opponent this turn:drew:") => {
-                let k: i32 = n["an opponent this turn:drew:".len()..].parse().unwrap_or(1);
+                let k: i32 = n["an opponent this turn:drew:".len()..]
+                    .parse()
+                    .unwrap_or(1);
                 format!("an opponent drew {} this turn", at_least(k, "card"))
             }
             other => self.gap(format!("Condition::Custom({other})")),

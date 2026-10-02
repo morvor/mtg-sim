@@ -14,7 +14,11 @@ fn whole_zone(f: &Filter) -> Option<(ZoneKind, Option<PlayerRel>)> {
     let mut owner = None;
     for a in atoms {
         match a {
-            Filter::InZone(z) if matches!(z, ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library) => zone = Some(*z),
+            Filter::InZone(z)
+                if matches!(z, ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library) =>
+            {
+                zone = Some(*z)
+            }
             Filter::OwnedBy(r) => owner = Some(*r),
             Filter::Card | Filter::Any => {}
             _ => return None,
@@ -248,7 +252,11 @@ impl Renderer<'_> {
                 }
             }
             Sel::Var(v) if self.var_defs.iter().any(|(x, _, used)| x == v && !used) => {
-                let i = self.var_defs.iter().position(|(x, _, used)| x == v && !used).unwrap_or(0);
+                let i = self
+                    .var_defs
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
                 self.var_defs[i].2 = true;
                 let s = self.var_defs[i].1.clone();
                 self.sel(&s, case)
@@ -308,7 +316,13 @@ impl Renderer<'_> {
                 decline(format!("a card you exiled with cards named {n}"), case)
             }
             Sel::Union(v) => {
-                let parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
+                let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
+                // "each opponent and each creature and planeswalker they control".
+                if parts.first().is_some_and(|p| p == "each opponent") {
+                    for p in parts.iter_mut().skip(1) {
+                        *p = p.replace("your opponents control", "they control");
+                    }
+                }
                 decline(join_list(&parts, "and"), case)
             }
             Sel::TopOfGraveyard(p) => {

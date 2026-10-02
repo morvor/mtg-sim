@@ -186,8 +186,10 @@ impl Renderer<'_> {
                     })
                 };
                 if v.iter().all(|x| status_word(x).is_some()) {
-                    let w: Vec<String> =
-                        v.iter().map(|x| status_word(x).unwrap().to_string()).collect();
+                    let w: Vec<String> = v
+                        .iter()
+                        .map(|x| status_word(x).unwrap().to_string())
+                        .collect();
                     np.status.push(join_list(&w, "or"));
                 } else if v.iter().all(|x| matches!(x, Filter::Color(_))) {
                     let cs: Vec<String> = v
@@ -535,14 +537,23 @@ impl Renderer<'_> {
     fn default_kind(np: &Np) -> &'static str {
         // Only creatures attack, block, and have power and toughness (CR 506.4, 208.1):
         // "attacking or blocking creature", "creatures with flying".
-        let combat = np.status.iter().any(|s| {
-            matches!(
-                s.as_str(),
-                "attacking" | "blocking" | "blocked" | "unblocked" | "attacking or blocking"
-                    | "nonattacking" | "nonblocking"
-            )
-        }) || np.with.iter().any(|w| w.starts_with("power") || w.starts_with("toughness") || is_combat_keyword(w))
-            || np.post.iter().any(|p| p.starts_with("attacking") || p.starts_with("blocking") || p.starts_with("blocked"));
+        let combat =
+            np.status.iter().any(|s| {
+                matches!(
+                    s.as_str(),
+                    "attacking"
+                        | "blocking"
+                        | "blocked"
+                        | "unblocked"
+                        | "attacking or blocking"
+                        | "nonattacking"
+                        | "nonblocking"
+                )
+            }) || np.with.iter().any(|w| {
+                w.starts_with("power") || w.starts_with("toughness") || is_combat_keyword(w)
+            }) || np.post.iter().any(|p| {
+                p.starts_with("attacking") || p.starts_with("blocking") || p.starts_with("blocked")
+            });
         if combat && matches!(np.zone, None | Some(ZoneKind::Battlefield)) {
             return "creature";
         }
@@ -593,7 +604,12 @@ impl Renderer<'_> {
         words.extend(np.colors.iter().cloned());
         words.extend(np.quality.iter().cloned());
         if !np.nons.is_empty() {
-            words.push(np.nons.join(", "));
+            let nons = np.nons.join(", ");
+            // "nonland permanent card": the non- word goes before "permanent".
+            match words.iter().position(|w| w == "permanent") {
+                Some(i) => words.insert(i, nons),
+                None => words.push(nons),
+            }
         }
         let head = match num {
             Num::One => self.head(&np),
@@ -962,9 +978,24 @@ fn distribute_or(f: &Filter) -> Filter {
 fn is_combat_keyword(w: &str) -> bool {
     matches!(
         w,
-        "flying" | "reach" | "first strike" | "double strike" | "trample" | "deathtouch"
-            | "lifelink" | "vigilance" | "menace" | "defender" | "haste" | "shadow"
-            | "horsemanship" | "fear" | "intimidate" | "skulk" | "flanking" | "banding"
+        "flying"
+            | "reach"
+            | "first strike"
+            | "double strike"
+            | "trample"
+            | "deathtouch"
+            | "lifelink"
+            | "vigilance"
+            | "menace"
+            | "defender"
+            | "haste"
+            | "shadow"
+            | "horsemanship"
+            | "fear"
+            | "intimidate"
+            | "skulk"
+            | "flanking"
+            | "banding"
     )
 }
 

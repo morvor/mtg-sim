@@ -17,6 +17,7 @@ fn static_ability(effect: StaticEffect, text: &str) -> Ability {
 fn chosen_object_phrase(s: &str) -> Option<Filter> {
     let s = s.trim();
     let probe;
+    let mut probed = false;
     let s = match s
         .strip_prefix("sources ")
         .or_else(|| s.strip_prefix("source "))
@@ -24,6 +25,7 @@ fn chosen_object_phrase(s: &str) -> Option<Filter> {
         // "card" parses as a head noun with no type restriction.
         Some(r) => {
             probe = format!("card {r}");
+            probed = true;
             probe.as_str()
         }
         None => s,
@@ -32,7 +34,12 @@ fn chosen_object_phrase(s: &str) -> Option<Filter> {
     if !end(tail).is_empty() || !crate::choices::filter_mentions_choice(&f) {
         return None;
     }
-    Some(f)
+    // "sources of the chosen type": any object, not only cards.
+    Some(if probed {
+        crate::oracle::phrases::without_probe_card(f)
+    } else {
+        f
+    })
 }
 
 /// "Spells [...] can't be cast" restricts casting cards (and copies) with those
