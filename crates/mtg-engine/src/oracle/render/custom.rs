@@ -202,6 +202,11 @@ impl Renderer<'_> {
                 rel("attached to a permanent you control")
             }
             "attached to a creature you control" => rel("attached to a creature you control"),
+            crate::kw::grant_filters::ATTACKING_YOU => rel("attacking you"),
+            crate::kw::grant_filters::ATTACKING_OPPONENT => rel("attacking your opponents"),
+            crate::kw::grant_filters::ATTACKING_ENCHANTED_PLAYER => {
+                rel("attacking enchanted player")
+            }
             n if n.starts_with("has landwalk:") => {
                 let k = &n["has landwalk:".len()..];
                 (false, format!("with {k}"))
@@ -445,6 +450,20 @@ impl Renderer<'_> {
                     .parse()
                     .unwrap_or(1);
                 format!("an opponent drew {} this turn", at_least(k, "card"))
+            }
+            crate::oracle::patterns::grant_conditions::COMMITTED_CRIME_THIS_TURN => {
+                "you've committed a crime this turn".into()
+            }
+            n if n.starts_with(crate::oracle::patterns::grant_conditions::ACTION_THIS_TURN) => {
+                match &n[crate::oracle::patterns::grant_conditions::ACTION_THIS_TURN.len()..] {
+                    "surveil" => "you've surveilled this turn".into(),
+                    "scry" => "you've scried this turn".into(),
+                    other => self.gap(format!("Condition::Custom(did {other})")),
+                }
+            }
+            n if n.starts_with(crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN) => {
+                let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
+                format!("you've sacrificed {} this turn", with_article(t))
             }
             other => self.gap(format!("Condition::Custom({other})")),
         }
