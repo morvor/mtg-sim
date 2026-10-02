@@ -593,10 +593,10 @@ impl Renderer<'_> {
             return self.me();
         }
         // "Red spells and white spells you cast cost {1} less".
-        let saved = self.alt_and;
-        self.alt_and = true;
+        let saved = (self.alt_and, self.plural_alts);
+        (self.alt_and, self.plural_alts) = (true, true);
         let n = self.noun(f, Num::Many);
-        self.alt_and = saved;
+        (self.alt_and, self.plural_alts) = saved;
         if n.contains("spell") {
             n
         } else if n == "permanents" || n == "cards" {

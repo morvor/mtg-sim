@@ -564,6 +564,12 @@ impl Renderer<'_> {
                 Ev::new(w, format!("search {p} library"))
             }
             TriggerCond::TurnedFaceUp(f) => Ev::new(obj(self, f), "is turned face up"),
+            // "When ~ transforms into [this face]": an ability of a face triggers only
+            // when the permanent has that face up after it transforms (it has the ability
+            // only then; CR 701.27e), so cards say either.
+            TriggerCond::Transforms(Filter::Source) => {
+                Ev::new(obj(self, &Filter::Source), "transforms {opt:into ~}")
+            }
             TriggerCond::Transforms(f) => Ev::new(obj(self, f), "transforms"),
             TriggerCond::YouSacrifice(f) => {
                 let n = self.noun_det(f, det.clone());

@@ -16,10 +16,10 @@ impl Renderer<'_> {
             Value::Const(n) => n.to_string(),
             Value::X => "X".into(),
             Value::Count(f) => {
-                let saved = self.alt_and;
-                self.alt_and = true;
+                let saved = (self.alt_and, self.plural_alts);
+                (self.alt_and, self.plural_alts) = (true, true);
                 let n = self.noun_det(f, Det::Plural);
-                self.alt_and = saved;
+                (self.alt_and, self.plural_alts) = saved;
                 if Self::counts_all_permanents(f, &n) {
                     format!("the number of {n} {{opt:on the battlefield}}")
                 } else {

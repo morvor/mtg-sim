@@ -504,6 +504,9 @@ pub struct Renderer<'a> {
     pub(crate) each_mode: bool,
     /// Alternatives in a head noun join with "and" ("for each instant and sorcery card").
     pub(crate) alt_and: bool,
+    /// Rendering a plural noun phrase whose alternatives are each named in full ("red
+    /// spells and white spells").
+    pub(crate) plural_alts: bool,
     /// The noun for a filter that names no type: "source" for damage sources.
     pub(crate) default_head: Option<&'static str>,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
@@ -551,6 +554,7 @@ impl<'a> Renderer<'a> {
             subject_types: Vec::new(),
             each_mode: false,
             alt_and: false,
+            plural_alts: false,
             default_head: None,
             after_clash: false,
             sacrificed: None,

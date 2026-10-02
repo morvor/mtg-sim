@@ -249,6 +249,10 @@ impl Renderer<'_> {
                         }
                     }
                     np.alts.extend(alts);
+                } else if self.plural_alts {
+                    // "Red spells and white spells you cast cost {1} less to cast."
+                    let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::Many)).collect();
+                    np.fixed = Some(join_list(&alts, "and"));
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
                     np.fixed = Some(join_list(&alts, "or"));
