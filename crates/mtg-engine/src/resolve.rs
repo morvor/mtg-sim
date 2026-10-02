@@ -1612,8 +1612,13 @@ impl Game {
             Effect::RestartGame { keep } => {
                 crate::restart::request_restart(self, keep.as_ref(), ctx);
             }
-            Effect::KeepAndSacrificeRest { who, among, keep } => {
-                crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, ctx);
+            Effect::KeepAndSacrificeRest {
+                who,
+                among,
+                keep,
+                up_to,
+            } => {
+                crate::apnap::keep_and_sacrifice_rest(self, who, among, keep, *up_to, ctx);
             }
             Effect::WinGame { who } => {
                 // CR 104.2b, 104.3f: players named together win simultaneously.

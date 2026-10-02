@@ -326,27 +326,159 @@ fn as_you_base(r: &str) -> Option<String> {
     as_you(&plural_to_singular(r)?)
 }
 
-/// Parses predicate `pred` (third person, after the subject) as an instruction for
-/// "you". `may`: whether it's optional ("may [instruction]"), which is returned
-/// separately so the caller can wrap it.
-fn predicate(pred: &str, b: &mut Builder) -> Option<(bool, Effect)> {
+/// The value an instruction for another player hoisted out of its predicate because it
+/// mentions "you" (the ability's controller): determined before that player performs it.
+const HOISTED: Var = vars::USER + 2742;
+
+/// A predicate whose amount mentions "you" ("reveals X cards from their hand, where X is
+/// the number of Faeries you control", "mills cards equal to the number of cards in your
+/// hand", "reveals a number of cards from their hand equal to the number of Allies you
+/// control"): the predicate with the amount as "x", and the amount read for "you".
+fn hoist_value(pred: &str, b: &mut Builder) -> Option<(String, Option<Value>)> {
+    let has_x = |t: &str| t.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x");
+    if let Some((clause, v)) = pred.rsplit_once(", where x is ") {
+        if !mentions_you(v) {
+            return Some((pred.to_string(), None));
+        }
+        let (val, tail) = crate::oracle::statics::parse_value_phrase(v, b)?;
+        if !end(&tail).is_empty() || !has_x(clause) {
+            return None;
+        }
+        return Some((clause.to_string(), Some(val)));
+    }
+    let Some(at) = pred.find(" equal to ") else {
+        return Some((pred.to_string(), None));
+    };
+    let (head, v) = (&pred[..at], &pred[at + " equal to ".len()..]);
+    if !mentions_you(v) {
+        return Some((pred.to_string(), None));
+    }
+    if has_x(head) || mentions_you(head) {
+        return None;
+    }
+    let (val, tail) = crate::oracle::statics::parse_value_phrase(v, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    let head = if head.contains(" a number of ") {
+        head.replacen(" a number of ", " x ", 1)
+    } else {
+        let (verb, rest) = split_word(head);
+        let (noun, after) = split_word(rest);
+        if !matches!(noun, "cards" | "life") {
+            return None;
+        }
+        format!("{verb} x {noun} {after}").trim_end().to_string()
+    };
+    Some((head, Some(val)))
+}
+
+/// The predicate split before a later clause with another subject: "discards a card, you
+/// draw a card, and you gain 2 life" → ("discards a card", "you draw a card, and you gain
+/// 2 life"); "exiles the top four cards of their library, then you may put ...".
+fn split_tail(pred: &str) -> (&str, Option<&str>) {
+    let mut best: Option<(usize, usize)> = None;
+    for sep in [", then you ", ", and you ", " and you ", ", you ", ", then each player who does "] {
+        if let Some(at) = pred.find(sep) {
+            if best.is_none_or(|(b, _)| at < b) {
+                best = Some((at, sep.len()));
+            }
+        }
+    }
+    match best {
+        Some((at, len)) => {
+            let sep = &pred[at..at + len];
+            // Keep the new subject: "you ..." / "each player who does ...".
+            let start = if sep.ends_with("you ") {
+                at + len - "you ".len()
+            } else {
+                at + len - "each player who does ".len()
+            };
+            (&pred[..at], Some(&pred[start..]))
+        }
+        None => (pred, None),
+    }
+}
+
+/// An instruction worded for "you" (`text`, without the subject): as the patterns read it
+/// without a subject ("draw a card") or with "you" ("you become the monarch"); failing
+/// that, the original third-person predicate (`orig`) as patterns for "that player" read
+/// it, with "that player" meaning the player performing it ("you" in `Effect::AsPlayer`).
+fn instruction(text: &str, orig: Option<&str>, b: &mut Builder) -> Option<Effect> {
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    };
+    if let Some(e) = parse_clause(text, b) {
+        return Some(e);
+    }
+    restore(b);
+    if let Some(e) = parse_clause(&format!("you {text}"), b) {
+        return Some(e);
+    }
+    restore(b);
+    let orig = orig?;
+    // Only a predicate about that player alone: no other player is "that player".
+    if orig.contains("that player") || orig.contains(" the player") {
+        return None;
+    }
+    b.it_player = PlayerRef::You;
+    let e = parse_clause(&format!("that player {orig}"), b);
+    b.it_player = saved.2.clone();
+    if e.is_none() {
+        restore(b);
+    }
+    e
+}
+
+/// Parses predicate `pred` (third person, after the subject; `base`: its verb is already
+/// in the base form, as after "each" or "they") as an instruction for "you". Returns
+/// whether it's optional ("may [instruction]"), the instruction (for "may", the whole
+/// optional instruction for a one-player subject, `one`), and the hoisted amount.
+fn predicate(
+    pred: &str,
+    one: bool,
+    b: &mut Builder,
+) -> Option<(bool, Effect, Option<Value>)> {
+    let (pred, hoisted) = hoist_value(pred, b)?;
     let (may, pred) = match pred.strip_prefix("may ") {
-        Some(r) => (true, r),
+        Some(r) => (true, r.to_string()),
         None => (false, pred),
     };
     let text = if may {
-        as_you_base(pred)?
+        as_you_base(&pred)?
     } else {
-        as_you(pred)?
+        as_you(&pred)?
     };
-    let e = if may {
+    let orig = if may {
+        plural_to_singular(&pred)?
+    } else {
+        pred.clone()
+    };
+    let e = if may && one {
         // "you may pay {2}" (an optional cost, CR 118.12) and "you may [instruction]".
-        let e = parse_sentence(&format!("you may {text}"), b)?;
-        (true, e)
+        match parse_sentence(&format!("you may {text}"), b) {
+            Some(e) => e,
+            None => Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(instruction(&text, Some(&orig), b)?),
+            },
+        }
     } else {
-        (false, parse_clause(&text, b)?)
+        instruction(&text, Some(&orig), b)?
     };
-    Some(e)
+    let e = match &hoisted {
+        Some(_) => {
+            if !super::r107_numbers::uses_x(&e) {
+                return None;
+            }
+            super::r107_numbers::substitute_x(&e, &Value::Var(HOISTED))?
+        }
+        None => e,
+    };
+    Some((may, e, hoisted))
 }
 
 fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -356,55 +488,133 @@ fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
     let saved_player = b.it_player.clone();
     let r = (|| {
         let (subj, pred) = subject(l, b)?;
-        match subj {
-            Subject::One(who) => {
-                let (_, e) = predicate(&pred, b)?;
-                Some(Effect::AsPlayer {
+        let (pred, tail) = split_tail(&pred);
+        let main = subject_effect(subj, pred, b)?;
+        let Some(tail) = tail else {
+            return Some(main);
+        };
+        let t = parse_sentence(tail, b)?;
+        Some(Effect::seq(vec![main, t]))
+    })();
+    if r.is_none() {
+        b.targets.truncate(saved_targets);
+        b.it_player = saved_player;
+    }
+    r
+}
+
+/// The value of X as the instruction begins, for an instruction another player performs:
+/// an X an outer pattern later defines ("..., where X is the number of Faeries you
+/// control") is read for the ability's controller, not for that player.
+const OUTER_X: Var = vars::USER + 2744;
+
+/// `wrap` applied to `e`, with the X `e` uses read before it (see [`OUTER_X`]).
+fn with_outer_x(e: Effect, wrap: impl FnOnce(Effect) -> Effect) -> Option<Effect> {
+    if !super::r107_numbers::uses_x(&e) {
+        return Some(wrap(e));
+    }
+    let inner = super::r107_numbers::substitute_x(&e, &Value::Var(OUTER_X))?;
+    Some(Effect::seq(vec![
+        Effect::StoreValue {
+            var: OUTER_X,
+            value: Value::X,
+        },
+        wrap(inner),
+    ]))
+}
+
+/// The instruction `pred` performed by `subj`.
+fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> {
+    let with_hoisted = |e: Effect, hoisted: Option<Value>| match hoisted {
+        Some(v) => Effect::seq(vec![
+            Effect::StoreValue {
+                var: HOISTED,
+                value: v,
+            },
+            e,
+        ]),
+        None => e,
+    };
+    match subj {
+        Subject::One(who) => {
+            // "target opponent may have you draw a card": that player chooses whether you
+            // do it.
+            if let Some(r) = pred.strip_prefix("may have you ") {
+                let e = instruction(r, None, b)?;
+                return Some(Effect::May {
                     who,
                     effect: Box::new(e),
-                })
+                });
             }
-            Subject::YouAnd(other) => {
-                // The predicate is already worded for "you" ("each draw two cards",
-                // "each reveal the top card of your library").
-                if pred.starts_with("may ") {
-                    return None;
-                }
-                let e = parse_clause(&pred, b)?;
-                Some(Effect::seq(vec![
+            let (_, e, hoisted) = predicate(pred, true, b)?;
+            let e = with_outer_x(e, |e| Effect::AsPlayer {
+                who,
+                effect: Box::new(e),
+            })?;
+            Some(with_hoisted(e, hoisted))
+        }
+        Subject::YouAnd(other) => {
+            // The predicate is already worded for "you" ("each draw two cards",
+            // "each reveal the top card of your library").
+            if pred.starts_with("may ") {
+                return None;
+            }
+            let e = instruction(pred, None, b)?;
+            with_outer_x(e, |e| {
+                Effect::seq(vec![
                     e.clone(),
                     Effect::AsPlayer {
                         who: other,
                         effect: Box::new(e),
                     },
-                ]))
+                ])
+            })
+        }
+        Subject::Each(who, cond) => {
+            let (may, e, hoisted) = predicate(pred, false, b)?;
+            let guard = |e: Effect| match &cond {
+                Some(c) => Effect::If {
+                    cond: c.clone(),
+                    then: Box::new(e),
+                    otherwise: Box::new(Effect::Noop),
+                },
+                None => e,
+            };
+            // "Each player chooses six lands they control, then sacrifices the rest": the
+            // players choose in APNAP order, then all the rest are sacrificed at once
+            // (CR 101.4).
+            if let (false, None, Effect::KeepAndSacrificeRest { who: PlayerRef::You, among, keep, up_to }) = (may, &cond, &e) {
+                return Some(Effect::KeepAndSacrificeRest {
+                    who,
+                    among: among.clone(),
+                    keep: keep.clone(),
+                    up_to: *up_to,
+                });
             }
-            Subject::Each(who, cond) => {
-                let (may, e) = if let Some(r) = pred.strip_prefix("may ") {
-                    (true, parse_clause(&as_you_base(r)?, b)?)
-                } else {
-                    (false, parse_clause(&as_you(&pred)?, b)?)
-                };
-                let guard = |e: Effect| match &cond {
-                    Some(c) => Effect::If {
-                        cond: c.clone(),
-                        then: Box::new(e),
-                        otherwise: Box::new(Effect::Noop),
-                    },
-                    None => e,
-                };
-                if !may {
-                    return Some(Effect::ForEachPlayer {
-                        who,
-                        effect: Box::new(Effect::AsPlayer {
-                            who: PlayerRef::Iterated,
-                            effect: Box::new(guard(e)),
-                        }),
-                    });
-                }
-                b.named
-                    .push((ACCEPTED_NAME.to_string(), Sel::Var(ACCEPTED)));
-                Some(Effect::seq(vec![
+            if !may {
+                let e = with_outer_x(e, |e| Effect::ForEachPlayer {
+                    who,
+                    effect: Box::new(Effect::AsPlayer {
+                        who: PlayerRef::Iterated,
+                        effect: Box::new(guard(e)),
+                    }),
+                })?;
+                return Some(with_hoisted(e, hoisted));
+            }
+            let x_used = super::r107_numbers::uses_x(&e);
+            let e = if x_used {
+                super::r107_numbers::substitute_x(&e, &Value::Var(OUTER_X))?
+            } else {
+                e
+            };
+            b.named
+                .push((ACCEPTED_NAME.to_string(), Sel::Var(ACCEPTED)));
+            let pre = x_used.then_some(Effect::StoreValue {
+                var: OUTER_X,
+                value: Value::X,
+            });
+            Some(with_hoisted(
+                Effect::seq(pre.into_iter().chain(vec![
                     // CR 101.4: they decide in APNAP order...
                     Effect::Store {
                         var: OPTED,
@@ -432,15 +642,11 @@ fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
                             effect: Box::new(e),
                         }),
                     },
-                ]))
-            }
+                ]).collect()),
+                hoisted,
+            ))
         }
-    })();
-    if r.is_none() {
-        b.targets.truncate(saved_targets);
-        b.it_player = saved_player;
     }
-    r
 }
 
 inventory::submit! { EffectPattern { name: "[player] [instruction]", priority: 900, parse: player_subject } }
@@ -454,7 +660,7 @@ fn each_player_who_does(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     let r = l.strip_prefix("each player who does ")?;
-    let e = parse_clause(&as_you(r)?, b)?;
+    let e = instruction(&as_you(r)?, Some(r), b)?;
     Some(Effect::ForEachPlayer {
         who: PlayerRef::Var(ACCEPTED),
         effect: Box::new(Effect::AsPlayer {
