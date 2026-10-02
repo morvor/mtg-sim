@@ -141,7 +141,7 @@ fn blocked_by_dreadmaw(t: &mut TestGame, attacker: ObjectId) -> ObjectId {
 
 #[test]
 fn hateflayer_wither_applies_to_combat_and_ability_damage() {
-    cr!("702.80a", "120.3d", "702.80c");
+    cr!("702.80a", "120.3d");
     ruling!(
         "Hateflayer",
         "Wither applies to any damage Hateflayer deals to a creature, which includes both its combat damage and damage from its activated ability."

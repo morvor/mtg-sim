@@ -94,7 +94,7 @@ fn radagast_grants_one_ward_to_a_beast_bird() {
 
 #[test]
 fn radagast_as_a_bird_has_two_wards() {
-    cr!("702.21a", "702.21b", "613.1f");
+    cr!("702.21a", "603.2", "613.1f");
     ruling!(
         "Radagast, Wizard of Wilds",
         "If Radagast, Wizard of Wilds is a Beast or a Bird, it will have two instances of ward {1}."
@@ -132,7 +132,7 @@ fn artifact_winter() -> (TestGame, ObjectId) {
 
 #[test]
 fn winter_as_an_artifact_has_two_wards_that_trigger_separately() {
-    cr!("702.21a", "702.21b", "613.1f");
+    cr!("702.21a", "603.2", "613.1f");
     ruling!(
         "Winter, Cursed Rider",
         "If an effect causes Winter to become an artifact, its second ability will cause it to gain a second instance of ward."
@@ -251,7 +251,7 @@ fn raubahn_ward(remove: bool) -> TestGame {
 
 #[test]
 fn raubahn_ward_uses_power_as_it_resolves() {
-    cr!("702.21a", "608.2h", "113.7a");
+    cr!("702.21a", "702.21b", "608.2h", "113.7a");
     ruling!(
         "Raubahn, Bull of Ala Mhigo",
         "Use Raubahn's power at the time the ward ability resolves to determine how much life must be paid."
