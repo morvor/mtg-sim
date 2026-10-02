@@ -750,3 +750,32 @@ fn highcliff_felidar_destroys_each_opponents_greatest_creature() {
     assert!(!t.on_battlefield(d));
     assert!(t.on_battlefield(mine));
 }
+
+#[test]
+fn an_ability_after_a_comma_list_describes_its_last_item() {
+    cr!("115.1", "702.9b");
+    // Return to the Earth: "Destroy target artifact, enchantment, or creature with flying."
+    let mut t = TestGame::new(2);
+    let artifact = t.battlefield(P1, "Ornithopter"); // an artifact creature with flying
+    let relic = t.battlefield(P1, "Howling Mine"); // an artifact without flying
+    let bears = t.battlefield(P1, "Grizzly Bears"); // a creature without flying
+    let drake = t.battlefield(P1, "Wind Drake"); // a creature with flying
+    t.lands(P0, "Forest", 4);
+    let s = t.hand(P0, "Return to the Earth");
+    t.cast(P0, s).target(relic).go();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&relic.into()), "any artifact");
+    assert!(cands.contains(&artifact.into()));
+    assert!(cands.contains(&drake.into()));
+    assert!(!cands.contains(&bears.into()), "only a creature with flying");
+    t.resolve();
+    assert!(!t.on_battlefield(relic));
+    // Exorcise: "... or creature with power 4 or greater": a power only for creatures.
+    let (f, _, _) = parse_object_phrase("artifact, enchantment, or creature with power 4 or greater")
+        .unwrap();
+    assert!(matches!(&f, Filter::Or(v) if matches!(v[0], Filter::Type(_))), "{f:?}");
+    // Mana value describes them all.
+    let (f, _, _) =
+        parse_object_phrase("artifact, creature, or enchantment with mana value 3 or less").unwrap();
+    assert!(matches!(&f, Filter::And(_)), "{f:?}");
+}

@@ -651,6 +651,18 @@ fn with_names<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
         }
         return None;
     }
+    // "with the same controller [as that creature]": controlled by its controller.
+    if let Some(r) = t.strip_prefix("with the same controller") {
+        let (sel, rest) = match r.trim_start().strip_prefix("as ") {
+            Some(o) => object_in(o)?,
+            None if word_end(r) => (referent(), r),
+            None => return None,
+        };
+        let f = Filter::ControllerMatches(Box::new(PlayerFilter::Ref(Box::new(
+            PlayerRef::ControllerOf(Box::new(sel)),
+        ))));
+        return Some((f, rest));
+    }
     if let Some(r) = t.strip_prefix("with the same name as ") {
         let (sel, rest) = object_in(r)?;
         return Some((Filter::SameNameAs(Box::new(sel)), rest));
@@ -1616,3 +1628,36 @@ pub fn their_object<'a>(r: &'a str, b: &Builder) -> Option<(&'a str, Filter)> {
     let f = resolve_referent(f, b)?;
     Some((noun, f))
 }
+
+/// "Target player other than ~'s owner gains control of it." (Crown of Doom): a player
+/// target excluding a player.
+fn target_player_other_than(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (excluded, phrase) = [
+        (" other than ~'s owner", PlayerRef::Owner),
+        (" other than ~'s controller", PlayerRef::You),
+    ]
+    .into_iter()
+    .find(|(p, _)| l.contains(&format!("target player{p}")) || l.contains(&format!("target opponent{p}")))
+    .map(|(p, r)| (r, p))?;
+    let rewritten = l.replacen(phrase, "", 1);
+    let before = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(&rewritten, b)?;
+    let added: Vec<usize> = (before..b.targets.len())
+        .filter(|i| matches!(b.targets[*i].what, TargetKind::Player(_)))
+        .collect();
+    if added.len() != 1 {
+        b.targets.truncate(before);
+        return None;
+    }
+    let spec = &mut b.targets[added[0]];
+    if let TargetKind::Player(pf) = &spec.what {
+        spec.what = TargetKind::Player(PlayerFilter::And(vec![
+            pf.clone(),
+            PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(excluded)))),
+        ]));
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "relational: target player other than ~'s owner", priority: 100, parse: target_player_other_than } }

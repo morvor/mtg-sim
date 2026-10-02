@@ -297,10 +297,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut group_start = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
+    // The heads are a comma list ("artifact, enchantment, or creature").
+    let mut comma_list = false;
     loop {
         let (w, rest) = split_word(s);
         let w2 = w.trim_end_matches(',');
         let Some(f) = head_noun(w2) else { break };
+        if w.ends_with(',') {
+            comma_list = true;
+        }
         if !matches!(f, Filter::Subtype(_)) {
             head_subtypes_only = false;
         }
@@ -456,6 +461,32 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 heads.push(Filter::and(vec![last, f]));
                 s = r;
             }
+        }
+    } else if heads.len() > 1 && comma_list {
+        // "target artifact, enchantment, or creature with flying", "artifact, enchantment,
+        // or creature with power 4 or greater": an ability or a power/toughness after a
+        // comma list describes its last item only (the others don't have one). Other
+        // qualifiers ("with mana value 3 or less", "you control") describe them all.
+        let t = s.trim_start();
+        let keyword = |f: &Filter| match f {
+            Filter::HasKeyword(_) => true,
+            Filter::Not(x) => matches!(**x, Filter::HasKeyword(_)),
+            _ => false,
+        };
+        let last_only = parse_with_suffix(t)
+            .filter(|(f, _)| keyword(f))
+            .or_else(|| {
+                parse_stat_suffix(t).filter(|(f, _)| {
+                    matches!(
+                        f,
+                        Filter::Power(..) | Filter::Toughness(..) | Filter::PowerVsBase(_)
+                    )
+                })
+            });
+        if let Some((f, r)) = last_only {
+            let last = heads.pop().unwrap();
+            heads.push(Filter::and(vec![last, f]));
+            s = r;
         }
     }
     let head = if heads.len() == 1 {
