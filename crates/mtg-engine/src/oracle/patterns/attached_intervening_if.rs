@@ -38,7 +38,10 @@ fn attached_intervening_if(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     }) {
         return None;
     }
-    let (cond, _) = parse_static_condition(cond_text, None, ctx)?;
+    let cond = match greatest_power(cond_text) {
+        Some(c) => c,
+        None => parse_static_condition(cond_text, None, ctx)?.0,
+    };
     let effect_orig = &rest[rest.len() - effect.len()..];
     let without = format!("{trigger}, {effect_orig}");
     let mut ability = crate::oracle::triggers::parse_triggered(&without, ctx)?;
@@ -52,6 +55,27 @@ fn attached_intervening_if(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     });
     a.text = t.into();
     Some(vec![ability])
+}
+
+/// "enchanted permanent is a creature with the greatest power among creatures on the
+/// battlefield" (Historian's Wisdom): it's a creature, and no creature among them has
+/// greater power (ties count).
+fn greatest_power(c: &str) -> Option<Condition> {
+    let r = c
+        .strip_prefix("enchanted permanent is a creature with the greatest power among ")
+        .or_else(|| c.strip_prefix("enchanted creature has the greatest power among "))?;
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if !plural || !crate::oracle::phrases::end(tail).is_empty() {
+        return None;
+    }
+    Some(Condition::And(vec![
+        Condition::SelMatches(Sel::AttachedTo, Filter::creature()),
+        Condition::Compare(
+            Value::PowerOf(Box::new(Sel::AttachedTo)),
+            Cmp::Ge,
+            Value::GreatestPower(f),
+        ),
+    ]))
 }
 
 inventory::submit! { AbilityPattern { name: "trigger, if enchanted/equipped [object] [state], [effect not about it]", priority: 70, parse: attached_intervening_if } }

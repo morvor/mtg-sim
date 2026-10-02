@@ -408,3 +408,44 @@ fn arachnus_web_isnt_destroyed_if_the_power_drops_before_it_resolves() {
     assert!(!t.on_battlefield(web));
     assert!(t.in_graveyard(P0, "Arachnus Web"));
 }
+
+#[test]
+fn historians_wisdom_checks_the_greatest_power_on_trigger_and_resolution() {
+    cr!("603.4", "608.2b");
+    ruling!(
+        "Historian's Wisdom",
+        "Historian's Wisdom has an intervening \"if\" clause in its triggered ability. This means that you will draw a card only if the enchanted permanent is a creature with the greatest power both at the time the ability triggers and at the time that it resolves."
+    );
+    supported("Historian's Wisdom");
+    // Grizzly Bears (4/3 with it) against Hill Giant (3/3): a card is drawn.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    let w = in_hand_with_mana(&mut t, P0, "Historian's Wisdom");
+    t.cast(P0, w).target(bears).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 3));
+    assert_eq!(triggers_on_stack(&t, "greatest power"), 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // P1 responds with Giant Growth on the Hill Giant (6/6): no card.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant2 = t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    let w = in_hand_with_mana(&mut t, P0, "Historian's Wisdom");
+    t.cast(P0, w).target(bears).go();
+    t.resolve();
+    assert_eq!(triggers_on_stack(&t, "greatest power"), 1);
+    cast_on(&mut t, P1, "Giant Growth", giant2);
+    assert_eq!(t.hand_size(P0), hand);
+    // Against Craw Wurm (6/4), it doesn't trigger at all.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Craw Wurm");
+    let w = in_hand_with_mana(&mut t, P0, "Historian's Wisdom");
+    t.cast(P0, w).target(bears).go();
+    t.resolve();
+    assert_eq!(triggers_on_stack(&t, "greatest power"), 0);
+}
