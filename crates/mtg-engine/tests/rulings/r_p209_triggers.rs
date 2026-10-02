@@ -72,6 +72,64 @@ fn nurturing_presence_spirit_triggers_the_granted_ability() {
     assert_eq!(t.pt(bears), (3, 3));
 }
 
+/// P0 casts Historian's Wisdom on its Grizzly Bears (4/3 with it) against P1's Elite
+/// Vanguard (2/1); with the trigger on the stack, `respond` runs. Whether P0 drew a card.
+fn historians_wisdom(respond: impl FnOnce(&mut TestGame, ObjectId, ObjectId)) -> bool {
+    supported("Historian's Wisdom");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Elite Vanguard");
+    let w = in_hand_with_mana(&mut t, P0, "Historian's Wisdom");
+    let hand = t.hand_size(P0);
+    t.cast(P0, w).target(bears).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "the trigger");
+    let w = t.g.current(w);
+    respond(&mut t, bears, w);
+    t.settle();
+    t.resolve_all();
+    t.hand_size(P0) > hand
+}
+
+#[test]
+fn historians_wisdom_creature_gone_first_means_the_aura_enchanted_nothing() {
+    cr!("603.4", "608.2h", "704.5m");
+    ruling!(
+        "Historian's Wisdom",
+        "If the enchanted creature leaves the battlefield in response to the triggered ability but the Aura is still on the battlefield, the Aura will be put into its owner's graveyard as a state-based action. In that case, the last time it was on the battlefield, it wasn't enchanting a permanent, and its controller will not draw a card."
+    );
+    // The creature leaves first; the Aura follows as a state-based action: no card.
+    assert!(!historians_wisdom(|t, bears, _| {
+        move_to(t, bears, Zone::Hand(P0));
+        assert!(t.in_graveyard(P0, "Historian's Wisdom"));
+    }));
+    // Only the Aura leaves: as it last existed, it enchanted the Bears, which still have
+    // the greatest power (2, tied with the Vanguard).
+    assert!(historians_wisdom(|t, _, w| {
+        move_to(t, w, Zone::Hand(P0));
+    }));
+    // Both leave at the same time: the Aura was still enchanting the Bears, whose last
+    // known power is 4.
+    assert!(historians_wisdom(|t, bears, w| {
+        let moves = [bears, w]
+            .into_iter()
+            .map(|o| mtg_engine::replacement::MoveEv {
+                obj: o,
+                to: Zone::Hand(P0),
+                pos: mtg_engine::ability::LibraryPosition::Top,
+                cause: mtg_engine::events::MoveCause::Effect,
+                by: None,
+                etb: Default::default(),
+                source: None,
+            })
+            .collect();
+        t.g.move_objects(moves);
+        t.g.flush_events();
+    }));
+}
+
 // ---------------------------------------------------------------------------------------
 // Upkeep triggers and Curses
 // ---------------------------------------------------------------------------------------

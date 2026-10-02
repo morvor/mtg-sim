@@ -131,9 +131,12 @@ fn splinter_twin_legendary_copy_triggers_the_legend_rule() {
     attach_new(&mut t, P0, "Splinter Twin", isamaru);
     t.set_step(P0, Step::PrecombatMain);
     activate_containing(&mut t, P0, isamaru, "Create a token").unwrap();
-    t.resolve_all();
-    let all = t.named_on_battlefield("Isamaru, Hound of Konda");
-    assert_eq!(all.len(), 1);
+    t.settle();
+    // The ability resolves: two of them, until state-based actions are checked.
+    t.g.resolve_top();
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 2);
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 1);
 }
 
 /// P0 controls two `aura`s attached to two Grizzly Bears (P1's if `steal`, else P0's), and
