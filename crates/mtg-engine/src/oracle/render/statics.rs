@@ -48,6 +48,23 @@ fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        // "Cast this spell only during combat": no player can cast it unless (CR 601.3).
+        if let (
+            Some(Condition::Not(c)),
+            StaticEffect::Restriction(Restriction::CantCast {
+                who: PlayerFilter::Any,
+                what: Filter::Source,
+            }),
+        ) = (&s.condition, &s.effect)
+        {
+            let m = self.me();
+            let when = match c.as_ref() {
+                Condition::YourTurn => "during your turn".to_string(),
+                Condition::Phase(PhaseCond::Combat) => "during combat".to_string(),
+                other => format!("if {}", self.condition(other)),
+            };
+            return format!("Cast {m} only {when}.");
+        }
         // CR 716.2a: the abilities printed with a class level bar: "As long as this Class
         // is level N or greater, it has [abilities]" (the bar is the activated ability).
         if let (

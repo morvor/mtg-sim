@@ -991,6 +991,24 @@ impl Renderer<'_> {
             }
             TriggerCond::FirstTimeEachTurn(inner) => {
                 let e = self.trigger_event(inner, det);
+                // "Whenever you cast your first instant or sorcery spell each turn".
+                let first =
+                    e.vp.strip_prefix("cast a ")
+                        .or_else(|| e.vp.strip_prefix("cast an "))
+                        .filter(|r| e.subj == "you" && r.contains("spell") && !r.contains('{'));
+                if let Some(r) = first {
+                    let (head, tail) = match r.find("spell") {
+                        Some(i) => (&r[..i + 5], &r[i + 5..]),
+                        None => (r, ""),
+                    };
+                    let a = e.vp.strip_prefix("cast ").unwrap_or(&e.vp);
+                    return Ev::new(
+                        e.subj.clone(),
+                        format!(
+                            "cast {{alt:{a} for the first time each turn|your first {head}{tail} each turn}}"
+                        ),
+                    );
+                }
                 Ev::new(e.subj, format!("{} for the first time each turn", e.vp))
             }
             TriggerCond::Batched { trigger, per } => {
