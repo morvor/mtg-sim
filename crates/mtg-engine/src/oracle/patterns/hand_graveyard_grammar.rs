@@ -406,7 +406,7 @@ fn record(e: Effect, b: &mut Builder) -> Effect {
         e,
         Effect::StoreValue {
             var: THAT_MANY,
-            value: Value::Prev,
+            value: Value::CountSel(Box::new(Sel::Var(vars::IT))),
         },
         Effect::Store {
             var: AFFECTED,
@@ -430,6 +430,18 @@ pub fn acted(b: &Builder) -> bool {
 fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (who, third, r) = subject_verb(l, b, "discard")?;
+    // "discard one of them": among the cards the text is about.
+    if let Some((Sel::Choose { filter, count, .. }, tail)) = some_of_them(&r, b, &who) {
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Effect::Discard {
+            who,
+            n: count,
+            random: false,
+            filter,
+        });
+    }
     let r = r.strip_suffix(" at random").map_or(r.clone(), str::to_string);
     let (c, rest) = cards(&r, b, Some(&who))?;
     if !end(&rest).is_empty() {
@@ -1028,3 +1040,200 @@ fn s_zone_keyword_grant(
 }
 
 inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: cards in a zone have [keyword]", priority: 300, parse: s_zone_keyword_grant } }
+
+// ---------------------------------------------------------------------------
+// Whole zones and lists: "exile your hand", "exile all creatures and graveyards",
+// "exile any number of target players' graveyards", "exile ~ and all cards from all
+// graveyards"
+// ---------------------------------------------------------------------------
+
+/// A whole hand or graveyard: "your hand", "that player's graveyard", "target player's
+/// graveyard", "graveyards", "all graveyards", "any number of target players'
+/// graveyards". Returns the cards in it.
+fn whole_zone<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
+    let s = s.trim_start();
+    for p in ["any number of target players' ", "any number of target opponents' "] {
+        if let Some(r) = s.strip_prefix(p) {
+            let (zones, rest) = zone_word(r)?;
+            let [zone] = zones[..] else { return None };
+            let pf = if p.contains("opponents") {
+                PlayerFilter::Opponent
+            } else {
+                PlayerFilter::Any
+            };
+            let mut spec = TargetSpec::player(pf, p.trim_end());
+            spec.min = 0;
+            spec.max = Value::Const(99);
+            let it = b.it.clone();
+            let slot = b.add_target(spec, p.trim_end());
+            b.it = it;
+            return Some((
+                Filter::and(vec![
+                    Filter::InZone(zone),
+                    Filter::OwnedBy(PlayerRel::Target(slot)),
+                ]),
+                rest,
+            ));
+        }
+    }
+    let saved = (b.targets.len(), b.it_player.clone());
+    let (owner, rest) = match s.strip_prefix("all ").or_else(|| s.strip_prefix("each ")) {
+        Some(r) if r.starts_with("graveyards") || r.starts_with("hands") || r.starts_with("graveyard") => (None, r),
+        _ if s.starts_with("graveyards") || s.starts_with("hands") => (None, s),
+        _ => match owner_phrase(s, b, None) {
+            Some((Some(o), _, r)) => (Some(o), r),
+            _ => {
+                b.targets.truncate(saved.0);
+                b.it_player = saved.1;
+                return None;
+            }
+        },
+    };
+    let Some((zones, rest)) = zone_word(rest) else {
+        b.targets.truncate(saved.0);
+        b.it_player = saved.1;
+        return None;
+    };
+    let zone = if zones.len() == 1 {
+        Filter::InZone(zones[0])
+    } else {
+        Filter::Or(zones.into_iter().map(Filter::InZone).collect())
+    };
+    let mut parts = vec![Filter::Card, zone];
+    parts.extend(owner);
+    Some((Filter::and(parts), rest))
+}
+
+/// One item of an exile list: a whole zone, cards in a zone, "~", or "all [permanents]
+/// [from the battlefield]".
+fn exile_item<'a>(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    let s = s.trim_start();
+    if let Some((f, rest)) = whole_zone(s, b) {
+        return Some((Sel::All(f), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("~") {
+        if word_end(r) {
+            return Some((Sel::This, r.to_string()));
+        }
+    }
+    let saved = b.targets.len();
+    if let Some((c, rest)) = cards(s, b, Some(&PlayerRef::You)) {
+        if c.zone.is_some() && matches!(c.qty, Qty::All) {
+            return Some((Sel::All(c.filter), rest));
+        }
+    }
+    b.targets.truncate(saved);
+    let r = s.strip_prefix("all ")?;
+    let (f, _, rest) = parse_object_phrase(r)?;
+    if super::statics::mentions_other_zones(&f) {
+        return None;
+    }
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix("from the battlefield").unwrap_or(rest);
+    Some((Sel::All(f), rest.to_string()))
+}
+
+/// "Exile all creatures and graveyards.", "Exile ~ and all cards from all graveyards.",
+/// "Exile all artifacts, creatures, and lands from the battlefield, all cards from all
+/// graveyards, and all cards from all hands.", "exile your hand", "exile any number of
+/// target players' graveyards": everything named is exiled at once.
+fn p_exile_list(l: &str, b: &mut Builder) -> Option<Effect> {
+    let mut r = end(l).strip_prefix("exile ")?.to_string();
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut items = Vec::new();
+    loop {
+        let Some((sel, rest)) = exile_item(&r, b) else {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            return None;
+        };
+        items.push(sel);
+        let t = rest.trim_start();
+        if t.is_empty() {
+            break;
+        }
+        r = match t
+            .strip_prefix(", and ")
+            .or_else(|| t.strip_prefix("and "))
+            .or_else(|| t.strip_prefix(", "))
+        {
+            Some(x) => x.to_string(),
+            None => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+                return None;
+            }
+        };
+    }
+    let what = if items.len() == 1 {
+        items.pop()?
+    } else {
+        Sel::Union(items)
+    };
+    Some(record(
+        Effect::Exile {
+            what,
+            face_down: false,
+            link: false,
+        },
+        b,
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile zones and lists", priority: 310, parse: p_exile_list } }
+
+/// "sacrifice any number of permanents you control", "sacrifice any number of other
+/// permanents": the player chooses which (CR 701.21a); "that many" afterwards is the
+/// number sacrificed.
+fn p_sacrifice_any(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("sacrifice any number of ")?;
+    let (f, _, rest) = parse_object_phrase(r)?;
+    if !rest.trim().is_empty() || super::statics::mentions_other_zones(&f) {
+        return None;
+    }
+    let f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
+    let e = Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: f.clone(),
+                count: Value::CountSel(Box::new(Sel::All(f))),
+                up_to: true,
+                store: None,
+            },
+        },
+        Effect::SacrificeObjects {
+            what: Sel::Var(CHOSEN),
+        },
+    ]);
+    Some(record(e, b))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: sacrifice any number", priority: 300, parse: p_sacrifice_any } }
+
+/// "draw three cards, then discard one of them", "draw two cards, then put one of them
+/// on the bottom of your library": "them" are the cards drawn.
+fn p_draw_then_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (first, second) = end(l).split_once(", then ")?;
+    if !second.contains(" of them") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let draw = crate::oracle::effects::parse_simple(first, b)
+        .filter(|e| matches!(e, Effect::Draw { who: PlayerRef::You, .. }));
+    let Some(draw) = draw else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    b.it = Sel::Var(vars::REVEALED);
+    let Some(then) = crate::oracle::effects::parse_simple(second, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::seq(vec![draw, then]))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: draw, then [verb] N of them", priority: 300, parse: p_draw_then_of_them } }
