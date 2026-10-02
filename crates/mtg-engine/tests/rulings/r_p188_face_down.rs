@@ -11,6 +11,7 @@ use crate::r_s06_common::give_control;
 use crate::r_s11_common::turn_face_up;
 use crate::r_s19_common::{chaos, planechase_game, start_planar_deck};
 use crate::r_s28_common::cast_card;
+use mtg_engine::ability::{Duration, Effect, Sel};
 use mtg_engine::facedown::can_look_at;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
@@ -304,4 +305,102 @@ fn plant_tadpoles_taps_creatures_that_skip_their_next_untap() {
     t.advance_to(P0, Step::Upkeep);
     t.advance_to(P1, Step::Upkeep);
     assert!(!t.obj_now(b1).tapped && !t.obj_now(b2).tapped);
+}
+
+#[test]
+fn an_already_face_down_permanent_isnt_given_the_listed_characteristics() {
+    cr!("708.2b");
+    // Cyber Conversion at a creature that's already face down: nothing happens, it stays a
+    // plain face-down 2/2, not a Cyberman artifact.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, giant));
+    t.g.recompute();
+    cyber_conversion(&mut t, P0, giant);
+    assert!(nameless_colorless_2_2(&t, giant));
+    assert!(!is_cyberman(&t, giant));
+    // Turned face up and face down again by an effect listing nothing: still no Cyberman.
+    let fd = t.g.current(giant);
+    mtg_engine::facedown::turn_face_up(&mut t.g, fd, false);
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, fd));
+    t.g.recompute();
+    assert!(!is_cyberman(&t, giant));
+
+    // Illithid Harvester at a face-down and a face-up creature: only the one it turns face
+    // down becomes a Horror.
+    let mut t = TestGame::new(2);
+    let fd = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, fd));
+    for id in [fd, bears] {
+        t.g.objects[id.0 as usize].tapped = true;
+    }
+    t.g.recompute();
+    t.answer_targets(P0, &[o(fd), o(bears)]);
+    t.enter(P0, "Illithid Harvester // Plant Tadpoles");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert!(t.obj_now(bears).chars.has_subtype("Horror"));
+    assert!(nameless_colorless_2_2(&t, fd));
+    assert!(!t.obj_now(fd).chars.has_subtype("Horror"));
+}
+
+#[test]
+fn illithid_harvesters_face_down_permanents_stay_distinguishable() {
+    cr!("708.6", "708.10");
+    ruling!(
+        "Illithid Harvester // Plant Tadpoles",
+        "Once the permanents are face down, no player may mix them up on the battlefield or otherwise try to hide or disguise which card is which."
+    );
+    // Turning a permanent face down isn't a zone change: each Horror is the same object
+    // as before, with its counters and tapped status, so every player can still tell
+    // which card is which (though only its controller may look at it). One turned face
+    // down by another effect (listing nothing) is told apart as a plain 2/2.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.g.add_counters(o(giant), counters::PLUS1, 1, None);
+    for id in [giant, bears] {
+        t.g.objects[id.0 as usize].tapped = true;
+    }
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, elves));
+    t.g.recompute();
+    t.answer_targets(P0, &[o(giant), o(bears)]);
+    t.enter(P0, "Illithid Harvester // Plant Tadpoles");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    for id in [giant, bears] {
+        assert_eq!(t.g.current(id), id);
+        assert!(t.g.is_live(id) && t.obj(id).face_down && t.obj(id).tapped);
+        assert!(t.obj(id).chars.has_subtype("Horror"));
+        assert!(!can_look_at(&t.g, P0, id) && can_look_at(&t.g, P1, id));
+    }
+    assert_eq!(t.counters(giant, counters::PLUS1), 1);
+    assert_eq!(t.pt(giant), (3, 3));
+    assert_eq!(t.pt(bears), (2, 2));
+    assert!(t.obj(elves).face_down && !t.obj(elves).chars.has_subtype("Horror"));
+    // CR 708.10: a face-down Horror that becomes a copy of another creature keeps its
+    // face-down characteristics; turned face up, it's the copied creature.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    let angel = t.battlefield(P0, "Serra Angel");
+    ctx.targets = vec![vec![o(bears)], vec![o(angel)]];
+    t.g.exec(
+        &Effect::BecomeCopy {
+            what: Sel::Target(0),
+            of: Sel::Target(1),
+            duration: Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t.obj(bears).chars.has_subtype("Horror") && t.obj(bears).chars.name.is_empty());
+    assert_eq!(t.pt(bears), (2, 2));
+    mtg_engine::facedown::turn_face_up(&mut t.g, bears, false);
+    t.g.recompute();
+    assert_eq!(t.obj(bears).chars.name, "Serra Angel");
+    assert!(!t.obj(bears).chars.has_subtype("Horror"));
+    assert_eq!(t.pt(bears), (4, 4));
 }

@@ -857,6 +857,9 @@ pub mod vars {
     /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
     /// this way"): not those that were already tapped.
     pub const TAPPED: Var = USER + 3066;
+    /// Permanents the most recent "turn ... face down" instruction turned face down: not
+    /// those that already were face down or couldn't be (CR 708.2b, 712.16).
+    pub const TURNED_FACE_DOWN: Var = USER + 7088;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its

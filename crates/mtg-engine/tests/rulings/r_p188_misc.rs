@@ -104,6 +104,21 @@ fn dune_diviner_cant_tap_one_desert_for_both_costs() {
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
     assert!(t.obj(desert).tapped && t.obj(mountain).tapped);
+    assert!(t.g.player(P0).mana_pool.is_empty());
+
+    // A failed first try at paying (the Desert tapped for the {1}) is undone completely:
+    // Manabarbs triggers once, for the Mountain, not also for the Desert.
+    supported("Manabarbs");
+    let mut t = TestGame::new(2);
+    let dd = t.battlefield(P0, "Dune Diviner");
+    let desert = t.battlefield(P0, "Desert of the Fervent");
+    let mountain = t.battlefield(P0, "Mountain");
+    t.battlefield(P1, "Manabarbs");
+    t.activate(P0, dd, 0, &[]).expect("diviner");
+    t.resolve_all();
+    assert!(t.obj(desert).tapped && t.obj(mountain).tapped);
+    assert!(t.g.player(P0).mana_pool.is_empty());
+    assert_eq!(t.life(P0), 20, "1 life gained, 1 damage from Manabarbs");
 }
 
 #[test]

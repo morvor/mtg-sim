@@ -248,9 +248,15 @@ impl Game {
     /// entering: the card is checked as it exists in its current zone, before it would
     /// move (Kunoros, Hound of Athreos; Grafdigger's Cage).
     pub fn cant_enter_from_its_zone(&self, obj: ObjectId) -> bool {
-        let Some(zone) = self.obj(obj).zone.kind() else {
-            return false;
-        };
+        match self.obj(obj).zone.kind() {
+            Some(zone) => self.cant_enter_from(obj, zone),
+            None => false,
+        }
+    }
+
+    /// Whether "[cards] in [zones] can't enter the battlefield" stops `obj`, as it
+    /// currently exists, from entering from `zone`.
+    pub(crate) fn cant_enter_from(&self, obj: ObjectId, zone: ZoneKind) -> bool {
         let check = |r: &Restriction, ctx: &Ctx| match r {
             Restriction::CantEnterFrom { what, zones } => {
                 zones.contains(&zone) && self.matches(obj, what, ctx)

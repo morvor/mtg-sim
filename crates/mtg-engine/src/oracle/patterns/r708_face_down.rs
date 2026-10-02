@@ -56,8 +56,10 @@ fn f_face_down_listed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     *prev = Effect::Seq(vec![
         Effect::TurnFaceDown { what },
+        // Only the permanents this turned face down (CR 708.2b: one that already was face
+        // down doesn't get the listed characteristics).
         Effect::Modify {
-            what: w,
+            what: Sel::Var(vars::TURNED_FACE_DOWN),
             mods,
             duration: Duration::WhileFaceDown,
         },

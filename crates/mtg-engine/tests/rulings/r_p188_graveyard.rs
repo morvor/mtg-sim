@@ -245,6 +245,24 @@ fn weathered_runestone_stops_nonland_permanent_cards_and_casting_from_those_zone
     let ring = t.graveyard(P0, "Sol Ring");
     cast_at(&mut t, P0, "Argivian Restoration", ring);
     assert!(t.on_battlefield(ring));
+    // Sculpting Steel (a nonland card in the graveyard) can't enter even as a copy of an
+    // artifact land, which it would be on the battlefield; without the Runestone it can.
+    for runestone in [true, false] {
+        let mut t = TestGame::new(2);
+        if runestone {
+            t.battlefield(P1, "Weathered Runestone");
+        }
+        let seat = t.battlefield(P1, "Seat of the Synod");
+        let steel = t.graveyard(P0, "Sculpting Steel");
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[o(seat)]);
+        cast_at(&mut t, P0, "Argivian Restoration", steel);
+        let s = t.g.current(steel);
+        assert_eq!(t.on_battlefield(s), !runestone);
+        if !runestone {
+            assert!(t.obj(s).is(CardType::Land));
+        }
+    }
 }
 
 #[test]
@@ -354,4 +372,46 @@ fn ramunap_excavator_doesnt_change_when_lands_can_be_played() {
     let island = t.hand(P0, "Island");
     t.play_land(P0, island).expect("land from hand");
     assert!(!can_play_land(&mut t, P0, forest));
+}
+
+#[test]
+fn grafdiggers_cage_makes_manifesting_from_a_library_impossible() {
+    cr!("701.40a", "701.40f", "708.3");
+    ruling!(
+        "Grafdigger's Cage",
+        "Manifesting a card from a graveyard or library is an impossible action while Grafdigger's Cage is on the battlefield."
+    );
+    supported("Grafdigger's Cage");
+    supported("Soul Summons");
+    // The card is turned face down before it moves: a 2/2 face-down creature card in the
+    // library, even if it's a noncreature card face up. Kunoros (graveyards only) doesn't
+    // stop it.
+    for (blocker, stopped) in [
+        (None, false),
+        (Some("Grafdigger's Cage"), true),
+        (Some("Kunoros, Hound of Athreos"), false),
+    ] {
+        for top in ["Lightning Bolt", "Hill Giant"] {
+            let mut t = TestGame::new(2);
+            if let Some(b) = blocker {
+                t.battlefield(P1, b);
+            }
+            let card = t.library_top(P0, top);
+            t.lands(P0, "Plains", 2);
+            let spell = t.hand(P0, "Soul Summons");
+            t.cast(P0, spell).go();
+            t.resolve_all();
+            let c = t.g.current(card);
+            let msg = format!("{blocker:?} {top}");
+            if stopped {
+                // CR 701.40f: it isn't manifested; it stays in the library, face up.
+                assert_eq!(t.zone(c), Zone::Library(P0), "{msg}");
+                assert!(!t.obj(c).face_down, "{msg}");
+                assert_eq!(t.obj(c).chars.name, top, "{msg}");
+            } else {
+                assert!(t.on_battlefield(c), "{msg}");
+                assert!(t.obj(c).face_down, "{msg}");
+            }
+        }
+    }
 }
