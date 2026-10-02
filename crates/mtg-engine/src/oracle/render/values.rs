@@ -456,7 +456,19 @@ impl Renderer<'_> {
             Condition::PlayerMatches(p, pf) => {
                 let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, false);
-                format!("{subj} {pred}")
+                // "an opponent has less life than you" is said from your side: "you have
+                // more life than an opponent".
+                let mirrored = match pred.as_str() {
+                    "has less life than you" => Some("more life"),
+                    "has fewer cards in hand than you" => Some("more cards in hand"),
+                    _ => None,
+                };
+                match mirrored {
+                    Some(m) if !subj.contains(['{', '|', '}']) => {
+                        format!("{{alt:{subj} {pred}|you have {m} than {subj}}}")
+                    }
+                    _ => format!("{subj} {pred}"),
+                }
             }
             Condition::YourTurn => "it's your turn".into(),
             Condition::NotYourTurn => "it's not your turn".into(),

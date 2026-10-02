@@ -550,7 +550,16 @@ impl Renderer<'_> {
                         && !matches!(count, Value::Var(_) | Value::Prev) =>
                     {
                         let n = self.noun_det(filter, Det::Plural);
-                        let k = self.value(count);
+                        let mut k = self.value(count);
+                        // A number remembered before the reveal, performed as the
+                        // revealing player: its "you" is still the controller.
+                        if self.in_as_player {
+                            k = format!(" {k}")
+                                .replace(" you", &format!(" {}you", super::KEEP_YOU))
+                                .replace(" your", &format!(" {}your", super::KEEP_YOU))
+                                .trim_start()
+                                .to_string();
+                        }
                         format!("a number of {n} equal to {k}")
                     }
                     _ => self.sel(&what, Case::Obj),

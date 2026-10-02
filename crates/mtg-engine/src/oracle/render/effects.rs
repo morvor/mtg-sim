@@ -363,7 +363,9 @@ impl Renderer<'_> {
                 let w = self.player(who, Case::Subj);
                 // Performed as that player: "you" in the instruction is that player
                 // ("target player loses 4 life").
+                let saved = std::mem::replace(&mut self.in_as_player, true);
                 let inner = self.effect(effect);
+                self.in_as_player = saved;
                 let inner = inner.strip_prefix("you ").unwrap_or(&inner);
                 // "loses 3 life unless they discard a card" / "... unless that player
                 // discards a card": the same player performs the alternative.
@@ -411,7 +413,12 @@ impl Renderer<'_> {
                     .replace(" you.", " them.")
                     // "Target players each mill a card and lose 1 life."
                     .replace(". they ", " and ");
-                format!("{w} {}", third_person(inner.trim()))
+                let s = format!("{w} {}", third_person(inner.trim()));
+                if self.in_as_player {
+                    s
+                } else {
+                    s.replace(super::KEEP_YOU, "")
+                }
             }
             // "... If [condition], repeat this process." (CR 608.2c)
             Effect::RepeatProcess { body } => self.effect(body),
@@ -2430,12 +2437,19 @@ impl Renderer<'_> {
                     if p == "you" {
                         pays
                     } else {
-                        // The payment is worded for the player who pays.
-                        let pays = format!(" {pays} ")
+                        // The payment is worded for the player who pays. How many times a
+                        // repeated payment is made ("{1} for each artifact you control") is
+                        // counted for the ability's controller before anyone pays
+                        // (`cumulative_upkeep::expand_repeated`), so "you" there stays.
+                        let (head, each) = match pays.split_once(" for each ") {
+                            Some((h, e)) => (h.to_string(), format!(" for each {e}")),
+                            None => (pays.clone(), String::new()),
+                        };
+                        let head = format!(" {head} ")
                             .replace(" your ", " their ")
                             .replace(" you control", " they control")
                             .replace(" to you ", " to them ");
-                        third_person(pays.trim())
+                        format!("{}{each}", third_person(head.trim()))
                     }
                 })
                 .collect();

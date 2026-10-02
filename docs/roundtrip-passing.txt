@@ -126,6 +126,7 @@ Acolyte of the Inferno
 Acorn Harvest
 Acquired Mutation
 Acquisition Octopus
+Acquisitions Expert
 Acridian
 Acrobatic Leap
 Acrobatic Maneuver
@@ -1264,6 +1265,7 @@ Bakersbane Duo
 Baku Altar
 Bala Ged Recovery // Bala Ged Sanctuary
 Bala Ged Scorpion
+Bala Ged Thief
 Balamb Garden, SeeD Academy // Balamb Garden, Airborne
 Balamb T-Rexaur
 Baldur's Gate
@@ -4685,6 +4687,7 @@ Disciple of Grace
 Disciple of Griselbrand
 Disciple of Law
 Disciple of Malice
+Disciple of Phenax
 Disciple of Tevesh Szat
 Disciple of the Old Ways
 Disciple of the Ring
@@ -6346,6 +6349,7 @@ Fetid Horror
 Fetid Imp
 Fetid Pools
 Fettergeist
+Feudkiller's Verdict
 Fever Charm
 Fevered Convulsions
 Fey Steed
@@ -7523,6 +7527,7 @@ Glorifier of Suffering
 Glorious Anthem
 Glorious Charge
 Glorious Decay
+Glorious Enforcer
 Glorious Gale
 Glorious Sunrise
 Glory
@@ -10086,6 +10091,7 @@ Kjeldoran Skyknight
 Kjeldoran War Cry
 Kjeldoran Warrior
 Klauth, Unrivaled Ancient
+Klaw, Sonic Subjugator
 Klothys's Design
 Klothys, God of Destiny
 Knacksaw Clique
@@ -11713,6 +11719,7 @@ Mire Triton
 Mire in Misery
 Mire's Grasp
 Mire's Malice
+Mire's Toll
 Mirelurk Queen
 Miren, the Moaning Well
 Miriam, Herd Whisperer
@@ -13052,6 +13059,7 @@ Overlord of the Boilerbilges
 Overlord of the Floodpits
 Overlord of the Mistmoors
 Overprotect
+Override
 Overrule
 Overrun
 Overseer of the Damned
@@ -13863,6 +13871,7 @@ Prosthetic Injector
 Protean Hulk
 Protean Thaumaturge
 Protect // Serve
+Protect the Negotiators
 Protection Magic
 Protection of the Hekma
 Protective Parents
@@ -17246,6 +17255,7 @@ Spell Snare
 Spell Snip
 Spell Snuff
 Spell Swindle
+Spell Syphon
 Spellbinder
 Spellbook
 Spellbook Seeker // Careful Study
@@ -18186,6 +18196,7 @@ Surveillance Room
 Surveilling Sprite
 Survey Mechan
 Survey the Wreckage
+Survival Cache
 Survive the Night
 Survivor of Korlis
 Survivor of the Unseen

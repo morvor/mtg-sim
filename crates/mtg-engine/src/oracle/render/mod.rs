@@ -531,6 +531,10 @@ pub struct Renderer<'a> {
     /// The last instruction rendered was performed by a player other than you ("If they
     /// do, ...").
     pub(crate) last_actor_other: bool,
+    /// Inside an instruction performed as another player (`Effect::AsPlayer`), whose
+    /// "you" is reworded for that player; text about the controller made there is marked
+    /// with [`KEEP_YOU`] so it isn't.
+    pub(crate) in_as_player: bool,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
     /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
@@ -614,6 +618,7 @@ impl<'a> Renderer<'a> {
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
+            in_as_player: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
             other_salient: false,
@@ -1162,6 +1167,10 @@ pub fn zone_word(z: ZoneKind) -> &'static str {
 pub fn counter_name(k: &str) -> String {
     format!("{k} counter")
 }
+
+/// Marks a "you" that means the ability's controller inside an instruction performed as
+/// another player (removed when that instruction is put into words).
+pub(crate) const KEEP_YOU: char = '\u{1}';
 
 impl Renderer<'_> {
     /// Renders `f` with an event in scope (see [`Renderer::event_scope`]).
