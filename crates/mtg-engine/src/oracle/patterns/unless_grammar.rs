@@ -554,7 +554,18 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
     );
     let r = (|| {
         let effect = parse_clause(eff, b)?;
-        let cond = crate::oracle::patterns::conditions_referents::parse_condition_with(&c, b)?;
+        let cond = crate::oracle::patterns::conditions_referents::parse_condition_with(&c, b)
+            .or_else(|| {
+                // "sacrifice it unless {U} was spent to cast it": "it" is ~.
+                if !matches!(b.it, Sel::This) {
+                    return None;
+                }
+                let words: Vec<&str> = c
+                    .split(' ')
+                    .map(|w| if w == "it" { "~" } else { w })
+                    .collect();
+                crate::oracle::statics::parse_condition(&words.join(" "), b.ctx)
+            })?;
         Some(Effect::If {
             cond: Condition::Not(Box::new(cond)),
             then: Box::new(effect),
@@ -568,3 +579,221 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "unless grammar: [effect] unless [condition about a referent]", priority: 860, parse: unless_state } }
+
+/// A static ability of one object that applies unless a condition holds: "~ has hexproof
+/// unless it's attacking", "~ isn't a creature unless you control three or more
+/// permanents you don't own", "enchanted creature gets +2/+2 unless [condition]". The
+/// effect applies while the condition is false, checked continuously.
+fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (body, c) = l.rsplit_once(" unless ")?;
+    // One object: a group's condition would be about each of its objects.
+    let it = if body.starts_with("~ ") || body.starts_with("~'s ") {
+        Sel::This
+    } else if ["enchanted creature ", "equipped creature ", "enchanted permanent "]
+        .iter()
+        .any(|p| body.starts_with(p))
+    {
+        Sel::AttachedTo
+    } else {
+        return None;
+    };
+    if body.contains(" unless ") || body.contains(" as long as ") || body.contains(" if ") {
+        return None;
+    }
+    // "enchanted creature doesn't untap during its controller's untap step unless that
+    // player is the monarch": that player is its controller.
+    let that_player = c.strip_prefix("that player ").filter(|_| body.contains(" its controller"));
+    let cond = match that_player {
+        Some(pred) => Condition::PlayerMatches(
+            PlayerRef::ControllerOf(Box::new(it.clone())),
+            crate::oracle::patterns::statics_conditions::player_predicate(pred)?,
+        ),
+        None => {
+            crate::oracle::patterns::statics_conditions::parse_static_condition(c, Some(&it), ctx)?
+                .0
+        }
+    };
+    // The original wording of the body (patterns may read names from it).
+    let cut = text.to_lowercase().rfind(" unless ")?;
+    let body_text = format!("{}.", &text[..cut]);
+    let mut abilities = crate::oracle::statics::parse_static(&body_text, ctx)?;
+    if abilities.is_empty() {
+        return None;
+    }
+    let not = Condition::Not(Box::new(cond));
+    for a in abilities.iter_mut() {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let mut s = s.clone();
+        s.condition = Some(match s.condition.take() {
+            Some(inner) => Condition::And(vec![inner, not.clone()]),
+            None => not.clone(),
+        });
+        *a = AbilityDef::new(AbilityKind::Static(s), text);
+    }
+    Some(abilities)
+}
+
+inventory::submit! { super::StaticPattern { name: "unless grammar: [static of one object] unless [condition]", priority: 900, parse: static_unless } }
+
+/// The cost of one creature's attack or block, after "unless [its controller]" (the
+/// creature's controller is who pays, CR 508.1d, 509.1c): "pays {2}", "pays {1} for each
+/// +1/+1 counter on it", "pays {X} ..., where X is the number of enchantments you control",
+/// "sacrifices a land of their choice", "returns an enchantment you control to its
+/// owner's hand", "sacrifice two Islands". `per_creature`: how the text says the cost is
+/// for each creature ("for each creature they control that's attacking you", "for each of
+/// those creatures"), already removed. Amounts are counted as the cost is determined
+/// (from the point of view of the ability's controller).
+fn tax_cost(action: &str, where_x: Option<&str>, it: &Sel, b: &mut Builder) -> Option<Cost> {
+    if let Some(r) = action.strip_prefix("pays ").or_else(|| action.strip_prefix("pay ")) {
+        if let Some(w) = where_x {
+            if r != "{x}" {
+                return None;
+            }
+            let (v, rest) = parse_value_phrase(w, b)?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            return Some(Cost::default().with(CostPart::Repeated {
+                cost: Box::new(resolution_cost("{1}")?),
+                times: v,
+            }));
+        }
+        if let Some((c, each)) = r.split_once(" for each ") {
+            let times = super::statics::parse_for_each(each, Some(it))?;
+            return Some(Cost::default().with(CostPart::Repeated {
+                cost: Box::new(resolution_cost(c)?),
+                times,
+            }));
+        }
+        return resolution_cost(r);
+    }
+    if where_x.is_some() || action.contains(" for each ") {
+        return None;
+    }
+    let pays = payments(action, b)?;
+    match pays.as_slice() {
+        [Payment { cost, x: None }] => Some(cost.clone()),
+        _ => None,
+    }
+}
+
+/// Attack and block taxes (CR 508.1d, 508.1h, 509.1c, 509.1d): "[creatures] can't attack
+/// [you [or planeswalkers you control]] unless their controller pays [cost] [for each
+/// creature they control that's attacking you]", "enchanted creature can't attack or block
+/// unless its controller pays {3}", "~ can't attack unless you sacrifice two Islands",
+/// "black creatures can't attack unless their controller sacrifices a land of their choice
+/// for each black creature they control that's attacking".
+fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (head, rest) = l.split_once(" unless ")?;
+    let i = head.find(" can't ")?;
+    let (subj, pred) = (&head[..i], &head[i + 1..]);
+    let (attack, block, defender_s) = if let Some(d) = pred.strip_prefix("can't attack or block") {
+        (true, true, d)
+    } else if let Some(d) = pred.strip_prefix("can't attack") {
+        (true, false, d)
+    } else if pred == "can't block" {
+        (false, true, "")
+    } else {
+        return None;
+    };
+    let (defender, planeswalkers) = match defender_s.trim() {
+        "" => (PlayerFilter::Any, true),
+        "you" => (PlayerFilter::You, false),
+        "you or planeswalkers you control" => (PlayerFilter::You, true),
+        _ => return None,
+    };
+    if block && !defender_s.trim().is_empty() {
+        return None;
+    }
+    let (filter, it, own) = match subj {
+        "~" => (Filter::Source, Sel::This, true),
+        "enchanted creature" | "equipped creature" => {
+            (Filter::AttachedToSource, Sel::AttachedTo, false)
+        }
+        s => {
+            let (f, plural, t) = parse_object_phrase(s)?;
+            if !plural || !end(t).is_empty() {
+                return None;
+            }
+            (f, Sel::This, false)
+        }
+    };
+    // Who pays: the creature's controller.
+    let action = if let Some(a) = rest
+        .strip_prefix("their controller ")
+        .or_else(|| rest.strip_prefix("its controller "))
+    {
+        a
+    } else if own {
+        rest.strip_prefix("you ")?
+    } else {
+        return None;
+    };
+    let (action, where_x) = match action.split_once(", where x is ") {
+        Some((a, w)) => (a, Some(w)),
+        None => (action, None),
+    };
+    // The cost is for each creature: the restriction applies to each one.
+    let mut action = action.to_string();
+    for suffix in [
+        " for each of those creatures",
+        " for each blocking creature they control",
+    ] {
+        if let Some(a) = action.strip_suffix(suffix) {
+            action = a.to_string();
+        }
+    }
+    if let Some(at) = action.find(" for each ") {
+        let each = &action[at + " for each ".len()..];
+        if let Some(noun) = each
+            .strip_suffix(" they control that's attacking you")
+            .or_else(|| each.strip_suffix(" they control that's attacking"))
+        {
+            let (f, _, t) = parse_object_phrase(noun)?;
+            if !end(t).is_empty()
+                || !serde_json::to_string(&f)
+                    .unwrap_or_default()
+                    .contains("\"Creature\"")
+            {
+                return None;
+            }
+            action = action[..at].to_string();
+        }
+    }
+    let mut b = Builder::new(ctx);
+    let cost = tax_cost(&action, where_x, &it, &mut b)?;
+    if !b.targets.is_empty() {
+        return None;
+    }
+    let mut out = Vec::new();
+    if attack {
+        out.push(Restriction::AttackCost {
+            attackers: filter.clone(),
+            defender,
+            planeswalkers,
+            cost: cost.clone(),
+        });
+    }
+    if block {
+        out.push(Restriction::BlockCost {
+            blockers: filter,
+            cost,
+        });
+    }
+    Some(
+        out.into_iter()
+            .map(|r| {
+                AbilityDef::new(
+                    AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(r))),
+                    text,
+                )
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::StaticPattern { name: "unless grammar: attack and block taxes", priority: 850, parse: attack_block_tax } }
