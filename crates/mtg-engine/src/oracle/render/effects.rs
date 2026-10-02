@@ -2793,6 +2793,17 @@ impl Renderer<'_> {
             }
             i += 1;
         }
+        // "Until end of turn, target creature gets +0/+2 and another target creature gets
+        // -2/-0": the duration of consecutive effects said once, after the last.
+        for k in 0..parts.len().saturating_sub(1) {
+            if parts[k].ends_with(" until end of turn")
+                && parts[k + 1].ends_with(" until end of turn")
+                && !parts[k].contains('.')
+            {
+                let n = parts[k].len() - " until end of turn".len();
+                parts[k] = format!("{} {{opt:until end of turn}}", &parts[k][..n]);
+            }
+        }
         dedupe_where(&parts.join(". "))
     }
 

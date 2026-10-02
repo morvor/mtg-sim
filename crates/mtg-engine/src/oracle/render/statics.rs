@@ -2579,6 +2579,8 @@ impl Renderer<'_> {
                 let both = to_players.is_some() && to_objects.is_some();
                 let to_that = if both {
                     " {opt:to that player or permanent}"
+                } else if to_players.is_some() {
+                    " {opt:to that player}"
                 } else {
                     ""
                 };
@@ -2590,7 +2592,7 @@ impl Renderer<'_> {
                         let to_that = if anything {
                             " {opt:to that permanent or player}"
                         } else {
-                            ""
+                            to_that
                         };
                         format!("it deals that much damage plus {v}{to_that} instead")
                     }

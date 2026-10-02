@@ -234,6 +234,36 @@ impl Renderer<'_> {
             }
             TriggerCond::EntersBattlefield(f) => Ev::new(obj(self, f), "enters"),
             TriggerCond::LeavesBattlefield(f) => Ev::new(obj(self, f), "leaves the battlefield"),
+            // "Whenever a creature is put into an opponent's graveyard from the
+            // battlefield": a permanent goes to its owner's graveyard (CR 400.3), so it's one
+            // that player owns dying.
+            TriggerCond::Dies(Filter::And(v))
+                if v.iter().any(|x| {
+                    matches!(x, Filter::OwnedBy(PlayerRel::Opponent | PlayerRel::You))
+                }) =>
+            {
+                let o = obj(self, &Filter::And(v.clone()));
+                let whose = if v
+                    .iter()
+                    .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                {
+                    "your"
+                } else {
+                    "an opponent's"
+                };
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|x| !matches!(x, Filter::OwnedBy(_)))
+                    .cloned()
+                    .collect();
+                let n = obj(self, &Filter::and(rest));
+                Ev::new(
+                    "",
+                    format!(
+                        "{{alt:{o} dies|{n} is put into {whose} graveyard from the battlefield}}"
+                    ),
+                )
+            }
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
             // "Whenever a spell or ability an opponent controls destroys a land you
             // control" (CR 701.8).

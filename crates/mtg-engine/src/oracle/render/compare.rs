@@ -174,6 +174,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (a condition or quality, not a count of events).",
     },
     Equivalence {
+        pattern: r"\b(gains?) x life, where x is the damage dealt this way\b",
+        replacement: "$1 that many life",
+        why: "\"You gain life equal to the damage dealt this way\": as much life as that \
+              damage.",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
@@ -1008,6 +1014,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
             (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
+            (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
