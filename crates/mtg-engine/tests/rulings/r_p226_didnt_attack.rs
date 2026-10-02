@@ -1,0 +1,65 @@
+//! Rulings batch P226 — "At the beginning of your end step, if ~ didn't attack this
+//! turn, ..." (CR 603.4, 508.1): Homicidal Brute and Air Nomad Student.
+
+use crate::r_s01_common::*;
+use crate::r_s08_common::is_tapped;
+use crate::r_s17_common::{enter_transformed, name_of};
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::types::*;
+use mtg_engine::*;
+
+const SCHOLAR: &str = "Civilized Scholar // Homicidal Brute";
+
+#[test]
+fn homicidal_brute_taps_and_transforms_even_if_it_couldnt_attack() {
+    cr!("603.4", "508.1", "701.27a", "302.6");
+    ruling!(
+        "Civilized Scholar // Homicidal Brute",
+        "You'll tap and transform Homicidal Brute even if it couldn't attack."
+    );
+    // (Civilized Scholar's ability doesn't compile; Homicidal Brute's does.) "At the
+    // beginning of your end step, if this creature didn't attack this turn, tap this
+    // creature, then transform it." It entered this turn: it couldn't attack.
+    let mut t = TestGame::new(2);
+    let brute = enter_transformed(&mut t, P0, SCHOLAR);
+    assert_eq!(name_of(&t, brute), "Homicidal Brute");
+    assert!(t.obj_now(brute).summoning_sick);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(name_of(&t, brute), "Civilized Scholar");
+    assert!(is_tapped(&t, brute));
+    // It attacked: nothing.
+    let mut t = TestGame::new(2);
+    let brute = enter_transformed(&mut t, P0, SCHOLAR);
+    t.g.objects[brute.0 as usize].summoning_sick = false;
+    t.attack(&[(brute, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 15);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(name_of(&t, brute), "Homicidal Brute");
+}
+
+#[test]
+fn air_nomad_student_grows_on_turns_it_doesnt_attack() {
+    cr!("603.4", "508.1", "702.9b");
+    supported("Air Nomad Student");
+    // Flying. "At the beginning of your end step, if this creature didn't attack this
+    // turn, put a +1/+1 counter on it."
+    let mut t = TestGame::new(2);
+    let student = t.battlefield(P0, "Air Nomad Student");
+    assert!(t.obj_now(student).has_keyword(KeywordKind::Flying));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(student, counters::PLUS1), 1);
+    // Attacking: no counter.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.attack(&[(student, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(student, counters::PLUS1), 1);
+}
