@@ -2881,8 +2881,38 @@ impl Renderer<'_> {
                         join_list(&k, "and")
                     ));
                 }
+                Modification::AddAbilitiesOf { from, which } => {
+                    let kinds = match (which.activated, which.triggered, which.only) {
+                        (_, _, Some(AbilityClass::Loyalty)) => "loyalty",
+                        (_, _, Some(AbilityClass::Mana)) => "mana",
+                        (true, true, _) => "activated and triggered",
+                        (false, true, _) => "triggered",
+                        _ => "activated",
+                    };
+                    let from = self.sel(from, Case::Obj);
+                    let except = match which.except {
+                        Some(AbilityClass::Mana) => " except mana abilities",
+                        Some(AbilityClass::Loyalty) => " except for loyalty abilities",
+                        _ => "",
+                    };
+                    abilities.push(format!("all {kinds} abilities of {from}{except}"));
+                }
                 Modification::RemoveKeyword(k) => {
                     parts.push(format!("loses {}", self.keyword_kind_word(*k)))
+                }
+                Modification::LoseKeywordWithQuality { kind, quality } => {
+                    let k = match quality {
+                        Some(q) => {
+                            let mut kw = crate::keywords::Keyword::new(*kind);
+                            kw.filter = Some(q.clone());
+                            self.keyword_lower(&kw)
+                        }
+                        None if *kind == crate::keywords::KeywordKind::Banding => {
+                            "all \"bands with other\" abilities".into()
+                        }
+                        None => self.keyword_kind_word(*kind),
+                    };
+                    parts.push(format!("loses {k}"))
                 }
                 Modification::LoseKeyword(k) => {
                     let t = k

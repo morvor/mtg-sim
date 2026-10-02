@@ -20,6 +20,7 @@
 //! * [`testing`] provides a harness for rules tests.
 
 pub mod ability;
+pub mod ability_grants;
 pub mod actions;
 pub mod activation_costs;
 pub mod adventure;
