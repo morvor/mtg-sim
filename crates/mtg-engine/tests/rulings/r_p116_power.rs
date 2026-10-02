@@ -475,3 +475,37 @@ fn primal_empathy_a_shared_greatest_power_draws() {
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.counters(mine, "+1/+1"), 1);
 }
+
+#[test]
+fn grunn_attacks_alone_only_if_declared_as_the_only_attacker() {
+    cr!("506.5", "701.11b");
+    ruling!(
+        "Grunn, the Lonely King",
+        "A creature attacks alone if it's the only creature declared as an attacker during the declare attackers step"
+    );
+    supported("Grunn, the Lonely King");
+    // "Whenever Grunn attacks alone, double its power and toughness until end of turn."
+    let attack = |t: &mut TestGame, attackers: &[ObjectId]| {
+        let atk = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(atk));
+        t.advance_to(P0, Step::DeclareAttackers);
+        t.settle();
+    };
+    let mut t = TestGame::new(2);
+    let grunn = t.battlefield(P0, "Grunn, the Lonely King");
+    attack(&mut t, &[grunn]);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(grunn), (10, 10));
+    // With another attacker that is then removed from combat: it didn't attack alone.
+    let mut t = TestGame::new(2);
+    let grunn = t.battlefield(P0, "Grunn, the Lonely King");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack(&mut t, &[grunn, bears]);
+    assert_eq!(t.stack_len(), 0);
+    destroy(&mut t, bears);
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.pt(grunn), (5, 5));
+}
