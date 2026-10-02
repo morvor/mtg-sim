@@ -1,0 +1,97 @@
+//! When triggered abilities trigger (CR 603.2, 603.10, 608.2c).
+//!
+//! An ability triggers as soon as its trigger event occurs (CR 603.2), and whether an
+//! event matches, and what the objects involved look like, is determined from the game
+//! immediately after the event (CR 603.10; leaves-the-battlefield and the other
+//! exceptions look back to immediately before it). A resolving spell or ability performs
+//! its instructions one after another (CR 608.2c), so the events of one instruction are
+//! checked for triggers before the next instruction happens: "Create a 1/1 token. Put
+//! three +1/+1 counters on it." makes the token enter as a 1/1, and "whenever a creature
+//! with power 4 or greater enters" doesn't trigger.
+//!
+//! Events are queued in [`Game::events`] and checked by [`Game::flush_events`]. The
+//! effect interpreter calls [`Game::action_boundary`] before each instruction (and the
+//! stack calls it once a spell's or ability's instructions are done), which checks the
+//! events queued so far — unless an action is still in progress: an atomic effect
+//! (destroying, creating tokens, moving objects, ...), a zone move, or the application of
+//! replacement effects. Those produce simultaneous events, and their nested instructions
+//! ("as this enters, choose ...", the "instead" part of a replacement effect) are part of
+//! the same event: checking in the middle would split a simultaneous event (CR 603.2c,
+//! "one or more" triggers) and show triggers a half-done action.
+//!
+//! An atomic action that itself consists of steps the rules perform one after another
+//! (amass: create an Army, then put counters on it, CR 701.47a) calls
+//! [`Game::sequential_step`] between them.
+
+use crate::ability::Effect;
+use crate::game::Game;
+
+/// Bookkeeping for when trigger events are checked.
+#[derive(Clone, Debug, Default)]
+pub struct TriggerTiming {
+    /// Actions in progress whose events must be checked together: atomic effects, zone
+    /// moves, replacement effects being applied.
+    pub(crate) atomic: u32,
+    /// Set while [`Game::flush_events`] runs: events emitted while triggers are being
+    /// detected (by a triggered mana ability resolving right away, CR 605.4a) wait for
+    /// the next check instead of being checked in the middle of this one.
+    pub(crate) flushing: bool,
+}
+
+/// Whether an effect only sequences, chooses between, or repeats other instructions
+/// (CR 608.2c) rather than performing an action itself: the instructions inside it are
+/// separate actions, each checked for triggers when it's done.
+pub fn is_sequencing(e: &Effect) -> bool {
+    matches!(
+        e,
+        Effect::Noop
+            | Effect::Seq(_)
+            | Effect::If { .. }
+            | Effect::May { .. }
+            | Effect::PayOptional { .. }
+            | Effect::ForEach { .. }
+            | Effect::ForEachPlayer { .. }
+            | Effect::AsPlayer { .. }
+            | Effect::Repeat { .. }
+            | Effect::RepeatProcess { .. }
+            | Effect::RepeatThisProcess
+            | Effect::ChooseOne { .. }
+            | Effect::Store { .. }
+            | Effect::StoreValue { .. }
+            | Effect::Note { .. }
+            | Effect::SetX { .. }
+            | Effect::SelfReplace { .. }
+    )
+}
+
+impl Game {
+    /// An action is complete (CR 603.2, 608.2c): its events form their own batch for
+    /// "one or more" triggers, and, unless a larger action is still in progress, they're
+    /// checked for triggers now, with the game as it is right after them (CR 603.10).
+    pub fn action_boundary(&mut self) {
+        self.end_event_batch();
+        if self.timing.atomic == 0 {
+            self.flush_events();
+        }
+    }
+
+    /// Between the steps of an atomic action that the rules perform one after another
+    /// (CR 701.47a: amass creates the Army token, then puts counters on it): the events of
+    /// the steps so far are checked for triggers, if this action is the only one in
+    /// progress.
+    pub fn sequential_step(&mut self) {
+        self.end_event_batch();
+        if self.timing.atomic <= 1 {
+            self.flush_events();
+        }
+    }
+
+    /// Runs `f` as one atomic action: no trigger check happens inside it (see the module
+    /// documentation).
+    pub fn atomically<R>(&mut self, f: impl FnOnce(&mut Game) -> R) -> R {
+        self.timing.atomic += 1;
+        let r = f(self);
+        self.timing.atomic -= 1;
+        r
+    }
+}

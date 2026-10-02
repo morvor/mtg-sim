@@ -865,6 +865,11 @@ pub enum PlayerFilter {
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
+    /// A player the card they would draw now would be the first one they draw in this
+    /// draw step: it's one of their draw steps and they haven't drawn a card in it yet
+    /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
+    /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
+    FirstDrawInDrawStep,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),

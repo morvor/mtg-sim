@@ -21,15 +21,25 @@ impl Game {
         if self.result.is_some() || self.end.restart.is_some() {
             return;
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c), and those of the instructions before
+        // it are checked for triggers before it happens (CR 603.2, 603.10).
+        self.action_boundary();
         if self.dirty {
             self.recompute();
         }
-        // Each instruction is a separate action: events it causes form their own batch for
-        // "one or more" triggers (CR 603.2c, 608.2c).
-        self.end_event_batch();
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        if crate::trigger_timing::is_sequencing(e) {
+            self.exec_effect(e, ctx);
+        } else {
+            self.atomically(|g| g.exec_effect(e, ctx));
+        }
+    }
+
+    /// Performs one effect (see [`Game::exec`]).
+    fn exec_effect(&mut self, e: &Effect, ctx: &mut Ctx) {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {

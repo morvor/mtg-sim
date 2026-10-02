@@ -18,16 +18,23 @@ impl KeywordRules for Bushido {
         &[KeywordKind::Bushido]
     }
 
+    /// "Bushido X, where X is ..." granted by an effect (Fumiko the Lowblood): the bonus is
+    /// determined each time the ability resolves (CR 608.2h), see [`Keyword::x`].
+    fn x_determined_on_resolution(&self) -> bool {
+        true
+    }
+
     /// CR 702.45a: "Bushido N" means "Whenever this creature blocks or becomes blocked,
     /// it gets +N/+N until end of turn."
     fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
         let n = kw.n.unwrap_or(0);
+        let x = kw.x.clone().unwrap_or(Value::c(n));
         Some(vec![AbilityDef::new(
             AbilityKind::Triggered(TriggeredAbility::new(
                 TriggerCond::BlocksOrBecomesBlocked(Filter::Source),
                 Body::effect(Effect::Modify {
                     what: Sel::This,
-                    mods: vec![Modification::ModifyPT(Value::c(n), Value::c(n))],
+                    mods: vec![Modification::ModifyPT(x.clone(), x)],
                     duration: Duration::EndOfTurn,
                 }),
             )),

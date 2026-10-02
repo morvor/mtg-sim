@@ -371,6 +371,16 @@ impl Game {
         m: MoveEv,
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
+        // "As this enters" choices are part of the move: no trigger check happens in the
+        // middle of it (see `trigger_timing`).
+        self.atomically(|g| g.perform_move_now(m, lookback))
+    }
+
+    fn perform_move_now(
+        &mut self,
+        m: MoveEv,
+        lookback: Option<Arc<LookbackSnapshot>>,
+    ) -> Option<ObjectId> {
         let old_id = m.obj;
         if !self.can_move(old_id) {
             return None;

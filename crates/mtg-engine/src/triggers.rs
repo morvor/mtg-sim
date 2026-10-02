@@ -122,9 +122,15 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
 impl Game {
     /// Processes pending events: records turn history and detects triggered abilities.
     pub fn flush_events(&mut self) {
-        if self.events.is_empty() {
+        if self.events.is_empty() || self.timing.flushing {
             return;
         }
+        self.timing.flushing = true;
+        self.flush_events_now();
+        self.timing.flushing = false;
+    }
+
+    fn flush_events_now(&mut self) {
         // CR 610.3, 610.4: "until" effects end immediately after their event.
         crate::until::check_untils(self);
         if self.dirty {
