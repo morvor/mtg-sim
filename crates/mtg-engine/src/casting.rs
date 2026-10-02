@@ -1926,12 +1926,7 @@ impl Game {
         // Loyalty abilities: once per turn per permanent (CR 606.3), unless an effect
         // allows more.
         if act.is_loyalty {
-            let done: u32 = o
-                .activations_this_turn
-                .iter()
-                .filter(|(uid, _)| self.is_loyalty_uid(src, **uid))
-                .map(|(_, n)| *n)
-                .sum();
+            let done = o.loyalty_activations_this_turn;
             if done >= crate::activation_costs::loyalty_activations_per_turn(self, p, src, a, act) {
                 return false;
             }
@@ -2418,7 +2413,11 @@ impl Game {
     /// Records that `p` activated the ability `uid` of `src` (CR 602.2i): this turn, and
     /// over the object's existence ("Activate only once", CR 702.177a).
     fn record_activation(&mut self, p: PlayerId, src: ObjectId, uid: u64) {
+        let loyalty = self.is_loyalty_uid(src, uid);
         let o = &mut self.objects[src.0 as usize];
+        if loyalty {
+            o.loyalty_activations_this_turn += 1;
+        }
         *o.activations_this_turn.entry(uid).or_insert(0) += 1;
         *o.activations.entry(uid).or_insert(0) += 1;
         self.history.activated.push((p, src, uid));

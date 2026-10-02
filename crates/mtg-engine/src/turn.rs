@@ -350,6 +350,7 @@ impl Game {
             if crate::multiplayer::grand_melee::resets_with_turn(self, c, active) {
                 let o = &mut self.objects[i];
                 o.activations_this_turn.clear();
+                o.loyalty_activations_this_turn = 0;
                 o.triggers_this_turn.clear();
             }
         }
