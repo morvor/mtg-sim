@@ -582,3 +582,136 @@ fn kalamax_s_copy_of_fling_deals_the_sacrificed_power() {
     assert_eq!(t.life(P1), 14);
     assert_eq!(t.counters(k, counters::PLUS1), 1);
 }
+
+// --- Wild Ricochet ----------------------------------------------------------------------------
+
+/// P1 (the active player) casts `spell` targeting `targets`; P0 casts Wild Ricochet ("You
+/// may choose new targets for target instant or sorcery spell. Then copy that spell. You
+/// may choose new targets for the copy.") on it, leaving the original's targets and changing
+/// the copy's to `copy_targets`. Wild Ricochet is on the stack.
+fn ricochet(t: &mut TestGame, s: ObjectId, copy_targets: &[Option<Entity>]) {
+    supported("Wild Ricochet");
+    cast_new(t, P0, "Wild Ricochet", &[obj(s)]);
+    t.answer_yes(P0, false);
+    if copy_targets.is_empty() {
+        keep_copy_targets(t, P0);
+    } else {
+        change_copy_targets(t, P0, copy_targets);
+    }
+}
+
+#[test]
+fn wild_ricochet_s_copy_isnt_cast_and_resolves_first() {
+    cr!("707.10", "707.10c", "405.5");
+    ruling!(
+        "Wild Ricochet",
+        "The controller of the original spell retains control of that spell. The copy is created on the stack, so it's not \"cast.\" Abilities that trigger when a player casts a spell won't trigger. The copy will then resolve like a normal spell, after players get a chance to cast spells and activate abilities. The copy resolves before the original spell."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Young Pyromancer");
+    t.set_step(P1, Step::PrecombatMain);
+    let bolt = cast_new(&mut t, P1, "Lightning Bolt", &[Entity::Player(P0)]);
+    ricochet(&mut t, bolt, &[Some(Entity::Player(P1))]);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(t.obj(copies[0]).controller, P0);
+    assert_eq!(t.obj(bolt).controller, P1);
+    assert_eq!(*t.g.stack.last().unwrap(), copies[0]);
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(elementals(&t, P0), 1);
+}
+
+#[test]
+fn wild_ricochet_copies_a_spell_without_targets() {
+    cr!("707.10", "115.1a");
+    ruling!(
+        "Wild Ricochet",
+        "Wild Ricochet can target (and copy) any instant or sorcery spell, not just one with targets. It doesn't matter who controls it."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let div = cast_new(&mut t, P1, "Divination", &[]);
+    ricochet(&mut t, div, &[]);
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), h0 + 2);
+    assert_eq!(t.hand_size(P1), h1 + 2);
+}
+
+#[test]
+fn wild_ricochet_s_copy_of_fling_deals_the_sacrificed_power() {
+    cr!("707.10", "118.8");
+    ruling!(
+        "Wild Ricochet",
+        "if a player sacrifices a 3/3 creature to cast Fling, and you copy it with Wild Ricochet, the copy of Fling will also deal 3 damage to its target."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let fling = fling_giant(&mut t, P1, Entity::Player(P0));
+    ricochet(&mut t, fling, &[Some(Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 17);
+}
+
+// --- Echo Mage ---------------------------------------------------------------------------------
+
+/// `p`'s Echo Mage with four level counters ("LEVEL 4+ ... {U}{U}, {T}: Copy target instant
+/// or sorcery spell twice. You may choose new targets for the copies.") copies `s`.
+fn echo_mage_copies(t: &mut TestGame, p: PlayerId, s: ObjectId) {
+    supported("Echo Mage");
+    let em = t.battlefield(p, "Echo Mage");
+    t.g.objects[em.0 as usize]
+        .counters
+        .insert(counters::LEVEL.into(), 4);
+    t.g.dirty = true;
+    t.lands(p, "Island", 2);
+    t.answer_targets(p, &[obj(s)]);
+    activate_containing(t, p, em, "twice").unwrap();
+}
+
+#[test]
+fn echo_mage_s_copies_arent_cast_and_resolve_first() {
+    cr!("707.10", "707.10c", "711.2a");
+    ruling!(
+        "Echo Mage",
+        "When either ability resolves, it creates a copy (or two) of a spell. The copies are created on the stack, so they’re not “cast.” Abilities that trigger when a player casts a spell won’t trigger. Each copy will then resolve like a normal spell, after players get a chance to cast spells and activate abilities. Each copy resolves before the original spell does."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Young Pyromancer");
+    let bolt = cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    echo_mage_copies(&mut t, P0, bolt);
+    keep_copy_targets(&mut t, P0);
+    keep_copy_targets(&mut t, P0);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 2);
+    let top2 = &t.g.stack[t.g.stack.len() - 2..];
+    assert!(copies.iter().all(|c| top2.contains(c)));
+    t.resolve();
+    t.resolve();
+    assert_eq!(t.life(P1), 14);
+    assert!(t.g.stack.contains(&bolt));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+    assert_eq!(elementals(&t, P0), 1);
+}
+
+#[test]
+fn echo_mage_s_copies_of_fling_deal_the_sacrificed_power() {
+    cr!("707.10", "118.8");
+    ruling!(
+        "Echo Mage",
+        "You can’t choose to pay any additional costs for a copy. However, effects based on any additional costs that were paid for the original spell are copied as though those same costs were paid for each copy too."
+    );
+    let mut t = TestGame::new(2);
+    let fling = fling_giant(&mut t, P0, Entity::Player(P1));
+    echo_mage_copies(&mut t, P0, fling);
+    keep_copy_targets(&mut t, P0);
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+}
