@@ -17,16 +17,13 @@ fn negative_power_assigns_its_absolute_value() {
 }
 
 #[test]
-fn a_creature_with_negative_power_normally_deals_none() {
-    cr!("510.1a");
+fn blocked_he_assigns_that_damage_to_the_blocker() {
+    cr!("510.1a", "510.1c");
     let mut t = TestGame::new(2);
     let loot = t.battlefield(P0, "Loot, the Anomaly");
-    // Without the ability (a 0/x creature given -2/-0) no damage is assigned.
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    t.g.objects[loot.0 as usize].tapped = true;
-    t.lands(P0, "Swamp", 1);
-    let _ = bears;
+    let bears = t.battlefield(P1, "Grizzly Bears");
     t.set_step(P0, Step::BeginningOfCombat);
-    t.attack(&[(bears, Entity::Player(P1))], &[]);
-    assert_eq!(t.life(P1), 18);
+    t.attack(&[(loot, Entity::Player(P1))], &[(bears, loot)]);
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(loot));
 }

@@ -139,6 +139,37 @@ pub fn marker_if(name: &str, cond: crate::ability::Condition, text: &str) -> Abi
     crate::ability::AbilityDef::new(AbilityKind::Static(s), text)
 }
 
+/// The abilities the compiler makes of `text` (a part of a hand-written ability that
+/// other cards share, e.g. its trigger condition), or an unsupported ability if it can't
+/// (reported by `manual-check`).
+pub fn parse(ctx: &CompileContext, text: &str) -> Vec<Ability> {
+    crate::oracle::parse_ability(text, ctx).unwrap_or_else(|| {
+        vec![crate::ability::AbilityDef::new(
+            AbilityKind::Unsupported(text.to_string()),
+            text,
+        )]
+    })
+}
+
+/// `a` (a static ability) with the condition `cond` and the oracle text `text`.
+pub fn with_condition(a: &Ability, cond: crate::ability::Condition, text: &str) -> Ability {
+    let mut kind = a.kind.clone();
+    if let AbilityKind::Static(s) = &mut kind {
+        s.condition = Some(cond);
+    }
+    crate::ability::AbilityDef::new(kind, text)
+}
+
+/// An instant or sorcery's spell ability (CR 113.3a).
+pub fn spell(targets: Vec<crate::ability::TargetSpec>, effect: crate::ability::Effect, text: &str) -> Ability {
+    crate::ability::AbilityDef::new(
+        AbilityKind::Spell(crate::ability::SpellAbility {
+            body: crate::ability::Body::simple(targets, effect),
+        }),
+        text,
+    )
+}
+
 /// Checks the hand-written definitions against the card data and the tests in
 /// `tests_cards_dir` (the `tests/cards/` directory): returns one message per problem.
 ///
@@ -187,9 +218,12 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             continue;
         }
         let face = &def.faces[m.face];
-        if face.chars.abilities.iter().any(|a| {
-            matches!(&a.kind, AbilityKind::Unsupported(t) if t == m.text)
-        }) || !face.unsupported.is_empty()
+        if face
+            .chars
+            .abilities
+            .iter()
+            .any(|a| matches!(&a.kind, AbilityKind::Unsupported(_)))
+            || !face.unsupported.is_empty()
         {
             problems.push(format!(
                 "{} (face {}): the card still has unsupported text {:?}",
