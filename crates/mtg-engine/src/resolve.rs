@@ -165,12 +165,8 @@ impl Game {
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);
-                let saved = ctx.iter_player;
-                for p in players {
-                    ctx.iter_player = Some(p);
-                    self.exec(effect, ctx);
-                }
-                ctx.iter_player = saved;
+                // CR 101.4, 608.2e–f: what several players do at the same time.
+                crate::simultaneous::for_each_player(self, players, effect, ctx);
             }
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
@@ -1454,60 +1450,18 @@ impl Game {
                 }
             }
             Effect::ShuffleInto { what } => {
+                // Into their owners' libraries (CR 701.24c).
                 let objs = self.resolve_objects(what, ctx);
-                let mut owners = Vec::new();
-                for o in objs {
-                    let owner = self.obj(o).owner;
-                    self.move_object_ev(MoveEv {
-                        obj: o,
-                        to: Zone::Library(owner),
-                        pos: LibraryPosition::Top,
-                        cause: MoveCause::Effect,
-                        by: Some(ctx.controller),
-                        etb: EtbInfo::default(),
-                        source: ctx.source,
-                    });
-                    if !owners.contains(&owner) {
-                        owners.push(owner);
-                    }
-                }
-                for o in owners {
-                    self.shuffle_library(o);
-                }
+                crate::shuffle_rules::shuffle_into(self, &objs, Vec::new(), ctx);
             }
             Effect::ShuffleIntoLibrary { what, library } => {
                 let objs = self.resolve_objects(what, ctx);
-                // CR 701.24c, 701.24d: the libraries are shuffled even if the objects
-                // aren't where they're expected to be, or there are none.
-                let mut libraries = self.eval_players(library, ctx);
-                for o in &objs {
-                    let owner = self.obj(*o).owner;
-                    if !libraries.contains(&owner) {
-                        libraries.push(owner);
-                    }
-                }
-                let moves: Vec<MoveEv> = objs
-                    .iter()
-                    .filter(|o| self.is_live(**o))
-                    .map(|o| MoveEv {
-                        obj: *o,
-                        to: Zone::Library(self.obj(*o).owner),
-                        pos: LibraryPosition::Top,
-                        cause: MoveCause::Effect,
-                        by: Some(ctx.controller),
-                        etb: EtbInfo::default(),
-                        source: ctx.source,
-                    })
-                    .collect();
-                let moved: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
-                for p in libraries {
-                    self.shuffle_library(p);
-                }
-                let moved: Vec<Entity> = moved
-                    .into_iter()
-                    .filter(|o| matches!(self.obj(*o).zone, Zone::Library(_)))
-                    .map(Entity::Object)
-                    .collect();
+                let libraries = self.eval_players(library, ctx);
+                let moved: Vec<Entity> =
+                    crate::shuffle_rules::shuffle_into(self, &objs, libraries, ctx)
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect();
                 ctx.prev_value = moved.len() as i64;
                 ctx.prev_happened = !moved.is_empty();
                 ctx.prev_affected = moved.clone();
@@ -2140,7 +2094,7 @@ impl Game {
     /// CR 400.7j: an object an earlier part of the same effect moved to a public zone can
     /// be found by later parts of it ("Exile target creature and put two time counters on
     /// it"): the object it became, when that instruction recorded it.
-    fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+    pub(crate) fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
         let Entity::Object(o) = e else {
             return e;
         };
@@ -2190,7 +2144,7 @@ impl Game {
 
     /// The source of damage for an effect: the named object, or the resolving object's
     /// source (CR 120.2, 609.7). Uses last known information if it has left.
-    fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
+    pub(crate) fn damage_source(&mut self, sel: &Sel, ctx: &mut Ctx) -> Option<ObjectId> {
         match sel {
             Sel::None | Sel::This => ctx
                 .stack_obj
@@ -2422,6 +2376,18 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
+        let moves = self.destination_moves(&objs, to, ctx);
+        self.move_objects(moves).into_iter().flatten().collect()
+    }
+
+    /// The zone changes that move objects to a destination, without performing them (see
+    /// [`Game::move_to_destination`]).
+    pub(crate) fn destination_moves(
+        &mut self,
+        objs: &[ObjectId],
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
         let controller = to
             .controller
             .as_ref()
@@ -2453,8 +2419,7 @@ impl Game {
             (Some(sel), ZoneKind::Battlefield) => Some(self.resolve_sel(sel, ctx).first().copied()),
             _ => None,
         };
-        let moves: Vec<MoveEv> = objs
-            .iter()
+        objs.iter()
             .filter(|o| self.is_live(**o))
             .map(|o| {
                 let owner = self.obj(*o).owner;
@@ -2489,8 +2454,7 @@ impl Game {
                     source: ctx.source,
                 }
             })
-            .collect();
-        self.move_objects(moves).into_iter().flatten().collect()
+            .collect()
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each

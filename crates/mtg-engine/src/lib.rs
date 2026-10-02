@@ -116,6 +116,7 @@ pub mod scry_rules;
 pub mod search_rules;
 pub mod shortcuts;
 pub mod shuffle_rules;
+pub mod simultaneous;
 pub mod skip;
 pub mod special_actions;
 pub mod spell_choice;

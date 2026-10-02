@@ -140,13 +140,18 @@ fn shuffle_zones_into_library(l: &str, _b: &mut Builder) -> Option<Effect> {
     } else {
         Sel::Union(sels)
     };
-    let mut e = Effect::ShuffleInto { what };
+    let who = if each {
+        PlayerRef::Iterated
+    } else {
+        PlayerRef::You
+    };
+    // The player's library is shuffled even if there's nothing to shuffle into it
+    // (CR 701.24d).
+    let mut e = Effect::ShuffleIntoLibrary {
+        what,
+        library: who.clone(),
+    };
     if let Some(n) = draw {
-        let who = if each {
-            PlayerRef::Iterated
-        } else {
-            PlayerRef::You
-        };
         e = Effect::seq(vec![e, Effect::Draw { who, n }]);
     }
     Some(if each {
