@@ -43,7 +43,9 @@ inventory::submit! { ManualAbility {
                     t.body.targets.clear();
                     if let Effect::AddRestriction { restriction, .. } = &mut t.body.effect {
                         if let Restriction::MustBlockAttacker { blocker, .. } = restriction {
-                            *blocker = magnetized();
+                            // The creatures with magnet counters as it resolves
+                            // (locked in then, CR 608.2h).
+                            *blocker = Filter::In(Box::new(Sel::All(magnetized())));
                         }
                     }
                 }

@@ -6,7 +6,7 @@ use mtg_engine::*;
 
 #[test]
 fn upkeep_toggles_tapped_and_untapped_permanents() {
-    cr!("502.3", "603.2");
+    cr!("614.10", "603.2");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sands of Time");
     let forest = t.battlefield(P1, "Forest");

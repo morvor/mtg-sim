@@ -31,8 +31,14 @@ fn a_player_who_cast_a_spell_last_turn_can_be_attacked() {
     t.advance_to(P0, Step::PrecombatMain);
     t.lands(P0, "Mountain", 1);
     let bolt = t.hand(P0, "Lightning Bolt");
-    t.cast(P0, bolt).target(P1).go();
-    t.resolve();
+    let spell = t.cast(P0, bolt).target(P1).go();
+    // The spell is countered: what counts is that it was cast.
+    t.lands(P1, "Island", 2);
+    let cs = t.hand(P1, "Counterspell");
+    t.cast(P1, cs).target(spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
     t.advance_to(P1, Step::BeginningOfCombat);
     t.attack(&[(b, Entity::Player(P0))], &[]);
     assert_eq!(t.life(P0), 18);

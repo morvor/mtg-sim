@@ -20,6 +20,8 @@ fn taps_the_lands_that_could_produce_the_same_type() {
     assert!(t.obj_now(f2).tapped);
     assert!(t.obj_now(taiga).tapped);
     assert!(!t.obj_now(m).tapped);
+    // The lands it tapped produced no mana: only the first Forest's {G} is in the pool.
+    assert_eq!(t.g.player(P1).mana_pool.total(), 1);
 }
 
 #[test]

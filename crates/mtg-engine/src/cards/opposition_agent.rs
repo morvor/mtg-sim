@@ -5,8 +5,8 @@
 //! The found cards are exiled instead of being put where the effect says; the rest of the
 //! effect still happens (ruling). With several Opposition Agents, the one that most
 //! recently entered applies (its controller controls the searching player, CR 723).
-//! The mana permission is that of CR 118.14 (mana of any type), which includes "any
-//! color".
+//! Mana may be spent as though it were mana of any color (CR 609.4b), not of any type:
+//! colorless symbols still need colorless mana.
 
 use super::{active, marker, ManualAbility};
 use crate::ability::Duration;
@@ -81,7 +81,7 @@ impl KeywordRules for Rules {
         let turn = g.turn.number;
         for n in exiled {
             g.special
-                .any_type_mana
+                .any_color_mana
                 .push((you, n, Duration::Permanent, Some(src), turn));
         }
         true

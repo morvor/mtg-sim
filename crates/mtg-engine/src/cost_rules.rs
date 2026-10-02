@@ -449,8 +449,23 @@ pub fn may_decline_cast_if_able(g: &mut Game, p: PlayerId, card: ObjectId) -> bo
 /// Whether `p` may spend mana of any type to cast `spell` (CR 118.14): an effect allowed
 /// it for the card the spell was cast from.
 pub fn may_spend_any_type(g: &Game, p: PlayerId, spell: ObjectId) -> bool {
+    permitted(g, &g.special.any_type_mana, p, spell)
+}
+
+/// Whether `p` may spend mana as though it were mana of any color to cast `spell` (CR
+/// 609.4b): an effect allowed it for the card the spell was cast from.
+pub fn may_spend_as_any_color(g: &Game, p: PlayerId, spell: ObjectId) -> bool {
+    permitted(g, &g.special.any_color_mana, p, spell)
+}
+
+fn permitted(
+    g: &Game,
+    list: &[(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)],
+    p: PlayerId,
+    spell: ObjectId,
+) -> bool {
     let card = g.obj(spell).prev;
-    g.special.any_type_mana.iter().any(|(q, o, d, src, turn)| {
+    list.iter().any(|(q, o, d, src, turn)| {
         *q == p
             && (*o == spell || Some(*o) == card)
             && match d {
@@ -462,9 +477,12 @@ pub fn may_spend_any_type(g: &Game, p: PlayerId, spell: ObjectId) -> bool {
 
 /// CR 118.14: when mana of any type can be spent to cast a spell, mana may be spent as
 /// though it were colorless mana or mana of any color: each colored, colorless or hybrid
-/// symbol of its cost can be paid with one mana of any type.
+/// symbol of its cost can be paid with one mana of any type. When mana may only be spent
+/// as though it were mana of any color (CR 609.4b), colorless symbols still need
+/// colorless mana.
 pub fn spend_any_type(g: &Game, p: PlayerId, spell: ObjectId, cost: &mut Cost) {
-    if !may_spend_any_type(g, p, spell) {
+    let any_type = may_spend_any_type(g, p, spell);
+    if !any_type && !may_spend_as_any_color(g, p, spell) {
         return;
     }
     let Some(m) = cost.mana.as_mut() else {
@@ -474,11 +492,11 @@ pub fn spend_any_type(g: &Game, p: PlayerId, spell: ObjectId, cost: &mut Cost) {
         if matches!(
             s,
             ManaSymbol::Colored(_)
-                | ManaSymbol::Colorless
                 | ManaSymbol::Hybrid(..)
                 | ManaSymbol::TwoHybrid(_)
                 | ManaSymbol::ColorlessHybrid(_)
-        ) {
+        ) || (any_type && matches!(s, ManaSymbol::Colorless))
+        {
             *s = ManaSymbol::Generic(1);
         }
     }

@@ -5,7 +5,6 @@ use mtg_engine::*;
 
 #[test]
 fn looks_at_hand_top_card_and_rearranges_your_top_four() {
-    cr!("701.16a");
     ruling!("Spy Network", "Only you get to look.");
     let mut t = TestGame::new(2);
     t.hand(P1, "Lightning Bolt");

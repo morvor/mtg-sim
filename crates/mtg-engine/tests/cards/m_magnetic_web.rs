@@ -55,3 +55,23 @@ fn magnetized_creatures_block_a_magnetized_attacker() {
     assert_eq!(t.life(P1), 20);
     assert!(!t.on_battlefield(a));
 }
+
+#[test]
+fn the_blockers_are_the_creatures_with_magnet_counters_as_it_resolves() {
+    cr!("509.1c", "608.2h");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Magnetic Web");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    magnet(&mut t, a);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(a, Entity::Player(P1))]));
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.resolve_all();
+    // A magnet counter put on the Giant after the ability resolved doesn't make it block.
+    magnet(&mut t, giant);
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 18);
+    assert!(t.on_battlefield(a));
+}

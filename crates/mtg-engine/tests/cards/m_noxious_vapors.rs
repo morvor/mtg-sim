@@ -5,7 +5,7 @@ use mtg_engine::*;
 
 #[test]
 fn keeps_one_card_of_each_color_and_lands() {
-    cr!("701.9a", "701.20a");
+    cr!("701.9a");
     let mut t = TestGame::new(2);
     let bolt = t.hand(P1, "Lightning Bolt");
     t.hand(P1, "Shock");
