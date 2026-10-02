@@ -266,7 +266,7 @@ fn glimmervoid_basin_chaos_tokens_copy_only_copiable_values() {
 
 #[test]
 fn tawnos_token_copy_of_a_card_has_its_enters_abilities() {
-    cr!("707.2", "707.9b", "603.6a", "614.1c", "111.10");
+    cr!("707.2", "707.9b", "603.6a", "614.1c");
     ruling!(
         "Tawnos, Solemn Survivor",
         "Any enters-the-battlefield abilities of the token you create will trigger when it enters the battlefield. Any “as [this permanent] enters the battlefield” or “[this permanent] enters the battlefield with” abilities of the copied token or card will also work."

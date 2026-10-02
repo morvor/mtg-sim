@@ -328,7 +328,7 @@ fn dacks_duplicate_copies_printed_values_plus_haste_and_dethrone() {
 
 #[test]
 fn evil_twin_has_the_copied_enters_abilities_and_destroys_its_namesake() {
-    cr!("707.2", "707.9a", "614.1c", "603.6a", "201.2");
+    cr!("707.2", "707.9a", "614.1c", "603.6a", "201.2a");
     ruling!(
         "Evil Twin",
         "Any enters-the-battlefield abilities of the copied creature will trigger when Evil Twin enters the battlefield. Any \"as [this creature] enters the battlefield\" or \"[this creature] enters the battlefield with\" abilities of the chosen creature will also work."

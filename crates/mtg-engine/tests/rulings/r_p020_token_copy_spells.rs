@@ -48,7 +48,7 @@ fn one_copy_of_my_riftwatcher(spell: &str, modes: &[usize]) -> (TestGame, Object
 
 #[test]
 fn self_reflection_token_has_the_copied_enters_abilities() {
-    cr!("707.2", "111.4", "614.1c", "603.6a");
+    cr!("707.2", "614.1c", "603.6a");
     ruling!(
         "Self-Reflection",
         "Any \"enters\" abilities of the copied creature will trigger when the token enters. Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the target creature will also work."
