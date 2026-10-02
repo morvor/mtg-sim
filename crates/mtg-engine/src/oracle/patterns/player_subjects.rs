@@ -1052,15 +1052,15 @@ mod tests {
 }
 
 #[cfg(test)]
-mod probe {
+mod grammar {
     use crate::card::Layout;
     use crate::oracle::{compile, CompileContext};
     use crate::types::TypeLine;
 
-    #[test]
-    fn probe() {
-        let Ok(texts) = std::env::var("PS_PROBE") else { return };
-        let tl = TypeLine::parse(&std::env::var("PS_TYPE").unwrap_or("Sorcery".into()));
+    /// The compiled abilities of `text` on a card of type `ty`, or None if any of it is
+    /// unsupported.
+    fn compiled(ty: &str, text: &str) -> Option<String> {
+        let tl = TypeLine::parse(ty);
         let ctx = CompileContext {
             card_name: "Test Card",
             full_name: "Test Card",
@@ -1071,9 +1071,71 @@ mod probe {
             power: None,
             toughness: None,
         };
-        for t in texts.split('|') {
-            let r = compile(t, &ctx);
-            println!("== {t}\n   unsupported: {:?}\n   {:?}", r.unsupported, r.abilities.iter().map(|a| format!("{:?}", a.kind)).collect::<Vec<_>>());
+        let r = compile(text, &ctx);
+        r.unsupported
+            .is_empty()
+            .then(|| format!("{:?}", r.abilities))
+    }
+
+    #[test]
+    fn subjects_and_agreement() {
+        for (ty, text) in [
+            ("Sorcery", "Target player mills half their library, rounded down."),
+            ("Sorcery", "Target opponent exiles the top three cards of their library."),
+            ("Sorcery", "Each opponent reveals their hand."),
+            ("Sorcery", "Each player may discard their hand and draw seven cards."),
+            ("Sorcery", "Target opponent may draw a card."),
+            ("Sorcery", "Any number of target players each discard a card."),
+            ("Sorcery", "You and target opponent each draw three cards."),
+            ("Sorcery", "Each player who controls a multicolored creature draws a card."),
+            ("Sorcery", "Each opponent with no cards in hand loses 2 life."),
+            ("Sorcery", "Each player chooses three permanents they control, then sacrifices the rest."),
+            ("Sorcery", "Each opponent discards a card, you draw a card, and you gain 2 life."),
+            ("Creature", "Whenever ~ deals combat damage to a player, that player exiles the top card of their library."),
+            ("Creature", "Whenever ~ attacks, defending player may pay {1}."),
+            ("Creature", "Whenever ~ deals combat damage to a player, they get four rad counters."),
+            ("Artifact", "Whenever a player casts a spell, they may pay {1}. If the player does, they draw a card at the beginning of the next end step."),
+        ] {
+            assert!(compiled(ty, text).is_some(), "{text}");
         }
+    }
+
+    #[test]
+    fn the_controller_s_you_stays_the_controller() {
+        // "you" in another player's instruction is the ability's controller: the amount
+        // is read before that player performs it.
+        let e = compiled(
+            "Sorcery",
+            "Each opponent mills cards equal to the number of cards in your hand.",
+        )
+        .unwrap();
+        assert!(e.contains("StoreValue"), "{e}");
+        let at_store = e.find("HandSize(You)").unwrap();
+        assert!(at_store < e.find("AsPlayer").unwrap(), "{e}");
+        // Their own hand is theirs.
+        let e = compiled(
+            "Sorcery",
+            "Each opponent mills cards equal to the number of cards in their hand.",
+        )
+        .unwrap();
+        assert!(!e.contains("StoreValue"), "{e}");
+    }
+
+    #[test]
+    fn not_a_player_instruction() {
+        // Without an earlier player, "that player" means nothing.
+        assert!(compiled("Sorcery", "That player draws a card.").is_none());
+        // "They" for objects isn't a player.
+        assert!(compiled(
+            "Sorcery",
+            "Untap all creatures you control. They get +1/+1 until end of turn. They draw a card."
+        )
+        .is_none());
+        // Followed-up "if they do" needs an instruction whose doing is recorded.
+        assert!(compiled(
+            "Sorcery",
+            "Target player gains 2 life. If they do, you draw a card."
+        )
+        .is_none());
     }
 }

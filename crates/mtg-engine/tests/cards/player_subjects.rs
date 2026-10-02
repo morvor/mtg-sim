@@ -366,3 +366,175 @@ fn monomania_target_player_keeps_one_card() {
     assert_eq!(t.hand_size(P1), 1);
     assert_eq!(t.zone(keep), Zone::Hand(P1));
 }
+
+#[test]
+fn new_frontiers_each_player_who_searched_shuffles() {
+    cr!("101.4", "701.24a");
+    assert_supported("New Frontiers");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 3);
+    let f = t.library_top(P0, "Forest");
+    let p = t.library_top(P1, "Plains");
+    let spell = t.hand(P0, "New Frontiers");
+    t.answer_yes(P0, true).answer_yes(P1, true);
+    t.answer_choose(P0, &[Entity::Object(f)]);
+    t.answer_choose(P1, &[Entity::Object(p)]);
+    t.cast(P0, spell).x(2).go();
+    t.resolve();
+    let forests: Vec<ObjectId> = t
+        .named_on_battlefield("Forest")
+        .into_iter()
+        .filter(|o| t.obj_now(*o).tapped)
+        .collect();
+    let plains = t.named_on_battlefield("Plains");
+    // The searched-for lands entered tapped under their owners' control (the three
+    // Forests that paid for the spell are tapped too).
+    assert_eq!(forests.len(), 4);
+    assert_eq!(plains.len(), 1);
+    assert_eq!(t.obj_now(plains[0]).controller, P1);
+    assert!(t.obj_now(plains[0]).tapped);
+}
+
+#[test]
+fn blightning_the_targeted_player_discards_two() {
+    cr!("701.9b");
+    assert_supported("Blightning");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    t.hand(P1, "Shock");
+    t.hand(P1, "Forest");
+    t.hand(P1, "Island");
+    let spell = t.hand(P0, "Blightning");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P1), 1);
+    assert_eq!(t.graveyard_size(P1), 2);
+}
+
+#[test]
+fn stinging_vitriol_they_discard_the_chosen_card() {
+    cr!("701.9b");
+    assert_supported("Stinging Vitriol");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    let bears = t.hand(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Stinging Vitriol");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, spell).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.zone(shock), Zone::Hand(P1));
+}
+
+#[test]
+fn grave_consequences_each_player_may_exile_from_their_graveyard() {
+    cr!("101.4");
+    assert_supported("Grave Consequences");
+    let mut t = TestGame::new(2);
+    library(&mut t, P0, 2);
+    t.lands(P0, "Swamp", 2);
+    let a = t.graveyard(P0, "Shock");
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P1, "Shock");
+    t.graveyard(P1, "Shock");
+    t.graveyard(P1, "Shock");
+    let spell = t.hand(P0, "Grave Consequences");
+    t.answer_yes(P0, true).answer_yes(P1, false);
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    // P0 exiled one of their two cards; then each loses 1 life per card in their
+    // graveyard (Grave Consequences itself isn't there yet as it resolves).
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P0), 1);
+}
+
+#[test]
+fn tyrannize_target_player_discards_their_hand_unless_they_pay_seven_life() {
+    cr!("118.12");
+    assert_supported("Tyrannize");
+    for pays in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 5);
+        t.hand(P1, "Shock");
+        t.hand(P1, "Forest");
+        let spell = t.hand(P0, "Tyrannize");
+        t.answer_yes(P1, pays);
+        t.cast(P0, spell).target(P1).go();
+        t.resolve();
+        if pays {
+            assert_eq!(t.life(P1), 13);
+            assert_eq!(t.hand_size(P1), 2);
+        } else {
+            assert_eq!(t.life(P1), 20);
+            assert_eq!(t.hand_size(P1), 0);
+        }
+    }
+}
+
+#[test]
+fn thieving_sprite_counts_faeries_as_the_ability_resolves() {
+    cr!("701.20a", "608.2h");
+    ruling!(
+        "Thieving Sprite",
+        "The number of cards that are revealed is equal to the number of Faeries you control when the ability resolves."
+    );
+    assert_supported("Thieving Sprite");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Faerie Miscreant");
+    for _ in 0..4 {
+        t.hand(P1, "Grizzly Bears");
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Thieving Sprite");
+    t.resolve();
+    let (_, min, max) = choices_of(&t, P1)[0].clone();
+    assert_eq!((min, max), (2, 2));
+    assert_eq!(t.hand_size(P1), 3);
+}
+
+#[test]
+fn keldon_firebombers_each_player_keeps_three_lands() {
+    cr!("101.4", "701.21a");
+    assert_supported("Keldon Firebombers");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    t.lands(P1, "Forest", 2);
+    t.enter(P0, "Keldon Firebombers");
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Mountain").len(), 3);
+    // A player with three or fewer lands keeps them all.
+    assert_eq!(t.named_on_battlefield("Forest").len(), 2);
+}
+
+#[test]
+fn dire_fleet_ravager_each_player_loses_a_third_rounded_up() {
+    cr!("107.1a");
+    assert_supported("Dire Fleet Ravager");
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Dire Fleet Ravager");
+    t.resolve();
+    assert_eq!(t.life(P0), 13);
+    assert_eq!(t.life(P1), 13);
+}
+
+#[test]
+fn rites_of_flourishing_each_player_may_play_an_additional_land() {
+    cr!("305.2");
+    assert_supported("Rites of Flourishing");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rites of Flourishing");
+    t.set_step(P0, Step::PrecombatMain);
+    let a = t.hand(P0, "Forest");
+    let b = t.hand(P0, "Forest");
+    let c = t.hand(P0, "Forest");
+    assert!(t.play_land(P0, a).is_ok());
+    assert!(t.play_land(P0, b).is_ok());
+    assert!(t.play_land(P0, c).is_err());
+}
