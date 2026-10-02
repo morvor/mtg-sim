@@ -691,6 +691,30 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         ]);
         return Some((Filter::and(vec![suspended, f]), rest));
     }
+    // "Mountain and red card": each card of either description.
+    {
+        let words: Vec<&str> = s.splitn(4, ' ').collect();
+        if words.len() >= 3
+            && words[1] == "and"
+            && matches!(head_noun(words[0]), Some(Filter::Subtype(_) | Filter::Type(_)))
+            && crate::types::Color::from_word(words[2]).is_some()
+        {
+            let rest = words.get(3).copied().unwrap_or("");
+            let (f2, r2) = objects(&format!("{} {rest}", words[2]), b)?;
+            let (f1, _, _) = parse_object_phrase(words[0])?;
+            // The second description's head ("card") and qualifiers apply to both.
+            let Filter::And(parts) = &f2 else {
+                return None;
+            };
+            let color = parts.first()?.clone();
+            if !matches!(color, Filter::Color(_)) {
+                return None;
+            }
+            let mut v = vec![Filter::Or(vec![f1, color])];
+            v.extend(parts[1..].iter().cloned());
+            return Some((Filter::and(v), r2));
+        }
+    }
     // "Aura and Equipment attached to it": either kind (a union of two nouns).
     let owned;
     let s = match s.split_once(' ') {

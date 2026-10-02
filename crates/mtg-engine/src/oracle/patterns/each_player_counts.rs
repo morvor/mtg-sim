@@ -87,3 +87,36 @@ fn defending_player_amount(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "defending player: amount depending on that player", priority: 65, parse: defending_player_amount } }
+
+/// The last instruction of an effect (looking into sequences).
+fn last(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last),
+        e => e,
+    }
+}
+
+/// "Target opponent reveals their hand. You draw a card for each Mountain and red card in
+/// it.": "it" is the revealed hand.
+fn counted_in_revealed_hand(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Effect::RevealHand { who } = last(prev).clone() else {
+        return false;
+    };
+    let Some(head) = l.strip_suffix(" in it") else {
+        return false;
+    };
+    if !head.contains(" for each ") && !head.contains(" equal to ") {
+        return false;
+    }
+    let saved = std::mem::replace(&mut b.it_player, who);
+    let Some(e) = crate::oracle::effects::parse_clause(&format!("{head} in their hand"), b)
+    else {
+        b.it_player = saved;
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "count cards in the revealed hand", priority: 60, apply: counted_in_revealed_hand } }

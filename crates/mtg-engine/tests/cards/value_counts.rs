@@ -4,7 +4,7 @@
 //! depend on each player ("each player loses 1 life for each creature they control"),
 //! tokens and look-at-top-X with a defined X, and "draw cards equal to the difference".
 
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -409,4 +409,77 @@ fn peer_into_the_abyss_rounds_up_each_time() {
     t.resolve();
     assert_eq!(t.hand_size(P1), before + (lib + 1) / 2);
     assert_eq!(t.life(P1), 3);
+}
+
+#[test]
+fn light_from_within_counts_white_symbols_in_each_creatures_cost() {
+    cr!("107.4e");
+    assert_supported("Light from Within");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Light from Within");
+    let knight = t.battlefield(P0, "White Knight");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.settle();
+    // {W}{W}: +2/+2; {1}{G}: nothing.
+    assert_eq!(t.pt(knight), (4, 4));
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn eidolon_of_countless_battles_two_bonuses() {
+    cr!("613.4c");
+    assert_supported("Eidolon of Countless Battles");
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Eidolon of Countless Battles");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let pacifism = t.battlefield(P0, "Pacifism");
+    assert!(t.g.attach(pacifism, Entity::Object(bears)));
+    t.settle();
+    // Two creatures and one Aura: +3/+3 on a 0/0.
+    assert_eq!(t.pt(e), (3, 3));
+}
+
+#[test]
+fn baleful_stare_counts_cards_in_the_revealed_hand() {
+    cr!("701.20a");
+    assert_supported("Baleful Stare");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    t.hand(P1, "Mountain");
+    t.hand(P1, "Shock");
+    t.hand(P1, "Forest");
+    let b = t.hand(P0, "Baleful Stare");
+    let before = t.hand_size(P0);
+    t.cast(P0, b).target(Entity::Player(P1)).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), before - 1 + 2);
+}
+
+#[test]
+fn hydra_broodmaster_x_tokens_of_size_x() {
+    cr!("701.37c", "107.3a");
+    assert_supported("Hydra Broodmaster");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let h = t.battlefield(P0, "Hydra Broodmaster");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.activate(P0, h, 0, &[]).unwrap();
+    t.resolve_all();
+    let tokens = t.named_on_battlefield("Hydra Token");
+    assert_eq!(tokens.len(), 2);
+    assert!(tokens.iter().all(|x| t.pt(*x) == (2, 2)));
+}
+
+#[test]
+fn netherborn_phalanx_each_opponent_counts_their_own_creatures() {
+    cr!("608.2h");
+    assert_supported("Netherborn Phalanx");
+    let mut t = TestGame::new(3);
+    for _ in 0..2 {
+        t.battlefield(P1, "Grizzly Bears");
+    }
+    t.battlefield(P2, "Grizzly Bears");
+    t.enter(P0, "Netherborn Phalanx");
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 18, 19));
 }
