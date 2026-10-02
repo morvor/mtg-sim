@@ -25,6 +25,11 @@ pub const DEALT_DAMAGE_THIS_TURN: &str = "dealt_damage_this_turn";
 /// object's land subtypes are removed.
 pub const LOSE_ALL_LAND_TYPES: &str = "lose_all_land_types";
 
+/// `Modification::Custom` (layer 6) named this prefix followed by an ability's text: the
+/// object loses the abilities with that text ("~ loses \"Prevent all damage that would
+/// be dealt to ~.\"", Glittering Lion; CR 613.1f).
+pub const LOSE_ABILITY_PREFIX: &str = "lose_ability:";
+
 pub struct GrantFilters;
 
 impl KeywordRules for GrantFilters {
@@ -40,6 +45,13 @@ impl KeywordRules for GrantFilters {
         _ctx: &Ctx,
         _target: ObjectId,
     ) -> bool {
+        if let Some(text) = name.strip_prefix(LOSE_ABILITY_PREFIX) {
+            let text = text.trim().to_lowercase();
+            chars
+                .abilities
+                .retain(|a| a.text.trim().to_lowercase() != text);
+            return true;
+        }
         if name != LOSE_ALL_LAND_TYPES {
             return false;
         }

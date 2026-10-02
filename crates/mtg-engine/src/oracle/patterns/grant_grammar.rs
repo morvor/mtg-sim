@@ -1194,3 +1194,40 @@ fn those_counted_gain(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "grants: those creatures (just counted) gain ...", priority: 70, apply: those_counted_gain } }
+
+/// "Until end of turn, ~ loses \"Prevent all damage that would be dealt to ~.\""
+/// (Glittering Lion, Glittering Lynx): the object loses that one ability (CR 613.1f).
+fn loses_quoted_ability(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let (lead, body) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => (true, r),
+        None => (false, l),
+    };
+    let (body, trail) = match body.strip_suffix(" until end of turn") {
+        Some(r) => (r, true),
+        None => (body, false),
+    };
+    if lead == trail {
+        return None;
+    }
+    let (subject, quote) = body.split_once(" loses \"")?;
+    let quote = quote.strip_suffix('"')?;
+    if quote.contains('"') {
+        return None;
+    }
+    let what = match subject {
+        "~" => Sel::This,
+        "it" => b.it.clone(),
+        _ => return None,
+    };
+    Some(Effect::Modify {
+        what,
+        mods: vec![Modification::Custom {
+            name: format!("{}{quote}", crate::kw::grant_filters::LOSE_ABILITY_PREFIX).into(),
+            layer: Layer::L6Ability,
+        }],
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: loses \"[ability]\"", priority: 120, parse: loses_quoted_ability } }

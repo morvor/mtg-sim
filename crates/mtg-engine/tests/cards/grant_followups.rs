@@ -297,3 +297,54 @@ fn order_of_the_alabaster_host_shrinks_the_blocking_creature() {
     assert_eq!(t.pt(blocker), (5, 5));
     assert_eq!(t.pt(other), (2, 2));
 }
+
+#[test]
+fn spined_tyrranax_reflexive_target_gains_trample() {
+    cr!("603.12");
+    assert_supported(&["Spined Tyrranax"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Spined Tyrranax");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Targets,
+        mtg_engine::decision::Answer::Entities(vec![Entity::Object(bears)]),
+    );
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Trample));
+}
+
+#[test]
+fn glittering_lion_loses_its_prevention_ability_until_end_of_turn() {
+    cr!("613.1f", "602.1");
+    assert_supported(&["Glittering Lion", "Glittering Lynx"]);
+    let mut t = TestGame::new(2);
+    let lion = t.battlefield(P0, "Glittering Lion");
+    t.lands(P1, "Mountain", 2);
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(lion).go();
+    t.resolve();
+    assert!(t.on_battlefield(lion));
+    assert_eq!(t.obj_now(lion).damage, 0);
+    // Any player may activate it: the opponent does, then Shocks it.
+    t.lands(P1, "Mountain", 4);
+    let idx = t
+        .obj_now(lion)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .count()
+        - 1;
+    t.activate(P1, lion, idx, &[]).unwrap();
+    t.resolve();
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(lion).go();
+    t.resolve();
+    assert!(!t.on_battlefield(lion));
+}
