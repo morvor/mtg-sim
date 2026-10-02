@@ -116,6 +116,11 @@ impl Renderer<'_> {
                 let e = self.static_effect(&s.effect);
                 format!("during turns other than yours, {}", lower_first(&e))
             }
+            // "Players can't cast spells during combat."
+            Some(Condition::Phase(PhaseCond::Combat)) => {
+                let e = self.static_effect(&s.effect);
+                format!("{} during combat", e.trim_end_matches('.'))
+            }
             // "~ can't attack or block unless an opponent has eight or more cards in their
             // graveyard."
             Some(Condition::Not(c)) if matches!(s.effect, StaticEffect::Restriction(_)) => {

@@ -3403,9 +3403,21 @@ impl Renderer<'_> {
             match m {
                 Modification::ModifyPT(p, t) => {
                     let (ps, pw) = self.pt_amount(p);
-                    let (ts, tw) = self.pt_amount(t);
-                    if let Some(w) = pw.or(tw) {
-                        where_clauses.push(w);
+                    let (mut ts, tw) = self.pt_amount(t);
+                    match (pw, tw) {
+                        // "+X/+Y, where X is ... and Y is ...": two different numbers.
+                        (Some(a), Some(b))
+                            if format!("{p:?}") != format!("{t:?}") && ps == "X" && ts == "X" =>
+                        {
+                            ts = "Y".into();
+                            let y = b.trim_start_matches(", where X is ");
+                            where_clauses.push(format!("{a}, and Y is {y}"));
+                        }
+                        (pw, tw) => {
+                            if let Some(w) = pw.or(tw) {
+                                where_clauses.push(w);
+                            }
+                        }
                     }
                     let (mut a, mut b) = (signed(&ps), signed(&ts));
                     // "-2/-0": a zero next to a negative modifier is printed "-0".
