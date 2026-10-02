@@ -118,6 +118,7 @@ pub mod stack_ability_filters;
 pub mod start;
 pub mod stickers;
 pub mod subgame;
+pub mod target_groups;
 pub mod target_rules;
 pub mod teams;
 pub mod testing;

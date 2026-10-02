@@ -763,6 +763,19 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             who,
             filter: Filter::Any,
         },
+        // "Whenever you play a land or cast a spell" (The Endstone, Cemetery Protector):
+        // either event; "it" is the land or the spell.
+        "play a land or cast a spell" | "plays a land or casts a spell" => {
+            let (cast, _, _) = parse_cast(who, "a spell")?;
+            let c = TriggerCond::AnyOf(vec![
+                TriggerCond::LandPlayed {
+                    who,
+                    filter: Filter::Any,
+                },
+                cast,
+            ]);
+            return Some((c, Sel::TriggerObject, tp()));
+        }
         "loses the game" if who == PlayerRel::Any => TriggerCond::PlayerLoses,
         "scry" | "scries" => action("scry"),
         "surveil" | "surveils" => action("surveil"),
@@ -841,12 +854,15 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         }
         let base = TriggerCond::NthSpellCast { who, n };
         let c = match x {
-            "spell each turn" => base,
+            // "your third spell in a turn" (Vance's Blasting Cannons): the same.
+            "spell each turn" | "spell in a turn" => base,
             "spell during each opponent's turn" | "spell during an opponent's turn" => {
-                TriggerCond::Where {
+                // "That player" is the opponent whose turn it is (Blightwing Bandit).
+                let c = TriggerCond::Where {
                     trigger: Box::new(base),
                     cond: Condition::NotYourTurn,
-                }
+                };
+                return Some((c, spell(), PlayerRef::ActivePlayer));
             }
             "spell during your turn" | "spell each turn during your turn" => TriggerCond::Where {
                 trigger: Box::new(base),
@@ -1090,10 +1106,29 @@ pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
             false,
         );
     }
+    // "~ or an instant or sorcery spell you control" (Syr Carah, the Bold): either.
+    if let Some(r) = s
+        .strip_prefix("~ or ")
+        .filter(|r| !r.starts_with("another "))
+    {
+        let other = parse_subject(r)?;
+        if other.self_only || other.one_or_more {
+            return None;
+        }
+        return mk(Filter::Or(vec![Filter::Source, other.filter]), false, false);
+    }
     if let Some(r) = s.strip_prefix("~ or another ") {
-        let (f, plural, tail) = parse_object_phrase(r)?;
+        // "~ or another creature with the same name" (as ~; Pirated Copy, CR 201.2a).
+        let (r, same_name) = match r.strip_suffix(" with the same name") {
+            Some(x) => (x, true),
+            None => (r, false),
+        };
+        let (mut f, plural, tail) = parse_object_phrase(r)?;
         if plural || !end(tail).is_empty() {
             return None;
+        }
+        if same_name {
+            f = Filter::and(vec![f, Filter::SameNameAs(Box::new(Sel::This))]);
         }
         return mk(
             Filter::Or(vec![Filter::Source, Filter::and(vec![f, Filter::Other])]),
