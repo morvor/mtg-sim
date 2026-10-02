@@ -120,6 +120,11 @@ fn win_or_lose(l: &str, b: &mut Builder) -> Option<Effect> {
             let text = spec.text.clone();
             PlayerRef::Target(b.add_target(spec, &text))
         }
+        // "Target opponent may ... If you win the flip, that player loses the game.":
+        // the target player the text mentioned.
+        None if l.starts_with("that player ") && matches!(b.it_player, PlayerRef::Target(_)) => {
+            b.it_player.clone()
+        }
         None => who,
     };
     Some(if win {

@@ -32,6 +32,28 @@ pub const GAIN_OWNERSHIP: &str = "ante:gain ownership";
 /// top card of the controller's library ("Exchange that card with the top card of your
 /// library").
 pub const EXCHANGE_WITH_TOP: &str = "ante:exchange with top card";
+/// `Effect::Custom`: the controller antes the source ("Ante this artifact", CR 407.4),
+/// from whichever zone it's in. Records whether it was anted ("If you do").
+pub const ANTE_THIS: &str = "ante:this";
+/// `Effect::Custom`: "put all other cards you own from the ante into your graveyard"
+/// (all but the source).
+pub const OTHER_ANTE_CARDS_TO_GRAVEYARD: &str = "ante:other owned cards to graveyard";
+/// `Effect::Custom`: "exchange ownership of [the objects in `vars::IT`] and ~": the two
+/// owners swap (CR 407.3). Records whether the exchange happened.
+pub const EXCHANGE_OWNERSHIP: &str = "ante:exchange ownership with this";
+/// `Effect::Custom` prefix ("hand"/"graveyard" follows): "put [the objects in `vars::IT`]
+/// into your hand/graveyard and ~ from anywhere into that player's graveyard", after an
+/// exchange of ownership: that player is the source's new owner.
+pub const PUT_EXCHANGED: &str = "ante:put exchanged:";
+/// `Effect::Custom`: "that player owns ~ and you own the other exiled card": the owner of
+/// the objects in `vars::IT` becomes the source's owner, and the controller theirs.
+pub const GIVE_THIS_FOR_IT: &str = "ante:they own this, you own it";
+/// `Effect::Custom`: "put ~ into its owner's graveyard" for a source the ability exiled
+/// (its current object, if it's in exile).
+pub const EXILED_THIS_TO_GRAVEYARD: &str = "ante:exiled this to graveyard";
+/// The objects whose ownership [`EXCHANGE_OWNERSHIP`] exchanged with the source's, for
+/// [`PUT_EXCHANGED`].
+const EXCHANGED: Var = vars::USER + 4071;
 
 /// Whether a card has the ante reminder "Remove this card from your deck before playing
 /// if you're not playing for ante." (CR 407.3).
@@ -167,62 +189,190 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
     match name {
         ANTE_TOP => {
             let p = ctx.iter_player.unwrap_or(ctx.controller);
+            ctx.prev_happened = false;
             if let Some(top) = g.library_top(p) {
                 let new = ante(g, p, top, ctx.source);
+                ctx.prev_happened = new.is_some();
                 ctx.set_var(vars::IT, new.into_iter().map(Entity::Object).collect());
             }
             true
         }
-        GAIN_OWNERSHIP => {
-            // CR 407.3: only ante cards change a card's owner.
+        ANTE_THIS => {
+            ctx.prev_happened = false;
+            let Some(src) = ctx.source.map(|s| g.current(s)) else {
+                return true;
+            };
+            if !g.is_live(src) || g.obj(src).zone == Zone::Ante {
+                return true;
+            }
+            // CR 407.4: only its owner can ante it.
+            let new = ante(g, ctx.controller, src, ctx.source);
+            ctx.prev_happened = new.is_some();
+            true
+        }
+        OTHER_ANTE_CARDS_TO_GRAVEYARD => {
+            let p = ctx.controller;
+            let src = ctx.source.map(|s| g.current(s));
+            let cards: Vec<ObjectId> = g
+                .ante
+                .iter()
+                .copied()
+                .filter(|o| Some(*o) != src && g.obj(*o).owner == p && g.obj(*o).is_card())
+                .collect();
+            let moves = cards
+                .into_iter()
+                .map(|obj| MoveEv {
+                    obj,
+                    to: Zone::Graveyard(p),
+                    pos: LibraryPosition::Top,
+                    cause: MoveCause::Effect,
+                    by: Some(p),
+                    etb: EtbInfo::default(),
+                    source: ctx.source,
+                })
+                .collect();
+            g.move_objects(moves);
+            true
+        }
+        EXCHANGE_OWNERSHIP => {
+            let done = exchange_ownership(g, ctx);
+            ctx.prev_happened = done;
+            let exchanged = if done {
+                it_objects(ctx).into_iter().map(Entity::Object).collect()
+            } else {
+                vec![]
+            };
+            ctx.set_var(EXCHANGED, exchanged);
+            true
+        }
+        GIVE_THIS_FOR_IT => {
             if !ctx.source.is_some_and(|s| object_is_ante_card(g, s)) {
                 return true;
             }
-            let p = ctx.controller;
+            let Some(src) = ctx.source.map(|s| g.current(s)) else {
+                return true;
+            };
+            let you = ctx.controller;
             for o in it_objects(ctx) {
                 let o = g.current(o);
-                if g.is_live(o) {
-                    g.objects[o.0 as usize].owner = p;
-                    g.log(|g| format!("{p} becomes the owner of {}", g.describe(o)));
+                if !g.is_live(o) || o == src {
+                    continue;
                 }
+                let them = g.obj(o).owner;
+                set_owner(g, src, them);
+                set_owner(g, o, you);
             }
-            g.dirty = true;
             true
         }
-        EXCHANGE_WITH_TOP => {
-            let p = ctx.controller;
-            let cards: Vec<ObjectId> = it_objects(ctx)
-                .into_iter()
-                .map(|o| g.current(o))
-                .filter(|o| g.is_live(*o) && g.obj(*o).zone == Zone::Ante)
-                .collect();
-            let Some(card) = cards.first().copied() else {
+        EXILED_THIS_TO_GRAVEYARD => {
+            let Some(src) = ctx.source.map(|s| g.current(s)) else {
                 return true;
             };
-            let Some(top) = g.library_top(p) else {
+            if g.is_live(src) && g.obj(src).zone == Zone::Exile {
+                let owner = g.obj(src).owner;
+                g.move_object(
+                    src,
+                    Zone::Graveyard(owner),
+                    MoveCause::Effect,
+                    Some(ctx.controller),
+                );
+            }
+            true
+        }
+        n if n.starts_with(PUT_EXCHANGED) => {
+            // Only after an exchange of ownership happened: the exchanged objects, and
+            // the source "from anywhere" into its new owner's graveyard.
+            let exchanged: Vec<ObjectId> = ctx
+                .vars
+                .get(&EXCHANGED)
+                .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                .unwrap_or_default();
+            if exchanged.is_empty() {
                 return true;
+            }
+            let to_hand = n[PUT_EXCHANGED.len()..] == *"hand";
+            let p = ctx.controller;
+            let to = if to_hand {
+                Zone::Hand(p)
+            } else {
+                Zone::Graveyard(p)
             };
             let base = MoveEv {
-                obj: card,
-                to: Zone::Library(p),
+                obj: ObjectId(0),
+                to,
                 pos: LibraryPosition::Top,
                 cause: MoveCause::Effect,
                 by: Some(p),
                 etb: EtbInfo::default(),
                 source: ctx.source,
             };
-            let to_ante = MoveEv {
-                obj: top,
-                to: Zone::Ante,
-                ..base.clone()
-            };
-            // An exchange of zones happens only if both objects can move (CR 701.12a).
-            if g.move_forbidden(&base) || g.move_forbidden(&to_ante) {
-                return true;
+            let mut moves: Vec<MoveEv> = exchanged
+                .into_iter()
+                .map(|o| g.current(o))
+                .filter(|o| g.is_live(*o) && g.obj(*o).zone != to)
+                .map(|obj| MoveEv {
+                    obj,
+                    ..base.clone()
+                })
+                .collect();
+            if let Some(src) = ctx.source.map(|s| g.current(s)).filter(|s| g.is_live(*s)) {
+                let owner = g.obj(src).owner;
+                if g.obj(src).zone != Zone::Graveyard(owner) {
+                    moves.push(MoveEv {
+                        obj: src,
+                        to: Zone::Graveyard(owner),
+                        ..base.clone()
+                    });
+                }
             }
-            g.move_objects(vec![to_ante, base]);
+            g.move_objects(moves);
             true
         }
         _ => false,
     }
+}
+
+/// Changes an object's owner (CR 108.3: only the rules for ante care, 407.3). A card in
+/// a graveyard, hand or library stays where it is until an instruction moves it.
+fn set_owner(g: &mut Game, obj: ObjectId, p: PlayerId) {
+    if g.obj(obj).owner == p {
+        return;
+    }
+    g.objects[obj.0 as usize].owner = p;
+    g.log(|g| format!("{p} becomes the owner of {}", g.describe(obj)));
+    g.dirty = true;
+}
+
+/// "Exchange ownership of [the objects in `vars::IT`] and ~" (CR 407.3): the source's
+/// owner and the other object's owner swap ownership of them. Like any exchange, it
+/// happens only if it can be completed: both objects still exist (the source from
+/// anywhere), only an ante card does it, and they have different owners (CR 701.12a-b).
+/// Returns whether it happened.
+pub fn exchange_ownership(g: &mut Game, ctx: &Ctx) -> bool {
+    let Some(source) = ctx.source else {
+        return false;
+    };
+    // CR 407.3: only ante cards change a card's owner.
+    if !object_is_ante_card(g, source) {
+        return false;
+    }
+    let src = g.current(source);
+    let others: Vec<ObjectId> = it_objects(ctx)
+        .into_iter()
+        .map(|o| g.current(o))
+        .filter(|o| g.is_live(*o))
+        .collect();
+    let [other] = others[..] else {
+        return false;
+    };
+    if !g.is_live(src) || other == src {
+        return false;
+    }
+    let (a, b) = (g.obj(src).owner, g.obj(other).owner);
+    if a == b {
+        return false;
+    }
+    set_owner(g, src, b);
+    set_owner(g, other, a);
+    true
 }
