@@ -92,8 +92,8 @@ fn last_ditch_effort_deals_damage_equal_to_the_number_sacrificed() {
     t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Mountain", 1);
     let spell = t.hand(P0, "Last-Ditch Effort");
-    t.answer_choose(P0, &objs(&[a, b]));
     t.cast(P0, spell).target(P1).go();
+    t.answer_choose(P0, &objs(&[a, b]));
     t.resolve();
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);

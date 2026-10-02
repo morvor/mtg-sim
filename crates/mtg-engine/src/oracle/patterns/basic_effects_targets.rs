@@ -277,7 +277,7 @@ fn sels_len(s: &Sel) -> usize {
     }
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: [verb] several targets", priority: 150, parse: verb_targets } }
+inventory::submit! { EffectPattern { name: "basic effects: [verb] several targets", priority: 980, parse: verb_targets } }
 
 /// A player-or-object target the core phrase parser doesn't read: "target player or
 /// battle", "target opponent or battle", "another target battle or opponent".

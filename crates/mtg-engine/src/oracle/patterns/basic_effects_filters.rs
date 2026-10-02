@@ -112,8 +112,9 @@ fn thats_a<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
             None => break,
         }
     }
-    // A list ("that's a Cat, Elemental, or Beast") is read elsewhere.
-    if alts.len() < 2 || r.trim_start().starts_with(',') {
+    // A list ("that's a Cat, Elemental, or Beast") is read elsewhere, and so is a clause
+    // that ends the phrase ("each creature you control that's an Ape or a Monkey.").
+    if alts.len() < 2 || r.trim_start().starts_with(',') || end(r).trim().is_empty() {
         return None;
     }
     Some((Filter::Or(alts), r))

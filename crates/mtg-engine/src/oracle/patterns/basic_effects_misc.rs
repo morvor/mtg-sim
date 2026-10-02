@@ -21,7 +21,7 @@ fn shuffle_into_owners_library(l: &str, b: &mut Builder) -> Option<Effect> {
     }
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: shuffle [object] into its owner's library", priority: 60, parse: shuffle_into_owners_library } }
+inventory::submit! { EffectPattern { name: "basic effects: shuffle [object] into its owner's library", priority: 980, parse: shuffle_into_owners_library } }
 
 /// "It gets an additional -1/-1 until end of turn for each Desert you control.", "Zombie
 /// creatures you control get an additional +2/+2 until end of turn": "additional" only

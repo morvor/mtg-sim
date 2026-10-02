@@ -202,13 +202,13 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: [verb] any number of [objects]", priority: 150, parse: verb_chosen } }
+inventory::submit! { EffectPattern { name: "basic effects: [verb] any number of [objects]", priority: 980, parse: verb_chosen } }
 
 /// "you may tap two untapped creatures you control", "any opponent may tap an untapped
 /// creature they control", "you may exile a Human you control and an artifact you
 /// control": an optional action that is a cost paid as the ability resolves (CR 118.12),
 /// so "if you do" means it was paid in full.
-fn may_pay_action(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn may_pay_action(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (who, r) = if let Some(r) = l.strip_prefix("you may ") {
         (PlayerRef::You, r)
@@ -278,7 +278,9 @@ fn chosen_instruction(e: &Effect) -> Option<(Verb, &Filter)> {
                     Effect::Store {
                         var,
                         sel: Sel::Choose { filter, .. },
-                    } if *var == CHOSEN => Some(filter),
+                    } if *var == CHOSEN || *var == super::hand_graveyard_grammar::CHOSEN => {
+                        Some(filter)
+                    }
                     _ => None,
                 })?;
                 let verb = v.iter().find_map(|x| match x {
@@ -560,7 +562,7 @@ fn sacrifice_described(l: &str, _b: &mut Builder) -> Option<Effect> {
     }
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: sacrifice [described object]", priority: 150, parse: sacrifice_described } }
+inventory::submit! { EffectPattern { name: "basic effects: sacrifice [described object]", priority: 980, parse: sacrifice_described } }
 
 /// "sacrifice each other creature you control", "sacrifice all Dragons you control",
 /// "sacrifice half the non-Demon permanents you control, rounded up", "enchanted
@@ -601,7 +603,7 @@ fn sacrifice_group(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 150, parse: sacrifice_group } }
+inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 980, parse: sacrifice_group } }
 
 /// "you untap all lands you control" (Sword of Feast and Famine), "you sacrifice a land"
 /// (Redcap Melee): the controller performs the instruction.
@@ -655,3 +657,65 @@ fn if_that_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "basic effects: if that player does", priority: 60, apply: if_that_player_does } }
+
+/// "Sacrifice any number of artifacts, creatures, and/or lands. Draw a card for each
+/// permanent sacrificed this way." where the sacrifice is the hand/graveyard grammar's
+/// (`hand_graveyard_grammar::p_sacrifice_any`) and none of its own follow-ups read the next
+/// sentence: the sacrificed objects are what [`f_about_chosen`] counts.
+fn f_about_sacrificed_any(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    use super::hand_graveyard_grammar as hgg;
+    let Effect::Seq(v) = &*prev else {
+        return false;
+    };
+    let chose = v.iter().position(|x| {
+        matches!(x, Effect::Store { var, sel: Sel::Choose { .. } } if *var == hgg::CHOSEN)
+    });
+    let Some(i) = chose else {
+        return false;
+    };
+    if !matches!(v.get(i + 1), Some(Effect::SacrificeObjects { what: Sel::Var(w) }) if *w == hgg::CHOSEN)
+    {
+        return false;
+    }
+    // Only the record of what was sacrificed follows.
+    if !v[i + 2..].iter().all(|x| {
+        matches!(x, Effect::Store { .. } | Effect::StoreValue { .. } | Effect::Custom(_))
+    }) {
+        return false;
+    }
+    // The sentence read on its own (the grammar's "that many") comes first.
+    let state = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.clone(),
+    );
+    // (Not "that much" read as an event's amount where no event happened: "Sacrifice any
+    // number of creatures. ~ deals that much damage to any target.")
+    let alone = parse_sentence(&end(&s.to_lowercase()), b).is_some_and(|e| {
+        b.in_trigger || !format!("{e:?}").contains("EventAmount")
+    });
+    b.targets.truncate(state.0);
+    (b.it, b.it_player, b.named) = (state.1, state.2, state.3);
+    if alone {
+        return false;
+    }
+    let saved = prev.clone();
+    if let Effect::Seq(v) = prev {
+        v.push(Effect::Store {
+            var: DONE,
+            sel: Sel::Var(hgg::AFFECTED),
+        });
+        v.push(Effect::StoreValue {
+            var: COUNT,
+            value: Value::CountSel(Box::new(Sel::Var(DONE))),
+        });
+    }
+    if f_about_chosen(s, prev, b) {
+        return true;
+    }
+    *prev = saved;
+    false
+}
+
+inventory::submit! { FollowupPattern { name: "basic effects: about the objects sacrificed (hand/graveyard grammar)", priority: 999, apply: f_about_sacrificed_any } }

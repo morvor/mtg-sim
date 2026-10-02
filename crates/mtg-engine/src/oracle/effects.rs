@@ -544,12 +544,15 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     if l.starts_with("you may pay ")
         || (l.starts_with("you may ") && l.contains(" unless that player pays "))
         || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
-        // "You may tap two untapped creatures you control": a cost paid on resolution
-        // (CR 118.12, see `patterns::basic_effects_choose`).
-        || l.starts_with("you may tap ")
-        || l.starts_with("you may exile ")
     {
         if let Some(e) = parse_simple(l, b) {
+            return Some(e);
+        }
+    }
+    // "You may tap two untapped creatures you control": a cost paid on resolution
+    // (CR 118.12, see `patterns::basic_effects_choose`).
+    if l.starts_with("you may tap ") || l.starts_with("you may exile ") {
+        if let Some(e) = super::patterns::basic_effects_choose::may_pay_action(l, b) {
             return Some(e);
         }
     }
