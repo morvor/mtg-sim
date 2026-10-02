@@ -72,3 +72,27 @@ pub fn shuffled(t: &TestGame, p: PlayerId) -> bool {
         .iter()
         .any(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == p))
 }
+
+/// Queues `p`'s answer to a "choose a creature type" decision.
+pub fn choose_creature_type(t: &mut TestGame, p: PlayerId, ty: &str) {
+    let i = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == ty)
+        .unwrap_or_else(|| panic!("no creature type {ty}"));
+    t.answer(p, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+}
+
+/// The option lists of the "choose one of these" decisions asked of `p` since decision
+/// `from`, with their prompts.
+pub fn options_asked(t: &TestGame, p: PlayerId, from: usize) -> Vec<(String, Vec<String>)> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(q, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption {
+                prompt, options, ..
+            } if *q == p => Some((prompt.clone(), options.clone())),
+            _ => None,
+        })
+        .collect()
+}
