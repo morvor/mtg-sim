@@ -130,11 +130,22 @@ pub fn clash_players(
 
 /// `p` clashes with an opponent (CR 701.30b). Returns whether `p` won.
 pub fn clash_with_opponent(g: &mut Game, p: PlayerId, source: Option<ObjectId>) -> bool {
+    clash_with_chosen_opponent(g, p, source).0
+}
+
+/// `p` clashes with an opponent (CR 701.30b). Returns whether `p` won, and the opponent.
+pub fn clash_with_chosen_opponent(
+    g: &mut Game,
+    p: PlayerId,
+    source: Option<ObjectId>,
+) -> (bool, Option<PlayerId>) {
     let mut players = vec![p];
-    players.extend(choose_opponent(g, p, source));
-    clash_players(g, &players, source)
+    let opponent = choose_opponent(g, p, source);
+    players.extend(opponent);
+    let won = clash_players(g, &players, source)
         .into_iter()
-        .any(|(q, _, won)| q == p && won)
+        .any(|(q, _, won)| q == p && won);
+    (won, opponent)
 }
 
 pub struct Fateseal;
@@ -164,10 +175,14 @@ impl KeywordActionRules for Clash {
     /// "[You] clash with an opponent".
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
         let mut won = false;
+        let mut opponents = Vec::new();
         for p in g.eval_players(a.who, ctx) {
-            won |= clash_with_opponent(g, p, ctx.source);
+            let (w, opponent) = clash_with_chosen_opponent(g, p, ctx.source);
+            won |= w;
+            opponents.extend(opponent.map(Entity::Player));
         }
         ctx.prev_happened = won;
+        ctx.set_var(kvars::CLASHED_WITH, opponents);
     }
 }
 

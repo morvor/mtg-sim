@@ -809,3 +809,38 @@ fn hide_in_plain_sight_cloaks_two_and_puts_the_rest_on_the_bottom() {
     expected.sort();
     assert_eq!(bottom, expected);
 }
+
+#[test]
+fn unidentified_hovership_the_exiled_cards_owner_manifests_dread() {
+    cr!("701.62a", "607.2a");
+    ruling!(
+        "Unidentified Hovership",
+        "If there's no exiled card when Unidentified Hovership's third ability resolves"
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let ship = t.enter(P0, "Unidentified Hovership");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    destroy(&mut t, ship);
+    t.resolve_all();
+    let manifested: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.g.obj(*o).face_down)
+        .collect();
+    assert_eq!(manifested.len(), 1);
+    assert_eq!(t.g.obj(manifested[0]).controller, P1);
+
+    // With nothing exiled, nothing happens.
+    let mut t = TestGame::new(2);
+    t.answer_targets(P0, &[]);
+    let ship = t.enter(P0, "Unidentified Hovership");
+    t.resolve_all();
+    destroy(&mut t, ship);
+    t.resolve_all();
+    assert!(t.g.battlefield.iter().all(|o| !t.g.obj(*o).face_down));
+}

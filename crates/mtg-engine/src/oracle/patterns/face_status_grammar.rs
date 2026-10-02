@@ -983,3 +983,24 @@ fn f_manifest_some(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "face grammar: manifest / cloak N of them, then put the rest ...", priority: 95, apply: f_manifest_some } }
+
+/// "the exiled card's owner manifests dread" (Unidentified Hovership): the owner of the
+/// card exiled with the source (CR 607.2a, 701.62a).
+fn p_exiled_cards_owner_manifests(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("the exiled card's owner ")?;
+    let action = match r {
+        "manifests dread" => KeywordAction::ManifestDread,
+        _ => return None,
+    };
+    Some(Effect::KeywordAction {
+        action,
+        who: PlayerRef::OwnerOf(Box::new(Sel::All(exiled_with_source()))),
+        what: Sel::None,
+        n: Value::c(1),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: the exiled card's owner manifests dread", priority: 110, parse: p_exiled_cards_owner_manifests } }

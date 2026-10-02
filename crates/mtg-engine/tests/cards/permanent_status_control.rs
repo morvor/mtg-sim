@@ -449,3 +449,28 @@ fn ogre_geargrabber_unattaches_the_equipment_when_control_returns() {
     assert_eq!(controller(&t, blade), P1);
     assert_eq!(t.obj_now(blade).attached_to, None);
 }
+
+#[test]
+fn captivating_glance_the_clash_winner_gains_control() {
+    cr!("701.30b", "701.30d");
+    // (Who controls the creature first, the cards revealed, who ends up controlling it.)
+    for (before, mine, theirs, winner) in [
+        (P1, "Serra Angel", "Island", P0),
+        (P0, "Island", "Serra Angel", P1),
+    ] {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P0, "Hill Giant");
+        let glance = t.battlefield(P0, "Captivating Glance");
+        assert!(t.g.attach(glance, Entity::Object(giant)));
+        if before == P1 {
+            give_control(&mut t, giant, P1);
+        }
+        t.library_top(P0, mine);
+        t.library_top(P1, theirs);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        // "If you win, gain control of enchanted creature. Otherwise, that player (the
+        // opponent clashed with) gains control of it."
+        assert_eq!(controller(&t, giant), winner);
+    }
+}
