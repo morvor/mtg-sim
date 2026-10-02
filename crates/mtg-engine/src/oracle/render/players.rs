@@ -69,21 +69,26 @@ impl Renderer<'_> {
             return self.gap(format!("target slot {i} out of range"));
         };
         let other = !t.distinct_from.is_empty();
-        let count = match (t.min, t.max.as_const()) {
-            (1, Some(1)) => None,
-            (0, Some(m)) if m >= 99 => Some("any number of".into()),
-            (n, Some(m)) if n as i32 == m => Some(number_word(m)),
-            (0, Some(m)) if m >= 1 => Some(format!("up to {}", number_word(m))),
-            (1, Some(2)) => Some("one or two".into()),
-            (a, Some(m)) if a >= 1 && m > a as i32 && m - (a as i32) <= 3 => {
-                let words: Vec<String> = (a as i32..=m).map(number_word).collect();
+        let count = match (t.fixed_min(), t.max.as_const()) {
+            // "X target creatures": exactly that many (the minimum is the maximum).
+            (None, _) if format!("{:?}", t.min) == format!("{:?}", t.max) => {
+                Some(self.value(&t.max))
+            }
+            (None, _) => Some(self.gap("a target minimum other than a number or the maximum")),
+            (Some(1), Some(1)) => None,
+            (Some(0), Some(m)) if m >= 99 => Some("any number of".into()),
+            (Some(n), Some(m)) if n == m => Some(number_word(m)),
+            (Some(0), Some(m)) if m >= 1 => Some(format!("up to {}", number_word(m))),
+            (Some(1), Some(2)) => Some("one or two".into()),
+            (Some(a), Some(m)) if a >= 1 && m > a && m - a <= 3 => {
+                let words: Vec<String> = (a..=m).map(number_word).collect();
                 Some(join_list(&words, "or"))
             }
-            (1, Some(m)) if m > 1 && m < 100 => Some(format!("one or {}", number_word(m))),
-            (0, Some(_)) | (0, None) if matches!(t.max, Value::Const(_)) => {
+            (Some(1), Some(m)) if m > 1 && m < 100 => Some(format!("one or {}", number_word(m))),
+            (Some(0), Some(_)) | (Some(0), None) if matches!(t.max, Value::Const(_)) => {
                 Some("any number of".into())
             }
-            (n, None) => {
+            (Some(n), None) => {
                 let v = self.value(&t.max);
                 if n == 0 {
                     Some(format!("up to {v}"))
@@ -212,6 +217,20 @@ impl Renderer<'_> {
                 s.push_str(&format!(" {w}"));
             }
         }
+        // A relationship with the targets of an earlier instance of "target" ("another
+        // target creature with the same controller", "that shares a card type with it").
+        match &t.related_to {
+            None => {}
+            Some((_, TargetGroup::SameController)) => s.push_str(" with the same controller"),
+            Some((_, TargetGroup::ShareCardType)) => s.push_str(" that shares a card type with it"),
+            Some((_, TargetGroup::ShareCardTypeAmong(_))) => {
+                s.push_str(" that shares one of those types with it")
+            }
+            Some((_, g)) => {
+                let w = self.gap(format!("a relationship with another target: {g:?}"));
+                s.push_str(&format!(" {w}"));
+            }
+        }
         s
     }
 
@@ -228,6 +247,18 @@ impl Renderer<'_> {
             TargetGroup::SharePermanentType => "that share a permanent type".into(),
             TargetGroup::ShareNoCreatureType => "that share no creature types".into(),
             TargetGroup::DifferentNames => "with different names".into(),
+            TargetGroup::DifferentControllers => "with different controllers".into(),
+            TargetGroup::DifferentManaValues => "with different mana values".into(),
+            TargetGroup::DifferentPowers => "with different powers".into(),
+            TargetGroup::EqualToughness => "with equal toughness".into(),
+            TargetGroup::ShareCardTypeAmong(types) => {
+                let words: Vec<String> = types
+                    .iter()
+                    .map(|t| format!("{t:?}").to_lowercase())
+                    .collect();
+                format!("that share {}", join_list(&words, "or"))
+            }
+            TargetGroup::OnePerCardType => "one of each card type".into(),
             TargetGroup::TotalAtMost(stat, v) => {
                 let st = match stat {
                     TotalStat::ManaValue => "mana value",
@@ -401,6 +432,11 @@ impl Renderer<'_> {
                 decline(n, case)
             }
             Sel::AttachedToThis => decline("each permanent attached to ~".into(), case),
+            // "the permanent target Aura is attached to".
+            Sel::HostOf(s) => {
+                let s = self.sel(s, Case::Subj);
+                decline(format!("the permanent {s} is attached to"), case)
+            }
             Sel::All(f) => {
                 if let Some(z) = whole_zone(f) {
                     let s = self.whole_zone_phrase(z.0, z.1);

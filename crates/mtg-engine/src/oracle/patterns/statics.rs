@@ -1692,6 +1692,26 @@ pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restricti
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
         "is goaded" | "are goaded" => return Some(vec![Restriction::Goaded(fc)]),
+        // CR 302.6 with 609.4: summoning sickness is waived for attacking.
+        "can attack as though it had haste"
+        | "can attack as though they had haste"
+        | "can attack as though those creatures had haste" => {
+            return Some(vec![Restriction::AttackAsThoughHaste {
+                attackers: fc,
+                defender: None,
+            }])
+        }
+        "can attack your opponents and planeswalkers your opponents control as though those creatures had haste"
+        | "can attack your opponents and planeswalkers your opponents control as though they had haste" => {
+            return Some(vec![Restriction::AttackAsThoughHaste {
+                attackers: fc,
+                defender: Some(PlayerFilter::Opponent),
+            }])
+        }
+        // CR 509.1a with 609.4: only the untapped requirement is waived.
+        "can block as though it were untapped" | "can block as though they were untapped" => {
+            return Some(vec![Restriction::BlockAsThoughUntapped(fc)])
+        }
         "can't attack you" | "can't attack you or planeswalkers you control" => {
             return Some(vec![Restriction::CantAttackPlayer {
                 attackers: fc,

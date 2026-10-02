@@ -19,7 +19,7 @@ fn choose_two_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     for text in [first, second.as_str()] {
         let (spec, tail) = parse_target(text)?;
         if !end(tail).is_empty()
-            || spec.min != 1
+            || spec.fixed_min() != Some(1)
             || !matches!(spec.max, Value::Const(1))
             || !matches!(spec.what, TargetKind::Object(_))
         {
@@ -55,6 +55,18 @@ fn fight_each_other(l: &str, b: &mut Builder) -> Option<Effect> {
     let (sel, rest) = object_ref(subject, b)?;
     if !rest.trim().is_empty() {
         return None;
+    }
+    // "Choose two target creatures that share no creature types. Those creatures fight
+    // each other." (Rivals' Duel): exactly two targets of one instance of "target".
+    if let Sel::Target(s) = sel {
+        let spec = b.targets.get(s as usize)?;
+        if spec.fixed_min() != Some(2) || !matches!(spec.max, Value::Const(2)) {
+            return None;
+        }
+        return Some(Effect::Fight {
+            a: Sel::Target(s),
+            b: Sel::Target(s),
+        });
     }
     let Sel::Union(v) = sel else {
         return None;

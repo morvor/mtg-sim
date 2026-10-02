@@ -775,6 +775,10 @@ impl<'a> Renderer<'a> {
                 }
             };
             head = format!("{head} {count}");
+            // "You may choose two" (Shadrix Silverquill): that many modes or none.
+            if m.optional {
+                head = format!("you may {head}");
+            }
             match &m.chooser {
                 ModeChooser::Random => head.push_str(" at random"),
                 ModeChooser::Unchosen { this_turn } => {
@@ -789,6 +793,9 @@ impl<'a> Renderer<'a> {
         let mut s = format!("{head} —");
         if m.allow_repeat {
             s = format!("{head}. You may choose the same mode more than once.");
+        }
+        if m.different_players {
+            s = format!("{head}. Each mode must target a different player.");
         }
         for mode in &m.modes {
             let cost = mode.cost.as_ref().map(|c| self.cost(c));
