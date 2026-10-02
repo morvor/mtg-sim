@@ -2340,6 +2340,7 @@ impl Game {
     fn fix_restriction(&self, r: &Restriction, ctx: &Ctx) -> Restriction {
         let mut r = r.clone();
         if let Some(f) = restriction_object_filter(&mut r) {
+            self.fix_excluded_objects(f, ctx);
             if filter_references_specific(f) {
                 *f = Filter::Any;
             }
@@ -2367,11 +2368,34 @@ impl Game {
         r
     }
 
+    /// "Creatures other than [specific objects]" (Intimidation Bolt: "other creatures
+    /// can't attack this turn", other than its target) is a class of objects that can
+    /// include objects arriving later (CR 611.2c); the excluded objects are those named as
+    /// the effect begins.
+    fn fix_excluded_objects(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::And(v) => {
+                for x in v.iter_mut() {
+                    if let Filter::Not(inner) = x {
+                        if matches!(**inner, Filter::In(_)) {
+                            **inner = Filter::Objects(self.named_objects(inner, ctx));
+                        }
+                    }
+                }
+            }
+            Filter::Not(inner) if matches!(**inner, Filter::In(_)) => {
+                **inner = Filter::Objects(self.named_objects(inner, ctx));
+            }
+            _ => {}
+        }
+    }
+
     /// Restrictions naming specific objects ("target creature can't block this turn")
     /// lock onto those objects.
     fn lock_restriction_objects(&self, r: &Restriction, ctx: &Ctx) -> Option<Vec<ObjectId>> {
         let mut r = r.clone();
         let f = restriction_object_filter(&mut r)?;
+        self.fix_excluded_objects(f, ctx);
         if filter_references_specific(f) {
             Some(self.named_objects(f, ctx))
         } else {
