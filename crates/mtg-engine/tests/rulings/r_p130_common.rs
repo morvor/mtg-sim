@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use mtg_engine::object::StackKind;
+use mtg_engine::types::counters;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -71,4 +72,16 @@ pub fn to_combat_damage_triggers(t: &mut TestGame) {
     let ap = t.g.turn.active;
     t.advance_to(ap, mtg_engine::turn::Step::CombatDamage);
     t.settle();
+}
+
+/// Sets the loyalty of a planeswalker.
+pub fn loyalty(t: &mut TestGame, pw: ObjectId, n: u32) {
+    let pw = t.g.current(pw);
+    let have = t.counters(pw, counters::LOYALTY);
+    if n > have {
+        t.g.add_counters(Entity::Object(pw), counters::LOYALTY, n - have, None);
+    } else {
+        t.g.remove_counters(Entity::Object(pw), counters::LOYALTY, have - n);
+    }
+    t.g.recompute();
 }
