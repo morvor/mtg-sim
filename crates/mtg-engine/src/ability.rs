@@ -2437,6 +2437,11 @@ pub struct PlayTerms {
     /// become (X being 0, CR 107.3b).
     #[serde(default)]
     pub alt_cost: Option<Cost>,
+    /// An additional cost a spell cast with the permission must be cast with ("by paying 2
+    /// life in addition to paying its other costs", CR 601.2b, 601.2f); amounts may be
+    /// relative to the spell as for `alt_cost`.
+    #[serde(default)]
+    pub extra_cost: Option<Cost>,
     /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
     #[serde(default)]
     pub flash: bool,
@@ -2458,6 +2463,12 @@ impl PlayTerms {
         self.spells_only |= other.spells_only;
         if other.alt_cost.is_some() {
             self.alt_cost = other.alt_cost.clone();
+        }
+        if let Some(e) = &other.extra_cost {
+            match self.extra_cost.as_mut() {
+                Some(c) => crate::casting::add_cost(c, e),
+                None => self.extra_cost = Some(e.clone()),
+            }
         }
         self.flash |= other.flash;
         self.cost_increase += other.cost_increase;

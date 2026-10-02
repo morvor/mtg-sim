@@ -138,6 +138,31 @@ fn a_permission_may_require_an_alternative_cost() {
 }
 
 #[test]
+fn a_permission_may_come_with_an_additional_cost() {
+    cr!("601.2f", "601.2h", "118.9a");
+    // "... by paying 2 life in addition to paying its other costs": the mana cost and the
+    // life; an alternative cost of the card's own may replace the mana cost.
+    let extra = PlayTerms {
+        extra_cost: Some(Cost::free().with(CostPart::PayLife(Value::c(2)))),
+        ..Default::default()
+    };
+    let mut t = TestGame::new(2);
+    let bears = t.exile(P0, "Grizzly Bears");
+    let md = t.exile(P0, "Mulldrifter");
+    grant(&mut t, "Costly Permission", extra);
+    t.lands(P0, "Forest", 2);
+    t.cast(P0, bears).go();
+    assert_eq!(t.life(P0), 18);
+    t.resolve();
+    t.lands(P0, "Island", 3);
+    assert!(cast_methods(&mut t, P0, md).contains(&CastMethod::Keyword(KeywordKind::Evoke)));
+    t.cast(P0, md)
+        .method(CastMethod::Keyword(KeywordKind::Evoke))
+        .go();
+    assert_eq!(t.life(P0), 16);
+}
+
+#[test]
 fn a_permission_may_let_spells_be_cast_as_though_they_had_flash() {
     cr!("702.8a", "601.3", "307.1");
     let flash = PlayTerms {

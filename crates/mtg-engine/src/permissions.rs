@@ -318,6 +318,11 @@ fn with_permission(
 ) -> Option<CastOption> {
     let mut o = opt.clone();
     let face_way = matches!(o.method, CastMethod::Normal | CastMethod::Half(_));
+    // X is 0 for costs relative to the spell (CR 107.3b).
+    let mv = chars
+        .mana_cost
+        .as_ref()
+        .map_or(0, |m| m.mana_value_with_x(0));
     if perm.free {
         if o.alt_cost.is_some() {
             return None;
@@ -330,15 +335,21 @@ fn with_permission(
         if o.alt_cost.is_some() {
             return None;
         }
-        // X is 0: the alternative cost doesn't include it (CR 107.3b).
-        let mv = chars
-            .mana_cost
-            .as_ref()
-            .map_or(0, |m| m.mana_value_with_x(0));
         o.alt_cost = Some(spell_relative_cost(c, mv));
         if face_way {
             o.method = CastMethod::Alternative(crate::casting::PERMISSION_COST);
         }
+    }
+    // An additional cost that comes with the permission (CR 601.2f).
+    if let Some(e) = &perm.terms.extra_cost {
+        let e = spell_relative_cost(e, mv);
+        o.extra_cost = Some(match o.extra_cost.take() {
+            Some(mut c) => {
+                crate::casting::add_cost(&mut c, &e);
+                c
+            }
+            None => e,
+        });
     }
     if perm.terms.flash {
         o.flash = true;
