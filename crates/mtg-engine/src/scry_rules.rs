@@ -133,12 +133,14 @@ pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: O
         Look::Scry => "scry",
         Look::Surveil => "surveil",
     };
-    for p in players {
+    // The amount is the number of cards the player actually looked at ("the number of
+    // cards looked at while scrying this way": fewer with a short library).
+    for (p, cards) in players.into_iter().zip(&looked) {
         g.emit(Event::Custom {
             name: name.into(),
             player: Some(p),
             obj: None,
-            amount: n as i32,
+            amount: cards.len() as i32,
         });
     }
 }
