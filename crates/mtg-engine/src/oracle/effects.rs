@@ -190,6 +190,23 @@ fn parse_modal(
     let (head, rest) = t.split_once('\n')?;
     let hl = head.to_lowercase();
     let hl = hl.trim().trim_end_matches(['—', ':', '.', ' ']);
+    // "Choose one. X is the number of spells you've cast this turn." (Gnostro, Voice of the
+    // Crags): the value of X in each mode, determined as the ability resolves.
+    let (hl, x_is) = match hl.split_once(". x is ") {
+        Some((h, v)) => (h, Some(v)),
+        None => (hl, None),
+    };
+    let x_value = match x_is {
+        Some(v) => {
+            let mut b = Builder::new(ctx);
+            let (value, rest) = super::statics::parse_value_phrase(v, &mut b)?;
+            if !b.targets.is_empty() || !rest.trim().is_empty() {
+                return None;
+            }
+            Some(value)
+        }
+        None => None,
+    };
     let fixed = match hl {
         "choose one" => Some((1, 1)),
         "choose two" => Some((2, 2)),
@@ -223,7 +240,10 @@ fn parse_modal(
             b.it = it.clone();
             b.it_player = it_player.clone();
         }
-        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        let mut effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        if let Some(v) = &x_value {
+            effect = Effect::Seq(vec![Effect::SetX { value: v.clone() }, effect]);
+        }
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,

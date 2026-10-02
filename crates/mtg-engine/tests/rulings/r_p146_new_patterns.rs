@@ -442,3 +442,53 @@ fn sidequest_hunt_the_mark_enters_destroys_and_transforms_into_yiazmat() {
     assert!(t.obj(s).has_keyword(KeywordKind::Indestructible));
     assert!(t.obj(s).tapped);
 }
+
+#[test]
+fn gnostro_x_is_counted_as_the_ability_resolves() {
+    cr!("608.2h", "700.2", "107.3");
+    ruling!(
+        "Gnostro, Voice of the Crags",
+        "The value of X is determined as Gnostro's ability resolves."
+    );
+    supported("Gnostro, Voice of the Crags");
+    // "{T}: Choose one. X is the number of spells you've cast this turn. • Scry X. •
+    // Gnostro deals X damage to target creature. • You gain X life."
+    // One spell before activating, one in response: X is 2.
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Gnostro, Voice of the Crags");
+    cast_resolve(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![2]),
+    );
+    t.activate(P0, g, 0, &[]).unwrap();
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    // The damage mode: two spells cast, 2 damage.
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Gnostro, Voice of the Crags");
+    let giant = t.battlefield(P1, "Hill Giant");
+    cast_resolve(&mut t, P0, "Ornithopter", &[]);
+    cast_resolve(&mut t, P0, "Ornithopter", &[]);
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![1]),
+    );
+    activate_resolve(&mut t, P0, g, 0, &[obj(giant)]);
+    assert_eq!(t.obj(giant).damage, 2);
+    // The scry mode: one spell, scry 1.
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Gnostro, Voice of the Crags");
+    cast_resolve(&mut t, P0, "Ornithopter", &[]);
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![0]),
+    );
+    let from = n_asked(&t);
+    activate_resolve(&mut t, P0, g, 0, &[]);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+}
