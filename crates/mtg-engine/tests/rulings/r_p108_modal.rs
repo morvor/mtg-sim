@@ -382,3 +382,61 @@ fn nothing_happens_between_a_confluences_modes() {
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
 }
+
+// --- Skemfar Shadowsage ----------------------------------------------------------------------
+
+/// A vanilla 1/1 creature with the given creature types for `p`.
+fn typed(t: &mut TestGame, p: PlayerId, types: &str) -> ObjectId {
+    let def = crate::r_s01_common::custom_card(
+        &format!("Test {types}"),
+        &format!("Creature — {types}"),
+        "{1}",
+        Some((1, 1)),
+        "",
+    );
+    t.custom(p, def, mtg_engine::object::Zone::Battlefield)
+}
+
+#[test]
+fn skemfar_shadowsage_counts_the_largest_group_as_it_resolves() {
+    cr!("608.2h", "700.2a");
+    ruling!(
+        "Skemfar Shadowsage",
+        "The amount of life lost or gained is calculated as the triggered ability resolves based on the creatures you control at that time, including Skemfar Shadowsage itself if it's still under your control."
+    );
+    ruling!(
+        "Skemfar Shadowsage",
+        "You choose which mode the triggered ability has as you put that ability on the stack. You can't change modes later."
+    );
+    supported("Skemfar Shadowsage");
+    let mut t = TestGame::new(2);
+    typed(&mut t, P0, "Giant Wizard");
+    typed(&mut t, P0, "Giant Warrior");
+    typed(&mut t, P0, "Elf Warrior");
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![0]),
+    );
+    let s = t.enter(P0, "Skemfar Shadowsage");
+    t.settle();
+    let trig = abilities_from(&t, s);
+    assert_eq!(trig.len(), 1);
+    assert_eq!(modes_of(&t, trig[0]), vec![Some(0)]);
+    // A Kor Warrior arrives before it resolves: three Warriors.
+    typed(&mut t, P0, "Kor Warrior");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // The Elves (with Skemfar itself) would be two; Giants two.
+    let mut t = TestGame::new(2);
+    typed(&mut t, P0, "Elf Warrior");
+    typed(&mut t, P0, "Giant Wizard");
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![1]),
+    );
+    t.enter(P0, "Skemfar Shadowsage");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+}
