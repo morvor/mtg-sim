@@ -1042,3 +1042,27 @@ fn f_rest_of_those_cards(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "face grammar: put the rest of those cards ...", priority: 95, apply: f_rest_of_those_cards } }
+
+/// "You may look at face-down creatures your opponents control any time." (Found Footage):
+/// a static ability letting its controller look at them (CR 708.5 otherwise allows only
+/// their controllers).
+fn s_look_at_opponents_face_down(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    if end(l) != "you may look at face-down creatures your opponents control any time" {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+            crate::facedown::LOOK_AT_OPPONENTS_FACE_DOWN.into(),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "face grammar: you may look at face-down creatures your opponents control", priority: 110, parse: s_look_at_opponents_face_down } }

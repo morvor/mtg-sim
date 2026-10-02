@@ -844,3 +844,22 @@ fn unidentified_hovership_the_exiled_cards_owner_manifests_dread() {
     t.resolve_all();
     assert!(t.g.battlefield.iter().all(|o| !t.g.obj(*o).face_down));
 }
+
+#[test]
+fn found_footage_lets_you_look_at_opponents_face_down_creatures() {
+    cr!("708.5");
+    assert_compiles(&["Found Footage"]);
+    let mut t = TestGame::new(2);
+    let theirs = t.battlefield(P1, "Serra Angel");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, theirs));
+    t.g.recompute();
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P0, theirs));
+    let footage = t.battlefield(P0, "Found Footage");
+    t.g.recompute();
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, theirs));
+    // Only while P0 controls it.
+    t.g.destroy(footage, None);
+    t.g.flush_events();
+    t.g.recompute();
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P0, theirs));
+}
