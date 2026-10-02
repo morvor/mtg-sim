@@ -1174,6 +1174,22 @@ impl Renderer<'_> {
             Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
                 format!("{} can't enter the battlefield", subj(self, f))
             }
+            Restriction::CantEnterFrom { what, zones } => {
+                let zones: Vec<String> = zones
+                    .iter()
+                    .map(|z| match z {
+                        ZoneKind::Library => "libraries".to_string(),
+                        ZoneKind::Graveyard => "graveyards".to_string(),
+                        ZoneKind::Hand => "hands".to_string(),
+                        z => format!("{z:?}").to_lowercase(),
+                    })
+                    .collect();
+                format!(
+                    "{} in {} can't enter the battlefield",
+                    subj(self, what),
+                    join_list(&zones, "and")
+                )
+            }
             Restriction::DoesntUntap(f) => {
                 let s = subj(self, f);
                 let whose = if matches!(f, Filter::Source)

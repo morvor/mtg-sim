@@ -28,15 +28,25 @@ fn no_regeneration(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 
 /// "[objects] can't enter the battlefield" (CR 608.3e: a permanent spell that can't enter
 /// goes to its owner's graveyard).
+///
+/// "[cards] in graveyards [and libraries] can't enter the battlefield" (Kunoros, Hound of
+/// Athreos; Grafdigger's Cage): the card is checked as it exists in that zone.
 fn cant_enter(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let what = l.strip_suffix(" can't enter the battlefield")?;
     let (f, _, tail) = parse_object_phrase(what)?;
-    if !end(tail).is_empty() {
-        return None;
-    }
-    let s = StaticAbility::new(StaticEffect::Restriction(
-        Restriction::CantEnterBattlefield(f),
-    ));
+    let r = match end(tail) {
+        "" => Restriction::CantEnterBattlefield(f),
+        "in graveyards" => Restriction::CantEnterFrom {
+            what: f,
+            zones: vec![ZoneKind::Graveyard],
+        },
+        "in graveyards and libraries" => Restriction::CantEnterFrom {
+            what: f,
+            zones: vec![ZoneKind::Graveyard, ZoneKind::Library],
+        },
+        _ => return None,
+    };
+    let s = StaticAbility::new(StaticEffect::Restriction(r));
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
 }
 
