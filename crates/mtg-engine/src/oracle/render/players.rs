@@ -323,6 +323,15 @@ impl Renderer<'_> {
             }
             Sel::Union(v) => {
                 let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
+                // "target creature and all other creatures with the same name as that
+                // creature": the union already leaves out the one named first.
+                if let [Sel::Target(_), Sel::All(_)] = v.as_slice() {
+                    if let Some(rest) = parts[1].strip_prefix("all ") {
+                        parts[1] = format!("all {{opt:other}} {rest}");
+                    } else {
+                        parts[1] = format!("{{opt:other}} {}", parts[1]);
+                    }
+                }
                 // "each opponent and each creature and planeswalker they control".
                 if parts.first().is_some_and(|p| p == "each opponent") {
                     for p in parts.iter_mut().skip(1) {

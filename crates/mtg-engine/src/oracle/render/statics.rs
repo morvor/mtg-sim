@@ -150,6 +150,13 @@ impl Renderer<'_> {
                     if let Modification::CdaPT(p, t) = &mods[0] {
                         return self.cda_pt(affected, p, t);
                     }
+                    // "You control enchanted creature."
+                    if let Modification::SetController(p) = &mods[0] {
+                        let obj = self.affected_subject(affected);
+                        let w = self.player(p, Case::Subj);
+                        let verb = if w == "you" { "control" } else { "controls" };
+                        return format!("{w} {verb} {obj}");
+                    }
                 }
                 let subj = self.affected_subject(affected);
                 let vp = self.mods_vp(mods, false);

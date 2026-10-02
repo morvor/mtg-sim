@@ -247,10 +247,12 @@ fn may_pay_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         },
         modal: None,
     };
-    Some(vec![AbilityDef::new(
-        AbilityKind::Triggered(TriggeredAbility::new(trigger, body)),
-        block,
-    )])
+    // Where it functions: "... If you do, return ~ from your graveyard to your hand"
+    // functions from the graveyard (CR 113.6m).
+    let zone = crate::oracle::triggers::trigger_zone(&trigger, rest);
+    let mut tr = TriggeredAbility::new(trigger, body);
+    tr.zone = zone;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), block)])
 }
 
 inventory::submit! { AbilityPattern { name: "r107 may pay trigger", priority: 70, parse: may_pay_trigger } }

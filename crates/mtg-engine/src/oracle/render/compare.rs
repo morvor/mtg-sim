@@ -218,14 +218,31 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               permanent produced (CR 605.1b, 106.12a); \"additional\" restates it.",
     },
     Equivalence {
-        pattern: r"\bthem\b",
-        replacement: "it",
-        why: "Pronoun number (grammatical number is ignored).",
+        pattern: r"\bx life,? where x is the life lost this way\b",
+        replacement: "that many life",
+        why: "\"Life equal to the life lost this way\" is the amount of life the previous \
+              instruction made players lose: \"that many life\" (CR 608.2c).",
     },
     Equivalence {
         pattern: r"\bthey\b",
         replacement: "them",
         why: "Pronoun case: \"they\"/\"them\" refer to the same objects.",
+    },
+    Equivalence {
+        pattern: r"\b(he|she|him)\b",
+        replacement: "it",
+        why: "Oracle text of named characters refers to the permanent by a gendered \
+              pronoun where other cards say \"it\"; the referent is the same object.",
+    },
+    Equivalence {
+        pattern: r"\bhis\b",
+        replacement: "its",
+        why: "See \"he\".",
+    },
+    Equivalence {
+        pattern: r"\bthem\b",
+        replacement: "it",
+        why: "Pronoun number (grammatical number is ignored).",
     },
     Equivalence {
         pattern: r"\btheir\b",
@@ -615,6 +632,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),
             (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
             (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
+            (r"\b(gains?|loses?) (\d+|two|three|four|five) life for each ([^.]+?)(\.|$)", "$1 x life, where x is $2 times the number of $3$4"),
             (r"\b(gets?) ([+-])1/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])1/([+-])0 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])0/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x $4, where x is the number of $5$6"),

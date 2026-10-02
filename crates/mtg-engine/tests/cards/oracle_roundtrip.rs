@@ -286,3 +286,20 @@ fn other_creatures_named_like_it_include_tokens() {
     assert!(t.g.obj(token).is_token());
     assert_eq!(t.pt(dwarves), (3, 3), "the token counts");
 }
+
+/// "Whenever an opponent gains life, you may pay {R}. If you do, return this card from
+/// your graveyard to your hand." functions from the graveyard (CR 113.6m).
+#[test]
+fn return_this_card_from_your_graveyard_triggers_in_the_graveyard() {
+    cr!("113.6m");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    let fire = t.graveyard(P0, "Punishing Fire");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.g.gain_life(P1, 2);
+    t.settle();
+    t.resolve_all();
+    assert!(!t.g.is_live(fire), "it triggered and returned");
+    assert!(t.in_hand(P0, "Punishing Fire"));
+}

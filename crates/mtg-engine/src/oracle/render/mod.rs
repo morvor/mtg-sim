@@ -71,7 +71,11 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     let mut r = Renderer::new(info);
     let mut out = RenderedFace::default();
     let mut prev_changeling = false;
-    for a in abilities {
+    for (i, a) in abilities.iter().enumerate() {
+        if let Some(n) = backup_n(a, &abilities[i + 1..]) {
+            out.lines.push(format!("Backup {n}"));
+            continue;
+        }
         // CR 702.73a: a printed changeling's "is every creature type" CDA is the keyword's
         // meaning, compiled next to it; it isn't printed separately.
         if prev_changeling && is_changeling_cda(a) {
@@ -103,6 +107,61 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     merge_chapters(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
+}
+
+/// CR 702.165a: "Backup N" means "When this creature enters, put N +1/+1 counters on
+/// target creature. If that's another creature, it also gains the non-backup abilities of
+/// this creature printed below this one until end of turn." An ability of that shape whose
+/// granted abilities are exactly the ones after it renders as the keyword.
+fn backup_n(a: &Ability, later: &[Ability]) -> Option<i32> {
+    let AbilityKind::Triggered(t) = &a.kind else {
+        return None;
+    };
+    if !matches!(t.trigger, TriggerCond::EntersBattlefield(Filter::Source))
+        || t.intervening_if.is_some()
+        || t.body.targets.len() != 1
+        || !matches!(
+            &t.body.targets[0].what,
+            TargetKind::Object(Filter::Type(CardType::Creature))
+        )
+    {
+        return None;
+    }
+    let Effect::Seq(v) = &t.body.effect else {
+        return None;
+    };
+    let [Effect::AddCounters {
+        what: Sel::Target(0),
+        kind,
+        n: Value::Const(n),
+    }, Effect::If {
+        cond: Condition::SelMatches(Sel::Target(0), Filter::Other),
+        then,
+        otherwise,
+    }] = v.as_slice()
+    else {
+        return None;
+    };
+    if kind != "+1/+1" || !matches!(**otherwise, Effect::Noop) {
+        return None;
+    }
+    let Effect::Modify {
+        what: Sel::Target(0),
+        mods,
+        duration: Duration::EndOfTurn,
+    } = &**then
+    else {
+        return None;
+    };
+    if mods.len() != later.len() {
+        return None;
+    }
+    let same = mods.iter().zip(later).all(|(m, l)| match (m, &l.kind) {
+        (Modification::AddKeyword(k), AbilityKind::Keyword(lk)) => k.kind == lk.kind,
+        (Modification::AddAbility(g), lk) => format!("{:?}", g.kind) == format!("{lk:?}"),
+        _ => false,
+    });
+    same.then_some(*n)
 }
 
 /// Renders a single ability (for tests and diagnostics). Gaps are returned as `Err`.
