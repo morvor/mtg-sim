@@ -494,7 +494,7 @@ impl Renderer<'_> {
                     s
                 }
             }
-            PlayerModification::Custom(name) => self.custom_player_mod(name),
+            PlayerModification::Custom(name) => self.custom_player_mod(name, &subj, &poss),
         }
     }
 

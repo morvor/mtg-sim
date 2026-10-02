@@ -83,6 +83,48 @@ impl Renderer<'_> {
                     .to_string();
                 format!("distribute {c} among {t}{}", w.unwrap_or_default())
             }
+            "end the combat phase" => "end the combat phase".into(),
+            "redistribute life totals" => "redistribute any number of players' life totals".into(),
+            "roll the planar die (effect)" => "roll the planar die".into(),
+            "play a subgame" => {
+                "players play a Magic subgame, using their libraries as their decks".into()
+            }
+            "subgame: non-winners lose half their life" => {
+                "each player who doesn't win the subgame loses half their life, rounded up".into()
+            }
+            "party:choose a party, sacrifice the rest" => {
+                "each player chooses a party from among creatures they control, then sacrifices the rest".into()
+            }
+            n if n.starts_with("each player keeps creatures with total power at most:") => {
+                let k = &n["each player keeps creatures with total power at most:".len()..];
+                format!("each player chooses any number of creatures they control with total power {k} or less, then sacrifices all other creatures they control")
+            }
+            "zones:each other player copies that spell with new targets" => {
+                "each other player copies that spell. Each of those players may choose new targets for their copy".into()
+            }
+            n if n.starts_with("conjure:") => {
+                // "conjure:[count]:[zone]:each:[name]".
+                let parts: Vec<&str> = n["conjure:".len()..].splitn(4, ':').collect();
+                match parts.as_slice() {
+                    [count, zone, _, name] => {
+                        let k: i32 = count.parse().unwrap_or(1);
+                        let cards = if k == 1 {
+                            "a card".to_string()
+                        } else {
+                            format!("{} cards", number_word(k))
+                        };
+                        let to = match *zone {
+                            "battlefield" => "onto the battlefield",
+                            "library" => "into your library",
+                            "hand" => "into your hand",
+                            "graveyard" => "into your graveyard",
+                            _ => "",
+                        };
+                        format!("conjure {cards} named {name} {to}")
+                    }
+                    _ => return self.gap(format!("Effect::Custom({n})")),
+                }
+            }
             other => return self.gap(format!("Effect::Custom({other})")),
         };
         s
@@ -113,6 +155,16 @@ impl Renderer<'_> {
             "attached_to_host" => rel("attached to it"),
             "attacking the event's player" => rel("attacking that player"),
             "toughness_gt_power" => rel("with toughness greater than its power"),
+            "activated_this_turn" => rel("that was activated this turn"),
+            "attached to you" => rel("attached to you"),
+            "base power=1" => rel("with base power 1"),
+            "has_nonmana_activated_ability" => {
+                rel("with an activated ability that isn't a mana ability")
+            }
+            "umbra armor:attached to a permanent you control" => {
+                rel("attached to a permanent you control")
+            }
+            "attached to a creature you control" => rel("attached to a creature you control"),
             n if n.starts_with("has landwalk:") => {
                 let k = &n["has landwalk:".len()..];
                 (false, format!("with {k}"))
@@ -161,6 +213,21 @@ impl Renderer<'_> {
                 let l = &n["mana_spent_of:".len()..];
                 format!("the amount of {{{l}}} spent to cast {}", self.me())
             }
+            "opponents_counters:poison" => {
+                "the number of poison counters your opponents have".into()
+            }
+            "players being attacked" => "the number of players being attacked".into(),
+            "cards_in_all_hands" => "the total number of cards in all players' hands".into(),
+            "life_lost_by_opponents_this_turn" => {
+                "the total life lost by your opponents this turn".into()
+            }
+            "crew:creatures that crewed it this turn" => {
+                "the number of creatures that crewed it this turn".into()
+            }
+            "convoke:number of creatures that convoked it" => {
+                "the number of creatures that convoked it".into()
+            }
+            "bushido:points of bushido it has" => "the number of points of bushido it has".into(),
             other => self.gap(format!("Value::Custom({other})")),
         }
     }
@@ -221,6 +288,18 @@ impl Renderer<'_> {
                 number_word(min)
             ),
             "party_size" if min >= 4 => "you have a full party".to_string(),
+            "turn:sources you controlled dealt damage" => format!(
+                "{} or more sources you controlled dealt damage this turn",
+                number_word(min)
+            ),
+            "turn:creature cards put into graveyards" => format!(
+                "{} or more creature cards were put into graveyards from anywhere this turn",
+                number_word(min)
+            ),
+            "max_mana_spent_of_one_color" => format!(
+                "at least {} mana of the same color was spent to cast it",
+                number_word(min)
+            ),
             _ => return None,
         })
     }
@@ -229,6 +308,28 @@ impl Renderer<'_> {
         let me = |r: &mut Self| r.me();
         match name {
             "you_attacked_this_turn" => "you attacked this turn".into(),
+            "eminence:in the command zone or on the battlefield" => {
+                format!("{} is in the command zone or on the battlefield", me(self))
+            }
+            "an opponent this turn:gained life" => "an opponent gained life this turn".into(),
+            "untap:control_and_source_remains_tapped" => {
+                let m = me(self);
+                format!("you control {m} and {m} remains tapped")
+            }
+            "soulbond:this is paired with a creature with soulbond" => {
+                format!("{} is paired with a creature with soulbond", me(self))
+            }
+            "combat:this attacked or blocked this combat" => {
+                format!("{} attacked or blocked this combat", me(self))
+            }
+            "exploit:it exploited that creature" => "it exploited that creature".into(),
+            n if n.starts_with("you_cast_another_spell_this_turn:") => {
+                let c = &n["you_cast_another_spell_this_turn:".len()..];
+                match color_of_letter(c) {
+                    Some(w) => format!("you've cast another {w} spell this turn"),
+                    None => self.gap(format!("Condition::Custom({n})")),
+                }
+            }
             crate::kw::storied::HAS_ENDURING_STORY => "you have an enduring story".into(),
             "foretell:this spell was foretold" => "this spell was foretold".into(),
             "a_player_cast_two_spells_last_turn" => {
@@ -326,6 +427,7 @@ impl Renderer<'_> {
             crate::kw::exert::EXERTED => "when you do".into(),
             n if n.starts_with("door unlocked:") => "when you unlock this door".into(),
             "mutates:self" => format!("{} mutates", self.me()),
+            "die:highest natural result:you" => "you roll a die's highest natural result".into(),
             n if n.starts_with("class becomes level:") => {
                 let l = &n["class becomes level:".len()..];
                 format!("{} becomes level {l}", self.me())
@@ -344,6 +446,9 @@ impl Renderer<'_> {
                 // "[keyword]:[event]" names describe the event: "exploit:this exploits a
                 // creature", "training:this creature trains".
                 let known = [
+                    "mutate:",
+                    "mentor:",
+                    "visit:",
                     "exploit:",
                     "training:",
                     "enlist:",
@@ -434,12 +539,99 @@ impl Renderer<'_> {
                 let k = &n["power-up:other creatures' cost less:".len()..];
                 format!("power-up abilities of other creatures you control cost {{{k}}} less to activate")
             }
+            "cascade:as you cascade, put a land card from among the exiled cards onto the battlefield tapped" => {
+                "as you cascade, you may put a land card from among the exiled cards onto the battlefield tapped".into()
+            }
+            n if n.starts_with("deck:up to ") => {
+                let k: i32 = n["deck:up to ".len()..].parse().unwrap_or(0);
+                format!("a deck can have up to {} cards named {}", number_word(k), me(self))
+            }
+            "deck:circle two colors" => "as you create your deck, circle two of the colors below".into(),
+            "exhaust:during your turn, you may activate exhaust abilities as though they haven't been activated" => {
+                "during your turn, as long as you haven't activated an exhaust ability this turn, you may activate exhaust abilities as though they haven't been activated".into()
+            }
+            "teamwork:flash if cast using teamwork" => format!(
+                "you may cast {} as though it had flash if it's cast using teamwork",
+                me(self)
+            ),
+            "bestow:you may cast this card from your graveyard using its bestow ability" => {
+                format!("you may cast {} from your graveyard using its bestow ability", me(self))
+            }
+            "you may cast this card from your graveyard using its mutate ability" => {
+                format!("you may cast {} from your graveyard using its mutate ability", me(self))
+            }
+            "foretell:costs {1} less and can be done on any player's turn" => {
+                "foretelling cards from your hand costs {1} less and can be done on any player's turn".into()
+            }
+            "can block creatures with shadow as though they didn't have shadow" => format!(
+                "{} can block creatures with shadow as though they didn't have shadow",
+                me(self)
+            ),
+            "plot:the top card of your library has plot equal to its mana cost" => {
+                "the top card of your library has plot. The plot cost is equal to its mana cost".into()
+            }
+            "plot:you may plot nonland cards from the top of your library" => {
+                "you may plot nonland cards from the top of your library".into()
+            }
+            "opponents skip extra turns" => {
+                "if an opponent would begin an extra turn, that player skips that turn instead".into()
+            }
+            n if n.starts_with("surveil extra:") => {
+                let k: i32 = n["surveil extra:".len()..].parse().unwrap_or(0);
+                format!(
+                    "you may look at an additional {} cards each time you surveil",
+                    number_word(k)
+                )
+            }
+            "wither:all damage as though its source had wither" => {
+                "all damage is dealt as though its source had wither".into()
+            }
+            "power-up:can be activated an additional time" => {
+                "each power-up ability of permanents you control can be activated an additional time".into()
+            }
+            n if n.starts_with("collect evidence instead of mana cost:") => {
+                let k = &n["collect evidence instead of mana cost:".len()..];
+                format!("you may collect evidence {k} rather than pay the mana cost for spells you cast")
+            }
+            "villainous choice: opponents face it an additional time" => {
+                "if an opponent would face a villainous choice, they face that choice an additional time".into()
+            }
+            "radiation: gain life rather than lose life" => {
+                "you gain life rather than lose life from radiation".into()
+            }
+            "boast:creatures you control can boast twice during each of your turns" => {
+                "creatures you control can boast twice during each of your turns rather than once".into()
+            }
+            "vote: you get an additional vote" => "while voting, you get an additional vote".into(),
+            n if n.starts_with("search portion:") && n.ends_with(":opponents") => {
+                let k: i32 = n["search portion:".len()..n.len() - ":opponents".len()]
+                    .parse()
+                    .unwrap_or(0);
+                format!(
+                    "if an opponent would search a library, that player searches the top {} cards of that library instead",
+                    number_word(k)
+                )
+            }
+            "tap_total_power:Crew:toughness" => {
+                format!("{} crews Vehicles using its toughness rather than its power", me(self))
+            }
+            "tap_total_power:Station:toughness" => format!(
+                "{} stations permanents using its toughness rather than its power",
+                me(self)
+            ),
             other => self.gap(format!("StaticEffect::Custom({other})")),
         }
     }
 
     pub(crate) fn custom_restriction(&mut self, name: &str) -> String {
         match name {
+            "players can't cycle cards" => "players can't cycle cards".into(),
+            "combat: controller chooses how creatures block" => {
+                "you choose which creatures block this combat and how those creatures block".into()
+            }
+            "combat: controller chooses how opponents' creatures block" => {
+                "you choose how those creatures block".into()
+            }
             "untap:may_choose_not_to_untap" => format!(
                 "you may choose not to untap {} during your untap step",
                 self.me()
@@ -448,7 +640,33 @@ impl Renderer<'_> {
         }
     }
 
-    pub(crate) fn custom_player_mod(&mut self, name: &str) -> String {
-        self.gap(format!("PlayerModification::Custom({name})"))
+    /// A custom rule for players: `subj` is "you", "players", ...; `poss` its possessive.
+    pub(crate) fn custom_player_mod(&mut self, name: &str, subj: &str, poss: &str) -> String {
+        let you = subj == "you";
+        match name {
+            "keep unspent mana" => {
+                let s = if subj == "each player" {
+                    "players"
+                } else {
+                    subj
+                };
+                let dont = if you || s == "players" || s.ends_with('s') {
+                    "don't"
+                } else {
+                    "doesn't"
+                };
+                format!("{s} {dont} lose unspent mana as steps and phases end")
+            }
+            "spend mana as though any color" => {
+                format!("{subj} may spend mana as though it were mana of any color")
+            }
+            "unspent mana becomes C" => {
+                format!("if {subj} would lose unspent mana, that mana becomes colorless instead")
+            }
+            "may look at the top card of their library any time" => {
+                format!("{subj} may look at the top card of {poss} library any time")
+            }
+            other => self.gap(format!("PlayerModification::Custom({other})")),
+        }
     }
 }
