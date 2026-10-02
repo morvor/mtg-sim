@@ -751,6 +751,13 @@ impl Renderer<'_> {
             );
             return format!("{subj} {pred}");
         }
+        // "if this is the second time this ability has resolved this turn".
+        if let (Value::TimesResolvedThisTurn, Cmp::Eq, Value::Const(n)) = (a, cmp, b) {
+            return format!(
+                "this is the {} time this ability has resolved this turn",
+                ordinal_word(*n as u32)
+            );
+        }
         let a_value = a;
         let a = self.value(a);
         // "there are seven or more cards in your graveyard".

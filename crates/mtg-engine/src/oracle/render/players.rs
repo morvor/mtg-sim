@@ -476,9 +476,16 @@ impl Renderer<'_> {
             PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
                 self.trigger_player.unwrap_or("that player").into()
             }
-            PlayerRef::TriggerPlayer | PlayerRef::Iterated | PlayerRef::Var(_) => {
-                "that player".into()
+            // "Whenever an opponent draws a card, they lose 2 life" / "... that player
+            // loses 2 life".
+            PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
+                return match case {
+                    Case::Subj => "{alt:that player|they}".into(),
+                    Case::Obj => "{alt:that player|them}".into(),
+                    Case::Poss => "{alt:that player's|their}".into(),
+                }
             }
+            PlayerRef::Var(_) => "that player".into(),
             PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),

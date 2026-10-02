@@ -28,6 +28,12 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
+        replacement: "you own dies",
+        why: "A card goes to its owner's graveyard (CR 400.3), so a permanent put into your \
+              graveyard from the battlefield is one you own that dies (CR 700.4).",
+    },
+    Equivalence {
         pattern: r"\bcycles? or discards? (a|another|one or more|two or more) ",
         replacement: "discard $1 ",
         why: "Cycling a card discards it (CR 702.29a); an ability that triggers when a player \
@@ -108,7 +114,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               target already named.",
     },
     Equivalence {
-        pattern: r"\b(that|the) (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)\b",
+        pattern: r"\b(that|the) (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source|copy)\b",
         replacement: "it",
         why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named.",
     },
