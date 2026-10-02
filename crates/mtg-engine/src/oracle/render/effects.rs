@@ -608,6 +608,33 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("tap or untap {w}")
             }
+            // "Sacrifice an artifact or discard a card": two simple instructions of yours,
+            // one of which you choose.
+            Effect::ChooseOne {
+                who: PlayerRef::You,
+                options,
+            } if options.len() == 2
+                && options.iter().all(|(_, e)| {
+                    matches!(
+                        e,
+                        Effect::Sacrifice { who: PlayerRef::You, .. }
+                            | Effect::Discard { who: PlayerRef::You, .. }
+                            | Effect::LoseLife { who: PlayerRef::You, .. }
+                    )
+                }) =>
+            {
+                let parts: Vec<String> = options
+                    .iter()
+                    .map(|(_, e)| {
+                        let t = self.effect(e);
+                        t.strip_prefix("you ").map(str::to_string).unwrap_or(t)
+                    })
+                    .collect();
+                if parts.iter().any(|p| p.contains(['.', '\n'])) {
+                    return self.gap("choose one of two instructions");
+                }
+                parts.join(" or ")
+            }
             Effect::ChooseOne { who, options } => {
                 let w = self.player(who, Case::Subj);
                 let head = if w == "you" {
@@ -4329,7 +4356,7 @@ impl Renderer<'_> {
             M::SpellWithSubtype(s) => format!("to cast {s} spells"),
             M::SpellOfChosenType => "to cast a creature spell of the chosen type".into(),
             M::SpellsOnly => "to cast spells".into(),
-            M::AbilitiesOnly => "to activate abilities".into(),
+            M::AbilitiesOnly => "to activate {alt:abilities|an ability}".into(),
             M::XCostsOnly => "on costs that include {X}".into(),
             M::ArtifactSpellOrAbility => {
                 "to cast artifact spells or activate abilities of artifacts".into()
@@ -4341,23 +4368,44 @@ impl Renderer<'_> {
                     .into()
             }
             M::NotGeneric => "This mana can't be spent to pay generic mana costs".into(),
+            // "to cast an artifact spell or activate an ability": "to" said once.
             M::AnyOf(v) => {
-                let parts: Vec<String> =
-                    v.iter().map(|x| self.mana_restriction_purpose(x)).collect();
+                let parts: Vec<String> = v
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        let p = self.mana_restriction_purpose(x);
+                        if i > 0 {
+                            format!("{{opt:to}} {}", p.strip_prefix("to ").unwrap_or(&p))
+                        } else {
+                            p
+                        }
+                    })
+                    .collect();
                 join_list(&parts, "or")
             }
+            // "to cast Dragon spells" / "to cast a Dragon spell".
             M::CastSpell(f) => {
-                let n = self.noun(&f.0, Num::Many);
-                let n = if n.contains("spell") {
-                    n
+                let many = self.noun(&f.0, Num::Many);
+                let many = if many.contains("spell") {
+                    many
                 } else {
-                    format!("{n} spells")
+                    format!("{many} spells")
                 };
-                format!("to cast {n}")
+                let one = self.noun(&f.0, Num::One);
+                let one = if one.contains("spell") {
+                    one
+                } else {
+                    format!("{one} spell")
+                };
+                format!("to cast {{alt:{many}|{}}}", with_article(&one))
             }
+            // "to activate abilities of artifacts" / "... an ability of an artifact source".
             M::ActivateAbilityOf(f) => {
                 let n = self.noun(&f.0, Num::Many);
-                format!("to activate abilities of {n}")
+                let one = self.noun(&f.0, Num::One);
+                let a = with_article(&one);
+                format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
             M::ClassLevel => "to gain a Class level".into(),
             // "This mana can't be spent to cast spells from your hand."
