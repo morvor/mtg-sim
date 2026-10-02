@@ -232,6 +232,7 @@ fn a_permission_to_cast_red_spells_permits_the_prototyped_spell() {
                     spells: true,
                     cost: None,
                     flash: false,
+                    terms: Default::default(),
                 },
             ))),
             "You may cast red spells from among cards in exile.",

@@ -1417,6 +1417,13 @@ impl Renderer<'_> {
                 };
                 format!("{w} can't draw more than {c} each turn")
             }
+            Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
+                let w = self.player_filter_subject(who);
+                let s = self.spell_noun_plural(what);
+                let s = s.trim_end_matches('s');
+                let c = number_word(*n as i32);
+                format!("{w} can't cast more than {c} {s} each turn")
+            }
             Restriction::MaxSpellsPerTurn(p, n) => {
                 let w = self.player_filter_subject(p);
                 let c = if *n == 1 {

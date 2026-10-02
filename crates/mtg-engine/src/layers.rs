@@ -602,6 +602,20 @@ impl Game {
         self.rule_effects.retain(|e| !rm.contains(&e.id));
         self.player_effects.retain(|e| !pm.contains(&e.id));
         self.replacements.retain(|e| !rp.contains(&e.id));
+        // "You may play that card for as long as you control ~": once over, it's over,
+        // even if that player controls it again.
+        let ended: Vec<bool> = self
+            .play_grants
+            .iter()
+            .map(|g| self.effect_expired(&g.duration, g.source, g.player))
+            .collect();
+        if ended.contains(&true) {
+            let mut i = 0;
+            self.play_grants.retain(|_| {
+                i += 1;
+                !ended[i - 1]
+            });
+        }
     }
 
     /// The characteristics listed by the effects that turned the face-down permanent `id`
@@ -1336,8 +1350,15 @@ impl Game {
                 // "Until end of turn, you may play lands and cast spells from the top of
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    // "You may cast a creature spell from your graveyard this turn": a
+                    // single use, this effect's own (see `permissions.rs`).
+                    let once = pp
+                        .terms
+                        .limit
+                        .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone(), None));
+                        st.play_permissions
+                            .push((src, *p, pp.clone(), once.clone()));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."

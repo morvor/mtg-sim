@@ -400,6 +400,9 @@ pub enum ManaRestriction {
     /// generic half of a {2/W}-style symbol. Checked symbol by symbol as the cost is paid
     /// (see [`Mana::pays_generic`]).
     NotGeneric,
+    /// "This mana can't be spent to cast spells from your hand.": it can pay for anything
+    /// except casting a spell matching the filter.
+    NotCastSpell(SpendFilter),
 }
 
 /// A filter inside a [`ManaRestriction`], compared structurally.
@@ -510,6 +513,7 @@ impl ManaRestriction {
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
             // Filters need the game: see `allows_in`.
             ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,
+            ManaRestriction::NotCastSpell(_) => !ctx.is_spell,
         }
     }
 
@@ -532,6 +536,7 @@ impl ManaRestriction {
         match self {
             ManaRestriction::CastSpell(f) => ctx.is_spell && matches(f),
             ManaRestriction::ActivateAbilityOf(f) => ctx.is_ability && matches(f),
+            ManaRestriction::NotCastSpell(f) => !(ctx.is_spell && matches(f)),
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows_in(g, payer, mana_source, ctx)),
             other => other.allows(ctx),
         }

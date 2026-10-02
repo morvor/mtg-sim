@@ -3326,6 +3326,10 @@ impl Renderer<'_> {
                 format!("to activate abilities of {n}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            M::NotCastSpell(f) => {
+                let n = self.noun(&f.0, Num::Many);
+                format!("This mana can't be spent to cast {n}")
+            }
         }
     }
 
