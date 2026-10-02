@@ -440,3 +440,74 @@ fn p_turn_face_up(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: turn [objects] face up", priority: 110, parse: p_turn_face_up } }
+
+// ---------------------------------------------------------------------------
+// Transforming: "transform up to one target Werewolf you control", "transform all
+// Humans", "transform any number of Human Werewolves you control" (CR 701.27).
+// ---------------------------------------------------------------------------
+
+/// "transform [target phrase / all objects / any number of objects]": each one that can
+/// transform does; anything else doesn't (CR 701.27c).
+fn p_transform_objects(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("transform ")?;
+    let on_battlefield = |f: Filter| {
+        if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+            return None;
+        }
+        Some(Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]))
+    };
+    if let Some(x) = r.strip_prefix("all ") {
+        let (f, plural, rest) = parse_object_phrase(x)?;
+        if !plural || !end(rest).is_empty() {
+            return None;
+        }
+        let f = super::filters_relational::resolve_referent(f, b)?;
+        return Some(Effect::Transform {
+            what: Sel::All(on_battlefield(f)?),
+        });
+    }
+    if let Some(x) = r.strip_prefix("any number of ") {
+        if x.starts_with("target ") {
+            return None;
+        }
+        let (f, _, rest) = parse_object_phrase(x)?;
+        if !end(rest).is_empty() {
+            return None;
+        }
+        let f = super::filters_relational::resolve_referent(f, b)?;
+        return Some(Effect::Transform {
+            what: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: on_battlefield(f)?,
+                count: Value::c(99),
+                up_to: true,
+                store: None,
+            },
+        });
+    }
+    let targeted = r.starts_with("target ")
+        || r.starts_with("up to one target ")
+        || r.starts_with("up to one other target ")
+        || r.starts_with("another target ");
+    if !targeted {
+        return None;
+    }
+    let (spec, tail) = parse_target(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    match &spec.what {
+        TargetKind::Object(f) if f.zone().is_none_or(|z| z == ZoneKind::Battlefield) => {}
+        _ => return None,
+    }
+    let text = r[..r.len() - tail.len()].trim().to_string();
+    let slot = b.add_target(spec, &text);
+    Some(Effect::Transform {
+        what: Sel::Target(slot),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: transform [targets / all objects / any number of objects]", priority: 110, parse: p_transform_objects } }
