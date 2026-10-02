@@ -766,6 +766,19 @@ impl Game {
         if layer == Layer::L4Type && effs[0].cda && fixed_self_type_cda(&effs[0], st) {
             return 0;
         }
+        // The earliest effect applies first if it depends on nothing — the usual case, and
+        // the answer of the full analysis below too — found with one row of it.
+        let depends_on_any = |g: &mut Game, i: usize, st: &mut LayerState| {
+            matches!(effs[i].key, EffKey::Static(..))
+                && (0..n).any(|j| {
+                    i != j
+                        && effs[i].cda == effs[j].cda
+                        && g.depends_on(&effs[i], &effs[j], layer, live, st)
+                })
+        };
+        if !depends_on_any(self, 0, st) {
+            return 0;
+        }
         let mut dep = vec![vec![false; n]; n];
         for i in 0..n {
             if !matches!(effs[i].key, EffKey::Static(..)) {

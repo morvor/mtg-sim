@@ -189,6 +189,7 @@ pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
                         created_step: None,
                         created_steps: 0,
                         for_rest_of_game: false,
+                        performer: None,
                     });
                 }
             }

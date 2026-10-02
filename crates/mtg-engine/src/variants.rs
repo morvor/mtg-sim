@@ -82,6 +82,28 @@ pub fn scheme_deck(g: &Game, p: PlayerId) -> Vec<ObjectId> {
         .collect()
 }
 
+/// CR 103.3a: each scheme deck's owner shuffles it before the game begins.
+pub fn shuffle_scheme_decks(g: &mut Game) {
+    use rand::seq::SliceRandom;
+    for p in g.player_ids() {
+        let slots: Vec<usize> = g
+            .command
+            .iter()
+            .enumerate()
+            .filter(|(_, id)| {
+                let o = g.obj(**id);
+                o.face_down && o.owner == p && is_scheme_card(o)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let mut ids: Vec<ObjectId> = slots.iter().map(|i| g.command[*i]).collect();
+        ids.shuffle(&mut g.rng);
+        for (i, id) in slots.into_iter().zip(ids) {
+            g.command[i] = id;
+        }
+    }
+}
+
 /// The face-up scheme cards in the command zone.
 pub fn face_up_schemes(g: &Game) -> Vec<ObjectId> {
     g.command

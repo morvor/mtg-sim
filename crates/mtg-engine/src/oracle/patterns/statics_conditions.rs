@@ -104,7 +104,7 @@ pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
 
 /// "attacking", "tapped", "equipped", "a creature", "white", "red or green",
 /// "legendary", "a basic Mountain", "face down".
-fn state_filter(s: &str) -> Option<Filter> {
+pub(crate) fn state_filter(s: &str) -> Option<Filter> {
     let s = end(s);
     let simple = match s {
         "attacking" => Some(Filter::Attacking),
@@ -227,7 +227,7 @@ pub(crate) fn counters_on_it(h: &str) -> Option<(Cmp, Value, Option<CounterKind>
 }
 
 /// "N or more", "N or less", "N or fewer", "N or greater", "at least N", "N".
-fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
+pub(crate) fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
     if let Some(r) = s.strip_prefix("at least ") {
         let (n, r) = parse_number(r)?;
         return Some((Cmp::Ge, n, r));
@@ -683,7 +683,7 @@ pub(crate) fn attacking_player_condition(c: &str) -> Option<PlayerFilter> {
 }
 
 /// An object phrase, also allowing a leading color choice: "red or white permanent".
-fn color_or_phrase(r: &str) -> Option<Filter> {
+pub(crate) fn color_or_phrase(r: &str) -> Option<Filter> {
     let words: Vec<&str> = r.splitn(4, ' ').collect();
     if words.len() == 4 && words[1] == "or" {
         if let (Some(a), Some(b)) = (Color::from_word(words[0]), Color::from_word(words[2])) {
