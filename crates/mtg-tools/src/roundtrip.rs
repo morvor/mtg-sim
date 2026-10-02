@@ -40,7 +40,14 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Target creature ... gets +X/+X ..., where X is its power\" used the source's power, not the target's | Winged Temple of Orazca (Fatal Frenzy now compiles) | `r107_numbers::where_x_is_parts` |\n\
 | \"Whenever ... this turn, put three +1/+1 counters on it. It gains trample ...\": the second sentence was the creating ability's own instruction (about the source) | The Last Ronin | `patterns/this_turn_trigger_followup.rs` |\n\
 | \"~ deals damage to any target equal to that card's mana value\": \"that card\" was the damage's target | Undying Flames | `damage_removal::damage_part` |\n\
-| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\n\
+| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\
+| \"Search your library for up to X cards\" (quantity only) had to find exactly X (tests for this and the rows below in `tests/cards/roundtrip_clusters_2.rs`) | Diabolic Revelation | `patterns/card_flow_search.rs`: the search grammar |\n\
+| \"Put a creature card exiled with ~ onto the battlefield. It gains haste\": \"it\" was the source | Yggdrasil, Rebirth Engine | `r600_linked.rs` |\n\
+| \"Whenever ~ becomes blocked by a creature, it deals 2 damage to that creature\": \"it\" was the blocker | Acolyte of the Inferno | object resolver in `oracle/effects.rs` |\n\
+| \"Each player mills cards equal to your Ring-bearer's power\" used each player's own Ring-bearer | One Ring to Rule Them All | `a701_actions::with_action_referent` |\n\
+| \"during turns other than yours\" was \"during an opponent's turn\" (a teammate's turn didn't count) | Mesa Lynx | `patterns/statics.rs` `turn_condition` |\n\
+| \"spells you cast from your graveyard cost less\" also reduced spells cast from another player's graveyard | Patrician Geist | `r601_cost_by_cast_zone.rs` |\n\
+| \"enchanted creature or enchantment creature\" kept only the first phrase | Feast of Dreams | `phrases::two_phrases_same_head` |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";
