@@ -814,7 +814,14 @@ impl Game {
                 if objs.is_empty() {
                     return;
                 }
-                ctx.prev_happened = objs.iter().any(|o| self.obj(*o).controller != p);
+                // "Draw a card for each one they gained control of this way".
+                let changed: Vec<ObjectId> = objs
+                    .iter()
+                    .copied()
+                    .filter(|o| self.obj(*o).controller != p)
+                    .collect();
+                ctx.prev_happened = !changed.is_empty();
+                ctx.prev_value = changed.len() as _;
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 self.effects.push(ContinuousEffect {

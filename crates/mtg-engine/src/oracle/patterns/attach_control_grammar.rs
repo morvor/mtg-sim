@@ -177,6 +177,48 @@ fn recipient(s: &str, what: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
             rest,
         ));
     }
+    // "another creature", "another permanent it can enchant" (Fumble, Aura Graft): one
+    // chosen as it's performed, other than the one the attachments are attached to.
+    if let Some(r) = s.strip_prefix("another ") {
+        let (f, plural, rest) = noun_phrase(r)?;
+        let trimmed = rest.trim_start();
+        let rest = trimmed
+            .strip_prefix("it can enchant")
+            .or_else(|| trimmed.strip_prefix("it could enchant"))
+            .map_or(rest.clone(), str::to_string);
+        if plural || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+            return None;
+        }
+        let f = super::filters_relational::resolve_referent(f, b)?;
+        let mut parts = vec![
+            f,
+            Filter::InZone(ZoneKind::Battlefield),
+            Filter::not(Filter::In(Box::new(Sel::HostOf(Box::new(what.clone()))))),
+        ];
+        // One attachment: a permanent it can be attached to (several are each attached
+        // if they can be, CR 701.3b).
+        let single = match what {
+            Sel::Target(slot) => b
+                .targets
+                .get(*slot as usize)
+                .is_some_and(|t| t.max.as_const() == Some(1)),
+            Sel::This | Sel::Var(_) => !matches!(b.group, Some(_)),
+            _ => false,
+        };
+        if single {
+            parts.push(Filter::CanBeAttachedBy(Box::new(what.clone())));
+        }
+        return Some((
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(parts),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+            rest,
+        ));
+    }
     // A player (a Curse is attached to a player, CR 303.4).
     for p in ["that player", "target player", "target opponent"] {
         if s.strip_prefix(p).is_some_and(word_end) {
@@ -750,3 +792,33 @@ fn p_enter_attached(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: [put onto the battlefield] attached to [recipient]", priority: 110, parse: p_enter_attached } }
+
+/// "unattach it at the beginning of the next end step" (Unexpected Request), where "it"
+/// is an object an earlier instruction chose and stored ("you may attach an Equipment you
+/// control to that creature. If you do, ..."): a delayed triggered ability (CR 603.7)
+/// that keeps referring to that object.
+fn p_delayed_on_stored(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    let (trigger, inner) = super::triggers_delayed::split_delay(l)?;
+    if !matches!(b.it, Sel::Var(_)) || !inner.starts_with("unattach ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let e = crate::oracle::effects::parse_clause(inner, b);
+    let ok = matches!(&e, Some(Effect::Unattach { what }) if format!("{what:?}") == format!("{:?}", saved.1));
+    if !ok || b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    Some(Effect::DelayedTrigger {
+        trigger,
+        body: Box::new(Body::effect(e?)),
+        once: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "attach grammar: unattach it at the beginning of the next end step", priority: 110, parse: p_delayed_on_stored } }

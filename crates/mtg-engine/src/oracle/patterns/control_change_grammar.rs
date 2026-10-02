@@ -309,3 +309,123 @@ fn but_dont_control<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "control grammar: you own but don't control", priority: 100, parse: but_dont_control } }
+
+/// "Draw a card for each one they gained control of this way." (Coveted Falcon) after a
+/// control change: one card for each permanent whose controller changed (not those the
+/// player already controlled, or that had left the battlefield).
+fn f_draw_for_each_gained(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() || !ends_with_control_change(prev) {
+        return false;
+    }
+    if !matches!(
+        end(l),
+        "draw a card for each one they gained control of this way"
+            | "draw a card for each permanent they gained control of this way"
+    ) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Draw {
+            who: PlayerRef::You,
+            n: Value::Prev,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "control grammar: draw a card for each one they gained control of this way", priority: 110, apply: f_draw_for_each_gained } }
+
+/// First variables for the two sets of permanents swapped by "you and [player] each gain
+/// control of all [objects] the other controls".
+const SWAPPED_THEIRS: Var = vars::USER + 8320;
+const SWAPPED_YOURS: Var = vars::USER + 8321;
+
+/// "You and target opponent each gain control of all creatures the other controls until
+/// end of turn." (Twist Allegiance): both sets are determined first, then each player
+/// gains control of the other's (CR 611.2c). "Those creatures" afterwards are both sets.
+fn p_swap_all(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("you and ")?;
+    let (other, r) = r.split_once(" each gain control of all ")?;
+    let (r, duration) = {
+        let (d, r) = duration_suffix(r);
+        (r, d)
+    };
+    let noun = r.strip_suffix(" the other controls")?;
+    let (f, plural, tail) = parse_object_phrase(noun)?;
+    if !plural || !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some((who, rest)) = player_ref(other, b).filter(|(_, rest)| end(rest).is_empty()) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    let _ = rest;
+    if matches!(who, PlayerRef::You) {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    let on_battlefield = |c: Filter| Filter::and(vec![f.clone(), Filter::InZone(ZoneKind::Battlefield), c]);
+    let theirs = Sel::All(on_battlefield(super::value_grammar::controlled_by(&who)));
+    let yours = Sel::All(on_battlefield(Filter::ControlledBy(PlayerRel::You)));
+    let both = Sel::Union(vec![Sel::Var(SWAPPED_THEIRS), Sel::Var(SWAPPED_YOURS)]);
+    let group = super::pronoun_groups::GROUP;
+    let it_before = std::mem::replace(&mut b.it, Sel::Var(group));
+    b.group = Some(super::pronoun_groups::GroupRef {
+        sel: both.clone(),
+        it_before,
+    });
+    Some(Effect::Seq(vec![
+        Effect::Store {
+            var: SWAPPED_THEIRS,
+            sel: theirs,
+        },
+        Effect::Store {
+            var: SWAPPED_YOURS,
+            sel: yours,
+        },
+        Effect::Store {
+            var: group,
+            sel: both,
+        },
+        Effect::GainControl {
+            what: Sel::Var(SWAPPED_THEIRS),
+            who: PlayerRef::You,
+            duration: duration.clone(),
+        },
+        Effect::GainControl {
+            what: Sel::Var(SWAPPED_YOURS),
+            who,
+            duration,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "control grammar: you and [player] each gain control of all [objects] the other controls", priority: 110, parse: p_swap_all } }
+
+/// "If you control neither creature, ..." after an instruction about two targets (Modify
+/// Memory, after the exchange): you control none of the targets.
+fn neither_target(c: &str) -> Option<Condition> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let noun = end(c).strip_prefix("you control neither ")?;
+    let (f, plural, tail) = parse_object_phrase(noun)?;
+    if plural || !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    Some(Condition::Not(Box::new(Condition::Exists(Filter::and(vec![
+        f,
+        Filter::In(Box::new(Sel::AllTargets)),
+        Filter::ControlledBy(PlayerRel::You),
+    ])))))
+}
+
+inventory::submit! { super::ConditionPattern { name: "control grammar: you control neither [target]", priority: 110, parse: neither_target } }
