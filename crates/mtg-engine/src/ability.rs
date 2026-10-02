@@ -937,6 +937,9 @@ pub enum Sel {
     TopOfLibrary(PlayerRef, Value),
 }
 
+/// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
+pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerRef {
@@ -1249,6 +1252,9 @@ pub enum Filter {
     SharesColor(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
+    /// The number of counters of a kind (of all kinds: None) on it compared with a value
+    /// ("with three or more +1/+1 counters on it", "with exactly one tide counter on it").
+    CounterCount(Option<CounterKind>, Cmp, Box<Value>),
     /// Has at least one ability (for "creature with no abilities" use Not).
     HasAbilities,
     /// The source object itself.
@@ -1718,6 +1724,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// "for as long as it has a [kind] counter on it": for each affected object, until it
+    /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
+    /// later, and does nothing to an object that has none as the effect begins).
+    WhileAffectedHasCounter(CounterKind),
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
     /// "[doesn't untap] during its controller's next untap step": for each affected
@@ -3283,10 +3293,29 @@ pub enum Effect {
         kind: CounterKind,
         n: Value,
     },
+    /// "Remove N [kind] counters from [what]" (CR 122). `kind: None`: N counters in all,
+    /// of the kinds the controller of the spell or ability chooses where the object has
+    /// several (every counter if N is at least how many it has: "remove all counters").
     RemoveCounters {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Remove up to N [kind] counters from [what]", "remove any number of counters from
+    /// [what]" (`max: None`): for each object, the controller of the spell or ability
+    /// chooses how many to remove (at most `max`) and, of several kinds, which.
+    RemoveCountersUpTo {
+        what: Sel,
+        kind: Option<CounterKind>,
+        max: Option<Value>,
+    },
+    /// "Choose a counter on [from]. Put an additional counter of that kind on ...": the
+    /// controller chooses a kind of counter among the counters on `from` (objects or
+    /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
+    /// kind. Nothing happens if there are none.
+    ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
     },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.
