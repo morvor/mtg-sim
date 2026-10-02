@@ -168,6 +168,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               to.",
     },
     Equivalence {
+        pattern: r"\b(controls?|targets?) one or more\b",
+        replacement: "$1 a",
+        why: "Controlling or targeting one or more Eggs is controlling or targeting an Egg \
+              (a condition or quality, not a count of events).",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

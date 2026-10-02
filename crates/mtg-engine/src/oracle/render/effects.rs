@@ -2861,7 +2861,7 @@ impl Renderer<'_> {
                 Sel::Choose {
                     chooser: PlayerRef::You,
                     filter,
-                    count: Value::Const(1),
+                    count: Value::Const(count),
                     up_to: true,
                     ..
                 },
@@ -2871,6 +2871,11 @@ impl Renderer<'_> {
         else {
             return None;
         };
+        // "You may cast any number of spells from among them".
+        let many = *count >= 99;
+        if *count != 1 && !many {
+            return None;
+        }
         let f = match filter {
             Filter::And(v) => Filter::and(
                 v.iter()
@@ -2880,19 +2885,26 @@ impl Renderer<'_> {
             ),
             other => other.clone(),
         };
-        let n = self.noun_det(&f, super::nouns::Det::A);
+        let det = if many {
+            super::nouns::Det::Count("any number of".into())
+        } else {
+            super::nouns::Det::A
+        };
+        let n = self.noun_det(&f, det);
         let n = match n.find(" card") {
             Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
                 format!("{} spell{}", &n[..i], &n[i + 5..])
             }
             _ => n,
         };
-        let fr = if *free {
-            " without paying its mana cost"
-        } else {
-            ""
+        let fr = match (*free, many) {
+            (false, _) => "",
+            (true, false) => " without paying its mana cost",
+            (true, true) => " without paying their mana costs",
         };
-        Some(format!("you may cast {n}{fr}"))
+        // Any number of them may be none: "Cast any number of cards exiled with ~ ...".
+        let may = if many { "{opt:you may}" } else { "you may" };
+        Some(format!("{may} cast {n}{fr}"))
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {

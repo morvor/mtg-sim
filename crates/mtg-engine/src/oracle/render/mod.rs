@@ -661,6 +661,9 @@ pub struct Renderer<'a> {
     /// What the last instruction did to a group of objects ("permanents destroyed this
     /// way"), for counting them.
     pub(crate) it_done: Option<String>,
+    /// Rendering a trigger event that triggers once for a whole batch of events
+    /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
+    pub(crate) batch_once: bool,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -726,6 +729,7 @@ impl<'a> Renderer<'a> {
             var_defs: Vec::new(),
             outer_vars: Vec::new(),
             it_done: None,
+            batch_once: false,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,

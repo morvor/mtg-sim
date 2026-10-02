@@ -547,7 +547,13 @@ impl Renderer<'_> {
                         with_article(n)
                     }
                 };
-                Ev::new(self.rel_subject(*who), format!("discard {n}"))
+                // "Whenever one or more players discard one or more cards" (once for all).
+                let w = if self.batch_once && matches!(who, PlayerRel::Any) {
+                    "one or more players".to_string()
+                } else {
+                    self.rel_subject(*who)
+                };
+                Ev::new(w, format!("discard {n}"))
             }
             TriggerCond::GainsLife { who } => Ev::new(self.rel_subject(*who), "gain life"),
             TriggerCond::LosesLife { who } => Ev::new(self.rel_subject(*who), "lose life"),
@@ -556,7 +562,12 @@ impl Renderer<'_> {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
                 };
-                let o = self.noun_det(filter, Det::A);
+                // "... are put on one or more Humans you control" (once for all).
+                let o = if self.batch_once && !matches!(filter, Filter::Source) {
+                    self.noun_det(filter, Det::OneOrMore)
+                } else {
+                    self.noun_det(filter, Det::A)
+                };
                 // "Whenever a +1/+1 counter is put on ~" triggers for each counter.
                 if *each {
                     Ev::new(with_article(&k), format!("is put on {o}"))
@@ -941,7 +952,9 @@ impl Renderer<'_> {
                     (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
                     (other, _) => other,
                 };
+                let saved = std::mem::replace(&mut self.batch_once, matches!(per, BatchPer::Batch));
                 let e = self.trigger_event(trigger, d);
+                self.batch_once = saved;
                 Ev::new(e.subj, plural_verb(&e.vp))
             }
             TriggerCond::SpellCopied { who, filter } => {
