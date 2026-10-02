@@ -1046,15 +1046,23 @@ impl Renderer<'_> {
                 }
             }
             Effect::RemoveCounters { what, kind, n } => {
+                self.removed_kind = Some(match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                });
                 let noun = match kind {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
                 };
                 let t = self.sel(what, Case::Obj);
+                // "Remove all charge counters from ~": as many as are on it.
+                let all_on_it = matches!(n, Value::CountersOn(s, k)
+                    if same_sel(s, what) && format!("{k:?}") == format!("{kind:?}"));
                 match n {
                     Value::Const(i) if *i >= 1000 => {
                         format!("remove all {} from {t}", plural(&noun))
                     }
+                    _ if all_on_it => format!("remove all {} from {t}", plural(&noun)),
                     _ => {
                         let (c, w) = self.counted(n, &noun);
                         format!("remove {c} from {t}{}", w.unwrap_or_default())
@@ -4684,6 +4692,18 @@ impl Renderer<'_> {
                     format!("{a} mana of any one color{}", w.unwrap_or_default())
                 }
             },
+            // "Remove all charge counters from ~. Add one mana of any color for each charge
+            // counter removed this way."
+            ManaProduction::AnyCombination(Value::Var(v))
+                if self.removed_kind.is_some()
+                    && self
+                        .stored_values
+                        .iter()
+                        .any(|(x, val, _)| x == v && matches!(val, Value::Prev)) =>
+            {
+                let k = self.removed_kind.clone().unwrap_or_default();
+                format!("one mana of any color for each {k} removed this way")
+            }
             ManaProduction::AnyCombination(n) => {
                 let (a, w) = match n {
                     Value::Const(k) => (number_word(*k), None),

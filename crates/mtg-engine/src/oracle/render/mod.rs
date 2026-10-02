@@ -699,6 +699,9 @@ pub struct Renderer<'a> {
     pub(crate) milled: bool,
     /// Rendering an emblem's abilities ("this emblem").
     pub(crate) in_emblem: bool,
+    /// The kind of counter an instruction of this ability removed ("for each charge
+    /// counter removed this way").
+    pub(crate) removed_kind: Option<String>,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -768,6 +771,7 @@ impl<'a> Renderer<'a> {
             prev_mandatory: false,
             milled: false,
             in_emblem: false,
+            removed_kind: None,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
@@ -877,6 +881,7 @@ impl<'a> Renderer<'a> {
         self.outer_vars.clear();
         self.it_done = None;
         self.milled = false;
+        self.removed_kind = None;
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();

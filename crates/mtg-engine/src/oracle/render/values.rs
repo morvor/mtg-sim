@@ -497,6 +497,20 @@ impl Renderer<'_> {
                     }
                 }
             }
+            // "if no opponent has more life than that player".
+            Condition::Not(inner)
+                if matches!(inner.as_ref(), Condition::PlayerMatches(PlayerRef::EachOpponent, PlayerFilter::Life(Cmp::Gt, v))
+                    if matches!(v.as_ref(), Value::LifeTotal(_))) =>
+            {
+                let Condition::PlayerMatches(_, PlayerFilter::Life(_, v)) = inner.as_ref() else {
+                    return self.gap("no opponent has more life");
+                };
+                let Value::LifeTotal(p) = v.as_ref() else {
+                    return self.gap("no opponent has more life");
+                };
+                let p = self.player(p, Case::Obj);
+                format!("no opponent has more life than {p}")
+            }
             Condition::Not(inner) => self.negated_condition(inner),
             // "If you revealed a Dragon card or controlled a Dragon as you cast this
             // spell" (`kw::revealed_or_controlled`).

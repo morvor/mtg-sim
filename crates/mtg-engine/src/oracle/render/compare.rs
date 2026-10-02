@@ -216,6 +216,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               control\" are \"creatures your opponents control with flying\".",
     },
     Equivalence {
+        pattern: r"\bexiled with (~it|~|it) with mana value ([^ .,]+)",
+        replacement: "with mana value $2 exiled with $1",
+        why: "The order of a noun's qualities: \"a creature card with mana value X exiled \
+              with ~\".",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
