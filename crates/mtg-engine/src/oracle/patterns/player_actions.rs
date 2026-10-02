@@ -12,8 +12,10 @@
 //!   it chooses in APNAP order and the rest are sacrificed at the same time (CR 101.4,
 //!   101.4c); "choose N cards in your hand/graveyard and discard/exile/shuffle the rest".
 //! - "untap a land you control", "reveal your hand".
+//! - "Each player may play an additional land on each of their turns." (a static).
 
-use super::EffectPattern;
+use super::{EffectPattern, StaticPattern};
+use crate::oracle::CompileContext;
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
@@ -228,6 +230,26 @@ inventory::submit! { EffectPattern { name: "player actions: shuffle all [permane
 fn keep_and_sacrifice(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("you ").unwrap_or(l);
+    // "sacrifice all lands you control except for three"
+    if let Some(r) = l.strip_prefix("sacrifice all ") {
+        let (objects, n) = r.rsplit_once(" except for ")?;
+        let (n, rest) = parse_number(n)?;
+        let n = n.as_const()?;
+        if !end(rest).is_empty() || !(1..=20).contains(&n) {
+            return None;
+        }
+        let among = without_controller(permanents_you_control(objects)?)?;
+        if format!("{among:?}").contains("You") {
+            return None;
+        }
+        let among = Filter::and(vec![Filter::Permanent, among]);
+        return Some(Effect::KeepAndSacrificeRest {
+            who: PlayerRef::You,
+            among: among.clone(),
+            keep: vec![among; n as usize],
+            up_to: false,
+        });
+    }
     let r = l.strip_prefix("choose ")?;
     let r = r
         .strip_suffix(", then sacrifice the rest")
@@ -464,3 +486,21 @@ fn draw_up_to(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "player actions: draw up to N cards", priority: 400, parse: draw_up_to } }
+
+/// "Each player may play an additional land on each of their turns." (Rites of
+/// Flourishing): a static ability for every player (CR 305.2).
+fn each_player_additional_land(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (rel, n) = match end(l) {
+        "each player may play an additional land on each of their turns" => (PlayerRel::Any, 1),
+        "each opponent may play an additional land on each of their turns" => {
+            (PlayerRel::Opponent, 1)
+        }
+        _ => return None,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::AdditionalLandPlays(rel, n))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "player actions: each player may play an additional land", priority: 100, parse: each_player_additional_land } }
