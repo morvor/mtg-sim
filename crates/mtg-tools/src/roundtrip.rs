@@ -19,6 +19,21 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const PASSING_LIST: &str = "docs/roundtrip-passing.txt";
 
+/// What the round trip found in the compiler, kept with the generated report.
+const FINDINGS: &str = "## Compiler bugs found by the round trip\n\n\
+Each was a card the compiler accepted but misread; each is fixed and has an in-game test in \
+`crates/mtg-engine/tests/cards/oracle_roundtrip.rs`.\n\n\
+| Bug | Cards (examples) | Fix |\n|---|---|---|\n\
+| A probe noun's \"is a card\" part stayed in object filters, so tokens were left out (\"Creatures your opponents control enter tapped\", \"Colorless creatures you control enter with ... counters\", \"each other creature named ~\") | Kinjalli's Sunwing, Curator Beastie, Seven Dwarves, Thalia, Heretic Cathar, Archon of Emeria (about 20) | `phrases::without_probe_card` (the same fix landed upstream for the \"enters\" patterns) |\n\
+| \"[trigger], you may pay [cost]. If you do, return this card from your graveyard ...\" functioned from the battlefield, so it never triggered | Punishing Fire, Akoum Firebird, Asgardian Inspiration (about 150) | `trigger_zone` for may-pay triggers (also fixed upstream the same way) |\n\
+| \"... deals damage to any other target\" with no earlier target lost \"other\": the object dealing the damage could be the target | Pain for All, Black Panther, Most Dangerous, Red Hulk | `damage_removal::any_other_than` |\n\
+| \"with a single target\" swallowed the rest of the sentence: \"unless its controller pays {2}\" was dropped | Divert | qualifier only at the end; new pattern \"[effect] unless its controller pays [cost]\" (5 more cards supported) |\n\
+| \"Equip ... Activate only once each turn.\" wasn't enforced (it was for crew) | Dark Knight's Greatsword and 3 others | `kw/equip.rs` |\n\n\
+Known approximations the comparison accepts (same meaning in practice, listed here because \
+the AST can't tell the wordings apart): \"doesn't untap during your next untap step\" on an \
+object you control is compiled as \"during its controller's next untap step\"; \"cycle or \
+discard\" triggers are compiled as discard triggers (CR 702.29d).\n\n";
+
 /// Cards the coverage reports count: playable paper cards legal somewhere.
 pub fn counted(c: &mtg_data::scryfall::ScryfallCard) -> bool {
     c.is_playable_card()
@@ -324,6 +339,7 @@ fn report(
         100.0 * passing.len() as f64 / total.max(1) as f64,
         failing.len()
     ));
+    md.push_str(FINDINGS);
     md.push_str("## Allowed equivalences\n\nApplied to both sides (`compare.rs`, `EQUIVALENCES`):\n\n| Pattern | Replacement | Why |\n|---|---|---|\n");
     for e in EQUIVALENCES {
         md.push_str(&format!(

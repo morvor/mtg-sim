@@ -1241,7 +1241,7 @@ impl Renderer<'_> {
             // --- Entering the battlefield (CR 614.1c).
             (E::EntersBattlefield(f), action) => {
                 let subj = self.enters_subject(f);
-                let it = if subj == "~" { "it" } else { "it" };
+                let it = "it";
                 match action {
                     A::EnterTapped if subj != "~" && subj != "~it" => {
                         format!("{subj} enter tapped")
@@ -1278,7 +1278,20 @@ impl Renderer<'_> {
                         format!("as {subj} enters, {e}")
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
-                    other => self.gap(format!("enters replacement {other:?}")),
+                    other @ (A::PreventAmount(_)
+                    | A::Multiply(_)
+                    | A::Add(_)
+                    | A::PlusTokens { .. }
+                    | A::Subtract(_)
+                    | A::Redirect(_)
+                    | A::RedirectNext(..)
+                    | A::Regenerate
+                    | A::PreventAndThen(..)
+                    | A::LifeFloor(_)
+                    | A::ManaTypeInstead(_)) => {
+                        let then = self.replacement_then(other, "it");
+                        format!("if {subj} would enter, {then}")
+                    }
                 }
             }
             (E::TurnedFaceUp, A::AsEnters(e)) => {
@@ -1709,10 +1722,53 @@ impl Renderer<'_> {
                 format!("that much minus {v} instead")
             }
             A::Regenerate => format!("regenerate {it}"),
-            other => self.gap(format!(
-                "replacement action {:?}",
-                std::mem::discriminant(other)
-            )),
+            A::PlusTokens { spec, count } => {
+                let (d, tail) = self.token_desc(spec);
+                let c = match count {
+                    Value::EventAmount => "that many".to_string(),
+                    Value::Const(1) => with_article(&d),
+                    other => self.value(other),
+                };
+                let tokens = if matches!(count, Value::Const(1)) {
+                    format!("{c} token{tail}")
+                } else {
+                    format!("{c} {d} tokens{tail}")
+                };
+                format!("those tokens plus {tokens} are created instead")
+            }
+            A::Redirect(sel) => {
+                let t = self.sel(sel, Case::Obj);
+                format!("that damage is dealt to {t} instead")
+            }
+            A::RedirectNext(sel, v) => {
+                let t = self.sel(sel, Case::Obj);
+                let v = self.value(v);
+                format!("{v} of that damage is dealt to {t} instead")
+            }
+            A::PreventAndThen(amount, e) => {
+                let p = match amount {
+                    None => "prevent that damage".to_string(),
+                    Some(v) => {
+                        let v = self.value(v);
+                        format!("prevent {v} of that damage")
+                    }
+                };
+                let e = self.effect(e);
+                format!("{p}. {e}")
+            }
+            A::LifeFloor(v) => {
+                let v = self.value(v);
+                format!("{it} loses life only down to {v}")
+            }
+            A::ManaTypeInstead(t) => format!("it produces {} instead", mana_symbol(*t)),
+            // Enters-the-battlefield replacements are worded with their event
+            // (`as_enters`); here they have no event to go with.
+            A::EnterTapped
+            | A::EnterWithCounters(..)
+            | A::AsEnters(_)
+            | A::EnterAsCopy { .. }
+            | A::EnterUnderControl(_)
+            | A::EnterTransformed => self.gap("enters replacement without an enters event"),
         }
     }
 
