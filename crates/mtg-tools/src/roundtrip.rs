@@ -1,5 +1,5 @@
 //! `roundtrip [--card NAME] [--filter TEXT] [--limit N] [--write PATH] [--check] [--ast]
-//! [--list] [--clusters N]`: renders every fully supported card's compiled abilities back
+//! [--list] [--all] [--clusters N]`: renders every fully supported card's compiled abilities back
 //! to Oracle-style text ([`mtg_engine::oracle::render`]) and compares it with the card's
 //! Oracle text.
 //!
@@ -7,6 +7,8 @@
 //! * `--filter TEXT`: only cards whose Oracle text contains TEXT (case-insensitive).
 //! * `--limit N`: with `--list`, print at most N mismatching cards (default 20).
 //! * `--list`: print mismatching cards with both sides.
+//! * `--all`: print every checked card with both sides (to diff the compiler's output
+//!   before and after a change).
 //! * `--write PATH`: write the Markdown report (and `docs/roundtrip-passing.txt`, the
 //!   checked-in list of passing cards that must stay passing).
 //! * `--check`: exit 1 if a card in `docs/roundtrip-passing.txt` no longer passes.
@@ -33,7 +35,12 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"it\" after the card names itself (\"put a +1/+1 counter on ~. It gains flying\", \"sacrifice ~ and it deals 3 damage\", \"~ gets +1/+1 ... Untap it.\") was the triggering object or spell | Mogg Bombers, Machine Man, Model X-51, Blistercoil Weird, Aria of Flame, Vivi Ornitier (about 20) | `oracle_hardening_referents::note_object_last` |\n\
 | \"another target creature\" after an earlier target object also excluded the source, which may be that other target | Itzquinth, Firstborn of Gishath, Rhino, Terrible Trampler (about 30) | `Builder::add_target` |\n\
 | \"Each player discards a card. If you discarded a card this way, ...\" counted any player's discarded card (test in `tests/cards/roundtrip_renderer_gaps.rs`) | Fanatic of the Harrowing | `conditions_this_way::if_this_way`: only cards you own |\n\
-| \"For each creature card exiled this way, each opponent loses 1 life and you gain 1 life\" scaled only the first half (test in `tests/cards/roundtrip_renderer_gaps.rs`) | Graveyard Trespasser // Graveyard Glutton | `hand_graveyard_grammar::scale` reaches each-player instructions |\n\n\
+| \"For each creature card exiled this way, each opponent loses 1 life and you gain 1 life\" scaled only the first half (test in `tests/cards/roundtrip_renderer_gaps.rs`) | Graveyard Trespasser // Graveyard Glutton | `hand_graveyard_grammar::scale` reaches each-player instructions |\n\
+| \"Equipped creature gets +X/+X, where X is its mana value\" used the Equipment's mana value | Hedron Matrix | `r107_numbers::enchanted_gets_xy` (tests in `tests/cards/roundtrip_parser_bugs_1.rs`, as below) |\n\
+| \"Target creature ... gets +X/+X ..., where X is its power\" used the source's power, not the target's | Winged Temple of Orazca (Fatal Frenzy now compiles) | `r107_numbers::where_x_is_parts` |\n\
+| \"Whenever ... this turn, put three +1/+1 counters on it. It gains trample ...\": the second sentence was the creating ability's own instruction (about the source) | The Last Ronin | `patterns/this_turn_trigger_followup.rs` |\n\
+| \"~ deals damage to any target equal to that card's mana value\": \"that card\" was the damage's target | Undying Flames | `damage_removal::damage_part` |\n\
+| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";
@@ -108,6 +115,7 @@ struct Options {
     ast: bool,
     clusters: usize,
     list: bool,
+    all: bool,
 }
 
 fn parse(args: &[String]) -> Options {
@@ -120,6 +128,7 @@ fn parse(args: &[String]) -> Options {
         ast: false,
         clusters: 0,
         list: false,
+        all: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -148,6 +157,7 @@ fn parse(args: &[String]) -> Options {
             "--check" => o.check = true,
             "--ast" => o.ast = true,
             "--list" => o.list = true,
+            "--all" => o.all = true,
             _ => {}
         }
         i += 1;
@@ -193,6 +203,7 @@ fn print_card(r: &CardCheck) {
         println!("  gap: {g}");
     }
     if !r.pass {
+        println!("  cluster: {}", cluster_key(r));
         for u in &r.unmatched_oracle {
             println!("  - {}", normalize_unit(u).join(" "));
         }
@@ -272,6 +283,11 @@ pub fn run(args: &[String]) {
     );
     if o.list {
         for r in failing.iter().take(o.limit) {
+            print_card(r);
+        }
+    }
+    if o.all {
+        for r in &results {
             print_card(r);
         }
     }

@@ -265,6 +265,10 @@ impl Renderer<'_> {
                         }
                     }
                     np.alts.extend(alts);
+                } else if self.plural_alts {
+                    // "Red spells and white spells you cast cost {1} less to cast."
+                    let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::Many)).collect();
+                    np.fixed = Some(join_list(&alts, "and"));
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
                     np.fixed = Some(join_list(&alts, "or"));
@@ -396,9 +400,15 @@ impl Renderer<'_> {
                 let who = self.rel_object(*r);
                 np.post.push(format!("attacking {who}"));
             }
+            Filter::BlockingSource if self.self_before_target => {
+                np.post.push("blocking ~it".into())
+            }
             Filter::BlockingSource => {
                 let m = self.me();
                 np.post.push(format!("blocking {m}"))
+            }
+            Filter::BlockedBySource if self.self_before_target => {
+                np.post.push("blocked by ~it".into())
             }
             Filter::BlockedBySource => {
                 let m = self.me();
@@ -437,8 +447,10 @@ impl Renderer<'_> {
                 np.with.push(format!("loyalty {}", cmp_phrase(*c, &v)));
             }
             Filter::Named(n) => np.post.push(format!("named {n}")),
+            // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
                 let s = self.sel(s, Case::Obj);
+                let s = s.replace("|each card exiled with ~}", "|a card exiled with ~}");
                 np.with.push(format!("the same name as {s}"));
             }
             Filter::DifferentNameFrom(s) => {
@@ -658,6 +670,35 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("unmodified".into()),
             Filter::EnteredThisTurn => np.rel.push("that didn't enter this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that didn't attack this turn".into()),
+            // "a spell from anywhere other than your hand": a spell is cast from its
+            // caster's own hand (CR 601.2a); one that isn't in a hand either (Drannith
+            // Magistrate's "can't cast spells from anywhere other than their hands").
+            Filter::CastFrom(z) => np.post.push(format!(
+                "from anywhere other than {{alt:your|their}} {}",
+                zone_word(*z)
+            )),
+            Filter::Or(v)
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::CastFrom(_)))
+                    && v.iter().all(|x| match x {
+                        Filter::CastFrom(z) | Filter::InZone(z) => v.iter().all(
+                            |y| matches!(y, Filter::CastFrom(w) | Filter::InZone(w) if w == z),
+                        ),
+                        _ => false,
+                    }) =>
+            {
+                let z = v
+                    .iter()
+                    .find_map(|x| match x {
+                        Filter::CastFrom(z) => Some(*z),
+                        _ => None,
+                    })
+                    .unwrap_or(ZoneKind::Hand);
+                np.post.push(format!(
+                    "from anywhere other than {{alt:your|their}} {}",
+                    zone_word(z)
+                ))
+            }
             Filter::Or(v) => {
                 for x in v {
                     self.collect_not(x, np);
@@ -937,10 +978,8 @@ impl Renderer<'_> {
             },
             PlayerRel::Any => "a player's".into(),
             PlayerRel::NotYou => "an opponent's".into(),
-            PlayerRel::Target(i) => {
-                let p = self.target_player_mention(i);
-                possessive(&p)
-            }
+            // "target player's graveyard", then "that player's" / "their graveyard".
+            PlayerRel::Target(i) => self.target_mention(i, Case::Poss),
             PlayerRel::TargetOrController(i) => {
                 let p = self.target_player_mention(i);
                 possessive(&p)
@@ -963,7 +1002,8 @@ impl Renderer<'_> {
             PlayerRel::Target(i) | PlayerRel::TargetOrController(i) => {
                 self.target_player_mention(i)
             }
-            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "that player".into(),
+            // "the number of creatures attacking that player" / "... attacking them".
+            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "{alt:that player|them}".into(),
             PlayerRel::Defending => "defending player".into(),
             PlayerRel::Active => "the active player".into(),
             PlayerRel::Teammate => "a teammate".into(),
@@ -975,6 +1015,7 @@ impl Renderer<'_> {
     pub(crate) fn rel_subject(&mut self, r: PlayerRel) -> String {
         match r {
             PlayerRel::Any => "a player".into(),
+            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "{alt:that player|they}".into(),
             other => self.rel_object(other),
         }
     }
@@ -984,8 +1025,10 @@ impl Renderer<'_> {
         let num = if self.each_mode { Num::Many } else { num };
         match r {
             PlayerRel::You => "you control".into(),
+            // "a creature an opponent controls" / "each creature your opponents control":
+            // the same objects, those any opponent controls.
             PlayerRel::Opponent => match num {
-                Num::One => "an opponent controls".into(),
+                Num::One => "{alt:an opponent controls|your opponents control}".into(),
                 Num::Many => "your opponents control".into(),
             },
             PlayerRel::NotYou => "you don't control".into(),
@@ -997,7 +1040,7 @@ impl Renderer<'_> {
             // "among creatures they control": the player each player is.
             PlayerRel::Iterated => "{alt:that player controls|they control}".into(),
             other => {
-                let p = self.rel_object(other);
+                let p = self.rel_subject(other);
                 format!("{p} controls")
             }
         }
@@ -1007,7 +1050,8 @@ impl Renderer<'_> {
         match r {
             PlayerRel::You => "you own".into(),
             PlayerRel::NotYou => "you don't own".into(),
-            PlayerRel::Opponent => "an opponent owns".into(),
+            // The same cards: those any opponent owns.
+            PlayerRel::Opponent => "{alt:an opponent owns|your opponents own}".into(),
             other => {
                 let p = self.rel_object(other);
                 format!("{p} owns")

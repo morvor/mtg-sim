@@ -30,11 +30,21 @@ impl Renderer<'_> {
                 parts.push("{Q}".into());
             }
         }
+        // "Remove three quest counters from ~ and sacrifice it": a later cost names the
+        // object again as "it".
+        let mut named_self = false;
         for p in &c.parts {
             match p {
                 CostPart::Tap | CostPart::Untap | CostPart::Loyalty(_) => {}
                 other => {
-                    let s = self.cost_part(other);
+                    let mut s = self.cost_part(other);
+                    if named_self {
+                        s = s.replace(" ~ ", " ~it ");
+                        if let Some(x) = s.strip_suffix(" ~") {
+                            s = format!("{x} ~it");
+                        }
+                    }
+                    named_self |= s.contains('~');
                     parts.push(capitalize(&s));
                 }
             }
@@ -132,8 +142,20 @@ impl Renderer<'_> {
                     None => "counter".into(),
                 };
                 let (c, w) = self.counted(count, &noun);
+                let w = w.unwrap_or_default();
+                // "Remove two counters from ~" (counters of any kinds).
+                if matches!(filter, Filter::Source) {
+                    let m = self.me();
+                    return format!("remove {c} from {m}{w}");
+                }
+                // "Remove a counter from a creature you control": one counter comes from
+                // one of them.
+                if matches!(count, Value::Const(1)) {
+                    let f = self.noun_det(filter, nouns::Det::A);
+                    return format!("remove {c} from {f}{w}");
+                }
                 let f = self.noun(filter, Num::Many);
-                format!("remove {c} from among {f}{}", w.unwrap_or_default())
+                format!("remove {c} from among {f}{w}")
             }
             CostPart::AddCounters { kind, count } => {
                 let (c, w) = self.counted(count, &counter_name(kind));
@@ -354,6 +376,10 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        for oc in &a.own_cost_changes {
+            let c = self.own_cost_change(oc);
+            s = join_words(&[s, c]);
+        }
         if !restr.is_empty() {
             let r: Vec<String> = restr
                 .iter()

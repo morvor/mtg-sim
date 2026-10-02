@@ -214,6 +214,19 @@ pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -
         None => value_s,
     };
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    // "Target creature you control gets +X/+X until end of turn, where X is its power":
+    // a pronoun in the value refers to the target the instruction just named, if it
+    // names one (else it keeps its earlier antecedent, e.g. the source).
+    if value_s.split([' ', ',']).any(|w| matches!(w, "it" | "its")) {
+        if let Some(e) =
+            where_x_is_clause_first(clause, value_s, b, it.clone(), as_cast.is_some(), true)
+        {
+            return Some(e);
+        }
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    }
     if let Some((v, tail)) = value_phrase(value_s, b) {
         if end(&tail).is_empty() {
             return where_x_is_value_inner(clause, v, b, it, as_cast.is_some());
@@ -224,23 +237,33 @@ pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -
     b.it_player = saved.2;
     // The value may refer to what the instruction names ("Target player draws X cards,
     // where X is the number of cards in their graveyard"): read the instruction first.
-    where_x_is_clause_first(clause, value_s, b, it, as_cast.is_some())
+    where_x_is_clause_first(clause, value_s, b, it, as_cast.is_some(), false)
 }
 
 /// "[clause], where X is [value]" with the value read after the clause, so that its
-/// pronouns can refer to the clause's targets.
+/// pronouns can refer to the clause's targets. With `new_referent`, only if the clause
+/// gives "it" a new antecedent.
 fn where_x_is_clause_first(
     clause: &str,
     value_s: &str,
     b: &mut Builder,
     it: Sel,
     targets_only: bool,
+    new_referent: bool,
 ) -> Option<Effect> {
     let first_target = b.targets.len();
-    b.it = it;
+    b.it = it.clone();
     let e = super::value_grammar::with_x_defined(true, || {
         crate::oracle::effects::parse_clause(clause, b)
     })?;
+    // Only a target the instruction names (chosen before X is used); not, say, the cards
+    // it looks at, which X determines ("look at the top X cards ..., where X is its
+    // power": "its" is still the earlier antecedent).
+    if new_referent
+        && (format!("{:?}", b.it) == format!("{it:?}") || !matches!(b.it, Sel::Target(_)))
+    {
+        return None;
+    }
     let (v, tail) = value_phrase(value_s, b)?;
     if !end(&tail).is_empty() {
         return None;
@@ -550,6 +573,9 @@ fn enchanted_gets_xy(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<A
         toughness: None,
     };
     let mut b = Builder::new(&cctx);
+    // "where X is its mana value" (Hedron Matrix): "it" is the enchanted or equipped
+    // creature the sentence is about, not the Aura or Equipment.
+    b.it = Sel::AttachedTo;
     let (x, tail) = value_phrase(rest, &mut b)?;
     let (p, t) = match pt {
         "+x/+y" => {
