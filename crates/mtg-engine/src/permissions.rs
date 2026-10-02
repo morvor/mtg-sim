@@ -58,6 +58,10 @@ pub struct CastPermission {
     pub terms: PlayTerms,
     /// The once-each-turn use it is (its object and slot), if it's one.
     pub once: Option<(ObjectId, SmolStr)>,
+    /// For a permission to play cards with certain qualities: those qualities (as a spell),
+    /// with the object and player they're judged relative to. The spell must still have
+    /// them once its proposal is complete (with the value chosen for X, CR 601.2e).
+    pub qualities: Option<(Filter, Option<ObjectId>, PlayerId)>,
 }
 
 impl PartialEq for CastPermission {
@@ -161,6 +165,7 @@ pub fn allowing(
             free: gr.free,
             terms: gr.terms.clone(),
             once: None,
+            qualities: None,
         });
     }
     // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission to
@@ -190,6 +195,7 @@ pub fn allowing(
             free,
             terms,
             once: once.clone().map(|slot| (*src, slot)),
+            qualities: Some((f, Some(*src), *ctl)),
         });
     }
     out.sort_by_key(|c| {
@@ -464,6 +470,24 @@ fn choose(
     ) {
         crate::decision::Answer::Index(i) if i < perms.len() => i,
         _ => default,
+    }
+}
+
+/// Whether the permission `perm` the card `card` is being cast with still allows the
+/// spell it became as proposed, which has the characteristics `proposed` (with the value
+/// chosen for X in its mana cost): its qualities are judged with the choices made in the
+/// proposal, such as its mana value with that X (CR 601.2e, 601.3e; Lurrus of the
+/// Dream-Den ruling), and otherwise as the card was where it was cast from. A permission
+/// for that card allows it however it's proposed.
+pub fn still_allows(
+    g: &Game,
+    perm: &CastPermission,
+    card: ObjectId,
+    proposed: &Characteristics,
+) -> bool {
+    match &perm.qualities {
+        Some((f, src, ctl)) => matches_with_chars(g, card, proposed, f, &Ctx::new(*src, *ctl)),
+        None => true,
     }
 }
 

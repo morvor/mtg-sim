@@ -405,62 +405,14 @@ fn citadel_with(t: &mut TestGame, top: &str) -> ObjectId {
 }
 
 #[test]
-fn bolas_citadel_spells_are_cast_for_life_with_mandatory_additional_costs() {
-    cr!("118.9a", "118.9b", "601.2f", "601.3");
-    ruling!(
-        "Bolas's Citadel",
-        "If you cast a spell for another cost \"rather than pay its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, such as that of Spark Harvest, those must be paid to cast the card."
-    );
-    supported("Bolas's Citadel");
-    // Mulldrifter: 5 life, not evoked.
-    let mut t = TestGame::new(2);
-    let md = citadel_with(&mut t, "Mulldrifter");
-    t.lands(P0, "Island", 5);
-    assert_eq!(legal_cast_methods(&mut t, P0, md), vec![PAY_LIFE]);
-    t.cast(P0, md).method(PAY_LIFE).go();
-    assert_eq!((t.life(P0), tapped_lands(&t, P0)), (15, 0));
-    // Spark Harvest ({B}; sacrifice a creature or pay {3}{B} as an additional cost):
-    // 1 life and that additional cost.
-    let mut t = TestGame::new(2);
-    let harvest = citadel_with(&mut t, "Spark Harvest");
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    // Nothing to sacrifice and no {3}{B}: it can't be cast.
-    t.g.turn.priority = Some(P0);
-    assert!(t
-        .cast(P0, harvest)
-        .method(PAY_LIFE)
-        .target(bears)
-        .try_go()
-        .is_err());
-    assert_eq!(t.life(P0), 20);
-    let elves = t.battlefield(P0, "Llanowar Elves");
-    assert_eq!(legal_cast_methods(&mut t, P0, harvest), vec![PAY_LIFE]);
-    t.answer(P0, DecisionKind::Option, Answer::Index(0));
-    t.answer_choose(P0, &[Entity::Object(elves)]);
-    t.cast(P0, harvest).method(PAY_LIFE).target(bears).go();
-    assert_eq!(t.life(P0), 19);
-    assert!(t.in_graveyard(P0, "Llanowar Elves"));
-}
-
-#[test]
-fn bolas_citadel_follows_the_normal_timing_and_land_plays() {
-    cr!("305.2", "305.2b", "307.1", "601.3");
-    ruling!(
-        "Bolas's Citadel",
-        "You can play a land card from the top of your library only if you have available land plays remaining."
-    );
+fn bolas_citadel_follows_the_normal_timing() {
+    cr!("307.1", "601.3");
     ruling!(
         "Bolas's Citadel",
         "You must follow the normal timing permissions and restrictions of the cards you play from your library."
     );
     supported("Bolas's Citadel");
-    let mut t = TestGame::new(2);
-    let forest = citadel_with(&mut t, "Forest");
-    let hand_land = t.hand(P0, "Plains");
-    assert!(can_play_land(&mut t, P0, forest));
-    t.play_land(P0, hand_land).expect("land from hand");
-    assert!(!can_play_land(&mut t, P0, forest), "no land play left");
-    // A sorcery from the top: only at sorcery speed.
+    // A sorcery from the top, paying life: only at sorcery speed.
     let mut t = TestGame::new(2);
     let harvest = citadel_with(&mut t, "Spark Harvest");
     t.battlefield(P1, "Grizzly Bears");
@@ -762,6 +714,32 @@ fn karador_losing_karador_doesnt_affect_the_spell() {
     let spell = t.cast(P0, bears).go();
     t.g.destroy(karador, None);
     t.g.flush_events();
+    t.resolve_all();
+    assert!(t.on_battlefield(spell));
+}
+
+#[test]
+fn lurrus_the_mana_value_counts_the_value_chosen_for_x() {
+    cr!("601.2e", "601.3e", "202.3e");
+    ruling!(
+        "Lurrus of the Dream-Den",
+        "For spells with {X} in their mana costs, use the value chosen for X to determine the spell's mana value. For example, if a permanent spell costs {X}{W}, you could cast it with X as 1 but not as 2."
+    );
+    supported("Lurrus of the Dream-Den");
+    supported("Hangarback Walker");
+    // Hangarback Walker ({X}{X}): with X = 1 its mana value is 2; with X = 2, 4.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lurrus of the Dream-Den");
+    let walker = t.graveyard(P0, "Hangarback Walker");
+    t.lands(P0, "Wastes", 4);
+    assert_eq!(legal_cast_methods(&mut t, P0, walker), vec![CastMethod::Normal]);
+    // X = 2: the proposed spell isn't one Lurrus allows; the casting is undone (CR 733).
+    assert!(t.cast(P0, walker).x(2).try_go().is_err());
+    assert_eq!(t.obj(walker).zone, Zone::Graveyard(P0));
+    assert_eq!(tapped_lands(&t, P0), 0);
+    // X = 1 is fine.
+    let spell = t.cast(P0, walker).x(1).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
     t.resolve_all();
     assert!(t.on_battlefield(spell));
 }

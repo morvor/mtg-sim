@@ -69,10 +69,9 @@ pub struct PlayGrant {
     pub terms: PlayTerms,
 }
 
-/// Recorded in `CastInfo::paid` for a spell cast from where an effect's permission for
-/// that card ([`PlayGrant`], "you may cast that card this turn") let its controller cast
-/// it: another permission (such as "once during each of your turns, you may cast a
-/// creature spell from your graveyard") wasn't needed for it.
+/// Recorded in `CastInfo::paid` for a spell cast with an effect's permission for that card
+/// ([`PlayGrant`], "you may cast that card this turn") as the permission its controller
+/// chose to use (see `permissions.rs`).
 pub const CAST_WITH_GRANT: &str = "cast with an effect's permission for the card";
 
 pub fn grant_play_permission(
@@ -1531,6 +1530,19 @@ impl Game {
         let proposed = self.obj(id).chars.clone();
         if self.cast_prohibited_by_effects(p, id, &proposed) {
             return Err(Illegal("the proposed spell can't be cast".into()));
+        }
+        // The permission it's cast with must allow the spell as proposed: "a permanent
+        // spell with mana value 2 or less" with the value chosen for X (CR 601.3e).
+        if let Some(c) = &opt.permission {
+            let mut as_proposed = proposed.clone();
+            if let Some(m) = as_proposed.mana_cost.as_mut() {
+                *m = m.with_x(x.max(0) as u32);
+            }
+            if !crate::permissions::still_allows(self, c, card, &as_proposed) {
+                return Err(Illegal(
+                    "the permission doesn't allow the proposed spell".into(),
+                ));
+            }
         }
 
         // 601.2f: total cost. The player chooses halves of hybrid symbols by which the
