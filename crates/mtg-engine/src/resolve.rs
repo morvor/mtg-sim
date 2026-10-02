@@ -1948,11 +1948,28 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
-                let picked: Vec<Entity> =
-                    crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
-                        .into_iter()
-                        .map(Entity::Object)
-                        .collect();
+                let chosen = crate::zones::choose_objects(
+                    self,
+                    p,
+                    ctx.source,
+                    "Choose",
+                    cands.clone(),
+                    min,
+                    n,
+                );
+                // "Choose any number of ... tokens you control with different names": the
+                // objects chosen must have the relationship.
+                let picked: Vec<Entity> = crate::target_groups::fit_together(
+                    self,
+                    filter,
+                    chosen,
+                    &cands,
+                    min as usize,
+                    ctx,
+                )
+                .into_iter()
+                .map(Entity::Object)
+                .collect();
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }

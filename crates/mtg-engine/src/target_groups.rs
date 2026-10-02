@@ -18,7 +18,7 @@
 //! must have equal toughness or a total mana value or power are compared among the
 //! targets that are still legal.
 
-use crate::ability::{TargetGroup, TargetSpec, Value};
+use crate::ability::{Filter, TargetGroup, TargetSpec, Value};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::object::{Characteristics, GameObject};
@@ -57,6 +57,39 @@ fn stat(g: &Game, group: &TargetGroup, o: &GameObject) -> i64 {
     }
 }
 
+/// Whether each object can stand for a different card type it has (a matching of the
+/// objects to card types, found by augmenting paths).
+fn one_per_card_type(objs: &[&GameObject]) -> bool {
+    fn assign(
+        k: usize,
+        objs: &[&GameObject],
+        owner: &mut Vec<(CardType, usize)>,
+        seen: &mut Vec<CardType>,
+    ) -> bool {
+        for t in objs[k].chars.card_types.iter() {
+            if seen.contains(&t) {
+                continue;
+            }
+            seen.push(t);
+            let free = match owner.iter().position(|(c, _)| *c == t) {
+                None => true,
+                Some(i) => {
+                    let other = owner[i].1;
+                    assign(other, objs, owner, seen)
+                }
+            };
+            if free {
+                owner.retain(|(c, _)| *c != t);
+                owner.push((t, k));
+                return true;
+            }
+        }
+        false
+    }
+    let mut owner = Vec::new();
+    (0..objs.len()).all(|k| assign(k, objs, &mut owner, &mut Vec::new()))
+}
+
 /// Whether these targets, taken together, have the relationship. Objects that left their
 /// zone are compared using their last known information.
 pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) -> bool {
@@ -75,6 +108,7 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
             pairwise(&objs, |a, b| g.mana_value_of(a.id) != g.mana_value_of(b.id))
         }
         TargetGroup::EqualToughness => objs.iter().all(|o| o.toughness() == objs[0].toughness()),
+        TargetGroup::OnePerCardType => one_per_card_type(&objs),
         TargetGroup::TotalManaValueAtMost(v) | TargetGroup::TotalPowerAtMost(v) => {
             objs.iter().map(|o| stat(g, group, o)).sum::<i64>() <= bound(g, v, ctx)
         }
@@ -148,6 +182,7 @@ pub fn holds_on_resolution(
         | TargetGroup::DifferentNames
         | TargetGroup::DifferentManaValues
         | TargetGroup::EqualToughness
+        | TargetGroup::OnePerCardType
         | TargetGroup::TotalManaValueAtMost(_)
         | TargetGroup::TotalPowerAtMost(_) => group_ok(g, group, legal, ctx),
     }
@@ -252,4 +287,78 @@ pub fn related_ok(
             group_ok(g, group, &pair, ctx)
         })
     })
+}
+
+// ---------------------------------------------------------------------------
+// Choices of several objects that aren't targets (`Filter::Together`)
+// ---------------------------------------------------------------------------
+
+/// The relationship a choice of several objects described by `f` must have
+/// ("artifact cards with different names"), if any: its `Filter::Together` part.
+pub fn together_of(f: &Filter) -> Option<&TargetGroup> {
+    match f {
+        Filter::Together(g) => Some(g),
+        Filter::And(v) => v.iter().find_map(together_of),
+        _ => None,
+    }
+}
+
+fn entities(objs: &[ObjectId]) -> Vec<Entity> {
+    objs.iter().map(|o| Entity::Object(*o)).collect()
+}
+
+/// Whether `n` of the candidates can be chosen together as `f` requires (a cost such as
+/// "sacrifice three artifact tokens with different names" can be paid only then).
+pub fn can_choose_together(g: &Game, f: &Filter, cands: &[ObjectId], n: usize, ctx: &Ctx) -> bool {
+    if cands.len() < n {
+        return false;
+    }
+    match together_of(f) {
+        None => true,
+        Some(grp) => find_group(g, grp, &entities(cands), n, ctx).is_some(),
+    }
+}
+
+/// The chosen objects if they have the relationship `f` requires; otherwise the largest
+/// group of them, in choice order, that does, completed to `min` from the candidates if
+/// possible (and kept as large as it can be if not).
+pub fn fit_together(
+    g: &Game,
+    f: &Filter,
+    picked: Vec<ObjectId>,
+    cands: &[ObjectId],
+    min: usize,
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
+    let Some(grp) = together_of(f) else {
+        return picked;
+    };
+    let all = entities(cands);
+    let fitted = fit(g, grp, entities(&picked), &all, min, ctx).unwrap_or_else(|| {
+        // No group of `min` exists: the largest one there is.
+        (0..min)
+            .rev()
+            .find_map(|k| find_group(g, grp, &all, k, ctx))
+            .unwrap_or_default()
+    });
+    fitted.into_iter().filter_map(|e| e.object()).collect()
+}
+
+/// Asks `p` to choose `min` to `max` of the candidates, which `f` describes; if `f`
+/// requires a relationship among the chosen objects, an answer without it is fitted to
+/// one that has it (CR 601.2c-like legality for choices that aren't targets).
+#[allow(clippy::too_many_arguments)]
+pub fn choose_together(
+    g: &mut Game,
+    p: PlayerId,
+    source: Option<ObjectId>,
+    prompt: &str,
+    f: &Filter,
+    cands: Vec<ObjectId>,
+    min: u32,
+    max: u32,
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
+    let picked = g.ask_objects(p, source, prompt, cands.clone(), min, max);
+    fit_together(g, f, picked, &cands, min as usize, ctx)
 }

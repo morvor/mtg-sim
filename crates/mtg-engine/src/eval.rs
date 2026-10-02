@@ -623,6 +623,8 @@ impl Game {
             Filter::AttachedTo(sel) => o
                 .attached_to
                 .is_some_and(|h| self.eval_sel(sel, ctx).contains(&h)),
+            // A relationship among the objects chosen, not a quality of one of them.
+            Filter::Together(_) => true,
             Filter::CanBeAttachedBy(sel) => self
                 .eval_sel(sel, ctx)
                 .iter()

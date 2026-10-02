@@ -868,3 +868,230 @@ fn crown_of_the_ages_targets_only_the_aura() {
     t.resolve();
     assert_eq!(t.obj_now(p).attached_to, Some(Entity::Object(scout)));
 }
+
+#[test]
+fn saheeli_rai_searches_for_artifacts_with_different_names() {
+    cr!("701.23a", "201.2b");
+    supported("Saheeli Rai");
+    // Two Ornithopters and a Memnite in the library: the two Ornithopters can't both be
+    // found; one of them and the Memnite are put onto the battlefield.
+    let mut t = TestGame::new(2);
+    let saheeli = t.battlefield(P0, "Saheeli Rai");
+    t.g.add_counters(Entity::Object(saheeli), "loyalty", 4, None);
+    let a = t.library_top(P0, "Ornithopter");
+    let b = t.library_top(P0, "Ornithopter");
+    let c = t.library_top(P0, "Memnite");
+    t.library_top(P0, "Grizzly Bears");
+    t.answer_choose(
+        P0,
+        &[Entity::Object(a), Entity::Object(b), Entity::Object(c)],
+    );
+    t.activate(P0, saheeli, 2, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    assert_eq!(t.named_on_battlefield("Memnite").len(), 1);
+}
+
+/// The number of tokens `p` controls with the subtype.
+fn tokens_with(t: &TestGame, p: PlayerId, subtype: &str) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|o| {
+            let o = t.obj(**o);
+            o.is_token() && o.controller == p && o.chars.has_subtype(subtype)
+        })
+        .count()
+}
+
+#[test]
+fn transmutation_font_sacrifices_tokens_with_different_names() {
+    cr!("118.3", "201.2b", "602.2b");
+    // (Its first ability isn't supported; the second is its first activated ability.)
+    // A Clue, a Food and a Blood token: they can be sacrificed.
+    let mut t = TestGame::new(2);
+    let font = t.battlefield(P0, "Transmutation Font");
+    t.lands(P0, "Wastes", 3);
+    for name in ["Clue", "Food", "Blood"] {
+        crate::r_s02_common::create_token(&mut t, P0, name);
+    }
+    t.library_top(P0, "Ornithopter");
+    assert!(t.activate(P0, font, 0, &[]).is_ok());
+    t.resolve();
+    assert_eq!(tokens_with(&t, P0, "Clue"), 0);
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+
+    // Two Clues and a Food: no three with different names, so it can't be activated.
+    let mut t = TestGame::new(2);
+    let font = t.battlefield(P0, "Transmutation Font");
+    t.lands(P0, "Wastes", 3);
+    for name in ["Clue", "Clue", "Food"] {
+        crate::r_s02_common::create_token(&mut t, P0, name);
+    }
+    assert!(t.activate(P0, font, 0, &[]).is_err());
+    assert_eq!(tokens_with(&t, P0, "Clue"), 2);
+
+    // Two Clues, a Food and a Blood: choosing both Clues isn't legal; one Clue, the Food
+    // and the Blood are sacrificed.
+    let mut t = TestGame::new(2);
+    let font = t.battlefield(P0, "Transmutation Font");
+    t.lands(P0, "Wastes", 3);
+    let c1 = crate::r_s02_common::create_token(&mut t, P0, "Clue");
+    let c2 = crate::r_s02_common::create_token(&mut t, P0, "Clue");
+    let food = crate::r_s02_common::create_token(&mut t, P0, "Food");
+    crate::r_s02_common::create_token(&mut t, P0, "Blood");
+    t.answer_choose(
+        P0,
+        &[Entity::Object(c1), Entity::Object(c2), Entity::Object(food)],
+    );
+    t.activate(P0, font, 0, &[]).unwrap();
+    assert_eq!(tokens_with(&t, P0, "Clue"), 1);
+    assert_eq!(tokens_with(&t, P0, "Food"), 0);
+    assert_eq!(tokens_with(&t, P0, "Blood"), 0);
+}
+
+#[test]
+fn ormos_discards_cards_with_different_names() {
+    cr!("118.3", "201.2b", "602.2b");
+    // Ormos's "Discard three cards with different names" (its other lines aren't
+    // supported, so the ability is checked directly): two Bears and an Elves can't be
+    // discarded for it.
+    let def = card("Ormos, Archive Keeper");
+    let ability = def.faces[0]
+        .chars
+        .abilities
+        .iter()
+        .find_map(|a| match &a.kind {
+            AbilityKind::Activated(x) if a.text.contains("different names") => Some(x.clone()),
+            _ => None,
+        })
+        .expect("Ormos's activated ability compiles");
+    let discard = ability
+        .cost
+        .parts
+        .iter()
+        .find_map(|p| match p {
+            CostPart::Discard { filter, count, .. } => Some((filter.clone(), count.clone())),
+            _ => None,
+        })
+        .expect("a discard cost");
+    assert!(matches!(discard.1, Value::Const(3)));
+    let mut t = TestGame::new(2);
+    let a = t.hand(P0, "Grizzly Bears");
+    let b = t.hand(P0, "Grizzly Bears");
+    let c = t.hand(P0, "Llanowar Elves");
+    let ctx = Ctx::new(None, P0);
+    assert!(!mtg_engine::target_groups::can_choose_together(
+        &t.g,
+        &discard.0,
+        &[a, b, c],
+        3,
+        &ctx
+    ));
+    let d = t.hand(P0, "Hill Giant");
+    assert!(mtg_engine::target_groups::can_choose_together(
+        &t.g,
+        &discard.0,
+        &[a, b, c, d],
+        3,
+        &ctx
+    ));
+}
+
+#[test]
+fn battle_for_bretagard_copies_tokens_with_different_names() {
+    cr!("714.2b", "201.2b", "111.4");
+    ruling!(
+        "Battle for Bretagard",
+        "The chapter III ability doesn't target any of the tokens. You choose which ones you're copying as the ability resolves."
+    );
+    ruling!(
+        "Battle for Bretagard",
+        "In particular, a Human Warrior creature token has a different name than an Elf Warrior creature token, and you may create a copy of each using the chapter III ability."
+    );
+    supported("Battle for Bretagard");
+    // Chapters I and II make a Human Warrior and an Elf Warrior, which have different
+    // names: chapter III copies each of them.
+    let mut t = TestGame::new(2);
+    let saga = t.enter(P0, "Battle for Bretagard");
+    t.settle();
+    t.resolve_all();
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.settle();
+    t.resolve_all();
+    let humans: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.obj(*o).is_token() && t.obj(*o).chars.has_subtype("Human"))
+        .collect();
+    assert_eq!(humans.len(), 1);
+    let human_name = t.obj(humans[0]).chars.name.clone();
+    let elves: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.obj(*o).is_token() && t.obj(*o).chars.has_subtype("Elf"))
+        .collect();
+    assert_eq!(elves.len(), 1);
+    assert_ne!(human_name, t.obj(elves[0]).chars.name);
+    t.answer_choose(P0, &[Entity::Object(humans[0]), Entity::Object(elves[0])]);
+    let from = t.asked().len();
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.settle();
+    // Choosing happens on resolution, not as the ability is put on the stack.
+    assert!(asked_since(&t, from)
+        .iter()
+        .all(|(_, d)| !matches!(d, Decision::ChooseTargets { .. })));
+    t.resolve_all();
+    let count = |t: &TestGame, sub: &str| {
+        t.g.battlefield
+            .iter()
+            .filter(|o| t.obj(**o).is_token() && t.obj(**o).chars.has_subtype(sub))
+            .count()
+    };
+    assert_eq!(count(&t, "Human"), 2);
+    assert_eq!(count(&t, "Elf"), 2);
+}
+
+#[test]
+fn atraxa_one_card_for_each_card_type() {
+    cr!("701.20a", "205.2a", "300.2");
+    ruling!(
+        "Atraxa, Grand Unifier",
+        "If a revealed card has more than one card type, you may choose to put it into your hand for any of its types. For example, an artifact creature card could be put into your hand as the artifact card you choose or as the creature card you choose. If you choose it as the artifact card, you could also put into your hand a creature card, and vice versa."
+    );
+    supported("Atraxa, Grand Unifier");
+    // Revealed: Memnite (artifact creature), Grizzly Bears (creature), Ornithopter
+    // (artifact creature), Forest (land). Memnite as the artifact and the Bears as the
+    // creature, plus the Forest: three cards. A third one for artifact or creature isn't
+    // possible.
+    let mut t = TestGame::new(2);
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let forest = t.library_top(P0, "Forest");
+    let thopter = t.library_top(P0, "Ornithopter");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let memnite = t.library_top(P0, "Memnite");
+    let library = t.library_size(P0);
+    t.answer_choose(
+        P0,
+        &[
+            Entity::Object(memnite),
+            Entity::Object(bears),
+            Entity::Object(thopter),
+            Entity::Object(forest),
+        ],
+    );
+    t.enter(P0, "Atraxa, Grand Unifier");
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Memnite"));
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(t.in_hand(P0, "Forest"));
+    assert!(!t.in_hand(P0, "Ornithopter"));
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.library_size(P0), library - 3);
+}

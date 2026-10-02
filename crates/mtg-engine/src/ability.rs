@@ -662,6 +662,9 @@ pub enum TargetGroup {
     DifferentManaValues,
     /// All have the same toughness ("with equal toughness").
     EqualToughness,
+    /// Each stands for a different card type it has ("for each card type, ... a card of
+    /// that type"): an object with several card types counts as any one of them.
+    OnePerCardType,
     /// Their total mana value is at most this ("with total mana value 6 or less").
     TotalManaValueAtMost(Value),
     /// Their total power is at most this ("with total power 10 or less").
@@ -1161,6 +1164,12 @@ pub enum Filter {
     /// An object each of the selected objects could legally be attached to right now
     /// ("another permanent it can enchant", CR 301.5c, 303.4).
     CanBeAttachedBy(Box<Sel>),
+    /// Not a quality of one object but of the objects chosen together with this filter:
+    /// "search your library for up to three artifact cards with different names",
+    /// "sacrifice three artifact tokens with different names". Every object matches it
+    /// on its own; where several objects are chosen (a search, a cost, "choose"), the
+    /// choice must have the relationship (see `target_groups::choose_together`).
+    Together(Box<TargetGroup>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
