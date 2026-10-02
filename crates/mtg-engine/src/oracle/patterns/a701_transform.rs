@@ -3,10 +3,32 @@
 //! * "Whenever a permanent you control transforms into a non-Human creature", "... into a
 //!   Phyrexian": the permanent has the quality immediately after it transforms
 //!   (CR 701.27e). ("~ transforms into ~" is parsed with the other status triggers.)
+//! * "transform it", "transform him": transform the source or the object the ability
+//!   triggered on, when an earlier part of the ability refers to it ("Whenever ~ attacks and isn't blocked, you
+//!   may pay {2}{B}. If you do, transform it."), which then transforms only if it hasn't
+//!   transformed since the ability was put onto the stack (CR 701.27f).
 
-use super::TriggerPattern;
+use super::{EffectPattern, TriggerPattern};
 use crate::ability::*;
+use crate::oracle::effects::{object_ref, Builder};
 use crate::oracle::phrases::*;
+
+fn transform_pronoun(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l.strip_prefix("transform ")?;
+    if !["it", "him", "her", "that creature", "that permanent"].contains(&r) {
+        return None;
+    }
+    let (what, rest) = object_ref(r, b)?;
+    // Only the source or the object an ability triggered on: a pronoun that the parser
+    // resolves to something else (a card discarded earlier in "If a creature card is
+    // discarded this way, untap ~, then transform it.") may not be what it means.
+    if !end(&rest).is_empty() || !matches!(what, Sel::This | Sel::TriggerObject) {
+        return None;
+    }
+    Some(Effect::Transform { what })
+}
+
+inventory::submit! { EffectPattern { name: "a701 transform it", priority: 100, parse: transform_pronoun } }
 
 fn transforms_into(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let r = end(r);
