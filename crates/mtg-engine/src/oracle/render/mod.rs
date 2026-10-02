@@ -13,7 +13,9 @@
 pub mod compare;
 mod costs;
 mod custom;
+mod custom_effects;
 mod custom_filters;
+mod custom_more;
 mod each_player;
 mod effects;
 mod extremes;
@@ -39,6 +41,9 @@ pub struct FaceInfo {
     pub subtypes: Vec<Subtype>,
     /// What an Aura on this face enchants ("creature", "land"), for "enchanted [thing]".
     pub enchant: Option<String>,
+    /// For half of a meld pair: (the partner's noun, "a creature named Hanweir Garrison";
+    /// the meld result's name), from the card's related cards.
+    pub meld: Option<(String, String)>,
 }
 
 impl FaceInfo {
@@ -48,6 +53,7 @@ impl FaceInfo {
             card_types: face.chars.card_types,
             subtypes: face.chars.subtypes.iter().cloned().collect(),
             enchant: None,
+            meld: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info
@@ -318,7 +324,41 @@ pub fn render_ability(a: &Ability, info: &FaceInfo) -> Result<String, Vec<String
 
 /// Renders all faces of a card.
 pub fn render_card(def: &CardDef) -> Vec<RenderedFace> {
-    def.faces.iter().map(render_face).collect()
+    let meld = meld_info(def);
+    def.faces
+        .iter()
+        .map(|f| {
+            let mut info = FaceInfo::of(f);
+            info.meld = meld.clone();
+            render_abilities(&f.chars.abilities, &info)
+        })
+        .collect()
+}
+
+/// The meld partner and result of half of a meld pair (CR 701.42, 712.4).
+fn meld_info(def: &CardDef) -> Option<(String, String)> {
+    let db = crate::card::CardDb::global();
+    let result = def
+        .related
+        .iter()
+        .find(|(k, _)| k == "meld_result")
+        .map(|(_, n)| n.clone())?;
+    let partner = db
+        .get(&result)?
+        .related
+        .iter()
+        .find(|(k, n)| k == "meld_part" && !n.eq_ignore_ascii_case(&def.name))
+        .map(|(_, n)| n.clone())?;
+    let p = db.get(&partner)?;
+    let kind = p.faces.first().map(|f| f.chars.card_types)?;
+    let noun = if kind.contains(CardType::Creature) {
+        "creature"
+    } else if kind.contains(CardType::Land) {
+        "land"
+    } else {
+        "permanent"
+    };
+    Some((format!("a {noun} named {partner}"), result))
 }
 
 /// The noun an Aura's enchant keyword names ("creature", "land", "player").
@@ -345,6 +385,17 @@ fn gift_given(a: &Ability) -> Option<String> {
         AbilityKind::Triggered(t) => &t.body,
         _ => return None,
     };
+    // CR 702.174b: on a permanent, "When this permanent enters, if its gift cost was paid,
+    // [effect]."
+    if let AbilityKind::Triggered(t) = &a.kind {
+        if matches!(t.trigger, TriggerCond::EntersBattlefield(Filter::Source))
+            && matches!(&t.intervening_if, Some(Condition::CostPaid(c)) if c == "gift")
+        {
+            if let Effect::Custom(n) = &t.body.effect {
+                return n.strip_prefix("gift:give:").map(|s| s.to_string());
+            }
+        }
+    }
     if let Effect::If {
         cond: Condition::CostPaid(c),
         then,
@@ -504,6 +555,8 @@ pub struct Renderer<'a> {
     pub(crate) play_terms: Option<PlayTerms>,
     /// An earlier instruction of the sequence being rendered exiled objects.
     pub(crate) after_exile: bool,
+    /// The target an effect done "for each" target is about (a single target).
+    pub(crate) each_target: Option<u8>,
 }
 
 impl<'a> Renderer<'a> {
@@ -538,6 +591,7 @@ impl<'a> Renderer<'a> {
             plural_vars: Vec::new(),
             play_terms: None,
             after_exile: false,
+            each_target: None,
         }
     }
 

@@ -175,6 +175,14 @@ impl Renderer<'_> {
                     Stat::Counters(None) if *op == AggOp::Sum => {
                         return format!("the number of counters among {s}");
                     }
+                    // "the number of white mana symbols in its mana cost".
+                    Stat::ManaSymbols(c) if *op == AggOp::Sum => {
+                        let p = match s.as_str() {
+                            "it" => "its".to_string(),
+                            other => super::nouns::possessive(other),
+                        };
+                        return format!("the number of {} mana symbols in {p} mana cost", c.word());
+                    }
                     other => return self.gap(format!("Value::Aggregate {other:?}")),
                 };
                 let o = match op {
@@ -200,8 +208,12 @@ impl Renderer<'_> {
                     Among::Powers => "different powers",
                     Among::Names => "different names",
                     Among::CounterKinds => "kinds of counters",
+                    // "the greatest number of creatures you control that have a creature
+                    // type in common".
                     Among::LargestCreatureTypeGroup => {
-                        return self.gap("Among::LargestCreatureTypeGroup");
+                        return format!(
+                            "the greatest number of {s} that have a creature type in common"
+                        );
                     }
                 };
                 format!("the number of {what} among {s}")
@@ -520,6 +532,9 @@ impl Renderer<'_> {
                 s.replace(" was ", " wasn't ")
             }
             Condition::WasCast => "you didn't cast it".into(),
+            Condition::Custom(n) if n == "you_were_the_starting_player" => {
+                "you weren't the starting player".into()
+            }
             other => {
                 let s = self.condition(other);
                 format!("it's not true that {s}")

@@ -293,6 +293,23 @@ impl Renderer<'_> {
                 self.var_defs.push((*var, Sel::CreatorLinked, false));
                 self.effect(effect)
             }
+            // "Target unblocked attacking creature becomes blocked": an instruction done
+            // for each object of a single target is done to the target.
+            Effect::ForEach {
+                sel: Sel::Target(i),
+                var,
+                effect,
+            } if self
+                .targets
+                .get(*i as usize)
+                .is_some_and(|t| matches!(t.max, Value::Const(1))) =>
+            {
+                self.var_defs.push((*var, Sel::Target(*i), false));
+                let saved = self.each_target.replace(*i);
+                let s = self.effect(effect);
+                self.each_target = saved;
+                s
+            }
             Effect::ForEach { sel, effect, .. } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),

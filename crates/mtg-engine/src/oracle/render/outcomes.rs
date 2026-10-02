@@ -144,12 +144,39 @@ impl Renderer<'_> {
         i: usize,
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
-        self.named_group_part(v, i)
+        self.look_then_exile_part(v, i)
+            .or_else(|| self.named_group_part(v, i))
             .or_else(|| self.distribute_part(v, i))
             .or_else(|| self.each_chooses_part(v, i))
             .or_else(|| self.reveal_part(v, i))
             .or_else(|| self.each_player_part(v, i))
             .or_else(|| self.outcome_part(v, i, known))
+    }
+
+    /// "Look at the top card of that player's library, then exile it face down": exiled
+    /// face down, and you may look at it (CR 406.3, 708.2).
+    fn look_then_exile_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        let (
+            Effect::Exile {
+                what,
+                face_down: true,
+                ..
+            },
+            Some(Effect::Custom(c)),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        if c != "zones:may look at exiled" {
+            return None;
+        }
+        let s = self.sel(what, Case::Obj);
+        let pron = if super::effects::is_plural_sel(what) {
+            "them"
+        } else {
+            "it"
+        };
+        Some((2, format!("look at {s}, then exile {pron} face down")))
     }
 
     /// "Untap target creature and each other creature that shares a color with it. Those
