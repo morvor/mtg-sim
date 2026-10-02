@@ -98,11 +98,11 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
     // CR 508.3c: "[player] attacks with [N or more / one or more] [creatures]".
     for (who_s, who) in [
-        ("a player", PlayerRel::Any),
-        ("you", PlayerRel::You),
-        ("an opponent", PlayerRel::Opponent),
+        ("a player attacks", PlayerRel::Any),
+        ("you attack", PlayerRel::You),
+        ("an opponent attacks", PlayerRel::Opponent),
     ] {
-        if let Some(x) = r.strip_prefix(&format!("{who_s} attacks with ")) {
+        if let Some(x) = r.strip_prefix(&format!("{who_s} with ")) {
             let (min, rest) = if let Some(t) = x.strip_prefix("one or more ") {
                 (1, t)
             } else {
@@ -111,6 +111,11 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
                 (n.as_const()? as u32, t)
             };
             let rest = rest.strip_suffix('s').unwrap_or(rest);
+            // "you attack with N or more creatures" is the general attack trigger
+            // (oracle/patterns/triggers.rs); this handles a quality ("Knights").
+            if who == PlayerRel::You && rest == "creature" {
+                return None;
+            }
             return Some((
                 TriggerCond::PlayerAttacksWith {
                     who,

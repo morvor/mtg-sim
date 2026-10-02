@@ -30,6 +30,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
             if let Ok(n) = other.parse::<i32>() {
@@ -350,6 +351,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 s = r;
                 continue;
             }
+            // "Aura and Equipment spells", "Equipment and Vehicle spells": subtypes joined
+            // by "and" before a plural noun that narrows them name objects with either.
+            let after = split_word(split_word(r).1).0;
+            if matches!(heads.last(), Some(Filter::Subtype(_) | Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Subtype(_)))
+                && matches!(after, "spells" | "cards" | "permanents")
+            {
+                s = r;
+                continue;
+            }
         }
         // "creature card", "artifact spell", "Elf creature": a following head noun narrows.
         let (nw, nrest) = split_word(s);
@@ -573,6 +584,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             // "target creature you control other than enchanted creature" (Due Diligence).
             (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t
+            .strip_prefix("that's attached to a creature")
+            .or_else(|| t.strip_prefix("that are attached to creatures"))
+        {
+            // "each Aura you control that's attached to a creature" (Sage's Reverie).
+            (
+                Filter::Custom(crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
             // "untapped creatures that player controls that didn't attack this turn".
             (Filter::not(Filter::AttackedThisTurn), r)
@@ -656,6 +676,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("enchanted player controls") {
+            // A Curse's player (CR 303.4).
+            (
+                Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                    Sel::AttachedTo,
+                )))),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("the monarch controls") {
             // CR 725: none while there's no monarch.
             (
@@ -1318,8 +1346,13 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 12] = [
+    let pairs: [(&str, PlayerRef); 13] = [
         ("you ", PlayerRef::You),
+        // A Curse's player (CR 303.4).
+        (
+            "enchanted player ",
+            PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)),
+        ),
         ("each player ", PlayerRef::EachPlayer),
         ("each opponent ", PlayerRef::EachOpponent),
         ("each other player ", PlayerRef::EachOtherPlayer),

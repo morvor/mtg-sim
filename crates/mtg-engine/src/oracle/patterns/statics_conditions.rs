@@ -530,10 +530,12 @@ fn control_condition(c: &str) -> Option<Condition> {
         if let Some(r) = c.strip_prefix(p) {
             if let Some((cmp, n, rest)) = amount_cmp(r) {
                 let f = phrase(rest)?;
-                // "an opponent controls N or more X" needs one opponent to control them
-                // all; that's only expressible for a single opponent.
+                // "an opponent controls N or more X": one opponent controls them all.
                 if rel != PlayerRel::Defending {
-                    return None;
+                    return Some(Condition::PlayerMatches(
+                        PlayerRef::EachOpponent,
+                        PlayerFilter::Controls(Box::new(f), cmp, Box::new(n)),
+                    ));
                 }
                 return Some(Condition::Compare(
                     Value::Count(Filter::and(vec![f, Filter::ControlledBy(rel)])),

@@ -51,18 +51,21 @@ fn may_cast_countered_card(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool
     if !lands {
         filter.push(Filter::Not(Box::new(Filter::Type(CardType::Land))));
     }
+    let grant = Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: card.clone(),
+        // The permission is for that object: it ends when the card leaves exile.
+        duration: Duration::Permanent,
+        free: true,
+    };
+    // "You may cast": not to play a land (CR 305.9).
+    let grant = if lands { grant } else { grant.cast_only() };
     let each = Effect::ForEach {
         sel: Sel::Var(vars::IT),
         var: CARD,
         effect: Box::new(Effect::If {
-            cond: Condition::SelMatches(card.clone(), Filter::and(filter)),
-            then: Box::new(Effect::GrantPlayPermission {
-                who: PlayerRef::You,
-                what: card,
-                // The permission is for that object: it ends when the card leaves exile.
-                duration: Duration::Permanent,
-                free: true,
-            }),
+            cond: Condition::SelMatches(card, Filter::and(filter)),
+            then: Box::new(grant),
             otherwise: Box::new(Effect::Noop),
         }),
     };

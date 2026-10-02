@@ -37,12 +37,16 @@ fn may_cast_that_card_this_turn(l: &str, prev: &mut Effect, b: &mut Builder) -> 
             card.clone(),
             Filter::Not(Box::new(Filter::Type(CardType::Land))),
         ),
-        then: Box::new(Effect::GrantPlayPermission {
-            who: PlayerRef::You,
-            what: card,
-            duration: Duration::EndOfTurn,
-            free: false,
-        }),
+        // A permission to cast it, not to play a land (CR 305.9).
+        then: Box::new(
+            Effect::GrantPlayPermission {
+                who: PlayerRef::You,
+                what: card,
+                duration: Duration::EndOfTurn,
+                free: false,
+            }
+            .cast_only(),
+        ),
         otherwise: Box::new(Effect::Noop),
     };
     true

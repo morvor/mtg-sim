@@ -27,14 +27,15 @@ use crate::oracle::effects::{object_ref, player_ref, Builder};
 use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 
-/// "with three time counters on it", "with a +1/+1 counter on it".
+/// "with three time counters on it", "with a +1/+1 counter on it" (or "on her").
 pub(crate) fn with_counters_on_it(s: &str) -> Option<Vec<(CounterKind, Value)>> {
     let (n, r) = parse_number(s)?;
     let (kind, r) = crate::oracle::costs::counter_kind(r)?;
     let r = r
-        .strip_prefix("counters on it")
-        .or_else(|| r.strip_prefix("counter on it"))?;
-    r.is_empty().then(|| vec![(kind, n)])
+        .strip_prefix("counters on ")
+        .or_else(|| r.strip_prefix("counter on "))?;
+    // "on her", "on him": a legendary creature's pronoun for itself.
+    matches!(r, "it" | "her" | "him").then(|| vec![(kind, n)])
 }
 
 /// "to the battlefield tapped and transformed under its owner's control" (or "onto the

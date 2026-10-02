@@ -41,6 +41,7 @@ fn cast_self_from_graveyard(l: &str, text: &str, ctx: &CompileContext) -> Option
         lands: false,
         spells: true,
         cost: None,
+        flash: false,
     }));
     s.zone = FunctionZone::Graveyard;
     s.condition = condition;
