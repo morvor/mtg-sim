@@ -699,6 +699,10 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
 /// An object phrase with the qualifiers above, in any order. Returns the filter and the
 /// rest.
 pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    // "the milled cards" after milling (`dig_grammar`).
+    if let Some(x) = super::dig_grammar::dug_objects(s, b) {
+        return Some(x);
+    }
     // CR 702.62b: a "suspended" card is in exile with suspend and a time counter on it.
     if let Some(r) = s.strip_prefix("suspended ") {
         let (f, rest) = objects(r, b)?;

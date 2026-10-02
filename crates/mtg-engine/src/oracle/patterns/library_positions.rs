@@ -20,6 +20,89 @@ inventory::submit! {
 inventory::submit! {
     EffectPattern { name: "library positions: shuffle ~ and [objects] into their owners' libraries", priority: 200, parse: shuffle_self_and }
 }
+inventory::submit! {
+    super::FollowupPattern { name: "library positions: gain life equal to the number of cards shuffled this way", priority: 200, apply: gain_life_shuffled }
+}
+inventory::submit! {
+    EffectPattern { name: "library positions: put her/him into her/his owner's library Nth from the top", priority: 200, parse: put_her_nth }
+}
+inventory::submit! {
+    EffectPattern { name: "library positions: shuffle ~ into your library from your graveyard", priority: 200, parse: shuffle_self_from_graveyard }
+}
+
+/// "You gain life equal to the number of cards shuffled into your library this way."
+/// after shuffling cards into a library (the number moved, `Value::Prev`).
+fn gain_life_shuffled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "you gain life equal to the number of cards shuffled into your library this way" {
+        return false;
+    }
+    // (Other instructions may follow the shuffle that note what it moved, without moving
+    // anything.)
+    let shuffles = match prev {
+        Effect::ShuffleIntoLibrary { .. } | Effect::ShuffleInto { .. } => true,
+        Effect::Seq(v) => {
+            matches!(
+                v.first(),
+                Some(Effect::ShuffleIntoLibrary { .. } | Effect::ShuffleInto { .. })
+            ) && v[1..].iter().all(|e| {
+                matches!(
+                    e,
+                    Effect::Store { .. } | Effect::StoreValue { .. } | Effect::Custom(_)
+                )
+            })
+        }
+        _ => false,
+    };
+    if !shuffles {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::CountSel(Box::new(Sel::Var(vars::IT))),
+        },
+    ]);
+    true
+}
+
+/// "you may put her into her owner's library third from the top" (God-Eternal Bontu):
+/// the card the text is about ("her", "him": the object "it" means).
+fn put_her_nth(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l
+        .strip_prefix("put her into her owner's library ")
+        .or_else(|| l.strip_prefix("put him into his owner's library "))?;
+    let n = match r {
+        "second from the top" => 2,
+        "third from the top" => 3,
+        "fourth from the top" => 4,
+        _ => return None,
+    };
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(n - 1);
+    Some(Effect::Move {
+        what: b.it.clone(),
+        to,
+    })
+}
+
+/// "Shuffle ~ into your library from your graveyard" (Kogla and Yidaro, after discarding
+/// it as a cost): the card if it's in your graveyard (the object the source became).
+fn shuffle_self_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "shuffle ~ into your library from your graveyard" {
+        return None;
+    }
+    Some(Effect::ShuffleIntoLibrary {
+        what: Sel::All(Filter::and(vec![
+            Filter::Custom(crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT.into()),
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        library: PlayerRef::You,
+    })
+}
 
 /// "put the top card of your library on the bottom of your library".
 fn top_to_bottom(l: &str, _b: &mut Builder) -> Option<Effect> {

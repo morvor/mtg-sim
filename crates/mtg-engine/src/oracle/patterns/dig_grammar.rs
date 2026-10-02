@@ -566,6 +566,27 @@ pub fn note_source(e: Option<&Effect>, b: &mut Builder) {
     b.named.push((DIG_MARK.to_string(), rest));
 }
 
+/// "the milled cards", "the revealed cards", "the exiled cards" (in a value: "the greatest
+/// mana value among the milled cards"): the cards dug, after a dig.
+pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
+    if !dug(b) {
+        return None;
+    }
+    for p in [
+        "the milled cards",
+        "the cards milled this way",
+        "the revealed cards",
+        "the cards revealed this way",
+        "the exiled cards",
+        "the cards exiled this way",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Filter::In(Box::new(dug_sel())), r.to_string()));
+        }
+    }
+    None
+}
+
 fn dug(b: &Builder) -> bool {
     b.named.iter().any(|(n, _)| n == DIG_MARK)
 }
@@ -1268,6 +1289,63 @@ fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
     Some(out)
 }
 
+/// "a creature card, a land card, and a noncreature, nonland card": the descriptions of a
+/// list each starting with an article (a description may itself contain commas).
+fn articled_list(s: &str) -> Option<Vec<&str>> {
+    let mut out: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let bytes = s;
+    let mut i = 0;
+    while let Some(k) = bytes[i..].find(", ") {
+        let at = i + k;
+        let next = &bytes[at + 2..];
+        let next = next.strip_prefix("and ").unwrap_or(next);
+        if next.starts_with("a ") || next.starts_with("an ") {
+            out.push(&s[start..at]);
+            start = s.len() - next.len();
+        }
+        i = at + 2;
+    }
+    out.push(&s[start..]);
+    (out.len() >= 2 && out.iter().all(|p| p.starts_with("a ") || p.starts_with("an ")))
+        .then_some(out)
+}
+
+/// "An opponent chooses from among them a creature card, a land card, and a noncreature,
+/// nonland card.": one card of each description, chosen by that player; they stay where
+/// they are ("the chosen cards").
+fn chooses_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (chooser, r) = if let Some(r) = l.strip_prefix("an opponent chooses from among ") {
+        (PlayerRef::EachOpponent, r)
+    } else if let Some(r) = l.strip_prefix("choose from among ") {
+        (PlayerRef::You, r)
+    } else {
+        return None;
+    };
+    let r = among_ref(r)?.strip_prefix(' ')?;
+    let parts = articled_list(r)?;
+    let mut each = Vec::new();
+    for p in parts {
+        each.push(dig_card_filter(p.split_once(' ')?.1, b)?);
+    }
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(0);
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        b.named.push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    Some(Effect::DigStep(Box::new(DigStep::Take {
+        from: dug_sel(),
+        chooser,
+        filter: Filter::Any,
+        count: Some(Value::c(each.len() as i32)),
+        each_of: each,
+        up_to: false,
+        random: false,
+        reveal: false,
+        to,
+    })))
+}
+
 /// "you may reveal that card", "you may reveal it" after looking at the top card: the
 /// card is revealed (or not), and stays where it is.
 fn reveal_that_card(l: &str) -> Option<Vec<Effect>> {
@@ -1295,6 +1373,12 @@ fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
     if let Some(v) = parse_take(l, b) {
         return Some(Effect::seq(v));
     }
+    if let Some(e) = chooses_from_among(l, b) {
+        return Some(e);
+    }
+    // "You put the chosen cards into your hand."
+    let l = l.strip_prefix("you put ").map_or(l.to_string(), |r| format!("put {r}"));
+    let l = l.as_str();
     // "You may put that card on the bottom of your library.", "You may reveal that card."
     let (may, r) = match l.strip_prefix("you may ") {
         Some(r) => (true, r),
@@ -1415,6 +1499,28 @@ fn source_amount(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "Shuffle your library, then reveal the top card.": your library.
     if r == "the top card" {
         return Some((Value::c(1), "your library".into()));
+    }
+    // "Reveal the cards in your library." (Guided Passage).
+    if r == "the cards in your library" {
+        return Some((Value::LibrarySize(PlayerRef::You), "your library".into()));
+    }
+    // "Exile cards from the top of your library equal to the excess damage dealt to that
+    // creature this way."
+    if let Some(x) = r.strip_prefix("cards from the top of ") {
+        let (lib, v) = x.split_once(" equal to ")?;
+        // The excess damage the previous damage instruction dealt (CR 120.10).
+        if matches!(
+            v,
+            "the excess damage dealt to that creature this way"
+                | "the excess damage dealt this way"
+        ) {
+            return Some((Value::Var(vars::EXCESS), lib.to_string()));
+        }
+        let (n, tail) = super::value_grammar::parse_value(v, b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some((n, lib.to_string()));
     }
     if let Some(r) = r.strip_prefix("the top ") {
         // "the top two cards of", "the top X plus one cards of", "the top X cards of".
