@@ -897,3 +897,80 @@ fn lord_jyscal_guado_and_lasting_tarfire_check_as_the_end_step_begins() {
     t.settle();
     assert_eq!(t.stack_len(), 0);
 }
+
+#[test]
+fn putting_counters_on_several_creatures_at_once_triggers_for_each() {
+    cr!("122.6", "603.2c");
+    ruling!(
+        "Hapatra, Vizier of Poisons",
+        "If you put any number of -1/-1 counters on more than one creature at once, Hapatra's last ability triggers once for each of those creatures."
+    );
+    ruling!(
+        "Hapatra, Vizier of Poisons",
+        "If you put enough -1/-1 counters on Hapatra so that its toughness is 0 or less, its last ability triggers."
+    );
+    ruling!(
+        "Obelisk Spider",
+        "If you put one or more -1/-1 counter on each of multiple creatures at the same time, Obelisk Spider’s last ability triggers once for each of those creatures."
+    );
+    supported("Hapatra, Vizier of Poisons");
+    supported("Obelisk Spider");
+    supported("Black Sun's Zenith");
+    // Black Sun's Zenith with X = 2 on Hapatra (2/2), Obelisk Spider (1/4) and two of
+    // P1's creatures: four creatures get counters at once.
+    let mut t = TestGame::new(2);
+    let hapatra = t.battlefield(P0, "Hapatra, Vizier of Poisons");
+    t.battlefield(P0, "Obelisk Spider");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Wastes", 2);
+    let zenith = t.hand(P0, "Black Sun's Zenith");
+    t.cast(P0, zenith).x(2).go();
+    t.resolve();
+    // Hapatra's toughness is 0, but it was on the battlefield as the counters were put on
+    // it: its ability triggered for each of the four creatures, Obelisk Spider's too.
+    assert!(!t.on_battlefield(hapatra));
+    assert_eq!(
+        triggers_on_stack(&t, "create a 1/1 green Snake creature token"),
+        4
+    );
+    assert_eq!(
+        triggers_on_stack(&t, "each opponent loses 1 life and you gain 1 life"),
+        4
+    );
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Snake").len(), 4);
+    assert_eq!((t.life(P0), t.life(P1)), (24, 16));
+}
+
+#[test]
+fn wakka_checks_as_the_end_step_begins_whoever_put_the_counter() {
+    cr!("603.4", "513.1a");
+    ruling!(
+        "Wakka, Devoted Guardian",
+        "Wakka's last ability checks at the moment it would trigger to see if a counter was put on Wakka this turn. If none were, the ability won't trigger at all. Once your end step begins, it's too late to put a counter on Wakka in order to cause this ability to trigger."
+    );
+    supported("Wakka, Devoted Guardian");
+    // No counter was put on Wakka this turn: no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(bears, counters::PLUS1), 0);
+    // An opponent's ability puts a counter on Wakka ("a counter was put on Wakka", by
+    // anyone): it triggers.
+    let mut t = TestGame::new(2);
+    let wakka = t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(wakka), counters::MINUS1, 1, Some(theirs));
+    t.g.flush_events();
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+}
