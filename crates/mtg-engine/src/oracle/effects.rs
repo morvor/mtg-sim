@@ -71,8 +71,10 @@ impl<'c> Builder<'c> {
         // (and so not understood) if "it" has no antecedent.
         if super::patterns::filters_relational::mentions_referent(&spec) {
             let it = super::patterns::pronoun_groups::singular_it(self);
-            if let Some(s) = super::patterns::filters_relational::substitute(&spec, &it) {
-                spec = s;
+            if super::patterns::filters_relational::names_one_object(&it) {
+                if let Some(s) = super::patterns::filters_relational::substitute(&spec, &it) {
+                    spec = s;
+                }
             }
         }
         // "another target creature" / "up to one other target creature" after earlier
@@ -321,10 +323,23 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             None
         };
         // Sentences that modify the previous one ("It can't be regenerated.").
+        let before_followup = (b.it.clone(), b.targets.len());
         let followed_up = match effects.last_mut() {
             Some(prev) => crate::oracle_ext::apply_followup_ext(&s, prev, b),
             None => false,
         };
+        // "You may reveal a card that shares a creature type with that creature from among
+        // them ...": a qualifier's "it" in the sentence (see `patterns::filters_relational`).
+        if followed_up {
+            if let Some(prev) = effects.pop() {
+                let e = super::patterns::filters_relational::resolve_in_sentence(
+                    prev,
+                    b,
+                    before_followup,
+                )?;
+                effects.push(e);
+            }
+        }
         if followed_up {
             b.sentences += 1;
         } else {

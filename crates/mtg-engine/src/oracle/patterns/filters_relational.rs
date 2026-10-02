@@ -112,6 +112,9 @@ pub fn resolve_referent(f: Filter, b: &Builder) -> Option<Filter> {
         return Some(f);
     }
     let it = super::pronoun_groups::singular_it(b);
+    if !names_one_object(&it) {
+        return None;
+    }
     let f = if matches!(it, Sel::This) {
         f
     } else {
@@ -714,6 +717,9 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
         return Some(e);
     }
     let it = super::pronoun_groups::singular_it(b);
+    if !names_one_object(&it) {
+        return Some(e);
+    }
     Some(substitute(&e, &it).unwrap_or(e))
 }
 
@@ -1366,10 +1372,28 @@ pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// antecedent the placeholder stays, and the ability isn't understood.
 pub fn resolve_clause(e: Effect, it: &Sel) -> Effect {
     let e = resolve_they(e);
-    if !mentions_referent(&e) {
+    if !mentions_referent(&e) || !names_one_object(it) {
         return e;
     }
     substitute(&e, it).unwrap_or(e)
+}
+
+/// Whether "it" stands for one object a qualifier can relate to: the source, a target,
+/// the trigger's object or spell, the enchanted or equipped object, the sacrificed object.
+/// Not cards an instruction looked at or revealed ("Look at the top six cards of your
+/// library. You may reveal a card that shares a creature type with it ..." isn't about
+/// those cards), which leave the qualifier unresolved.
+pub fn names_one_object(it: &Sel) -> bool {
+    matches!(
+        it,
+        Sel::This
+            | Sel::Target(_)
+            | Sel::TriggerObject
+            | Sel::TriggerLki
+            | Sel::TriggerSpell
+            | Sel::TriggerOtherObject
+            | Sel::AttachedTo
+    ) || matches!(it, Sel::Var(v) if *v == vars::SACRIFICED)
 }
 
 /// "Target player sacrifices a creature with the greatest power among creatures they
