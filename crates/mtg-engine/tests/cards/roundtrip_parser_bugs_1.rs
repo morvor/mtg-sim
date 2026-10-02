@@ -87,3 +87,22 @@ fn a_sentence_after_a_this_turn_trigger_continues_it() {
     assert!(c.has_keyword(KeywordKind::Lifelink));
     assert!(c.has_keyword(KeywordKind::Indestructible));
 }
+
+#[test]
+fn damage_equal_to_that_cards_mana_value_is_the_exiled_cards() {
+    cr!("406.1", "120.3");
+    // Undying Flames: "Exile cards from the top of your library until you exile a nonland
+    // card. Undying Flames deals damage to any target equal to that card's mana value."
+    // "That card" is the exiled card (it was read as the damage's target, a player here,
+    // whose "mana value" is 0).
+    supported("Undying Flames");
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Grizzly Bears"); // mana value 2
+    t.library_top(P0, "Forest");
+    t.lands(P0, "Mountain", 6);
+    let s = t.hand(P0, "Undying Flames");
+    t.cast(P0, s).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_eq!(t.life(P1), 18);
+}

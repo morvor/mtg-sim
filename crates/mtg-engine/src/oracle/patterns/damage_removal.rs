@@ -483,9 +483,21 @@ fn damage_part(
         return Some((damage(src, v, to), tail));
     }
     if let Some(r) = s.strip_prefix("damage to ") {
+        let before = b.it.clone();
         let (to, tail) = recipients(r, src, b)?;
         let r2 = tail.trim_start().strip_prefix("equal to ")?.to_string();
-        let (v, tail2) = value_phrase(&r2, b)?;
+        // "Exile cards ... until you exile a nonland card. ~ deals damage to any target
+        // equal to that card's mana value": "that card" is the card named before, never
+        // the permanent or player the damage is dealt to.
+        let named_after = std::mem::replace(&mut b.it, before.clone());
+        if !r2.starts_with("that card") {
+            b.it = named_after.clone();
+        }
+        let read = value_phrase(&r2, b);
+        if format!("{:?}", b.it) == format!("{before:?}") {
+            b.it = named_after;
+        }
+        let (v, tail2) = read?;
         return Some((damage(src, v, to), tail2));
     }
     let (amount, r) = amount_phrase(s, where_x)?;

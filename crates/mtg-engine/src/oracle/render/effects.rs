@@ -1178,6 +1178,16 @@ impl Renderer<'_> {
                 let p = self.possessive_for(who);
                 let f = self.card_noun(filter);
                 let f = with_article(&f);
+                // Every card revealed is exiled, one of them the card found: "exile cards
+                // from the top of your library until you exile a nonland card".
+                let exiled = |d: &Destination| d.zone == ZoneKind::Exile && !d.face_down;
+                if exiled(found_to) && exiled(rest_to) {
+                    let vp = format!(
+                        "exile cards from the top of {p} library until {} exile {f}",
+                        if p == "your" { "you" } else { "they" }
+                    );
+                    return self.with_subject(who, &vp, false);
+                }
                 let found = self.destination_phrase(found_to, false, true);
                 let rest = self.destination_phrase(rest_to, true, true);
                 let vp = format!(
