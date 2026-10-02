@@ -128,18 +128,27 @@ fn you_gain_protection(l: &str, _b: &mut Builder) -> Option<Effect> {
 /// The keywords an object loses: whole keywords only ("hexproof", "indestructible",
 /// "protection" — all protection abilities, "all landwalk abilities"). Losing one
 /// particular protection or landwalk ability isn't supported.
-fn lost_keywords(s: &str) -> Option<Vec<KeywordKind>> {
+fn lost_keywords(s: &str) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     for p in split_keyword_phrases(s) {
         match p.as_str() {
-            "protection" => out.push(KeywordKind::Protection),
-            "all landwalk abilities" | "landwalk" => out.push(KeywordKind::Landwalk),
+            "protection" => out.push(Modification::RemoveKeyword(KeywordKind::Protection)),
+            "all landwalk abilities" | "landwalk" => {
+                out.push(Modification::RemoveKeyword(KeywordKind::Landwalk))
+            }
             _ => {
                 for k in keyword_list(&p)? {
+                    // "loses protection from black" (Cephalid Snitch): that one ability
+                    // (CR 702.16).
+                    if k.kind == KeywordKind::Protection && k.filter.is_some() && k.text.is_some()
+                    {
+                        out.push(Modification::LoseKeyword(k));
+                        continue;
+                    }
                     if k.filter.is_some() || k.cost.is_some() || k.n.is_some() {
                         return None;
                     }
-                    out.push(k.kind);
+                    out.push(Modification::RemoveKeyword(k.kind));
                 }
             }
         }
@@ -218,7 +227,7 @@ fn loses_keywords(l: &str, b: &mut Builder) -> Option<Effect> {
     if pt_change.is_some() {
         out.extend(mods.iter().cloned());
     }
-    out.extend(lost.into_iter().map(Modification::RemoveKeyword));
+    out.extend(lost);
     if gained.is_some() {
         out.extend(mods);
     }

@@ -258,3 +258,63 @@ fn ordruun_mentor_targets_a_creature_attacking_that_player() {
     assert!(t.obj_now(a).has_keyword(KeywordKind::FirstStrike));
     assert!(t.obj_now(b).has_keyword(KeywordKind::FirstStrike));
 }
+
+#[test]
+fn roar_of_resistance_pumps_creatures_attacking_opponents() {
+    cr!("506.2", "603.2c");
+    assert_supported(&["Roar of Resistance"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Roar of Resistance");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let idle = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        mtg_engine::testing::DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(a, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.pt(a), (4, 2));
+    assert_eq!(t.pt(idle), (2, 2));
+}
+
+#[test]
+fn cephalid_snitch_removes_only_protection_from_black() {
+    cr!("702.16a", "613.1f");
+    assert_supported(&["Cephalid Snitch"]);
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, "Cephalid Snitch");
+    // First strike, protection from black.
+    let k = t.battlefield(P1, "White Knight");
+    // Protection from white: a different protection ability stays.
+    let b = t.battlefield(P1, "Black Knight");
+    assert!(!spell_targets(&mut t, P0, "Doom Blade").contains(&Entity::Object(k)));
+    t.activate(P0, s, 0, &[Entity::Object(k)]).unwrap();
+    t.resolve();
+    assert!(!t.obj_now(k).has_keyword(KeywordKind::Protection));
+    assert!(t.obj_now(k).has_keyword(KeywordKind::FirstStrike));
+    assert!(spell_targets(&mut t, P0, "Doom Blade").contains(&Entity::Object(k)));
+    assert!(t.obj_now(b).has_keyword(KeywordKind::Protection));
+}
+
+#[test]
+fn public_execution_weakens_the_other_creatures_of_that_player() {
+    cr!("608.2c", "608.2h");
+    assert_supported(&["Public Execution"]);
+    let mut t = TestGame::new(3);
+    let target = t.battlefield(P1, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    let other_player = t.battlefield(P2, "Hill Giant");
+    let mine = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Swamp", 6);
+    let s = t.hand(P0, "Public Execution");
+    t.cast(P0, s).target(target).go();
+    t.resolve();
+    assert!(!t.on_battlefield(target));
+    assert_eq!(t.pt(theirs), (1, 3));
+    assert_eq!(t.pt(other_player), (3, 3));
+    assert_eq!(t.pt(mine), (3, 3));
+}

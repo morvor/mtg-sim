@@ -803,6 +803,27 @@ fn attacking_same_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'
 
 inventory::submit! { FilterSuffixPattern { name: "grants: attacking the same player or planeswalker", priority: 100, parse: attacking_same_suffix } }
 
+/// "creatures attacking your opponents and/or planeswalkers they control" (Roar of
+/// Resistance): attacking an opponent or a planeswalker an opponent controls.
+fn attacking_opponents_or_their_planeswalkers<'a>(
+    t: &'a str,
+    _so_far: &Filter,
+) -> Option<(Filter, &'a str)> {
+    let r = [
+        "attacking your opponents and/or planeswalkers they control",
+        "attacking your opponents or planeswalkers they control",
+        "attacking an opponent or a planeswalker they control",
+    ]
+    .into_iter()
+    .find_map(|p| t.strip_prefix(p))?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    Some((Filter::AttackingPlayer(PlayerRel::Opponent), r))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "grants: attacking your opponents and/or planeswalkers they control", priority: 100, parse: attacking_opponents_or_their_planeswalkers } }
+
 /// "~ deals 2 damage to target player and gains indestructible until end of turn." (Ellie,
 /// Vengeful Hunter): two predicates of the same object, the second read as its own
 /// sentence about it.
@@ -1281,3 +1302,46 @@ fn spell_has_keyword_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
 }
 
 inventory::submit! { super::AbilityPattern { name: "grants: if this spell was kicked, it has [keyword]", priority: 120, parse: spell_has_keyword_if } }
+
+/// "Destroy target creature an opponent controls. Each other creature that player
+/// controls gets -2/-0 until end of turn." (Public Execution): "that player" is the
+/// controller of the object the previous instruction was about, and "other" excludes that
+/// object.
+fn each_other_that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let r = l.strip_prefix("each other ")?;
+    let (noun, pred) = r.split_once(" that player controls ")?;
+    let Sel::Target(slot) = b.it.clone() else {
+        return None;
+    };
+    // A target player named before is "that player"; otherwise it's the object's
+    // controller.
+    let player = match &b.it_player {
+        PlayerRef::Target(s) => PlayerRef::Target(*s),
+        _ => PlayerRef::ControllerOf(Box::new(Sel::Target(slot))),
+    };
+    let (f, _, rest) = super::statics::object_phrase(noun)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let f = Filter::and(vec![
+        f,
+        Filter::not(Filter::In(Box::new(Sel::Target(slot)))),
+        Filter::ControlledByPlayer(Box::new(player)),
+    ]);
+    let saved = b.it.clone();
+    b.it = Sel::All(f);
+    let verb = pred.split(' ').next()?;
+    if !matches!(verb, "gets" | "gains" | "loses") {
+        b.it = saved;
+        return None;
+    }
+    let e = crate::oracle::effects::parse_sentence(&format!("it {pred}"), b);
+    b.it = saved;
+    match e? {
+        e @ Effect::Modify { what: Sel::All(_), .. } => Some(e),
+        _ => None,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "grants: each other creature that player controls ...", priority: 220, parse: each_other_that_player_controls } }
