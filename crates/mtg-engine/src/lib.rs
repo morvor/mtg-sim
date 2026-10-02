@@ -135,6 +135,7 @@ pub mod text_change;
 pub mod tokens;
 pub mod tokens_predefined;
 pub mod transform_rules;
+pub mod trigger_timing;
 pub mod triggers;
 pub mod turn;
 pub mod turn_structure;

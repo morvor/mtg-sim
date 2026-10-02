@@ -468,6 +468,11 @@ pub struct TurnHistory {
     /// used this turn. Recorded by `kw/once_each_turn_cast.rs`.
     #[serde(default)]
     pub once_permissions_used: Vec<ObjectId>,
+    /// Cards players drew during their own draw steps: (player, draw step, card), the step
+    /// being its index in `TurnState::step_log`, in the order drawn ("except the first one
+    /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
+    #[serde(default)]
+    pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -568,6 +573,9 @@ pub struct Game {
     pub events: Vec<Event>,
     /// All events this turn (for look-back queries).
     pub turn_events: Vec<Event>,
+    /// While positive, the events of the instructions being performed form one batch
+    /// (see [`Game::end_event_batch`]).
+    pub batch_hold: u32,
     pub log: Vec<LogEntry>,
     pub logging: bool,
     pub next_timestamp: Timestamp,
@@ -700,6 +708,8 @@ pub struct Game {
     /// Watches every event as it's processed, with the game as it is then (see
     /// [`EventObserver`]; [`Game::event_feed`] keeps the events for later reading).
     pub observer: Option<EventObserver>,
+    /// When queued events are checked for triggers (CR 603.2, 608.2c).
+    pub timing: crate::trigger_timing::TriggerTiming,
 }
 
 impl Game {
@@ -749,6 +759,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
+            batch_hold: 0,
             log: vec![],
             logging: false,
             next_timestamp: 1,
@@ -809,6 +820,7 @@ impl Game {
             cards: Default::default(),
             event_feed: Default::default(),
             observer: None,
+            timing: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

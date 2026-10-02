@@ -1,7 +1,8 @@
 //! "Whenever ~ becomes the target of a spell or ability [an opponent controls], counter that
 //! spell or ability [unless its controller pays {2}]." (Frost Titan, Shimmering
 //! Glasskite), "... ~ deals 2 damage to that spell's controller." (Bonecrusher Giant),
-//! "that spell or ability's controller sacrifices a land" (Lava Runner).
+//! "that spell or ability's controller sacrifices a land" (Lava Runner), "counter that
+//! spell unless its controller discards a card" (Reality Smasher).
 //!
 //! In these triggers "that spell or ability" is the spell or ability that targeted the
 //! object (CR 603.2, 115.1), and its controller is the trigger's player. The block is
@@ -98,6 +99,15 @@ fn counter_targeting_spell(l: &str, _b: &mut Builder) -> Option<Effect> {
             }
             None => super::counters_resources_pay::resolution_cost(c)?,
         }
+    } else if end(r) == "unless its controller discards a card" {
+        // Reality Smasher: discarding a card is the cost its controller may pay.
+        let (cost, _) = crate::oracle::costs::parse_cost("discard a card")?;
+        if cost.mana.is_some()
+            || !matches!(cost.parts.as_slice(), [CostPart::Discard { random: false, .. }])
+        {
+            return None;
+        }
+        cost
     } else {
         return None;
     };
