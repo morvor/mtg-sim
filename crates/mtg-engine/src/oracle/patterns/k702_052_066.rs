@@ -285,6 +285,9 @@ fn trigger_while_suspended(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     {
         return None;
     }
+    // "..., if ~ is suspended, remove a time counter from it": "it" is the suspended card
+    // (the trigger's own object is another card or spell).
+    let t = &t.replace(" time counter from it.", " time counter from ~.");
     let a = crate::oracle::triggers::parse_triggered(t, ctx)?;
     let AbilityKind::Triggered(mut tr) = a.kind.clone() else {
         return None;

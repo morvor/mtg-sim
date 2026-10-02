@@ -641,11 +641,10 @@ fn surgical_extraction_may_leave_cards_even_in_the_graveyard() {
     let lib = t.library_top(P1, "Grizzly Bears");
     t.lands(P0, "Swamp", 1);
     let s = t.hand(P0, "Surgical Extraction");
-    // The graveyard: leave the other copy. The hand: take it. The library: leave it.
-    t.answer_choose(P0, &[]);
+    // One search of the graveyard, hand and library: take the target and the copy in
+    // hand; leave the other copy in the graveyard and the one in the library.
     let in_hand = t.g.player(P1).hand[0];
-    t.answer_choose(P0, &[in_hand.into()]);
-    t.answer_choose(P0, &[]);
+    t.answer_choose(P0, &[a.into(), in_hand.into()]);
     t.cast(P0, s).target(a).go();
     t.resolve();
     assert_eq!(t.zone(t.g.current(b)), mtg_engine::object::Zone::Graveyard(P1));

@@ -73,6 +73,15 @@ fn f_reflexive_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !refers || l.contains("target") {
         return false;
     }
+    // (After a payment, the reflexive ability is the last of a sequence; see
+    // `reflexive_after_payment`.)
+    let prev = match prev {
+        Effect::Seq(v) => match v.last_mut() {
+            Some(last) => last,
+            None => return false,
+        },
+        e => e,
+    };
     let Effect::If {
         cond,
         then,

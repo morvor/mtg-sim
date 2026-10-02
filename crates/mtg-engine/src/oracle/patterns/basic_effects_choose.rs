@@ -515,7 +515,6 @@ inventory::submit! { FollowupPattern { name: "basic effects: about the chosen ob
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::oracle::costs::parse_cost;
 
     #[test]

@@ -128,6 +128,14 @@ pub struct Modal {
     pub per_mode_cost: bool,
     /// Modes chosen by an opponent (CR 700.2e) or at random.
     pub chooser: ModeChooser,
+    /// "Each mode must target a different player": no player is the target of two of
+    /// the chosen modes (see `mode_players.rs`).
+    #[serde(default)]
+    pub different_players: bool,
+    /// "You may choose two": the controller chooses that many modes or none (a triggered
+    /// ability with no mode chosen is removed from the stack, CR 700.2b).
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,6 +199,10 @@ pub struct ActivatedAbility {
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
     pub own_cost_changes: Vec<OwnCostChange>,
+    /// "This ability can't be copied." (Gogo, Master of Mimicry): an instruction that
+    /// functions while the ability is on the stack (CR 113.6g, 707.10).
+    #[serde(default)]
+    pub cant_be_copied: bool,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -215,6 +227,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             own_cost_changes: Vec::new(),
+            cant_be_copied: false,
         }
     }
 }
@@ -517,6 +530,68 @@ pub enum ZoneKind {
     Outside,
 }
 
+/// A search (CR 701.23): "[who] search(es) [whose] [zones] for [parts][, reveal
+/// them][, put them DESTS][, then shuffle]".
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchSpec {
+    /// The searching player(s) ("each opponent may search": a variable).
+    pub who: PlayerRef,
+    /// Whose zones are searched, evaluated for each searcher (`Iterated` = their own).
+    pub whose: PlayerRef,
+    /// The zones searched (library, graveyard, hand).
+    pub zones: Vec<ZoneKind>,
+    /// "and/or": the searcher chooses which of the zones to search.
+    pub zones_optional: bool,
+    /// The cards searched for: each part is found separately ("a Forest card and a
+    /// Plains card"); a card is found for at most one part.
+    pub parts: Vec<SearchPart>,
+    /// "with different names" (CR 201.2).
+    pub distinct_names: bool,
+    /// The searcher may decline to search ("you may search").
+    pub optional: bool,
+    pub reveal: bool,
+    /// Where the found cards go, in order: each takes its count of the found cards (as
+    /// many as possible), the last (count `None`) the rest. Empty: they stay where they
+    /// are (a later instruction refers to them).
+    pub dests: Vec<SearchDest>,
+    pub shuffle: SearchShuffle,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchPart {
+    pub filter: Filter,
+    pub count: Value,
+    /// "up to N", "any number of": the searcher may find fewer.
+    pub up_to: bool,
+    /// "all cards with that name": every matching card in a public zone is found.
+    #[serde(default)]
+    pub all: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchDest {
+    /// How many of the found cards go here (`None`: the rest).
+    pub count: Option<Value>,
+    pub to: Destination,
+    /// "put it into your hand or graveyard", "onto the battlefield or into your hand":
+    /// other places the searcher may put these cards instead, chosen as they're put.
+    #[serde(default)]
+    pub or: Vec<Destination>,
+}
+
+/// When a searched library is shuffled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SearchShuffle {
+    #[default]
+    No,
+    /// After the found cards are put where they go ("then shuffle"); "if you search your
+    /// library this way, shuffle" is the same: only searched libraries are shuffled.
+    After,
+    /// "Then shuffle and put that card on top" (CR 701.24b): the library is shuffled
+    /// except the found cards, which are then put in their position in it.
+    Before,
+}
+
 /// Where an effect puts an object.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Destination {
@@ -544,6 +619,11 @@ pub struct Destination {
     /// 303.4f–i).
     #[serde(default)]
     pub attached_to: Option<Sel>,
+    /// Library: a choice between positions ("your choice of the top or bottom of its
+    /// owner's library"), made by the controller of the effect as the object moves; empty
+    /// for the single `position`.
+    #[serde(default)]
+    pub position_choice: Vec<LibraryPosition>,
 }
 
 impl Destination {
@@ -559,6 +639,7 @@ impl Destination {
             with_counters: vec![],
             with_mods: vec![],
             attached_to: None,
+            position_choice: vec![],
         }
     }
     pub fn battlefield() -> Destination {
@@ -601,7 +682,11 @@ pub enum LibraryPosition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TargetSpec {
     pub what: TargetKind,
-    pub min: u32,
+    /// The fewest targets that must be chosen. Like `max`, it's evaluated as targets are
+    /// chosen, after X and the number of times the spell is kicked are announced
+    /// (CR 601.2b, 601.2c): "X target creatures" has exactly X targets (`min` and `max`
+    /// both X), never more than `max`.
+    pub min: Value,
     pub max: Value,
     /// Each target in this slot must be different from targets in these other slots
     /// ("another target creature").
@@ -621,6 +706,19 @@ pub struct TargetSpec {
     /// share a creature type"); see `target_groups.rs`.
     #[serde(default)]
     pub together: Option<TargetGroup>,
+    /// A relationship the targets of this instance of the word "target" must have with
+    /// those of an earlier one, slot `.0` ("move a counter from target creature onto
+    /// another target creature with the same controller"); see `target_groups.rs`.
+    #[serde(default)]
+    pub related_to: Option<(u8, TargetGroup)>,
+    /// "For each opponent, ... up to one target creature that player controls": this
+    /// instance of the word "target" is chosen once for each player in the game this
+    /// filter matches, `min` to `max` targets for each, where the object filter's
+    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
+    /// target; on resolution each target must still match for the player it was chosen
+    /// for. See `per_player_targets.rs`.
+    #[serde(default)]
+    pub per_player: Option<PlayerFilter>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
@@ -634,22 +732,34 @@ pub enum TargetGroup {
     /// All are controlled by the same player ("two target creatures a single player
     /// controls").
     SameController,
-    /// No two of them are controlled by the same player ("up to two target artifacts
-    /// controlled by different players").
-    DifferentControllers,
     /// There's a creature type all of them have.
     ShareCreatureType,
     /// There's a card type all of them have.
     ShareCardType,
+    /// There's one of these card types all of them have ("another target permanent that
+    /// shares one of those types with it", the types the first target was described by).
+    ShareCardTypeAmong(Vec<CardType>),
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
+    DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
+    /// No two of them have the same mana value ("with different mana values").
+    DifferentManaValues,
+    /// No two of them have the same power ("with different powers").
+    DifferentPowers,
+    /// All have the same toughness ("with equal toughness").
+    EqualToughness,
+    /// Each stands for a different card type it has ("for each card type, ... a card of
+    /// that type"): an object with several card types counts as any one of them.
+    OnePerCardType,
     /// Their total of a value is at most the value ("with total mana value 6 or less",
-    /// "with total mana value X or less").
+    /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
 }
 
@@ -667,7 +777,7 @@ impl TargetSpec {
     pub fn one(what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
             what,
-            min: 1,
+            min: Value::Const(1),
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
@@ -675,11 +785,13 @@ impl TargetSpec {
             text: text.into(),
             condition: None,
             together: None,
+            related_to: None,
+            per_player: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
-            min: 0,
+            min: Value::Const(0),
             max: Value::Const(n),
             ..TargetSpec::one(what, text)
         }
@@ -692,6 +804,13 @@ impl TargetSpec {
     }
     pub fn any_target() -> TargetSpec {
         TargetSpec::one(TargetKind::AnyTarget, "any target")
+    }
+    /// `min` when it's a fixed number (most target phrases: "target", "up to two").
+    pub fn fixed_min(&self) -> Option<i32> {
+        match self.min {
+            Value::Const(n) => Some(n),
+            _ => None,
+        }
     }
 }
 
@@ -744,6 +863,9 @@ pub mod vars {
     /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
     /// this way"): not those that were already tapped.
     pub const TAPPED: Var = USER + 3066;
+    /// Permanents the most recent "turn ... face down" instruction turned face down: not
+    /// those that already were face down or couldn't be (CR 708.2b, 712.16).
+    pub const TURNED_FACE_DOWN: Var = USER + 7088;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -788,6 +910,9 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents or players the selected objects are attached to ("the permanent
+    /// target Aura is attached to").
+    HostOf(Box<Sel>),
     /// Objects attached to the source ("equipment attached to it").
     AttachedToThis,
     /// All objects matching the filter.
@@ -820,6 +945,9 @@ pub enum Sel {
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
 }
+
+/// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
+pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
 
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1136,6 +1264,9 @@ pub enum Filter {
     SharesColor(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
+    /// The number of counters of a kind (of all kinds: None) on it compared with a value
+    /// ("with three or more +1/+1 counters on it", "with exactly one tide counter on it").
+    CounterCount(Option<CounterKind>, Cmp, Box<Value>),
     /// Has at least one ability (for "creature with no abilities" use Not).
     HasAbilities,
     /// The source object itself.
@@ -1150,6 +1281,12 @@ pub enum Filter {
     Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
+    /// Attached to one of the selected permanents or players ("Auras attached to target
+    /// permanent").
+    AttachedTo(Box<Sel>),
+    /// An object each of the selected objects could legally be attached to right now
+    /// ("another permanent it can enchant", CR 301.5c, 303.4).
+    CanBeAttachedBy(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -1226,8 +1363,10 @@ pub enum Filter {
     ValueCmp(Box<Value>, Cmp, Box<Value>),
     /// A requirement on the objects chosen together for one selection ("up to four cards
     /// with different names", "any number of creature cards with total mana value 6 or
-    /// less"). Every object matches it on its own; whatever chooses the objects (target
-    /// slots, searches, choices) checks the group (see `relational.rs`, `target_groups.rs`).
+    /// less", "sacrifice three artifact tokens with different names"). Every object
+    /// matches it on its own; whatever chooses the objects (target slots, searches,
+    /// choices, costs) checks the group (see `relational.rs`,
+    /// `target_groups::choose_together`).
     Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -1377,6 +1516,10 @@ pub enum Value {
     TimesKicked,
     /// Speed (CR 702.179).
     Speed(PlayerRef),
+    /// The number of turns the player has taken this game, including the current turn if
+    /// it's theirs ("your first, second, or third turn of the game"; not the number of
+    /// turns the game has had, as players may take extra turns).
+    TurnsTaken(PlayerRef),
     /// "the greatest power among creatures you control", "the total mana value of
     /// artifacts you control", "the number of +1/+1 counters among creatures you control":
     /// a characteristic of each selected object, combined (0 when nothing is selected).
@@ -1597,11 +1740,24 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// For as long as the affected objects are face down: characteristics an effect lists
+    /// for a permanent it turns face down ("Turn target creature face down. It becomes a
+    /// 2/2 Cyberman artifact creature.", CR 708.2a) stop applying once it's turned face up.
+    WhileFaceDown,
+    /// "for as long as it has a [kind] counter on it": for each affected object, until it
+    /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
+    /// later, and does nothing to an object that has none as the effect begins).
+    WhileAffectedHasCounter(CounterKind),
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
@@ -1726,6 +1882,9 @@ pub enum Modification {
         from: Filter,
     },
     RemoveKeyword(KeywordKind),
+    /// Loses one particular keyword ability: the instances of that kind with the same
+    /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
+    LoseKeyword(Keyword),
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
     CantHaveKeyword(KeywordKind),
@@ -1782,6 +1941,7 @@ impl Modification {
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
             | RemoveKeyword(_)
+            | LoseKeyword(_)
             | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -1956,6 +2116,19 @@ pub enum ReplacementEvent {
         by: PlayerRel,
         kind: Option<CounterKind>,
     },
+    /// Counters (of `kind`) would be put on an object matching `on_objects` or a player
+    /// matching `on_players`, by a player matching `by` if given (CR 122.6, 122.6a: "If you
+    /// would put one or more counters on a permanent you control"), and, if `effect_only`,
+    /// by an effect (CR 609.1: "If an effect would put one or more counters on a permanent
+    /// you control" doesn't apply to counters put as a cost, as the result of damage, or by
+    /// a turn-based action; see [`crate::events::CounterOrigin`]).
+    PutCountersMatching {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        by: Option<PlayerRel>,
+        effect_only: bool,
+    },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
     /// One or more tokens with the characteristics described by `tokens` would be created
@@ -2129,6 +2302,17 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
+    /// they may attack though their controller hasn't controlled them continuously since
+    /// their most recent turn began. With `defender`, only those players and planeswalkers
+    /// they control ("can attack your opponents and planeswalkers your opponents control
+    /// as though those creatures had haste"). See `as_though::may_attack_as_though_haste`.
+    AttackAsThoughHaste {
+        attackers: Filter,
+        defender: Option<PlayerFilter>,
+    },
+    /// "[blockers] can block as though they were untapped" (CR 509.1a with 609.4).
+    BlockAsThoughUntapped(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
@@ -2179,6 +2363,9 @@ pub enum Restriction {
     },
     /// "can't be countered".
     CantBeCountered(Filter),
+    /// "[spells] can't be copied" (CR 113.6g, 707.10): "This spell can't be copied." on an
+    /// instant or sorcery, functioning on the stack. See `rule_statics::cant_be_copied`.
+    CantBeCopied(Filter),
     /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
     /// [`Restriction::CantEnter`] (CR 614.17d).
     CantEnterBattlefield(Filter),
@@ -2207,12 +2394,42 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "Players can't pay life [or sacrifice (permanents)] to cast spells or activate
+    /// abilities [that aren't mana abilities]" (Karn's Sylex, Yasharn, Angel of
+    /// Jubilation; CR 118.3, 119.4): the players `who` describes can't pay life (with
+    /// `life`) nor sacrifice permanents matching `sacrifice` to pay the costs of casting
+    /// spells or activating abilities (with `mana_abilities`, mana abilities too). Costs
+    /// paid as a spell or ability resolves aren't affected. See `rule_statics::payment`.
+    CantPayToCastOrActivate {
+        who: PlayerFilter,
+        life: bool,
+        sacrifice: Option<Filter>,
+        mana_abilities: bool,
+    },
+    /// "Spells and abilities your opponents control can't cause you to sacrifice
+    /// permanents" (Sigarda, Host of Herons), "Triggered abilities you control can't cause
+    /// you to sacrifice or exile creature tokens you control" (The Master, Multiplied):
+    /// the spells and abilities `by` describes can't make their controller's opponent (or
+    /// controller) sacrifice permanents matching `what` (CR 701.21), nor, with `exile`,
+    /// exile them. See `rule_statics::sacrifice_causes`.
+    CantCauseSacrifice {
+        what: Filter,
+        by: SacrificeCauses,
+        exile: bool,
+    },
     /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
     /// don't apply when they're destroyed (CR 701.19c).
     CantBeRegenerated(Filter),
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
+    /// "[cards] in [zones] can't enter the battlefield" (Kunoros, Hound of Athreos;
+    /// Grafdigger's Cage): checked against the card as it exists in that zone, before it
+    /// would move (so a noncreature card entering as a copy of a creature isn't stopped).
+    CantEnterFrom {
+        what: Filter,
+        zones: Vec<ZoneKind>,
+    },
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
@@ -2220,6 +2437,10 @@ pub enum Restriction {
     SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
+    /// "[permanents] can't be turned face up" (CR 708.7): not by a special action
+    /// (morph, disguise, a manifested or cloaked creature's mana cost, CR 702.37e,
+    /// 702.168d, 701.40b, 701.58b) nor by an effect. See `rule_statics::face_up`.
+    CantTurnFaceUp(Filter),
     /// "can't search libraries".
     CantSearch(PlayerFilter),
     /// Cast spells only at sorcery speed etc.
@@ -2240,6 +2461,16 @@ pub enum Restriction {
     },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
+/// the controller of its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SacrificeCauses {
+    /// "Spells and abilities your opponents control".
+    OpponentsSpellsAndAbilities,
+    /// "Triggered abilities you control".
+    YourTriggeredAbilities,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2463,6 +2694,9 @@ pub enum StaticEffect {
     /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
     /// declared" (CR 506.8). Checked from the card itself while it's being cast.
     CastOnlyIf(Condition),
+    /// "~ can be attached only to a [filter]" (Gate Smasher, Konda's Banner): an Equipment
+    /// that can't legally be attached to other objects (CR 301.5, 701.3b, 704.5n).
+    AttachOnlyTo(Filter),
     /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
     /// "You may exert this creature as it attacks. When you do, [then]."
     OptionalAttackCost {
@@ -2487,6 +2721,12 @@ pub enum StaticEffect {
     /// permanents matching the filter (relative to the source) are left out of the legend
     /// rule (see `legend_rule.rs`).
     LegendRuleExempt(Filter),
+    /// "Damage isn't removed from [permanents matching the filter] during cleanup steps"
+    /// (an exception to CR 514.2; see `rule_statics::cleanup_damage`).
+    DamageNotRemoved(Filter),
+    /// "Counters remain on ~ as it moves to any zone other than a player's hand or library"
+    /// (an exception to CR 122.2 and 400.7; see `rule_statics::counters_remain`).
+    CountersRemain,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2740,6 +2980,37 @@ pub enum TriggerCond {
         /// put action ("one or more [kind] counters are put on …").
         #[serde(default)]
         each: bool,
+    },
+    /// "Whenever [who] put(s) one or more [kind] counters on [objects or players]" (once
+    /// for each put action on each permanent or player) / "Whenever [who] put(s) a [kind]
+    /// counter on …" (`each`: once for each counter) (CR 122.6, 122.6a): counters put by a
+    /// player matching `who`, however they were put (by an effect, as a cost, as the result
+    /// of damage, or by a turn-based action, [`crate::events::CounterOrigin`]). Event
+    /// object = the permanent (none for a player), player = the player who put them,
+    /// amount = how many.
+    CountersPutBy {
+        who: PlayerRel,
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        each: bool,
+    },
+    /// "Whenever a spell or ability [by] controls destroys [filter]" (CR 701.8): a
+    /// permanent destroyed by the effect of a spell or ability (not by a state-based
+    /// action, CR 704.5g–h, and not sacrificed or exiled). Looks back in time
+    /// (CR 603.10a). Event object = the permanent as it last existed on the battlefield,
+    /// player = the controller of the spell or ability.
+    DestroyedBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// "When/Whenever [filter spell] is countered by a spell or ability [by] controls"
+    /// (CR 701.6). Looks back in time (CR 603.10e). Event object = the spell as it last
+    /// existed on the stack, player = the controller of the spell or ability that
+    /// countered it.
+    CounteredBy {
+        filter: Filter,
+        by: PlayerRel,
     },
     CountersRemoved {
         filter: Filter,
@@ -3098,10 +3369,29 @@ pub enum Effect {
         kind: CounterKind,
         n: Value,
     },
+    /// "Remove N [kind] counters from [what]" (CR 122). `kind: None`: N counters in all,
+    /// of the kinds the controller of the spell or ability chooses where the object has
+    /// several (every counter if N is at least how many it has: "remove all counters").
     RemoveCounters {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Remove up to N [kind] counters from [what]", "remove any number of counters from
+    /// [what]" (`max: None`): for each object, the controller of the spell or ability
+    /// chooses how many to remove (at most `max`) and, of several kinds, which.
+    RemoveCountersUpTo {
+        what: Sel,
+        kind: Option<CounterKind>,
+        max: Option<Value>,
+    },
+    /// "Choose a counter on [from]. Put an additional counter of that kind on ...": the
+    /// controller chooses a kind of counter among the counters on `from` (objects or
+    /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
+    /// kind. Nothing happens if there are none.
+    ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
     },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.
@@ -3441,6 +3731,9 @@ pub enum Effect {
         reveal: bool,
         shuffle: bool,
     },
+    /// The general search (CR 701.23, see [`crate::search_rules`]): one or more zones,
+    /// several card descriptions, distinct names, split destinations.
+    SearchCards(Box<SearchSpec>),
     Shuffle {
         who: PlayerRef,
     },

@@ -17,6 +17,7 @@ pub mod effects;
 pub mod keywords;
 pub mod patterns;
 pub mod phrases;
+pub mod render;
 pub mod statics;
 pub mod triggers;
 
@@ -376,7 +377,7 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if let Some(a) = statics::parse_spell_static(text, ctx) {
             return Some(vec![a]);
         }
-        let body = effects::parse_body(text, ctx)?;
+        let body = effects::other_than_sole_target(effects::parse_body(text, ctx)?);
         return Some(vec![AbilityDef::new(
             AbilityKind::Spell(SpellAbility { body }),
             text,
@@ -465,6 +466,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
             Some((head, sentence)) => (head, Some(sentence)),
             None => (eff_text, None),
         };
+    // "This ability can't be copied." (CR 113.6g, 707.10).
+    let (eff_text, cant_be_copied) = match patterns::rule_statics::strip_cant_be_copied(eff_text) {
+        Some(rest) => (rest, true),
+        None => (eff_text.to_string(), false),
+    };
+    let eff_text = eff_text.as_str();
     // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
     let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
         || cost.parts.iter().any(crate::casting::cost_part_has_x);
@@ -500,7 +507,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let target_slots = if body
         .targets
         .iter()
-        .all(|t| t.max.as_const() == Some(1) && t.min == 1)
+        .all(|t| t.max.as_const() == Some(1) && t.fixed_min() == Some(1))
     {
         body.targets.len()
     } else {
@@ -521,6 +528,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_loyalty = loyalty;
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
+    act.cant_be_copied = cant_be_copied;
     act.zone = activated_zone(cost_s, eff_text);
     if let Some((_, Some(c))) = amount_x {
         act.condition = Some(match act.condition.take() {

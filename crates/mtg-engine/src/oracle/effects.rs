@@ -64,6 +64,17 @@ impl<'c> Builder<'c> {
             ctx,
         }
     }
+    /// Whether target slot `i` is for objects (and so could be the object a later
+    /// "other target" excludes).
+    fn is_object_target(&self, i: u8) -> bool {
+        self.targets.get(i as usize).is_some_and(|t| {
+            matches!(
+                t.what,
+                TargetKind::Object(_) | TargetKind::ObjectOrPlayer(..) | TargetKind::AnyTarget
+            )
+        })
+    }
+
     pub fn add_target(&mut self, mut spec: TargetSpec, text: &str) -> u8 {
         spec.text = text.to_string();
         // "target creature card with lesser mana value": the object "it" means as the
@@ -83,6 +94,17 @@ impl<'c> Builder<'c> {
         let other = text.starts_with("another target") || text.contains("other target");
         if other && spec.distinct_from.is_empty() {
             spec.distinct_from = (0..self.targets.len() as u8).collect();
+        }
+        // "Destroy target artifact or land. Put a +1/+1 counter on up to three other
+        // target creatures.": "other" means other than the earlier target object, not
+        // other than the source, which may be among those creatures.
+        if other && spec.distinct_from.iter().any(|i| self.is_object_target(*i)) {
+            if let TargetKind::Object(Filter::And(v)) = &mut spec.what {
+                v.retain(|f| !matches!(f, Filter::Other));
+                if v.len() == 1 {
+                    spec.what = TargetKind::Object(v.pop().unwrap_or(Filter::Any));
+                }
+            }
         }
         // A target player doesn't become "it" ("target opponent loses life equal to its
         // power" — "its" is still the object from before).
@@ -170,6 +192,11 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
+    // cast, even after "it" has come to mean something else.
+    if matches!(it, Sel::TriggerSpell) {
+        b.named.push(("that spell".into(), Sel::TriggerSpell));
+    }
     b.it = it;
     b.it_player = it_player;
     let effect = parse_effect_text(t, &mut b)?;
@@ -190,6 +217,34 @@ fn parse_modal(
     let (head, rest) = t.split_once('\n')?;
     let hl = head.to_lowercase();
     let hl = hl.trim().trim_end_matches(['—', ':', '.', ' ']);
+    // "Each mode must target a different player" (see `mode_players.rs`).
+    let (hl, different_players) =
+        match hl.strip_suffix(". each mode must target a different player") {
+            Some(h) => (h, true),
+            None => (hl, false),
+        };
+    // "You may choose two": that many modes, or none (see `Modal::optional`).
+    let (hl, optional) = match hl.strip_prefix("you may ") {
+        Some(h) if matches!(h, "choose one" | "choose two" | "choose three") => (h, true),
+        _ => (hl, false),
+    };
+    // "Choose one. X is the number of spells you've cast this turn." (Gnostro, Voice of the
+    // Crags): the value of X in each mode, determined as the ability resolves.
+    let (hl, x_is) = match hl.split_once(". x is ") {
+        Some((h, v)) => (h, Some(v)),
+        None => (hl, None),
+    };
+    let x_value = match x_is {
+        Some(v) => {
+            let mut b = Builder::new(ctx);
+            let (value, rest) = super::statics::parse_value_phrase(v, &mut b)?;
+            if !b.targets.is_empty() || !rest.trim().is_empty() {
+                return None;
+            }
+            Some(value)
+        }
+        None => None,
+    };
     let fixed = match hl {
         "choose one" => Some((1, 1)),
         "choose two" => Some((2, 2)),
@@ -223,7 +278,10 @@ fn parse_modal(
             b.it = it.clone();
             b.it_player = it_player.clone();
         }
-        let effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        let mut effect = parse_effect_text(strip_flavor_word(l), &mut b)?;
+        if let Some(v) = &x_value {
+            effect = Effect::Seq(vec![Effect::SetX { value: v.clone() }, effect]);
+        }
         modes.push(Mode {
             text: l.to_string(),
             targets: b.targets,
@@ -247,6 +305,8 @@ fn parse_modal(
         modes,
         per_mode_cost: false,
         chooser: header.chooser,
+        different_players,
+        optional,
     })
 }
 
@@ -280,7 +340,20 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        if *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ') {
+        // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
+        // creature put onto the battlefield with ~.\" Put target creature card ..."): the
+        // next sentence starts with a capital letter.
+        let quote_ends_sentence = *ch == '"'
+            && !in_quote
+            && i > 0
+            && chars[i - 1] == '.'
+            && chars.get(i + 1) == Some(&' ')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_uppercase() || *c == '~');
+        if quote_ends_sentence
+            || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
+        {
             let s = cur.trim().to_string();
             if !s.is_empty() {
                 out.push(s);
@@ -310,11 +383,18 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
     // effect is in `effects`, and its value, if it could be read.
     let mut x_defined: Option<(usize, Option<Value>)> = None;
     let mut x_stored = false;
+    let mut prev_sentence: Option<String> = None;
     for s in split_sentences(t) {
         // "~ deals 1 damage to each creature. If it was kicked, it deals 2 damage to each
         // creature instead.": a spell that is the subject of an instruction is what a
         // later "it" refers to, until something else is mentioned.
         super::patterns::oracle_hardening_referents::note_subject(&s, b);
+        super::patterns::oracle_hardening_referents::note_object_last(
+            prev_sentence.as_deref(),
+            &s,
+            b,
+        );
+        prev_sentence = Some(s.to_string());
         let defines_x = s.to_lowercase().contains(", where x is ");
         // Read before the sentence is parsed, with pronouns as the sentence reads them.
         let defined_value = if defines_x {
@@ -365,6 +445,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 &mut introduced,
             );
             super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
+            super::patterns::oracle_hardening_referents::note_counters_on_source(&mut e, b);
             effects.push(e);
             b.sentences += 1;
         }
@@ -472,7 +553,33 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             effect: Box::new(e),
         });
     }
-    if let Some((cond, rest)) = parse_leading_if(l, b) {
+    // "If you control a Fish, Octopus, or Otter, draw a card.": when the text after the
+    // first comma isn't an instruction, the condition may go on (read by the patterns).
+    let before_if = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let leading_if = parse_leading_if(l, b).and_then(|(cond, rest)| {
+        if !rest.contains(", ") {
+            return Some((cond, rest));
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let subject_is_source;
+        let rest2 = match rest.strip_prefix("it ") {
+            Some(r) if l.starts_with("if ~ ") => {
+                subject_is_source = format!("~ {r}");
+                subject_is_source.as_str()
+            }
+            _ => rest,
+        };
+        let ok = parse_clause(rest2, b).is_some();
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        if !ok {
+            // Read again by the patterns: nothing the condition added stays.
+            b.targets.truncate(before_if.0);
+            (b.it, b.it_player) = (before_if.1.clone(), before_if.2.clone());
+        }
+        ok.then_some((cond, rest))
+    });
+    if let Some((cond, rest)) = leading_if {
         // "If ~ was kicked, it deals 2 damage ...": the subject "it" is the condition's.
         let subject_is_source;
         let rest = match rest.strip_prefix("it ") {
@@ -536,11 +643,15 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             let saved_player = b.it_player.clone();
             let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
+                // "put a +1/+1 counter on ~, then it deals damage ..."
+                super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
                 // "return target permanent to its owner's hand, then that player ..."
                 super::patterns::oracle_hardening_referents::note_player_mention(a, b);
+                // "put a +1/+1 counter on ~ and it deals 1 damage to each opponent".
+                super::patterns::oracle_hardening_referents::note_object_last(Some(a), c, b);
                 // The second half may modify the first ("exile it, then return it").
                 if matches!(sep, ", then " | " and then ")
                     && crate::oracle_ext::apply_followup_ext(c, &mut ea, b)
@@ -569,8 +680,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 7] = [
+    let pairs: [(&str, Sel); 11] = [
         ("~", Sel::This),
+        // An Aura enchanting a card in a graveyard ("Enchant creature card in a
+        // graveyard", CR 303.4a): that card.
+        ("enchanted creature card", Sel::AttachedTo),
+        ("enchanted instant card", Sel::AttachedTo),
+        ("enchanted card", Sel::AttachedTo),
+        ("the enchanted card", Sel::AttachedTo),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
         // Auras with "enchant permanent/land/artifact/...": the object it's attached to
@@ -765,6 +882,21 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             r.to_string(),
         ));
     }
+    // "~'s controller sacrifices it": the source's controller (or owner); "it" is ~.
+    for (p, owner) in [("~'s controller", false), ("~'s owner", true)] {
+        if let Some(r) = s.strip_prefix(p) {
+            if super::patterns::oracle_hardening_referents::is_no_referent(&b.it) {
+                b.it = Sel::This;
+            }
+            let this = Box::new(Sel::This);
+            let who = if owner {
+                PlayerRef::OwnerOf(this)
+            } else {
+                PlayerRef::ControllerOf(this)
+            };
+            return Some((who, r.to_string()));
+        }
+    }
     if let Some(r) = s
         .strip_prefix("its owner")
         .or_else(|| s.strip_prefix("their owner"))
@@ -838,6 +970,10 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
         }
+    }
+    // "for as long as it has a flood counter on it" (CR 611.2b).
+    if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
+        return (d, r);
     }
     (Duration::Permanent, t)
 }
@@ -1005,7 +1141,13 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            spec.min = 1;
+            // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
+            // target gets at least 1 (CR 601.2d).
+            spec.min = Value::c(if r2.starts_with("any number of ") {
+                0
+            } else {
+                1
+            });
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");
@@ -1030,6 +1172,56 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         amount,
         to,
     })
+}
+
+/// In an instant or sorcery with a single object target, "other creatures" (Intimidation
+/// Bolt: "~ deals 3 damage to target creature. Other creatures can't attack this turn")
+/// means other than that target: the spell itself is never among the objects described.
+pub(crate) fn other_than_sole_target(mut body: Body) -> Body {
+    if body.modal.is_some()
+        || body.targets.len() != 1
+        || !matches!(body.targets[0].what, TargetKind::Object(_))
+        || !matches!(body.targets[0].max, Value::Const(1))
+    {
+        return body;
+    }
+    // A filter conjunction with `Filter::Other` ({"And": [..., "Other", ...]}) also excludes
+    // the target. Abilities the spell grants or gives to tokens keep their own "other"
+    // (other than their source).
+    fn fix(v: serde_json::Value, in_and: bool, changed: &mut bool) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| {
+                        let and = k == "And";
+                        (k, fix(v, and, changed))
+                    })
+                    .collect(),
+            ),
+            // Kept alongside "other than this spell", which matters for a spell filter.
+            J::Array(a) if in_and && a.iter().any(|x| x == "Other") => {
+                *changed = true;
+                let mut a: Vec<_> = a.into_iter().map(|x| fix(x, false, changed)).collect();
+                a.push(serde_json::json!({"Not": {"In": {"Target": 0}}}));
+                J::Array(a)
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| fix(x, false, changed)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(&body.effect) else {
+        return body;
+    };
+    let mut changed = false;
+    let json = fix(json, false, &mut changed);
+    if changed {
+        if let Ok(e) = serde_json::from_value(json) {
+            body.effect = e;
+        }
+    }
+    body
 }
 
 /// "That creature deals damage ... to each other creature": "other" means other than the
@@ -1648,7 +1840,20 @@ fn p_scry_surveil_mill(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "target creature can't block this turn", "~ can't be blocked this turn".
 fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (dur, l) = duration_suffix(l);
+    let (mut dur, mut l) = duration_suffix(l);
+    // "That creature can't block this combat" (Forgestoker Dragon): until the combat
+    // phase ends.
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_suffix(" this combat") {
+            (dur, l) = (Duration::EndOfCombat, r);
+        }
+    }
+    // "Until your next turn, creatures can't attack you" (Chronomantic Escape).
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_prefix("until your next turn, ") {
+            (dur, l) = (Duration::UntilYourNextTurn, r);
+        }
+    }
     if matches!(dur, Duration::Permanent) {
         return None;
     }
@@ -1658,14 +1863,24 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     // class of objects ("creatures can't be blocked this turn") also applies to objects
     // that join the class later (Veiling Oddity ruling). Specific objects (targets, "those
     // creatures") are locked in as the effect begins.
+    // "Other creatures can't attack this turn" is a class too: other than the source, or
+    // (in an instant or sorcery) other than its target, see `other_than_sole_target`.
     let f = match &what {
-        Sel::All(f) if is_class_filter(f) => f.clone(),
+        Sel::All(f) if is_class_filter(&without_other(f)) => f.clone(),
         _ => Filter::In(Box::new(what)),
     };
     let r = match rest {
         "can't block" => Restriction::CantBlock(f),
         "can't attack" => Restriction::CantAttack(f),
         "can't attack or block" => Restriction::CantAttackOrBlock(f),
+        "can't attack you" | "can't attack you or planeswalkers you control" => {
+            Restriction::CantAttackPlayer {
+                attackers: f,
+                defender: PlayerFilter::You,
+                planeswalkers: rest.ends_with("planeswalkers you control"),
+                battles: false,
+            }
+        }
         "can't be blocked" => Restriction::CantBeBlocked(f),
         "attacks this combat if able" | "attacks if able" => Restriction::MustAttack(f),
         _ => return None,
@@ -1674,6 +1889,15 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         restriction: r,
         duration: dur,
     })
+}
+
+/// The filter with its top-level "other" parts removed.
+fn without_other(f: &Filter) -> Filter {
+    match f {
+        Filter::Other => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(without_other).collect()),
+        f => f.clone(),
+    }
 }
 
 /// Whether a filter describes a class of objects by their current qualities only, without

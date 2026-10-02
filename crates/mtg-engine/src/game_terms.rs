@@ -216,8 +216,11 @@ pub fn choose_party_and_sacrifice_rest(g: &mut Game, ctx: &Ctx) {
                 .map(|o| (o.id, p)),
         );
     }
+    let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
     for (c, p) in rest {
-        g.sacrifice(c, p);
+        if !g.sacrifice_forbidden(c, cause.as_ref()) {
+            g.sacrifice(c, p);
+        }
     }
 }
 

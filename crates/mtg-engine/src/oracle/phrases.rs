@@ -9,6 +9,21 @@ use crate::keywords::KeywordKind;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// A filter parsed from a probe phrase "card [qualifiers]" without the probe's own head
+/// noun: only the qualifiers are meant ("you control", "of the chosen type"). `Card`
+/// would exclude tokens (CR 108.2), which the qualifiers don't.
+pub fn without_probe_card(f: Filter) -> Filter {
+    match f {
+        Filter::Card => Filter::Any,
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Card))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();
@@ -30,8 +45,20 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
+        // "mills twice X cards", "exile up to twice X target cards".
+        "twice" => {
+            let (w2, rest2) = split_word(rest);
+            if w2 != "x" {
+                return None;
+            }
+            return Some((
+                Value::Mul(Box::new(Value::Const(2)), Box::new(Value::X)),
+                rest2,
+            ));
+        }
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
@@ -228,6 +255,15 @@ pub fn adjective(w: &str) -> Option<Filter> {
 
 /// Parses an object description like "nontoken creature you control with flying".
 /// Returns (filter, plural?, rest).
+/// Whether a filter is about cards (has a `Filter::Card` part).
+fn names_cards(f: &Filter) -> bool {
+    match f {
+        Filter::Card => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(names_cards),
+        _ => false,
+    }
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
@@ -522,6 +558,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+        } else if let Some(r) = t
+            .strip_prefix("named ~")
+            .filter(|_| !parts.iter().any(names_cards))
+        {
+            // "each creature you control named ~" (Gary Clone). ("card named ~" is the
+            // card's printed name, see `card_flow_search`.)
+            (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
             // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)
@@ -545,6 +588,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // Internal form of "that player controls" inside a trigger whose player is
             // the triggering player (see `triggers_effects::that_player_controls`).
             (Filter::ControlledBy(PlayerRel::TriggerPlayer), r)
+        } else if let Some(r) = t.strip_prefix("the iterated player controls") {
+            // Internal form of "that player controls" after "for each opponent," (see
+            // `patterns::per_player_targets`).
+            (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t
@@ -561,8 +608,34 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("in a graveyard")
             .or_else(|| t.strip_prefix("from a graveyard"))
+            .or_else(|| t.strip_prefix("from graveyards"))
+            .or_else(|| t.strip_prefix("in graveyards"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t
+            .strip_prefix("in defending player's graveyard")
+            .or_else(|| t.strip_prefix("from defending player's graveyard"))
+        {
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Defending),
+                ]),
+                r,
+            )
+        } else if let Some(r) = t
+            .strip_prefix("from the iterated player's graveyard")
+            .or_else(|| t.strip_prefix("in the iterated player's graveyard"))
+        {
+            // Internal form of "from that player's graveyard" after "for each opponent,"
+            // (see `patterns::per_player_targets`).
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Iterated),
+                ]),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("from the triggering player's graveyard") {
             // Internal form of "from that player's graveyard" inside a trigger whose
             // player is the triggering player (`triggers_effects::that_player_controls`).
@@ -650,13 +723,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_with_suffix(t) {
             (f, r)
-        } else if let Some((f, r)) = t.strip_prefix("that has ").and_then(|x| {
-            // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
-            let with = format!("with {x}");
-            let (f, rest) = parse_with_suffix(&with)?;
-            let n = rest.len();
-            Some((f, &t[t.len() - n..]))
-        }) {
+        } else if let Some((f, r)) = t
+            .strip_prefix("that has ")
+            .or_else(|| t.strip_prefix("that have "))
+            .and_then(|x| {
+                // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
+                let with = format!("with {x}");
+                let (f, rest) = parse_with_suffix(&with)?;
+                let n = rest.len();
+                Some((f, &t[t.len() - n..]))
+            })
+        {
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
@@ -907,6 +984,11 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
     } else {
         (false, t.strip_prefix("with ")?)
     };
+    // "with three or more +1/+1 counters on it", "with counters on them", "with no
+    // counters on it" (see `patterns::counter_grammar`).
+    if let Some(r) = super::patterns::counter_grammar::counters_on(rest, negate) {
+        return Some(r);
+    }
     // "with no abilities" (CR 113.12: granted abilities count, characteristics and
     // qualities don't).
     if let Some(tail) = rest.strip_prefix("no abilities") {
@@ -965,6 +1047,10 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         // "with no counters on them" (Damning Verdict, Hazardous Conditions).
         if let Some(tail) = rest.strip_prefix("no counters on them") {
             return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        // "creatures you control with counters on them" (Synchronized Charge): any kind.
+        if let Some(tail) = rest.strip_prefix("counters on them") {
+            return Some((Filter::HasCounter(None), tail));
         }
         let (kind, r2) = split_word(rest);
         if let Some(tail) = r2.strip_prefix("counters on them") {
@@ -1167,30 +1253,29 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
 /// Parses a target phrase. Returns (spec, rest).
 pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     let mut s = s.trim_start();
-    let mut min = 1u32;
+    let mut min = Value::Const(1);
     let mut max = Value::Const(1);
     let mut another = false;
     let mut together = None;
     if let Some(r) = strip(s, "up to ") {
         let (n, r2) = parse_number(r)?;
-        min = 0;
+        min = Value::Const(0);
         max = n;
         s = r2;
     } else if let Some(r) = strip(s, "one or two ") {
-        min = 1;
+        min = Value::Const(1);
         max = Value::Const(2);
         s = r;
     } else if let Some((n, r)) = parse_number(s) {
         if strip(r, "target").is_some() || strip(r, "other target").is_some() {
-            if let Value::Const(k) = n {
-                min = k as u32;
-            }
+            // "X target creatures" means exactly X of them (CR 601.2c).
+            min = n.clone();
             max = n;
             s = r;
         }
     }
     if let Some(r) = strip(s, "any number of ") {
-        min = 0;
+        min = Value::Const(0);
         max = Value::Const(99);
         s = r;
     }
@@ -1313,6 +1398,8 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         text: String::new(),
         condition: None,
         together,
+        related_to: None,
+        per_player: None,
     };
     Some((spec, rest))
 }
@@ -1343,22 +1430,7 @@ fn target_group_suffix<'a>(
             rest,
         ));
     }
-    let groups = [
-        ("that share a creature type", TargetGroup::ShareCreatureType),
-        (
-            "that share no creature types",
-            TargetGroup::ShareNoCreatureType,
-        ),
-        ("that share a card type", TargetGroup::ShareCardType),
-        (
-            "that share a permanent type",
-            TargetGroup::SharePermanentType,
-        ),
-    ];
-    let Some((rest, grp)) = groups
-        .iter()
-        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
-    else {
+    let Some((rest, grp)) = group_phrase(t) else {
         return Some((f, r));
     };
     *together = Some(grp);
@@ -1374,6 +1446,70 @@ fn target_group_suffix<'a>(
         other => parts.push(other),
     }
     Some((Filter::and(parts), rest))
+}
+
+/// A relationship several objects must have, at the start of `t` ("that share a creature
+/// type", "with different names", "with total mana value 6 or less"; see
+/// `target_groups.rs`), and what follows it.
+pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
+    let groups = [
+        ("that share a creature type", TargetGroup::ShareCreatureType),
+        (
+            "that share no creature types",
+            TargetGroup::ShareNoCreatureType,
+        ),
+        ("that share a card type", TargetGroup::ShareCardType),
+        (
+            "that share a permanent type",
+            TargetGroup::SharePermanentType,
+        ),
+        (
+            "with different controllers",
+            TargetGroup::DifferentControllers,
+        ),
+        ("with different names", TargetGroup::DifferentNames),
+        (
+            "with different mana values",
+            TargetGroup::DifferentManaValues,
+        ),
+        ("with different powers", TargetGroup::DifferentPowers),
+        ("with equal toughness", TargetGroup::EqualToughness),
+    ];
+    groups
+        .iter()
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
+        .or_else(|| total_at_most(t))
+}
+
+/// The first relationship phrase (see [`group_phrase`]) in `l`, after a space: its start,
+/// its end and the relationship.
+pub fn find_group_phrase(l: &str) -> Option<(usize, usize, TargetGroup)> {
+    l.match_indices(' ').find_map(|(i, _)| {
+        let rest = &l[i + 1..];
+        let (after, grp) = group_phrase(rest)?;
+        // A whole phrase: not "with different names" inside a longer word.
+        (after.is_empty() || after.starts_with([' ', ',', '.']))
+            .then(|| (i, l.len() - after.len(), grp))
+    })
+}
+
+/// "with total mana value 6 or less", "with total power 10 or less", "with total mana
+/// value X or less": a bound on the targets' total.
+fn total_at_most(t: &str) -> Option<(&str, TargetGroup)> {
+    let (r, mana_value) = if let Some(r) = t.strip_prefix("with total mana value ") {
+        (r, true)
+    } else {
+        (t.strip_prefix("with total power ")?, false)
+    };
+    let (n, r) = parse_number(r)?;
+    let r = r.trim_start().strip_prefix("or less")?;
+    let stat = if mana_value {
+        TotalStat::ManaValue
+    } else {
+        TotalStat::Power
+    };
+    let grp = TargetGroup::TotalAtMost(stat, Box::new(n));
+    Some((r, grp))
 }
 
 fn filter_mentions_spell(f: &Filter) -> bool {
@@ -1393,6 +1529,14 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
         let mut t = TargetSpec::any_target();
         t.what = TargetKind::AnyTarget;
         return Some((t, r));
+    }
+    // "1 damage to any target and 2 damage to another target" (Cone of Flame): any target
+    // other than the earlier ones (the text "another target" makes it so, see
+    // `Builder::add_target`).
+    if let Some(r) = s.trim_start().strip_prefix("another target") {
+        if r.is_empty() || r.starts_with(',') || r.starts_with('.') || r.starts_with(" and ") {
+            return Some((TargetSpec::any_target(), r));
+        }
     }
     parse_target(s)
 }
@@ -1486,7 +1630,7 @@ mod tests {
         assert!(matches!(t.what, TargetKind::Object(_)));
         assert_eq!(end(rest), "");
         let (t, _) = parse_target("up to two target creatures").unwrap();
-        assert_eq!(t.min, 0);
+        assert_eq!(t.fixed_min(), Some(0));
         let (t, _) = parse_any_target("any target").unwrap();
         assert!(matches!(t.what, TargetKind::AnyTarget));
         let (t, _) = parse_target("target spell").unwrap();

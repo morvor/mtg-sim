@@ -274,17 +274,9 @@ pub(crate) fn stack_target(s: &str) -> Option<(TargetSpec, &str)> {
         StackKind::Ability => TargetKind::Ability(f),
         StackKind::Both => TargetKind::SpellOrAbility(f),
     };
-    let spec = TargetSpec {
-        what,
-        min,
-        max,
-        distinct_from: vec![],
-        divide: None,
-        chosen_by_opponent: false,
-        text: s[..s.len() - rest.len()].trim().to_string(),
-        condition: None,
-        together: None,
-    };
+    let mut spec = TargetSpec::one(what, s[..s.len() - rest.len()].trim().to_string());
+    spec.min = Value::Const(min);
+    spec.max = max;
     Some((spec, rest))
 }
 
@@ -569,7 +561,7 @@ mod tests {
         ));
         let t = target("up to four target spells and/or abilities");
         assert!(matches!(t.what, TargetKind::SpellOrAbility(_)));
-        assert_eq!(t.min, 0);
+        assert_eq!(t.min.as_const(), Some(0));
         assert!(matches!(target("target spell cast from a graveyard").what, TargetKind::Spell(_)));
         assert!(matches!(
             target("target creature spell with power or toughness 2 or less").what,

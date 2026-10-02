@@ -356,29 +356,48 @@ pub fn assigns_as_though_unblocked(g: &mut Game, id: ObjectId) -> bool {
 // Other hooks
 // ---------------------------------------------------------------------------
 
-/// After damage is dealt (toxic, poisonous-like effects implemented as statics, etc.).
+/// After damage is dealt (poisonous-like effects implemented as statics, etc.).
 pub fn after_damage(g: &mut Game, source: ObjectId, target: Entity, amount: u32, combat: bool) {
-    // CR 702.164c toxic: combat damage to a player also gives poison counters.
-    if combat {
-        if let Entity::Player(p) = target {
-            let toxic: i32 = g
-                .obj(source)
-                .chars
-                .keywords()
-                .filter(|k| k.kind == KeywordKind::Toxic)
-                .map(|k| k.n.unwrap_or(0))
-                .sum();
-            if toxic > 0 {
-                g.add_counters(
-                    Entity::Player(p),
-                    counters::POISON,
-                    toxic as u32,
-                    Some(source),
-                );
-            }
+    crate::kw::after_damage(g, source, target, amount, combat);
+}
+
+/// CR 702.164c toxic: combat damage dealt to a player by a creature with toxic causes that
+/// creature's controller to give the player poison counters equal to its total toxic value
+/// (CR 702.164b), in addition to the damage's other results. The counters that creatures
+/// one player controls give a player with simultaneous combat damage are put as a single
+/// event ("If more than one creature with toxic deals combat damage to a player at the
+/// same time, those counters are placed as a single event"); they're a result of damage,
+/// not an effect.
+pub fn toxic_counters(g: &mut Game, dealt: &[(ObjectId, Entity, u32)], combat: bool) {
+    if !combat {
+        return;
+    }
+    // (controller, player, total toxic value, first source)
+    let mut groups: Vec<(PlayerId, PlayerId, u32, ObjectId)> = Vec::new();
+    for (source, target, _) in dealt {
+        let Entity::Player(p) = target else {
+            continue;
+        };
+        let toxic: i32 = g
+            .obj(*source)
+            .chars
+            .keywords()
+            .filter(|k| k.kind == KeywordKind::Toxic)
+            .map(|k| k.n.unwrap_or(0))
+            .sum();
+        if toxic <= 0 {
+            continue;
+        }
+        let ctl = g.obj(*source).controller;
+        match groups.iter_mut().find(|(c, q, _, _)| *c == ctl && q == p) {
+            Some(gr) => gr.2 += toxic as u32,
+            None => groups.push((ctl, *p, toxic as u32, *source)),
         }
     }
-    crate::kw::after_damage(g, source, target, amount, combat);
+    for (_, p, n, source) in groups {
+        let how = crate::event_causes::CounterPut::damage(g, source);
+        g.put_counters(Entity::Player(p), counters::POISON, n, how);
+    }
 }
 
 /// CR 502.1 / 702.26: phasing during the untap step.
@@ -406,7 +425,17 @@ pub fn mana(s: &str) -> Cost {
 }
 
 /// Equip restrictions such as "Equip legendary creature" (CR 702.6) are enforced on the
-/// equip ability's target; attachment legality otherwise only requires a creature.
-pub fn equip_restriction_ok(_g: &Game, _equipment: ObjectId, _creature: ObjectId) -> bool {
-    true
+/// equip ability's target; attachment legality otherwise only requires a creature, unless
+/// the Equipment says "~ can be attached only to a [filter]" (CR 301.5, 701.3b, 704.5n).
+pub fn equip_restriction_ok(g: &Game, equipment: ObjectId, creature: ObjectId) -> bool {
+    let o = g.obj(equipment);
+    o.chars.abilities.iter().all(|a| match &a.kind {
+        AbilityKind::Static(s) => match &s.effect {
+            StaticEffect::AttachOnlyTo(f) => {
+                g.matches(creature, f, &Ctx::new(Some(equipment), o.controller))
+            }
+            _ => true,
+        },
+        _ => true,
+    })
 }

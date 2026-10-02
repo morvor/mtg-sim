@@ -67,6 +67,25 @@ fn object_state(r: &str, sel: &Sel, contracted: bool) -> Option<Condition> {
     } else {
         return object_has(r, sel);
     };
+    // "is enchanted by exactly one Aura", "is enchanted by three or more Auras" (Timber
+    // Paladin): the number of Auras attached to it.
+    if let Some(x) = state.strip_prefix("enchanted by ") {
+        let x = x.strip_prefix("exactly ").unwrap_or(x);
+        let (cmp, n, noun) =
+            super::counters_resources_counters::amount_cmp(x)?;
+        if !matches!(end(noun), "aura" | "auras") {
+            return None;
+        }
+        let c = Condition::Compare(
+            Value::Count(Filter::and(vec![
+                Filter::Subtype("Aura".into()),
+                Filter::AttachedToAnyOf(Box::new(sel.clone())),
+            ])),
+            cmp,
+            n,
+        );
+        return Some(if neg { Condition::Not(Box::new(c)) } else { c });
+    }
     let f = state_filter(state)?;
     let c = Condition::SelMatches(sel.clone(), f);
     Some(if neg { Condition::Not(Box::new(c)) } else { c })
@@ -123,6 +142,10 @@ pub(crate) fn state_filter(s: &str) -> Option<Filter> {
         // CR 506.5.
         "attacking alone" => Some(Filter::AttackingAlone),
         "blocking alone" => Some(Filter::BlockingAlone),
+        // "As long as ~ is attached to a creature" (Conqueror's Flail).
+        "attached to a creature" => Some(Filter::Custom(
+            crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into(),
+        )),
         _ => None,
     };
     if simple.is_some() {
@@ -282,6 +305,18 @@ fn graveyard_condition(c: &str) -> Option<Condition> {
             PlayerRef::EachOpponent,
             PlayerFilter::GraveyardSize(cmp, Box::new(n)),
         ));
+    }
+    // "there are ten or more cards in a single graveyard" (Swimmer in Nightmares): some
+    // player's graveyard.
+    if let Some(r) = c.strip_prefix("there are ") {
+        if let Some((cmp, n, tail)) = amount_cmp(r) {
+            if end(tail) == "cards in a single graveyard" {
+                return Some(Condition::PlayerMatches(
+                    PlayerRef::EachPlayer,
+                    PlayerFilter::GraveyardSize(cmp, Box::new(n)),
+                ));
+            }
+        }
     }
     // "there is a Lesson card in your graveyard", "there's a ...", "a Warrior card is in
     // your graveyard", "an instant card and a sorcery card are in your graveyard".
@@ -487,6 +522,29 @@ fn control_condition(c: &str) -> Option<Condition> {
     if let Some(r) = c.strip_prefix("you don't control ") {
         let f = phrase(&article(r)?)?;
         return Some(Condition::Not(Box::new(Condition::Exists(f.you_control()))));
+    }
+    // "defending player controls the most creatures or is tied for the most" (Hooded
+    // Horror): no player controls more of them.
+    if let Some(r) = c
+        .strip_prefix("defending player controls the most ")
+        .and_then(|r| r.strip_suffix(" or is tied for the most"))
+    {
+        let f = phrase(r)?;
+        return Some(Condition::Compare(
+            Value::Count(Filter::and(vec![
+                f.clone(),
+                Filter::ControlledBy(PlayerRel::Defending),
+            ])),
+            Cmp::Ge,
+            Value::OverPlayers(
+                AggOp::Max,
+                PlayerFilter::Any,
+                Box::new(Value::Count(Filter::and(vec![
+                    f,
+                    Filter::ControlledBy(PlayerRel::Iterated),
+                ]))),
+            ),
+        ));
     }
     for (p, rel) in [
         ("an opponent controls ", PlayerRel::Opponent),

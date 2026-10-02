@@ -613,7 +613,11 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         if cond.is_some() {
             return None;
         }
-        return Some((TriggerCond::SpellCopied { who, filter }, Sel::TriggerSpell, tp()));
+        return Some((
+            TriggerCond::SpellCopied { who, filter },
+            Sel::TriggerSpell,
+            tp(),
+        ));
     }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
@@ -920,7 +924,9 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
     // is ~, the object the spell targets (Fabled Hero, Favored Hoplite's "prevent all
     // damage that would be dealt to it").
     let targets_source = match &filter {
-        Filter::And(v) => v.iter().any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
+        Filter::And(v) => v
+            .iter()
+            .any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
         _ => false,
     };
     let base = TriggerCond::CastSpell { who, filter };
@@ -986,7 +992,10 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
             rest = tail;
             continue;
         }
-        if let Some(r) = t.strip_prefix("from anywhere other than your hand") {
+        if let Some(r) = t
+            .strip_prefix("from anywhere other than your hand")
+            .or_else(|| t.strip_prefix("from anywhere other than their hand"))
+        {
             parts.push(Filter::not(Filter::CastFrom(ZoneKind::Hand)));
             rest = r;
             continue;
@@ -1337,6 +1346,24 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
         // and the new object for actions (CR 400.7e; see `Game::resolve_sel`).
         Some(((cond, this_or(Sel::TriggerLki), ctl_of(Sel::TriggerLki)), r))
     };
+    // "dies or is put into exile" (Kaya's Ghostform): either zone change from the
+    // battlefield (CR 603.1b, 603.6c).
+    // ("... from the battlefield" is the God-Eternals' own pattern.)
+    for p in ["dies or is put into exile", "die or are put into exile"] {
+        if let Some(r) = starts(p).filter(|r| !r.trim_start().starts_with("from")) {
+            return zone_change(
+                TriggerCond::AnyOf(vec![
+                    TriggerCond::Dies(f.clone()),
+                    TriggerCond::ZoneChange {
+                        filter: f.clone(),
+                        from: Some(ZoneKind::Battlefield),
+                        to: Some(ZoneKind::Exile),
+                    },
+                ]),
+                r,
+            );
+        }
+    }
     for p in ["dies", "die"] {
         if let Some(r) = starts(p) {
             return zone_change(TriggerCond::Dies(f.clone()), r);
@@ -1463,10 +1490,21 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     // "one or more cards leave your graveyard" (look back in time, CR 603.10a).
     for p in ["leaves your graveyard", "leave your graveyard"] {
         if let Some(r) = starts(p) {
-            let cond = TriggerCond::ZoneChange {
+            let mut cond = TriggerCond::ZoneChange {
                 filter: Filter::and(vec![f.clone(), Filter::OwnedBy(PlayerRel::You)]),
                 from: Some(ZoneKind::Graveyard),
                 to: None,
+            };
+            // "... leave your graveyard during your turn" (Kheru Goldkeeper).
+            let r = match r.strip_prefix(" during your turn") {
+                Some(rest) => {
+                    cond = TriggerCond::Where {
+                        trigger: Box::new(cond),
+                        cond: Condition::YourTurn,
+                    };
+                    rest
+                }
+                None => r,
             };
             if subj.one_or_more {
                 return Some((batch(cond, false, PlayerRef::You), r));

@@ -183,20 +183,48 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let (trigger, it, it_player) =
         crate::oracle::triggers::parse_trigger_condition(&format!("whenever {cond_s}"))?;
+    // "Choose target creature an opponent controls. Whenever you attack this turn, ~ deals
+    // damage ... to that creature": when the trigger condition names no creature, "that
+    // creature" is the creature chosen earlier, captured as the delayed trigger is created
+    // (CR 603.7c).
+    let chosen = b
+        .chosen_creature
+        .as_ref()
+        .map(|(slot, _)| *slot)
+        .filter(|_| eff.contains("that creature") && !cond_s.contains("creature"));
+    let chosen_var = chosen.map(|slot| (slot, CAPTURE_BASE + 10 + slot as Var));
+    let it = match chosen_var {
+        Some((_, var)) => Sel::Var(var),
+        None => it,
+    };
     if matches!(it, Sel::None) && has_object_pronoun(eff) {
         return None;
     }
-    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let mut body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let mut stores = Vec::new();
+    if let Some((slot, var)) = chosen_var {
+        if body.modal.is_some() || !body.targets.is_empty() {
+            return None;
+        }
+        let (s, effect) = capture(&body.effect)?;
+        stores.push(Effect::Store {
+            var,
+            sel: Sel::Target(slot),
+        });
+        stores.extend(s);
+        body.effect = effect;
+    }
     let trigger = if until_next_turn {
         TriggerCond::UntilYourNextTurn(Box::new(trigger))
     } else {
         TriggerCond::ThisTurn(Box::new(trigger))
     };
-    Some(Effect::DelayedTrigger {
+    stores.push(Effect::DelayedTrigger {
         trigger,
         body: Box::new(body),
         once: false,
-    })
+    });
+    Some(Effect::seq(stores))
 }
 
 /// Splits at the first comma outside quotes.
@@ -215,12 +243,24 @@ fn split_at_comma(s: &str) -> Option<(&str, &str)> {
 fn delayed_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (trigger, inner) = split_delay(l)?;
+    // "You gain 2 life, and you return ~ from your graveyard to your hand at the beginning
+    // of the next end step.": only the last instruction of the list waits (Mangara's
+    // Blessing rulings); the others happen now.
+    let mut now = None;
+    let inner = match inner.rsplit_once(", and ") {
+        Some((head, last)) if l.starts_with(inner) => {
+            now = Some(parse_sentence(head, b)?);
+            last
+        }
+        _ => inner,
+    };
     if inner.is_empty() || has_object_pronoun(inner) {
         return None;
     }
     let effect = parse_sentence(inner, b)?;
     let (stores, effect) = capture(&effect)?;
-    let mut seq = stores;
+    let mut seq: Vec<Effect> = now.into_iter().collect();
+    seq.extend(stores);
     seq.push(Effect::DelayedTrigger {
         trigger,
         body: Box::new(Body::effect(effect)),

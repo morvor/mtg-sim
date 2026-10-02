@@ -127,17 +127,13 @@ fn target_alternatives(s: &str) -> Option<(TargetSpec, &str)> {
     if other {
         f = Filter::and(vec![f, Filter::Other]);
     }
-    let spec = TargetSpec {
-        what: TargetKind::Object(f),
-        min,
-        max,
-        distinct_from: vec![],
-        divide: None,
-        chosen_by_opponent: false,
-        text: s[..s.len() - rest.len()].trim().to_string(),
-        condition: None,
-        together,
-    };
+    let mut spec = TargetSpec::one(
+        TargetKind::Object(f),
+        s[..s.len() - rest.len()].trim().to_string(),
+    );
+    spec.min = Value::Const(min);
+    spec.max = max;
+    spec.together = together;
     Some((spec, rest))
 }
 
@@ -658,7 +654,7 @@ fn damage_to_each_of(l: &str, b: &mut Builder) -> Option<Effect> {
         let (n, x) = parse_number(x)?;
         if end(x) == "targets" {
             let mut spec = TargetSpec::any_target();
-            spec.min = 0;
+            spec.min = Value::Const(0);
             spec.max = n;
             spec.text = "up to x targets".to_string();
             let slot = b.add_target(spec, "targets");

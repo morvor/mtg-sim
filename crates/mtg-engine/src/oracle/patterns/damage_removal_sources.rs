@@ -93,7 +93,7 @@ fn recipient<'a>(s: &'a str, b: &mut Builder) -> Option<(Recipient, &'a str)> {
         let (spec, r) = parse_target(s)?;
         // Only single object targets: the filter is locked onto the chosen object.
         if !matches!(spec.what, TargetKind::Object(_))
-            || spec.min != 1
+            || spec.fixed_min() != Some(1)
             || !matches!(spec.max, Value::Const(1))
         {
             return None;
@@ -156,7 +156,7 @@ fn action(s: &str, b: &mut Builder) -> Option<ReplacementAction> {
         .strip_suffix(" instead")?;
     let (spec, rest) = parse_target(t)?;
     if !rest.trim().is_empty()
-        || spec.min != 1
+        || spec.fixed_min() != Some(1)
         || !matches!(spec.max, Value::Const(1))
         || !matches!(spec.what, TargetKind::Object(_))
     {

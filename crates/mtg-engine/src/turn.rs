@@ -332,6 +332,9 @@ impl Game {
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
+        for p in self.active_players() {
+            self.players[p.idx()].turns_taken += 1;
+        }
         // Per-turn records start afresh (in Grand Melee, not those of players taking
         // another turn at the same time, CR 807.4).
         for i in 0..self.players.len() {
@@ -819,7 +822,9 @@ impl Game {
     /// passed for the permanents the active player controls (and the effect no longer
     /// applies to objects that left the battlefield, CR 400.7). An effect on a group not
     /// locked to objects ("lands you control don't untap during your next untap step")
-    /// lasts through its controller's next untap step.
+    /// lasts through its controller's next untap step, or through the next untap step of
+    /// the player whose permanents it names ("creatures target player controls don't
+    /// untap during that player's next untap step").
     fn expire_through_next_untap_step(&mut self, active: PlayerId) {
         let objects = &self.objects;
         let battlefield = &self.battlefield;
@@ -831,11 +836,17 @@ impl Game {
                 v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
             }
         }
+        // "During your next untap step": the effect's controller's untap step has passed.
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughYourNextUntapStep) || e.controller != active
+        });
         self.rule_effects.retain(|e| {
             !matches!(e.duration, Duration::ThroughNextUntapStep)
                 || match &e.objects {
                     Some(v) => !v.is_empty(),
-                    None => e.controller != active,
+                    None => {
+                        untap_restricted_player(&e.restriction).unwrap_or(e.controller) != active
+                    }
                 }
         });
         self.dirty = true;
@@ -873,7 +884,14 @@ impl Game {
             .map(|o| o.id)
             .collect();
         for s in sagas {
-            self.add_counters(Entity::Object(s), counters::LORE, 1, None);
+            // CR 714.3c: the active player puts them, as a turn-based action (not an
+            // effect).
+            self.put_counters(
+                Entity::Object(s),
+                counters::LORE,
+                1,
+                crate::event_causes::CounterPut::rule(active),
+            );
         }
         // CR 505.5: attractions.
         crate::variants::roll_to_visit_attractions(self, active);
@@ -906,6 +924,9 @@ impl Game {
         }
         // CR 514.2: remove damage; end "until end of turn" effects.
         crate::special_actions::end_of_turn(self);
+        if self.dirty {
+            self.recompute();
+        }
         for id in self.battlefield.clone() {
             if crate::kw::keeps_damage_in_cleanup(self, id) {
                 continue;
@@ -1061,4 +1082,27 @@ impl Game {
     pub fn is_hidden_zone(zone: Zone) -> bool {
         !zone.is_public()
     }
+}
+
+/// The player a "doesn't untap" restriction on a group of permanents is about, if its
+/// filter names one ("creatures [that player] controls").
+fn untap_restricted_player(r: &Restriction) -> Option<PlayerId> {
+    let Restriction::DoesntUntap(f) = r else {
+        return None;
+    };
+    let parts = match f {
+        Filter::And(v) => v.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+    parts.iter().find_map(|x| match x {
+        Filter::ControllerMatches(pf) => match &**pf {
+            PlayerFilter::Is(p) => Some(*p),
+            PlayerFilter::Or(v) => match v.as_slice() {
+                [PlayerFilter::Is(p)] => Some(*p),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    })
 }

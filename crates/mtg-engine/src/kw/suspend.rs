@@ -231,7 +231,13 @@ impl KeywordRules for Suspend {
                 kw.n.unwrap_or(0).max(0) as u32
             };
             if n > 0 {
-                g.add_counters(Entity::Object(new), counters::TIME, n, None);
+                // Suspending is a special action (CR 116.2f): not an effect.
+                g.put_counters(
+                    Entity::Object(new),
+                    counters::TIME,
+                    n,
+                    crate::event_causes::CounterPut::rule(p),
+                );
             }
         }
         Some(Ok(()))

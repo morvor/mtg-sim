@@ -177,6 +177,17 @@ pub fn unresolved(a: &AbilityDef) -> bool {
     if !s.contains("\"Together\"") {
         return false;
     }
+    fn strip_filter(m: &mut serde_json::Map<String, serde_json::Value>, key: &str) {
+        if let Some(serde_json::Value::Object(inner)) = m.get_mut(key) {
+            if let Some(f) = inner.get("filter") {
+                let ok = serde_json::from_value::<Filter>(f.clone())
+                    .is_ok_and(|f| !crate::relational::has_nested_group(&f));
+                if ok {
+                    inner.remove("filter");
+                }
+            }
+        }
+    }
     fn strip_checked(v: &mut serde_json::Value) {
         match v {
             serde_json::Value::Object(m) => {
@@ -189,13 +200,17 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                         m.remove("Count");
                     }
                 }
-                for key in ["Search", "Choose"] {
-                    if let Some(serde_json::Value::Object(inner)) = m.get_mut(key) {
-                        if let Some(f) = inner.get("filter") {
-                            let ok = serde_json::from_value::<Filter>(f.clone())
-                                .is_ok_and(|f| !crate::relational::has_nested_group(&f));
-                            if ok {
-                                inner.remove("filter");
+                // Searches, choices and the cards a dig takes are chosen together
+                // (`target_groups::fit_together`); so are the objects a sacrifice, discard
+                // or exile cost is paid with (`target_groups::can_choose_together`).
+                for key in ["Search", "Choose", "Dig"] {
+                    strip_filter(m, key);
+                }
+                if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {
+                    for part in parts {
+                        if let serde_json::Value::Object(pm) = part {
+                            for key in ["Sacrifice", "Discard", "Exile"] {
+                                strip_filter(pm, key);
                             }
                         }
                     }
@@ -535,6 +550,30 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
             Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v)),
             rest,
         ));
+    }
+    // "each artifact with mana value less than or equal to the number of rust counters on
+    // it" (Corrosion): "it" is the object described.
+    if let Some(r) = x.strip_prefix("the number of ") {
+        let own = |kind: Option<&str>, rest: &'a str| {
+            let v = Value::CountersOn(Box::new(Sel::Var(vars::TESTED)), kind.map(Into::into));
+            Some((
+                Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v)),
+                rest,
+            ))
+        };
+        if let Some(rest) = r.strip_prefix("counters on it").filter(|r| word_end(r)) {
+            return own(None, rest);
+        }
+        if let Some((kind, rest)) = r.split_once(" counters on it") {
+            if word_end(rest)
+                && !kind.is_empty()
+                && kind
+                    .chars()
+                    .all(|c| c.is_alphabetic() || matches!(c, '+' | '-' | '/'))
+            {
+                return own(Some(kind), &r[kind.len() + " counters on it".len()..]);
+            }
+        }
     }
     let (v, rest) = value_in(x)?;
     Some((stat_filter(stat, cmp, v), rest))

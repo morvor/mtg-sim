@@ -124,6 +124,47 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 },
             ..
         } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // Exiling, or choosing to reveal or discard, N cards the player chooses ("you may
+        // exile two cards from your graveyard. If you do, ...") needs N to choose from: an
+        // action that can't be performed in full isn't offered (as for moving them).
+        Effect::Exile {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        }
+        | Effect::Store {
+            sel:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // "You may discard two cards" / "you may discard a creature card": enough such
+        // cards in hand (CR 701.9a: only cards can be discarded).
+        Effect::Discard {
+            who,
+            n: n @ Value::Const(_),
+            random: false,
+            filter,
+        } => {
+            let n = g.eval_value(n, ctx);
+            g.eval_players(who, ctx).into_iter().all(|p| {
+                g.player(p)
+                    .hand
+                    .iter()
+                    .filter(|c| g.obj(**c).is_card() && g.matches(**c, filter, ctx))
+                    .count() as i64
+                    >= n
+            })
+        }
         // Putting counters on N objects the player chooses ("put a -1/-1 counter on a
         // creature you control" as a cost) needs N to choose from (CR 118.3).
         Effect::AddCounters {
@@ -149,6 +190,7 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 .into_iter()
                 .any(|p| !g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_))))
         }
+        Effect::SearchCards(spec) => crate::search_rules::possible(g, spec, ctx),
         _ => true,
     }
 }
