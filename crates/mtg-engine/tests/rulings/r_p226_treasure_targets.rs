@@ -220,7 +220,7 @@ fn p1_casts(t: &mut TestGame, name: &str) -> ObjectId {
 
 #[test]
 fn hornswoggle_gives_a_treasure_even_if_the_spell_cant_be_countered() {
-    cr!("608.2c", "101.1", "701.6a");
+    cr!("608.2c", "701.6a");
     ruling!(
         "Hornswoggle",
         "Hornswoggle can target a spell that can't be countered, such as Nezahal, Primal Tide. When Hornswoggle resolves, that spell won't be countered, but you'll still get a Treasure."
@@ -248,7 +248,7 @@ fn hornswoggle_gives_a_treasure_even_if_the_spell_cant_be_countered() {
 
 #[test]
 fn spell_swindle_gives_treasures_even_if_the_spell_cant_be_countered() {
-    cr!("608.2c", "101.1", "202.3");
+    cr!("608.2c", "202.3");
     ruling!(
         "Spell Swindle",
         "You may target a spell that can't be countered. When Spell Swindle resolves, the target spell will be unaffected, but you'll still get Treasures."
@@ -268,7 +268,7 @@ fn spell_swindle_gives_treasures_even_if_the_spell_cant_be_countered() {
 
 #[test]
 fn an_offer_you_cant_refuse_needs_its_target_but_not_for_it_to_be_countered() {
-    cr!("608.2b", "608.2c", "101.1");
+    cr!("608.2b", "608.2c");
     ruling!(
         "An Offer You Can't Refuse",
         "If the target is still legal as it resolves but the spell can't be countered for some reason, its controller will still create two Treasure tokens."
@@ -351,7 +351,7 @@ fn gold_rush_counts_treasures_once_and_may_have_no_target() {
 
 #[test]
 fn bloodroot_apothecarys_trigger_does_nothing_if_its_target_player_is_illegal() {
-    cr!("608.2b", "702.11d", "111.10a");
+    cr!("608.2b", "702.11c", "111.10a");
     ruling!(
         "Bloodroot Apothecary",
         "If the target player is an illegal target as Bloodroot Apothecary's second ability tries to resolve, it won't resolve and none of its effects will happen. No player will create a Treasure token."

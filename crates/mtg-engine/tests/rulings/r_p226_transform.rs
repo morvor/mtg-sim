@@ -150,7 +150,7 @@ fn a_transformed_cards_mana_value_is_its_front_faces() {
 
 #[test]
 fn final_iteration_doesnt_see_the_spell_that_transformed_docent() {
-    cr!("603.2", "603.2e", "712.18");
+    cr!("603.2", "712.18");
     ruling!(
         "Docent of Perfection // Final Iteration",
         "When Docent of Perfection transforms into Final Iteration, the instant or sorcery spell that’s on the stack doesn’t cause Final Iteration’s triggered ability to trigger."
@@ -266,7 +266,7 @@ fn wolfbitten_captive_and_krallenhorde_killer_each_activate_once_per_turn() {
 
 #[test]
 fn wedding_announcement_transforms_only_as_its_trigger_resolves_and_keeps_its_counters() {
-    cr!("608.2c", "712.18", "122.2");
+    cr!("608.2c", "712.18");
     ruling!(
         "Wedding Announcement // Wedding Festivity",
         "Transforming is part of the triggered ability that puts invitation counters on Wedding Announcement. If some other effect causes Wedding Announcement to have three or more invitation counters on it, it won't transform until the next time its triggered ability resolves."
