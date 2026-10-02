@@ -3426,6 +3426,8 @@ impl crate::eval::View for WithChars<'_> {
 pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     match f {
         Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => Filter::Any,
+        // "Spells you cast from exile": a card about to be cast from exile is still there.
+        Filter::CastFrom(z) => Filter::Or(vec![f.clone(), Filter::InZone(*z)]),
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(as_spell_filter).collect()),
         Filter::Not(x) => match **x {

@@ -1231,3 +1231,36 @@ fn loses_quoted_ability(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "grants: loses \"[ability]\"", priority: 120, parse: loses_quoted_ability } }
+
+/// "If this spell was kicked, it has split second." (Molten Disaster): a static ability of
+/// the spell, functioning on the stack (CR 113.6, 702.61a), whose condition is about how it
+/// was cast.
+fn spell_has_keyword_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() {
+        return None;
+    }
+    let text = block.trim();
+    let l = text.to_lowercase();
+    let r = crate::oracle::phrases::end(&l).strip_prefix("if ")?;
+    let (cond, kw) = r.split_once(", it has ")?;
+    let cond = crate::oracle::statics::parse_condition(cond, ctx)?;
+    if !matches!(cond, Condition::CostPaid(_)) {
+        return None;
+    }
+    let mut mods = Vec::new();
+    for a in crate::oracle::keywords::parse_keyword_line(kw, ctx)? {
+        match &a.kind {
+            AbilityKind::Keyword(k) => mods.push(Modification::AddKeyword(k.clone())),
+            _ => return None,
+        }
+    }
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods,
+    });
+    s.condition = Some(cond);
+    s.zone = FunctionZone::Stack;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "grants: if this spell was kicked, it has [keyword]", priority: 120, parse: spell_has_keyword_if } }
