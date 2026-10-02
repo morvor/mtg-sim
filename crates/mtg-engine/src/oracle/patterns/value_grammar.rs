@@ -30,6 +30,21 @@ use crate::types::CounterKind;
 
 thread_local! {
     static X_DEFINED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static HALF_ROUNDING: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// How "half" rounds where the text says so once for the whole ability ("Round up each
+/// time.", CR 107.1a): Some(true) for up.
+pub fn half_rounding() -> Option<bool> {
+    HALF_ROUNDING.with(|c| c.get())
+}
+
+/// Runs `f` with [`half_rounding`] set.
+pub fn with_half_rounding<T>(up: bool, f: impl FnOnce() -> T) -> T {
+    let saved = HALF_ROUNDING.with(|c| c.replace(Some(up)));
+    let out = f();
+    HALF_ROUNDING.with(|c| c.set(saved));
+    out
 }
 
 /// Whether the text being compiled defines X: the ability's cost has an X in it (CR
@@ -106,7 +121,7 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         } else if let Some(x) = rest.strip_prefix(", rounded down") {
             (false, x)
         } else {
-            return None;
+            (half_rounding()?, rest.as_str())
         };
         return Some((Value::Div(Box::new(v), 2, up), rest.to_string()));
     }
@@ -413,6 +428,25 @@ fn zone_word(s: &str) -> Option<(ZoneKind, &str)> {
 /// hand", "in each graveyard", "named ~", "[player] controls", "attacking you", "you
 /// own in exile" (already read), "attached to ~", "with the same name as that spell".
 fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
+    // "Auras you control that are attached to creatures", "that's attached to a
+    // creature": attached to an object of that kind.
+    for p in ["that's attached to ", "that are attached to ", "attached to "] {
+        if let Some(r) = t.strip_prefix(p) {
+            let r2 = r
+                .strip_prefix("a ")
+                .or_else(|| r.strip_prefix("an "))
+                .unwrap_or(r);
+            if let Some((f, false, rest)) = parse_object_phrase(r2) {
+                if matches!(f, Filter::Type(_) | Filter::Permanent) {
+                    let n = rest.len();
+                    return Some((
+                        Filter::AttachedToAnyOf(Box::new(Sel::All(f))),
+                        &t[t.len() - n..],
+                    ));
+                }
+            }
+        }
+    }
     // "attached to it", "attached to ~", "attached to them" (a player).
     if let Some(r) = t.strip_prefix("attached to ") {
         if let Some(r2) = r.strip_prefix("them") {
@@ -483,7 +517,7 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     }
     if let Some(r) = t.strip_prefix("named ~") {
         if word_end(r) {
-            return Some((named_this(b), r));
+            return Some((named_this(b)?, r));
         }
         return None;
     }
@@ -581,14 +615,11 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     Some((controlled_by(&p), r))
 }
 
-/// "named ~": the card's name (CR 201.2), or the source's name where the card isn't known
-/// (a static ability read on its own).
-fn named_this(b: &Builder) -> Filter {
-    if b.ctx.card_name.is_empty() {
-        Filter::SameNameAs(Box::new(Sel::This))
-    } else {
-        Filter::Named(b.ctx.card_name.into())
-    }
+/// "named ~": the card's name (CR 201.2).
+fn named_this(b: &Builder) -> Option<Filter> {
+    // Without the card (a static ability read on its own, maybe granted to another
+    // object), "~" can't be told apart from the object it's granted to.
+    (!b.ctx.card_name.is_empty()).then(|| Filter::Named(b.ctx.card_name.into()))
 }
 
 /// "instant cards, sorcery cards, and/or have an Adventure", "Oozes or are named ~":
@@ -612,7 +643,7 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
             continue;
         }
         if item == "named ~" {
-            alts.push(named_this(b));
+            alts.push(named_this(b)?);
             continue;
         }
         let (f, _, tail) = parse_object_phrase(item)?;
@@ -888,6 +919,26 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 return Some((Value::TimesKicked, rest.to_string()));
             }
             return None;
+        }
+    }
+    // "for each 1 life you lost" in a "whenever you lose life" trigger: the amount of
+    // that life loss (or gain), counted in groups of N.
+    if b.in_trigger {
+        if let Some((n, x)) = parse_number(r) {
+            if let Some(k) = n.as_const().filter(|k| *k > 0) {
+                for p in ["life you lost", "life you gained"] {
+                    if let Some(rest) = x.trim_start().strip_prefix(p) {
+                        if word_end(rest) {
+                            let v = if k == 1 {
+                                Value::EventAmount
+                            } else {
+                                Value::Div(Box::new(Value::EventAmount), k, false)
+                            };
+                            return Some((v, rest.to_string()));
+                        }
+                    }
+                }
+            }
         }
     }
     // CR 104.3: "players who have lost the game".

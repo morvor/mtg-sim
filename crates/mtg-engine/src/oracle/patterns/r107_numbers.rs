@@ -405,6 +405,13 @@ fn loses_half_life(l: &str, b: &mut Builder) -> Option<Effect> {
         (s, true)
     } else if let Some(s) = l.strip_suffix(" lose half your life, rounded down") {
         (s, false)
+    } else if let (Some(s), Some(up)) = (
+        l.strip_suffix(" loses half their life")
+            .or_else(|| l.strip_suffix(" lose half your life")),
+        super::value_grammar::half_rounding(),
+    ) {
+        // "Round up each time." after the instructions (CR 107.1a).
+        (s, up)
     } else {
         return None;
     };
@@ -492,3 +499,28 @@ fn enchanted_gets_xy_block(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
 }
 
 inventory::submit! { AbilityPattern { name: "r107 gets +x/+y", priority: 70, parse: enchanted_gets_xy_block } }
+
+/// "[instructions with "half ..."]. Round up each time." / "Round down each time." (CR
+/// 107.1a: the text says how to round, once for every "half" in the ability).
+fn round_each_time(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (body, up) = if let Some(b) = t.strip_suffix(" Round up each time.") {
+        (b, true)
+    } else if let Some(b) = t.strip_suffix(" Round down each time.") {
+        (b, false)
+    } else {
+        return None;
+    };
+    if !body.to_lowercase().contains("half ") {
+        return None;
+    }
+    let mut abilities = super::value_grammar::with_half_rounding(up, || {
+        crate::oracle::parse_ability(body, ctx)
+    })?;
+    for a in &mut abilities {
+        std::sync::Arc::make_mut(a).text = block.to_string();
+    }
+    Some(abilities)
+}
+
+inventory::submit! { AbilityPattern { name: "r107 round up each time", priority: 70, parse: round_each_time } }
