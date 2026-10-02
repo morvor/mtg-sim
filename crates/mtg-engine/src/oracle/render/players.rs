@@ -281,7 +281,10 @@ impl Renderer<'_> {
                 self.sel(&s, case)
             }
             Sel::Var(v) => match *v {
-                vars::SACRIFICED => decline("the sacrificed creature".into(), case),
+                vars::SACRIFICED => {
+                    let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
+                    decline(format!("the sacrificed {n}"), case)
+                }
                 vars::CREATED => it(case),
                 _ => it(case),
             },

@@ -142,7 +142,12 @@ impl Renderer<'_> {
                     None => String::new(),
                 };
                 let c = self.cost(k.cost.as_ref().unwrap());
-                format!("suspend {n}—{c}")
+                // CR 702.62a: "Suspend X" comes with "X can't be 0".
+                if k.n == Some(-1) {
+                    format!("suspend {n}—{c}. X can't be 0")
+                } else {
+                    format!("suspend {n}—{c}")
+                }
             }
             KeywordKind::Reinforce if k.n == Some(-1) => {
                 let c = self.cost(k.cost.as_ref().unwrap());

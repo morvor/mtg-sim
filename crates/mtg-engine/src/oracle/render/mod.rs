@@ -401,6 +401,8 @@ pub struct Renderer<'a> {
     pub(crate) trigger_names_opponent: bool,
     /// The keyword an activated ability is introduced by ("Boast — ...").
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
+    /// The head noun of what the cost sacrificed ("the sacrificed artifact").
+    pub(crate) sacrificed: Option<String>,
 }
 
 impl<'a> Renderer<'a> {
@@ -418,6 +420,7 @@ impl<'a> Renderer<'a> {
             alt_and: false,
             default_head: None,
             after_clash: false,
+            sacrificed: None,
             var_defs: Vec::new(),
             trigger_player: None,
             revealed_hand: false,
@@ -493,6 +496,7 @@ impl<'a> Renderer<'a> {
         self.trigger_player = None;
         self.revealed_hand = false;
         self.x_for_each = None;
+        self.sacrificed = None;
         self.trigger_names_opponent = false;
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),

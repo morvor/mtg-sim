@@ -256,6 +256,7 @@ impl Renderer<'_> {
             Filter::Colorless => np.colors.push("colorless".into()),
             Filter::Multicolored => np.colors.push("multicolored".into()),
             Filter::Monocolored => np.colors.push("monocolored".into()),
+            Filter::Permanent if np.kind == Some("commander") => {}
             Filter::Permanent => np.kind = Some("permanent"),
             Filter::PermanentCard => {
                 np.permanent_card = true;

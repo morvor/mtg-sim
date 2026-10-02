@@ -2007,7 +2007,11 @@ impl Renderer<'_> {
             ));
             return s;
         }
-        s.push_str(&format!(", put {pron} {dest}"));
+        if to.zone == ZoneKind::Exile {
+            s.push_str(&format!(", exile {pron}"));
+        } else {
+            s.push_str(&format!(", put {pron} {dest}"));
+        }
         if *shuffle {
             s.push_str(", then shuffle");
         }

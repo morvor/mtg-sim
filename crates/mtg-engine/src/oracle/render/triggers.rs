@@ -148,6 +148,19 @@ impl Renderer<'_> {
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
         let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
         match t {
+            // "When ~ enters untapped".
+            TriggerCond::EntersBattlefield(Filter::And(v))
+                if v.len() == 2
+                    && matches!(v[0], Filter::Source)
+                    && matches!(v[1], Filter::Untapped | Filter::Tapped) =>
+            {
+                let how = if matches!(v[1], Filter::Untapped) {
+                    "untapped"
+                } else {
+                    "tapped"
+                };
+                Ev::new(self.me(), format!("enters {how}"))
+            }
             TriggerCond::EntersBattlefield(f) => Ev::new(obj(self, f), "enters"),
             TriggerCond::LeavesBattlefield(f) => Ev::new(obj(self, f), "leaves the battlefield"),
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
@@ -436,7 +449,15 @@ impl Renderer<'_> {
             }
             TriggerCond::LandPlayed { who, filter } => {
                 let w = self.rel_subject(*who);
-                let n = self.noun_det(filter, Det::A);
+                // A land is played (CR 305.1): the filter only narrows which land.
+                let saved = self.default_head;
+                self.default_head = Some("land");
+                let n = if matches!(filter, Filter::Any) {
+                    "a land".to_string()
+                } else {
+                    self.noun_det(filter, Det::A)
+                };
+                self.default_head = saved;
                 Ev::new(w, format!("play {n}"))
             }
             TriggerCond::Cycled { who, filter } => {

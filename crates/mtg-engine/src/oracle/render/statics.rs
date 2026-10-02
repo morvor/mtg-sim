@@ -102,7 +102,16 @@ impl Renderer<'_> {
                 // enchanted": the condition comes first or last, so the object itself is
                 // named by "~" or "it" in either place.
                 self.self_salient = true;
-                let c = self.condition(c);
+                let mut c = self.condition(c);
+                // "As long as ~ is in your graveyard and you control a Forest": an ability
+                // that functions only from the graveyard (CR 113.6).
+                if s.zone == FunctionZone::Graveyard
+                    && matches!(&s.effect, StaticEffect::Continuous { affected, .. }
+                        if !matches!(affected, Filter::Source))
+                    && !c.contains("graveyard")
+                {
+                    c = format!("{} is in your graveyard and {c}", self.me());
+                }
                 let e = self.static_effect(&s.effect);
                 format!("as long as {c}, {}", lower_first(&e))
             }
@@ -290,7 +299,14 @@ impl Renderer<'_> {
                 None => "if ~ is in your opening hand, you may begin the game with it on the battlefield".into(),
                 Some(d) => {
                     let (t, b) = d.as_ref();
-                    let t = self.trigger_text(t);
+                    // CR 103.? leylines and chancellors: the first upkeep of the game.
+                    let t = match t {
+                        TriggerCond::BeginningOf {
+                            step: TriggerStep::Upkeep,
+                            whose: PlayerRel::Any,
+                        } => "at the beginning of the first upkeep".to_string(),
+                        t => self.trigger_text(t),
+                    };
                     let b = self.body(b);
                     format!(
                         "you may reveal ~ from your opening hand. If you do, {t}, {}",
