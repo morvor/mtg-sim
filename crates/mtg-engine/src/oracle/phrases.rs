@@ -1453,6 +1453,25 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         Some(r) => (true, r),
         None => (false, rest),
     };
+    // "target creature card of an opponent's choice from your graveyard": the zone
+    // follows the choice and still describes the target.
+    let (what, rest) = match (chosen_by_opponent, what) {
+        (true, TargetKind::Object(f)) => {
+            match rest.trim_start().strip_prefix("from your graveyard") {
+                Some(r) => (
+                    TargetKind::Object(Filter::and(vec![
+                        f,
+                        Filter::InZone(ZoneKind::Graveyard),
+                        Filter::OwnedBy(PlayerRel::You),
+                    ])),
+                    r,
+                ),
+                None if rest.trim_start().starts_with("from ") => return None,
+                None => (TargetKind::Object(f), rest),
+            }
+        }
+        (_, w) => (w, rest),
+    };
     let spec = TargetSpec {
         what,
         min,

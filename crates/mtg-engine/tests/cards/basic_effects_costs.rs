@@ -91,3 +91,36 @@ fn sauron_ward_demands_a_legendary_artifact_or_creature() {
         assert_eq!(t.in_graveyard(P1, "Isamaru, Hound of Konda"), has_legend);
     }
 }
+
+#[test]
+fn hulks_thunderclap_needs_its_last_target_only_if_it_beheld() {
+    cr!("601.2c", "701.4a");
+    assert_supported("Hulk's Thunderclap");
+    // Not beheld: castable with no noncreature artifact or enchantment to target.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Forest", 2);
+    let clap = t.hand(P0, "Hulk's Thunderclap");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(false));
+    t.cast(P0, clap).target(bears).target(giant).go();
+    t.resolve();
+    assert_eq!(t.g.obj(giant).damage, 2);
+    // Beheld: it also destroys the third target.
+    let mut t = TestGame::new(2);
+    let brawn = t.battlefield(P0, "Brawn, Amadeus Cho");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let stone = t.battlefield(P1, "Mind Stone");
+    t.lands(P0, "Forest", 2);
+    let clap = t.hand(P0, "Hulk's Thunderclap");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_choose(P0, &[Entity::Object(brawn)]);
+    t.cast(P0, clap)
+        .target(bears)
+        .target(giant)
+        .target(stone)
+        .go();
+    t.resolve();
+    assert!(!t.on_battlefield(stone));
+}

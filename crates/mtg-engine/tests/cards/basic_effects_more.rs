@@ -291,3 +291,76 @@ fn dose_of_dawnglow_blights_only_outside_your_main_phase() {
         assert_eq!(t.counters(back[0], "-1/-1"), if main { 0 } else { 2 }, "main: {main}");
     }
 }
+
+#[test]
+fn mausoleum_turnkey_an_opponent_chooses_a_card_from_your_graveyard() {
+    cr!("601.2c", "115.1");
+    assert_supported("Mausoleum Turnkey");
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let wurm = t.graveyard(P1, "Craw Wurm");
+    t.answer_targets(P1, &[Entity::Object(bears)]);
+    t.enter(P0, "Mausoleum Turnkey");
+    t.resolve_all();
+    let cands = last_target_candidates(&t, P1);
+    assert!(cands.contains(&Entity::Object(giant)));
+    assert!(!cands.contains(&Entity::Object(wurm)), "only your graveyard");
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(!t.in_hand(P0, "Hill Giant"));
+}
+
+#[test]
+fn icy_prison_returns_the_exiled_creature_when_it_leaves() {
+    cr!("610.3", "118.12");
+    assert_supported("Icy Prison");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let prison = t.enter(P0, "Icy Prison");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    // Nobody pays {3} at P0's upkeep: it's sacrificed and the Giant returns.
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.on_battlefield(prison));
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}
+
+#[test]
+fn sorin_the_mirthless_takes_the_top_card_and_loses_its_mana_value() {
+    cr!("606.3");
+    assert_supported("Sorin the Mirthless");
+    for take in [true, false] {
+        let mut t = TestGame::new(2);
+        let sorin = t.battlefield(P0, "Sorin the Mirthless");
+        let giant = t.library_top(P0, "Hill Giant");
+        t.answer_yes(P0, take);
+        t.activate(P0, sorin, 0, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.in_hand(P0, "Hill Giant"), take);
+        assert_eq!(t.life(P0), if take { 16 } else { 20 });
+        if !take {
+            assert_eq!(t.g.player(P0).library.last(), Some(&giant));
+        }
+    }
+}
+
+#[test]
+fn nissas_defeat_draws_only_for_a_destroyed_nissa() {
+    cr!("608.2h");
+    assert_supported("Nissa's Defeat");
+    for (name, draws) in [("Nissa, Voice of Zendikar", true), ("Garruk Wildspeaker", false)] {
+        let mut t = TestGame::new(2);
+        let pw = t.battlefield(P1, name);
+        t.lands(P0, "Forest", 3);
+        let defeat = t.hand(P0, "Nissa's Defeat");
+        let hand = t.hand_size(P0);
+        t.cast(P0, defeat).target(pw).go();
+        t.resolve();
+        assert!(!t.on_battlefield(pw));
+        assert_eq!(t.hand_size(P0), hand - 1 + draws as usize, "{name}");
+    }
+}

@@ -603,7 +603,13 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         let e = parse_clause(rest, b)?;
         // CR 601.2c, 702.33g: targets of a part that has its effect only if an optional
         // cost was paid as the spell was cast are chosen only if it was paid.
-        if matches!(cond, Condition::CostPaid(_)) {
+        // "If this spell's additional cost was paid, destroy target ..." too.
+        let paid_check = match &cond {
+            Condition::CostPaid(_) => true,
+            Condition::Custom(n) => n == crate::player_control::ADDITIONAL_COST_PAID,
+            _ => false,
+        };
+        if paid_check {
             for spec in &mut b.targets[first_new_target..] {
                 spec.condition = Some(cond.clone());
             }
