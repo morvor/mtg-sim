@@ -2154,6 +2154,18 @@ fn parse_predicate(
         if r == "all abilities" || r == "all other abilities" {
             return Some(vec![Out::Mod(Modification::RemoveAllAbilities)]);
         }
+        // "loses all land types and abilities" (Lithoform Blight): its land subtypes
+        // (layer 4) and its abilities (layer 6).
+        if subj.lands && (r == "all land types and abilities" || r == "all land types") {
+            let mut out = vec![Out::Mod(Modification::Custom {
+                name: crate::kw::grant_filters::LOSE_ALL_LAND_TYPES.into(),
+                layer: Layer::L4Type,
+            })];
+            if r.ends_with("abilities") {
+                out.push(Out::Mod(Modification::RemoveAllAbilities));
+            }
+            return Some(out);
+        }
         let mut out = Vec::new();
         for item in split_list(r) {
             out.push(Out::Mod(Modification::RemoveKeyword(

@@ -21,11 +21,31 @@ pub const ATTACKING_ENCHANTED_PLAYER: &str = "attacking_player:enchanted";
 /// "that dealt damage this turn": the object was the source of damage this turn (CR 120).
 pub const DEALT_DAMAGE_THIS_TURN: &str = "dealt_damage_this_turn";
 
+/// `Modification::Custom` (layer 4): "loses all land types" (CR 205.3i, 305.7): the
+/// object's land subtypes are removed.
+pub const LOSE_ALL_LAND_TYPES: &str = "lose_all_land_types";
+
 pub struct GrantFilters;
 
 impl KeywordRules for GrantFilters {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_modification(
+        &self,
+        _g: &Game,
+        name: &str,
+        chars: &mut crate::object::Characteristics,
+        _ctx: &Ctx,
+        _target: ObjectId,
+    ) -> bool {
+        if name != LOSE_ALL_LAND_TYPES {
+            return false;
+        }
+        let land = &crate::types::subtype_lists().land;
+        chars.subtypes.retain(|s| !land.contains(s.as_str()));
+        true
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

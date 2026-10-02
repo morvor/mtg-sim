@@ -160,9 +160,31 @@ fn object_history(c: &str) -> Option<Condition> {
     ))
 }
 
+/// "the top card of your library is a land card", "... is black" (Mul Daya Channelers,
+/// Vampire Nocturnus): checked against the card there now; false with an empty library.
+fn top_of_library(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("the top card of your library is ")?;
+    let f = match crate::types::Color::from_word(r) {
+        Some(col) => Filter::Color(col),
+        None => {
+            let d = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+            let (f, plural, rest) = parse_object_phrase(d)?;
+            if plural || !rest.trim().is_empty() || !d.ends_with(" card") {
+                return None;
+            }
+            f
+        }
+    };
+    Some(Condition::SelMatches(
+        Sel::TopOfLibrary(PlayerRef::You, Value::c(1)),
+        f,
+    ))
+}
+
 fn grant_condition(c: &str) -> Option<Condition> {
     let c = end(c);
-    cast_this_turn(c)
+    top_of_library(c)
+        .or_else(|| cast_this_turn(c))
         .or_else(|| history(c))
         .or_else(|| owns_in_exile(c))
         .or_else(|| object_history(c))
@@ -187,6 +209,8 @@ mod tests {
             "an opponent owns a card in exile",
             "it was cast",
             "two or more creatures are blocking it",
+            "the top card of your library is a land card",
+            "the top card of your library is black",
         ] {
             assert!(grant_condition(c).is_some(), "{c}");
         }

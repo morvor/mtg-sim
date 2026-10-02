@@ -832,10 +832,11 @@ fn while_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
     if !rest.trim().is_empty() || !matches!(sel, Sel::Target(_) | Sel::Var(_)) {
         return None;
     }
-    // A one-shot effect giving an object an ability: "it has" is "it gains".
+    // A one-shot effect giving an object an ability: "it has" is "it gains" ("it loses
+    // all land types and abilities and has \"{T}: Add {C}.\"").
     let clause = match clause.strip_prefix("it has ") {
         Some(x) => format!("it gains {x}"),
-        None => clause.to_string(),
+        None => clause.replace(" and has \"", " and gains \""),
     };
     let Effect::Modify {
         what,
@@ -980,3 +981,54 @@ fn leading_duration_clauses(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "grants: leading duration over several clauses", priority: 95, parse: leading_duration_clauses } }
+
+/// "Lands your opponents control with the chosen name lose all land types and abilities,
+/// and they gain \"{T}: Add one mana of any color.\"" (Alpine Moon): in a static ability,
+/// "they gain" is "have" (the objects have the ability while the effect applies).
+fn static_they_gain(_l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = text.trim();
+    let (head, tail) = t.split_once(", and they gain \"")?;
+    if head.contains('"') {
+        return None;
+    }
+    crate::oracle::statics::parse_static(&format!("{head} and have \"{tail}"), ctx)
+}
+
+inventory::submit! { StaticPattern { name: "grants: static ..., and they gain", priority: 220, parse: static_they_gain } }
+
+/// "Basic lands each player controls have shroud as long as that player controls three or
+/// fewer lands." (Sheltering Prayers): the condition is about each affected object's
+/// controller, so it narrows the group (CR 611.3a).
+fn each_player_controls_as_long_as(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = crate::oracle::phrases::end(l);
+    let (subject, rest) = l.split_once(" each player controls have ")?;
+    let (kw, cond) = rest.split_once(" as long as that player controls ")?;
+    let (n, tail) = crate::oracle::phrases::parse_number(cond)?;
+    let (cmp, noun) = if let Some(x) = crate::oracle::phrases::strip(tail, "or fewer") {
+        (Cmp::Le, x)
+    } else if let Some(x) = crate::oracle::phrases::strip(tail, "or more") {
+        (Cmp::Ge, x)
+    } else {
+        return None;
+    };
+    let (counted, _, r) = crate::oracle::phrases::parse_object_phrase(noun.trim())?;
+    let (f, _, r2) = super::statics::object_phrase(subject)?;
+    if !r.trim().is_empty() || !r2.trim().is_empty() {
+        return None;
+    }
+    let mods = crate::oracle::effects::keyword_mods(kw)?;
+    let affected = Filter::and(vec![
+        f,
+        Filter::ControllerMatches(Box::new(PlayerFilter::Controls(
+            Box::new(counted),
+            cmp,
+            Box::new(n),
+        ))),
+    ]);
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous { affected, mods })),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "grants: [objects] each player controls have ... as long as that player controls ...", priority: 220, parse: each_player_controls_as_long_as } }
