@@ -18,7 +18,7 @@
 //! player removing them chooses ([`crate::counter_rules::remove_chosen_counters`]); "up to
 //! N" and "any number of" let that player choose how many (`Effect::RemoveCountersUpTo`).
 
-use super::{EffectPattern, FollowupPattern};
+use super::{EffectPattern, FollowupPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::costs::counter_kind;
 use crate::oracle::effects::{object_ref, Builder};
@@ -778,3 +778,98 @@ fn while_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counter grammar: [effect] for as long as it has a [kind] counter on it", priority: 50, parse: while_it_has_counter } }
+
+/// "As long as there is exactly one tide counter on ~, it gets -1/-1." (Homarid), "As
+/// long as ~ has seven or more loyalty counters on him, he's ...": after a condition on
+/// the counters on ~, the pronoun is ~.
+fn as_long_as_counters_it(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as long as ")?;
+    let (c, rest) = r.split_once(", ")?;
+    if !c.contains(" counter") || !(c.ends_with(" on ~") || c.starts_with("~ has ")) {
+        return None;
+    }
+    let rest = ["it ", "he ", "she "]
+        .iter()
+        .find_map(|p| rest.strip_prefix(p))?;
+    crate::oracle::statics::parse_static(&format!("as long as {c}, ~ {rest}."), ctx).map(|v| {
+        v.into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), text))
+            .collect()
+    })
+}
+
+inventory::submit! { StaticPattern { name: "counter grammar: as long as [counters on ~], it ...", priority: 50, parse: as_long_as_counters_it } }
+
+/// "When there are four or more depletion counters on ~", "Whenever there are four or
+/// more tide counters on ~", "When ~ has three or more plague counters on it": a state
+/// trigger (CR 603.8) on the counters on the source.
+fn counters_state_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r);
+    let (c, on) = if let Some(c) = r
+        .strip_prefix("there are ")
+        .or_else(|| r.strip_prefix("there is "))
+    {
+        (c, "~")
+    } else {
+        (r.strip_prefix("~ has ")?, "it")
+    };
+    let (cmp, n, c) = super::counters_resources_counters::amount_cmp(c)?;
+    let (kind, c) = super::counters_resources_counters::kind_then_on(c)?;
+    if end(c) != on {
+        return None;
+    }
+    Some((
+        TriggerCond::State(Condition::Compare(
+            Value::CountersOn(Box::new(Sel::This), kind),
+            cmp,
+            n,
+        )),
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "counter grammar: when there are N counters on ~ (state trigger)", priority: 50, parse: counters_state_trigger } }
+
+/// "Put a charge counter on ~ or remove one from it.", "Put a plague counter on ~ or
+/// remove a plague counter from it.", "Put a lore counter on target Saga you control or
+/// remove one from it.": the controller chooses which as the ability resolves.
+fn put_or_remove(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("put ")?;
+    let (put_s, remove_s) = r.split_once(" or remove ")?;
+    let put = put_one(&format!("put {put_s}"), b)?;
+    let Effect::AddCounters { what, kind, n } = &put else {
+        return None;
+    };
+    let removed = remove_s
+        .strip_suffix(" from it")
+        .or_else(|| remove_s.strip_suffix(" from them"))?;
+    let (rn, rkind) = if removed == "one" {
+        (n.clone(), kind.clone())
+    } else {
+        let (q, rest) = quantity(removed, b)?;
+        let (k, rest) = counter_noun(&rest)?;
+        let Qty::Exact(rn) = q else {
+            return None;
+        };
+        if !rest.trim().is_empty() || k.as_ref() != Some(kind) {
+            return None;
+        }
+        (rn, kind.clone())
+    };
+    let remove = Effect::RemoveCounters {
+        what: what.clone(),
+        kind: Some(rkind.clone()),
+        n: rn,
+    };
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            (format!("put a {kind} counter"), put.clone()),
+            (format!("remove a {rkind} counter"), remove),
+        ],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: put a counter on [holder] or remove one from it", priority: 50, parse: put_or_remove } }
