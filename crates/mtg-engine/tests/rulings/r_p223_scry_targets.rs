@@ -421,3 +421,37 @@ fn attack_until_trigger(t: &mut TestGame, attacker: ObjectId) {
         .run_until(1_000, |g| g.turn.step == Step::DeclareAttackers && !g.stack.is_empty());
     assert!(ok);
 }
+
+#[test]
+fn riddle_of_lightning_with_an_illegal_target_doesnt_scry_or_reveal() {
+    cr!("608.2b", "701.22a", "115.4");
+    ruling!("Riddle of Lightning", "If the chosen target is an illegal target by the time Riddle of Lightning tries to resolve, the spell doesn't resolve. You don't scry 3 or reveal any card.");
+    supported("Riddle of Lightning");
+    // "Choose any target. Scry 3, then reveal the top card of your library. Riddle of
+    // Lightning deals damage equal to that card's mana value to that permanent or
+    // player." With a legal target (a player): scry 3, reveal, damage.
+    let mut t = TestGame::new(2);
+    for _ in 0..4 {
+        t.library_top(P0, "Hill Giant");
+    }
+    let riddle = in_hand_with_mana(&mut t, P0, "Riddle of Lightning");
+    let from = t.asked().len();
+    t.cast(P0, riddle).target(P1).go();
+    t.resolve_all();
+    assert_eq!(scry_sizes(&t, P0, from), vec![3]);
+    assert_eq!(rev(&t), 1);
+    assert_eq!(t.life(P1), 16);
+    // With the target gone: nothing.
+    let mut t = TestGame::new(2);
+    for _ in 0..4 {
+        t.library_top(P0, "Hill Giant");
+    }
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let riddle = in_hand_with_mana(&mut t, P0, "Riddle of Lightning");
+    let from = t.asked().len();
+    t.cast(P0, riddle).target(bears).go();
+    destroy(&mut t, bears);
+    t.resolve_all();
+    assert!(scries_since(&t, from).is_empty());
+    assert_eq!(rev(&t), 0);
+}
