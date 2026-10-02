@@ -387,7 +387,7 @@ fn bolass_citadel_a_land_from_the_top_needs_an_available_land_play() {
     t.play_land(P0, island).unwrap();
     t.settle();
     assert!(!can_play_land(&mut t, P0, top));
-    // On a later turn, with a land play available, it can be played.
+    // With the land play available, it can be played.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Bolas's Citadel");
     let top = t.library_top(P0, "Forest");

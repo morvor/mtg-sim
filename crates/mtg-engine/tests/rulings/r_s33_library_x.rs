@@ -59,8 +59,8 @@ fn ranger_captain_of_eos_can_find_a_creature_with_x_in_its_cost() {
     supported("Ranger-Captain of Eos");
     // "When this creature enters, you may search your library for a creature card with
     // mana value 1 or less, reveal it, put it into your hand, then shuffle."
-    // Walking Ballista ({X}{X}) has mana value 0 in the library; Hangarback Walker too;
-    // Grizzly Bears (mana value 2) doesn't qualify.
+    // Walking Ballista ({X}{X}) has mana value 0 in the library; Grizzly Bears (mana
+    // value 2) doesn't qualify.
     let mut t = TestGame::new(2);
     let ballista = t.library_top(P0, "Walking Ballista");
     t.library_top(P0, "Grizzly Bears");
