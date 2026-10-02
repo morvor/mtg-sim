@@ -2906,6 +2906,12 @@ fn parse_player_body(s: &str) -> Option<Body> {
             PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
         ),
         ("you ", PlayerFilter::You),
+        // "As long as ~ is attacking, defending player can't cast spells." (Wardscale
+        // Dragon): the player ~ is attacking (CR 506.2, 802.2a).
+        (
+            "defending player ",
+            PlayerFilter::Ref(Box::new(PlayerRef::DefendingPlayer)),
+        ),
         ("your opponents ", PlayerFilter::Opponent),
         ("each opponent ", PlayerFilter::Opponent),
         ("players ", PlayerFilter::Any),
