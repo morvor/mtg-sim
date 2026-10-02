@@ -390,7 +390,11 @@ fn attached_selection(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         let mut spec = TargetSpec::object(f, text.clone());
         spec.min = Value::c(min);
         spec.max = Value::c(max);
+        // "Exile up to one target Equipment attached to that creature. If that creature
+        // would die this turn, ...": "that creature" is still the creature.
+        let it = b.it.clone();
         let slot = b.add_target(spec, &text);
+        b.it = it;
         return Some((Sel::Target(slot), rest));
     }
     if min == 0 {

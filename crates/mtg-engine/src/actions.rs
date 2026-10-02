@@ -2032,6 +2032,7 @@ impl Game {
     pub fn unattach(&mut self, obj: ObjectId) {
         if let Some(prev) = self.obj(obj).attached_to {
             self.objects[obj.0 as usize].attached_to = None;
+            self.objects[obj.0 as usize].last_attached_to = Some(prev);
             self.dirty = true;
             self.emit(Event::Unattached { obj, from: prev });
         }
