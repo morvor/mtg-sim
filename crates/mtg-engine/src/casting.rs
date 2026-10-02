@@ -1816,7 +1816,21 @@ impl Game {
             }
         }
         if let Some(c) = &act.condition {
-            if !self.eval_cond(c, &Ctx::new(Some(src), p)) {
+            // A condition on X ("X can't be 0", CR 107.3a) holds if it does for some value
+            // that could be announced (CR 602.2b).
+            let ctx = Ctx::new(Some(src), p);
+            let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                || act.cost.parts.iter().any(cost_part_has_x);
+            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let for_some_x = || {
+                (1..=max_x as i32).any(|x| {
+                    let mut ctx = ctx.clone();
+                    ctx.x = x;
+                    ctx.x_defined = true;
+                    self.eval_cond(c, &ctx)
+                })
+            };
+            if !self.eval_cond(c, &ctx) && !(has_x && for_some_x()) {
                 return false;
             }
         }
@@ -2033,6 +2047,21 @@ impl Game {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
             };
+            // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
+            // can't be 0"); otherwise the least value that does is announced.
+            if let Some(c) = &act.condition {
+                let holds = |x: i64| {
+                    let mut ctx = ctx.clone();
+                    ctx.x = x as i32;
+                    ctx.x_defined = true;
+                    self.eval_cond(c, &ctx)
+                };
+                if !holds(x) {
+                    x = (0..=max)
+                        .find(|x| holds(*x))
+                        .ok_or_else(|| Illegal("no legal value of X".into()))?;
+                }
+            }
         }
         ctx.x = x as i32;
         if act.is_mana_ability {
