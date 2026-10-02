@@ -23,7 +23,9 @@ use crate::types::*;
 use smol_str::SmolStr;
 
 /// The subjects an exception clause can start with ("it", "the token", "they").
-const SUBJECTS: [&str; 12] = [
+const SUBJECTS: [&str; 14] = [
+    "she has ",
+    "he has ",
     "it's ",
     "it isn't ",
     "it is ",
@@ -47,6 +49,22 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         }
     }
     s.split('|').map(|x| x.trim().to_string()).collect()
+}
+
+/// "black", "red and white": a color list replacing the copied colors (CR 105.3).
+fn only_colors(s: &str) -> Option<ColorSet> {
+    let mut colors = ColorSet::NONE;
+    for w in s.split_whitespace().filter(|w| *w != "and") {
+        colors.insert(Color::from_word(w.trim_end_matches(','))?);
+    }
+    (!colors.is_colorless()).then_some(colors)
+}
+
+/// "an artifact": a single card type replacing the copied ones (CR 205.1a). Not "an
+/// artifact creature", which keeps the prior card types and subtypes (CR 205.1b).
+fn only_card_types(s: &str) -> Option<Vec<CardType>> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    Some(vec![CardType::from_word(s)?])
 }
 
 /// "4/4" → (4, 4).
@@ -90,6 +108,7 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     let mut card_types = Vec::new();
     let mut subtypes = Vec::new();
+    let mut supertypes = Vec::new();
     for (i, w) in s.split_whitespace().enumerate() {
         if i == 0 {
             if let Some((p, t)) = pt(w) {
@@ -97,15 +116,21 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
                 continue;
             }
         }
-        if let Some(t) = CardType::from_word(w) {
+        if let Some(st) = Supertype::from_word(w) {
+            // "it's legendary in addition to its other types" (Sarkhan, Soul Aflame).
+            supertypes.push(st);
+        } else if let Some(t) = CardType::from_word(w) {
             card_types.push(t);
         } else {
             let sub = subtype_word(w)?;
             subtypes.push(sub);
         }
     }
-    if card_types.is_empty() && subtypes.is_empty() {
+    if card_types.is_empty() && subtypes.is_empty() && supertypes.is_empty() {
         return None;
+    }
+    if !supertypes.is_empty() {
+        out.push(Modification::AddSupertypes(supertypes));
     }
     if !card_types.is_empty() {
         out.push(Modification::AddTypes(card_types));
@@ -190,7 +215,15 @@ pub(crate) fn copy_exceptions(
                 | "the tokens are not legendary"
         ) {
             out.push(Modification::RemoveSupertypes(vec![Supertype::Legendary]));
-        } else if let Some(r) = ["it has ", "they have ", "the token has ", "the tokens have ", "each of them has "]
+        } else if let Some(r) = [
+            "it has ",
+            "she has ",
+            "he has ",
+            "they have ",
+            "the token has ",
+            "the tokens have ",
+            "each of them has ",
+        ]
             .iter()
             .find_map(|p| c.strip_prefix(p))
         {
@@ -224,6 +257,8 @@ pub(crate) fn copy_exceptions(
             if let Some(types) = r
                 .strip_suffix(" in addition to its other types")
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
+                .or_else(|| r.strip_suffix(" in addition to its other creature types"))
+                .or_else(|| r.strip_suffix(" in addition to their other creature types"))
             {
                 out.extend(added_types(types)?);
             } else if let Some(x) = r
@@ -233,9 +268,19 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(types) = only_card_types(r) {
+                // "except it's an artifact" (Machine God's Effigy): its only card types
+                // are these (CR 205.1a).
+                out.push(Modification::SetTypes { types, subtypes: vec![] });
+            } else if let Some(colors) = only_colors(r) {
+                // "except the token is black" (Penumbra Umbra).
+                out.push(Modification::SetColors(colors));
             } else {
                 out.extend(replaced_characteristics(r)?);
             }
+        } else if matches!(c, "its name is ~" | "her name is ~" | "his name is ~") {
+            // The copy keeps this object's own name (Sunfrill Imitator, CR 707.9b).
+            out.push(Modification::SetName(SmolStr::new(ctx.card_name)));
         } else if let Some(n) = c.strip_prefix("its name is ") {
             if n.is_empty() || n.contains('~') || n.contains('"') || n.split(' ').count() > 4 {
                 return None;
