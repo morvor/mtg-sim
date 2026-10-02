@@ -186,13 +186,16 @@ impl Game {
                 ReplEvent::Move(m) if m.to != Zone::Battlefield => Some(m.obj),
                 _ => None,
             })
-            .filter(|o| {
-                let o = self.obj(*o);
+            .filter(|id| {
+                let o = self.obj(*id);
                 o.zone == Zone::Battlefield
                     && o.attached_to.is_some_and(|a| match a {
                         Entity::Player(_) => true,
+                        // A permanent, or a card in the zone the Aura's enchant ability
+                        // names (Spellweaver Volute).
                         Entity::Object(x) => {
-                            self.is_live(x) && self.obj(x).zone == Zone::Battlefield
+                            self.is_live(x)
+                                && crate::attach::can_be_attached_where_it_is(self, *id, x)
                         }
                     })
             })
@@ -782,6 +785,19 @@ impl Game {
                     .entry(link)
                     .or_default()
                     .push(new_id);
+            }
+        }
+        // Counters it's given as it moves to another zone ("exile it with three time
+        // counters on it", see `destinations.rs`); a permanent's are put on it as it
+        // enters, above.
+        if m.to != Zone::Battlefield && !m.etb.counters.is_empty() {
+            let how = crate::event_causes::CounterPut {
+                source: m.source,
+                by: m.by,
+                origin: crate::events::CounterOrigin::Effect,
+            };
+            for (k, n) in m.etb.counters.clone() {
+                self.put_counters(Entity::Object(new_id), &k, n, how);
             }
         }
         if m.to == Zone::Battlefield && self.obj(new_id).zone == Zone::Battlefield {

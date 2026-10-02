@@ -840,13 +840,19 @@ fn is_state(sel: &Sel, s: &str, neg: bool, b: &mut Builder) -> Option<Condition>
         if !matches!(sel, Sel::This) {
             return None;
         }
+        // "exactly one Aura" (Timber Paladin) is "one Aura".
+        let r = r.strip_prefix("exactly ").unwrap_or(r);
         let (cmp, n, rest) = amount_cmp(r)?;
         let (f, _, tail) = parse_object_phrase(rest.trim())?;
         if !end(tail).is_empty() {
             return None;
         }
+        // The Auras attached to it (not the object it's attached to).
         Condition::Compare(
-            Value::Count(Filter::and(vec![f, Filter::AttachedToSource])),
+            Value::Count(Filter::and(vec![
+                f,
+                Filter::AttachedToAnyOf(Box::new(sel.clone())),
+            ])),
             cmp,
             n,
         )

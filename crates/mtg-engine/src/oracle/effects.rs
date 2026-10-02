@@ -192,6 +192,11 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
+    // cast, even after "it" has come to mean something else.
+    if matches!(it, Sel::TriggerSpell) {
+        b.named.push(("that spell".into(), Sel::TriggerSpell));
+    }
     b.it = it;
     b.it_player = it_player;
     let effect = parse_effect_text(t, &mut b)?;
@@ -335,7 +340,20 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        if *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ') {
+        // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
+        // creature put onto the battlefield with ~.\" Put target creature card ..."): the
+        // next sentence starts with a capital letter.
+        let quote_ends_sentence = *ch == '"'
+            && !in_quote
+            && i > 0
+            && chars[i - 1] == '.'
+            && chars.get(i + 1) == Some(&' ')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_uppercase() || *c == '~');
+        if quote_ends_sentence
+            || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
+        {
             let s = cur.trim().to_string();
             if !s.is_empty() {
                 out.push(s);
@@ -632,8 +650,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 7] = [
+    let pairs: [(&str, Sel); 11] = [
         ("~", Sel::This),
+        // An Aura enchanting a card in a graveyard ("Enchant creature card in a
+        // graveyard", CR 303.4a): that card.
+        ("enchanted creature card", Sel::AttachedTo),
+        ("enchanted instant card", Sel::AttachedTo),
+        ("enchanted card", Sel::AttachedTo),
+        ("the enchanted card", Sel::AttachedTo),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
         // Auras with "enchant permanent/land/artifact/...": the object it's attached to
@@ -901,6 +925,10 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
         }
+    }
+    // "for as long as it has a flood counter on it" (CR 611.2b).
+    if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
+        return (d, r);
     }
     (Duration::Permanent, t)
 }

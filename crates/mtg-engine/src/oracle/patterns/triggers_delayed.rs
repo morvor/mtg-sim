@@ -183,20 +183,48 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let (trigger, it, it_player) =
         crate::oracle::triggers::parse_trigger_condition(&format!("whenever {cond_s}"))?;
+    // "Choose target creature an opponent controls. Whenever you attack this turn, ~ deals
+    // damage ... to that creature": when the trigger condition names no creature, "that
+    // creature" is the creature chosen earlier, captured as the delayed trigger is created
+    // (CR 603.7c).
+    let chosen = b
+        .chosen_creature
+        .as_ref()
+        .map(|(slot, _)| *slot)
+        .filter(|_| eff.contains("that creature") && !cond_s.contains("creature"));
+    let chosen_var = chosen.map(|slot| (slot, CAPTURE_BASE + 10 + slot as Var));
+    let it = match chosen_var {
+        Some((_, var)) => Sel::Var(var),
+        None => it,
+    };
     if matches!(it, Sel::None) && has_object_pronoun(eff) {
         return None;
     }
-    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let mut body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let mut stores = Vec::new();
+    if let Some((slot, var)) = chosen_var {
+        if body.modal.is_some() || !body.targets.is_empty() {
+            return None;
+        }
+        let (s, effect) = capture(&body.effect)?;
+        stores.push(Effect::Store {
+            var,
+            sel: Sel::Target(slot),
+        });
+        stores.extend(s);
+        body.effect = effect;
+    }
     let trigger = if until_next_turn {
         TriggerCond::UntilYourNextTurn(Box::new(trigger))
     } else {
         TriggerCond::ThisTurn(Box::new(trigger))
     };
-    Some(Effect::DelayedTrigger {
+    stores.push(Effect::DelayedTrigger {
         trigger,
         body: Box::new(body),
         once: false,
-    })
+    });
+    Some(Effect::seq(stores))
 }
 
 /// Splits at the first comma outside quotes.

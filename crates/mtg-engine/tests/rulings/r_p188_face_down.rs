@@ -240,6 +240,13 @@ fn illithid_harvester_makes_2_2_horrors_until_turned_face_up() {
     assert!(!t.obj_now(angel).chars.has_subtype("Horror"));
     assert_eq!(t.pt(angel), (4, 5));
     assert!(t.obj_now(giant).chars.has_subtype("Horror"));
+    // Turned face down again by an effect that lists nothing: a plain 2/2, not a Horror.
+    let a = t.g.current(angel);
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, a));
+    t.g.recompute();
+    assert!(nameless_colorless_2_2(&t, angel));
+    assert!(!t.obj_now(angel).chars.has_subtype("Horror"));
+    assert!(t.obj_now(giant).chars.has_subtype("Horror"));
 }
 
 #[test]

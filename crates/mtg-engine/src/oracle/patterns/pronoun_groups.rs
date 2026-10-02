@@ -66,6 +66,7 @@ pub fn affected_group(e: &Effect) -> Option<&Sel> {
         | Effect::GainControl { what, .. }
         | Effect::AddCounters { what, .. }
         | Effect::RemoveCounters { what, .. }
+        | Effect::RemoveCountersUpTo { what, .. }
         | Effect::RemoveFromCombat { what }
         | Effect::KeywordAction {
             action: KeywordAction::Goad,
