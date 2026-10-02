@@ -3527,6 +3527,7 @@ Consulate Dreadnought
 Consulate Skygate
 Consulate Turret
 Consult the Necrosages
+Consume Spirit
 Consume Strength
 Consume the Meek
 Consumed by Greed
@@ -4964,6 +4965,7 @@ Dragonstorm
 Dragonstorm Globe
 Dragonwing Glider
 Dragoon's Wyvern
+Drain Life
 Drain the Well
 Draining Whelk
 Drainpipe Vermin
@@ -5572,6 +5574,7 @@ Embersmith
 Emberstrike Duo
 Emberwilde Augur
 Emberwilde Caliph
+Emblazoned Golem
 Emblem of the Warmind
 Embodiment of Agonies
 Embodiment of Fury
@@ -7383,6 +7386,7 @@ Gigantosaurus
 Gigastorm Titan
 Gila Courser
 Gilacorn
+Gilanra, Caller of Wirewood
 Gild
 Gilded Assault Cart
 Gilded Cerodon
@@ -8721,6 +8725,7 @@ Hobbling Zombie
 Hobgoblin Dragoon
 Hobgoblin, Mantled Marauder
 Hog-Monkey
+Hogaak, Arisen Necropolis
 Hokori, Dust Drinker
 Hold at Bay
 Hold for Questioning
@@ -9762,6 +9767,7 @@ Jwari Disruption // Jwari Ruins
 Jwari Scuttler
 Jwari Shapeshifter
 Jyoti, Moag Ancient
+K'rrik, Son of Yawgmoth
 K-9, Mark I
 Kabira Crossroads
 Kabira Evangel
@@ -10365,6 +10371,7 @@ Lantern Scout
 Lantern Spirit
 Lantern-Lit Graveyard
 Lapis Lazuli Talisman
+Lapis Orb of Dragonkind
 Lapse of Certainty
 Laquatus's Champion
 Laquatus's Disdain
@@ -15629,6 +15636,7 @@ Scalebane's Elite
 Scaled Behemoth
 Scaled Herbalist
 Scaled Hulk
+Scaled Nurturer
 Scaled Wurm
 Scalelord Reckoner
 Scales of Shale
@@ -17091,6 +17099,7 @@ Sorin, Vampire Lord
 Sosuke's Summons
 Soul Barrier
 Soul Bleed
+Soul Burn
 Soul Channeling
 Soul Charmer
 Soul Collector
@@ -18095,6 +18104,7 @@ Sunhome Stalwart
 Sunhome, Fortress of the Legion
 Sunken Field
 Sunken Hollow
+Sunken Palace
 Sunlance
 Sunlit Hoplite
 Sunlit Marsh
@@ -18894,6 +18904,7 @@ Thieves' Guild Enforcer
 Thieves' Tools
 Thieving Magpie
 Thieving Otter
+Thieving Skydiver
 Thing Swing
 Thing in the Ice // Awoken Horror
 Think Tank

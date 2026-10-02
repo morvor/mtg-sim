@@ -48,6 +48,8 @@ pub(crate) fn parse_restriction(s: &str) -> Option<ManaRestriction> {
         | "this mana can't be spent to cast nonartifact spells" => {
             Some(ManaRestriction::NotNonartifactSpell)
         }
+        // Jegantha, the Wellspring (see `ManaRestriction::NotGeneric`).
+        "this mana can't be spent to pay generic mana costs" => Some(ManaRestriction::NotGeneric),
         _ => None,
     }
 }
@@ -484,31 +486,63 @@ inventory::submit! { StaticPattern { name: "r106 produce mana replacement", prio
 
 /// "{T}: Add {R}. When that mana is spent to cast a red instant or sorcery spell, copy
 /// that spell and you may choose new targets for the copy." (CR 106.6): the mana carries
-/// a delayed triggered ability.
+/// a delayed triggered ability. Also "When you spend this mana to cast a Dragon creature
+/// spell, ..." (the mana goes to the ability's controller, who is "you"), and "When you
+/// spend this mana to cast a spell or activate an ability, copy that spell or ability. You
+/// may choose new targets for the copy." (Sunken Palace): it also triggers when the mana
+/// pays an activation cost.
 fn mana_spent_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = block.to_lowercase();
-    let marker = ". when that mana is spent to cast ";
-    let idx = lower.find(marker)?;
+    let (idx, marker) = [
+        ". when that mana is spent to cast ",
+        ". when you spend this mana to cast ",
+    ]
+    .into_iter()
+    .find_map(|m| lower.find(m).map(|i| (i, m)))?;
     let head = &block[..idx + 1];
     let tail = &lower[idx + marker.len()..];
     let (spell_s, eff_s) = tail.split_once(", ")?;
+    // "a spell or activate an ability" (only in the "you spend this mana" wording).
+    let (spell_s, on_abilities) = match spell_s.strip_suffix(" or activate an ability") {
+        Some(s) if marker.contains("you spend") => (s, true),
+        Some(_) => return None,
+        None => (spell_s, false),
+    };
     let spell_s = spell_s
         .strip_prefix("a ")
         .or_else(|| spell_s.strip_prefix("an "))
         .unwrap_or(spell_s);
-    let (f, _, rest) = parse_object_phrase(spell_s)?;
-    if !end(rest).is_empty() {
-        return None;
-    }
+    let f = if spell_s == "spell" {
+        Filter::Any
+    } else if let Some((f, _, rest)) =
+        parse_object_phrase(spell_s).filter(|(_, _, rest)| end(rest).is_empty())
+    {
+        let _ = rest;
+        f
+    } else {
+        // "a Dragon creature spell": a second narrowing noun.
+        crate::oracle::patterns::mana_restrictions::spell_alternatives(spell_s)?
+    };
     let spell_filter = Filter::and(vec![f, Filter::Spell]);
     let body = match end(eff_s) {
-        "copy that spell and you may choose new targets for the copy" => {
+        "copy that spell and you may choose new targets for the copy" if !on_abilities => {
             Body::effect(Effect::CopySpell {
                 what: Sel::TriggerSpell,
                 count: Value::c(1),
                 new_targets: true,
             })
         }
+        // "copy that spell or ability. You may choose new targets for the copy." (A mana
+        // ability can't be copied: it never is the ability the mana is spent on here,
+        // CR 605.3b, 707.10.)
+        "copy that spell or ability. you may choose new targets for the copy" if on_abilities => {
+            Body::effect(Effect::CopySpell {
+                what: Sel::TriggerSpell,
+                count: Value::c(1),
+                new_targets: true,
+            })
+        }
+        _ if on_abilities => return None,
         other => crate::oracle::effects::parse_trigger_body(
             other,
             ctx,
@@ -530,6 +564,7 @@ fn mana_spent_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
             add: Box::new(act.body.effect.clone()),
             spell_filter: spell_filter.clone(),
             body: Box::new(body.clone()),
+            abilities: on_abilities,
         };
         act.is_mana_ability = act.body.targets.is_empty();
         out.push(AbilityDef::new(AbilityKind::Activated(act), block));

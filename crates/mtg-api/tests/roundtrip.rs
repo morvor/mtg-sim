@@ -64,6 +64,7 @@ fn samples(t: &mut TestGame) -> Vec<(Decision, JsonAnswer, Answer)> {
         (
             Decision::ChooseX {
                 source: bolt,
+                min: 0,
                 max: 5,
             },
             JsonAnswer::number(3),

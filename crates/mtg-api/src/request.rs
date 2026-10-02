@@ -609,10 +609,10 @@ pub fn prepare(
                     (views, avail.into_iter().map(Payload::Index).collect()),
                 )
             }
-            Decision::ChooseX { max, .. } => (
-                format!("Choose the value of X (0 to {max})."),
+            Decision::ChooseX { min, max, .. } => (
+                format!("Choose the value of X ({min} to {max})."),
                 AnswerSpec::Number {
-                    min: 0,
+                    min: *min,
                     max: Some(*max),
                 },
                 (vec![], vec![]),

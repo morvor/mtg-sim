@@ -41,7 +41,7 @@ struct CheapestAgent;
 impl Agent for CheapestAgent {
     fn decide(&mut self, _g: &Game, _p: PlayerId, d: &Decision) -> Answer {
         match d {
-            Decision::ChooseX { .. } => Answer::Number(0),
+            Decision::ChooseX { min, .. } => Answer::Number((*min).max(0)),
             Decision::OptionalCost { repeatable, .. } => {
                 if *repeatable {
                     Answer::Number(0)
