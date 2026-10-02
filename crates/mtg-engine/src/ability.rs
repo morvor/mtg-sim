@@ -602,6 +602,33 @@ pub struct TargetSpec {
     /// only if a kicker cost was paid (CR 601.2c).
     #[serde(default)]
     pub condition: Option<Condition>,
+    /// A requirement on the targets chosen for this instance of the word "target" taken
+    /// together ("two target cards from a single graveyard", "two target creatures that
+    /// share a creature type"); see `target_groups.rs`.
+    #[serde(default)]
+    pub together: Option<TargetGroup>,
+}
+
+/// A relationship the targets of one instance of the word "target" must have with each
+/// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
+/// (CR 608.2b).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetGroup {
+    /// All have the same owner: cards "from a single graveyard", or "two target cards
+    /// from an opponent's graveyard" (one opponent's graveyard).
+    SameOwner,
+    /// All are controlled by the same player ("two target creatures a single player
+    /// controls").
+    SameController,
+    /// There's a creature type all of them have.
+    ShareCreatureType,
+    /// There's a card type all of them have.
+    ShareCardType,
+    /// There's a permanent type (artifact, battle, creature, enchantment, land,
+    /// planeswalker) all of them have.
+    SharePermanentType,
+    /// No two of them have a creature type in common ("that share no creature types").
+    ShareNoCreatureType,
 }
 
 impl TargetSpec {
@@ -615,6 +642,7 @@ impl TargetSpec {
             chosen_by_opponent: false,
             text: text.into(),
             condition: None,
+            together: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
@@ -1258,6 +1286,10 @@ pub enum Value {
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),
+    /// "the number of different mana values among [objects]": how many distinct mana
+    /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
+    /// stack, CR 202.3e).
+    ManaValuesAmong(Filter),
     /// Number of different mana types spent to cast this spell (converge etc.).
     ColorsSpent,
     /// Amount of mana spent to cast this spell.

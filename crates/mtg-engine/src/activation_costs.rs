@@ -105,9 +105,7 @@ impl CostChanges {
                 Reduction::Colored(c, n) => {
                     if let Some(m) = cost.mana.as_mut() {
                         for _ in 0..n {
-                            if !m.reduce_colored(c) {
-                                m.reduce_generic(1);
-                            }
+                            crate::cost_rules::reduce_one_colored(m, c, false);
                         }
                     }
                 }
