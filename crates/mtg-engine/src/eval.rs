@@ -827,7 +827,13 @@ impl Game {
         }
         // "All cards from target player's hand and graveyard": several zones.
         if f.zone().is_none() {
-            if let Some(zones) = alternative_zones(f) {
+            if let Some(mut zones) = alternative_zones(f) {
+                let mut seen = Vec::new();
+                zones.retain(|z| {
+                    let new = !seen.contains(z);
+                    seen.push(*z);
+                    new
+                });
                 return zones
                     .into_iter()
                     .flat_map(|z| self.objects_in_zone_kind(z))

@@ -161,7 +161,12 @@ fn owner_phrase<'a>(
             return Some((Some(Filter::OwnedBy(PlayerRel::Opponent)), None, r));
         }
     }
-    for p in ["a single ", "a ", "each ", "all ", "each player's ", "all players' "] {
+    // ("from a single graveyard" requires all the cards to come from one graveyard: not
+    // read here.)
+    if s.starts_with("a single ") {
+        return None;
+    }
+    for p in ["a ", "each ", "all ", "each player's ", "all players' "] {
         if let Some(r) = s.strip_prefix(p) {
             return Some((None, None, r));
         }
@@ -494,7 +499,11 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         return Some(record(Effect::DiscardHand { who }, b));
     }
-    let r = r.strip_suffix(" at random").map_or(r.clone(), str::to_string);
+    // "discards a creature card at random" (CR 701.9b): nobody chooses.
+    let (r, random) = match r.strip_suffix(" at random") {
+        Some(x) => (x.to_string(), true),
+        None => (r.clone(), false),
+    };
     let (c, rest) = cards(&r, b, Some(&who))?;
     if !end(&rest).is_empty() {
         return None;
@@ -514,9 +523,11 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         Qty::Exactly(n) => Effect::Discard {
             who: who.clone(),
             n: n.clone(),
-            random: false,
+            random,
             filter: adj,
         },
+        // Only an exact number of cards is discarded at random.
+        _ if random => return None,
         // The whole hand (even a hand of no cards is discarded).
         Qty::All if matches!(adj, Filter::Any | Filter::Card) => Effect::DiscardHand { who: who.clone() },
         // CR 701.9a: all of them; the player chooses none.
@@ -2233,7 +2244,13 @@ fn p_half_x(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
-    // Every X is halved.
+    // Every X is halved (an X that isn't "half X" isn't read here).
+    let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric()).collect();
+    let xs = words.iter().filter(|w| **w == "x").count();
+    let halves = words.windows(2).filter(|w| w[0] == "half" && w[1] == "x").count();
+    if xs != halves {
+        return None;
+    }
     let rewritten = body.replace("half x ", "x ");
     if rewritten.contains("half ") {
         return None;
@@ -2823,14 +2840,23 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile ~ from
 fn p_if_condition_with_commas(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("if ")?;
     let first = r.find(", ")?;
+    let condition = |c: &str, b: &mut Builder| {
+        super::conditions_referents::parse_condition_with(c, b)
+            .or_else(|| crate::oracle::statics::parse_condition(c, b.ctx))
+    };
+    // What the text up to the first comma reads as on its own: a longer condition that
+    // reads the same ignored the text after that comma ("If you have 5 or less life, you
+    // can't lose life this turn, ..." isn't a condition with commas).
+    let head = format!("{:?}", condition(&r[..first], b));
     let mut at = first + 2;
     while let Some(i) = r[at..].find(", ") {
         let split = at + i;
         at = split + 2;
         let (c, rest) = (&r[..split], &r[split + 2..]);
-        let cond = super::conditions_referents::parse_condition_with(c, b)
-            .or_else(|| crate::oracle::statics::parse_condition(c, b.ctx));
-        let Some(cond) = cond else { continue };
+        let Some(cond) = condition(c, b) else { continue };
+        if format!("{:?}", Some(&cond)) == head {
+            continue;
+        }
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
         match crate::oracle::effects::parse_sentence(rest, b) {
             Some(then) => {
@@ -3024,9 +3050,40 @@ mod grammar {
             ("Sorcery", "Reveal any number of cards in target opponent's hand."),
             // "For every" with an unknown thing.
             ("Creature", "~ gets +1/+1 for every seven blorps."),
+            // The text after the first comma isn't part of the condition.
+            ("Sorcery", "If you have 5 or less life, you can't lose life this turn, draw a card."),
+            // The cards must all come from one graveyard.
+            ("Sorcery", "Put two cards from a single graveyard on the bottom of their owner's library."),
+            // A number of cards discarded at random that nobody chose.
+            ("Sorcery", "Discard any number of cards at random."),
         ] {
             assert!(compiled(ty, text).is_none(), "{text}");
         }
+    }
+
+    #[test]
+    fn only_half_x_is_halved() {
+        let e = compiled("Sorcery", "You gain X life and draw half X cards, rounded down.").unwrap();
+        assert!(e.contains("GainLife { who: You, n: X }"), "{e}");
+        assert!(e.contains("Div(X, 2, false)"), "{e}");
+    }
+
+    #[test]
+    fn a_random_discard_is_random() {
+        let e = compiled("Sorcery", "Target player discards a card at random.").unwrap();
+        assert!(e.contains("random: true"), "{e}");
+    }
+
+    #[test]
+    fn only_the_last_instruction_of_a_list_waits_for_the_end_step() {
+        let e = compiled(
+            "Sorcery",
+            "You gain 2 life, and you return ~ from your graveyard to your hand at the beginning of the next end step.",
+        )
+        .unwrap();
+        let gain = e.find("GainLife").unwrap();
+        let delayed = e.find("DelayedTrigger").unwrap();
+        assert!(gain < delayed, "{e}");
     }
 
     #[test]

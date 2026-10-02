@@ -546,6 +546,7 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     }
     // "If you control a Fish, Octopus, or Otter, draw a card.": when the text after the
     // first comma isn't an instruction, the condition may go on (read by the patterns).
+    let before_if = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let leading_if = parse_leading_if(l, b).and_then(|(cond, rest)| {
         if !rest.contains(", ") {
             return Some((cond, rest));
@@ -562,6 +563,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         let ok = parse_clause(rest2, b).is_some();
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
+        if !ok {
+            // Read again by the patterns: nothing the condition added stays.
+            b.targets.truncate(before_if.0);
+            (b.it, b.it_player) = (before_if.1.clone(), before_if.2.clone());
+        }
         ok.then_some((cond, rest))
     });
     if let Some((cond, rest)) = leading_if {

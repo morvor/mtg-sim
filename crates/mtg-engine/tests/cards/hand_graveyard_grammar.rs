@@ -156,7 +156,7 @@ fn faerie_macabre_exiles_from_different_graveyards() {
 
 #[test]
 fn worldfire_exiles_every_hand_and_graveyard() {
-    cr!("406.1");
+    cr!("406.2");
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 9);
     t.hand(P0, "Shock");
@@ -177,7 +177,7 @@ fn worldfire_exiles_every_hand_and_graveyard() {
 
 #[test]
 fn identity_crisis_exiles_a_hand_and_graveyard() {
-    cr!("406.1");
+    cr!("406.2");
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 2);
     t.lands(P0, "Swamp", 4);
@@ -194,7 +194,7 @@ fn identity_crisis_exiles_a_hand_and_graveyard() {
 
 #[test]
 fn titanias_command_life_for_each_card_exiled_this_way() {
-    cr!("406.1");
+    cr!("406.2");
     let mut t = TestGame::new(2);
     t.lands(P0, "Forest", 6);
     for _ in 0..3 {
@@ -327,7 +327,7 @@ fn rites_of_refusal_taxes_per_card_discarded() {
 
 #[test]
 fn valakut_awakening_puts_cards_on_bottom_then_draws_one_more() {
-    cr!("401.4");
+    cr!("121.1");
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 3);
     let a = t.hand(P0, "Grizzly Bears");
@@ -341,7 +341,8 @@ fn valakut_awakening_puts_cards_on_bottom_then_draws_one_more() {
     assert_eq!(t.hand_size(P0), 4);
     assert_eq!(t.zone(a), Zone::Library(P0));
     let lib = &t.g.player(P0).library;
-    assert!(lib[..2].contains(&t.g.current(a)) || lib[lib.len() - 2..].contains(&t.g.current(a)));
+    // On the bottom (index 0 is the bottom card): not drawn back.
+    assert!(lib[..2].contains(&t.g.current(a)) && lib[..2].contains(&t.g.current(b)));
     assert_eq!(t.library_size(P0), 30 - 3 + 2);
 }
 
@@ -364,18 +365,20 @@ fn forgotten_creation_discards_whole_hand_then_draws_that_many() {
 
 #[test]
 fn prying_questions_opponent_puts_a_card_on_top() {
-    cr!("401.4");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 3);
     let bears = t.hand(P1, "Grizzly Bears");
-    t.hand(P1, "Shock");
-    t.answer_choose(P1, &objs(&[bears]));
+    let shock = t.hand(P1, "Shock");
+    t.answer_choose(P1, &objs(&[shock]));
     let pq = t.hand(P0, "Prying Questions");
     t.cast(P0, pq).target(P1).go();
     t.resolve();
     assert_eq!(t.life(P1), 17);
+    // The opponent chose which card.
+    assert!(last_choice_of(&t, P1).contains(&Entity::Object(bears)));
     let top = *t.g.player(P1).library.last().unwrap();
-    assert_eq!(t.g.obj(top).chars.name.as_str(), "Grizzly Bears");
+    assert_eq!(t.g.obj(top).chars.name.as_str(), "Shock");
     assert_eq!(t.hand_size(P1), 1);
 }
 
@@ -610,7 +613,7 @@ fn put_family_compiles() {
 
 #[test]
 fn draugr_thought_thief_may_mill_the_looked_at_card() {
-    cr!("401.4");
+    cr!("603.5");
     let mut t = TestGame::new(2);
     let top = t.library_top(P1, "Grizzly Bears");
     t.answer_targets(P0, &[Entity::Player(P1)]);
@@ -622,7 +625,7 @@ fn draugr_thought_thief_may_mill_the_looked_at_card() {
 
 #[test]
 fn wu_spy_puts_one_of_the_two_into_the_graveyard() {
-    cr!("401.4");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     let a = t.library_top(P1, "Grizzly Bears");
     let b = t.library_top(P1, "Shock");
@@ -637,7 +640,7 @@ fn wu_spy_puts_one_of_the_two_into_the_graveyard() {
 
 #[test]
 fn landscaper_colos_puts_an_opponents_card_on_the_bottom() {
-    cr!("401.4");
+    cr!("400.3");
     let mut t = TestGame::new(2);
     let g = t.graveyard(P1, "Grizzly Bears");
     t.answer_targets(P0, &objs(&[g]));
@@ -925,13 +928,21 @@ fn drafnas_restoration_puts_artifact_cards_on_top() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
     let a = t.graveyard(P1, "Ornithopter");
+    let a2 = t.graveyard(P1, "Sol Ring");
     let b = t.graveyard(P1, "Grizzly Bears");
     let s = t.hand(P0, "Drafna's Restoration");
-    t.cast(P0, s).target(P1).targets(&objs(&[a])).go();
+    t.cast(P0, s).target(P1).targets(&objs(&[a, a2])).go();
     t.resolve();
     assert_eq!(t.zone(a), Zone::Library(P1));
-    assert_eq!(*t.g.player(P1).library.last().unwrap(), t.g.current(a));
+    let lib = &t.g.player(P1).library;
+    let top2 = &lib[lib.len() - 2..];
+    assert!(top2.contains(&t.g.current(a)) && top2.contains(&t.g.current(a2)));
     assert_eq!(t.zone(b), Zone::Graveyard(P1));
+    // The cards' owner arranged them (CR 401.4).
+    assert!(t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::Order { items, .. } if items.len() == 2)));
 }
 
 #[test]
@@ -1080,7 +1091,7 @@ fn mind_maggots_counters_per_creature_card_discarded() {
 
 #[test]
 fn expressive_iteration_distributes_three_cards() {
-    cr!("401.4");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
     t.lands(P0, "Mountain", 1);
@@ -1105,7 +1116,7 @@ fn expressive_iteration_distributes_three_cards() {
 
 #[test]
 fn telling_time_one_to_hand_one_on_top_one_on_bottom() {
-    cr!("401.4");
+    cr!("608.2d");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 2);
     let c = t.library_top(P0, "Shock");
@@ -1203,11 +1214,16 @@ fn arjun_cycles_the_whole_hand() {
     assert_eq!(t.hand_size(P0), 2);
     assert!(!t.in_hand(P0, "Grizzly Bears"));
     assert_eq!(t.library_size(P0), 30);
+    // Their owner arranged them.
+    assert!(t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { items, .. } if items.len() == 2)));
 }
 
 #[test]
 fn sanctifier_en_vec_exiles_black_and_red_cards_from_graveyards() {
-    cr!("406.1");
+    cr!("406.2");
     let mut t = TestGame::new(2);
     t.graveyard(P1, "Lightning Bolt");
     t.graveyard(P0, "Doom Blade");
@@ -1645,7 +1661,7 @@ fn lifeblood_hydra_gains_and_draws_its_power() {
 
 #[test]
 fn balance_of_power_draws_the_difference() {
-    cr!("121.2");
+    cr!("608.2h");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 5);
     for _ in 0..5 {
@@ -1683,7 +1699,7 @@ fn fifth_batch_compiles() {
 
 #[test]
 fn standstill_the_casters_opponents_draw() {
-    cr!("102.2");
+    cr!("806.1");
     let mut t = TestGame::with_config(3, Default::default());
     t.battlefield(P0, "Standstill");
     t.lands(P1, "Mountain", 1);
@@ -1712,7 +1728,7 @@ fn heartwood_storyteller_each_opponent_of_the_caster_may_draw() {
 
 #[test]
 fn prophet_of_the_scarab_draws_the_greater_number() {
-    cr!("107.1");
+    cr!("608.2h");
     let mut t = TestGame::new(2);
     for _ in 0..3 {
         t.graveyard(P0, "Gravecrawler");
@@ -1742,7 +1758,7 @@ fn wojek_investigator_counts_opponents_with_bigger_hands() {
 
 #[test]
 fn survival_cache_draws_with_more_life_than_an_opponent() {
-    cr!("119.1");
+    cr!("119.3");
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 3);
     let s = t.hand(P0, "Survival Cache");
@@ -2032,7 +2048,7 @@ fn phyrexian_furnace_exiles_the_bottom_card() {
 
 #[test]
 fn nicol_bolas_exiles_all_but_the_bottom_card() {
-    cr!("401.1");
+    cr!("406.2");
     let mut t = TestGame::new(2);
     let bottom = t.g.player(P1).library[0];
     let s = t.custom(
@@ -2225,4 +2241,124 @@ fn bison_whistle_a_bison_put_onto_the_battlefield_isnt_also_put_into_hand() {
     t.activate(P0, w, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.zone(land), Zone::Graveyard(P0));
+}
+
+// ---------------------------------------------------------------------------
+// Review: random discards, delayed instructions in a list, conditions with commas, half X
+// ---------------------------------------------------------------------------
+
+#[test]
+fn rag_man_discards_a_creature_card_at_random() {
+    cr!("701.9b");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let rag = t.battlefield(P0, "Rag Man");
+    let bears = t.hand(P1, "Grizzly Bears");
+    let giant = t.hand(P1, "Hill Giant");
+    let shock = t.hand(P1, "Shock");
+    t.activate(P0, rag, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    // One of the creature cards, chosen by nobody.
+    let gone = [bears, giant]
+        .iter()
+        .filter(|c| t.zone(**c) == Zone::Graveyard(P1))
+        .count();
+    assert_eq!(gone, 1);
+    assert_eq!(t.zone(shock), Zone::Hand(P1));
+    assert!(
+        !t.asked()
+            .iter()
+            .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. })),
+        "the discarding player chose"
+    );
+}
+
+#[test]
+fn mangaras_blessing_gains_life_now_and_returns_at_end_step() {
+    cr!("603.7a");
+    ruling!(
+        "Mangara's Blessing",
+        "The 2 life from having it discarded is gained when the triggered ability resolves"
+    );
+    ruling!(
+        "Mangara's Blessing",
+        "only returned if it is still in the graveyard at end of turn"
+    );
+    for leaves in [false, true] {
+        let mut t = TestGame::new(2);
+        let mb = t.hand(P0, "Mangara's Blessing");
+        t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+        t.lands(P1, "Swamp", 3);
+        let rot = t.hand(P1, "Mind Rot");
+        t.g.turn.priority = Some(P1);
+        t.cast(P1, rot).target(P0).go();
+        t.resolve_all();
+        // The life is gained as the trigger resolves; the card waits in the graveyard.
+        assert_eq!(t.life(P0), 22);
+        assert_eq!(t.zone(mb), Zone::Graveyard(P0));
+        if leaves {
+            // It leaves the graveyard and comes back: a new object, not returned.
+            let now = t.g.current(mb);
+            t.g.move_object(now, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+            let back = t.g.current(mb);
+            t.g.move_object(back, Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+        }
+        t.advance_to_step(mtg_engine::turn::Step::End);
+        t.resolve_all();
+        assert_eq!(t.in_hand(P0, "Mangara's Blessing"), !leaves);
+        assert_eq!(t.life(P0), 22);
+    }
+}
+
+#[test]
+fn contaminated_drink_draws_x_and_gets_half_x_rad_counters() {
+    cr!("107.1a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    t.lands(P0, "Swamp", 1);
+    let cd = t.hand(P0, "Contaminated Drink");
+    t.cast(P0, cd).x(5).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 5);
+    assert_eq!(t.g.player(P0).counter(mtg_engine::types::counters::RAD), 3);
+}
+
+#[test]
+fn necrotic_ooze_abilities_naming_their_card_refer_to_the_ooze() {
+    cr!("613.1f");
+    ruling!(
+        "Necrotic Ooze",
+        "treat Necrotic Ooze's version of that ability as though it referenced Necrotic Ooze"
+    );
+    let mut t = TestGame::new(2);
+    let ooze = t.battlefield(P0, "Necrotic Ooze");
+    let troll = t.graveyard(P1, "Cudgel Troll");
+    t.lands(P0, "Forest", 1);
+    t.activate(P0, ooze, 0, &[]).unwrap();
+    t.resolve_all();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(ooze).go();
+    t.resolve_all();
+    // The Ooze (4/3) was regenerated: still on the battlefield, tapped.
+    assert!(t.on_battlefield(ooze), "{}", t.dump_log());
+    assert!(t.obj_now(ooze).tapped);
+    assert_eq!(t.zone(troll), Zone::Graveyard(P1));
+}
+
+#[test]
+fn reviewed_wordings_are_read_faithfully_or_not_at_all() {
+    // "Discard ... at random" with a number nobody chose isn't read.
+    assert!(!card("Rites of Initiation").unsupported_text().is_empty());
+    // "From a single graveyard": all the cards from one graveyard.
+    assert!(card("Jötun Grunt")
+        .unsupported_text()
+        .iter()
+        .any(|u| u.contains("single graveyard")));
+    // The fateful hour sentence has more instructions than the text up to the comma.
+    assert!(card("Courageous Resolve")
+        .unsupported_text()
+        .iter()
+        .any(|u| u.contains("can't lose life")));
 }
