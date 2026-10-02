@@ -76,3 +76,20 @@ fn acolyte_of_the_inferno_deals_the_damage_to_its_blocker() {
     assert!(t.in_graveyard(P1, "Vampire Nighthawk"));
     assert!(t.in_graveyard(P0, "Acolyte of the Inferno"));
 }
+
+#[test]
+fn the_one_ring_saga_mills_each_player_by_your_ring_bearers_power() {
+    cr!("701.54e");
+    // "Each player mills cards equal to your Ring-bearer's power.": the controller's
+    // Ring-bearer; each player's own Ring-bearer was used, so an opponent without one
+    // milled nothing.
+    supported("One Ring to Rule Them All");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.battlefield(P0, "Hill Giant");
+    let (l0, l1) = (t.library_size(P0), t.library_size(P1));
+    t.enter(P0, "One Ring to Rule Them All");
+    t.resolve_all();
+    assert_eq!(t.library_size(P1), l1 - 3);
+    assert_eq!(t.library_size(P0), l0 - 3);
+}

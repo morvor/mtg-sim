@@ -434,7 +434,17 @@ impl Renderer<'_> {
                     .unwrap_or(0);
                 self.var_defs[i].2 = true;
                 let s = self.var_defs[i].1.clone();
-                self.sel(&s, case)
+                let r = self.sel(&s, case);
+                // Found by the controller before another player acts ("each player mills
+                // cards equal to your Ring-bearer's power"): its "your" is still yours.
+                if self.in_as_player && self.outer_vars.contains(v) {
+                    format!(" {r}")
+                        .replace(" your", &format!(" {}your", super::KEEP_YOU))
+                        .trim_start()
+                        .to_string()
+                } else {
+                    r
+                }
             }
             Sel::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
                 let i = self
@@ -528,6 +538,16 @@ impl Renderer<'_> {
                     return decline(s, case);
                 }
                 let s = self.noun_det(f, Det::Each);
+                // "each creature card in a graveyard" is each one in all graveyards.
+                let s = if s.ends_with(" in a graveyard") || s.contains(" in a graveyard ") {
+                    s.replacen(
+                        " in a graveyard",
+                        " {alt:in a graveyard|in all graveyards|in graveyards}",
+                        1,
+                    )
+                } else {
+                    s
+                };
                 // "Untap all creatures you control. They gain hexproof ...": the group
                 // just named is "them".
                 let key = format!("{f:?}");

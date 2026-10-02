@@ -48,6 +48,31 @@ fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        // CR 716.2a: the abilities printed with a class level bar: "As long as this Class
+        // is level N or greater, it has [abilities]" (the bar is the activated ability).
+        if let (
+            Some(Condition::Compare(Value::ClassLevel, Cmp::Ge, Value::Const(_))),
+            StaticEffect::Continuous {
+                affected: Filter::Source,
+                mods,
+            },
+        ) = (&s.condition, &s.effect)
+        {
+            if !mods.is_empty()
+                && mods
+                    .iter()
+                    .all(|m| matches!(m, Modification::AddAbility(_)))
+            {
+                let lines: Vec<String> = mods
+                    .iter()
+                    .filter_map(|m| match m {
+                        Modification::AddAbility(a) => Some(self.nested_ability(a)),
+                        _ => None,
+                    })
+                    .collect();
+                return lines.join("\n");
+            }
+        }
         // "Solved — [ability]" (CR 719.3b), compiled as the ability granted while solved.
         if s.condition.as_ref().is_some_and(super::is_solved) {
             if let StaticEffect::Continuous {
@@ -1463,9 +1488,18 @@ impl Renderer<'_> {
             }
             Restriction::MaxUntaps { who, what, n } => {
                 let w = self.player_filter_subject(who);
-                let x = self.noun(what, Num::Many);
+                let x = if *n == 1 {
+                    self.noun(what, Num::One)
+                } else {
+                    self.noun(what, Num::Many)
+                };
+                let steps = if w == "you" {
+                    "your untap step"
+                } else {
+                    "their untap steps"
+                };
                 format!(
-                    "{w} can't untap more than {} {x} during their untap steps",
+                    "{w} can't untap more than {} {x} during {steps}",
                     number_word(*n as i32)
                 )
             }

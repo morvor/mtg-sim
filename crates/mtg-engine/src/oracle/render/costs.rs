@@ -323,6 +323,19 @@ impl Renderer<'_> {
         let saved = self.zone;
         self.zone = a.zone;
         let cost = self.cost(&a.cost);
+        // CR 716.2a: "[Cost]: Level N" is "[Cost]: This Class's level becomes N. Activate
+        // only if this Class is level N-1 and only as a sorcery."
+        if let Effect::SetClassLevel { level } = &a.body.effect {
+            if matches!(a.timing, ActivationTiming::Sorcery)
+                && matches!(&a.condition, Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n as i64 + 1 == *level as i64)
+                && a.max_per_turn.is_none()
+                && a.max_total.is_none()
+                && a.own_cost_changes.is_empty()
+            {
+                self.zone = saved;
+                return format!("{cost}: Level {level}");
+            }
+        }
         let saved_salient = self.self_salient;
         // "Sacrifice ~: It deals 2 damage to any target."
         self.self_salient = cost.contains('~');

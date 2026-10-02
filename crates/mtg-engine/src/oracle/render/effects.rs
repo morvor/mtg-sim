@@ -582,6 +582,9 @@ impl Renderer<'_> {
             }
             Effect::Store { sel, var } if matches!(sel, Sel::All(_)) => {
                 self.var_defs.push((*var, sel.clone(), false));
+                if !self.in_as_player {
+                    self.outer_vars.push(*var);
+                }
                 String::new()
             }
             // A target remembered for a delayed trigger ("Destroy target blocking creature
@@ -2838,7 +2841,10 @@ impl Renderer<'_> {
                         // (`cumulative_upkeep::expand_repeated`), so "you" there stays.
                         let (head, each) = match pays.split_once(" for each ") {
                             Some((h, e)) => (h.to_string(), format!(" for each {e}")),
-                            None => (pays.clone(), String::new()),
+                            None => match pays.split_once(", where X is ") {
+                                Some((h, e)) => (h.to_string(), format!(", where X is {e}")),
+                                None => (pays.clone(), String::new()),
+                            },
                         };
                         let head = format!(" {head} ")
                             .replace(" your ", " their ")
@@ -3059,6 +3065,11 @@ impl Renderer<'_> {
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
                 Some(PlayerRef::You) if yours => {}
+                // "Return all artifact cards from all graveyards to the battlefield under
+                // their owners' control": each card's owner.
+                Some(PlayerRef::OwnerOf(o)) if matches!(o.as_ref(), Sel::All(_)) => {
+                    s.push_str(&format!(" under {owner} control"));
+                }
                 Some(c) => {
                     let c = self.player(c, Case::Poss);
                     s.push_str(&format!(" under {c} control"));
@@ -3378,9 +3389,20 @@ impl Renderer<'_> {
         } else {
             let what = match take {
                 Value::Const(1) => with_article(&noun),
+                // An unbounded count: "any number of artifact cards".
+                // "any number of creature and/or land cards".
+                Value::Const(k) if *k >= 99 => {
+                    let n = plural(&noun);
+                    let n = if n.contains('{') {
+                        n
+                    } else {
+                        n.replacen(" or ", " {alt:or|and/or} ", 1)
+                    };
+                    format!("any number of {n}")
+                }
                 _ => format!("{count} {}", plural(&noun)),
             };
-            let what = if take_up_to && many {
+            let what = if take_up_to && many && !what.starts_with("any number of ") {
                 format!("up to {what}")
             } else {
                 what
@@ -3409,8 +3431,20 @@ impl Renderer<'_> {
         }
         let left = match (n, take) {
             (Value::Const(a), Value::Const(b)) if a - b == 1 => "the other",
+            // "Put all cards revealed this way that weren't put onto the battlefield into
+            // your graveyard."
+            _ if reveal && take_to.zone == ZoneKind::Battlefield => {
+                "{alt:the rest|all cards revealed this way that weren't put onto the battlefield}"
+            }
             _ => "the rest",
         };
+        // The rest stay where they are ("..., then shuffle").
+        if rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::FromTop(_))
+        {
+            s.push_str(&format!(". {}", capitalize(&take_s)));
+            return s;
+        }
         if matches!(filter, Filter::Any) {
             s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         } else {

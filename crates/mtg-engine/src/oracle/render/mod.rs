@@ -592,6 +592,9 @@ pub struct Renderer<'a> {
     /// Selections stored in variables by the ability being rendered ("other creatures
     /// you control gain ..." stored, then modified): the first mention is the phrase.
     pub(crate) var_defs: Vec<(Var, Sel, bool)>,
+    /// Variables stored by the ability's controller outside an instruction performed as
+    /// another player: "you" in them stays the controller.
+    pub(crate) outer_vars: Vec<Var>,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -655,6 +658,7 @@ impl<'a> Renderer<'a> {
             search_verb: None,
             last_group: None,
             var_defs: Vec::new(),
+            outer_vars: Vec::new(),
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
@@ -737,11 +741,13 @@ impl<'a> Renderer<'a> {
         let saved_n = std::mem::replace(&mut self.self_named_in_clause, false);
         let saved_ts = std::mem::replace(&mut self.trigger_is_self, false);
         let saved_v = std::mem::take(&mut self.var_defs);
+        let saved_ov = std::mem::take(&mut self.outer_vars);
         let saved_p = std::mem::take(&mut self.plural_vars);
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
         self.var_defs = saved_v;
+        self.outer_vars = saved_ov;
         self.plural_vars = saved_p;
         self.targets = saved_t;
         self.introduced = saved_i;
@@ -756,6 +762,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.outer_vars.clear();
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();
