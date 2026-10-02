@@ -563,3 +563,190 @@ fn attached_it_static(block: &str, ctx: &crate::oracle::CompileContext) -> Optio
 }
 
 inventory::submit! { super::AbilityPattern { name: "attach grammar: as long as [objects] are attached to it", priority: 49, parse: attached_it_static } }
+
+// ---------------------------------------------------------------------------
+// Entering attached: "return ~ from your graveyard to the battlefield attached to that
+// creature", "put an Aura card from your hand onto the battlefield attached to ~"
+// ---------------------------------------------------------------------------
+
+/// What a permanent put onto the battlefield is attached to: a referent ("that creature",
+/// "~", "it", "enchanted creature"), a target object or player, or an object chosen as it
+/// enters ("a creature you control").
+fn entry_recipient(s: &str, b: &mut Builder) -> Option<Sel> {
+    let s = s.trim();
+    if let Some(r) = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")) {
+        let (f, plural, rest) = parse_object_phrase(r)?;
+        if plural || !end(rest).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+        {
+            return None;
+        }
+        let f = super::filters_relational::resolve_referent(f, b)?;
+        return Some(Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        });
+    }
+    for p in ["target player", "target opponent"] {
+        if s.strip_prefix(p).is_some_and(word_end) {
+            let (who, rest) = player_ref(s, b)?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            return match who {
+                PlayerRef::Target(slot) => Some(Sel::Target(slot)),
+                _ => None,
+            };
+        }
+    }
+    let (sel, rest) = object_ref(s, b)?;
+    if !end(&rest).is_empty()
+        || is_no_referent(&sel)
+        || matches!(
+            sel,
+            Sel::None | Sel::All(_) | Sel::Players(_) | Sel::Choose { .. }
+        )
+    {
+        return None;
+    }
+    if let Sel::Target(slot) = &sel {
+        let spec = b.targets.get(*slot as usize)?;
+        if spec.max.as_const() != Some(1) {
+            return None;
+        }
+        if let TargetKind::Object(f) = &spec.what {
+            if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+                return None;
+            }
+        }
+    }
+    Some(sel)
+}
+
+/// Sets what the one battlefield destination in `e` enters attached to. `None` unless
+/// exactly one instruction puts something onto the battlefield.
+fn with_entry_attachment(e: Effect, to: &Sel) -> Option<Effect> {
+    use serde_json::Value as J;
+    fn walk(v: &mut J, to: &J, n: &mut usize) {
+        match v {
+            J::Object(m) => {
+                if m.get("zone").and_then(|z| z.as_str()) == Some("Battlefield")
+                    && m.get("attached_to").is_some_and(|a| a.is_null())
+                {
+                    m.insert("attached_to".into(), to.clone());
+                    *n += 1;
+                }
+                for x in m.values_mut() {
+                    walk(x, to, n);
+                }
+            }
+            J::Array(a) => a.iter_mut().for_each(|x| walk(x, to, n)),
+            _ => {}
+        }
+    }
+    let mut json = serde_json::to_value(&e).ok()?;
+    let to = serde_json::to_value(to).ok()?;
+    let mut n = 0;
+    walk(&mut json, &to, &mut n);
+    (n == 1).then(|| serde_json::from_value(json).ok()).flatten()
+}
+
+/// What the one `Move` onto the battlefield in `e` moves.
+fn moved_onto_battlefield(e: &Effect) -> Option<Sel> {
+    use serde_json::Value as J;
+    fn walk(v: &J, out: &mut Vec<J>) {
+        match v {
+            J::Object(m) => {
+                if let Some(J::Object(mv)) = m.get("Move") {
+                    let to_battlefield = mv
+                        .get("to")
+                        .and_then(|t| t.get("zone"))
+                        .and_then(|z| z.as_str())
+                        == Some("Battlefield");
+                    if let (true, Some(w)) = (to_battlefield, mv.get("what")) {
+                        out.push(w.clone());
+                    }
+                }
+                m.values().for_each(|x| walk(x, out));
+            }
+            J::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(&serde_json::to_value(e).ok()?, &mut out);
+    match out.as_slice() {
+        [w] => serde_json::from_value(w.clone()).ok(),
+        _ => None,
+    }
+}
+
+/// "[put/return objects onto/to the battlefield] attached to [recipient][, then ...]": the
+/// objects enter attached to it — an Aura that can't legally enchant it, or one attached
+/// to something undefined, stays where it is; an Equipment that can't equip it enters
+/// unattached (CR 301.5e, 303.4f–i).
+fn p_enter_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let l = end(l);
+    if l.matches(" attached to ").count() != 1 {
+        return None;
+    }
+    let (head, after) = l.split_once(" attached to ")?;
+    if !(head.ends_with(" the battlefield") || head.ends_with(" under your control")) {
+        return None;
+    }
+    // The recipient runs to the next instruction (", then shuffle").
+    let (recipient, tail) = match after.find(", ") {
+        Some(i) => (&after[..i], &after[i..]),
+        None => (after, ""),
+    };
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    let parsed = (|| {
+        // A referent means what it meant before the objects were named ("Return up to
+        // two target Aura cards ... attached to that creature"); a target is the text's
+        // next one.
+        let targeted = recipient.starts_with("target ");
+        let pre = if targeted {
+            None
+        } else {
+            Some(entry_recipient(recipient, b)?)
+        };
+        let e = crate::oracle::effects::parse_clause(&format!("{head}{tail}"), b)?;
+        let mut to = match pre {
+            Some(to) => to,
+            None => {
+                let it = b.it.clone();
+                let to = entry_recipient(recipient, b)?;
+                b.it = it;
+                to
+            }
+        };
+        // "attached to a creature you control": one it can legally be attached to
+        // (Nomad Mythmaker's ruling).
+        if let Sel::Choose { filter, .. } = &mut to {
+            if let Some(what) = moved_onto_battlefield(&e) {
+                *filter = Filter::and(vec![
+                    filter.clone(),
+                    Filter::CanBeAttachedBy(Box::new(what)),
+                ]);
+            }
+        }
+        with_entry_attachment(e, &to)
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "attach grammar: [put onto the battlefield] attached to [recipient]", priority: 110, parse: p_enter_attached } }
