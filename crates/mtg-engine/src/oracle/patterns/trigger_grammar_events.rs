@@ -511,6 +511,17 @@ const STATE_STARTS: [&str; 16] = [
 
 fn state_trigger(r: &str) -> Option<Parsed> {
     let r = end(r);
+    // "When a player other than ~'s owner controls it, that player sacrifices it" (Bronze
+    // Bombshell): its controller, who controls this ability, doesn't own it.
+    if r == "a player other than ~'s owner controls it" {
+        let cond = Condition::SelMatches(Sel::This, Filter::not(Filter::OwnedBy(PlayerRel::You)));
+        // "That player" is that controller.
+        return Some((
+            TriggerCond::State(cond),
+            Sel::This,
+            PlayerRef::ControllerOf(Box::new(Sel::This)),
+        ));
+    }
     if !STATE_STARTS.iter().any(|p| r.starts_with(p)) {
         return None;
     }

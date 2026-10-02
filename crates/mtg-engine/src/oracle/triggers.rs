@@ -112,6 +112,11 @@ fn parse_triggered_at(
                 parsed
             };
             if let Some(cond) = parsed {
+                // "Whenever you scry, if ~ is tapped, you may untap it": with no object of
+                // the trigger event's own, "it" is the condition's subject.
+                if matches!(it, Sel::None) && c.starts_with("~ ") && body_it.is_none() {
+                    body_it = Some(Sel::This);
+                }
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];
                 // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the

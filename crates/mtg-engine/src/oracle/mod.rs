@@ -146,7 +146,11 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
             names.push(short.to_string());
         }
         if let Some((short, _)) = ctx.card_name.split_once(" of ") {
-            if !short.contains(' ') {
+            // "General Kudro" (General Kudro of Drannith): a title and a name.
+            let titled = short
+                .split_once(' ')
+                .is_some_and(|(title, name)| is_title(title) && !name.contains(' '));
+            if !short.contains(' ') || titled {
                 names.push(short.to_string());
             }
         }
@@ -209,6 +213,14 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         s = replace_ci(&s, r, "~");
     }
     s
+}
+
+/// A title before a legendary character's name ("General Kudro").
+fn is_title(w: &str) -> bool {
+    matches!(
+        w,
+        "General" | "Captain" | "Lord" | "Lady" | "King" | "Queen" | "Sir" | "Doctor"
+    )
 }
 
 /// The first word of a legendary card's name when it can stand for the card: not a

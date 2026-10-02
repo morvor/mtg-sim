@@ -30,6 +30,7 @@ use super::TriggerPattern;
 use crate::ability::*;
 use crate::oracle::patterns::triggers::{parse_subject, Subject};
 use crate::oracle::phrases::*;
+use crate::types::CardType;
 
 type Parsed = (TriggerCond, Sel, PlayerRef);
 
@@ -500,6 +501,16 @@ fn two_verbs(v: &str, s: &Subject) -> Option<Parsed> {
                 to: Some(ZoneKind::Command),
             },
         ]),
+        // A permanent is destroyed without a spell or ability only by a state-based
+        // action for lethal damage, which needs a creature (CR 704.5g-h): for a
+        // noncreature subject, every destruction has a cause (CR 701.8).
+        "is sacrificed or destroyed" if excludes_creatures(&f) => TriggerCond::AnyOf(vec![
+            TriggerCond::Sacrificed(f.clone()),
+            TriggerCond::DestroyedBy {
+                filter: f,
+                by: PlayerRel::Any,
+            },
+        ]),
         "phases out or leaves the battlefield" if s.self_only => TriggerCond::AnyOf(vec![
             TriggerCond::Phases {
                 phased_in: false,
@@ -510,6 +521,15 @@ fn two_verbs(v: &str, s: &Subject) -> Option<Parsed> {
         _ => return None,
     };
     Some(finish(cond, s, true, false))
+}
+
+/// Whether an object phrase says it's not a creature ("a noncreature artifact").
+fn excludes_creatures(f: &Filter) -> bool {
+    match f {
+        Filter::Not(x) => matches!(**x, Filter::Type(CardType::Creature)),
+        Filter::And(v) => v.iter().any(excludes_creatures),
+        _ => false,
+    }
 }
 
 fn zone_verb(v: &str, s: &Subject) -> Option<Parsed> {
@@ -533,6 +553,7 @@ fn zone_event(r: &str) -> Option<Parsed> {
             && !verb_s.starts_with("leave")
             && !verb_s.starts_with("dies ")
             && !verb_s.starts_with("phases ")
+            && !verb_s.starts_with("is sacrificed ")
         {
             continue;
         }
