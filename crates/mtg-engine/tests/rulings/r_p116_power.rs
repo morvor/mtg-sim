@@ -437,3 +437,41 @@ fn hulkling_compares_power_to_power_and_toughness_to_toughness() {
     t.resolve_all();
     assert_eq!(t.pt(h), (3, 4));
 }
+
+#[test]
+fn primal_empathy_a_shared_greatest_power_draws() {
+    cr!("608.2c", "603.3");
+    ruling!(
+        "Primal Empathy",
+        "If the greatest power among creatures on the battlefield is shared by a creature you control and a creature you don't control, you draw a card."
+    );
+    supported("Primal Empathy");
+    supported("High Score");
+    // "At the beginning of your upkeep, draw a card if you control a creature with the
+    // greatest power among creatures on the battlefield. Otherwise, put a +1/+1 counter on
+    // a creature you control."
+    let upkeep = |t: &mut TestGame| {
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        t.resolve_all();
+    };
+    // Tied at 3: P0 draws.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Primal Empathy");
+    let mine = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    upkeep(&mut t);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.counters(mine, "+1/+1"), 0);
+    // P1's creature is greater: a +1/+1 counter instead.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Primal Empathy");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    upkeep(&mut t);
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(t.counters(mine, "+1/+1"), 1);
+}
