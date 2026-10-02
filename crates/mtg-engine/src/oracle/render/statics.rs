@@ -617,6 +617,13 @@ impl Renderer<'_> {
                     s
                 }
             }
+            PlayerModification::PayLifeForMana { color, life } => {
+                let sym = mana_symbol(crate::mana::ManaType::from_color(*color));
+                format!(
+                    "for each {sym} in a cost, {subj} may pay {} life rather than pay that mana",
+                    number_word(*life as i32)
+                )
+            }
             PlayerModification::Custom(name) => self.custom_player_mod(name, &subj, &poss),
         }
     }
@@ -831,6 +838,7 @@ impl Renderer<'_> {
                 let t = target.clone();
                 format!("you can spend mana of any type to cast {t}")
             }
+            CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
@@ -2265,5 +2273,31 @@ impl Renderer<'_> {
         let _ = split_controller;
         let _ = join_words;
         let _ = third_person;
+    }
+}
+
+/// The sentence of a rule a spell or ability states about its own cost (see
+/// `payment_rules.rs`).
+pub(crate) fn cost_rule_text(r: &CostRule) -> String {
+    match r {
+        CostRule::XAtLeast(1) => "X can't be 0".into(),
+        CostRule::XAtLeast(n) => format!("X can't be less than {n}"),
+        CostRule::XOnlyColors { colors, distinct } => {
+            let words: Vec<&str> = Color::ALL
+                .iter()
+                .filter(|c| colors.contains(**c))
+                .map(|c| c.word())
+                .collect();
+            let mut s = if *colors == ColorSet::ALL {
+                "spend only colored mana on X".to_string()
+            } else {
+                format!("spend only {} mana on X", words.join(" and/or "))
+            };
+            if *distinct {
+                s.push_str(". No more than one mana of each color may be spent this way");
+            }
+            s
+        }
+        CostRule::NoMana => "you can't spend mana to cast ~".into(),
     }
 }

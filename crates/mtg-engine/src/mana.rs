@@ -394,6 +394,12 @@ pub enum ManaRestriction {
     /// "... or to gain a Class level": to activate a class level bar's ability
     /// (CR 716.2c).
     ClassLevel,
+    /// "This mana can't be spent to pay generic mana costs." (Jegantha, the Wellspring):
+    /// it can be spent on anything, but only to pay a colored or colorless mana symbol (or
+    /// the colored half of a hybrid one), never generic mana: numbers, {X}, {S} or the
+    /// generic half of a {2/W}-style symbol. Checked symbol by symbol as the cost is paid
+    /// (see [`Mana::pays_generic`]).
+    NotGeneric,
 }
 
 /// A filter inside a [`ManaRestriction`], compared structurally.
@@ -444,6 +450,27 @@ pub struct SpendContext {
     /// `None` for a cost a resolving spell or ability asks for (CR 118.3; see
     /// `rule_statics::payment`).
     pub cost_of: Option<crate::rule_statics::payment::CostOf>,
+    /// "Spend only black mana on X": how much of the generic mana of the cost X still
+    /// represents, and the mana that may pay it (see `payment_rules.rs`).
+    pub x_spend: Option<XSpend>,
+    /// Colors whose mana symbols the payer may pay with life instead ("For each {B} in a
+    /// cost, you may pay 2 life rather than pay that mana"), with the life each costs. The
+    /// payment fills it in from the payer's modifications (`payment_rules::life_for_mana`).
+    pub pay_life_for: Vec<(Color, u32)>,
+    /// The ability on the stack whose activation cost is being paid ("When you spend this
+    /// mana to cast a spell or activate an ability", CR 106.6).
+    pub ability_on_stack: Option<ObjectId>,
+}
+
+/// The part of a cost's generic mana that X represents, which only mana of `colors` may pay
+/// ("Spend only black mana on X", "Spend only colored mana on X"; with `distinct`, "No more
+/// than one mana of each color may be spent this way"). Mana that may be spent as though it
+/// were mana of any color counts as any of them (CR 609.4b).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct XSpend {
+    pub amount: u32,
+    pub colors: ColorSet,
+    pub distinct: bool,
 }
 
 impl ManaRestriction {
@@ -475,6 +502,8 @@ impl ManaRestriction {
                 !ctx.is_spell || ctx.card_types.contains(CardType::Artifact)
             }
             ManaRestriction::ClassLevel => ctx.is_ability && ctx.class_level,
+            // What it may pay is decided symbol by symbol.
+            ManaRestriction::NotGeneric => true,
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
             // Filters need the game: see `allows_in`.
             ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,
@@ -515,6 +544,10 @@ pub struct ManaRider {
     pub id: u64,
     /// The spell the mana must be spent to cast.
     pub spell_filter: crate::ability::Filter,
+    /// It also triggers when the mana is spent to activate an ability ("When you spend
+    /// this mana to cast a spell or activate an ability", CR 106.6).
+    #[serde(default)]
+    pub abilities: bool,
     /// The triggered ability's effect ("that spell" is the spell the mana was spent on).
     pub body: crate::ability::Body,
     pub controller: crate::types::PlayerId,
@@ -581,6 +614,11 @@ impl Mana {
             .as_ref()
             .is_none_or(|r| r.allows_in(g, payer, self.source, ctx))
     }
+    /// Whether it may pay generic mana ("This mana can't be spent to pay generic mana
+    /// costs", [`ManaRestriction::NotGeneric`]).
+    pub fn pays_generic(&self) -> bool {
+        !matches!(self.restriction, Some(ManaRestriction::NotGeneric))
+    }
 }
 
 /// A player's mana pool (CR 106.4).
@@ -620,8 +658,11 @@ impl ManaPool {
 pub struct PaymentPlan {
     /// Indices into the pool that will be spent.
     pub pool_indices: Vec<usize>,
-    /// Life to pay for Phyrexian symbols.
+    /// Life to pay instead of mana: for Phyrexian symbols, and for symbols an effect lets
+    /// the payer pay with life ([`SpendContext::pay_life_for`]).
     pub life: u32,
+    /// How many Phyrexian symbols are paid with life (CR 107.4f, 702.150a).
+    pub phyrexian: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -630,6 +671,9 @@ enum Req {
     Colorless,
     Snow,
     Generic,
+    /// One generic mana that X represents, which only mana of these colors may pay
+    /// ([`XSpend`]).
+    XOf(ColorSet),
     Hybrid(Color, Color),
     /// one colored or two generic
     TwoHybrid(Color),
@@ -643,11 +687,69 @@ impl Req {
         match self {
             Req::Colored(_) | Req::Colorless => 0,
             Req::ColorlessHybrid(_) | Req::Hybrid(..) => 1,
-            Req::Snow => 2,
+            Req::Snow | Req::XOf(_) => 2,
             Req::TwoHybrid(_) | Req::Phyrexian(_) | Req::PhyrexianHybrid(..) => 3,
             Req::Generic => 4,
         }
     }
+
+    /// The life that may pay the symbol instead of mana, and whether that's paying for a
+    /// Phyrexian symbol (CR 107.4f): 2 life for a Phyrexian symbol, or what an effect lets
+    /// the payer pay for a symbol of (or with a half of) a color ("For each {B} in a cost,
+    /// you may pay 2 life rather than pay that mana" — never for generic mana).
+    fn life(self, life_for: &[(Color, u32)]) -> Option<(u32, bool)> {
+        let of = |c: Color| life_for.iter().find(|(x, _)| *x == c).map(|(_, n)| *n);
+        match self {
+            Req::Phyrexian(_) | Req::PhyrexianHybrid(..) => Some((2, true)),
+            Req::Colored(c) | Req::TwoHybrid(c) | Req::ColorlessHybrid(c) => {
+                of(c).map(|n| (n, false))
+            }
+            Req::Hybrid(a, b) => match (of(a), of(b)) {
+                (Some(x), Some(y)) => Some((x.min(y), false)),
+                (Some(x), None) | (None, Some(x)) => Some((x, false)),
+                (None, None) => None,
+            },
+            Req::Colorless | Req::Snow | Req::Generic | Req::XOf(_) => None,
+        }
+    }
+}
+
+/// The requirements of a mana cost (X already substituted), with `x` of its generic mana
+/// being X that only mana of particular colors may pay. `None` for an unpayable cost.
+fn requirements(cost: &ManaCost, x: Option<XSpend>) -> Option<Vec<Req>> {
+    let mut reqs: Vec<Req> = Vec::new();
+    for s in &cost.symbols {
+        match *s {
+            ManaSymbol::Generic(n) => reqs.extend(std::iter::repeat_n(Req::Generic, n as usize)),
+            ManaSymbol::Colored(c) => reqs.push(Req::Colored(c)),
+            ManaSymbol::Colorless => reqs.push(Req::Colorless),
+            ManaSymbol::Snow => reqs.push(Req::Snow),
+            ManaSymbol::X | ManaSymbol::Y | ManaSymbol::Z => {}
+            ManaSymbol::Hybrid(a, b) => reqs.push(Req::Hybrid(a, b)),
+            ManaSymbol::TwoHybrid(c) => reqs.push(Req::TwoHybrid(c)),
+            ManaSymbol::ColorlessHybrid(c) => reqs.push(Req::ColorlessHybrid(c)),
+            ManaSymbol::Phyrexian(c) => reqs.push(Req::Phyrexian(c)),
+            ManaSymbol::PhyrexianHybrid(a, b) => reqs.push(Req::PhyrexianHybrid(a, b)),
+            ManaSymbol::Half(_) => {}
+            ManaSymbol::Infinity => return None,
+        }
+    }
+    if let Some(x) = x {
+        // The generic mana X represents (as much of it as is left to pay).
+        let n = x.amount.min(cost.generic_amount()) as usize;
+        let mut left = n;
+        reqs.retain(|r| {
+            if left > 0 && matches!(r, Req::Generic) {
+                left -= 1;
+                false
+            } else {
+                true
+            }
+        });
+        reqs.extend(std::iter::repeat_n(Req::XOf(x.colors), n));
+    }
+    reqs.sort_by_key(|r| r.rank());
+    Some(reqs)
 }
 
 /// Finds a way to pay `cost` (X already substituted) from `pool`, spending only mana
@@ -672,36 +774,18 @@ pub fn find_payment_with(
     max_life: u32,
     usable: &[bool],
 ) -> Option<PaymentPlan> {
-    let mut reqs: Vec<Req> = Vec::new();
-    for s in &cost.symbols {
-        match *s {
-            ManaSymbol::Generic(n) => reqs.extend(std::iter::repeat_n(Req::Generic, n as usize)),
-            ManaSymbol::Colored(c) => reqs.push(Req::Colored(c)),
-            ManaSymbol::Colorless => reqs.push(Req::Colorless),
-            ManaSymbol::Snow => reqs.push(Req::Snow),
-            ManaSymbol::X | ManaSymbol::Y | ManaSymbol::Z => {}
-            ManaSymbol::Hybrid(a, b) => reqs.push(Req::Hybrid(a, b)),
-            ManaSymbol::TwoHybrid(c) => reqs.push(Req::TwoHybrid(c)),
-            ManaSymbol::ColorlessHybrid(c) => reqs.push(Req::ColorlessHybrid(c)),
-            ManaSymbol::Phyrexian(c) => reqs.push(Req::Phyrexian(c)),
-            ManaSymbol::PhyrexianHybrid(a, b) => reqs.push(Req::PhyrexianHybrid(a, b)),
-            ManaSymbol::Half(_) => {}
-            ManaSymbol::Infinity => return None,
-        }
-    }
-    reqs.sort_by_key(|r| r.rank());
-    let mut used = vec![false; pool.len()];
-    let mut plan = PaymentPlan::default();
-    if solve(
+    let reqs = requirements(cost, ctx.x_spend)?;
+    let solver = PoolSolver {
         pool,
         usable,
-        &reqs,
-        0,
-        &mut used,
-        &mut plan,
+        any: &ctx.any_color,
+        life_for: &ctx.pay_life_for,
         max_life,
-        &ctx.any_color,
-    ) {
+        x_distinct: ctx.x_spend.is_some_and(|x| x.distinct),
+    };
+    let mut used = vec![false; pool.len()];
+    let mut plan = PaymentPlan::default();
+    if solver.solve(&reqs, 0, &mut used, &mut plan, ColorSet::NONE) {
         plan.pool_indices.sort_unstable();
         Some(plan)
     } else {
@@ -713,45 +797,118 @@ fn matches_color(m: &Mana, c: Color, any: &[ManaType]) -> bool {
     m.ty.color() == Some(c) || any.contains(&m.ty)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn solve(
-    pool: &[Mana],
-    usable: &[bool],
-    reqs: &[Req],
-    i: usize,
-    used: &mut Vec<bool>,
-    plan: &mut PaymentPlan,
+/// The backtracking search behind [`find_payment_with`].
+struct PoolSolver<'a> {
+    pool: &'a [Mana],
+    usable: &'a [bool],
+    /// Mana types that may be spent as though they were mana of any color.
+    any: &'a [ManaType],
+    life_for: &'a [(Color, u32)],
     max_life: u32,
-    any: &[ManaType],
-) -> bool {
-    if i == reqs.len() {
-        return true;
-    }
-    let req = reqs[i];
-    // Generic requirements are all at the end: just count free mana.
-    if let Req::Generic = req {
-        let need = reqs.len() - i;
-        let free: Vec<usize> = (0..pool.len()).filter(|&j| usable[j] && !used[j]).collect();
-        if free.len() < need {
+    /// Each mana paying X is of a different color.
+    x_distinct: bool,
+}
+
+impl PoolSolver<'_> {
+    /// Pays `reqs[i..]`. `x_used`: the colors of the mana paying X so far.
+    fn solve(
+        &self,
+        reqs: &[Req],
+        i: usize,
+        used: &mut Vec<bool>,
+        plan: &mut PaymentPlan,
+        x_used: ColorSet,
+    ) -> bool {
+        if i == reqs.len() {
+            return true;
+        }
+        let (pool, any) = (self.pool, self.any);
+        let req = reqs[i];
+        // Generic requirements are all at the end: just count free mana that may pay
+        // generic mana.
+        if let Req::Generic = req {
+            let need = reqs.len() - i;
+            let mut free: Vec<usize> = (0..pool.len())
+                .filter(|&j| self.usable[j] && !used[j] && pool[j].pays_generic())
+                .collect();
+            if free.len() < need {
+                return false;
+            }
+            // Prefer spending colorless, then the most plentiful colors first to keep options.
+            free.sort_by_key(|&j| (pool[j].ty != ManaType::C, pool[j].restriction.is_none()));
+            for &j in free.iter().take(need) {
+                used[j] = true;
+                plan.pool_indices.push(j);
+            }
+            return true;
+        }
+        let rest = |used: &mut Vec<bool>, plan: &mut PaymentPlan| {
+            self.solve(reqs, i + 1, used, plan, x_used)
+        };
+        let paid = match req {
+            Req::Colored(c) | Req::Phyrexian(c) => {
+                self.try_unit(&|m| matches_color(m, c, any), used, plan, &rest)
+            }
+            Req::Colorless => self.try_unit(&|m| m.ty == ManaType::C, used, plan, &rest),
+            // {S} is generic mana that mana from a snow source pays (CR 107.4h).
+            Req::Snow => self.try_unit(&|m| m.snow && m.pays_generic(), used, plan, &rest),
+            Req::XOf(colors) => self.pay_x(reqs, i, colors, used, plan, x_used),
+            Req::Hybrid(a, b) | Req::PhyrexianHybrid(a, b) => self.try_unit(
+                &|m| matches_color(m, a, any) || matches_color(m, b, any),
+                used,
+                plan,
+                &rest,
+            ),
+            Req::ColorlessHybrid(c) => self.try_unit(
+                &|m| matches_color(m, c, any) || m.ty == ManaType::C,
+                used,
+                plan,
+                &rest,
+            ),
+            Req::TwoHybrid(c) => {
+                self.try_unit(&|m| matches_color(m, c, any), used, plan, &rest) || {
+                    // Pay two generic instead: splice two Generic reqs at the end.
+                    let mut more: Vec<Req> = reqs[i + 1..].to_vec();
+                    more.push(Req::Generic);
+                    more.push(Req::Generic);
+                    more.sort_by_key(|r| r.rank());
+                    self.solve(&more, 0, used, plan, x_used)
+                }
+            }
+            Req::Generic => unreachable!(),
+        };
+        if paid {
+            return true;
+        }
+        // Life instead of mana.
+        let Some((life, phyrexian)) = req.life(self.life_for) else {
+            return false;
+        };
+        if self.max_life < plan.life + life {
             return false;
         }
-        // Prefer spending colorless, then the most plentiful colors first to keep options.
-        let mut free = free;
-        free.sort_by_key(|&j| (pool[j].ty != ManaType::C, pool[j].restriction.is_none()));
-        for &j in free.iter().take(need) {
-            used[j] = true;
-            plan.pool_indices.push(j);
+        plan.life += life;
+        plan.phyrexian += phyrexian as u32;
+        if rest(used, plan) {
+            return true;
         }
-        return true;
+        plan.life -= life;
+        plan.phyrexian -= phyrexian as u32;
+        false
     }
-    let try_unit = |pred: &dyn Fn(&Mana) -> bool,
-                    used: &mut Vec<bool>,
-                    plan: &mut PaymentPlan,
-                    next: &dyn Fn(&mut Vec<bool>, &mut PaymentPlan) -> bool|
-     -> bool {
+
+    /// Pays the requirement with one unit of mana `pred` accepts, then the rest (`next`).
+    fn try_unit(
+        &self,
+        pred: &dyn Fn(&Mana) -> bool,
+        used: &mut Vec<bool>,
+        plan: &mut PaymentPlan,
+        next: &dyn Fn(&mut Vec<bool>, &mut PaymentPlan) -> bool,
+    ) -> bool {
+        let pool = self.pool;
         // Try restricted mana first (it's less flexible elsewhere).
         let mut cands: Vec<usize> = (0..pool.len())
-            .filter(|&j| usable[j] && !used[j] && pred(&pool[j]))
+            .filter(|&j| self.usable[j] && !used[j] && pred(&pool[j]))
             .collect();
         cands.sort_by_key(|&j| pool[j].restriction.is_none());
         let mut seen_plain: Vec<ManaType> = Vec::new();
@@ -772,69 +929,35 @@ fn solve(
             used[j] = false;
         }
         false
-    };
-    let next = |used: &mut Vec<bool>, plan: &mut PaymentPlan| {
-        solve(pool, usable, reqs, i + 1, used, plan, max_life, any)
-    };
-    match req {
-        Req::Colored(c) => try_unit(&|m| matches_color(m, c, any), used, plan, &next),
-        Req::Colorless => try_unit(&|m| m.ty == ManaType::C, used, plan, &next),
-        Req::Snow => try_unit(&|m| m.snow, used, plan, &next),
-        Req::Hybrid(a, b) => try_unit(
-            &|m| matches_color(m, a, any) || matches_color(m, b, any),
-            used,
-            plan,
-            &next,
-        ),
-        Req::ColorlessHybrid(c) => try_unit(
-            &|m| matches_color(m, c, any) || m.ty == ManaType::C,
-            used,
-            plan,
-            &next,
-        ),
-        Req::TwoHybrid(c) => {
-            if try_unit(&|m| matches_color(m, c, any), used, plan, &next) {
-                return true;
+    }
+
+    /// Pays the generic mana `reqs[i]` of X with mana of one of `colors` (one not used for
+    /// X yet, if each must differ), then the rest.
+    fn pay_x(
+        &self,
+        reqs: &[Req],
+        i: usize,
+        colors: ColorSet,
+        used: &mut Vec<bool>,
+        plan: &mut PaymentPlan,
+        x_used: ColorSet,
+    ) -> bool {
+        for c in Color::ALL {
+            if !colors.contains(c) || (self.x_distinct && x_used.contains(c)) {
+                continue;
             }
-            // Pay two generic instead: splice two Generic reqs at the end.
-            let mut rest: Vec<Req> = reqs[i + 1..].to_vec();
-            rest.push(Req::Generic);
-            rest.push(Req::Generic);
-            rest.sort_by_key(|r| r.rank());
-            solve(pool, usable, &rest, 0, used, plan, max_life, any)
-        }
-        Req::Phyrexian(c) => {
-            if try_unit(&|m| matches_color(m, c, any), used, plan, &next) {
-                return true;
-            }
-            if max_life >= plan.life + 2 {
-                plan.life += 2;
-                if next(used, plan) {
-                    return true;
-                }
-                plan.life -= 2;
-            }
-            false
-        }
-        Req::PhyrexianHybrid(a, b) => {
-            if try_unit(
-                &|m| matches_color(m, a, any) || matches_color(m, b, any),
+            let mut now = x_used;
+            now.insert(c);
+            if self.try_unit(
+                &|m| m.pays_generic() && matches_color(m, c, self.any),
                 used,
                 plan,
-                &next,
+                &|u, p| self.solve(reqs, i + 1, u, p, now),
             ) {
                 return true;
             }
-            if max_life >= plan.life + 2 {
-                plan.life += 2;
-                if next(used, plan) {
-                    return true;
-                }
-                plan.life -= 2;
-            }
-            false
         }
-        Req::Generic => unreachable!(),
+        false
     }
 }
 

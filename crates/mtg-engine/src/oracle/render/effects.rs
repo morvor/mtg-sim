@@ -1101,6 +1101,7 @@ impl Renderer<'_> {
                 add,
                 spell_filter,
                 body,
+                abilities,
             } => {
                 let a = self.effect(add);
                 let f = self.noun_det(spell_filter, Det::A);
@@ -1110,7 +1111,11 @@ impl Renderer<'_> {
                     format!("{f} spell")
                 };
                 let b = self.in_event_scope(|r| r.body(body));
-                format!("{a}. When that mana is spent to cast {f}, {b}")
+                if *abilities {
+                    format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
+                } else {
+                    format!("{a}. When that mana is spent to cast {f}, {b}")
+                }
             }
             Effect::PersistentMana(e) => {
                 let a = self.effect(e);
@@ -3237,6 +3242,9 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn mana_restriction(&mut self, r: &crate::mana::ManaRestriction) -> String {
+        if let crate::mana::ManaRestriction::NotGeneric = r {
+            return "This mana can't be spent to pay generic mana costs".into();
+        }
         format!("Spend this mana only {}", self.mana_restriction_purpose(r))
     }
 
@@ -3255,6 +3263,7 @@ impl Renderer<'_> {
             M::InstantOrSorcery => "to cast instant or sorcery spells".into(),
             M::NoncreatureSpell => "to cast noncreature spells".into(),
             M::NotNonartifactSpell => "This mana can't be spent to cast a nonartifact spell".into(),
+            M::NotGeneric => "This mana can't be spent to pay generic mana costs".into(),
             M::AnyOf(v) => {
                 let parts: Vec<String> =
                     v.iter().map(|x| self.mana_restriction_purpose(x)).collect();

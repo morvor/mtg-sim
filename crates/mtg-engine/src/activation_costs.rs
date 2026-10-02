@@ -77,8 +77,9 @@ impl CostChanges {
             | CostChange::FlashForAdditionalCost(_)
             | CostChange::OptionalAdditionalCost { .. }
             | CostChange::AdditionalCostChoice(_) => return false,
-            // How the cost is paid, not what it is (see `cost_rules::spend_any_type`).
-            CostChange::SpendAnyType => return false,
+            // How the cost is paid, not what it is (see `cost_rules::spend_any_type`,
+            // `payment_rules`).
+            CostChange::SpendAnyType | CostChange::Rule(_) => return false,
         }
         true
     }

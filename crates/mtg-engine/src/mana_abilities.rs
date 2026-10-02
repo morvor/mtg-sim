@@ -606,7 +606,12 @@ pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
         let p = ctx.controller;
         let max = g.max_mana_available(p) as i64;
         let src = ctx.source.or(ctx.stack_obj).unwrap_or(ObjectId(0));
-        ctx.x = match g.ask(p, crate::decision::Decision::ChooseX { source: src, max }) {
+        let choice = crate::decision::Decision::ChooseX {
+            source: src,
+            min: 0,
+            max,
+        };
+        ctx.x = match g.ask(p, choice) {
             crate::decision::Answer::Number(n) if n >= 0 => n as i32,
             _ => 0,
         };
@@ -708,6 +713,7 @@ pub fn resolve_add_mana_with_rider(
     g: &mut Game,
     add: &Effect,
     spell_filter: &Filter,
+    abilities: bool,
     body: &Body,
     ctx: &mut Ctx,
 ) {
@@ -720,6 +726,7 @@ pub fn resolve_add_mana_with_rider(
             let rider = ManaRider {
                 id: 0,
                 spell_filter: spell_filter.clone(),
+                abilities,
                 body: body.clone(),
                 controller: ctx.controller,
                 source: ctx.source,
@@ -942,6 +949,20 @@ pub fn usable_pool(g: &Game, p: PlayerId, spend: &SpendContext) -> Vec<bool> {
 
 /// Whether mana `source` would produce may pay for `spend`. A rough "could this be paid"
 /// check (`check_only`) ignores restrictions.
+/// Whether the mana `source` would produce may pay generic mana ("This mana can't be spent
+/// to pay generic mana costs", [`ManaRestriction::NotGeneric`]).
+fn source_pays_generic(source: &ManaSource) -> bool {
+    let effect = match &source.ability.kind {
+        AbilityKind::Activated(act) => &act.body.effect,
+        AbilityKind::Spell(s) => &s.body.effect,
+        _ => return true,
+    };
+    !matches!(
+        effect_restriction(effect),
+        Some(ManaRestriction::NotGeneric)
+    )
+}
+
 fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &SpendContext) -> bool {
     if spend.check_only {
         return true;
@@ -1337,6 +1358,7 @@ pub fn potential_mana_count(g: &Game, p: PlayerId, reserve: Option<ObjectId>) ->
                 source: Some(si),
                 pool_index: None,
                 restriction_ok: true,
+                generic_ok: true,
             })
         })
         .collect();
@@ -1350,6 +1372,9 @@ enum Req {
     Colorless,
     Snow,
     Generic,
+    /// One generic mana that X represents, which only mana of these colors may pay
+    /// ([`XSpend`]).
+    XOf(ColorSet),
     Hybrid(Color, Color),
     TwoHybrid(Color),
     ColorlessHybrid(Color),
@@ -1359,24 +1384,50 @@ enum Req {
 
 impl Req {
     /// Whether the symbol can only be paid with a unit of mana ({2/C} can be paid with two
-    /// generic mana instead, Phyrexian symbols with life).
-    fn needs_one_unit(self) -> bool {
+    /// generic mana instead, Phyrexian symbols with life, and so can symbols an effect lets
+    /// the payer pay with life).
+    fn needs_one_unit(self, life_for: &[(Color, u32)]) -> bool {
         !matches!(
             self,
             Req::TwoHybrid(_) | Req::Phyrexian(_) | Req::PhyrexianHybrid(..)
-        )
+        ) && self.life(life_for).is_none()
     }
 
     /// The types of mana that can pay the symbol, as a set of [`type_bit`]s, if it can only
     /// be paid with one unit of mana of particular types.
-    fn type_mask(self) -> Option<u8> {
+    fn type_mask(self, life_for: &[(Color, u32)]) -> Option<u8> {
         let c = |x: Color| type_bit(ManaType::from_color(x));
+        if self.life(life_for).is_some() {
+            return None;
+        }
         match self {
             Req::Colored(x) => Some(c(x)),
             Req::Colorless => Some(type_bit(ManaType::C)),
             Req::Hybrid(x, y) => Some(c(x) | c(y)),
             Req::ColorlessHybrid(x) => Some(type_bit(ManaType::C) | c(x)),
+            Req::XOf(colors) => Some(
+                Color::ALL
+                    .iter()
+                    .filter(|x| colors.contains(**x))
+                    .fold(0, |m, x| m | c(*x)),
+            ),
             _ => None,
+        }
+    }
+
+    /// The life that may pay the symbol instead of mana: 2 for a Phyrexian symbol
+    /// (CR 107.4f), or what an effect lets the payer pay for a symbol of (or with a half
+    /// of) a color, never for generic mana (see `payment_rules.rs`).
+    fn life(self, life_for: &[(Color, u32)]) -> Option<u32> {
+        let of = |c: Color| life_for.iter().find(|(x, _)| *x == c).map(|(_, n)| *n);
+        match self {
+            Req::Phyrexian(_) | Req::PhyrexianHybrid(..) => Some(2),
+            Req::Colored(c) | Req::TwoHybrid(c) | Req::ColorlessHybrid(c) => of(c),
+            Req::Hybrid(a, b) => match (of(a), of(b)) {
+                (Some(x), Some(y)) => Some(x.min(y)),
+                (x, y) => x.or(y),
+            },
+            Req::Colorless | Req::Snow | Req::Generic | Req::XOf(_) => None,
         }
     }
 }
@@ -1386,7 +1437,7 @@ fn type_bit(t: ManaType) -> u8 {
     1 << (t as u8)
 }
 
-fn expand(cost: &ManaCost) -> Option<Vec<Req>> {
+fn expand(cost: &ManaCost, x: Option<XSpend>) -> Option<Vec<Req>> {
     let mut v = Vec::new();
     for s in &cost.symbols {
         match *s {
@@ -1403,11 +1454,25 @@ fn expand(cost: &ManaCost) -> Option<Vec<Req>> {
             ManaSymbol::Infinity => return None,
         }
     }
+    if let Some(x) = x {
+        // The generic mana X represents (as much of it as is left to pay).
+        let n = x.amount.min(cost.generic_amount()) as usize;
+        let mut left = n;
+        v.retain(|r| {
+            if left > 0 && matches!(r, Req::Generic) {
+                left -= 1;
+                false
+            } else {
+                true
+            }
+        });
+        v.extend(std::iter::repeat_n(Req::XOf(x.colors), n));
+    }
     // Generic symbols come last: once only they remain, any usable unit pays each.
     v.sort_by_key(|r| match r {
         Req::Colored(_) | Req::Colorless => 0,
         Req::Hybrid(..) | Req::ColorlessHybrid(_) => 1,
-        Req::Snow => 2,
+        Req::Snow | Req::XOf(_) => 2,
         Req::TwoHybrid(_) | Req::Phyrexian(_) | Req::PhyrexianHybrid(..) => 3,
         Req::Generic => 4,
     });
@@ -1423,6 +1488,8 @@ struct Unit {
     source: Option<usize>,
     pool_index: Option<usize>,
     restriction_ok: bool,
+    /// It may pay generic mana ([`ManaRestriction::NotGeneric`]).
+    generic_ok: bool,
 }
 
 /// Plans which sources to activate. Returns (source index, chosen types per unit) for
@@ -1434,7 +1501,7 @@ pub fn plan_payment(
     spend: &SpendContext,
     reserve: Option<ObjectId>,
 ) -> Option<Vec<(ManaSource, Vec<ManaType>)>> {
-    let reqs = expand(cost)?;
+    let reqs = expand(cost, spend.x_spend)?;
     let sources = mana_sources(g, p, reserve);
     // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
     // any colored requirement.
@@ -1457,11 +1524,13 @@ pub fn plan_payment(
             pool_index: Some(i),
             // A rough "could this be paid" check ignores restrictions (CR 106.6).
             restriction_ok: spend.check_only || m.can_spend_in(g, p, spend),
+            generic_ok: m.pays_generic(),
         });
     }
     for (si, s) in sources.iter().enumerate() {
         let snow = g.obj(s.obj).chars.has_supertype(Supertype::Snow);
         let ok = source_restriction_ok(g, p, s, spend);
+        let generic_ok = source_pays_generic(s);
         for u in &s.units {
             units.push(Unit {
                 types: widen(u.clone()),
@@ -1469,11 +1538,14 @@ pub fn plan_payment(
                 source: Some(si),
                 pool_index: None,
                 restriction_ok: ok,
+                generic_ok,
             });
         }
     }
     let life = g.player(p).life.max(0) as u32;
     let mut planner = Planner::new(&reqs, &units, &sources, life);
+    planner.life_for = crate::payment_rules::life_for_mana(g, p);
+    planner.x_distinct = spend.x_spend.is_some_and(|x| x.distinct);
     // "Players can't pay life to cast spells ..." (Phyrexian mana, CR 107.4f; see
     // `rule_statics::payment`).
     planner.phyrexian_life = !crate::rule_statics::payment::forbids_life(g, p, spend.cost_of);
@@ -1523,8 +1595,15 @@ struct Planner<'a> {
     /// Life paid so far: for Phyrexian symbols and for uses of special actions.
     life_used: u32,
     life: u32,
-    /// Phyrexian symbols may be paid with life.
+    /// Phyrexian symbols (and others an effect allows) may be paid with life.
     phyrexian_life: bool,
+    /// Colors whose symbols an effect lets the payer pay with life
+    /// ([`SpendContext::pay_life_for`]).
+    life_for: Vec<(Color, u32)>,
+    /// Each mana paying X is of a different color ([`XSpend::distinct`]), and the colors
+    /// of those paying it so far.
+    x_distinct: bool,
+    x_used: ColorSet,
 }
 
 impl<'a> Planner<'a> {
@@ -1573,6 +1652,9 @@ impl<'a> Planner<'a> {
             life_used: 0,
             life,
             phyrexian_life: true,
+            life_for: Vec::new(),
+            x_distinct: false,
+            x_used: ColorSet::NONE,
         }
     }
 
@@ -1726,11 +1808,18 @@ impl<'a> Planner<'a> {
     /// {W}{W}{U}{U} fails this at once, although each color on its own has enough lands.
     fn enough_units(&self, i: usize) -> bool {
         let rest = &self.reqs[i..];
-        let needed = rest.iter().filter(|r| r.needs_one_unit()).count() + self.extra_generic;
+        let needed = rest
+            .iter()
+            .filter(|r| r.needs_one_unit(&self.life_for))
+            .count()
+            + self.extra_generic;
         if self.capacity(&|_| true) < needed {
             return false;
         }
-        let masks: Vec<u8> = rest.iter().filter_map(|r| r.type_mask()).collect();
+        let masks: Vec<u8> = rest
+            .iter()
+            .filter_map(|r| r.type_mask(&self.life_for))
+            .collect();
         let all = masks.iter().fold(0, |a, m| a | m);
         // Each nonempty subset of the types these symbols can be paid with.
         let mut set = all;
@@ -1742,7 +1831,7 @@ impl<'a> Planner<'a> {
             set = (set - 1) & all;
         }
         let snow = rest.iter().filter(|r| matches!(r, Req::Snow)).count();
-        snow == 0 || self.capacity(&|u| u.snow) >= snow
+        snow == 0 || self.capacity(&|u| u.snow && u.generic_ok) >= snow
     }
 
     /// Pays the symbols from `i` on.
@@ -1755,18 +1844,20 @@ impl<'a> Planner<'a> {
         }
         let has = |u: &Unit, t: ManaType| u.types.contains(&t);
         let col = ManaType::from_color;
-        match self.reqs[i] {
+        let req = self.reqs[i];
+        let paid = match req {
             Req::Colored(c) => self.try_each(i, &|u| has(u, col(c)).then_some(col(c))),
             Req::Colorless => self.try_each(i, &|u| has(u, ManaType::C).then_some(ManaType::C)),
             Req::Snow => self.try_each(i, &|u| {
-                if u.snow {
+                if u.snow && u.generic_ok {
                     u.types.first().copied()
                 } else {
                     None
                 }
             }),
+            Req::XOf(colors) => self.pay_x(i, colors),
             // Only generic symbols remain (they're sorted last): any unit pays each.
-            Req::Generic => self.fill_generic(self.reqs.len() - i + self.extra_generic),
+            Req::Generic => return self.fill_generic(self.reqs.len() - i + self.extra_generic),
             Req::Hybrid(a, b) => self.try_each(i, &|u| {
                 if has(u, col(a)) {
                     Some(col(a))
@@ -1796,37 +1887,52 @@ impl<'a> Planner<'a> {
                 self.extra_generic -= 2;
                 false
             }
-            Req::Phyrexian(c) => {
-                if self.try_each(i, &|u| has(u, col(c)).then_some(col(c))) {
-                    return true;
+            Req::Phyrexian(c) => self.try_each(i, &|u| has(u, col(c)).then_some(col(c))),
+            Req::PhyrexianHybrid(a, b) => self.try_each(i, &|u| {
+                if has(u, col(a)) {
+                    Some(col(a))
+                } else if has(u, col(b)) {
+                    Some(col(b))
+                } else {
+                    None
                 }
-                self.pay_life_instead(i)
-            }
-            Req::PhyrexianHybrid(a, b) => {
-                let paid = self.try_each(i, &|u| {
-                    if has(u, col(a)) {
-                        Some(col(a))
-                    } else if has(u, col(b)) {
-                        Some(col(b))
-                    } else {
-                        None
-                    }
-                });
-                paid || self.pay_life_instead(i)
-            }
-        }
+            }),
+        };
+        paid || req
+            .life(&self.life_for)
+            .is_some_and(|n| self.pay_life_instead(i, n))
     }
 
-    /// Pays the Phyrexian symbol `i` with 2 life, then the rest.
-    fn pay_life_instead(&mut self, i: usize) -> bool {
-        if !self.phyrexian_life || self.life_used + 2 > self.life {
+    /// Pays symbol `i` with `n` life (a Phyrexian symbol, or one an effect lets the payer
+    /// pay with life), then the rest.
+    fn pay_life_instead(&mut self, i: usize, n: u32) -> bool {
+        if !self.phyrexian_life || self.life_used + n > self.life {
             return false;
         }
-        self.life_used += 2;
+        self.life_used += n;
         if self.solve(i + 1) {
             return true;
         }
-        self.life_used -= 2;
+        self.life_used -= n;
+        false
+    }
+
+    /// Pays the generic mana `i` of X with a unit that makes mana of one of `colors` (one
+    /// not used for X yet, if each must differ), then the rest.
+    fn pay_x(&mut self, i: usize, colors: ColorSet) -> bool {
+        for c in Color::ALL {
+            if !colors.contains(c) || (self.x_distinct && self.x_used.contains(c)) {
+                continue;
+            }
+            let t = ManaType::from_color(c);
+            let before = self.x_used;
+            self.x_used.insert(c);
+            let paid = self.try_each(i, &|u| (u.generic_ok && u.types.contains(&t)).then_some(t));
+            self.x_used = before;
+            if paid {
+                return true;
+            }
+        }
         false
     }
 
@@ -1850,7 +1956,8 @@ impl<'a> Planner<'a> {
     /// search: take units in order of preference, skipping any whose use would leave too
     /// few (such as the only ability of a permanent that makes two mana).
     fn fill_generic(&mut self, need: usize) -> bool {
-        let any = |_: &Unit| true;
+        // Mana that can't pay generic mana costs doesn't count.
+        let any = |u: &Unit| u.generic_ok;
         if self.capacity(&any) < need {
             return false;
         }
@@ -1859,6 +1966,9 @@ impl<'a> Planner<'a> {
         for left in (0..need).rev() {
             let mut took = false;
             for u in self.candidates() {
+                if !units[u].generic_ok {
+                    continue;
+                }
                 self.take(u, units[u].types[0]);
                 if self.capacity(&any) >= left {
                     took = true;
@@ -1886,6 +1996,16 @@ pub fn pay_mana(
     spend: &SpendContext,
     reserve: Option<ObjectId>,
 ) -> Option<Vec<ManaType>> {
+    // How the payer may pay: symbols they may pay with life instead ("For each {B} in a
+    // cost, you may pay 2 life rather than pay that mana"), and with mana that may be spent
+    // as though it were mana of any color, any mana pays the X a spell or ability limits to
+    // mana of particular colors (CR 609.4b).
+    let mut adjusted = spend.clone();
+    adjusted.pay_life_for = crate::payment_rules::life_for_mana(g, p);
+    if crate::as_though::spends_as_any_color(g, p) {
+        adjusted.any_color = ManaType::ALL.to_vec();
+    }
+    let spend = &adjusted;
     // Prefer paying from the pool if possible (without life for Phyrexian if mana suffices).
     let try_pool = |g: &Game, allow_life: u32| {
         find_payment_with(
@@ -1940,8 +2060,8 @@ pub fn pay_mana(
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;
     }
-    if let (true, Some(spell), true) = (spend.is_spell, spend.source, plan.life > 0) {
-        crate::kw::compleated::record_phyrexian_life(g, spell, plan.life / 2);
+    if let (true, Some(spell), true) = (spend.is_spell, spend.source, plan.phyrexian > 0) {
+        crate::kw::compleated::record_phyrexian_life(g, spell, plan.phyrexian);
     }
     let mut spent = Vec::new();
     let mut idxs = plan.pool_indices.clone();
@@ -1961,11 +2081,22 @@ pub fn pay_mana(
         crate::kw::snow_mana::record(g, spell, snow);
     }
     // "When that mana is spent to cast ..." (CR 106.6): the delayed triggers trigger now
-    // and are put on the stack the next time a player would receive priority.
-    if let (true, Some(spell)) = (spend.is_spell, spend.source) {
+    // and are put on the stack the next time a player would receive priority. "... or
+    // activate an ability": the ability on the stack whose cost it paid.
+    let spent_on = match (spend.is_spell, spend.source, spend.ability_on_stack) {
+        (true, Some(spell), _) => Some((spell, true)),
+        (false, _, Some(ability)) => Some((ability, false)),
+        _ => None,
+    };
+    if let Some((spell, is_spell)) = spent_on {
         for r in riders.into_iter().rev() {
             let rctx = Ctx::new(r.source, r.controller);
-            if !g.matches(spell, &r.spell_filter, &rctx) {
+            let triggers = if is_spell {
+                g.matches(spell, &r.spell_filter, &rctx)
+            } else {
+                r.abilities
+            };
+            if !triggers {
                 continue;
             }
             g.trigger_order += 1;

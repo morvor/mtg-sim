@@ -101,6 +101,7 @@ pub mod object;
 pub mod opening_hand;
 pub mod oracle;
 pub mod oracle_ext;
+pub mod payment_rules;
 pub mod per_player_targets;
 pub mod permissions;
 pub mod piles;

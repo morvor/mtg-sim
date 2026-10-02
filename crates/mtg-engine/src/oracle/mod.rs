@@ -501,6 +501,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         .then(|| patterns::r107_x_cant_be_zero::strip(eff_text))
         .flatten();
     let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
+    // "Spend only black mana on X." (see `payment_rules.rs`): a rule about paying the X in
+    // the cost.
+    let x_spend = cost_has_x
+        .then(|| patterns::payment_rules::strip_x_spend(eff_text))
+        .flatten();
+    let eff_text = x_spend.as_ref().map_or(eff_text, |(t, _)| t.as_str());
     // "Remove any number of +1/+1 counters from ~: Create that many ... tokens."
     let amount_eff = amount_x
         .as_ref()
@@ -562,6 +568,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         act.condition = Some(patterns::r107_x_cant_be_zero::condition(
             act.condition.take(),
         ));
+    }
+    if let Some((_, rule)) = x_spend {
+        act.own_cost_changes.push(OwnCostChange {
+            change: CostChange::Rule(rule),
+            condition: None,
+        });
     }
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
 }

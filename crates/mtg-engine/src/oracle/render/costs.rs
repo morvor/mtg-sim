@@ -341,6 +341,11 @@ impl Renderer<'_> {
             (false, true) => s.push_str(" X can't be 0."),
             (false, false) => {}
         }
+        // "Spend only black mana on X." (see `payment_rules`).
+        for r in crate::payment_rules::ability_rules(a) {
+            let t = super::statics::cost_rule_text(&r);
+            s.push_str(&format!(" {}.", capitalize(&t)));
+        }
         self.zone = saved;
         let _ = third_person;
         if solved {
