@@ -222,26 +222,188 @@ fn description<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, String)> {
             return Some((f, rest.to_string()));
         }
     }
-    let (f, _, rest) = parse_object_phrase(s)?;
-    // The description must name cards ("basic land card", "creature cards").
-    let head = &s[..s.len() - rest.len()];
-    if !head.contains("card") {
-        return None;
+    // The head ("basic land card", "Bird or basic land card") runs to the word "card".
+    let head_end = s
+        .match_indices("card")
+        .map(|(i, _)| i)
+        .find(|i| {
+            let after = &s[i + 4..];
+            let after = after.strip_prefix('s').unwrap_or(after);
+            (*i == 0 || s[..*i].ends_with(' ')) && (after.is_empty() || after.starts_with([' ', ',']))
+        })
+        .map(|i| {
+            let after = &s[i + 4..];
+            i + 4 + usize::from(after.starts_with('s'))
+        })?;
+    let mut fs = Vec::new();
+    let mut rest = s[head_end..].to_string();
+    match head(&s[..head_end]) {
+        Some(f) => fs.push(f),
+        None => {
+            let (f, _, r) = parse_object_phrase(s)?;
+            let h = s[..s.len() - r.len()].trim_end_matches([' ', ',']);
+            if h.len() < head_end {
+                return None;
+            }
+            fs.push(f);
+            rest = s[h.len()..].to_string();
+        }
     }
-    let mut fs = vec![f];
-    let mut rest = rest.trim_start().to_string();
-    // Qualifiers whose values need the builder ("with mana value X or less", "with mana
-    // value equal to 1 plus the sacrificed creature's mana value", "with mana value 4 or
-    // 5", "that have mana value 9").
+    // Qualifiers this grammar reads itself ("with mana value equal to 1 plus the
+    // sacrificed creature's mana value", "with deathtouch, hexproof, reach, or trample");
+    // others the object phrase grammar reads ("not named ~", "with that name").
+    let mut generic_done = fs.len() > 1 || rest.len() < s.len() - head_end;
     loop {
-        if let Some((f2, r)) = mana_value_qualifier(&rest, b) {
+        if let Some((f2, r)) = rest.strip_prefix(' ').and_then(|r| qualifier(r, b)) {
             fs.push(f2);
             rest = r;
             continue;
         }
+        let qualifies = [" with", " that", " not ", " without "]
+            .iter()
+            .any(|p| rest.starts_with(p));
+        if !generic_done && qualifies {
+            generic_done = true;
+            if let Some((f, _, r)) = parse_object_phrase(s) {
+                let h = s[..s.len() - r.len()].trim_end_matches([' ', ',']);
+                if h.len() > head_end {
+                    fs = vec![f];
+                    rest = s[h.len()..].to_string();
+                    continue;
+                }
+            }
+        }
         break;
     }
     Some((Filter::and(fs), rest))
+}
+
+/// A card description's head: "basic land card", "Spider Hero card", "Bird or basic land
+/// card" (a Bird card or a basic land card), "basic, Sphere, or Locus land card".
+fn head(h: &str) -> Option<Filter> {
+    if let Some((f, _, r)) = parse_object_phrase(h) {
+        if r.trim().is_empty() {
+            return Some(f);
+        }
+    }
+    let (words, noun) = h.rsplit_once(' ')?;
+    if !matches!(noun, "card" | "cards") {
+        return None;
+    }
+    // Subtypes only: "Spider Hero card".
+    let ws: Vec<&str> = words.split(' ').collect();
+    if ws.len() > 1 && ws.iter().all(|w| subtype_word(w).is_some()) {
+        let mut fs: Vec<Filter> = ws
+            .iter()
+            .filter_map(|w| subtype_word(w).map(Filter::Subtype))
+            .collect();
+        fs.push(Filter::Card);
+        return Some(Filter::and(fs));
+    }
+    // Alternatives that share the noun: "Bird or basic land", "basic, Sphere, or Locus
+    // land".
+    let alts: Vec<&str> = words
+        .split(", or ")
+        .flat_map(|x| x.split(" or "))
+        .flat_map(|x| x.split(", "))
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .collect();
+    if alts.len() < 2 {
+        return None;
+    }
+    let last = *alts.last()?;
+    // "Locus land": the last alternative's final word ("land") is shared by alternatives
+    // that only modify it (a supertype or a land type).
+    let shared = last.rsplit_once(' ').map(|(_, w)| w);
+    let mut out = Vec::new();
+    for a in &alts {
+        let modifies_shared = shared.is_some_and(|w| {
+            w == "land" && !a.contains(' ') && (*a == "basic" || is_land_type(a) && *a != last)
+        });
+        let phrase = if *a == last || !modifies_shared {
+            format!("{a} {noun}")
+        } else {
+            format!("{a} {} {noun}", shared.expect("checked"))
+        };
+        let (f, _, r) = parse_object_phrase(&phrase)?;
+        if !r.trim().is_empty() {
+            return None;
+        }
+        out.push(f);
+    }
+    Some(Filter::Or(out))
+}
+
+fn is_land_type(w: &str) -> bool {
+    let mut c = w.chars();
+    let cap: String = c
+        .next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default();
+    crate::types::is_land_type(&cap)
+}
+
+/// "with mana value ...", "with power or toughness 6 or greater", "with flashback or
+/// disturb", "with a mana ability", "with enchant creature".
+fn qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    if let Some(x) = mana_value_qualifier(s, b) {
+        return Some(x);
+    }
+    if let Some(r) = s.strip_prefix("with power or toughness ") {
+        let (n, r) = parse_number(r)?;
+        let r = r.trim_start();
+        let (c, r) = if let Some(r) = r.strip_prefix("or greater") {
+            (Cmp::Ge, r)
+        } else if let Some(r) = r.strip_prefix("or less") {
+            (Cmp::Le, r)
+        } else {
+            return None;
+        };
+        let f = Filter::Or(vec![
+            Filter::Power(c, Box::new(n.clone())),
+            Filter::Toughness(c, Box::new(n)),
+        ]);
+        return Some((f, r.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("with a mana ability") {
+        return Some((Filter::Custom(crate::search_rules::HAS_MANA_ABILITY.into()), r.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("with enchant creature") {
+        return Some((Filter::Custom(crate::search_rules::ENCHANT_CREATURE.into()), r.to_string()));
+    }
+    // A list of keywords: "with flashback or disturb", "with deathtouch, hexproof, reach,
+    // or trample".
+    let r = s.strip_prefix("with ")?;
+    let mut kws = Vec::new();
+    let mut rest = r;
+    loop {
+        let (k, r2) = keyword(rest)?;
+        kws.push(Filter::HasKeyword(k));
+        if let Some(r3) = r2.strip_prefix(", or ").or_else(|| r2.strip_prefix(" or ")) {
+            let (k, r4) = keyword(r3)?;
+            kws.push(Filter::HasKeyword(k));
+            rest = r4;
+            break;
+        }
+        rest = r2.strip_prefix(", ")?;
+    }
+    (kws.len() > 1).then(|| (Filter::Or(kws), rest.to_string()))
+}
+
+/// A keyword's name at the start of `s` (two-word names first).
+fn keyword(s: &str) -> Option<(crate::keywords::KeywordKind, &str)> {
+    let ends: Vec<usize> = s
+        .match_indices([' ', ','])
+        .map(|(i, _)| i)
+        .chain([s.len()])
+        .collect();
+    for e in ends.iter().take(2).rev() {
+        if let Some(k) = crate::keywords::KeywordKind::from_name(&s[..*e]) {
+            return Some((k, &s[*e..]));
+        }
+    }
+    None
 }
 
 fn mana_value_qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
@@ -295,19 +457,22 @@ fn count(s: &str) -> Option<(Value, bool, bool, &str)> {
 }
 
 /// The separators between parts that have their own articles.
-const PART_SEPS: [(&str, Sep); 6] = [
+const PART_SEPS: [(&str, Sep); 7] = [
     (", and/or ", Sep::And),
     (", and ", Sep::And),
     (" and/or ", Sep::And),
     (" and ", Sep::And),
     (", or ", Sep::Or),
     (" or ", Sep::Or),
+    (", ", Sep::Comma),
 ];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Sep {
     And,
     Or,
+    /// A comma in a list whose last separator says which kind it is.
+    Comma,
 }
 
 /// The card specs: a list of parts, each found separately ("a Forest card and a Plains
@@ -320,7 +485,27 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
     let mut rest: String = s;
     loop {
         let (n, up_to, all, r) = count(&rest)?;
-        let (f, r) = description(r, b)?;
+        let (mut f, mut r) = description(r, b)?;
+        // "basic land cards and/or Gate cards": alternatives without their own counts.
+        loop {
+            let alt = [" and/or ", ", or ", " or "].iter().find_map(|p| {
+                let r2 = r.strip_prefix(p)?;
+                if count(r2).is_some() {
+                    return None;
+                }
+                let saved = b.targets.len();
+                let d = description(r2, b);
+                if d.is_none() {
+                    b.targets.truncate(saved);
+                }
+                d
+            });
+            let Some((f2, r2)) = alt else {
+                break;
+            };
+            f = Filter::Or(vec![f, f2]);
+            r = r2;
+        }
         items.push((n, up_to, all, f));
         let next = PART_SEPS.iter().find_map(|(p, sep)| {
             let r2 = r.strip_prefix(p)?;
@@ -368,11 +553,16 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
             .collect();
         return Some((parts, distinct, r.to_string()));
     }
+    // A comma list ends with "and" or "or" ("a white card, a blue card, and a green
+    // card").
+    if seps.last() == Some(&Sep::Comma) {
+        return None;
+    }
     let or = seps.contains(&Sep::Or);
     if or {
         // Alternatives for one card: every part is "a"/"an" and every separator "or"
         // (the last may follow a comma list).
-        if seps.iter().any(|s| *s != Sep::Or)
+        if seps.iter().any(|s| *s == Sep::And)
             || items.iter().any(|(n, up, all, _)| !matches!(n, Value::Const(1)) || *up || *all)
         {
             return None;
@@ -537,7 +727,13 @@ fn tail_inner<'a>(
     .find_map(|p| t.strip_prefix(p));
     if let Some(x) = put {
         t = put_dests(x, spec, sr, b)?;
-    } else if let Some(x) = [", exile ", " and exile ", ", exiles ", " and exiles "]
+    } else if let Some(x) = [
+        ", exile ",
+        ", and exile ",
+        " and exile ",
+        ", exiles ",
+        " and exiles ",
+    ]
         .iter()
         .find_map(|p| t.strip_prefix(p))
     {
@@ -549,11 +745,11 @@ fn tail_inner<'a>(
     }
     // Shuffle.
     let shuffles = [
+        ", then shuffles",
+        " then shuffles",
         ", then shuffle",
         " then shuffle",
         ", shuffle",
-        ", then shuffles",
-        " then shuffles",
     ];
     if let Some(x) = shuffles.iter().find_map(|p| t.strip_prefix(p)) {
         // "then shuffle and put that card on top", "... third from the top", "... on top
@@ -854,7 +1050,45 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::card::CardDb;
+    use crate::oracle::CompileContext;
+
+    fn with_builder<T>(f: impl FnOnce(&mut Builder) -> T) -> T {
+        let tl = TypeLine::parse("Sorcery");
+        let ctx = CompileContext {
+            card_name: "Testcard",
+            full_name: "Testcard",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let mut b = Builder::new(&ctx);
+        f(&mut b)
+    }
+
+    #[test]
+    fn zz_debug() {
+        let Ok(t) = std::env::var("SG") else { return };
+        for t in t.split('|') {
+            with_builder(|b| {
+                let l = t.to_lowercase();
+                let l = end(&l);
+                let Some((sr, r)) = searcher(l, b) else { eprintln!("{t}: searcher fails"); return };
+                eprintln!("{t}: searcher ok who={:?}", sr.who);
+                let Some((_w, z, _o, r)) = zones(r, &sr, b) else { eprintln!("  zones fail"); return };
+                eprintln!("  zones {z:?} rest={r}");
+                let cut = ACTIONS.iter().filter_map(|a| r.find(a)).min().unwrap_or(r.len());
+                let (desc, t2) = r.split_at(cut);
+                eprintln!("  desc={desc:?} tail={t2:?}");
+                eprintln!("  specs={:?}", specs(desc, b));
+                eprintln!("  clause={:?}", search_clause(l, b).is_some());
+            });
+        }
+    }
 
     fn show(name: &str) -> String {
         let d = CardDb::global().get(name).expect("card");

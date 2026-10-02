@@ -46,6 +46,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     if let Some(b) = crate::zones::custom_filter(g, name, id, ctx) {
         return b;
     }
+    // "with a mana ability", "with enchant creature" (search descriptions, CR 701.23).
+    if let Some(b) = crate::search_rules::custom_filter(g, name, id, ctx) {
+        return b;
+    }
     // "a loyalty ability" being activated (CR 606).
     if let Some(b) = crate::stack_ability_filters::custom_filter(g, name, id, ctx) {
         return b;
