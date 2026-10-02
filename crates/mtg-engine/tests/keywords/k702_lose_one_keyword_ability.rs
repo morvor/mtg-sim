@@ -5,6 +5,7 @@
 //! abilities", a quality of the targeting ability itself (CR 702.11d).
 
 use mtg_engine::ability::*;
+use mtg_engine::decision::Decision;
 use mtg_engine::keywords::{Keyword, KeywordKind};
 use mtg_engine::object::*;
 use mtg_engine::testing::*;
@@ -25,7 +26,7 @@ fn walks(t: &mut TestGame, id: ObjectId, land: &str) -> bool {
 
 #[test]
 fn losing_one_landwalk_ability_leaves_the_others() {
-    cr!("702.14a", "702.14d", "613.1f");
+    cr!("702.14a", "113.10", "613.1f");
     let mut t = TestGame::new(2);
     let islandwalker = t.battlefield(P1, "Merfolk Raiders");
     let forestwalker = t.battlefield(P1, "Zendikar Farguide");
@@ -85,47 +86,83 @@ fn losing_bands_with_other_leaves_banding() {
     // It ends with the turn.
     t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
     assert_eq!(banding(&mut t).len(), 2);
+    // Losing banding, on the other hand, loses the "bands with other" ability as well.
+    let breaker = crate::common_k702_011_017::custom_card(
+        "Band Breaker",
+        "Artifact",
+        None,
+        "{T}: Target creature loses banding until end of turn.",
+    );
+    let breaker = t.custom(P0, breaker, Zone::Battlefield);
+    t.activate(P0, breaker, 0, &[Entity::Object(ayesha)]).unwrap();
+    t.resolve_all();
+    assert!(banding(&mut t).is_empty());
+}
+
+/// The candidates offered for the most recent target choice.
+fn offered(t: &TestGame) -> Vec<Entity> {
+    t.asked()
+        .iter()
+        .rev()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .expect("a target choice")
+}
+
+/// The targets chosen for the spell or ability on top of the stack.
+fn top_targets(t: &TestGame) -> Vec<Entity> {
+    let top = *t.g.stack.last().expect("something on the stack");
+    t.g.obj(top).stack.as_ref().unwrap().chosen[0].targets[0].clone()
 }
 
 #[test]
 fn hexproof_from_activated_and_triggered_abilities() {
-    cr!("702.11d", "702.11b", "115.4");
+    cr!("702.11d", "702.11b", "602.2b", "603.3d");
     ruling!(
         "Volatile Stormdrake",
         "Volatile Stormdrake can't be the target of any activated or triggered abilities your opponents control."
     );
     let mut t = TestGame::new(2);
     let drake = t.battlefield(P1, "Volatile Stormdrake");
-    // An activated ability P0 controls: on the stack, it can't target the Drake.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // An activated ability P0 controls: the Drake isn't a legal choice as it's activated
+    // (another creature of the same player is).
     let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
-    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).unwrap();
-    let ability = *t.g.stack.last().unwrap();
-    assert!(t.g.object_untargetable(drake, P0, Some(ability)));
+    t.activate(P0, sorcerer, 0, &[Entity::Object(drake)]).unwrap();
+    let choices = offered(&t);
+    assert!(choices.contains(&Entity::Object(bears)));
+    assert!(!choices.contains(&Entity::Object(drake)));
+    assert!(!top_targets(&t).contains(&Entity::Object(drake)));
     t.resolve_all();
-    // A triggered ability P0 controls can't either.
+    assert_eq!(t.obj_now(drake).damage, 0);
+    // A triggered ability P0 controls (Flametongue Kavu's "deals 4 damage to target
+    // creature"): the Drake isn't a legal choice as it's put on the stack.
     t.lands(P0, "Mountain", 4);
     let kavu = t.hand(P0, "Flametongue Kavu");
     t.cast(P0, kavu).go();
+    t.answer_targets(P0, &[Entity::Object(drake)]);
     t.resolve(); // the Kavu; its enters trigger goes on the stack
-    let trigger = *t.g.stack.last().unwrap();
-    assert!(t.g.obj(trigger).is_stack_ability());
-    assert!(t.g.object_untargetable(drake, P0, Some(trigger)));
-    let kavu_now = t.g.current(kavu);
-    assert!(!t.g.object_untargetable(kavu_now, P0, Some(trigger)));
+    let choices = offered(&t);
+    assert!(choices.contains(&Entity::Object(bears)));
+    assert!(!choices.contains(&Entity::Object(drake)));
+    assert!(!top_targets(&t).contains(&Entity::Object(drake)));
     t.resolve_all();
+    assert!(t.on_battlefield(drake));
     // A spell can target it.
     t.lands(P0, "Mountain", 1);
     let bolt = t.hand(P0, "Lightning Bolt");
     t.cast(P0, bolt).target(drake).go();
-    let spell = *t.g.stack.last().unwrap();
-    assert!(!t.g.object_untargetable(drake, P0, Some(spell)));
+    assert_eq!(top_targets(&t), vec![Entity::Object(drake)]);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Volatile Stormdrake"));
     // Its controller's own abilities can target it (CR 702.11b: opponents only).
     let mut t = TestGame::new(2);
     let drake = t.battlefield(P1, "Volatile Stormdrake");
     let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
-    t.activate(P1, sorcerer, 0, &[Entity::Player(P0)]).unwrap();
-    let ability = *t.g.stack.last().unwrap();
-    assert!(!t.g.object_untargetable(drake, P1, Some(ability)));
+    t.activate(P1, sorcerer, 0, &[Entity::Object(drake)]).unwrap();
+    assert_eq!(top_targets(&t), vec![Entity::Object(drake)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(drake).damage, 1);
 }

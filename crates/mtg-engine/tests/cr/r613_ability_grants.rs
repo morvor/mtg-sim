@@ -107,10 +107,22 @@ fn activated_and_triggered_abilities_of_the_exiled_card() {
     };
     assert_eq!(mine_trigger(&mut t), 1);
     assert_eq!(t.pt(idris), (5, 5));
+    // "If this artifact is untapped" is about Idris: while Idris is tapped, the ability
+    // doesn't trigger (CR 603.4).
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert!(t.g.tap(idris));
+    let before = t.hand_size(P1);
     t.advance_to(P1, mtg_engine::turn::Step::Draw);
     t.resolve_all();
-    // P1 drew their card for the turn and the additional card from Idris's ability.
-    assert_eq!(t.hand_size(P1), 2);
+    assert_eq!(t.hand_size(P1), before + 1, "only the draw for the turn");
+    // Untapped (in P0's untap step): P0 draws their card for the turn and the additional
+    // card from Idris's ability.
+    let before = t.hand_size(P0);
+    t.advance_to(P0, mtg_engine::turn::Step::Draw);
+    t.resolve_all();
+    assert!(!t.obj_now(idris).tapped);
+    assert_eq!(t.hand_size(P0), before + 2);
 }
 
 #[test]
@@ -197,7 +209,7 @@ fn copying_waits_for_effects_that_give_the_copied_object_abilities() {
 
 #[test]
 fn abilities_gained_from_different_objects_are_distinct_and_unlinked() {
-    cr!("607.5", "607.5a", "113.2c");
+    cr!("607.5", "113.2c");
     let mut t = TestGame::new(2);
     let ooze = t.battlefield(P0, "Necrotic Ooze");
     t.graveyard(P0, "Prodigal Sorcerer");

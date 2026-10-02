@@ -106,7 +106,11 @@ fn sources(g: &Game, from: &Sel, ctx: &Ctx, target: Option<ObjectId>) -> Vec<Obj
 /// the same link, distinct from the links of printed abilities and of abilities gained
 /// from other objects or other effects.
 fn gained_link(link: u16, granter: u32, from: u32) -> u16 {
-    0x8000 | ((link as u32 * 131 + granter * 31 + from * 7919 + 0x3d1) % 0x7fff) as u16
+    let h = (link as u64 * 131)
+        .wrapping_add(granter as u64 * 31)
+        .wrapping_add(from as u64 * 7919)
+        .wrapping_add(0x3d1);
+    0x8000 | (h % 0x7fff) as u16
 }
 
 /// Ability `a` of `from` as an object gains it through an effect of `granter`, with a

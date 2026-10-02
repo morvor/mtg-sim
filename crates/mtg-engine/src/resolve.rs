@@ -828,7 +828,10 @@ impl Game {
             }
             Effect::ExchangeControl { a, b } => {
                 // CR 701.12a: exactly two permanents, or no part of the exchange occurs
-                // ("two target creatures" select both from one target slot).
+                // ("two target creatures" select both from one target slot). Whether it
+                // happened is what "If you do" / "If you don't or can't make an exchange"
+                // ask about (CR 701.12b: between one player's permanents it does nothing).
+                ctx.prev_happened = false;
                 let mut both: Vec<ObjectId> = Vec::new();
                 for o in self
                     .resolve_objects(a, ctx)
@@ -863,6 +866,7 @@ impl Game {
                         });
                     }
                     self.dirty = true;
+                    ctx.prev_happened = true;
                 }
             }
             Effect::CreateToken {

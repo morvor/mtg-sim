@@ -608,8 +608,12 @@ fn skill_borrower_abilities_follow_the_top_card() {
     );
     let mut t = TestGame::new(2);
     let borrower = t.battlefield(P0, "Skill Borrower");
-    // Library, top first: Prodigal Sorcerer, Grizzly Bears, Island.
-    stack_library(&mut t, P0, &["Prodigal Sorcerer", "Grizzly Bears", "Island"]);
+    // Library, top first: Prodigal Sorcerer, Grizzly Bears, Cudgel Troll, Island.
+    stack_library(
+        &mut t,
+        P0,
+        &["Prodigal Sorcerer", "Grizzly Bears", "Cudgel Troll", "Island"],
+    );
     let i = index_of(&mut t, borrower, "deals 1 damage");
     t.activate(P0, borrower, i, &[Entity::Player(P1)]).unwrap();
     // The top card changes while the ability is on the stack.
@@ -619,9 +623,11 @@ fn skill_borrower_abilities_follow_the_top_card() {
         .any(|a| a.contains("deals 1 damage")));
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
-    // Grizzly Bears (a creature card without activated abilities) is on top, then an
-    // Island: Skill Borrower has no other abilities after drawing them.
+    // Drawing two cards: Cudgel Troll is on top only in the middle of the draw (no one
+    // can activate its ability then). Afterward an Island is on top: Skill Borrower has
+    // no abilities from either card.
     t.g.draw_cards(P0, 2);
+    assert!(t.in_hand(P0, "Cudgel Troll"));
     assert!(activated(&mut t, borrower).is_empty());
 }
 
@@ -761,4 +767,87 @@ fn ugin_reduces_colorless_spells_to_zero() {
     assert_eq!(t.g.mana_value_of(spell), 2);
     t.resolve_all();
     assert!(!t.named_on_battlefield("Howling Mine").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Volatile Stormdrake: exchange, energy, and "unless you pay an amount of {E}"
+// ---------------------------------------------------------------------------
+
+fn energy(t: &TestGame, p: PlayerId) -> u32 {
+    t.g.player(p).counters.get("energy").copied().unwrap_or(0)
+}
+
+/// Volatile Stormdrake enters under P0's control, its trigger targeting `target`, P0
+/// answering `pay` to paying energy; returns the Drake.
+fn stormdrake_exchanging(t: &mut TestGame, target: ObjectId, pay: bool) -> ObjectId {
+    t.answer_targets(P0, &[Entity::Object(target)]);
+    t.answer_yes(P0, pay);
+    let drake = t.enter(P0, "Volatile Stormdrake");
+    t.resolve_all();
+    drake
+}
+
+#[test]
+fn volatile_stormdrake_keeps_the_creature_for_its_mana_value_in_energy() {
+    cr!("701.12b", "107.14", "118.12a");
+    ruling!(
+        "Volatile Stormdrake",
+        "The effect of Volatile Stormdrake's last ability lasts indefinitely."
+    );
+    supported("Volatile Stormdrake");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let drake = stormdrake_exchanging(&mut t, bears, true);
+    assert_eq!(t.obj_now(bears).controller, P0);
+    assert_eq!(t.obj_now(drake).controller, P1);
+    // {E}{E}{E}{E}, then two of them paid for the Bears' mana value 2.
+    assert_eq!(energy(&t, P0), 2);
+    // The exchange lasts past the turn and after the Drake leaves the battlefield.
+    t.advance_to(P1, Step::Upkeep);
+    t.g.destroy(drake, None);
+    t.resolve_all();
+    // (Its owner's graveyard.)
+    assert!(t.in_graveyard(P0, "Volatile Stormdrake"));
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).controller, P0);
+}
+
+#[test]
+fn volatile_stormdrake_sacrifices_the_creature_unless_its_energy_is_paid() {
+    cr!("118.12a");
+    let mut t = TestGame::new(2);
+    // Declining to pay: the creature is sacrificed; the energy stays.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let drake = stormdrake_exchanging(&mut t, bears, false);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.obj_now(drake).controller, P1);
+    assert_eq!(energy(&t, P0), 4);
+    // Not enough energy for Shivan Dragon's mana value 6: it can't be paid.
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P1, "Shivan Dragon");
+    stormdrake_exchanging(&mut t, dragon, true);
+    assert!(t.in_graveyard(P1, "Shivan Dragon"));
+    assert_eq!(energy(&t, P0), 4);
+}
+
+#[test]
+fn volatile_stormdrake_does_nothing_if_it_left_the_battlefield() {
+    cr!("701.12a");
+    ruling!(
+        "Volatile Stormdrake",
+        "As Volatile Stormdrake's last ability resolves, Volatile Stormdrake must be on the battlefield and the target creature must be a legal target. If either of these things isn't true, the ability does nothing."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    let drake = t.enter(P0, "Volatile Stormdrake");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    // In response, the Drake leaves the battlefield: no exchange, so no energy.
+    t.g.move_object(drake, Zone::Hand(P0), MoveCause::Effect, None);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P1);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(energy(&t, P0), 0);
 }
