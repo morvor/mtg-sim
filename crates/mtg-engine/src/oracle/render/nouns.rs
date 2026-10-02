@@ -872,10 +872,8 @@ impl Renderer<'_> {
             },
             PlayerRel::Any => "a player's".into(),
             PlayerRel::NotYou => "an opponent's".into(),
-            PlayerRel::Target(i) => {
-                let p = self.target_player_mention(i);
-                possessive(&p)
-            }
+            // "target player's graveyard", then "that player's" / "their graveyard".
+            PlayerRel::Target(i) => self.target_mention(i, Case::Poss),
             PlayerRel::TargetOrController(i) => {
                 let p = self.target_player_mention(i);
                 possessive(&p)
@@ -898,7 +896,8 @@ impl Renderer<'_> {
             PlayerRel::Target(i) | PlayerRel::TargetOrController(i) => {
                 self.target_player_mention(i)
             }
-            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "that player".into(),
+            // "the number of creatures attacking that player" / "... attacking them".
+            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "{alt:that player|them}".into(),
             PlayerRel::Defending => "defending player".into(),
             PlayerRel::Active => "the active player".into(),
             PlayerRel::Teammate => "a teammate".into(),
@@ -910,6 +909,7 @@ impl Renderer<'_> {
     pub(crate) fn rel_subject(&mut self, r: PlayerRel) -> String {
         match r {
             PlayerRel::Any => "a player".into(),
+            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "{alt:that player|they}".into(),
             other => self.rel_object(other),
         }
     }
@@ -930,7 +930,7 @@ impl Renderer<'_> {
                 format!("{p} or that planeswalker's controller controls")
             }
             other => {
-                let p = self.rel_object(other);
+                let p = self.rel_subject(other);
                 format!("{p} controls")
             }
         }
