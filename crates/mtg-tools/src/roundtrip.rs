@@ -31,7 +31,9 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Equip ... Activate only once each turn.\" wasn't enforced (it was for crew) | Dark Knight's Greatsword and 3 others | `kw/equip.rs` |\n\
 | \"[...] doesn't untap during your next untap step\" was compiled as its controller's next untap step, so a permanent another player gained control of stayed tapped in that player's untap step | Mogg Hollows, Arbalest Elite, Rhonas's Last Stand | `Duration::ThroughYourNextUntapStep` |\n\
 | \"it\" after the card names itself (\"put a +1/+1 counter on ~. It gains flying\", \"sacrifice ~ and it deals 3 damage\", \"~ gets +1/+1 ... Untap it.\") was the triggering object or spell | Mogg Bombers, Machine Man, Model X-51, Blistercoil Weird, Aria of Flame, Vivi Ornitier (about 20) | `oracle_hardening_referents::note_object_last` |\n\
-| \"another target creature\" after an earlier target object also excluded the source, which may be that other target | Itzquinth, Firstborn of Gishath, Rhino, Terrible Trampler (about 30) | `Builder::add_target` |\n\n\
+| \"another target creature\" after an earlier target object also excluded the source, which may be that other target | Itzquinth, Firstborn of Gishath, Rhino, Terrible Trampler (about 30) | `Builder::add_target` |\n\
+| \"Each player discards a card. If you discarded a card this way, ...\" counted any player's discarded card (test in `tests/cards/roundtrip_renderer_gaps.rs`) | Fanatic of the Harrowing | `conditions_this_way::if_this_way`: only cards you own |\n\
+| \"For each creature card exiled this way, each opponent loses 1 life and you gain 1 life\" scaled only the first half (test in `tests/cards/roundtrip_renderer_gaps.rs`) | Graveyard Trespasser // Graveyard Glutton | `hand_graveyard_grammar::scale` reaches each-player instructions |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";
