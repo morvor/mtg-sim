@@ -922,15 +922,14 @@ fn reasons(c: &PoolCard, abilities: &[Tracked], u: &Usage) -> Vec<String> {
                 "activated ability: offered, never activated".to_string()
             }
             Use::Activated => {
+                // The keyword's name, without its cost ("Cycling {2}" -> "Cycling").
                 let k = t
                     .keyword
                     .as_deref()
+                    .and_then(|k| k.split([' ', '{']).next())
                     .map(|k| format!(" ({k})"))
                     .unwrap_or_default();
-                format!(
-                    "activated ability: never activatable{}",
-                    k.split(' ').take(2).collect::<Vec<_>>().join(" ")
-                )
+                format!("activated ability: never activatable{k}")
             }
             Use::Triggered if u.triggered.contains(&t.uid) => {
                 "triggered ability: triggered, never resolved".to_string()
