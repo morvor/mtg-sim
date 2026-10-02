@@ -9,6 +9,8 @@ use crate::kw::hand_graveyard_actions as hga;
 pub(crate) enum CustomQuality {
     /// After the noun: "creature that dealt damage to you this turn".
     Rel(String),
+    /// Before the noun: "goaded creatures".
+    Adj(&'static str),
     /// The kind of object, as the head noun: "triggered ability".
     Kind(&'static str),
     /// After the noun, and says where it is: "card exiled with it".
@@ -36,6 +38,21 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("that was dealt noncombat damage this turn")
         }
         crate::game_terms::ACTIVATED_ABILITY => Some(Kind("activated ability")),
+        crate::oracle::patterns::zone_move_grammar::EVEN_MANA_VALUE | "restrictions:even_mana_value" => {
+            rel("with {alt:an even mana value|even mana values}")
+        }
+        crate::oracle::patterns::zone_move_grammar::ODD_MANA_VALUE | "restrictions:odd_mana_value" => {
+            rel("with {alt:an odd mana value|odd mana values}")
+        }
+        // Cycling a card discards it (CR 702.29a).
+        crate::oracle::patterns::zone_move_grammar::DISCARDED_BY_YOU_THIS_TURN => {
+            rel("{alt:that you discarded this turn|that you cycled or discarded this turn}")
+        }
+        crate::oracle::patterns::zone_move_grammar::MILLED_THIS_TURN => rel("milled this turn"),
+        crate::oracle::patterns::zone_move_grammar::DEALT_DAMAGE_THIS_TURN => {
+            rel("that dealt damage this turn")
+        }
+        "restrictions:goaded" => Some(Adj("goaded")),
         crate::game_terms::TRIGGERED_ABILITY => Some(Kind("triggered ability")),
         crate::kw::basic_effects::SECOND_SPELL_CAST_THIS_TURN => {
             rel("{alt:that's the second spell cast this turn|that is the second spell cast this turn}")

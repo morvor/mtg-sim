@@ -140,6 +140,9 @@ impl Renderer<'_> {
                 format!("{t} becomes blocked")
             }
             "visit:claim the prize" => "claim the prize".into(),
+            crate::kw::basic_effects::CLASH_WITH_DEFENDING_PLAYER => {
+                "clash with defending player".into()
+            }
             // "Look at the top five cards of target opponent's library, then put them back
             // in any order", "... then exile one of them".
             n if n.starts_with("basic_effects:look at top:") => {

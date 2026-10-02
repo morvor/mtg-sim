@@ -198,6 +198,7 @@ impl Renderer<'_> {
             .or_else(|| self.named_group_part(v, i))
             .or_else(|| self.distribute_part(v, i))
             .or_else(|| self.each_chooses_part(v, i))
+            .or_else(|| self.random_pick_part(v, i))
             .or_else(|| self.reveal_part(v, i))
             .or_else(|| self.each_player_part(v, i))
             .or_else(|| self.outcome_part(v, i, known))
@@ -333,30 +334,37 @@ impl Renderer<'_> {
     /// creature with the greatest power among creatures that player controls": the choices
     /// are collected; later mentions are "it" or "them".
     fn each_chooses_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
-        let (
+        // The collected choices may start empty.
+        let (start, var0) = match &v[i] {
             Effect::Store {
                 var,
                 sel: Sel::Union(empty),
-            },
-            Some(Effect::ForEachPlayer { who, effect }),
-        ) = (&v[i], v.get(i + 1))
-        else {
+            } if empty.is_empty() => (1, Some(*var)),
+            _ => (0, None),
+        };
+        let Some(Effect::ForEachPlayer { who, effect }) = v.get(i + start) else {
             return None;
         };
-        if !empty.is_empty() {
-            return None;
-        }
+        // Each player chooses as themselves ("chooses a creature card in their
+        // graveyard"), or the choice is the iterated player's.
+        let (as_player, inner) = match effect.as_ref() {
+            Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect,
+            } => (true, effect.as_ref()),
+            other => (false, other),
+        };
         let Effect::Store {
-            var: v2,
+            var,
             sel: Sel::Union(u),
-        } = effect.as_ref()
+        } = inner
         else {
             return None;
         };
         let [Sel::Var(again), choice @ Sel::Choose { chooser, .. }] = u.as_slice() else {
             return None;
         };
-        if v2 != var || again != var {
+        if again != var || var0.is_some_and(|v0| v0 != *var) {
             return None;
         }
         let single = matches!(who, PlayerRef::You | PlayerRef::Target(_));
@@ -381,15 +389,101 @@ impl Renderer<'_> {
         };
         let w = self.player(who, Case::Subj);
         let s = self.sel(&what, Case::Obj);
-        let text = match chooser {
-            PlayerRef::Iterated => format!(
-                "{w} {}",
-                super::effects::third_person(&format!("choose {s}"))
-            ),
-            PlayerRef::You if !single => format!("for {w}, choose {s}"),
+        let text = match (chooser, as_player) {
+            (PlayerRef::Iterated, _) | (PlayerRef::You, true) => {
+                let s = format!(" {s} ").replace(" your ", " their ");
+                format!(
+                    "{w} {}",
+                    super::effects::third_person(&format!("choose {}", s.trim()))
+                )
+            }
+            (PlayerRef::You, false) if !single => format!("for {w}, choose {s}"),
             _ => return None,
         };
-        Some((2, text))
+        Some((start + 1, text))
+    }
+
+    /// "Return a Zombie creature card at random from your graveyard to the battlefield":
+    /// the candidates and how many are remembered, then picked at random
+    /// (`kw/zone_moves.rs`); the instruction after names the pick.
+    fn random_pick_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        use crate::oracle::patterns::zone_move_grammar::{RANDOM_COUNT, RANDOM_PICK, RANDOM_POOL};
+        let (
+            Effect::Store {
+                var: RANDOM_POOL,
+                sel: Sel::All(f),
+            },
+            Some(Effect::StoreValue {
+                var: RANDOM_COUNT,
+                value: n,
+            }),
+            Some(Effect::Custom(c)),
+        ) = (&v[i], v.get(i + 1), v.get(i + 2))
+        else {
+            return None;
+        };
+        if c != crate::kw::zone_moves::PICK_AT_RANDOM {
+            return None;
+        }
+        // The objects without where they are, then "at random", then where they are.
+        let (here, rest): (Vec<Filter>, Vec<Filter>) = match f {
+            Filter::And(v) => v.iter().cloned().partition(|x| {
+                matches!(x, Filter::InZone(_) | Filter::OwnedBy(_))
+                    || matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
+            }),
+            other => (vec![], vec![other.clone()]),
+        };
+        let linked = here
+            .iter()
+            .any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked)));
+        let det = match n {
+            Value::Const(1) => super::nouns::Det::A,
+            Value::Const(k) => super::nouns::Det::Count(number_word(*k)),
+            other => super::nouns::Det::Count(self.value(other)),
+        };
+        let noun = self.noun_det(&Filter::and(rest), det);
+        let zone = here.iter().find_map(|x| match x {
+            Filter::InZone(z) => Some(*z),
+            _ => None,
+        });
+        let owner = here.iter().find_map(|x| match x {
+            Filter::OwnedBy(r) => Some(*r),
+            _ => None,
+        });
+        let phrase = if linked {
+            // "a card at random exiled with ~", "a card exiled with it at random".
+            let m = self.me();
+            if noun.contains(['{', '|', '}']) {
+                format!("{noun} at random exiled with {m}")
+            } else {
+                format!(
+                    "{{alt:{noun} at random exiled with {m}|{noun} at random that was exiled with {m}|{noun} exiled with {m} at random}}"
+                )
+            }
+        } else {
+            let from = match (zone, owner) {
+                (Some(ZoneKind::Graveyard), Some(r)) => {
+                    format!(" from {} graveyard", self.rel_possessive(r, Num::One))
+                }
+                (Some(ZoneKind::Exile), None) => " from exile".into(),
+                (None, None) => String::new(),
+                _ => return None,
+            };
+            format!("{noun} at random{from}")
+        };
+        // Named by the next instruction ("return a creature card at random from your
+        // graveyard to your hand"), or chosen first ("choose a card at random in your
+        // graveyard. Put it into your hand").
+        let pick = format!("{:?}", Sel::Var(RANDOM_PICK));
+        let named = v.get(i + 3).is_some_and(|e| {
+            let d = format!("{e:?}");
+            d.contains(&pick) && !matches!(e, Effect::Store { .. })
+        });
+        if named {
+            self.target_vars.push((RANDOM_PICK, phrase, false));
+            return Some((3, String::new()));
+        }
+        Some((3, format!("choose {phrase}")))
     }
 
     /// "Reveal [cards] from your hand", "target player reveals three cards from their

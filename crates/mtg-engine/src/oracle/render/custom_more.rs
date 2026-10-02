@@ -88,6 +88,9 @@ impl Renderer<'_> {
             "upkeep:1" => "it's the first upkeep step of the turn".into(),
             crate::search_rules::YOU_SEARCHED_THIS_WAY => "you search your library this way".into(),
             "you_were_the_starting_player" => "you were the starting player".into(),
+            "restrictions:declare_blockers_step" => "it's the declare blockers step".into(),
+            "activation:draw_step" => "it's {alt:your|their} draw step".into(),
+            "activation:before_end_step" => "it's before the end step".into(),
             // CR 701.42a.
             crate::merge::MELD_PAIR_CONDITION => {
                 let (partner, _) = self.info.meld.clone()?;
@@ -131,6 +134,9 @@ impl Renderer<'_> {
         }
         let m = self.me();
         Some(match name {
+            "skip extra turns" => {
+                "if a player would begin an extra turn, that player skips that turn instead".into()
+            }
             "tap_total_power:Crew:toughness" => {
                 format!("{m} crews Vehicles using its toughness rather than its power")
             }
@@ -175,6 +181,20 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_modification_more(&mut self, name: &str) -> Option<String> {
+        // "have all activated abilities of all land cards exiled with ~".
+        if let Some(kind) = name
+            .strip_prefix(crate::oracle::patterns::zone_move_grammar::ACTIVATED_ABILITIES_OF_EXILED)
+        {
+            let m = self.me();
+            let cards = if kind.is_empty() {
+                "cards".to_string()
+            } else {
+                format!("{kind} cards")
+            };
+            return Some(format!(
+                "has all activated abilities of all {cards} exiled with {m}"
+            ));
+        }
         // "loses forestwalk", "loses all \"bands with other\" abilities" (layer 6).
         if let Some(j) = name.strip_prefix("basic_effects:remove keyword:") {
             let r: crate::kw::basic_effects::RemoveKeyword = serde_json::from_str(j).ok()?;

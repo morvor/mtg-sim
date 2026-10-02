@@ -593,6 +593,7 @@ impl Renderer<'_> {
                         }
                         Q::Implied => {}
                         Q::Kind(k) => np.kind = Some(k),
+                        Q::Adj(a) => np.status.push(a.to_string()),
                     }
                     return;
                 }
