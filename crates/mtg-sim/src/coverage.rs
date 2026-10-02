@@ -286,8 +286,9 @@ pub struct FocusAgent {
     pub focus: Arc<Focus>,
     pub usage: Arc<Mutex<Usage>>,
     rng: StdRng,
-    /// Focus actions taken in the current step.
+    /// The current turn and step.
     step: (u32, Step),
+    /// Focus actions taken this turn.
     taken: Vec<Action>,
     /// "Yes" answers in the current step.
     yeses: u32,
@@ -306,8 +307,20 @@ impl FocusAgent {
         }
     }
 
+    fn new_step(&mut self, g: &Game) {
+        if self.step != (g.turn.number, g.turn.step) {
+            if self.step.0 != g.turn.number {
+                self.taken.clear();
+            }
+            self.step = (g.turn.number, g.turn.step);
+            self.yeses = 0;
+        }
+    }
+
     fn priority(&mut self, g: &Game, p: PlayerId, actions: &[Action]) -> Option<Action> {
-        let mut usage = self.usage.lock().unwrap_or_else(|e| e.into_inner());
+        self.new_step(g);
+        let usage_arc = self.usage.clone();
+        let mut usage = usage_arc.lock().unwrap_or_else(|e| e.into_inner());
         usage.offered(g, actions);
         // Triggered mana abilities resolve without using the stack (CR 605.4a): they're
         // seen in the resolution counts of their sources.
@@ -325,14 +338,10 @@ impl FocusAgent {
                 }
             }
         }
-        if self.step != (g.turn.number, g.turn.step) {
-            self.step = (g.turn.number, g.turn.step);
-            self.taken.clear();
-            self.yeses = 0;
-        }
-        // Each focus action at most twice a step, and a dozen in all, so a repeatable
-        // ability doesn't take over the game.
-        if self.taken.len() >= 12 {
+        // Each focus action at most twice a turn, and eight in all, so a repeatable
+        // ability doesn't take over the game (each use of "{0}: ~ becomes ..." adds an
+        // effect for the rest of the game).
+        if self.taken.len() >= 8 {
             return None;
         }
         let mut all: Vec<Action> = actions
@@ -415,20 +424,28 @@ impl Agent for FocusAgent {
                     .unwrap_or_else(|e| e.into_inner())
                     .cast
                     .contains(&self.focus.name);
-                if !cast {
-                    let kept: Vec<Action> = actions
-                        .iter()
-                        .filter(|a| {
-                            !matches!(a, Action::Activate { source, .. }
-                                if matches!(g.obj(*source).zone, Zone::Hand(_))
-                                    && self.focus.is_focus_card(g, *source))
-                        })
-                        .cloned()
-                        .collect();
-                    return self
-                        .inner
-                        .decide(g, p, &Decision::Priority { actions: kept });
+                let kept: Vec<Action> = actions
+                    .iter()
+                    .filter(|a| {
+                        let hand_use = matches!(a, Action::Activate { source, .. }
+                            if matches!(g.obj(*source).zone, Zone::Hand(_))
+                                && self.focus.is_focus_card(g, *source));
+                        let overused = self.focus.uses(g, a)
+                            && (self.taken.len() >= 8
+                                || self.taken.iter().filter(|t| t == a).count() >= 2);
+                        !(hand_use && !cast) && !overused
+                    })
+                    .cloned()
+                    .collect();
+                let answer = self
+                    .inner
+                    .decide(g, p, &Decision::Priority { actions: kept });
+                if let Answer::Action(a) = &answer {
+                    if self.focus.uses(g, a) {
+                        self.taken.push(a.clone());
+                    }
                 }
+                return answer;
             }
             Decision::OptionalCost { repeatable, .. } => {
                 return if *repeatable {
@@ -459,11 +476,7 @@ impl Agent for FocusAgent {
             Decision::YesNo { .. } => {
                 // "You may" abilities can trigger each other without end (two Enduring
                 // Scalelords): the more often yes this step, the likelier no.
-                if self.step != (g.turn.number, g.turn.step) {
-                    self.step = (g.turn.number, g.turn.step);
-                    self.taken.clear();
-                    self.yeses = 0;
-                }
+                self.new_step(g);
                 let yes = self
                     .rng
                     .gen_bool(0.5 * 0.85f64.powi(self.yeses.min(100) as i32));
