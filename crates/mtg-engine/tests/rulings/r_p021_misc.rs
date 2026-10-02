@@ -2,7 +2,7 @@
 //! payments made once per trigger (CR 603.5), optional exiling and linked "exiled with"
 //! cards (CR 607.2a), costs paid on activation (CR 602.2b), delayed triggers and
 //! replacement-multiplied tokens (CR 603.7, 614.1a), extra triggers (CR 603.2d), a
-//! copy effect's duration (CR 611.2a), and "until leaves" exile (CR 610.3c).
+//! copy effect's duration (CR 611.2a), and "until leaves" exile (CR 610.3b, 610.3c).
 
 use crate::r_p021_common::*;
 use crate::r_s01_common::{attack_with, supported};
@@ -96,7 +96,7 @@ fn mimic_vat_exiling_is_optional_and_does_nothing_if_the_card_is_gone() {
 
 #[test]
 fn mimic_vat_token_made_in_an_end_step_is_exiled_at_the_next_end_step() {
-    cr!("603.7c", "513.1a");
+    cr!("603.7c", "513.2");
     ruling!(
         "Mimic Vat",
         "If Mimic Vat's second ability is activated during a turn's end step, the token will be exiled at the beginning of the following turn's end step."
@@ -332,7 +332,7 @@ fn hall_of_mirrors_affects_only_creatures_you_control_as_it_resolves() {
 
 #[test]
 fn identity_thief_is_still_a_copy_when_the_exiled_card_returns() {
-    cr!("611.2a", "603.7", "513.1a");
+    cr!("611.2a", "603.7", "610.3c");
     ruling!(
         "Identity Thief",
         "Identity Thief will still be a copy of the creature during the next end step when the exiled card returns."
@@ -448,7 +448,7 @@ fn permeating_mass_copying_something_else_makes_the_damaged_creature_copy_that()
 
 #[test]
 fn phantom_steed_leaving_before_its_trigger_resolves_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Phantom Steed",
         "If Phantom Steed leaves the battlefield before its ability resolves, the target creature won't be exiled."

@@ -115,7 +115,7 @@ fn shapesharer_effects_already_applied_to_the_shapeshifter_continue() {
 
 #[test]
 fn gigantoplasm_power_changes_apply_no_matter_when_they_began() {
-    cr!("613.4b", "613.4c", "613.4d", "707.9a");
+    cr!("613.4b", "613.4c", "707.9a");
     ruling!(
         "Gigantoplasm",
         "Effects that modify Gigantoplasm's power and/or toughness, such as the effect of Giant Growth or Glorious Anthem, will apply to Gigantoplasm no matter when they started applying."

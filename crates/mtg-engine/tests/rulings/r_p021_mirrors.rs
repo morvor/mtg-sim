@@ -88,7 +88,7 @@ fn mirror_of_the_forebears_copying_your_legendary_creature_and_the_legend_rule()
 
 #[test]
 fn mirage_mirror_copying_an_aura_or_an_equipment() {
-    cr!("704.5m", "704.5n", "301.5c", "303.4d");
+    cr!("704.5m", "704.5n");
     ruling!(
         "Mirage Mirror",
         "If Mirage Mirror becomes a copy of an Aura, it's put into its owner's graveyard unless it's somehow attached to an appropriate object or player already."
