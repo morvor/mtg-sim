@@ -530,3 +530,42 @@ fn two_targets_of_one_instance_fight_each_other() {
     assert_eq!(t.obj_now(giant).damage, 2);
     assert_eq!(t.obj_now(elves).damage, 0);
 }
+
+#[test]
+fn x_target_creatures_of_an_activated_ability_is_exactly_x() {
+    cr!("601.2b", "601.2c", "115.1");
+    // Rot-Curse Rakshasa's renew: "{X}{B}{B}, Exile this card from your graveyard: Put a
+    // decayed counter on each of X target creatures." With X = 2, exactly two targets
+    // are chosen (announced after X).
+    let mut t = TestGame::new(2);
+    let rakshasa = t.graveyard(P0, "Rot-Curse Rakshasa");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Llanowar Elves");
+    mana(&mut t, P0, ManaType::B, 4);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    let from = t.asked().len();
+    let id = t
+        .activate(P0, rakshasa, 0, &[])
+        .unwrap()
+        .expect("activated");
+    let asked: Vec<(u32, u32)> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { min, max, .. } => Some((*min, *max)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, vec![(2, 2)]);
+    // Answering only one target isn't enough: two are chosen.
+    let chosen = targets_of(&t, id);
+    assert_eq!(chosen.len(), 2);
+    assert!(chosen.contains(&Entity::Object(a)));
+    t.resolve();
+    let decayed =
+        |id: ObjectId| t.obj_now(id).has_keyword(mtg_engine::keywords::KeywordKind::Decayed);
+    assert!(decayed(a));
+    let other = chosen.iter().find(|e| **e != Entity::Object(a)).unwrap();
+    assert!(decayed(other.object().unwrap()));
+}
