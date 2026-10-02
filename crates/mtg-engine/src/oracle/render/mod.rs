@@ -469,6 +469,8 @@ pub struct Renderer<'a> {
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
     /// The head noun of what the cost sacrificed ("the sacrificed artifact").
     pub(crate) sacrificed: Option<String>,
+    /// The last group of objects named ("all creatures you control"), for "them".
+    pub(crate) last_group: Option<String>,
 }
 
 impl<'a> Renderer<'a> {
@@ -487,6 +489,7 @@ impl<'a> Renderer<'a> {
             default_head: None,
             after_clash: false,
             sacrificed: None,
+            last_group: None,
             var_defs: Vec::new(),
             trigger_player: None,
             revealed_hand: false,
@@ -563,6 +566,7 @@ impl<'a> Renderer<'a> {
         self.revealed_hand = false;
         self.x_for_each = None;
         self.sacrificed = None;
+        self.last_group = None;
         self.trigger_names_opponent = false;
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),

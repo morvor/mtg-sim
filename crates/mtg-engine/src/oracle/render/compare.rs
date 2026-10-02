@@ -557,7 +557,28 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
             out.push(p);
         }
     }
-    attached_anaphora(out)
+    attached_anaphora(expand_symbol_counts(out))
+}
+
+/// "Pay eight {E}" is "pay {E}{E}{E}{E}{E}{E}{E}{E}": a count of energy or ticket symbols
+/// spelled as a number (CR 107.14, 107.17).
+fn expand_symbol_counts(tokens: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        if let (Ok(n), Some(next)) = (tokens[i].parse::<usize>(), tokens.get(i + 1)) {
+            if (next == "{e}" || next == "{tk}") && (1..=20).contains(&n) {
+                for _ in 0..n {
+                    out.push(next.clone());
+                }
+                i += 2;
+                continue;
+            }
+        }
+        out.push(tokens[i].clone());
+        i += 1;
+    }
+    out
 }
 
 /// After the first "enchanted creature" (or "equipped creature", ...) in a unit, later

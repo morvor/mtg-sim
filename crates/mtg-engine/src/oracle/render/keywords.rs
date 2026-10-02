@@ -139,6 +139,20 @@ impl Renderer<'_> {
                 let b = self.cost(&k.costs[0]);
                 format!("{name} {a} and/or {b}")
             }
+            // "Prototype {1}{W} — 2/2": the prototype's power and toughness are the
+            // keyword's parameter (kept as "P/T").
+            KeywordKind::Prototype
+                if k.cost.is_some()
+                    && k.text.as_deref().is_some_and(|t| {
+                        t.split_once('/').is_some_and(|(p, q)| {
+                            p.parse::<i32>().is_ok() && q.parse::<i32>().is_ok()
+                        })
+                    }) =>
+            {
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let pt = k.text.clone().unwrap_or_default();
+                format!("prototype {c} — {pt}")
+            }
             KeywordKind::Ward if k.x.is_some() => {
                 let v = self.value(k.x.as_ref().unwrap());
                 format!("ward {{X}}, where X is {v}")

@@ -120,7 +120,13 @@ impl Renderer<'_> {
                     false,
                 )
             }
-            Effect::Shuffle { who } => (who.clone(), "shuffle".into(), false),
+            // "Shuffle." / "Shuffle your library." / "Target player shuffles their
+            // library." (a player shuffles their own library, CR 701.24a).
+            Effect::Shuffle { who } => (
+                who.clone(),
+                "shuffle {alt:|your library|their library}".into(),
+                false,
+            ),
             Effect::RevealHand { who } => {
                 let p = self.possessive_for(who);
                 self.revealed_hand = true;
@@ -132,12 +138,17 @@ impl Renderer<'_> {
                 (who.clone(), format!("sacrifice {n}"), false)
             }
             Effect::AddPlayerCounters { who, kind, n } => {
-                let s = if kind.as_str() == "energy" {
+                let symbol = match kind.as_str() {
+                    "energy" => Some("{E}"),
+                    "ticket" => Some("{TK}"),
+                    _ => None,
+                };
+                let s = if let Some(sym) = symbol {
                     match n {
-                        Value::Const(k) if *k > 0 => "{E}".repeat(*k as usize),
+                        Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
                         other => {
                             let v = self.value(other);
-                            format!("{v} {{E}}")
+                            format!("{v} {sym}")
                         }
                     }
                 } else {
@@ -1718,7 +1729,20 @@ impl Renderer<'_> {
             _ if !else_empty => {
                 let o = self.effect(otherwise);
                 let c = self.condition(cond);
-                let t = self.effect(then);
+                let mut t = self.effect(then);
+                // "~ deals 3 damage to any target. If ..., it deals 4 damage instead."
+                if let (Effect::DealDamage { to: a, .. }, Effect::DealDamage { to: b, .. }) =
+                    (then, otherwise)
+                {
+                    if same_sel(a, b) {
+                        if let Some(head) = t
+                            .strip_suffix(" to it")
+                            .or_else(|| t.strip_suffix(" to them"))
+                        {
+                            t = format!("{head} {{opt:to it}}");
+                        }
+                    }
+                }
                 format!("{o}. If {c}, {t} instead")
             }
             _ => {
@@ -2947,7 +2971,18 @@ impl Renderer<'_> {
             K::OpenAttraction => self.repeated("open an Attraction", n),
             K::Assemble => "assemble a Contraption".into(),
             K::ManifestDread => self.repeated("manifest dread", n),
-            K::Explore => return subject_verb(self, "explores", false),
+            // "It explores, then it explores again." / "It explores X times."
+            K::Explore => {
+                let base = subject_verb(self, "explores", false);
+                return match n {
+                    Value::Const(0) | Value::Const(1) => base,
+                    Value::Const(2) => format!("{base}, then {{alt:it|~it}} explores again"),
+                    other => {
+                        let t = self.times(other);
+                        format!("{base} {t}")
+                    }
+                };
+            }
             K::Connive => {
                 return subject_verb(self, "connives", !matches!(n, Value::Const(1)));
             }
@@ -2976,7 +3011,11 @@ impl Renderer<'_> {
                     format!("earthbend {w} {}", num(self))
                 }
             }
-            K::Waterbend if !has_what => format!("waterbend {}", num(self)),
+            // CR 701.67a: "Waterbend [cost]", a generic mana cost.
+            K::Waterbend if !has_what => match n {
+                Value::Const(k) => format!("waterbend {{{k}}}"),
+                _ => format!("waterbend {{{}}}", num(self)),
+            },
             K::Clash => {
                 self.after_clash = true;
                 "clash with an opponent".into()

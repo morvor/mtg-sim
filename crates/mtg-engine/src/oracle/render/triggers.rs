@@ -466,6 +466,8 @@ impl Renderer<'_> {
                     self.me()
                 } else if matches!(filter, Filter::Any) {
                     "a card".into()
+                } else if matches!(filter, Filter::Other) {
+                    "another card".into()
                 } else {
                     self.noun_det(filter, Det::A)
                 };

@@ -220,7 +220,8 @@ impl Renderer<'_> {
         }
         if self.slot_is_player(i) {
             return match case {
-                Case::Poss => "that player's".into(),
+                // "Target player shuffles their graveyard into their library."
+                Case::Poss => "{alt:that player's|their}".into(),
                 _ => "that player".into(),
             };
         }
@@ -306,6 +307,19 @@ impl Renderer<'_> {
                     return decline(s, case);
                 }
                 let s = self.noun_det(f, Det::Each);
+                // "Untap all creatures you control. They gain hexproof ...": the group
+                // just named is "them".
+                let key = format!("{f:?}");
+                let repeated = self.last_group.as_deref() == Some(key.as_str());
+                self.last_group = Some(key);
+                if repeated && !s.contains(['{', '|']) && !matches!(case, Case::Poss) {
+                    let pron = if matches!(case, Case::Subj) {
+                        "they"
+                    } else {
+                        "them"
+                    };
+                    return format!("{{alt:{pron}|{s}}}");
+                }
                 decline(s, case)
             }
             Sel::Players(p) => self.player(p, case),
