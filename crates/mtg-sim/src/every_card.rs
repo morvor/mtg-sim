@@ -861,7 +861,7 @@ fn run_card(picker: &Picker, index: usize, o: &Options, out: &Mutex<()>) -> Card
                         x.def.name, o.slow
                     ),
                     &log,
-                    tail.min(8),
+                    if o.log { usize::MAX } else { 8 },
                 );
                 result.slow += 1;
                 result

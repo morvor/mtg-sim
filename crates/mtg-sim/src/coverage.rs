@@ -289,6 +289,8 @@ pub struct FocusAgent {
     /// Focus actions taken in the current step.
     step: (u32, Step),
     taken: Vec<Action>,
+    /// "Yes" answers in the current step.
+    yeses: u32,
 }
 
 impl FocusAgent {
@@ -300,6 +302,7 @@ impl FocusAgent {
             rng: StdRng::seed_from_u64(seed ^ 0xf0c5),
             step: (0, Step::Untap),
             taken: Vec::new(),
+            yeses: 0,
         }
     }
 
@@ -325,6 +328,7 @@ impl FocusAgent {
         if self.step != (g.turn.number, g.turn.step) {
             self.step = (g.turn.number, g.turn.step);
             self.taken.clear();
+            self.yeses = 0;
         }
         // Each focus action at most twice a step, and a dozen in all, so a repeatable
         // ability doesn't take over the game.
@@ -451,6 +455,20 @@ impl Agent for FocusAgent {
                 top.shuffle(&mut self.rng);
                 other.shuffle(&mut self.rng);
                 return Answer::Split(top, other);
+            }
+            Decision::YesNo { .. } => {
+                // "You may" abilities can trigger each other without end (two Enduring
+                // Scalelords): the more often yes this step, the likelier no.
+                if self.step != (g.turn.number, g.turn.step) {
+                    self.step = (g.turn.number, g.turn.step);
+                    self.taken.clear();
+                    self.yeses = 0;
+                }
+                let yes = self
+                    .rng
+                    .gen_bool(0.5 * 0.85f64.powi(self.yeses.min(100) as i32));
+                self.yeses += yes as u32;
+                return Answer::Bool(yes);
             }
             Decision::NameCard { .. } => {
                 // A card of its own deck, so that "the chosen name" can matter.
