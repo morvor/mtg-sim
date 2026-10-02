@@ -105,6 +105,29 @@ pub fn note_object_last(prev: Option<&str>, sentence: &str, b: &mut Builder) {
     }
 }
 
+/// "Whenever you cast a spell, put a verse counter on ~, then it deals damage equal to
+/// the number of verse counters on it ...", "... put a collection counter on ~. Then if
+/// there are three or more collection counters on it, sacrifice it.": once an instruction
+/// has put counters on the source, "it" is the source, not the spell that triggered the
+/// ability.
+pub fn note_counters_on_source(e: &mut Effect, b: &mut Builder) {
+    if matches!(b.it, Sel::TriggerSpell)
+        && matches!(
+            last_instruction_mut(e),
+            Effect::AddCounters {
+                what: Sel::This,
+                ..
+            }
+        )
+    {
+        b.it = Sel::This;
+        // "that spell" still names the spell.
+        for p in ["that spell", "that ability"] {
+            b.named.push((p.to_string(), Sel::TriggerSpell));
+        }
+    }
+}
+
 /// The cards the latest search found (see [`note_introduced`]).
 pub const INTRODUCED: Var = vars::USER + 1101;
 

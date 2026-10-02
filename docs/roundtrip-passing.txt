@@ -1176,6 +1176,7 @@ Back to Nature
 Backdraft Hellkite
 Backfire
 Backlash
+Backstreet Bruiser
 Backup Agent
 Backwoods Survivalists
 Bad Deal
@@ -1213,6 +1214,7 @@ Balemurk Leech
 Ball Lightning
 Ballista Charger
 Ballista Squad
+Ballista Watcher // Ballista Wielder
 Balloon Peddler
 Balloon Stand
 Ballot Broker
@@ -2331,6 +2333,7 @@ Bull Rush
 Bull's Strength
 Bullwhip
 Bulwark Giant
+Bulwark Ox
 Bumbleflower's Sharepot
 Bumi's Feast Lecture
 Bumi, Eclectic Earthbender
@@ -2923,6 +2926,7 @@ Cho-Manno's Blessing
 Cho-Manno, Revolutionary
 Choco-Comet
 Chocobo Camp
+Chocobo Knights
 Chocobo Racetrack
 Choke
 Choked Estuary
@@ -2954,6 +2958,7 @@ Chronatog
 Chronic Flooding
 Chronicle of Victory
 Chronomancer
+Chronomantic Escape
 Chronomaton
 Chronosavant
 Chronostutter
@@ -6017,6 +6022,7 @@ Fire Nation Engineer
 Fire Nation Occupation
 Fire Nation Palace
 Fire Nation Raider
+Fire Nation Salvagers
 Fire Nation Sentinels
 Fire Nation Soldier
 Fire Nation Warship
@@ -10782,6 +10788,7 @@ Meticulous Artisan
 Meticulous Commons
 Meticulous Excavation
 Metrognome
+Metropolis Angel
 Metropolis Reformer
 Metropolis Sprite
 Miasmic Mummy
@@ -11322,6 +11329,7 @@ Mutant Chain Reaction
 Mutant Town
 Mutant Town Musicians
 Mutant's Prey
+Mutational Advantage
 Mutilate
 Mutual Destruction
 Muzzle
@@ -15744,6 +15752,7 @@ Slum Reaper
 Slumbering Cerberus
 Slumbering Dragon
 Slumbering Keepguard
+Sly Instigator
 Sly Requisitioner
 Smallpox
 Smash
@@ -17081,6 +17090,7 @@ Symmetry Matrix
 Symmetry Sage
 Synapse Necromage
 Synapse Sliver
+Synchronized Charge
 Synchronized Spellcraft
 Synchronized Strike
 Synchronous Sliver
@@ -17237,6 +17247,7 @@ Tattermunge Witch
 Tattoo Ward
 Tatyova, Benthic Druid
 Tatyova, Steward of Tides
+Taunt from the Rampart
 Taunting Elf
 Taunting Kobold
 Taunting Sliver
@@ -18356,6 +18367,7 @@ Tymora's Invoker
 Typhoid Rats
 Tyranid Harridan
 Tyranid Prime
+Tyrant Guard
 Tyrant of Kher Ridges
 Tyrant of Valakut
 Tyrant's Familiar

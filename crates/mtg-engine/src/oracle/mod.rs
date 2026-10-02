@@ -377,7 +377,7 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if let Some(a) = statics::parse_spell_static(text, ctx) {
             return Some(vec![a]);
         }
-        let body = effects::parse_body(text, ctx)?;
+        let body = effects::other_than_sole_target(effects::parse_body(text, ctx)?);
         return Some(vec![AbilityDef::new(
             AbilityKind::Spell(SpellAbility { body }),
             text,

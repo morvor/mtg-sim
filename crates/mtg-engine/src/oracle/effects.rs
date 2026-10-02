@@ -394,6 +394,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 &mut introduced,
             );
             super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
+            super::patterns::oracle_hardening_referents::note_counters_on_source(&mut e, b);
             effects.push(e);
             b.sentences += 1;
         }
@@ -561,6 +562,8 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             let saved_player = b.it_player.clone();
             let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
+                // "put a +1/+1 counter on ~, then it deals damage ..."
+                super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
@@ -1027,7 +1030,13 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            spec.min = 1;
+            // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
+            // target gets at least 1 (CR 601.2d).
+            spec.min = if r2.starts_with("any number of ") {
+                0
+            } else {
+                1
+            };
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");
@@ -1052,6 +1061,56 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         amount,
         to,
     })
+}
+
+/// In an instant or sorcery with a single object target, "other creatures" (Intimidation
+/// Bolt: "~ deals 3 damage to target creature. Other creatures can't attack this turn")
+/// means other than that target: the spell itself is never among the objects described.
+pub(crate) fn other_than_sole_target(mut body: Body) -> Body {
+    if body.modal.is_some()
+        || body.targets.len() != 1
+        || !matches!(body.targets[0].what, TargetKind::Object(_))
+        || !matches!(body.targets[0].max, Value::Const(1))
+    {
+        return body;
+    }
+    // A filter conjunction with `Filter::Other` ({"And": [..., "Other", ...]}) also excludes
+    // the target. Abilities the spell grants or gives to tokens keep their own "other"
+    // (other than their source).
+    fn fix(v: serde_json::Value, in_and: bool, changed: &mut bool) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| {
+                        let and = k == "And";
+                        (k, fix(v, and, changed))
+                    })
+                    .collect(),
+            ),
+            // Kept alongside "other than this spell", which matters for a spell filter.
+            J::Array(a) if in_and && a.iter().any(|x| x == "Other") => {
+                *changed = true;
+                let mut a: Vec<_> = a.into_iter().map(|x| fix(x, false, changed)).collect();
+                a.push(serde_json::json!({"Not": {"In": {"Target": 0}}}));
+                J::Array(a)
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| fix(x, false, changed)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(&body.effect) else {
+        return body;
+    };
+    let mut changed = false;
+    let json = fix(json, false, &mut changed);
+    if changed {
+        if let Ok(e) = serde_json::from_value(json) {
+            body.effect = e;
+        }
+    }
+    body
 }
 
 /// "That creature deals damage ... to each other creature": "other" means other than the
@@ -1670,7 +1729,20 @@ fn p_scry_surveil_mill(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "target creature can't block this turn", "~ can't be blocked this turn".
 fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (dur, l) = duration_suffix(l);
+    let (mut dur, mut l) = duration_suffix(l);
+    // "That creature can't block this combat" (Forgestoker Dragon): until the combat
+    // phase ends.
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_suffix(" this combat") {
+            (dur, l) = (Duration::EndOfCombat, r);
+        }
+    }
+    // "Until your next turn, creatures can't attack you" (Chronomantic Escape).
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_prefix("until your next turn, ") {
+            (dur, l) = (Duration::UntilYourNextTurn, r);
+        }
+    }
     if matches!(dur, Duration::Permanent) {
         return None;
     }
@@ -1680,14 +1752,24 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     // class of objects ("creatures can't be blocked this turn") also applies to objects
     // that join the class later (Veiling Oddity ruling). Specific objects (targets, "those
     // creatures") are locked in as the effect begins.
+    // "Other creatures can't attack this turn" is a class too: other than the source, or
+    // (in an instant or sorcery) other than its target, see `other_than_sole_target`.
     let f = match &what {
-        Sel::All(f) if is_class_filter(f) => f.clone(),
+        Sel::All(f) if is_class_filter(&without_other(f)) => f.clone(),
         _ => Filter::In(Box::new(what)),
     };
     let r = match rest {
         "can't block" => Restriction::CantBlock(f),
         "can't attack" => Restriction::CantAttack(f),
         "can't attack or block" => Restriction::CantAttackOrBlock(f),
+        "can't attack you" | "can't attack you or planeswalkers you control" => {
+            Restriction::CantAttackPlayer {
+                attackers: f,
+                defender: PlayerFilter::You,
+                planeswalkers: rest.ends_with("planeswalkers you control"),
+                battles: false,
+            }
+        }
         "can't be blocked" => Restriction::CantBeBlocked(f),
         "attacks this combat if able" | "attacks if able" => Restriction::MustAttack(f),
         _ => return None,
@@ -1696,6 +1778,15 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         restriction: r,
         duration: dur,
     })
+}
+
+/// The filter with its top-level "other" parts removed.
+fn without_other(f: &Filter) -> Filter {
+    match f {
+        Filter::Other => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(without_other).collect()),
+        f => f.clone(),
+    }
 }
 
 /// Whether a filter describes a class of objects by their current qualities only, without
