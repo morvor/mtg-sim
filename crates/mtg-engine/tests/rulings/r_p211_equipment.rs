@@ -729,3 +729,38 @@ fn kondas_banner_gives_at_most_two_plus_one_bonuses() {
     assert_eq!(t.pt(barktooth), (8, 7));
     assert_eq!(t.pt(bears), (2, 2));
 }
+
+#[test]
+fn elbrus_transforms_even_if_it_cant_be_unattached() {
+    cr!("701.3d", "701.27a", "608.2c");
+    ruling!(
+        "Elbrus, the Binding Blade // Withengar Unbound",
+        "Elbrus will transform even if you are unable to unattach it (most likely because the equipped creature died)."
+    );
+    supported("Elbrus, the Binding Blade // Withengar Unbound");
+    // "When equipped creature deals combat damage to a player, unattach Elbrus, then
+    // transform it."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elbrus = attach_new(&mut t, P0, "Elbrus, the Binding Blade // Withengar Unbound", bears);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.advance_to_step(Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(on_stack(&t, "unattach"), 1);
+    // The equipped creature dies before the ability resolves.
+    destroy(&mut t, bears);
+    assert_eq!(attached_to(&t, elbrus), None);
+    t.resolve_all();
+    assert_eq!(t.obj_now(elbrus).chars.name, "Withengar Unbound");
+    assert!(t.obj_now(elbrus).is_creature());
+    // Control: still attached, it's unattached and transforms.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elbrus = attach_new(&mut t, P0, "Elbrus, the Binding Blade // Withengar Unbound", bears);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(attached_to(&t, elbrus), None);
+    assert_eq!(t.obj_now(elbrus).chars.name, "Withengar Unbound");
+    assert_eq!(t.pt(bears), (2, 2));
+}

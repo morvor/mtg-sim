@@ -3,12 +3,14 @@
 //! entwine cost doesn't change the spell's color.
 
 use crate::r_s01_common::*;
+use crate::r_s02_common::can_play_land;
 use crate::r_s03_common::in_hand_with_mana;
 use crate::r_s07_common::chosen_modes;
 use crate::r_s23_common::color_word_idx;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -262,4 +264,45 @@ fn promise_of_power_entwined_counts_the_drawn_cards() {
     let demons = with_subtype(&t, P0, "Demon");
     assert_eq!(demons.len(), 1);
     assert_eq!(t.pt(demons[0]), (5, 5));
+}
+
+#[test]
+fn journey_of_discovery_entwined_on_an_opponents_turn_gives_no_land_plays() {
+    cr!("305.2", "305.3", "702.42a", "702.8a");
+    ruling!(
+        "Journey of Discovery",
+        "If you cast an entwined Journey of Discovery using Vedalken Orrery during an opponent’s turn, you can’t play two lands during that turn."
+    );
+    supported("Journey of Discovery");
+    supported("Vedalken Orrery");
+    // "Choose one — • Search your library for up to two basic land cards, reveal them, put
+    // them into your hand, then shuffle. • You may play up to two additional lands this
+    // turn. Entwine {2}{G}" Vedalken Orrery: "You may cast spells as though they had flash."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vedalken Orrery");
+    stack_library(&mut t, P0, &["Forest", "Plains"]);
+    t.set_step(P1, Step::PostcombatMain);
+    let c = in_hand_with_mana(&mut t, P0, "Journey of Discovery");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 2);
+    let spell = t.cast(P0, c).kicked(true).go();
+    assert_eq!(chosen_modes(&t, spell), vec![0, 1]);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Plains"));
+    let forest = t.hand(P0, "Forest");
+    assert!(!can_play_land(&mut t, P0, forest));
+    // On P0's own turn the extra land plays would work (control: two additional lands).
+    let mut t = TestGame::new(2);
+    let c = in_hand_with_mana(&mut t, P0, "Journey of Discovery");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 2);
+    t.cast(P0, c).kicked(true).go();
+    t.resolve_all();
+    for _ in 0..3 {
+        let land = t.hand(P0, "Forest");
+        assert!(can_play_land(&mut t, P0, land));
+        t.play_land(P0, land).unwrap();
+    }
+    let land = t.hand(P0, "Forest");
+    assert!(!can_play_land(&mut t, P0, land));
 }
