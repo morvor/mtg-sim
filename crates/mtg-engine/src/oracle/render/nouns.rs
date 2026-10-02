@@ -224,6 +224,26 @@ impl Renderer<'_> {
             }
             // "outlaw": an Assassin, Mercenary, Pirate, Rogue, or Warlock (CR 700.12).
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
+            // "artifact, enchantment, or legendary card": a supertype among card types,
+            // the alternatives sharing the noun.
+            Filter::Or(v)
+                if v.iter().any(|x| matches!(x, Filter::Supertype(_)))
+                    && v.iter().all(|x| {
+                        matches!(
+                            x,
+                            Filter::Supertype(_) | Filter::Type(_) | Filter::Subtype(_)
+                        )
+                    }) =>
+            {
+                for x in v {
+                    np.alts.push(match x {
+                        Filter::Supertype(t) => supertype_word(*t).to_string(),
+                        Filter::Type(t) => t.word().to_string(),
+                        Filter::Subtype(t) => t.to_string(),
+                        _ => String::new(),
+                    });
+                }
+            }
             Filter::Or(v) => {
                 let status_word = |x: &Filter| -> Option<&'static str> {
                     Some(match x {

@@ -885,7 +885,7 @@ fn sentence_rewrites(s: &str) -> String {
     // either way (CR 601.2c, 602.2b); the instruction that first uses it names it.
     static CHOOSE_TARGET: OnceLock<Option<Regex>> = OnceLock::new();
     if let Some(re) = CHOOSE_TARGET.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?target [^.,]+?)\. ((?:[a-z+/0-9{},-]+ ){1,8}?)(?:it|thatit|that creature|that permanent|that card|the chosen creature|the chosen card)\b").ok()
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) |any number of )?target [^.,]+?)\. ((?:[a-z+/0-9{},-]+ ){1,8}?)(?:each of them|it|thatit|them|that creature|that permanent|that card|the chosen creature|the chosen card)\b").ok()
     }) {
         // Only an instruction that acts on it ("tap it", "put a +1/+1 counter on it"),
         // not a condition about something else ("if you control a creature with a

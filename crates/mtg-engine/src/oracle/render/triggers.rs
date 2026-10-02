@@ -918,6 +918,17 @@ impl Renderer<'_> {
                 let e = self.trigger_event(inner, det);
                 Ev::new(e.subj, format!("{} for the first time each turn", e.vp))
             }
+            // "Whenever you roll one or more dice" (once per roll of several dice).
+            TriggerCond::Batched {
+                trigger,
+                per: BatchPer::Batch,
+            } if matches!(trigger.as_ref(), TriggerCond::RollDie(_)) => {
+                let e = self.trigger_event(trigger, det);
+                match e.vp.strip_suffix("roll a die") {
+                    Some(head) => Ev::new(e.subj, format!("{head}roll one or more dice")),
+                    None => Ev::new(e.subj, e.vp),
+                }
+            }
             TriggerCond::Batched { trigger, per } => {
                 // Once per object (or per source) in a batch is how "whenever a creature is
                 // dealt damage" works anyway (CR 603.2c); once per batch or per player is
