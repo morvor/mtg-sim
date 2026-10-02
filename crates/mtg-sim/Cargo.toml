@@ -9,3 +9,4 @@ mtg-engine = { path = "../mtg-engine" }
 mtg-api = { path = "../mtg-api" }
 mtg-data = { path = "../mtg-data" }
 rand.workspace = true
+smol_str = "0.3.6"

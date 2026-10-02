@@ -107,5 +107,6 @@ fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
         who,
         among,
         keep: one_of_each(list)?,
+        up_to: false,
     })
 }

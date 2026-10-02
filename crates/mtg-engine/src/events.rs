@@ -196,6 +196,12 @@ pub enum Event {
         step: Step,
         active: PlayerId,
     },
+    /// A step (or a phase without steps) ended: its mana pools have emptied (CR 500.5)
+    /// and "until end of step" effects have ended.
+    StepEnded {
+        step: Step,
+        active: PlayerId,
+    },
     TurnBegan {
         active: PlayerId,
         number: u32,
