@@ -52,9 +52,12 @@ impl CompileContext<'_> {
 pub struct Compiled {
     pub abilities: Vec<Ability>,
     pub unsupported: Vec<String>,
+    /// Blocks replaced by hand-written definitions ([`crate::cards`]).
+    pub manual: Vec<String>,
 }
 
 thread_local! {
+    static NO_MANUAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
@@ -66,16 +69,38 @@ pub fn raw_text() -> String {
     RAW_TEXT.with(|r| r.borrow().clone())
 }
 
+/// Runs `f` with hand-written definitions ([`crate::cards`]) disabled on this thread, so
+/// that what the compiler parses on its own can be checked (`manual-check`).
+pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
+    let prev = NO_MANUAL.with(|c| c.replace(true));
+    let r = f();
+    NO_MANUAL.with(|c| c.set(prev));
+    r
+}
+
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
+    let manual_ok = !NO_MANUAL.with(|c| c.get());
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
-        // A pronoun left without an antecedent means the text wasn't understood.
+        // A genuinely unique ability written by hand (compile-first policy, see `cards`).
+        if let Some(m) = manual_ok
+            .then(|| crate::cards::lookup(ctx.full_name, ctx.face_index, &block))
+            .flatten()
+        {
+            out.abilities.append(&mut (m.build)(ctx));
+            out.manual.push(block);
+            continue;
+        }
+        // A pronoun left without an antecedent, or an instruction to repeat a process
+        // outside any process, means the text wasn't understood.
         let parsed = parse_ability(&block, ctx).filter(|v| {
-            !v.iter()
-                .any(|a| patterns::oracle_hardening_referents::has_no_referent(a))
+            !v.iter().any(|a| {
+                patterns::oracle_hardening_referents::has_no_referent(a)
+                    || crate::repeat_process::has_stray_repeat(a)
+            })
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
@@ -106,7 +131,10 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{201C}', "\"")
         .replace('\u{201D}', "\"")
         // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
-        .replace("converted mana cost", "mana value");
+        .replace("converted mana cost", "mana value")
+        // A comma inside a closing quote before "where X is" belongs to the sentence:
+        // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
+        .replace(",\" where X is ", "\", where X is ");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
@@ -328,7 +356,14 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     // Triggered abilities.
     let lower = text.to_lowercase();
     if lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at ") {
-        return triggers::parse_triggered(text, ctx).map(|a| vec![a]);
+        if let Some(a) = triggers::parse_triggered(text, ctx) {
+            return Some(vec![a]);
+        }
+        // An instant or sorcery's "Whenever a creature attacks this turn, ..." is a spell
+        // ability creating a delayed triggered ability (CR 603.7b).
+        if !ctx.is_spell() {
+            return None;
+        }
     }
     // Spell abilities for instants and sorceries.
     if ctx.is_spell() {
@@ -412,6 +447,13 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
+    // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
+    let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
+        || cost.parts.iter().any(crate::casting::cost_part_has_x);
+    let x_not_zero = cost_has_x
+        .then(|| patterns::r107_x_cant_be_zero::strip(eff_text))
+        .flatten();
+    let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
     // CR 400.7j: "the exiled card" is the card the cost exiled.
     let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
         Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))?,
@@ -430,6 +472,11 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
     act.zone = activated_zone(cost_s, eff_text);
+    if x_not_zero.is_some() {
+        act.condition = Some(patterns::r107_x_cant_be_zero::condition(
+            act.condition.take(),
+        ));
+    }
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
 }
 

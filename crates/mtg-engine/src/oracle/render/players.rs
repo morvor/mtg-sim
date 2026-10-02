@@ -176,6 +176,29 @@ impl Renderer<'_> {
         if t.chosen_by_opponent {
             s.push_str(" of an opponent's choice");
         }
+        // A requirement on the targets taken together (CR 115.3).
+        let one = matches!(t.max, Value::Const(1));
+        match &t.together {
+            None => {}
+            _ if one => {}
+            Some(TargetGroup::SameOwner) => {
+                let before = s.clone();
+                for g in [" in a graveyard", " in graveyards"] {
+                    s = s.replacen(g, " from a single graveyard", 1);
+                }
+                // "two target cards from an opponent's graveyard": one graveyard.
+                if s == before && !s.contains("graveyard") {
+                    s.push_str(" a single player owns");
+                }
+            }
+            Some(TargetGroup::SameController) => {
+                s.push_str(" {alt:a single player controls|controlled by the same player}")
+            }
+            Some(TargetGroup::ShareCreatureType) => s.push_str(" that share a creature type"),
+            Some(TargetGroup::ShareCardType) => s.push_str(" that share a card type"),
+            Some(TargetGroup::SharePermanentType) => s.push_str(" that share a permanent type"),
+            Some(TargetGroup::ShareNoCreatureType) => s.push_str(" that share no creature types"),
+        }
         s
     }
 
@@ -550,6 +573,9 @@ impl Renderer<'_> {
             PlayerFilter::Active => "whose turn it is".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::LessThanHalfStartingLife => {
+                "with less than half their starting life total".into()
+            }
             PlayerFilter::Ref(r) => {
                 let p = self.player(r, Case::Obj);
                 format!("who is {p}")

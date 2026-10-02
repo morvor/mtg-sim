@@ -1019,6 +1019,9 @@ pub struct CardCheck {
     /// Oracle units with no match, and rendered units with no match.
     pub unmatched_oracle: Vec<String>,
     pub unmatched_rendered: Vec<String>,
+    /// Some of the card's abilities are hand-written (`crate::cards`), not compiled from
+    /// its text: what they do is in code, which the renderer can't put into words.
+    pub hand_written: bool,
 }
 
 /// Renders a card and compares it with its Oracle text.
@@ -1060,6 +1063,7 @@ pub fn check_card(def: &CardDef) -> CardCheck {
         gaps,
         unmatched_oracle,
         unmatched_rendered,
+        hand_written: !def.manual_text().is_empty(),
     }
 }
 

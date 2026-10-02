@@ -170,6 +170,29 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Poss);
                 format!("{s} base power")
             }
+            Value::SpellsCastThisTurnManaValue(p, f) => {
+                let n = if matches!(f, Filter::Any | Filter::Spell) {
+                    "spells".to_string()
+                } else {
+                    let n = self.noun(f, Num::Many);
+                    if n.contains("spell") {
+                        n
+                    } else {
+                        format!("{n} spells")
+                    }
+                };
+                let p = self.player(p, Case::Subj);
+                let have = if p == "you" {
+                    "you've"
+                } else {
+                    "that player has"
+                };
+                format!("the total mana value of {n} {have} cast this turn")
+            }
+            Value::ManaValuesAmong(f) => {
+                let n = self.noun_det(f, Det::Plural);
+                format!("the number of different mana values among {n}")
+            }
             Value::DistinctNames(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("the number of differently named {n}")
@@ -262,6 +285,10 @@ impl Renderer<'_> {
         }
         if matches!(v, Value::Prev) {
             return ("that many".into(), None);
+        }
+        // A number stored earlier: "that many", or the X the text already defined.
+        if matches!(v, Value::Var(n) if *n != vars::EXCESS) {
+            return ("{alt:that many|X}".into(), None);
         }
         if Self::is_simple(v) {
             return (self.value(v), None);
@@ -606,6 +633,10 @@ impl Renderer<'_> {
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
+            PlayerFilter::LessThanHalfStartingLife => {
+                let p = if you { "your" } else { "their" };
+                format!("{have} less than half {p} starting life total")
+            }
             PlayerFilter::DealtDamageThisTurn => "was dealt damage this turn".into(),
             // CR 122.1f: "poisoned" means having one or more poison counters.
             PlayerFilter::Counters(k, Cmp::Ge, v)

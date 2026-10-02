@@ -52,15 +52,24 @@ fn subject_list(subj: &str) -> Option<Filter> {
     if suffix.is_empty() {
         return Some(head);
     }
-    // Parse the controller suffix on a neutral head noun. The probe's own noun isn't part
-    // of the subject: "creatures your opponents control" includes creature tokens, so
-    // a `Card` from the probe ("not a token", CR 108.2) must not remain.
+    // Parse the controller suffix on a neutral head noun ("card" = any object).
     let probe = format!("card{suffix}");
     let (sf, _, tail) = parse_object_phrase(&probe)?;
     if !end(tail).is_empty() {
         return None;
     }
-    let sf = without_probe_card(sf);
+    // Keep only the controller part: the probe noun's own "is a card" restriction would
+    // wrongly exclude tokens ("Creatures your opponents control enter tapped" applies to
+    // creature tokens too, CR 111.1).
+    let sf = match sf {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|f| !matches!(f, Filter::Card))
+                .collect(),
+        ),
+        Filter::Card => Filter::Any,
+        other => other,
+    };
     Some(Filter::and(vec![head, sf]))
 }
 
@@ -87,6 +96,37 @@ fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
         block,
     )])
+}
+
+/// "Creatures you control enter as a copy of ~." (Essence of the Wild): a replacement
+/// effect that makes other permanents enter as a copy of this one (CR 614.1c, 707.2).
+fn others_enter_as_copy_of_this(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let subj = end(&lower).strip_suffix(" enter as a copy of ~")?;
+    if subj.starts_with('~') || subj.contains(" this turn") {
+        return None;
+    }
+    let f = subject_list(subj)?;
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+        action: ReplacementAction::EnterAsCopy {
+            filter: Filter::Source,
+            optional: false,
+        },
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "others enter as a copy of this", priority: 50, parse: others_enter_as_copy_of_this }
 }
 
 /// "Each other creature you control of the chosen type enters with an additional +1/+1
@@ -242,12 +282,35 @@ fn graveyard_others_enter_with_counters(block: &str, ctx: &CompileContext) -> Op
 
 /// "You may have ~ enter as a copy of any creature on the battlefield." (CR 707.9,
 /// 614.1c); "You may have ~ enter tapped as a copy of any land on the battlefield."
+/// With a leading condition ("If you attacked this turn, you may have ~ enter as a copy
+/// ..."), the replacement applies only if the condition is true as it enters.
 fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() {
         return None;
     }
     let lower = block.to_lowercase();
     let l = end(&lower);
+    if let Some(r) = l.strip_prefix("if ") {
+        let (c, rest) = r.split_once(", you may have ~ enter ")?;
+        let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+        // `l` is a prefix of the block (lowercased, without its final period).
+        let start = l.len() - rest.len() - "you may have ~ enter ".len();
+        if !block.is_ascii() || !lower[start..].starts_with("you may have ~ enter ") {
+            return None;
+        }
+        let out = enter_as_copy(&block[start..], ctx)?;
+        return Some(
+            out.into_iter()
+                .map(|a| {
+                    let mut kind = a.kind.clone();
+                    if let AbilityKind::Static(st) = &mut kind {
+                        st.condition = Some(cond.clone());
+                    }
+                    AbilityDef::new(kind, block)
+                })
+                .collect(),
+        );
+    }
     let r = l.strip_prefix("you may have ~ enter ")?;
     let (tapped, r) = match r.strip_prefix("tapped ") {
         Some(x) => (true, x),
@@ -262,7 +325,14 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
                 return None;
             }
             let start = l.find(", except ")? + ", except ".len();
-            (a, copy_exceptions(end(&block[start..]), ctx)?)
+            let raw = end(&block[start..]);
+            // Fall back to the token-copy exception grammar ("it's 7/7", "it has haste
+            // and dethrone", "it's an artifact and it has \"...\"").
+            let exc = copy_exceptions(raw, ctx).or_else(|| {
+                let (masked, quotes) = super::statics::mask_quotes(end(&raw.to_lowercase()))?;
+                super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
+            })?;
+            (a, exc)
         }
         None => (r, vec![]),
     };
@@ -328,6 +398,19 @@ fn copy_exceptions(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
                 out.push(Modification::AddAbility(a));
             }
             rest = &rest["it has \"".len() + close + 1..];
+        } else if let Some(r) = lower.strip_prefix("it has ") {
+            // "except it has changeling" (Omni-Changeling): keywords, up to the next
+            // clause.
+            let len = r.find(", ").unwrap_or(r.len());
+            let kws = r[..len].trim_end_matches('.');
+            for a in crate::oracle::keywords::parse_keyword_line(kws, ctx)? {
+                match &a.kind {
+                    AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
+                    AbilityKind::Unsupported(_) => return None,
+                    _ => out.push(Modification::AddAbility(a)),
+                }
+            }
+            rest = &rest[rest.len() - (r.len() - len)..];
         } else if let Some(r) = lower.strip_prefix("it isn't legendary") {
             out.push(Modification::RemoveSupertypes(vec![
                 crate::types::Supertype::Legendary,

@@ -129,6 +129,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,
+        together: None,
     };
     Some((spec, any_number, rest))
 }
@@ -141,6 +142,14 @@ fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
     let it = b.it.clone();
+    // "the exiled card's mana value" right after an instruction exiled it (Spark of
+    // Creativity); X in its mana cost is 0 there (CR 202.3e).
+    if let Some(r) = s.strip_prefix("the exiled card's mana value") {
+        if matches!(&it, Sel::Var(v) if *v == vars::IT) {
+            return Some((Value::ManaValueOf(Box::new(it)), r.to_string()));
+        }
+        return None;
+    }
     // "that card"/"that creature" never names the source itself or a player; if the
     // referent is one of those, the antecedent wasn't tracked (e.g. a discarded card).
     if s.starts_with("that ") && !it_is_object(b) {
@@ -231,6 +240,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
         ("each other player", PlayerRef::EachOtherPlayer),
         ("you", PlayerRef::You),
         ("that player", b.it_player.clone()),
+        // "At the beginning of each player's end step, ... deals damage to the player"
+        // (Angel's Trumpet): the trigger's player.
+        ("the player", b.it_player.clone()),
         ("defending player", PlayerRef::DefendingPlayer),
         ("its controller", PlayerRef::ControllerOf(it())),
         ("their controller", PlayerRef::ControllerOf(it())),
@@ -258,6 +270,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
             }
             // Pronouns whose antecedent wasn't tracked still point at the defaults.
             if p == "that player" && matches!(r, PlayerRef::You) {
+                return None;
+            }
+            if p == "the player" && !matches!(r, PlayerRef::TriggerPlayer) {
                 return None;
             }
             if p.starts_with("that ") && p != "that player" && !it_is_object(b) {
@@ -344,13 +359,13 @@ fn recipient_item(
             .or_else(|| word(t, "that player or that planeswalker's controller controls"))
         {
             let rel = players_of(prev, b)?;
-                (
-                    Filter::and(vec![f, Filter::ControlledBy(rel)]),
-                    r2.to_string(),
-                )
-            } else {
-                (f, rest)
-            };
+            (
+                Filter::and(vec![f, Filter::ControlledBy(rel)]),
+                r2.to_string(),
+            )
+        } else {
+            (f, rest)
+        };
         return Some((Sel::All(f), rest));
     }
     let before = b.targets.len();
@@ -925,7 +940,12 @@ pub(crate) fn delayed_parts(l: &str) -> Option<(&'static str, &str, TriggerStep)
 
 /// Builds "store the object now; at the step, destroy/exile/bounce it" (CR 603.7).
 /// Delayed triggers keep the creating ability's variables, not its targets or event.
-pub(crate) fn delayed_removal(verb: &str, what: Sel, tail: &str, step: TriggerStep) -> Option<Effect> {
+pub(crate) fn delayed_removal(
+    verb: &str,
+    what: Sel,
+    tail: &str,
+    step: TriggerStep,
+) -> Option<Effect> {
     let delayed = Sel::Var(DELAYED);
     let effect = match (verb, tail) {
         ("destroy", "") => Effect::Destroy {
@@ -940,10 +960,7 @@ pub(crate) fn delayed_removal(verb: &str, what: Sel, tail: &str, step: TriggerSt
         // "Sacrifice it": only its controller can sacrifice it, so nothing happens if
         // you no longer control it (CR 701.21a).
         ("sacrifice", "") => Effect::If {
-            cond: Condition::SelMatches(
-                delayed.clone(),
-                Filter::ControlledBy(PlayerRel::You),
-            ),
+            cond: Condition::SelMatches(delayed.clone(), Filter::ControlledBy(PlayerRel::You)),
             then: Box::new(Effect::SacrificeObjects { what: delayed }),
             otherwise: Box::new(Effect::Noop),
         },
@@ -1006,7 +1023,7 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // combat." (Mirror Mockery): the tokens an optional instruction created.
     let mut optional_create = false;
     let var = match last_effect(prev) {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
         _ => {
             if super::tokens_copies_create::last_create(prev).is_none() {
@@ -1195,12 +1212,21 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
 /// "[Exile X], then return it to the battlefield under its owner's control" and "Return
 /// that card to the battlefield under its owner's control at the beginning of the next
 /// end step" after an exile: the returned object is the card in exile — a new object
-/// (CR 400.7), not the original target.
+/// (CR 400.7), not the original target. Also "You may exile ~. If you do, return it to
+/// the battlefield under its owner's control." (Estrid's Invocation).
 fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Effect::Exile { what, .. } = last_effect(prev) else {
-        return false;
+    let (l, if_you_do) = match l.strip_prefix("if you do, ") {
+        Some(r) => (r, true),
+        None => (l, false),
     };
-    let what = what.clone();
+    let what = match (last_effect(prev), if_you_do) {
+        (Effect::Exile { what, .. }, false) => what.clone(),
+        (Effect::May { effect, .. }, true) => match &**effect {
+            Effect::Exile { what, .. } => what.clone(),
+            _ => return false,
+        },
+        _ => return false,
+    };
     let Some(r) = l.strip_prefix("return ") else {
         return false;
     };
@@ -1265,6 +1291,15 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                 },
             ]
         }
+    };
+    let effects = if if_you_do {
+        vec![Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(Effect::seq(effects)),
+            otherwise: Box::new(Effect::Noop),
+        }]
+    } else {
+        effects
     };
     let old = std::mem::take(prev);
     let mut v = vec![old];

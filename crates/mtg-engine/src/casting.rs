@@ -86,6 +86,11 @@ pub fn grant_play_permission(
     }
 }
 
+/// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
+/// sets ("If you cast a spell this way, pay life equal to its mana value rather than pay
+/// its mana cost."), not for an alternative cost of its own.
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
@@ -95,7 +100,8 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
     let faces = match o.card.as_ref().map(|d| (d.layout, d.faces.len())) {
-        Some((Layout::Split, 2)) => vec![FaceState::Half(0), FaceState::Half(1)],
+        // A split card with three halves too (There // They're // Their).
+        Some((Layout::Split, n)) if n >= 2 => (0..n as u8).map(FaceState::Half).collect(),
         Some((Layout::Adventure, 2)) => vec![FaceState::Front, FaceState::Half(1)],
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
@@ -121,8 +127,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 }
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
-fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
+fn choose_face_to_cast(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    only: Option<&[FaceState]>,
+) -> FaceState {
     let mut faces = castable_faces(g, card);
+    // Only the faces an effect lets the player cast (CR 601.3e).
+    if let Some(only) = only {
+        faces.retain(|f| only.contains(f));
+    }
     // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
     // CR 702.127a).
     let allowed: Vec<FaceState> = faces
@@ -155,12 +170,24 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    cast_during_resolution_as(g, p, card, method, None)
+}
+
+/// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
+/// the characteristics the effect allows, CR 601.3e), if given.
+pub fn cast_during_resolution_as(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    method: CastMethod,
+    only: Option<&[FaceState]>,
+) -> Result<ObjectId, Illegal> {
     // CR 702.61a: while a spell with split second is on the stack, no other spell can be
     // cast, even as part of a resolving ability's effect.
     if g.split_second_on_stack() {
         return Err(Illegal("a spell with split second is on the stack".into()));
     }
-    let face = choose_face_to_cast(g, p, card);
+    let face = choose_face_to_cast(g, p, card, only);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
     // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
@@ -178,6 +205,20 @@ pub fn cast_during_resolution(
             }
         }
     }
+    // CR 608.2g, 601.2b: a spell cast with its costs paid while an effect resolves may be
+    // cast for an alternative cost the card has (evoke, emerge, ...) rather than its mana
+    // cost.
+    if method == CastMethod::Normal && !keyword_way && face == FaceState::Front {
+        let mut alts = resolution_alternative_costs(g, p, card);
+        if !alts.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(alts.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= alts.len() {
+                opt = alts.swap_remove(k - 1);
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
         if !keyword_way {
@@ -186,6 +227,34 @@ pub fn cast_during_resolution(
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
+}
+
+/// The alternative costs `card` could be cast for by `p` while an effect lets them cast it
+/// during its resolution: those its abilities offer wherever it is, as if an effect let
+/// them cast it from there (CR 608.2g, 601.2b, 118.9).
+fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let turn = g.turn.number;
+    g.play_grants.push(PlayGrant {
+        player: p,
+        object: card,
+        duration: Duration::EndOfTurn,
+        free: false,
+        source: None,
+        turn,
+    });
+    let alts: Vec<CastOption> = g
+        .cast_options(p, card)
+        .into_iter()
+        .filter(|o| {
+            matches!(
+                o.method,
+                CastMethod::Alternative(_) | CastMethod::Keyword(_)
+            ) && o.alt_cost.is_some()
+        })
+        .collect();
+    // The permission pushed above (finding the options doesn't change the grants).
+    g.play_grants.pop();
+    alts
 }
 
 /// The ways `card` could be cast without paying its mana cost as a spell whose mana value
@@ -212,6 +281,20 @@ pub fn free_cast_options(
         if face == FaceState::Front {
             opts.extend(crate::kw::cast_options_with_any_cost(g, p, card));
         }
+    }
+    // CR 702.102a: a split card with fuse cast from its caster's hand may be cast as both
+    // halves, a fused split spell with the combined mana value (CR 702.102b).
+    let o = g.obj(card);
+    if o.zone == Zone::Hand(p)
+        && o.chars.has_keyword(KeywordKind::Fuse)
+        && o.card
+            .as_ref()
+            .is_some_and(|d| d.layout == crate::card::Layout::Split)
+        && !crate::kw::cast_prohibited(g, p, card, &g.face_characteristics(card, FaceState::Fused))
+    {
+        let mut f = CastOption::normal(FaceState::Fused);
+        f.method = CastMethod::Keyword(KeywordKind::Fuse);
+        opts.push(f);
     }
     opts.into_iter()
         .filter_map(|mut opt| {
@@ -244,10 +327,19 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Listing what could be done only checks legality: it doesn't exercise the
+        // abilities it consults (see `structure`).
+        crate::structure::unlogged(|| self.legal_actions_now(p))
+    }
+
+    fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
             for c in self.playable_land_cards(p) {
+                if !self.can_pay_land_play_cost(p, c) {
+                    continue;
+                }
                 out.push(Action::PlayLand { card: c });
             }
         }
@@ -338,6 +430,7 @@ impl Game {
                 .rule_effects
                 .iter()
                 .any(|e| check(&e.restriction, e.source, e.controller))
+            || crate::kw::land_play_prohibited(self, p, card)
     }
 
     /// Characteristics of the face a card would be played with as a land.
@@ -404,43 +497,92 @@ impl Game {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
-            if (land && !perm.lands) || (!land && !perm.spells) {
+            // A permission to cast spells only for a cost of its own ("If you cast a spell
+            // this way, pay life equal to its mana value rather than pay its mana cost")
+            // allows casting them only that way (CR 118.9; see
+            // [`Game::permission_cost_options`]).
+            if !land && perm.cost.as_ref().is_some_and(|c| !c.is_free()) {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
-            if !self.player_rel_matches(perm.who, p, &ctx) {
-                continue;
-            }
-            let in_zone = match perm.zone {
-                ZoneKind::Library => {
-                    if perm.top_only {
-                        self.library_top(p) == Some(card)
-                    } else {
-                        o.zone == Zone::Library(p)
-                    }
-                }
-                ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
-                ZoneKind::Exile => o.zone == Zone::Exile,
-                ZoneKind::Hand => o.zone == Zone::Hand(p),
-                ZoneKind::Command => o.zone == Zone::Command,
-                _ => false,
-            };
-            if !in_zone {
-                continue;
-            }
-            // CR 601.3e: the alternative characteristics the card would have as it's
-            // played are what the permission checks.
-            let f = if land {
-                perm.what.clone()
-            } else {
-                as_spell_filter(&perm.what)
-            };
-            let view = WithChars { id: card, chars };
-            if self.matches_view(&view, card, &f, &ctx) {
+            if self.static_permission_matches(*src, *ctl, perm, p, card, chars, land) {
                 return true;
             }
         }
         false
+    }
+
+    /// Whether the static play permission `perm` of `src` (controlled by `ctl`) lets `p`
+    /// play `card` with the characteristics `chars`, as a land or as a spell, ignoring any
+    /// cost of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn static_permission_matches(
+        &self,
+        src: ObjectId,
+        ctl: PlayerId,
+        perm: &PlayPermission,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+    ) -> bool {
+        let o = self.obj(card);
+        if (land && !perm.lands) || (!land && !perm.spells) {
+            return false;
+        }
+        let ctx = Ctx::new(Some(src), ctl);
+        if !self.player_rel_matches(perm.who, p, &ctx) {
+            return false;
+        }
+        let in_zone = match perm.zone {
+            ZoneKind::Library => {
+                if perm.top_only {
+                    self.library_top(p) == Some(card)
+                } else {
+                    o.zone == Zone::Library(p)
+                }
+            }
+            ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+            ZoneKind::Exile => o.zone == Zone::Exile,
+            ZoneKind::Hand => o.zone == Zone::Hand(p),
+            ZoneKind::Command => o.zone == Zone::Command,
+            _ => false,
+        };
+        if !in_zone {
+            return false;
+        }
+        // CR 601.3e: the alternative characteristics the card would have as it's
+        // played are what the permission checks.
+        let f = if land {
+            perm.what.clone()
+        } else {
+            as_spell_filter(&perm.what)
+        };
+        let view = WithChars { id: card, chars };
+        self.matches_view(&view, card, &f, &ctx)
+    }
+
+    /// Ways to cast `card` outside the hand that static permissions with a cost of their
+    /// own allow ("You may play lands and cast spells from the top of your library. If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost."): that cost is an alternative cost (CR 118.9), so the spell can't be cast
+    /// that way with another one (CR 118.9a).
+    fn permission_cost_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        let mut out = Vec::new();
+        for face in castable_faces(self, card) {
+            let chars = self.face_characteristics(card, face);
+            for (src, ctl, perm) in &self.statics.play_permissions {
+                let Some(cost) = perm.cost.as_ref().filter(|c| !c.is_free()) else {
+                    continue;
+                };
+                if self.static_permission_matches(*src, *ctl, perm, p, card, &chars, false) {
+                    let mut opt = CastOption::normal(face);
+                    opt.method = CastMethod::Alternative(PERMISSION_COST);
+                    opt.alt_cost = Some(cost.clone());
+                    out.push(opt);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a static permission lets `p` cast `card` from their hand without paying its
@@ -609,7 +751,8 @@ impl Game {
             }
             // Alternative costs from the card's own abilities ("You may pay X rather than pay
             // this spell's mana cost", evoke, dash, ...).
-            for a in &o.chars.abilities {
+            let own = self.characteristics_to_cast(card);
+            for a in &own.abilities {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
@@ -658,6 +801,7 @@ impl Game {
                     let free = opt.method == CastMethod::Free;
                     self.permission_allows_with(p, card, &chars, false, free)
                 });
+                out.extend(self.permission_cost_options(p, card));
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
@@ -729,6 +873,19 @@ impl Game {
             crate::kw::apply_spell_text_changes(self, card, &[tag.into()], &mut c);
         }
         c
+    }
+
+    /// The characteristics whose abilities offer ways to cast `card` (alternative costs,
+    /// keywords such as evoke): its own, or those of its front face if it's a face-down
+    /// card outside the battlefield, as it's turned face up just before it's cast
+    /// (CR 406.3a, 702.143a).
+    pub fn characteristics_to_cast(&self, card: ObjectId) -> Characteristics {
+        let o = self.obj(card);
+        if o.face_down && o.zone != Zone::Battlefield {
+            self.face_characteristics(card, FaceState::Front)
+        } else {
+            o.chars.clone()
+        }
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
@@ -946,8 +1103,46 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
+    }
+
+    /// The mana a player pays to play a land card that has a mana cost (Glade of the
+    /// Pump Spells: "You have to pay {2}{G} to play this land as your land drop"). Lands
+    /// normally have no mana cost; one put onto the battlefield by an effect isn't played,
+    /// so nothing is paid.
+    fn land_play_cost(&self, card: ObjectId) -> Option<ManaCost> {
+        let o = self.try_obj(card)?;
+        if !o.chars.is_land() {
+            return None;
+        }
+        o.chars.mana_cost.clone().filter(|m| !m.symbols.is_empty())
+    }
+
+    fn can_pay_land_play_cost(&self, p: PlayerId, card: ObjectId) -> bool {
+        let Some(m) = self.land_play_cost(card) else {
+            return true;
+        };
+        let spend = SpendContext {
+            check_only: true,
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::plan_payment(self, p, &m, &spend, Some(card)).is_some()
+    }
+
+    fn pay_land_play_cost(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
+        let Some(m) = self.land_play_cost(card) else {
+            return Ok(());
+        };
+        let spend = SpendContext {
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::pay_mana(self, p, &m, &spend, Some(card))
+            .map(|_| ())
+            .ok_or_else(|| Illegal("can't pay the land's mana cost".into()))
     }
 
     /// Plays a land during the resolution of a spell or ability that instructs `p` to
@@ -976,6 +1171,7 @@ impl Game {
         if self.land_play_prohibited(p, card) {
             return Err(Illegal("can't play that land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
     }
@@ -990,6 +1186,8 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
+        // "Each land played this way enters tapped" (CR 614.1c).
+        let tapped = crate::kw::play_permission_terms::lands_enter_tapped(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let new = self.move_object_ev(MoveEv {
             obj: card,
@@ -1000,6 +1198,7 @@ impl Game {
             etb: EtbInfo {
                 controller: Some(p),
                 face: Some(face),
+                tapped,
                 ..Default::default()
             },
             source: None,
@@ -1160,6 +1359,9 @@ impl Game {
             .play_grants
             .iter()
             .any(|g| g.object == card && g.player == p);
+        // "A spell cast this way costs {2} more to cast" (CR 601.2f).
+        let permission_cost_increase =
+            crate::kw::play_permission_terms::grant_cost_increase(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1168,6 +1370,7 @@ impl Game {
             turn: self.turn.number,
             instant_timing: !sorcery_time,
             main_phase: self.turn.step.is_main() && self.turn.active == p,
+            permission_cost_increase,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
@@ -1338,8 +1541,31 @@ impl Game {
                         .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
                 max = if mana_x { max.min(power) } else { power };
             }
-            x = match self.ask(p, Decision::ChooseX { source: id, max }) {
-                Answer::Number(n) if n >= 0 => n,
+            // An alternative cost that uses an object described with X ("exile a blue
+            // card with mana value X from your hand", CR 107.3a): X must be a value it
+            // can be paid with, at most the mana available if mana is paid for X too.
+            let x_values = opt
+                .alt_cost
+                .as_ref()
+                .and_then(|c| crate::x_cost_filters::payable_x_values(self, p, Some(id), c));
+            if let (Some(vals), Some(c)) = (&x_values, &opt.alt_cost) {
+                let bound = vals.iter().copied().max().unwrap_or(0);
+                max = if c.mana.as_ref().is_some_and(|m| m.has_x()) {
+                    max.min(bound)
+                } else {
+                    bound
+                };
+            }
+            // (A value the alternative cost can't be paid with isn't a legal choice.)
+            let answer = self.ask(p, Decision::ChooseX { source: id, max });
+            let payable = |n: i64| match (&x_values, &opt.alt_cost) {
+                (Some(_), Some(c)) => {
+                    crate::x_cost_filters::payable_with_x(self, p, Some(id), c, n)
+                }
+                _ => true,
+            };
+            x = match answer {
+                Answer::Number(n) if n >= 0 && payable(n) => n,
                 _ => max.max(0),
             };
         }
@@ -1487,7 +1713,9 @@ impl Game {
             crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
+        crate::next_spell::recheck_static_cast_grants(self, id);
         self.log(|g| format!("{p} casts {}", g.describe(id)));
+        crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
             spell: id,
             player: p,
@@ -1536,8 +1764,6 @@ impl Game {
                 parts: vec![],
             },
         };
-        // Reductions by mana symbols (CR 118.7a–g), applied after the other changes.
-        let mut mana_reductions: Vec<(ManaCost, bool)> = Vec::new();
         // Additional costs required by the casting method (e.g. CR 601.3c).
         if let Some(e) = &opt.extra_cost {
             add_cost(&mut cost, e);
@@ -1549,12 +1775,18 @@ impl Game {
         if tax > 0 {
             add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
         }
+        // "A spell cast this way costs {2} more to cast": an increase that comes with the
+        // permission it's cast with.
+        let more = crate::kw::play_permission_terms::cost_increase(self, p, card);
+        if more > 0 {
+            add_cost(&mut cost, &Cost::mana(ManaCost::generic(more)));
+        }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
         }
-        // Generic and colored reductions, applied after all increases.
-        let mut reductions: Vec<(u32, Option<Color>)> = Vec::new();
+        // CR 601.2f: increases apply as they're found, reductions after all of them.
+        let mut changes = crate::activation_costs::CostChanges::default();
         // Own additional costs ("As an additional cost to cast this spell, ...").
         for a in &chars.abilities {
             if let AbilityKind::Static(s) = &a.kind {
@@ -1572,28 +1804,11 @@ impl Game {
                                 &mut cost,
                                 &crate::kw::cumulative_upkeep::expand_repeated(self, c, &ctx),
                             ),
-                            CostChange::IncreaseGeneric(v) => {
-                                let n = self.eval_value(v, &ctx).max(0) as u32;
-                                add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
+                            // Alternative and optional costs are announced as the spell
+                            // is cast (see `cost_choices`).
+                            other => {
+                                changes.add(self, &mut cost, other, &ctx);
                             }
-                            // Reductions apply after every increase (CR 601.2f).
-                            CostChange::ReduceGeneric(v) => {
-                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, None))
-                            }
-                            CostChange::ReduceColored(c, v) => {
-                                reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
-                            }
-                            CostChange::IncreaseMana(m) => {
-                                add_cost(&mut cost, &Cost::mana(m.clone()))
-                            }
-                            CostChange::ReduceMana { mana, colored_only } => {
-                                mana_reductions.push((mana.clone(), *colored_only))
-                            }
-                            // Announced as the spell is cast (see `cost_choices`).
-                            CostChange::AlternativeCost(_)
-                            | CostChange::FlashForAdditionalCost(_)
-                            | CostChange::OptionalAdditionalCost { .. }
-                            | CostChange::AdditionalCostChoice(_) => {}
                         }
                     }
                 }
@@ -1612,66 +1827,16 @@ impl Game {
                 }
                 _ => false,
             };
-            if !applies {
-                continue;
-            }
-            match &cm.change {
-                CostChange::IncreaseGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
-                }
-                CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
-                CostChange::ReduceGeneric(v) => {
-                    reductions.push((self.eval_value(v, &ctx).max(0) as u32, None))
-                }
-                CostChange::ReduceColored(c, v) => {
-                    reductions.push((self.eval_value(v, &ctx).max(0) as u32, Some(*c)))
-                }
-                CostChange::ReduceMana { mana, colored_only } => {
-                    mana_reductions.push((mana.clone(), *colored_only))
-                }
-                CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::AlternativeCost(_)
-                | CostChange::FlashForAdditionalCost(_)
-                | CostChange::OptionalAdditionalCost { .. }
-                | CostChange::AdditionalCostChoice(_) => {}
+            if applies {
+                changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
-        for (n, color) in reductions {
-            match color {
-                None => {
-                    // CR 118.7a: the generic component (and monocolored hybrid symbols
-                    // paid with generic mana, CR 601.2b) ...
-                    let left = match cost.mana.as_mut() {
-                        Some(m) => crate::cost_rules::reduce_generic_and_hybrid(m, n),
-                        None => n,
-                    };
-                    // CR 601.2f: ... then the generic mana of a waterbend cost, which is
-                    // part of the total cost too.
-                    crate::kwa::bending::reduce_waterbend_generic(&mut cost, left);
-                }
-                Some(c) => {
-                    if let Some(m) = cost.mana.as_mut() {
-                        for _ in 0..n {
-                            if !m.reduce_colored(c) {
-                                m.reduce_generic(1);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        let mut hybrid = 0;
-        for (by, colored_only) in mana_reductions {
-            if let Some(m) = cost.mana.as_mut() {
-                crate::cost_rules::reduce_by(m, &by, colored_only, |_, cur, s| {
-                    let h = crate::cost_rules::chosen_half(self, card, hybrid, cur, s);
-                    hybrid += 1;
-                    h
-                });
-            }
-        }
+        changes.apply(&mut cost, |i, cur, s| {
+            crate::cost_rules::chosen_half(self, card, i, cur, s)
+        });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        // Changes applied after all others (e.g. a minimum total cost).
+        crate::kw::global_spell_cost(self, p, card, &mut cost);
         cost
     }
 
@@ -1725,9 +1890,19 @@ impl Game {
         if !self.has_priority(p) && !(act.is_mana_ability && self.mana_hint.is_some()) {
             return false;
         }
-        // Timing.
+        // Timing (an effect may let it be activated any time its controller could cast an
+        // instant, CR 602.5d, 606.3).
         let sorcery = act.timing == ActivationTiming::Sorcery || act.is_loyalty;
-        if sorcery && !self.is_sorcery_timing(p) {
+        if sorcery
+            && !self.is_sorcery_timing(p)
+            && !crate::activation_costs::instant_timing_allowed(self, p, src, a, act)
+        {
+            return false;
+        }
+        // CR 602.5e: "Activate only as an instant" — not in the middle of a payment.
+        if act.timing == ActivationTiming::AsInstant
+            && !crate::activation_costs::as_instant_ok(self, p)
+        {
             return false;
         }
         match act.timing {
@@ -1758,22 +1933,47 @@ impl Game {
             }
             _ => {}
         }
-        // Loyalty abilities: once per turn per permanent (CR 606.3).
-        if act.is_loyalty
-            && o.activations_this_turn
+        // Loyalty abilities: once per turn per permanent (CR 606.3), unless an effect
+        // allows more.
+        if act.is_loyalty {
+            let done: u32 = o
+                .activations_this_turn
                 .iter()
-                .any(|(uid, n)| *n > 0 && self.is_loyalty_uid(src, *uid))
-        {
-            return false;
+                .filter(|(uid, _)| self.is_loyalty_uid(src, **uid))
+                .map(|(_, n)| *n)
+                .sum();
+            if done >= crate::activation_costs::loyalty_activations_per_turn(self, p, src, a, act) {
+                return false;
+            }
         }
         if let Some(max) = act.max_per_turn {
             if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
                 return false;
             }
         }
+        // A condition on X ("X can't be 0", CR 107.3a) holds if it does for some value that
+        // could be announced (CR 602.2b): the least such value, at which the cost must
+        // then be payable.
+        let mut least_x: Option<i32> = None;
         if let Some(c) = &act.condition {
-            if !self.eval_cond(c, &Ctx::new(Some(src), p)) {
-                return false;
+            let ctx = Ctx::new(Some(src), p);
+            if !self.eval_cond(c, &ctx) {
+                let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                    || act.cost.parts.iter().any(cost_part_has_x);
+                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                least_x = has_x
+                    .then(|| {
+                        (1..=max_x as i32).find(|x| {
+                            let mut ctx = ctx.clone();
+                            ctx.x = *x;
+                            ctx.x_defined = true;
+                            self.eval_cond(c, &ctx)
+                        })
+                    })
+                    .flatten();
+                if least_x.is_none() {
+                    return false;
+                }
             }
         }
         if self.activation_prohibited(p, src, act.is_mana_ability)
@@ -1804,8 +2004,23 @@ impl Game {
                 return false;
             }
         }
-        let cost = self.ability_total_cost(p, src, a, act);
-        self.can_pay_cost_optimistic(p, &cost, Some(src), &o.chars.clone())
+        let x = least_x.unwrap_or(0);
+        let mut pay_ctx = Ctx::new(Some(src), p);
+        if least_x.is_some() {
+            pay_ctx.x = x;
+            pay_ctx.x_defined = true;
+        }
+        let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+        let chars = o.chars.clone();
+        self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
+            // CR 118.9: or an alternative cost it could be activated for.
+            || crate::activation_costs::alternative_costs(self, p, src, a, act)
+                .iter()
+                .any(|(_, alt)| {
+                    let cost =
+                        self.ability_total_cost_with(p, src, a, act, None, x as u32, Some(alt));
+                    self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
+                })
     }
 
     fn is_loyalty_uid(&self, src: ObjectId, uid: u64) -> bool {
@@ -1850,56 +2065,44 @@ impl Game {
         a: &Ability,
         act: &ActivatedAbility,
     ) -> Cost {
-        let mut cost = act.cost.clone();
+        self.ability_total_cost_with(p, src, a, act, None, 0, None)
+    }
+
+    /// Total cost of an activated ability (CR 602.2b, 601.2f): its activation cost, or
+    /// the alternative cost `alt` announced for it (CR 118.9), with X announced as `x`,
+    /// plus every cost increase and minus every reduction, which apply after all the
+    /// increases. `stack`: the ability on the stack once its targets are chosen, for
+    /// changes that depend on them; before that (`None`) such a reduction is assumed to
+    /// apply and such an increase not to.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ability_total_cost_with(
+        &self,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        act: &ActivatedAbility,
+        stack: Option<ObjectId>,
+        x: u32,
+        alt: Option<&Cost>,
+    ) -> Cost {
+        let mut cost = match alt {
+            Some(c) => crate::activation_costs::with_alternative(self, src, a, act, c),
+            None => act.cost.clone(),
+        };
+        // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
+        if let Some(m) = cost.mana.as_mut() {
+            *m = m.with_x(x);
+        }
+        let mut changes = crate::activation_costs::CostChanges::default();
         for (s, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*s), *ctl);
-            let applies = match &cm.applies_to {
-                CostTarget::Abilities(f) => {
-                    self.player_rel_matches(cm.who, p, &ctx) && self.matches(src, f, &ctx)
-                }
-                CostTarget::Keyword(k) => {
-                    self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
-                }
-                CostTarget::KeywordAbilitiesOf(k, f) => {
-                    self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::keyword_impls::ability_from_keyword(a) == Some(*k)
-                        && self.matches(src, f, &ctx)
-                }
-                // CR 606.4: the cost of a loyalty ability may be modified by other effects.
-                CostTarget::LoyaltyAbilities(f) => {
-                    act.is_loyalty
-                        && self.player_rel_matches(cm.who, p, &ctx)
-                        && self.matches(src, f, &ctx)
-                }
-                _ => false,
-            };
-            if !applies {
-                continue;
-            }
-            match &cm.change {
-                CostChange::IncreaseGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    add_cost(&mut cost, &Cost::mana(ManaCost::generic(n)));
-                }
-                CostChange::ReduceGeneric(v) => {
-                    let n = self.eval_value(v, &ctx).max(0) as u32;
-                    if let Some(m) = cost.mana.as_mut() {
-                        m.reduce_generic(n);
-                    }
-                }
-                CostChange::AdditionalCost(c) => add_cost(&mut cost, c),
-                CostChange::IncreaseMana(m) => add_cost(&mut cost, &Cost::mana(m.clone())),
-                CostChange::ReduceMana { mana, colored_only } => {
-                    if let Some(m) = cost.mana.as_mut() {
-                        crate::cost_rules::reduce_by(m, mana, *colored_only, |_, cur, s| {
-                            crate::cost_rules::default_half(cur, s)
-                        });
-                    }
-                }
-                _ => {}
+            if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
+                changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
+        changes.apply(&mut cost, |_, cur, s| {
+            crate::cost_rules::default_half(cur, s)
+        });
         // Keyword rules that change the cost (power-up, CR 702.193a).
         crate::kw::activation_cost(self, p, src, a, &mut cost);
         // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
@@ -1993,14 +2196,27 @@ impl Game {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
             };
+            // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
+            // can't be 0"); otherwise the least value that does is announced.
+            if let Some(c) = &act.condition {
+                let holds = |x: i64| {
+                    let mut ctx = ctx.clone();
+                    ctx.x = x as i32;
+                    ctx.x_defined = true;
+                    self.eval_cond(c, &ctx)
+                };
+                if !holds(x) {
+                    x = (0..=max)
+                        .find(|x| holds(*x))
+                        .ok_or_else(|| Illegal("no legal value of X".into()))?;
+                }
+            }
         }
         ctx.x = x as i32;
         if act.is_mana_ability {
             // CR 605.3: pay costs, then resolve immediately without using the stack.
-            let mut cost = self.ability_total_cost(p, src, a, act);
-            if let Some(m) = cost.mana.as_mut() {
-                *m = m.with_x(x as u32);
-            }
+            let alt = self.announce_alternative_activation_cost(p, src, a, act);
+            let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, alt.as_ref());
             let spend = SpendContext {
                 is_ability: true,
                 card_types: src_chars.card_types,
@@ -2025,6 +2241,7 @@ impl Game {
                 .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
+            crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.
@@ -2062,19 +2279,25 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
-        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost will be paid.
-        if let Some(m) = &act.cost.mana {
+        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
+        // activation cost (at most one) is announced.
+        let alt = self.announce_alternative_activation_cost(p, src, a, act);
+        // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost that will be paid
+        // (the activation cost or the alternative cost) will be paid.
+        let announced = match &alt {
+            Some(c) => &c.mana,
+            None => &act.cost.mana,
+        };
+        if let Some(m) = announced {
             crate::cost_rules::announce_phyrexian(self, p, id, m);
         }
         // 602.2b: modes, targets.
         if !self.choose_modes_and_targets(id, &act.body, &mut ctx) {
             return Err(Illegal("no legal targets".into()));
         }
-        // Costs.
-        let mut cost = self.ability_total_cost(p, src, a, act);
-        if let Some(m) = cost.mana.as_mut() {
-            *m = m.with_x(x as u32);
-        }
+        // Costs (CR 601.2f: with the targets chosen).
+        let mut cost =
+            self.ability_total_cost_with(p, src, a, act, Some(id), x as u32, alt.as_ref());
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
@@ -2137,6 +2360,39 @@ impl Game {
         Ok(Some(id))
     }
 
+    /// CR 118.9, 601.2b: offers `p` the alternative costs they may pay rather than the
+    /// activation cost of `a`; returns the one chosen, if any.
+    fn announce_alternative_activation_cost(
+        &mut self,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        act: &ActivatedAbility,
+    ) -> Option<Cost> {
+        let alts = crate::activation_costs::alternative_costs(self, p, src, a, act);
+        if alts.is_empty() {
+            return None;
+        }
+        let mut options = vec!["pay the activation cost".to_string()];
+        for (s, c) in &alts {
+            options.push(format!(
+                "pay {c:?} rather than the activation cost ({})",
+                self.describe(*s)
+            ));
+        }
+        match self.ask(
+            p,
+            Decision::ChooseOption {
+                source: Some(src),
+                prompt: "Alternative cost".into(),
+                options,
+            },
+        ) {
+            Answer::Index(i) if i >= 1 && i <= alts.len() => Some(alts[i - 1].1.clone()),
+            _ => None,
+        }
+    }
+
     /// Records that `p` activated the ability `uid` of `src` (CR 602.2i): this turn, and
     /// over the object's existence ("Activate only once", CR 702.177a).
     fn record_activation(&mut self, p: PlayerId, src: ObjectId, uid: u64) {
@@ -2164,7 +2420,8 @@ impl Game {
                 CostTarget::ThisSpell => !ability && src == *s,
                 CostTarget::Keyword(_)
                 | CostTarget::KeywordAbilitiesOf(..)
-                | CostTarget::LoyaltyAbilities(_) => false,
+                | CostTarget::LoyaltyAbilities(_)
+                | CostTarget::ActivatedAbilities(_) => false,
             };
             if applies {
                 if types.is_empty() {
@@ -2206,12 +2463,32 @@ impl Game {
         p: PlayerId,
         cost: &Cost,
         src: Option<ObjectId>,
-        _chars: &Characteristics,
+        chars: &Characteristics,
     ) -> bool {
-        let ctx = Ctx::new(src, p);
-        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
+        self.can_pay_cost_optimistic_in(p, cost, src, chars, &Ctx::new(src, p))
+    }
+
+    /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
+    /// the value announced for X: "Remove X +1/+1 counters from ~").
+    pub fn can_pay_cost_optimistic_in(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        _chars: &Characteristics,
+        ctx: &Ctx,
+    ) -> bool {
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // CR 107.3a: parts that use an object described with X can be paid if they could
+        // be for some value of X.
+        if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
+        {
+            return false;
+        }
         for part in &cost.parts {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx) {
+            if !crate::x_cost_filters::part_has_x_filter(part)
+                && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
+            {
                 return false;
             }
         }
@@ -2293,7 +2570,7 @@ impl Game {
     /// "Tap an untapped [permanent] you control" (CR 118.3). `untaps_src`: likewise, the
     /// cost also has {Q}, so the source can't be one of the tapped permanents untapped for
     /// "Untap a tapped [permanent] you control".
-    fn cost_part_payable(
+    pub(crate) fn cost_part_payable(
         &self,
         p: PlayerId,
         part: &CostPart,
@@ -2313,8 +2590,13 @@ impl Game {
                 if o.tapped != want_tapped {
                     return false;
                 }
-                // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning sickness.
-                !(o.is_creature() && o.summoning_sick && !o.has_keyword(KeywordKind::Haste))
+                // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning
+                // sickness (or a permission to activate them as though it had haste,
+                // CR 609.4).
+                !(o.is_creature()
+                    && o.summoning_sick
+                    && !o.has_keyword(KeywordKind::Haste)
+                    && !crate::activation_costs::as_though_haste(self, p, o.id))
             }
             CostPart::PayLife(v) => self.can_pay_life(p, self.eval_value(v, ctx).max(0) as u32),
             CostPart::Loyalty(n) => {
@@ -2475,6 +2757,7 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 crate::draw_rules::can_choose(self, e, &c)
+                    && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
@@ -2897,6 +3180,12 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 119.7: a cost that has a player who can't gain life gain life can't be
+                // paid — "have an opponent gain 3 life" with an opponent chosen as it's
+                // paid who can't.
+                if !crate::life_totals::cost_life_gain_possible(self, e, &c) {
+                    return bad("that player can't gain life");
+                }
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
@@ -3035,13 +3324,14 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::PayLife(v) | CostPart::PayEnergy(v) | CostPart::Mill(v) => is_x(v),
         // "Sacrifice a creature with power X or greater" (casualty X, CR 702.153a).
         CostPart::Sacrifice { count, filter } => is_x(count) || filter_mentions_x(filter),
-        CostPart::Discard { count, .. }
-        | CostPart::Exile { count, .. }
-        | CostPart::ReturnToHand { count, .. }
-        | CostPart::RemoveCounters { count, .. }
+        // "Exile a blue card with mana value X from your hand" (CR 107.3a).
+        CostPart::Discard { count, filter, .. }
+        | CostPart::Exile { count, filter, .. }
+        | CostPart::ReturnToHand { count, filter }
+        | CostPart::TapUntapped { count, filter } => is_x(count) || filter_mentions_x(filter),
+        CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
         | CostPart::AddCounters { count, .. }
-        | CostPart::TapUntapped { count, .. }
         | CostPart::UntapTapped { count, .. }
         | CostPart::PayPlayerCounters { count, .. }
         // "Reveal X green cards from your hand" (Martyr of Spores).
@@ -3055,7 +3345,7 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
 }
 
 /// Whether a filter compares a characteristic with X ("power X or greater").
-fn filter_mentions_x(f: &Filter) -> bool {
+pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
     match f {
         Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
             matches!(**v, Value::X)

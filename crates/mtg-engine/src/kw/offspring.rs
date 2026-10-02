@@ -93,7 +93,7 @@ impl KeywordRules for Offspring {
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
         let n: i32 = name.strip_prefix(BASE_POWER)?.parse().ok()?;
-        Some(g.obj(id).base_pt.0 == Some(n))
+        Some(super::base_pt::base_pt(g, id).0 == Some(n))
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {

@@ -158,7 +158,10 @@ impl Game {
                 let t = o.toughness();
                 if t <= 0 {
                     to_graveyard.push(id); // 704.5f
-                } else if o.damage > 0 && o.damage as i32 >= t {
+                } else if o.damage > 0
+                    && o.damage as i32 >= crate::kw::lethal_damage_basis(self, id)
+                    && !crate::kw::survives_lethal_damage(self, id)
+                {
                     to_destroy.push(id); // 704.5g
                 } else if o.deathtouch_damage {
                     to_destroy.push(id); // 704.5h

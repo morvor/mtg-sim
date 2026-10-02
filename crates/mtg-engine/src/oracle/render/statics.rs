@@ -265,6 +265,7 @@ impl Renderer<'_> {
             StaticEffect::CostModifier(cm) => self.cost_modifier(cm),
             StaticEffect::Replacement(def) => self.replacement(def, None),
             StaticEffect::PlayPermission(pp) => self.play_permission(pp),
+            StaticEffect::ActivationPermission(ap) => self.activation_permission("you", ap),
             StaticEffect::FlashPermission { who, what } => {
                 let w = self.rel_subject(*who);
                 let s = self.spell_noun_plural(what);
@@ -510,6 +511,10 @@ impl Renderer<'_> {
         };
         match m {
             PlayerModification::Hexproof => format!("{subj} have hexproof"),
+            PlayerModification::ActivationPermission(ap) => {
+                let who = subj.clone();
+                self.activation_permission(&who, ap)
+            }
             PlayerModification::Shroud => format!("{subj} have shroud"),
             PlayerModification::ProtectionFrom(f) => {
                 let q = self.quality(f);
@@ -641,7 +646,70 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::Plural);
                 format!("loyalty abilities of {n}")
             }
+            CostTarget::ActivatedAbilities(scope) => self.ability_scope(scope),
         }
+    }
+
+    /// Activated abilities by kind, source, and targets: "the first equip ability you
+    /// activate each turn", "abilities of creatures you control that target a Merfolk".
+    pub(crate) fn ability_scope(&mut self, scope: &AbilityScope) -> String {
+        let kind = match scope.class {
+            AbilityClass::Any if scope.nonmana => {
+                "activated abilities that aren't mana abilities".to_string()
+            }
+            AbilityClass::Any => "activated abilities".to_string(),
+            AbilityClass::Loyalty => "loyalty abilities".to_string(),
+            AbilityClass::Keyword(k) => format!("{} abilities", k.name().to_lowercase()),
+        };
+        let mut s = if scope.first_each_turn {
+            format!("the first {}", kind.replacen("abilities", "ability", 1))
+        } else {
+            kind
+        };
+        if !matches!(scope.sources, Filter::Any) {
+            let n = if matches!(scope.sources, Filter::Source) {
+                self.me()
+            } else {
+                self.noun_det(&scope.sources, Det::Plural)
+            };
+            s = format!("{s} of {n}");
+        }
+        if let Some(t) = &scope.targeting {
+            let n = self.noun_det(t, Det::A);
+            s = format!("{s} that target {n}");
+        }
+        if scope.first_each_turn {
+            s.push_str(" you activate each turn");
+        }
+        s
+    }
+
+    /// "You may activate loyalty abilities of planeswalkers you control any time you could
+    /// cast an instant", "... twice each turn rather than only once", "... as though those
+    /// creatures had haste" (CR 602.5d, 606.3, 302.6).
+    pub(crate) fn activation_permission(&mut self, who: &str, ap: &ActivationPermission) -> String {
+        let what = self.ability_scope(&ap.scope);
+        let mut parts = Vec::new();
+        if ap.instant_timing {
+            parts.push("any time you could cast an instant".to_string());
+        }
+        if let Some(n) = ap.loyalty_per_turn {
+            let t = match n {
+                1 => "once".to_string(),
+                2 => "twice".to_string(),
+                n => format!("{} times", number_word(n as i32)),
+            };
+            parts.push(format!("{t} each turn rather than only once"));
+        }
+        if ap.as_though_haste {
+            parts.push("as though those creatures had haste".to_string());
+        }
+        let tail = if parts.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", join_list(&parts, "and"))
+        };
+        format!("{who} may activate {what}{tail}")
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
@@ -700,6 +768,16 @@ impl Renderer<'_> {
             CostChange::ReduceGeneric(v) => {
                 let (amt, tail) = self.cost_amount(v);
                 format!("{target}{who} {costs} {amt} less {act}{tail}")
+            }
+            CostChange::ReduceGenericMinOne(v) => {
+                let (amt, tail) = self.cost_amount(v);
+                format!(
+                    "{target}{who} {costs} {amt} less {act}{tail}. This effect can't reduce the mana in that cost to less than one mana"
+                )
+            }
+            CostChange::SpendAnyType => {
+                let t = target.clone();
+                format!("you can spend mana of any type to cast {t}")
             }
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {

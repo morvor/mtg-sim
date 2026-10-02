@@ -76,6 +76,16 @@ fn object_state(r: &str, sel: &Sel, contracted: bool) -> Option<Condition> {
 /// "it" refers to, as a filter.
 pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
     let c = end(c);
+    // "it was dealt [noncombat] damage this turn" (Grisly Sigil).
+    match c {
+        "it was dealt damage this turn" => return Some(Filter::DealtDamageThisTurn),
+        "it was dealt noncombat damage this turn" => {
+            return Some(Filter::Custom(
+                crate::kw::noncombat_damage::DEALT_NONCOMBAT_DAMAGE_THIS_TURN.into(),
+            ))
+        }
+        _ => {}
+    }
     let (neg, state) = if let Some(r) = c
         .strip_prefix("it's not ")
         .or_else(|| c.strip_prefix("it isn't "))
@@ -148,7 +158,7 @@ fn state_filter(s: &str) -> Option<Filter> {
 }
 
 /// "has a +1/+1 counter on it", "has N or more quest counters on it", "has flying",
-/// "entered this turn", "attacked this turn".
+/// "entered this turn", "attacked this turn", "attacked a battle this turn".
 fn object_has(r: &str, sel: &Sel) -> Option<Condition> {
     let r = end(r);
     match r {
@@ -157,6 +167,12 @@ fn object_has(r: &str, sel: &Sel) -> Option<Condition> {
         }
         "attacked this turn" => {
             return Some(Condition::SelMatches(sel.clone(), Filter::AttackedThisTurn))
+        }
+        "attacked a battle this turn" => {
+            return Some(Condition::SelMatches(
+                sel.clone(),
+                Filter::Custom(crate::battle::ATTACKED_A_BATTLE_THIS_TURN.into()),
+            ))
         }
         _ => {}
     }
@@ -698,14 +714,11 @@ fn comparison_condition(c: &str) -> Option<Condition> {
         "your life total is less than your starting life total" => {
             Condition::Compare(life(), Cmp::Lt, Value::StartingLife)
         }
-        // Less than half: below half, rounding the half up for odd totals.
+        // Each opponent's own starting life total (CR 119.1).
         "an opponent's life total is less than half their starting life total" => {
             Condition::PlayerMatches(
                 PlayerRef::EachOpponent,
-                PlayerFilter::Life(
-                    Cmp::Lt,
-                    Box::new(Value::Div(Box::new(Value::StartingLife), 2, true)),
-                ),
+                PlayerFilter::LessThanHalfStartingLife,
             )
         }
         // CR 122.1f: a poisoned player has one or more poison counters.

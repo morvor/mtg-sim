@@ -17,29 +17,33 @@ fn static_ability(effect: StaticEffect, text: &str) -> Ability {
 fn chosen_object_phrase(s: &str) -> Option<Filter> {
     let s = s.trim();
     let probe;
-    let mut probed = false;
-    let s = match s
+    let (s, any_source) = match s
         .strip_prefix("sources ")
         .or_else(|| s.strip_prefix("source "))
     {
         // "card" parses as a head noun with no type restriction.
         Some(r) => {
             probe = format!("card {r}");
-            probed = true;
-            probe.as_str()
+            (probe.as_str(), true)
         }
-        None => s,
+        None => (s, false),
     };
     let (f, _, tail) = parse_object_phrase(s)?;
     if !end(tail).is_empty() || !crate::choices::filter_mentions_choice(&f) {
         return None;
     }
-    // "sources of the chosen type": any object, not only cards.
-    Some(if probed {
-        crate::oracle::phrases::without_probe_card(f)
-    } else {
-        f
-    })
+    // A source is any object, tokens included (Pithing Needle's ruling: a token with the
+    // same name as a card is named too), so drop the probe's "is a card" part.
+    Some(if any_source { not_only_cards(f) } else { f })
+}
+
+/// The filter without its "is a card" (not a token or copy) requirement.
+fn not_only_cards(f: Filter) -> Filter {
+    match f {
+        Filter::Card => Filter::Any,
+        Filter::And(v) => Filter::and(v.into_iter().map(not_only_cards).collect()),
+        other => other,
+    }
 }
 
 /// "Spells [...] can't be cast" restricts casting cards (and copies) with those

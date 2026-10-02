@@ -279,6 +279,7 @@ impl Renderer<'_> {
             ActivationTiming::YourTurn => restr.push("during your turn".into()),
             ActivationTiming::OpponentsTurn => restr.push("during an opponent's turn".into()),
             ActivationTiming::CombatWindow(ct) => restr.push(self.combat_timing(&ct)),
+            ActivationTiming::AsInstant => restr.push("as an instant".into()),
         }
         // CR 702.142a: a boast ability can be activated only if the creature attacked this
         // turn and only once each turn; that's what "Boast —" says.

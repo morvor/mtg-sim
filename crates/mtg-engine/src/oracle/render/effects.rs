@@ -185,6 +185,20 @@ impl Renderer<'_> {
                 let s = self.create_token(spec, count, *tapped, *attacking);
                 (controller.clone(), s, false)
             }
+            Effect::CreateTokenWithPT {
+                spec,
+                power,
+                toughness,
+                count,
+                controller,
+                tapped,
+                attacking,
+            } => {
+                let mut spec = spec.clone();
+                spec.pt_values = Some(Box::new((power.clone(), toughness.clone())));
+                let s = self.create_token(&spec, count, *tapped, *attacking);
+                (controller.clone(), s, false)
+            }
             Effect::CreateEmblem { who, abilities } => {
                 let s = self.emblem(abilities);
                 (who.clone(), s, true)
@@ -288,6 +302,9 @@ impl Renderer<'_> {
                 let inner = self.effect(effect);
                 format!("{w} {}", third_person(&inner))
             }
+            // "... If [condition], repeat this process." (CR 608.2c)
+            Effect::RepeatProcess { body } => self.effect(body),
+            Effect::RepeatThisProcess => "repeat this process".into(),
             Effect::Repeat { times, effect } => {
                 let inner = self.effect(effect);
                 let t = self.times(times);
@@ -633,7 +650,7 @@ impl Renderer<'_> {
                 let b = self.sel(b, Case::Obj);
                 format!("exchange control of {a} and {b}")
             }
-            Effect::CreateToken { .. } => unreachable_text(),
+            Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => unreachable_text(),
             Effect::CreateTokenAttached {
                 spec,
                 count,
@@ -1366,6 +1383,16 @@ impl Renderer<'_> {
             Effect::RollDice(r) => self.roll_dice(r),
             Effect::FlipCoins(c) => self.flip_coins(c),
             Effect::Piles(p) => match p.as_ref() {
+                crate::piles::PileAction::SeparateFaceDown { what, separator } => {
+                    let w = self.sel(what, Case::Obj);
+                    let s = self.player(separator, Case::Subj);
+                    let vp = format!("separate {w} into a face-down pile and a face-up pile");
+                    if s == "you" {
+                        vp
+                    } else {
+                        format!("{s} {}", third_person(&vp))
+                    }
+                }
                 crate::piles::PileAction::Separate { what, separator } => {
                     let w = self.sel(what, Case::Obj);
                     let s = self.player(separator, Case::Subj);
@@ -1565,6 +1592,20 @@ impl Renderer<'_> {
                     let t = self.sel(what, Case::Obj);
                     parts.push(format!("put {} on {t}", join_list(&items, "and")));
                     i = j;
+                    continue;
+                }
+                // "Put a +1/+1 counter on it and a +1/+1 counter on ~."
+                if let Some(Effect::AddCounters { .. }) = v.get(i + 1) {
+                    let a = self.effect(&v[i]);
+                    let b = self.effect(&v[i + 1]);
+                    match b.strip_prefix("put ") {
+                        Some(rest) => parts.push(format!("{a} and {{opt:put}} {rest}")),
+                        None => {
+                            parts.push(a);
+                            parts.push(b);
+                        }
+                    }
+                    i += 2;
                     continue;
                 }
             }
@@ -2259,7 +2300,21 @@ impl Renderer<'_> {
         for s in &spec.supertypes {
             words.push(nouns::supertype_word(*s).to_string());
         }
-        if let (Some(p), Some(t)) = (spec.power, spec.toughness) {
+        let mut where_x = String::new();
+        if let Some(pt) = &spec.pt_values {
+            // "an X/X green Ooze creature token, where X is ..." (CR 107.3).
+            let (p, t) = pt.as_ref();
+            let ps = self.value(p);
+            if format!("{p:?}") == format!("{t:?}") {
+                words.push("X/X".into());
+                if ps != "X" {
+                    where_x = format!(", where X is {ps}");
+                }
+            } else {
+                let ts = self.value(t);
+                words.push(format!("{ps}/{ts}"));
+            }
+        } else if let (Some(p), Some(t)) = (spec.power, spec.toughness) {
             words.push(format!("{p}/{t}"));
         }
         let colors: Vec<String> = color_words(spec.colors);
@@ -2307,6 +2362,7 @@ impl Renderer<'_> {
         if !with.is_empty() {
             tail.push_str(&format!(" with {}", join_list(&with, "and")));
         }
+        tail.push_str(&where_x);
         (words.join(" "), tail)
     }
 
@@ -2501,6 +2557,10 @@ impl Renderer<'_> {
                     becomes.pt = Some((p.clone(), t.clone()));
                 }
                 Modification::SwitchPT => parts.push("has its power and toughness switched".into()),
+                Modification::Custom { name, .. } => {
+                    let t = self.custom_modification(name);
+                    parts.push(t);
+                }
                 Modification::SetController(p) => {
                     let p = self.player(p, Case::Subj);
                     parts.push(format!("is controlled by {p}"));

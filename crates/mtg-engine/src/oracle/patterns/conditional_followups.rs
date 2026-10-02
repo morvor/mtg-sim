@@ -155,9 +155,31 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
+    // are twenty or more counters on it"), so is the condition's "it".
+    let about_source;
+    let c = if matches!(b.it, Sel::This) && !pronoun_free(c) {
+        about_source = c
+            .split(' ')
+            .map(|w| if w == "it" { "~" } else { w })
+            .collect::<Vec<_>>()
+            .join(" ");
+        about_source.as_str()
+    } else {
+        c
+    };
     let cond = match that_player_life(c, b) {
         Some(c) => c,
-        None if pronoun_free(c) => crate::oracle::statics::parse_condition(c, b.ctx)?,
+        None if pronoun_free(c) => {
+            let parse = |c: &str| crate::oracle::statics::parse_condition(c, b.ctx);
+            // "if there are twenty or more counters on ~ or you have twenty or more cards
+            // in hand": either of two conditions.
+            parse(c).or_else(|| {
+                c.match_indices(" or ").find_map(|(i, _)| {
+                    Some(Condition::Or(vec![parse(&c[..i])?, parse(&c[i + 4..])?]))
+                })
+            })?
+        }
         None => return None,
     };
     let e = crate::oracle::effects::parse_clause(x, b)?;

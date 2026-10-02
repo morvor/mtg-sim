@@ -495,6 +495,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+        } else if let Some(r) = t.strip_prefix("with the same name as ~") {
+            // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
+            (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("your team controls") {
             // CR 102.4: "your team" means "you and/or your teammates".
             (
@@ -579,6 +582,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("other than ~") {
             // "each Mount and/or Vehicle you control other than ~" (Spire Mechcycle).
             (Filter::Other, r)
+        } else if let Some(r) = t
+            .strip_prefix("other than enchanted creature")
+            .or_else(|| t.strip_prefix("other than equipped creature"))
+        {
+            // "target creature you control other than enchanted creature" (Due Diligence).
+            (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
+            // "untapped creatures that player controls that didn't attack this turn".
+            (Filter::not(Filter::AttackedThisTurn), r)
+        } else if let Some(r) = t.strip_prefix("that attacked this turn") {
+            (Filter::AttackedThisTurn, r)
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
@@ -669,6 +683,20 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_inset_suffix(t) {
             (f, r)
+        } else if let Some(r) = [
+            "that are enchanted by auras you control",
+            "that are enchanted by Auras you control",
+            "that's enchanted by an aura you control",
+            "that's enchanted by an Aura you control",
+        ]
+        .into_iter()
+        .find_map(|p| t.strip_prefix(p))
+        {
+            // (CR 303.4b) An Aura you control attached to it.
+            (
+                Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
+                r,
+            )
         } else {
             break;
         };
@@ -836,6 +864,30 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // "with corruption counters on them", "with +1/+1 counters on them" (a plural
+    // subject: each one with one or more counters of that kind).
+    if !negate {
+        // "with no counters on them" (Damning Verdict, Hazardous Conditions).
+        if let Some(tail) = rest.strip_prefix("no counters on them") {
+            return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        let (kind, r2) = split_word(rest);
+        if let Some(tail) = r2.strip_prefix("counters on them") {
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || (!kind.is_empty()
+                    && kind.chars().all(|c| c.is_alphabetic())
+                    // "with no counters on them" (Damning Verdict), "with two counters
+                    // on them": not a counter kind.
+                    && !matches!(
+                        kind,
+                        "no" | "any" | "some" | "two" | "three" | "four" | "five" | "more"
+                    ))
+            {
+                return Some((Filter::HasCounter(Some(kind.into())), tail));
+            }
+        }
+    }
     // Two-word keywords first ("first strike", "double strike").
     let words: Vec<&str> = rest.splitn(3, ' ').collect();
     for n in [2usize, 1] {
@@ -896,6 +948,42 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             let v = Value::PowerOf(Box::new(Sel::This));
             return Some((Filter::ManaValue(cmp, Box::new(v)), r));
         }
+    }
+    // "with base power and toughness 2/2", "with base power or toughness 1 [or less]"
+    // (CR 208.4b).
+    if let Some(r) = t
+        .strip_prefix("with base power and toughness ")
+        .or_else(|| t.strip_prefix("each with base power and toughness "))
+    {
+        let end = r
+            .find(|c: char| !(c.is_ascii_digit() || c == '/'))
+            .unwrap_or(r.len());
+        let (pt, rest) = r.split_at(end);
+        let (p, tough) = pt.split_once('/')?;
+        let base = crate::kw::base_pt::base_filter;
+        let f = Filter::and(vec![
+            base(true, Cmp::Eq, p.parse().ok()?),
+            base(false, Cmp::Eq, tough.parse().ok()?),
+        ]);
+        return Some((f, rest));
+    }
+    if let Some(r) = t
+        .strip_prefix("with base power or toughness ")
+        .or_else(|| t.strip_prefix("each with base power or toughness "))
+    {
+        let (n, r) = parse_number(r)?;
+        let n = n.as_const()?;
+        let r = r.trim_start();
+        let (cmp, rest) = if let Some(x) = r.strip_prefix("or less") {
+            (Cmp::Le, x)
+        } else if let Some(x) = r.strip_prefix("or greater") {
+            (Cmp::Ge, x)
+        } else {
+            (Cmp::Eq, r)
+        };
+        let base = crate::kw::base_pt::base_filter;
+        let f = Filter::Or(vec![base(true, cmp, n), base(false, cmp, n)]);
+        return Some((f, rest));
     }
     // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
     if let Some(r) = t.strip_prefix("with base power ") {
@@ -987,6 +1075,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     let mut min = 1u32;
     let mut max = Value::Const(1);
     let mut another = false;
+    let mut together = None;
     if let Some(r) = strip(s, "up to ") {
         let (n, r2) = parse_number(r)?;
         min = 0;
@@ -1076,6 +1165,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Ability(f), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
+        let (f, r) = target_group_suffix(f, &s[..s.len() - r.len()], r, &mut together)?;
         // "target planeswalker that was activated this turn or tapped creature": an
         // alternative description after the first one's suffixes, ending the phrase. Not
         // after a list ("target Spirit, creature with disturb, or enchantment"), whose
@@ -1113,8 +1203,68 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,
+        together,
     };
     Some((spec, rest))
+}
+
+/// A requirement on several targets taken together, after their object phrase ("two
+/// target creature cards that share a creature type from your graveyard", "up to three
+/// target cards from a single graveyard"; see `target_groups.rs`). `consumed` is the
+/// object phrase already parsed and `r` what follows it.
+fn target_group_suffix<'a>(
+    f: Filter,
+    consumed: &str,
+    r: &'a str,
+    together: &mut Option<TargetGroup>,
+) -> Option<(Filter, &'a str)> {
+    // "two target cards from an opponent's graveyard": cards in one opponent's graveyard.
+    if consumed.contains("an opponent's graveyard") {
+        *together = Some(TargetGroup::SameOwner);
+        return Some((f, r));
+    }
+    let t = r.trim_start();
+    if let Some(rest) = t
+        .strip_prefix("from a single graveyard")
+        .or_else(|| t.strip_prefix("in a single graveyard"))
+    {
+        *together = Some(TargetGroup::SameOwner);
+        return Some((
+            Filter::and(vec![f, Filter::InZone(ZoneKind::Graveyard)]),
+            rest,
+        ));
+    }
+    let groups = [
+        ("that share a creature type", TargetGroup::ShareCreatureType),
+        (
+            "that share no creature types",
+            TargetGroup::ShareNoCreatureType,
+        ),
+        ("that share a card type", TargetGroup::ShareCardType),
+        (
+            "that share a permanent type",
+            TargetGroup::SharePermanentType,
+        ),
+    ];
+    let Some((rest, grp)) = groups
+        .iter()
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, *g)))
+    else {
+        return Some((f, r));
+    };
+    *together = Some(grp);
+    // The object phrase's own suffixes may follow ("... from your graveyard"): parsed
+    // after a stand-in noun, which is then dropped.
+    let probe = format!("cards{rest}");
+    let (more, _, tail) = parse_object_phrase(&probe)?;
+    let rest = &rest[rest.len() - tail.len()..];
+    let mut parts = vec![f];
+    match more {
+        Filter::Card => {}
+        Filter::And(v) => parts.extend(v.into_iter().filter(|x| !matches!(x, Filter::Card))),
+        other => parts.push(other),
+    }
+    Some((Filter::and(parts), rest))
 }
 
 fn filter_mentions_spell(f: &Filter) -> bool {

@@ -640,6 +640,11 @@ impl Renderer<'_> {
         }
     }
 
+    /// A modification implemented in code (`Modification::Custom`), as a verb phrase.
+    pub(crate) fn custom_modification(&mut self, name: &str) -> String {
+        self.gap(format!("Modification::Custom({name})"))
+    }
+
     /// A custom rule for players: `subj` is "you", "players", ...; `poss` its possessive.
     pub(crate) fn custom_player_mod(&mut self, name: &str, subj: &str, poss: &str) -> String {
         let you = subj == "you";

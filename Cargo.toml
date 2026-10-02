@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mtg-data", "crates/mtg-engine", "crates/mtg-sim", "crates/mtg-tools"]
+members = ["crates/mtg-data", "crates/mtg-engine", "crates/mtg-api", "crates/mtg-sim", "crates/mtg-tools"]
 
 [workspace.package]
 version = "0.1.0"
