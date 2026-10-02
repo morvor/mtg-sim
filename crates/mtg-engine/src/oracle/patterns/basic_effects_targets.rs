@@ -141,6 +141,17 @@ fn target_alternatives(s: &str) -> Option<(TargetSpec, &str)> {
     Some((spec, rest))
 }
 
+/// "that Wall ..." → "that creature ...": a trigger's creature named by its subtype.
+pub(crate) fn that_subtype_as_creature(s: &str) -> Option<String> {
+    let r = s.strip_prefix("that ")?;
+    let (w, rest) = split_word(r);
+    let sub = crate::oracle::phrases::subtype_word(w)?;
+    if !crate::types::is_creature_type(&sub) {
+        return None;
+    }
+    Some(format!("that creature {rest}").trim_end().to_string())
+}
+
 /// One target phrase: the core's, or alternatives.
 fn one_target(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
@@ -751,3 +762,22 @@ fn deals_without_subject(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: deals damage (subject of the previous instruction)", priority: 150, parse: deals_without_subject } }
+
+/// "When ~ blocks a creature, destroy both creatures." (Alaborn Zealot): ~ and the creature
+/// the trigger is about.
+fn both_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("destroy both creatures")?;
+    if !r.is_empty() || !b.in_trigger || b.sentences != 0 {
+        return None;
+    }
+    let (other, _) = object_ref("that creature", b)?;
+    if matches!(other, Sel::This) {
+        return None;
+    }
+    Some(Effect::Destroy {
+        what: Sel::Union(vec![Sel::This, other]),
+        no_regen: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: destroy both creatures", priority: 150, parse: both_creatures } }

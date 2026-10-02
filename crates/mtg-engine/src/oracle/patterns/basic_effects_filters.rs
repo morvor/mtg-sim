@@ -45,6 +45,14 @@ fn this_turn<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
             }
         }
     }
+    // "creature ~ is blocking" (Wall of Corpses): an attacker it blocks (CR 509.1).
+    if let Some(r) = t.strip_prefix("~ is blocking") {
+        return Some((Filter::Custom(be::BLOCKED_BY_SOURCE_LKI.into()), r));
+    }
+    // "all creatures ~ blocked this turn" (Defiant Vanguard).
+    if let Some(r) = t.strip_prefix("~ blocked this turn") {
+        return Some((Filter::Custom(be::BLOCKED_BY_SOURCE_THIS_TURN.into()), r));
+    }
     // "that blocked or was blocked by a legendary creature this turn"
     let r = t.strip_prefix("that blocked or was blocked by ")?;
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;

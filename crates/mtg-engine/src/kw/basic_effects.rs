@@ -23,6 +23,12 @@ pub const SECOND_SPELL_CAST_THIS_TURN: &str = "basic_effects:second spell cast t
 pub const DEALT_DAMAGE_THIS_TURN: &str = "basic_effects:dealt damage this turn";
 /// `Filter::Custom`: a creature that blocked this turn.
 pub const BLOCKED_THIS_TURN: &str = "basic_effects:blocked this turn";
+/// `Filter::Custom`: a creature the ability's source blocked this turn.
+pub const BLOCKED_BY_SOURCE_THIS_TURN: &str = "basic_effects:blocked by the source this turn";
+/// `Filter::Custom`: a creature the ability's source is blocking, the source as it last
+/// existed if it has left the battlefield (CR 608.2b: "target creature this creature is
+/// blocking" after sacrificing it).
+pub const BLOCKED_BY_SOURCE_LKI: &str = "basic_effects:blocked by the source (last known)";
 const BLOCKED_OR_WAS_BLOCKED_BY: &str = "basic_effects:blocked or was blocked by:";
 
 /// `Filter::Custom` name: a creature that blocked, or was blocked by, a creature matching
@@ -195,6 +201,22 @@ impl KeywordRules for BasicEffects {
             return Some(g.turn_events.iter().any(|e| {
                 matches!(e, Event::Damage { source, amount, .. } if *source == id && *amount > 0)
             }));
+        }
+        if name == BLOCKED_BY_SOURCE_LKI {
+            let Some(src) = ctx.source else {
+                return Some(false);
+            };
+            if g.is_live(src) && g.obj(src).zone == crate::object::Zone::Battlefield {
+                return Some(g.matches(id, &crate::ability::Filter::BlockedBySource, ctx));
+            }
+            let in_combat = g.matches(id, &crate::ability::Filter::Attacking, ctx);
+            return Some(in_combat && blocks_this_turn(g).iter().any(|(b, a)| *b == src && *a == id));
+        }
+        if name == BLOCKED_BY_SOURCE_THIS_TURN {
+            let Some(src) = ctx.source else {
+                return Some(false);
+            };
+            return Some(blocks_this_turn(g).iter().any(|(b, a)| *b == src && *a == id));
         }
         if name == BLOCKED_THIS_TURN {
             return Some(blocks_this_turn(g).iter().any(|(b, _)| *b == id));
